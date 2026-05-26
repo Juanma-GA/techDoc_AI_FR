@@ -1,0 +1,30 @@
+{
+  "name": "internal-poc-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo interne — apps POC + packages partagés conformes à STANDARD_POC.md.",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "check-standard": "bash scripts/check_standard.sh",
+    "dev:ftm": "concurrently -n back,front -c blue,green \"cd apps/ftm/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000\" \"pnpm --filter @apps/ftm-frontend dev\"",
+    "dev:pdf-reviewer": "concurrently -n back,front -c blue,green \"cd apps/pdf-reviewer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001\" \"pnpm --filter @apps/pdf-reviewer-frontend dev\"",
+    "dev:doc-writer": "concurrently -n back,front -c blue,green \"cd apps/doc-writer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8002\" \"pnpm --filter @apps/doc-writer-frontend dev\"",
+    "dev:ocr-vision": "concurrently -n back,front -c blue,green \"cd apps/ocr-vision/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8003\" \"pnpm --filter @apps/ocr-vision-frontend dev\"",
+    "test:e2e:ftm": "pnpm --filter @apps/ftm-frontend --if-present test:e2e",
+    "test:e2e:pdf-reviewer": "pnpm --filter @apps/pdf-reviewer-frontend --if-present test:e2e",
+    "test:e2e:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present test:e2e",
+    "openapi:gen:ftm": "pnpm --filter @apps/ftm-frontend --if-present openapi:gen",
+    "openapi:gen:pdf-reviewer": "pnpm --filter @apps/pdf-reviewer-frontend --if-present openapi:gen",
+    "openapi:gen:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present openapi:gen"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}

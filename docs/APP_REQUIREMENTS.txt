@@ -1,0 +1,64 @@
+APP REQUIREMENTS
+================
+Environment variables, configuration files, external services, and
+dependencies required to run the POCs locally.
+
+MACHINE PREREQUISITES (common to all POCs)
+------------------------------------------
+- Python >= 3.11
+- Node.js >= 18 + pnpm (optional: a standalone HTML fallback is served
+  when frontend/dist/ is missing)
+- Windows (.bat launchers) or Unix (start.sh) — binds to 127.0.0.1 only,
+  never 0.0.0.0
+- Outbound internet access to https://api.mistral.ai
+
+
+EXTERNAL SERVICES (common)
+--------------------------
+- Mistral API (https://api.mistral.ai) — API key required for LLM features
+- The key can be provided via the MISTRAL_API_KEY env variable OR
+  configured at runtime via POST /api/v1/settings (persisted in the
+  AppConfig table)
+- No other external service: no Postgres, no Redis, no S3, no broker,
+  no Docker
+
+
+PYTHON DEPENDENCIES (common — backend/pyproject.toml)
+-----------------------------------------------------
+- fastapi>=0.115
+- uvicorn[standard]>=0.34
+- pydantic>=2.10
+- pydantic-settings>=2.0
+- sqlalchemy>=2.0
+- alembic>=1.13
+- httpx>=0.28
+- sse-starlette>=2.2
+- structlog>=24.1
+- truststore>=0.10
+- python-multipart>=0.0.9
+- python-docx, 
+- python-pptx, 
+- olefile, 
+- openpyxl,
+- PyMuPDF,
+- lxml, 
+- reportlab, 
+- slowapi, 
+- numpy
+
+Installed by _run.bat via `pip install -e .[dev]` (no requirements.txt —
+single source of truth is pyproject.toml).
+
+ENVIRONMENT VARIABLES (common — backend/.env, copy from .env.example)
+---------------------------------------------------------------------
+- APP_NAME=<poc-slug>
+- APP_VERSION=0.1.0
+- DEBUG=false
+- LOG_LEVEL=INFO
+- DATABASE_URL=sqlite:///./data/<poc>.db
+- STORAGE_DIR=./data/storage
+- CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:<PORT>
+- MAX_UPLOAD_SIZE_MB=50
+- MISTRAL_API_KEY=
+- MISTRAL_BASE_URL=https://api.mistral.ai
+- MISTRAL_CHAT_MODEL=mistral-small-latest

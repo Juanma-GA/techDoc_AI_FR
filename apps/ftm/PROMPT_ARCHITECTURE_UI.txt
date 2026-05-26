@@ -1,0 +1,57 @@
+You must produce an architecture and UI/IHM design document for the project in the current directory. The document will be used to compare it with other solutions in order to extract cross-project standards.
+
+## Before writing
+
+1. Explore the repository structure (root folders, build files, README).
+2. Precisely identify:
+   - the backend stack (framework, database, key dependencies, versions)
+   - the frontend stack (framework, toolchain, styling, UI libraries, charting, icons, routing, i18n, state management)
+   - the data model (main entities + relationships)
+   - the API surface (list real endpoints, do not invent any)
+   - the authentication / authorization model (or its absence)
+   - interaction patterns (upload, forms, lists, workflows, streaming, modals, toasts, etc.)
+   - the de facto design system (color tokens, typography, radii, shadows, atomic components, reused business components)
+   - the information architecture (routes, layout, navigation)
+3. Do not invent anything. If a piece of information does not exist, explicitly write "none", "not documented" or "to audit".
+
+## Output format
+
+Write a single file `ARCHITECTURE_AND_UI.md` at the project root, in English, in GitHub markdown. No emojis.
+
+Follow this structure exactly:
+
+1. **Title + intro**: project name, document goal, and mention that each section contains "Current state / Rationale / Open questions".
+2. **§1 Overview**: 3-5 line pitch + high-level ASCII diagram (clients -> backend -> external dependencies / storage).
+3. **§2 Backend architecture**:
+   - 2.1 Stack (table: layer / choice / version)
+   - 2.2 Module organization (commented tree)
+   - 2.3 Data model (ASCII relational diagram + structuring fields)
+   - 2.4 REST API surface (table resource / endpoints / notes + conventions: prefix, IDs, pagination, versioning, streaming, error format)
+   - 2.5 File storage (if any)
+   - 2.6 Security / non-functional concerns (auth, CORS, secrets, HTTPS, logs, cache)
+4. **§3 Frontend architecture**:
+   - 3.1 Stack (table aspect / choice) + rationale
+   - 3.2 Logical structure + routes
+5. **§4 Design system (de facto)**:
+   - 4.1 Color tokens (brand palette + semantic colors in a hex table)
+   - 4.2 Typography tokens
+   - 4.3 Dimension / shadow / radius tokens
+   - 4.4 Atomic components (table class / role)
+   - 4.5 Reused business components (table component / consumers)
+6. **§5 Information architecture & navigation**: layout + ASCII diagram, selectors (roles, language), i18n.
+7. **§6 Interaction patterns**: one subsection per major pattern (CRUD, upload, filters, state workflows like anomalies/tickets, chat, dashboards, etc.). For state workflows, include an ASCII transition diagram.
+8. **§7 Observability & errors**: logs, telemetry, ErrorBoundary, error pages.
+9. **§8 Comparison summary table**: markdown table with columns `Dimension | <Project name> | Solution B | Solution C | Proposed standard` and roughly twenty rows covering: backend framework, database, storage, auth, API versioning, frontend framework, language, styling, component lib, charts, icons, routing, i18n, dark mode, WCAG accessibility, UI tests, LLM streaming (if applicable), RAG (if applicable), exports, layout, design tokens, shared components, modal/toast, telemetry, packaging.
+10. **§9 Synthesis**: 3 lists - Strengths, Structural limitations, Priority topics to standardize (numbered, 8 to 12 items).
+
+## Style rules
+
+- Factual and concise tone. No superlatives, no marketing language.
+- In each section, systematically add an "**Open questions**" block as bullet points, with open-ended questions intended to surface gaps when comparing solutions.
+- Prefer markdown tables over paragraphs.
+- Diagrams must be in **ASCII art** (no Mermaid, no images).
+- Cite real files / paths from the project (`backend/app/main.py`, `src/App.tsx`, etc.) to anchor every statement.
+- If a dimension is not relevant for this project (e.g. no LLM chat), write "not applicable" rather than skipping it, so that the comparison grid stays aligned across projects.
+- No emojis. GitHub markdown only.
+
+Do not start writing the file until you have explored the actual stack.

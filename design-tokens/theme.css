@@ -1,0 +1,92 @@
+/*
+ * theme.css — CSS custom properties consumed by tailwind-preset.ts.
+ *
+ * Pattern Tailwind standard :
+ *   :root = palette light par défaut
+ *   .dark = override dark (déclenché par <html class="dark">)
+ *
+ * Spécificité égale (0,1,0) ; l'ordre source garantit que `.dark`
+ * l'emporte quand la classe est présente.
+ *
+ * Pattern : import once per app via `apps/<poc>/frontend/src/index.css` :
+ *
+ *     @import "@internal/design-tokens/theme.css";
+ *
+ * Source of truth : design-tokens/tokens.json. Edit there, not here.
+ */
+
+:root {
+  /* Backgrounds (light defaults) */
+  --color-bg-base: #ffffff;
+  --color-bg-2: #f8fafc;
+  --color-bg-3: #e2e8f0;
+
+  /* Cards */
+  --color-card-base: #ffffff;
+  --color-card-hover: #f1f5f9;
+
+  /* Brand */
+  --color-brand-blue: #2563eb;
+  --color-brand-blue-light: #3b82f6;
+
+  /* Semantic */
+  --color-semantic-success: #059669;
+  --color-semantic-warning: #d97706;
+  --color-semantic-danger: #dc2626;
+  --color-semantic-info: #2563eb;
+
+  /* Accent */
+  --color-accent-teal: #0891b2;
+  --color-accent-purple: #7c3aed;
+  --color-accent-orange: #ea580c;
+  --color-accent-pink: #db2777;
+  --color-accent-yellow: #ca8a04;
+
+  /* Text (named "fg.*" in Tailwind utilities — see tailwind-preset.ts) */
+  --color-text-base: #0f172a;
+  --color-text-dim: #64748b;
+  --color-text-muted: #94a3b8;
+
+  /* Borders */
+  --color-border-base: rgba(0, 0, 0, 0.07);
+  --color-border-md: rgba(0, 0, 0, 0.12);
+  --color-border-bright: rgba(37, 99, 235, 0.4);
+}
+
+.dark {
+  /* Backgrounds (dark) */
+  --color-bg-base: #0e1117;
+  --color-bg-2: #131720;
+  --color-bg-3: #1a2035;
+
+  /* Cards */
+  --color-card-base: #161c2b;
+  --color-card-hover: #1d2540;
+
+  /* Brand (identique au light) */
+  --color-brand-blue: #2563eb;
+  --color-brand-blue-light: #3b82f6;
+
+  /* Semantic */
+  --color-semantic-success: #10b981;
+  --color-semantic-warning: #f59e0b;
+  --color-semantic-danger: #ef4444;
+  --color-semantic-info: #3b82f6;
+
+  /* Accent */
+  --color-accent-teal: #06b6d4;
+  --color-accent-purple: #8b5cf6;
+  --color-accent-orange: #f97316;
+  --color-accent-pink: #ec4899;
+  --color-accent-yellow: #eab308;
+
+  /* Text */
+  --color-text-base: #e2e8f0;
+  --color-text-dim: #94a3b8;
+  --color-text-muted: #4b5563;
+
+  /* Borders */
+  --color-border-base: rgba(255, 255, 255, 0.07);
+  --color-border-md: rgba(255, 255, 255, 0.12);
+  --color-border-bright: rgba(37, 99, 235, 0.4);
+}

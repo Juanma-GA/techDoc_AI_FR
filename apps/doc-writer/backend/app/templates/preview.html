@@ -1,0 +1,1301 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <title>doc-writer</title>
+  <script>
+    (function () {
+      var stored = localStorage.getItem("theme");
+      var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700&display=swap" />
+  <style>
+    /*__CSS_VARS__*/
+
+    .theme-toggle { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--fg-dim); border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+    .theme-toggle:hover { background: var(--card-hover); color: var(--fg); }
+    .theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .theme-toggle-sun { display: none; }
+    .theme-toggle-moon { display: block; }
+    .dark .theme-toggle-sun { display: block; }
+    .dark .theme-toggle-moon { display: none; }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    html { font-size: 13.5px; }
+    body { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; }
+    a { color: var(--brand-light); text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    [hidden] { display: none !important; }
+
+    .layout { display: flex; height: 100vh; }
+    aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .sidebar-header { display: flex; align-items: baseline; gap: 8px; padding: 16px; border-bottom: 1px solid var(--border); }
+    .brand { font-family: "Orbitron", sans-serif; font-size: 1.15rem; color: var(--brand-light); }
+    .label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); }
+    .sidebar nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; flex: 1; }
+    .nav-item { display: flex; align-items: center; padding: 8px 12px; border-radius: 8px; color: var(--fg-dim); transition: background 0.15s, color 0.15s; border: none; background: transparent; width: 100%; text-align: left; }
+    .nav-item:hover { background: var(--card-hover); color: var(--fg); }
+    .nav-item.active { background: var(--brand); color: var(--fg); }
+    .nav-item:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+
+    .lang-switch { display: flex; gap: 4px; padding: 12px; border-top: 1px solid var(--border); }
+    .lang-btn { flex: 1; padding: 6px; border: 1px solid var(--border); background: transparent; color: var(--fg-dim); border-radius: 6px; font-size: 0.75rem; }
+    .lang-btn.active { background: var(--brand); color: var(--fg); border-color: var(--brand); }
+
+    main { flex: 1; overflow-y: auto; padding: 24px 32px; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-family: "Orbitron", sans-serif; font-size: 1.5rem; margin: 0 0 4px 0; }
+    .page-header p { color: var(--fg-dim); margin: 0; }
+
+    .banner { background: var(--card); border: 1px solid var(--border-bright); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--fg-dim); }
+    .banner strong { color: var(--fg); }
+    .banner.warn { border-color: var(--warning); color: var(--warning); }
+    .banner code { font-family: "JetBrains Mono", monospace; background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-card); margin-bottom: 16px; }
+    .card-title { font-family: "Orbitron", sans-serif; font-size: 1.05rem; margin: 0 0 14px 0; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .grow { flex: 1; min-width: 0; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .kpi-value { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
+    .kpi-value.ok { color: var(--success); }
+    .kpi-value.warn { color: var(--warning); }
+    .kpi-value.err { color: var(--danger); }
+    .kpi-value.info { color: var(--info); }
+
+    .form { display: flex; flex-direction: column; gap: 10px; }
+    .input, select, textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
+    textarea { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
+    .input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
+    .checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+    .checkbox input { accent-color: var(--brand); }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: none; padding: 8px 14px; font-weight: 500; transition: background 0.15s, opacity 0.15s, color 0.15s; }
+    .btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .btn.primary { background: var(--brand); color: var(--fg); }
+    .btn.primary:hover { background: var(--brand-light); }
+    .btn.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); }
+    .btn.secondary:hover { background: var(--card-hover); }
+    .btn.ghost { background: transparent; color: var(--fg-dim); }
+    .btn.ghost:hover { background: var(--card-hover); color: var(--fg); }
+    .btn.danger { background: var(--danger); color: var(--fg); }
+    .btn.danger:hover { opacity: 0.85; }
+    .btn.small { padding: 4px 10px; font-size: 0.8rem; }
+    .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+    .error, .success { margin-top: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg-2); font-size: 0.85rem; white-space: pre-wrap; }
+    .error { border: 1px solid var(--danger); color: var(--danger); }
+    .success { border: 1px solid var(--success); color: var(--success); }
+
+    .file-list, .session-list { display: flex; flex-direction: column; gap: 6px; }
+    .file-row, .session-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
+    .file-row:hover, .session-row:hover { border-color: var(--border-bright); }
+    .session-row { cursor: pointer; }
+    .session-row.active { background: var(--brand); border-color: var(--brand); }
+    .file-name, .session-name { font-weight: 600; }
+    .file-meta, .session-meta { color: var(--fg-dim); font-size: 0.85rem; }
+
+    .badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; }
+    .badge.info  { color: var(--info);  border-color: var(--info); }
+    .badge.ok    { color: var(--success); border-color: var(--success); }
+    .badge.warn  { color: var(--warning); border-color: var(--warning); }
+    .badge.danger { color: var(--danger); border-color: var(--danger); }
+
+    table.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    table.data-table th, table.data-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    table.data-table th { color: var(--fg-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; }
+    table.data-table tr:hover td { background: var(--bg-2); }
+
+    .empty-state { text-align: center; color: var(--fg-dim); padding: 24px; }
+
+    /* Dropzone */
+    .dropzone { border: 1px dashed var(--border-bright); border-radius: 8px; padding: 28px; text-align: center; cursor: pointer; color: var(--fg-dim); background: var(--bg-2); transition: background 0.15s, border-color 0.15s; }
+    .dropzone:hover, .dropzone.dragover { background: var(--card-hover); border-color: var(--brand-light); color: var(--fg); }
+    .dropzone strong { color: var(--fg); display: block; margin-bottom: 4px; font-family: "Orbitron", sans-serif; }
+
+    /* Doc checklist (multi-select pour Generation) */
+    .doc-checklist { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; padding: 8px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
+    .doc-checklist .empty-state { padding: 12px; }
+    .doc-checklist label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; color: var(--fg); cursor: pointer; border-radius: 6px; }
+    .doc-checklist label:hover { background: var(--card-hover); }
+    .doc-checklist input[type="checkbox"] { accent-color: var(--brand); }
+
+    /* Output streaming */
+    .output { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; min-height: 240px; white-space: pre-wrap; font-family: "Inter", sans-serif; line-height: 1.6; color: var(--fg); }
+    .output:empty::before { content: 'Le contenu genere apparaitra ici.'; color: var(--fg-muted); }
+
+    /* Architecture */
+    .arch-flow { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .arch-step { display: flex; gap: 10px; padding: 8px 12px; background: var(--bg-2); border-left: 3px solid var(--brand); border-radius: 4px; font-size: 0.9rem; }
+    .arch-step .step-n { color: var(--brand-light); font-family: "JetBrains Mono", monospace; font-weight: 700; flex-shrink: 0; }
+    .arch-split { padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
+    .arch-split .label.brand-color { color: var(--brand-light); margin-bottom: 6px; }
+    .arch-split .label.accent-color { color: var(--success); margin-bottom: 6px; }
+    .arch-split code { background: var(--bg-3); padding: 1px 5px; border-radius: 3px; font-family: "JetBrains Mono", monospace; font-size: 0.8rem; }
+
+    /* Sessions detail messages */
+    .msg { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-2); margin-bottom: 8px; }
+    .msg.user { background: var(--bg-2); }
+    .msg.assistant { background: var(--card); border-color: var(--border-bright); }
+    .msg-role { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); margin-bottom: 6px; }
+    .msg-citations { margin-top: 8px; font-size: 0.8rem; color: var(--fg-dim); font-family: "JetBrains Mono", monospace; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="brand">doc-writer</span><span class="label">v0.1</span>
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+          <svg class="theme-toggle-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+          <svg class="theme-toggle-moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+      <nav>
+        <button type="button" class="nav-item active" data-route="generate" data-i18n="nav.generate">Generation</button>
+        <button type="button" class="nav-item"        data-route="documents" data-i18n="nav.documents">Documents</button>
+        <button type="button" class="nav-item"        data-route="sessions" data-i18n="nav.sessions">Sessions</button>
+        <button type="button" class="nav-item"        data-route="architecture" data-i18n="nav.architecture">Architecture</button>
+        <button type="button" class="nav-item"        data-route="data" data-i18n="nav.data">Donnees</button>
+        <button type="button" class="nav-item"        data-route="settings" data-i18n="nav.settings">Parametres</button>
+      </nav>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn active" data-lang="fr">FR</button>
+        <button class="lang-btn"        data-lang="en">EN</button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="page-header">
+        <h1 id="pageTitle">Generation</h1>
+        <p id="pageSub"></p>
+      </div>
+      <div id="content"></div>
+    </main>
+  </div>
+
+  <script type="application/json" id="i18n-fr">/*__I18N_FR__*/</script>
+
+  <script>
+    const API = "/api/v1";
+
+    // ---- i18n -----------------------------------------------------------
+    const I18N = {
+      fr: {
+        "nav.generate": "Generation",
+        "nav.documents": "Documents",
+        "nav.sessions": "Sessions",
+        "nav.architecture": "Architecture",
+        "nav.data": "Donnees",
+        "nav.settings": "Parametres",
+        "page.generate.title": "Generation de contenu",
+        "page.generate.sub": "Redige un brief, selectionne tes documents et laisse Mistral produire le contenu.",
+        "page.documents.title": "Documents",
+        "page.documents.sub": "PDF, DOCX, PPTX, XLSX, TXT, MD. Parses et indexes automatiquement.",
+        "page.sessions.title": "Sessions",
+        "page.sessions.sub": "Historique de tes generations.",
+        "page.architecture.title": "Architecture",
+        "page.architecture.sub": "Backend, frontend et workflow utilisateur en un coup d oeil.",
+        "page.data.title": "Donnees",
+        "page.data.sub": "Vue d ensemble et operations de reset.",
+        "page.settings.title": "Parametres",
+        "page.settings.sub": "Cle API Mistral et modeles utilises.",
+        "generate.brief": "Brief",
+        "generate.output": "Sortie",
+        "generate.docsToUse": "Documents a utiliser",
+        "generate.placeholder": "Ex : Redige une synthese en trois paragraphes des points cles des documents selectionnes.",
+        "generate.submit": "Generer",
+        "generate.reset": "Reinitialiser",
+        "generate.outputEmpty": "Le contenu genere apparaitra ici.",
+        "generate.tooShort": "Le brief doit faire au moins 10 caracteres.",
+        "generate.noDocs": "Aucun document indexe. Va dans l onglet Documents.",
+        "generate.starting": "Lancement de la generation...",
+        "generate.step.createSession": "1/4 - Creation de la session...",
+        "generate.step.contactingMistral": "2/4 - Contact de l API Mistral (premier round-trip RAG)...",
+        "generate.step.waitingFirstToken": "3/4 - En attente du premier token Mistral...",
+        "generate.step.streaming": "4/4 - Streaming en cours...",
+        "generate.done": "Generation terminee.",
+        "generate.cancel": "Annuler",
+        "generate.aborted": "Generation annulee.",
+        "generate.streamEmpty": "Le stream s est ferme sans donnees ni event done. Verifie les logs backend.",
+        "generate.mistralRequired": "Mistral non configure.",
+        "generate.mistralHint": "Va dans l onglet Parametres pour saisir ta cle API.",
+        "generate.templateRequired": "Selectionne un template a remplir.",
+        "generate.format": "Format de sortie",
+        "generate.format.markdown": "Markdown libre",
+        "generate.format.faq": "FAQ (Q/R)",
+        "generate.format.structured": "Note structuree",
+        "generate.format.table": "Tableau comparatif",
+        "generate.format.template": "Remplir un template",
+        "generate.length": "Longueur",
+        "generate.length.short": "Court",
+        "generate.length.medium": "Moyen",
+        "generate.length.long": "Long",
+        "generate.tone": "Ton",
+        "generate.tone.professional": "Professionnel",
+        "generate.tone.pedagogical": "Pedagogique",
+        "generate.tone.technical": "Technique",
+        "generate.tone.synthetic": "Synthetique",
+        "generate.template": "Template a remplir",
+        "generate.template.none": "(Aucun)",
+        "generate.template.hint": "Uploade un .pptx dans l onglet Parametres. Mets des marqueurs {{cle}} OU simplement XXX aux endroits a remplir : le LLM devine le contenu d apres le titre/label qui precede.",
+        "generate.exportMd": "Telecharger en .md",
+        "generate.exportDocx": "Telecharger en .docx",
+        "generate.exportPdf": "Telecharger en .pdf",
+        "generate.exportPptx": "Telecharger en .pptx",
+        "generate.exportPptxHint": "PPTX dispo uniquement quand un template .pptx est selectionne.",
+        "generate.filename": "Nom du fichier de sortie",
+        "generate.filenamePlaceholder": "vide = titre de la session (sans extension)",
+        "documents.upload": "Upload",
+        "documents.list": "Liste",
+        "documents.dropHere": "Depose tes fichiers ici",
+        "documents.dropHint": "ou clique pour parcourir. Formats: PDF, DOCX, PPTX, XLSX, TXT, MD.",
+        "documents.empty": "Aucun document.",
+        "documents.uploading": "Upload en cours...",
+        "documents.indexMissing": "Index manquant",
+        "documents.delete": "Supprimer",
+        "col.name": "Nom", "col.size": "Taille", "col.chunks": "Chunks", "col.date": "Date", "col.actions": "Actions",
+        "sessions.title": "Sessions",
+        "sessions.empty": "Aucune session.",
+        "sessions.selectOne": "Selectionne une session",
+        "sessions.none": "Aucune session selectionnee.",
+        "sessions.noMessages": "Pas encore de message dans cette session.",
+        "sessions.sources": "Sources",
+        "arch.split.title": "Backend & Frontend en 30 secondes",
+        "arch.workflow": "Workflow utilisateur",
+        "data.overview": "Vue d ensemble",
+        "data.reset": "Reinitialiser",
+        "data.resetWarn": "Toutes ces operations sont **irreversibles**. La configuration Mistral (table app_config) est preservee.",
+        "data.resetDocs": "Reinit documents",
+        "data.resetSessions": "Reinit sessions",
+        "data.resetAll": "Tout supprimer",
+        "data.confirmAgain": "Cliquer encore pour confirmer",
+        "data.statsUnavailable": "Stats indisponibles.",
+        "kpi.documents": "Documents", "kpi.chunks": "Chunks", "kpi.sessions": "Sessions", "kpi.messages": "Messages", "kpi.totalSize": "Taille totale",
+        "settings.mistral": "Configuration Mistral",
+        "settings.apiKey": "Cle API Mistral",
+        "settings.apiKeyStored": "Une cle est deja enregistree (laisser vide pour la conserver).",
+        "settings.baseUrl": "Base URL",
+        "settings.chatModel": "Modele chat",
+        "settings.embedModel": "Modele embeddings",
+        "settings.save": "Enregistrer",
+        "settings.test": "Tester la connexion",
+        "settings.saved": "Parametres enregistres.",
+        "settings.templates": "Templates a remplir",
+        "settings.styles": "Documents de style / syntaxe",
+        "settings.refsHint.title": "Documents de reference (template + style).",
+        "settings.refsHint.body": "Uploade ici les fichiers qui servent de structure (template avec {{placeholders}}) ou d'exemple de syntaxe / ton a reproduire. Ils ne sont PAS indexes (pas de chunking RAG). On les utilise au moment de la generation depuis l'onglet Generation.",
+        "documents.sourcesOnly": "Documents source uniquement.",
+        "documents.sourcesHint": "Ce sont les fichiers de contenu indexes pour le RAG. Pour uploader un template ou un exemple de style, va dans l'onglet Parametres.",
+        "generate.style": "Style / syntaxe",
+        "generate.style.none": "(Aucun)",
+      },
+      en: {
+        "nav.generate": "Generate",
+        "nav.documents": "Documents",
+        "nav.sessions": "Sessions",
+        "nav.architecture": "Architecture",
+        "nav.data": "Data",
+        "nav.settings": "Settings",
+        "page.generate.title": "Content generation",
+        "page.generate.sub": "Write a brief, select your documents and let Mistral produce the content.",
+        "page.documents.title": "Documents",
+        "page.documents.sub": "PDF, DOCX, PPTX, XLSX, TXT, MD. Parsed and indexed automatically.",
+        "page.sessions.title": "Sessions",
+        "page.sessions.sub": "Generation history.",
+        "page.architecture.title": "Architecture",
+        "page.architecture.sub": "Backend, frontend and user workflow at a glance.",
+        "page.data.title": "Data",
+        "page.data.sub": "Overview and reset operations.",
+        "page.settings.title": "Settings",
+        "page.settings.sub": "Mistral API key and models used.",
+        "generate.brief": "Brief",
+        "generate.output": "Output",
+        "generate.docsToUse": "Documents to use",
+        "generate.placeholder": "E.g.: Write a three-paragraph summary of the key points in the selected documents.",
+        "generate.submit": "Generate",
+        "generate.reset": "Reset",
+        "generate.outputEmpty": "Generated content will appear here.",
+        "generate.tooShort": "Brief must be at least 10 characters.",
+        "generate.noDocs": "No indexed document yet. Go to the Documents tab.",
+        "generate.starting": "Starting generation...",
+        "generate.step.createSession": "1/4 - Creating session...",
+        "generate.step.contactingMistral": "2/4 - Contacting Mistral API (first RAG round-trip)...",
+        "generate.step.waitingFirstToken": "3/4 - Waiting for first Mistral token...",
+        "generate.step.streaming": "4/4 - Streaming...",
+        "generate.done": "Generation complete.",
+        "generate.cancel": "Cancel",
+        "generate.aborted": "Generation cancelled.",
+        "generate.streamEmpty": "Stream closed without data or done event. Check backend logs.",
+        "generate.mistralRequired": "Mistral not configured.",
+        "generate.mistralHint": "Go to the Settings tab to set your API key.",
+        "generate.templateRequired": "Select a template to fill.",
+        "generate.format": "Output format",
+        "generate.format.markdown": "Free markdown",
+        "generate.format.faq": "FAQ (Q/A)",
+        "generate.format.structured": "Structured note",
+        "generate.format.table": "Comparison table",
+        "generate.format.template": "Fill a template",
+        "generate.length": "Length",
+        "generate.length.short": "Short",
+        "generate.length.medium": "Medium",
+        "generate.length.long": "Long",
+        "generate.tone": "Tone",
+        "generate.tone.professional": "Professional",
+        "generate.tone.pedagogical": "Pedagogical",
+        "generate.tone.technical": "Technical",
+        "generate.tone.synthetic": "Synthetic",
+        "generate.template": "Template to fill",
+        "generate.template.none": "(None)",
+        "generate.template.hint": "Upload a .pptx in the Settings tab. Use {{key}} markers OR just plain XXX where content should go: the LLM infers each from the preceding title/label.",
+        "generate.exportMd": "Download as .md",
+        "generate.exportDocx": "Download as .docx",
+        "generate.exportPdf": "Download as .pdf",
+        "generate.exportPptx": "Download as .pptx",
+        "generate.exportPptxHint": "PPTX available only when a .pptx template is selected.",
+        "generate.filename": "Output filename",
+        "generate.filenamePlaceholder": "empty = session title (no extension)",
+        "documents.upload": "Upload",
+        "documents.list": "List",
+        "documents.dropHere": "Drop your files here",
+        "documents.dropHint": "or click to browse. Formats: PDF, DOCX, PPTX, XLSX, TXT, MD.",
+        "documents.empty": "No documents.",
+        "documents.uploading": "Uploading...",
+        "documents.indexMissing": "Index missing",
+        "documents.delete": "Delete",
+        "col.name": "Name", "col.size": "Size", "col.chunks": "Chunks", "col.date": "Date", "col.actions": "Actions",
+        "sessions.title": "Sessions",
+        "sessions.empty": "No sessions.",
+        "sessions.selectOne": "Select a session",
+        "sessions.none": "No session selected.",
+        "sessions.noMessages": "No message in this session yet.",
+        "sessions.sources": "Sources",
+        "arch.split.title": "Backend & Frontend in 30 seconds",
+        "arch.workflow": "User workflow",
+        "data.overview": "Overview",
+        "data.reset": "Reset",
+        "data.resetWarn": "All these operations are **irreversible**. Mistral config (app_config table) is preserved.",
+        "data.resetDocs": "Reset documents",
+        "data.resetSessions": "Reset sessions",
+        "data.resetAll": "Delete everything",
+        "data.confirmAgain": "Click again to confirm",
+        "data.statsUnavailable": "Stats unavailable.",
+        "kpi.documents": "Documents", "kpi.chunks": "Chunks", "kpi.sessions": "Sessions", "kpi.messages": "Messages", "kpi.totalSize": "Total size",
+        "settings.mistral": "Mistral configuration",
+        "settings.apiKey": "Mistral API key",
+        "settings.apiKeyStored": "A key is already stored (leave blank to keep it).",
+        "settings.baseUrl": "Base URL",
+        "settings.chatModel": "Chat model",
+        "settings.embedModel": "Embeddings model",
+        "settings.save": "Save",
+        "settings.test": "Test connection",
+        "settings.saved": "Settings saved.",
+        "settings.templates": "Templates to fill",
+        "settings.styles": "Style / syntax documents",
+        "settings.refsHint.title": "Reference documents (template + style).",
+        "settings.refsHint.body": "Upload here the files used as structure (template with {{placeholders}}) or as a style/tone example to reproduce. They are NOT indexed (no RAG chunking). They're used at generation time from the Generation tab.",
+        "documents.sourcesOnly": "Source documents only.",
+        "documents.sourcesHint": "These are the content files indexed for RAG. To upload a template or a style example, go to Settings.",
+        "generate.style": "Style / syntax",
+        "generate.style.none": "(None)",
+      },
+    };
+
+    let LANG = localStorage.getItem("doc-writer-lang") || "fr";
+
+    function t(key) {
+      const cur = I18N[LANG] || {};
+      const fr = I18N.fr || {};
+      return (cur[key] !== undefined ? cur[key] : (fr[key] !== undefined ? fr[key] : key));
+    }
+
+    function applyI18n() {
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        el.textContent = t(el.dataset.i18n);
+      });
+      document.documentElement.lang = LANG;
+    }
+
+    function setLang(lang) {
+      LANG = lang;
+      try { localStorage.setItem("doc-writer-lang", lang); } catch (e) { /* ignore */ }
+      document.querySelectorAll(".lang-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.lang === lang);
+      });
+      applyI18n();
+      // Re-render la page courante pour traduire son contenu dynamique.
+      navigate(state.currentRoute);
+    }
+
+    document.querySelectorAll(".lang-btn").forEach((b) => {
+      b.addEventListener("click", () => setLang(b.dataset.lang));
+    });
+
+    const routes = {
+      generate: { titleKey: "page.generate.title", subKey: "page.generate.sub", render: renderGenerate },
+      documents: { titleKey: "page.documents.title", subKey: "page.documents.sub", render: renderDocuments },
+      sessions: { titleKey: "page.sessions.title", subKey: "page.sessions.sub", render: renderSessions },
+      architecture: { titleKey: "page.architecture.title", subKey: "page.architecture.sub", render: renderArchitecture },
+      data: { titleKey: "page.data.title", subKey: "page.data.sub", render: renderData },
+      settings: { titleKey: "page.settings.title", subKey: "page.settings.sub", render: renderSettings },
+    };
+
+    const state = {
+      currentRoute: "generate",
+      documents: [],
+      sessions: [],
+      scopeIds: [],
+      output: "",
+      currentSessionId: null,
+      outputFormat: "markdown",
+      length: "medium",
+      tone: "professional",
+      templateDocId: null,
+      styleDocId: null,
+      templates: [],
+      styles: [],
+      outputFilename: "",
+    };
+
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => navigate(btn.dataset.route));
+    });
+
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      const root = document.documentElement;
+      const isDark = root.classList.contains("dark");
+      root.classList.toggle("dark", !isDark);
+      try { localStorage.setItem("theme", isDark ? "light" : "dark"); } catch (e) { /* ignore */ }
+    });
+
+    function navigate(route) {
+      state.currentRoute = route;
+      document.querySelectorAll(".nav-item").forEach((b) => {
+        b.classList.toggle("active", b.dataset.route === route);
+      });
+      const cfg = routes[route] || routes.generate;
+      document.getElementById("pageTitle").textContent = t(cfg.titleKey);
+      document.getElementById("pageSub").textContent = t(cfg.subKey);
+      cfg.render();
+    }
+
+    async function apiRequest(path, options) {
+      const res = await fetch(API + path, options);
+      if (res.status === 204) return null;
+      const text = await res.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch (e) { /* not json */ }
+      if (!res.ok) {
+        const msg = body && body.message ? body.message : (res.statusText || "Erreur");
+        const err = new Error(msg);
+        err.code = body && body.code;
+        throw err;
+      }
+      return body;
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function formatSize(n) {
+      if (n < 1024) return n + " B";
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " kB";
+      return (n / 1024 / 1024).toFixed(2) + " MB";
+    }
+
+    function formatDate(iso) {
+      try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+    }
+
+    function showFeedback(node, kind, msg) {
+      node.innerHTML = '<div class="' + kind + '">' + escapeHtml(msg) + '</div>';
+    }
+
+    // ---- Generate -------------------------------------------------------
+    async function renderGenerate() {
+      // Pre-check Mistral en parallele du listing docs source + templates + styles.
+      const [docs, templates, styles, cfg] = await Promise.all([
+        apiRequest("/documents?kind=source").catch(() => []),
+        apiRequest("/documents?kind=template").catch(() => []),
+        apiRequest("/documents?kind=style").catch(() => []),
+        apiRequest("/settings").catch(() => null),
+      ]);
+      state.documents = docs || [];
+      state.templates = templates || [];
+      state.styles = styles || [];
+      const mistralReady = !!(cfg && cfg.api_key_set);
+      const content = document.getElementById("content");
+      const docItemsHtml = state.documents.length === 0
+        ? '<div class="empty-state">' + escapeHtml(t("generate.noDocs")) + '</div>'
+        : state.documents.map((d) =>
+            '<label><input type="checkbox" value="' + d.id + '"' + (state.scopeIds.includes(d.id) ? ' checked' : '') + '/> <span>' + escapeHtml(d.filename) + '</span></label>'
+          ).join("");
+
+      const mistralBanner = mistralReady
+        ? ""
+        : '<div class="banner warn" id="mistralWarn"><strong>' + escapeHtml(t("generate.mistralRequired")) + '</strong> ' + escapeHtml(t("generate.mistralHint")) + '</div>';
+
+      // Choix possibles (les valeurs sont les keys "machine" envoyees au backend).
+      const formats = [
+        { v: "markdown",   k: "generate.format.markdown" },
+        { v: "faq",        k: "generate.format.faq" },
+        { v: "structured", k: "generate.format.structured" },
+        { v: "table",      k: "generate.format.table" },
+        { v: "template",   k: "generate.format.template" },
+      ];
+      const lengths = [
+        { v: "short",  k: "generate.length.short" },
+        { v: "medium", k: "generate.length.medium" },
+        { v: "long",   k: "generate.length.long" },
+      ];
+      const tones = [
+        { v: "professional", k: "generate.tone.professional" },
+        { v: "pedagogical",  k: "generate.tone.pedagogical" },
+        { v: "technical",    k: "generate.tone.technical" },
+        { v: "synthetic",    k: "generate.tone.synthetic" },
+      ];
+      const renderOpts = (opts, current) => opts.map((o) =>
+        '<option value="' + o.v + '"' + (o.v === current ? ' selected' : '') + '>' + escapeHtml(t(o.k)) + '</option>'
+      ).join("");
+
+      const templateOptions = state.templates.map((d) =>
+        '<option value="' + d.id + '"' + (d.id === state.templateDocId ? ' selected' : '') + '>' + escapeHtml(d.filename) + '</option>'
+      ).join("");
+      const styleOptions = state.styles.map((d) =>
+        '<option value="' + d.id + '"' + (d.id === state.styleDocId ? ' selected' : '') + '>' + escapeHtml(d.filename) + '</option>'
+      ).join("");
+
+      content.innerHTML = `
+        ${mistralBanner}
+        <div class="grid-2">
+          <div class="card">
+            <h2 class="card-title">${escapeHtml(t("generate.brief"))}</h2>
+            <div class="form">
+              <label>
+                <div class="label">${escapeHtml(t("generate.docsToUse"))}</div>
+                <div class="doc-checklist" id="docList">${docItemsHtml}</div>
+              </label>
+
+              <div class="row">
+                <label class="grow">
+                  <div class="label">${escapeHtml(t("generate.format"))}</div>
+                  <select class="input" id="formatSelect">${renderOpts(formats, state.outputFormat)}</select>
+                </label>
+                <label class="grow">
+                  <div class="label">${escapeHtml(t("generate.length"))}</div>
+                  <select class="input" id="lengthSelect">${renderOpts(lengths, state.length)}</select>
+                </label>
+                <label class="grow">
+                  <div class="label">${escapeHtml(t("generate.tone"))}</div>
+                  <select class="input" id="toneSelect">${renderOpts(tones, state.tone)}</select>
+                </label>
+              </div>
+
+              <div class="row">
+                <label id="templateRow" class="grow">
+                  <div class="label">${escapeHtml(t("generate.template"))}</div>
+                  <select class="input" id="templateSelect">
+                    <option value="">${escapeHtml(t("generate.template.none"))}</option>
+                    ${templateOptions}
+                  </select>
+                  ${state.templates.length === 0 ? '<small style="color:var(--fg-dim);font-size:0.78rem;">' + escapeHtml(t("generate.template.hint")) + '</small>' : ''}
+                </label>
+                <label class="grow">
+                  <div class="label">${escapeHtml(t("generate.style"))}</div>
+                  <select class="input" id="styleSelect">
+                    <option value="">${escapeHtml(t("generate.style.none"))}</option>
+                    ${styleOptions}
+                  </select>
+                </label>
+              </div>
+
+              <label>
+                <div class="label">${escapeHtml(t("generate.brief"))}</div>
+                <textarea id="promptText" rows="6" placeholder="${escapeHtml(t("generate.placeholder"))}"></textarea>
+              </label>
+
+              <div class="row">
+                <button class="btn primary" id="generateBtn"${mistralReady ? "" : " disabled"}>${escapeHtml(t("generate.submit"))}</button>
+                <button class="btn ghost" id="resetBtn">${escapeHtml(t("generate.reset"))}</button>
+              </div>
+              <div id="generateFeedback"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card-title">${escapeHtml(t("generate.output"))}</h2>
+            <div class="output" id="output">${escapeHtml(state.output)}</div>
+            <div id="citations" class="msg-citations" style="margin-top:10px;"></div>
+            <div id="exportRow" style="margin-top:12px;${state.output ? "" : "display:none"}">
+              <label>
+                <div class="label">${escapeHtml(t("generate.filename"))}</div>
+                <input class="input" id="filenameInput" type="text" value="${escapeHtml(state.outputFilename || "")}" placeholder="${escapeHtml(t("generate.filenamePlaceholder"))}" />
+              </label>
+              <div class="row" style="margin-top:8px;">
+                <button class="btn secondary small" data-export="md">${escapeHtml(t("generate.exportMd"))}</button>
+                <button class="btn secondary small" data-export="docx">${escapeHtml(t("generate.exportDocx"))}</button>
+                <button class="btn secondary small" data-export="pdf">${escapeHtml(t("generate.exportPdf"))}</button>
+                <button class="btn secondary small" data-export="pptx">${escapeHtml(t("generate.exportPptx"))}</button>
+              </div>
+              <small style="display:block;margin-top:6px;color:var(--fg-dim);font-size:0.78rem;">${escapeHtml(t("generate.exportPptxHint"))}</small>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById("docList").addEventListener("change", (e) => {
+        const target = e.target;
+        if (target.tagName !== "INPUT") return;
+        if (target.checked) state.scopeIds.push(target.value);
+        else state.scopeIds = state.scopeIds.filter((v) => v !== target.value);
+      });
+
+      document.getElementById("formatSelect").addEventListener("change", (e) => {
+        state.outputFormat = e.target.value;
+      });
+      document.getElementById("lengthSelect").addEventListener("change", (e) => { state.length = e.target.value; });
+      document.getElementById("toneSelect").addEventListener("change", (e) => { state.tone = e.target.value; });
+      const tplSel = document.getElementById("templateSelect");
+      if (tplSel) tplSel.addEventListener("change", (e) => { state.templateDocId = e.target.value || null; });
+      const styleSel = document.getElementById("styleSelect");
+      if (styleSel) styleSel.addEventListener("change", (e) => { state.styleDocId = e.target.value || null; });
+
+      document.getElementById("generateBtn").addEventListener("click", () => {
+        doGenerate().catch((e) => {
+          const fb = document.getElementById("generateFeedback");
+          if (fb) showFeedback(fb, "error", "[unhandled] " + (e && e.message ? e.message : String(e)));
+        });
+      });
+      document.getElementById("resetBtn").addEventListener("click", () => {
+        state.output = "";
+        state.scopeIds = [];
+        renderGenerate();
+      });
+
+      const fnInput = document.getElementById("filenameInput");
+      if (fnInput) {
+        fnInput.addEventListener("input", (e) => { state.outputFilename = e.target.value; });
+      }
+
+      document.querySelectorAll("[data-export]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const fb = document.getElementById("generateFeedback");
+          if (!state.currentSessionId) return;
+          const fmt = btn.dataset.export;
+          if (fmt === "pptx" && !state.templateDocId) {
+            if (fb) showFeedback(fb, "error", t("generate.exportPptxHint"));
+            return;
+          }
+          let url = API + "/sessions/" + state.currentSessionId + "/export?format=" + encodeURIComponent(fmt);
+          const fn = (state.outputFilename || "").trim();
+          if (fn) url += "&filename=" + encodeURIComponent(fn);
+          // Download via fetch+blob pour pouvoir lire le message d'erreur JSON
+          // (window.open declencherait le download d'un .pptx contenant le JSON d'erreur).
+          try {
+            const resp = await fetch(url, { method: "GET" });
+            if (!resp.ok) {
+              let detail = resp.statusText;
+              try { const body = await resp.json(); detail = body.message || detail; } catch (e) { /* ignore */ }
+              if (fb) showFeedback(fb, "error", "Export " + fmt + " : " + detail);
+              return;
+            }
+            const blob = await resp.blob();
+            const disposition = resp.headers.get("Content-Disposition") || "";
+            const m = /filename="?([^"]+)"?/.exec(disposition);
+            const outName = m ? m[1] : ((fn || state.currentSessionId) + "." + fmt);
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = outName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(blobUrl);
+          } catch (e) {
+            if (fb) showFeedback(fb, "error", "Export " + fmt + " : " + (e && e.message ? e.message : String(e)));
+          }
+        });
+      });
+    }
+
+    // AbortController de la generation en cours, pour permettre Annuler.
+    let _currentAbort = null;
+
+    async function doGenerate() {
+      const promptEl = document.getElementById("promptText");
+      const fb = document.getElementById("generateFeedback");
+      const btn = document.getElementById("generateBtn");
+      if (!promptEl || !fb) return;
+      const prompt = promptEl.value.trim();
+      if (prompt.length < 10) {
+        showFeedback(fb, "error", t("generate.tooShort"));
+        return;
+      }
+      if (state.outputFormat === "template" && !state.templateDocId) {
+        showFeedback(fb, "error", t("generate.templateRequired"));
+        return;
+      }
+      // Abort run precedent si encore en cours.
+      if (_currentAbort) { try { _currentAbort.abort(); } catch (e) { /* ignore */ } }
+      _currentAbort = new AbortController();
+      if (btn) { btn.textContent = t("generate.cancel"); btn.classList.add("danger"); btn.classList.remove("primary"); }
+
+      const _onAbortClick = () => {
+        if (_currentAbort) try { _currentAbort.abort(); } catch (e) { /* ignore */ }
+      };
+      const _resetBtn = () => {
+        if (!btn) return;
+        btn.textContent = t("generate.submit");
+        btn.classList.add("primary");
+        btn.classList.remove("danger");
+        btn.removeEventListener("click", _onAbortClick);
+      };
+      // Pendant streaming, le bouton bascule sur Annuler.
+      if (btn) btn.addEventListener("click", _onAbortClick, { once: true });
+
+      showFeedback(fb, "success", t("generate.step.createSession"));
+
+      let session;
+      try {
+        session = await apiRequest("/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scope_doc_ids: state.scopeIds,
+            lang: LANG,
+            output_format: state.outputFormat,
+            length: state.length,
+            tone: state.tone,
+            template_doc_id: state.templateDocId || null,
+            style_doc_id: state.styleDocId || null,
+          }),
+        });
+      } catch (e) {
+        showFeedback(fb, "error", "POST /sessions : " + e.message);
+        _resetBtn();
+        return;
+      }
+      state.currentSessionId = session.id;
+      state.output = "";
+      const out = document.getElementById("output");
+      out.textContent = "";
+
+      showFeedback(fb, "success", t("generate.step.contactingMistral"));
+      const startedAt = Date.now();
+      let firstTokenAt = null;
+      let tokenCount = 0;
+
+      try {
+        const resp = await fetch(API + "/sessions/" + session.id + "/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+          body: JSON.stringify({ question: prompt }),
+          signal: _currentAbort.signal,
+        });
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => null);
+          throw new Error((body && body.message) || ("HTTP " + resp.status + " " + resp.statusText));
+        }
+        showFeedback(fb, "success", t("generate.step.waitingFirstToken"));
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          // Normalise CRLF -> LF : sse-starlette emet "\r\n\r\n" mais on cherche "\n\n".
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+          let sep;
+          while ((sep = buffer.indexOf("\n\n")) !== -1) {
+            const chunk = buffer.slice(0, sep);
+            buffer = buffer.slice(sep + 2);
+            const lines = chunk.split("\n");
+            let event = "message";
+            const dataLines = [];
+            for (const line of lines) {
+              if (line.startsWith("event:")) event = line.slice(6).trim();
+              else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+            }
+            const data = dataLines.join("\n");
+            if (event === "session") {
+              // ack de session, on n'affiche rien
+            } else if (event === "token") {
+              if (firstTokenAt === null) {
+                firstTokenAt = Date.now();
+                showFeedback(fb, "success", t("generate.step.streaming"));
+              }
+              tokenCount += 1;
+              state.output += data;
+              out.textContent = state.output;
+            } else if (event === "done") {
+              const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+              showFeedback(fb, "success", t("generate.done") + " (" + tokenCount + " deltas, " + elapsed + "s)");
+              const row = document.getElementById("exportRow");
+              if (row) row.style.display = "";
+            } else if (event === "error") {
+              let m = data;
+              try { m = JSON.parse(data).message || data; } catch (e) { /* ignore */ }
+              showFeedback(fb, "error", "stream : " + m);
+            }
+          }
+        }
+        // Stream ferme sans event 'done' explicite (rare).
+        if (firstTokenAt === null && tokenCount === 0) {
+          showFeedback(fb, "error", t("generate.streamEmpty"));
+        }
+      } catch (e) {
+        if (e && e.name === "AbortError") {
+          showFeedback(fb, "error", t("generate.aborted"));
+        } else {
+          showFeedback(fb, "error", "/ask : " + (e && e.message ? e.message : String(e)));
+        }
+      } finally {
+        _currentAbort = null;
+        _resetBtn();
+      }
+    }
+
+    // ---- Documents ------------------------------------------------------
+    async function renderDocuments() {
+      // Seulement les sources ici. Templates + styles vivent dans Parametres.
+      const docs = await apiRequest("/documents?kind=source").catch(() => []);
+      state.documents = docs || [];
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="banner">
+          <strong>${escapeHtml(t("documents.sourcesOnly"))}</strong> ${escapeHtml(t("documents.sourcesHint"))}
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">${escapeHtml(t("documents.upload"))}</h2>
+          <div class="dropzone" id="dropzone">
+            <strong>${escapeHtml(t("documents.dropHere"))}</strong>
+            <span>${escapeHtml(t("documents.dropHint"))}</span>
+            <input type="file" id="fileInput" multiple accept=".pdf,.docx,.pptx,.xlsx,.xlsm,.txt,.md" style="display:none" />
+          </div>
+          <div id="uploadFeedback" style="margin-top: 10px;"></div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">${escapeHtml(t("documents.list"))}</h2>
+          ${
+            state.documents.length === 0
+              ? '<div class="empty-state">' + escapeHtml(t("documents.empty")) + '</div>'
+              : `<table class="data-table">
+                <thead><tr><th>${escapeHtml(t("col.name"))}</th><th>${escapeHtml(t("col.size"))}</th><th>${escapeHtml(t("col.chunks"))}</th><th>${escapeHtml(t("col.date"))}</th><th style="text-align:right">${escapeHtml(t("col.actions"))}</th></tr></thead>
+                <tbody>
+                  ${state.documents.map((d) => `
+                    <tr>
+                      <td class="file-name">${escapeHtml(d.filename)}</td>
+                      <td class="file-meta">${formatSize(d.size)}</td>
+                      <td>${d.index_error ? '<span class="badge warn">' + escapeHtml(t("documents.indexMissing")) + '</span>' : '<span class="badge ok">' + d.chunk_count + '</span>'}</td>
+                      <td class="file-meta">${formatDate(d.uploaded_at)}</td>
+                      <td style="text-align:right"><button class="btn ghost small" data-delete="${d.id}">${escapeHtml(t("documents.delete"))}</button></td>
+                    </tr>`).join("")}
+                </tbody></table>`
+          }
+        </div>
+      `;
+
+      const dropzone = document.getElementById("dropzone");
+      const fileInput = document.getElementById("fileInput");
+      dropzone.addEventListener("click", () => fileInput.click());
+      dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+      dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+      dropzone.addEventListener("drop", (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); uploadFiles(Array.from(e.dataTransfer.files), "source", "uploadFeedback", renderDocuments); });
+      fileInput.addEventListener("change", () => { if (fileInput.files.length) uploadFiles(Array.from(fileInput.files), "source", "uploadFeedback", renderDocuments); fileInput.value = ""; });
+
+      document.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          try {
+            await apiRequest("/documents/" + btn.dataset.delete, { method: "DELETE" });
+            renderDocuments();
+          } catch (e) { showFeedback(document.getElementById("uploadFeedback"), "error", e.message); }
+        });
+      });
+    }
+
+    /** Upload generique reutilise par Documents (sources) + Parametres (templates / styles).
+     *  feedbackId = id du div ou afficher le toast ; onDone = callback de re-render. */
+    async function uploadFiles(files, kind, feedbackId, onDone) {
+      const fb = document.getElementById(feedbackId);
+      if (fb) showFeedback(fb, "success", t("documents.uploading"));
+      const form = new FormData();
+      for (const f of files) form.append("files", f);
+      form.append("kind", kind);
+      try {
+        const resp = await fetch(API + "/documents", { method: "POST", body: form });
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => null);
+          throw new Error((body && body.message) || resp.statusText);
+        }
+        const data = await resp.json();
+        const okCount = (data.uploaded || []).filter((x) => x.ok).length;
+        if (fb) showFeedback(fb, "success", "Upload OK : " + okCount + "/" + files.length);
+        if (typeof onDone === "function") onDone();
+      } catch (e) {
+        if (fb) showFeedback(fb, "error", e.message);
+      }
+    }
+
+    // ---- Sessions -------------------------------------------------------
+    async function renderSessions() {
+      const sessions = await apiRequest("/sessions").catch(() => []);
+      state.sessions = sessions || [];
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="grid-2">
+          <div class="card">
+            <h2 class="card-title">Sessions</h2>
+            ${
+              state.sessions.length === 0
+                ? '<div class="empty-state">Aucune session.</div>'
+                : `<div class="session-list">
+                  ${state.sessions.map((s) => `
+                    <div class="session-row" data-open="${s.id}">
+                      <div>
+                        <div class="session-name">${escapeHtml(s.title || s.id)}</div>
+                        <div class="session-meta">${formatDate(s.created_at)}</div>
+                      </div>
+                      <div class="row">
+                        <span class="badge">${escapeHtml(s.lang)}</span>
+                        <button class="btn ghost small" data-del="${s.id}">Supprimer</button>
+                      </div>
+                    </div>`).join("")}
+                </div>`
+            }
+          </div>
+          <div class="card">
+            <h2 class="card-title" id="sessionDetailTitle">Selectionne une session</h2>
+            <div id="sessionDetailBody"><div class="empty-state">Aucune session selectionnee.</div></div>
+          </div>
+        </div>
+      `;
+
+      document.querySelectorAll("[data-del]").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          try {
+            await apiRequest("/sessions/" + btn.dataset.del, { method: "DELETE" });
+            renderSessions();
+          } catch (err) { /* swallow */ }
+        });
+      });
+      document.querySelectorAll(".session-row").forEach((row) => {
+        row.addEventListener("click", async () => {
+          const sid = row.dataset.open;
+          if (!sid) return;
+          document.querySelectorAll(".session-row").forEach((r) => r.classList.remove("active"));
+          row.classList.add("active");
+          try {
+            const msgs = await apiRequest("/sessions/" + sid + "/messages");
+            const session = state.sessions.find((s) => s.id === sid);
+            document.getElementById("sessionDetailTitle").textContent = session ? (session.title || sid) : sid;
+            const body = document.getElementById("sessionDetailBody");
+            body.innerHTML = msgs.length === 0
+              ? '<div class="empty-state">Pas encore de message dans cette session.</div>'
+              : msgs.map((m) =>
+                  '<div class="msg ' + escapeHtml(m.role) + '">' +
+                  '<div class="msg-role">' + escapeHtml(m.role) + '</div>' +
+                  '<div style="white-space:pre-wrap">' + escapeHtml(m.content) + '</div>' +
+                  ((m.citations || []).length
+                    ? '<div class="msg-citations">Sources : ' + m.citations.map((c) => '[' + escapeHtml(c.filename) + ']').join(" ") + '</div>'
+                    : "") +
+                  '</div>'
+                ).join("");
+          } catch (err) { /* swallow */ }
+        });
+      });
+    }
+
+    // ---- Architecture ---------------------------------------------------
+    function renderArchitecture() {
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Backend &harr; Frontend en 30 secondes</h2>
+          <div class="grid-2">
+            <div class="arch-split">
+              <div class="label brand-color">BACKEND</div>
+              <div>
+                Python 3.11+ &middot; FastAPI sous <code>/api/v1/</code> &middot; Pydantic v2 &middot;
+                SQLAlchemy 2 + SQLite + Alembic &middot; 5 parsers <code>.pdf</code> (PyMuPDF),
+                <code>.docx</code> (python-docx), <code>.pptx</code> (python-pptx),
+                <code>.xlsx</code> (openpyxl), <code>.txt/.md</code>. Export <code>.pptx</code>
+                via remplissage de template avec placeholders <code>{{cle}}</code>.
+                Indexation RAG : chunking + embeddings Mistral +
+                recherche cosinus (numpy float32 en BLOB SQLite). Streaming SSE via
+                <code>sse-starlette</code> et <code>httpx.AsyncClient</code>.
+                <code>structlog</code> JSON + <code>X-Request-Id</code> propage.
+              </div>
+            </div>
+            <div class="arch-split">
+              <div class="label accent-color">FRONTEND</div>
+              <div>
+                Preview HTML autonome embarque dans le backend (vanilla JS, sans Node) &mdash;
+                consomme l API REST directement, supporte le streaming SSE via
+                <code>fetch + ReadableStream</code>. Build React + Vite optionnel
+                (TS strict, Tailwind via preset partage, RHF + Zod, i18next, Zustand,
+                TanStack Query) pour une UI plus riche avec
+                <code>@internal/ui</code> et <code>@internal/design-tokens</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Workflow utilisateur</h2>
+          <div class="arch-flow">
+            <div class="arch-step"><span class="step-n">1.</span><span>Onglet <strong>Parametres</strong> &rarr; renseigner la cle Mistral et tester la connexion. La cle est stockee localement en SQLite (table <code>app_config</code>).</span></div>
+            <div class="arch-step"><span class="step-n">2.</span><span>Onglet <strong>Documents</strong> &rarr; drag &amp; drop des PDF / DOCX / PPTX / XLSX / TXT / MD. Parsing, dedup SHA-256, chunking puis embeddings Mistral &mdash; tout en synchrone (POC).</span></div>
+            <div class="arch-step"><span class="step-n">3.</span><span>Onglet <strong>Generation</strong> &rarr; selectionner les documents en scope (vide = tous), saisir un brief redactionnel, lancer.</span></div>
+            <div class="arch-step"><span class="step-n">4.</span><span>Le backend cree une <code>Session</code>, recherche les chunks similaires (cosinus k=12), assemble le prompt avec le system prompt <em>writer</em> et streame la reponse via SSE (events <code>session</code> &rarr; <code>token*</code> &rarr; <code>done</code>).</span></div>
+            <div class="arch-step"><span class="step-n">5.</span><span>Le contenu genere est persiste comme <code>Message</code> (role <code>assistant</code>) avec ses citations <code>[filename]</code>. Tu peux relire toutes les sessions dans l onglet <strong>Sessions</strong>.</span></div>
+            <div class="arch-step"><span class="step-n">6.</span><span>Pour partager : <code>package.bat</code> produit un ZIP autonome (Python embed + frontend dist + design-tokens). Le destinataire double-clique <code>start.bat</code> et c est pret.</span></div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ---- Donnees --------------------------------------------------------
+    async function renderData() {
+      const stats = await apiRequest("/admin/stats").catch(() => null);
+      const content = document.getElementById("content");
+      const fmtSize = (n) => (n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " kB" : (n / 1048576).toFixed(2) + " MB");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Vue d ensemble</h2>
+          ${
+            stats
+              ? `<div class="kpi-grid">
+                <div class="kpi"><div class="label">Documents</div><div class="kpi-value info">${stats.documents}</div></div>
+                <div class="kpi"><div class="label">Chunks</div><div class="kpi-value info">${stats.chunks}</div></div>
+                <div class="kpi"><div class="label">Sessions</div><div class="kpi-value info">${stats.sessions}</div></div>
+                <div class="kpi"><div class="label">Messages</div><div class="kpi-value info">${stats.messages}</div></div>
+                <div class="kpi"><div class="label">Taille totale</div><div class="kpi-value">${fmtSize(stats.total_size_bytes)}</div></div>
+              </div>`
+              : '<div class="empty-state">Stats indisponibles.</div>'
+          }
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Reinitialiser</h2>
+          <div class="banner warn">Toutes ces operations sont <strong>irreversibles</strong>. La configuration Mistral (table <code>app_config</code>) est preservee.</div>
+          <div class="row">
+            <button class="btn secondary" data-reset="documents">Reinit documents</button>
+            <button class="btn secondary" data-reset="sessions">Reinit sessions</button>
+            <button class="btn danger" data-reset="all">Tout supprimer</button>
+          </div>
+          <div id="resetFeedback" style="margin-top: 12px;"></div>
+        </div>
+      `;
+
+      // Double-clic pour confirmer (pas de confirm() natif, interdit par standard).
+      document.querySelectorAll("[data-reset]").forEach((btn) => {
+        let armed = false;
+        let timer = null;
+        const original = btn.textContent;
+        btn.addEventListener("click", async () => {
+          const scope = btn.dataset.reset;
+          if (!armed) {
+            armed = true;
+            btn.textContent = "Cliquer encore pour confirmer";
+            btn.classList.add("danger");
+            timer = setTimeout(() => {
+              armed = false;
+              btn.textContent = original;
+              if (scope !== "all") btn.classList.remove("danger");
+            }, 3000);
+            return;
+          }
+          clearTimeout(timer);
+          armed = false;
+          btn.textContent = original;
+          if (scope !== "all") btn.classList.remove("danger");
+          try {
+            const r = await apiRequest("/admin/reset/" + scope, { method: "POST" });
+            const items = Object.entries(r.deleted || {}).map(([k, v]) => k + ": " + v).join(", ");
+            showFeedback(document.getElementById("resetFeedback"), "success", "Reset OK (" + items + ").");
+            setTimeout(() => renderData(), 800);
+          } catch (e) { showFeedback(document.getElementById("resetFeedback"), "error", e.message); }
+        });
+      });
+    }
+
+    // ---- Settings -------------------------------------------------------
+    function _docListSection(title, kind, docs, dropzoneId, listId, feedbackId) {
+      return `
+        <div class="card">
+          <h2 class="card-title">${escapeHtml(title)}</h2>
+          <div class="dropzone" id="${dropzoneId}">
+            <strong>${escapeHtml(t("documents.dropHere"))}</strong>
+            <span>${escapeHtml(t("documents.dropHint"))}</span>
+            <input type="file" id="${dropzoneId}_input" multiple accept=".pdf,.docx,.pptx,.xlsx,.xlsm,.txt,.md" style="display:none" />
+          </div>
+          <div id="${feedbackId}" style="margin-top: 10px;"></div>
+          <div id="${listId}" style="margin-top: 12px;">
+            ${
+              docs.length === 0
+                ? '<div class="empty-state">' + escapeHtml(t("documents.empty")) + '</div>'
+                : '<table class="data-table"><thead><tr><th>' + escapeHtml(t("col.name")) +
+                  '</th><th>' + escapeHtml(t("col.size")) + '</th><th>' + escapeHtml(t("col.date")) +
+                  '</th><th style="text-align:right">' + escapeHtml(t("col.actions")) + '</th></tr></thead><tbody>' +
+                  docs.map((d) =>
+                    '<tr><td class="file-name">' + escapeHtml(d.filename) + '</td>' +
+                    '<td class="file-meta">' + formatSize(d.size) + '</td>' +
+                    '<td class="file-meta">' + formatDate(d.uploaded_at) + '</td>' +
+                    '<td style="text-align:right"><button class="btn ghost small" data-delete-' + kind + '="' + d.id + '">' + escapeHtml(t("documents.delete")) + '</button></td>' +
+                    '</tr>'
+                  ).join("") +
+                  '</tbody></table>'
+            }
+          </div>
+        </div>
+      `;
+    }
+
+    async function renderSettings() {
+      const [cfg, templates, styles] = await Promise.all([
+        apiRequest("/settings").catch(() => null),
+        apiRequest("/documents?kind=template").catch(() => []),
+        apiRequest("/documents?kind=style").catch(() => []),
+      ]);
+      state.templates = templates || [];
+      state.styles = styles || [];
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">
+            <span style="display:inline-flex;align-items:center;gap:10px">${escapeHtml(t("settings.mistral"))}
+              ${cfg && cfg.api_key_set ? '<span class="badge ok">CONFIGURED</span>' : '<span class="badge warn">NOT CONFIGURED</span>'}
+            </span>
+          </h2>
+          <form id="settingsForm" class="form">
+            <label>
+              <div class="label">${escapeHtml(t("settings.apiKey"))}</div>
+              <input class="input" id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+              ${cfg && cfg.api_key_set ? '<small style="color:var(--fg-dim);font-size:0.78rem">' + escapeHtml(t("settings.apiKeyStored")) + '</small>' : ""}
+            </label>
+            <label>
+              <div class="label">${escapeHtml(t("settings.baseUrl"))}</div>
+              <input class="input" id="baseUrl" type="url" value="${escapeHtml(cfg ? cfg.base_url : "https://api.mistral.ai")}" />
+            </label>
+            <div class="row">
+              <label class="grow">
+                <div class="label">${escapeHtml(t("settings.chatModel"))}</div>
+                <input class="input" id="chatModel" type="text" value="${escapeHtml(cfg ? cfg.chat_model : "mistral-small-latest")}" />
+              </label>
+              <label class="grow">
+                <div class="label">${escapeHtml(t("settings.embedModel"))}</div>
+                <input class="input" id="embedModel" type="text" value="${escapeHtml(cfg ? cfg.embed_model : "mistral-embed")}" />
+              </label>
+            </div>
+            <div class="row">
+              <button class="btn primary" type="button" id="saveBtn">${escapeHtml(t("settings.save"))}</button>
+              <button class="btn secondary" type="button" id="testBtn">${escapeHtml(t("settings.test"))}</button>
+              <span id="settingsFeedback" class="grow"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="banner">
+          <strong>${escapeHtml(t("settings.refsHint.title"))}</strong> ${escapeHtml(t("settings.refsHint.body"))}
+        </div>
+
+        ${_docListSection(t("settings.templates"), "template", state.templates, "tplDropzone", "tplList", "tplFeedback")}
+        ${_docListSection(t("settings.styles"),    "style",    state.styles,    "styleDropzone", "styleList", "styleFeedback")}
+      `;
+
+      document.getElementById("saveBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("settingsFeedback");
+        const payload = {
+          base_url: document.getElementById("baseUrl").value,
+          chat_model: document.getElementById("chatModel").value,
+          embed_model: document.getElementById("embedModel").value,
+        };
+        const apiKey = document.getElementById("apiKey").value;
+        if (apiKey) payload.api_key = apiKey;
+        try {
+          await apiRequest("/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          showFeedback(fb, "success", t("settings.saved"));
+          setTimeout(renderSettings, 500);
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.getElementById("testBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("settingsFeedback");
+        try {
+          const r = await apiRequest("/settings/test", { method: "POST" });
+          if (r.ok) showFeedback(fb, "success", "Connexion OK (" + r.models.length + " modeles disponibles).");
+          else showFeedback(fb, "error", "Echec : " + (r.error || ""));
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      // Dropzones templates + styles.
+      function _bindZone(zoneId, kind, listId, feedbackId) {
+        const dz = document.getElementById(zoneId);
+        const fi = document.getElementById(zoneId + "_input");
+        if (!dz || !fi) return;
+        dz.addEventListener("click", () => fi.click());
+        dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("dragover"); });
+        dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+        dz.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dz.classList.remove("dragover");
+          uploadFiles(Array.from(e.dataTransfer.files), kind, feedbackId, renderSettings);
+        });
+        fi.addEventListener("change", () => {
+          if (fi.files.length) uploadFiles(Array.from(fi.files), kind, feedbackId, renderSettings);
+          fi.value = "";
+        });
+      }
+      _bindZone("tplDropzone", "template", "tplList", "tplFeedback");
+      _bindZone("styleDropzone", "style", "styleList", "styleFeedback");
+
+      // Delete handlers (templates + styles).
+      ["template", "style"].forEach((kind) => {
+        document.querySelectorAll("[data-delete-" + kind + "]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            try {
+              await apiRequest("/documents/" + btn.dataset["delete" + kind.charAt(0).toUpperCase() + kind.slice(1)], { method: "DELETE" });
+              renderSettings();
+            } catch (e) {
+              const fb = document.getElementById(kind === "template" ? "tplFeedback" : "styleFeedback");
+              showFeedback(fb, "error", e.message);
+            }
+          });
+        });
+      });
+    }
+
+    // Bootstrap : setLang applique l'i18n + appelle navigate(currentRoute).
+    setLang(LANG);
+  </script>
+</body>
+</html>

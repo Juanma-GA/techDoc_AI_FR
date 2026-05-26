@@ -1,0 +1,86 @@
+{
+  "app": {
+    "title": "doc-writer",
+    "version": "0.1.0"
+  },
+  "nav": {
+    "generate": "Generate",
+    "documents": "Documents",
+    "sessions": "Sessions",
+    "settings": "Settings"
+  },
+  "generate": {
+    "title": "Content generation",
+    "subtitle": "Write a brief, select documents and let Mistral produce the content.",
+    "promptLabel": "Brief",
+    "promptPlaceholder": "E.g.: Write a three-paragraph summary of the key points in the selected documents.",
+    "scopeLabel": "Documents to use",
+    "scopeAll": "All documents",
+    "submit": "Generate",
+    "submitting": "Generating…",
+    "stop": "Stop",
+    "errorTitle": "Generation error",
+    "outputEmpty": "Generated content will appear here.",
+    "citations": "Cited sources",
+    "noDocuments": "No indexed document yet — upload a file in the Documents tab first.",
+    "templateLabel": "PPTX template (optional)",
+    "templateUploadLabel": "Drop a .pptx template",
+    "templateUploadDescription": "Auto-detection: {{key}}, XXX, or via Mistral for implicit zones.",
+    "templateClear": "Remove template",
+    "templateReanalyse": "Re-analyse via Mistral",
+    "templateScanning": "Scanning zones…",
+    "templateScanningLlm": "Running Mistral analysis (may take a few seconds)…",
+    "templateLlmAssisted": "some via Mistral",
+    "templateNoZones": "No zone detected. PPTX cannot be filled.",
+    "templateZonesFound": "{{count}} zone(s) detected:",
+    "exportMd": "Download as .md",
+    "exportDocx": "Download as .docx",
+    "exportPdf": "Download as .pdf",
+    "exportPptx": "Download as .pptx",
+    "exportPptxHint": "PPTX export becomes available once a template is attached to the session."
+  },
+  "documents": {
+    "title": "Documents",
+    "subtitle": "PDF, DOCX, PPTX, XLSX, TXT, MD — parsed and indexed automatically.",
+    "uploadLabel": "Drop your files here",
+    "uploadDescription": "or click to browse. Formats: PDF, DOCX, PPTX, XLSX, TXT, MD.",
+    "columnFilename": "Name",
+    "columnSize": "Size",
+    "columnChunks": "Chunks",
+    "columnDate": "Date",
+    "columnActions": "Actions",
+    "delete": "Delete",
+    "empty": "No documents.",
+    "uploading": "Uploading…",
+    "indexErrorBadge": "Index missing",
+    "indexOk": "Indexed"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "subtitle": "Generation history.",
+    "empty": "No sessions.",
+    "open": "Open",
+    "delete": "Delete",
+    "createdAt": "Created on",
+    "scope": "Scope"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Mistral API key and models used.",
+    "apiKeyLabel": "Mistral API key",
+    "apiKeyPlaceholder": "sk-…",
+    "apiKeyStored": "A key is already stored (leave blank to keep it).",
+    "baseUrlLabel": "Base URL",
+    "chatModelLabel": "Chat model",
+    "embedModelLabel": "Embeddings model",
+    "save": "Save",
+    "test": "Test connection",
+    "testOk": "Connection OK ({{count}} models available).",
+    "testFailed": "Failed: {{error}}",
+    "saved": "Settings saved."
+  },
+  "errors": {
+    "generic": "An error occurred.",
+    "noMistral": "Mistral is not configured. Set your API key in Settings."
+  }
+}

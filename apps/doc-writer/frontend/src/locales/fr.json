@@ -1,0 +1,86 @@
+{
+  "app": {
+    "title": "doc-writer",
+    "version": "0.1.0"
+  },
+  "nav": {
+    "generate": "Génération",
+    "documents": "Documents",
+    "sessions": "Sessions",
+    "settings": "Paramètres"
+  },
+  "generate": {
+    "title": "Génération de contenu",
+    "subtitle": "Rédige un brief, sélectionne tes documents et laisse Mistral produire le contenu.",
+    "promptLabel": "Brief",
+    "promptPlaceholder": "Ex : Rédige une synthèse en trois paragraphes des points clés des documents sélectionnés.",
+    "scopeLabel": "Documents à utiliser",
+    "scopeAll": "Tous les documents",
+    "submit": "Générer",
+    "submitting": "Génération en cours…",
+    "stop": "Arrêter",
+    "errorTitle": "Erreur de génération",
+    "outputEmpty": "Le contenu généré apparaîtra ici.",
+    "citations": "Sources citées",
+    "noDocuments": "Aucun document indexé — uploade d'abord un fichier dans l'onglet Documents.",
+    "templateLabel": "Template PPTX (optionnel)",
+    "templateUploadLabel": "Déposez un template .pptx",
+    "templateUploadDescription": "Détection automatique : {{cle}}, XXX, ou via Mistral pour les zones implicites.",
+    "templateClear": "Retirer le template",
+    "templateReanalyse": "Réanalyser via Mistral",
+    "templateScanning": "Détection des zones…",
+    "templateScanningLlm": "Analyse Mistral en cours (peut prendre quelques secondes)…",
+    "templateLlmAssisted": "dont certaines via Mistral",
+    "templateNoZones": "Aucune zone détectée. Le PPTX ne pourra pas être rempli.",
+    "templateZonesFound": "{{count}} zone(s) détectée(s) :",
+    "exportMd": "Télécharger en .md",
+    "exportDocx": "Télécharger en .docx",
+    "exportPdf": "Télécharger en .pdf",
+    "exportPptx": "Télécharger en .pptx",
+    "exportPptxHint": "Le bouton PPTX devient actif quand un template est attaché à la session."
+  },
+  "documents": {
+    "title": "Documents",
+    "subtitle": "PDF, DOCX, PPTX, XLSX, TXT, MD — parsés et indexés automatiquement.",
+    "uploadLabel": "Déposez vos fichiers ici",
+    "uploadDescription": "ou cliquez pour parcourir. Formats : PDF, DOCX, PPTX, XLSX, TXT, MD.",
+    "columnFilename": "Nom",
+    "columnSize": "Taille",
+    "columnChunks": "Chunks",
+    "columnDate": "Date",
+    "columnActions": "Actions",
+    "delete": "Supprimer",
+    "empty": "Aucun document.",
+    "uploading": "Upload en cours…",
+    "indexErrorBadge": "Index manquant",
+    "indexOk": "Indexé"
+  },
+  "sessions": {
+    "title": "Sessions",
+    "subtitle": "Historique des générations.",
+    "empty": "Aucune session.",
+    "open": "Voir",
+    "delete": "Supprimer",
+    "createdAt": "Créée le",
+    "scope": "Périmètre"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "subtitle": "Clé API Mistral et modèles utilisés.",
+    "apiKeyLabel": "Clé API Mistral",
+    "apiKeyPlaceholder": "sk-…",
+    "apiKeyStored": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
+    "baseUrlLabel": "URL de base",
+    "chatModelLabel": "Modèle chat",
+    "embedModelLabel": "Modèle embeddings",
+    "save": "Enregistrer",
+    "test": "Tester la connexion",
+    "testOk": "Connexion OK ({{count}} modèles disponibles).",
+    "testFailed": "Échec : {{error}}",
+    "saved": "Paramètres enregistrés."
+  },
+  "errors": {
+    "generic": "Une erreur est survenue.",
+    "noMistral": "Mistral n'est pas configuré. Renseigne ta clé dans Paramètres."
+  }
+}

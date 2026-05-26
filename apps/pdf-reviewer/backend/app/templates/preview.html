@@ -1,0 +1,2415 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <title>PDF Reviewer</title>
+  <script>
+    (function () {
+      var stored = localStorage.getItem("theme");
+      var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700&display=swap" />
+  <style>
+    /*__CSS_VARS__*/
+    .theme-toggle { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--fg-dim); border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+    .theme-toggle:hover { background: var(--card-hover); color: var(--fg); }
+    .theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .theme-toggle-sun { display: none; }
+    .theme-toggle-moon { display: block; }
+    .dark .theme-toggle-sun { display: block; }
+    .dark .theme-toggle-moon { display: none; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    html { font-size: 13.5px; }
+    body { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; }
+    a { color: var(--brand-light); text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    [hidden] { display: none !important; }
+
+    .layout { display: flex; height: 100vh; }
+    aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .sidebar-header { display: flex; align-items: baseline; gap: 8px; padding: 16px; border-bottom: 1px solid var(--border); }
+    .brand { font-family: "Orbitron", sans-serif; font-size: 1.15rem; color: var(--brand-light); }
+    .label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); }
+    .sidebar nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; flex: 1; }
+    .nav-item { display: flex; align-items: center; padding: 8px 12px; border-radius: 8px; color: var(--fg-dim); transition: background 0.15s, color 0.15s; border: none; background: transparent; width: 100%; text-align: left; }
+    .nav-item:hover { background: var(--card-hover); color: var(--fg); }
+    .nav-item.active { background: var(--brand); color: var(--fg); }
+    .nav-item:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .lang-switch { display: flex; gap: 4px; padding: 12px; border-top: 1px solid var(--border); }
+    .lang-btn { flex: 1; padding: 6px; border: 1px solid var(--border); background: transparent; color: var(--fg-dim); border-radius: 6px; font-size: 0.75rem; }
+    .lang-btn.active { background: var(--brand); color: var(--fg); border-color: var(--brand); }
+
+    main { flex: 1; overflow-y: auto; padding: 24px 32px; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-family: "Orbitron", sans-serif; font-size: 1.5rem; margin: 0 0 4px 0; }
+    .page-header p { color: var(--fg-dim); margin: 0; }
+
+    .banner { background: var(--card); border: 1px solid var(--border-bright); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--fg-dim); }
+    .banner strong { color: var(--fg); }
+    .banner code { font-family: "JetBrains Mono", monospace; background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-card); margin-bottom: 16px; }
+    .card-title { font-family: "Orbitron", sans-serif; font-size: 1.05rem; margin: 0 0 14px 0; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .grow { flex: 1; min-width: 0; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .kpi-value { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
+    .kpi-value.ok { color: var(--success); }
+    .kpi-value.warn { color: var(--warning); }
+    .kpi-value.err { color: var(--danger); }
+    .kpi-value.info { color: var(--info); }
+
+    .form { display: flex; flex-direction: column; gap: 10px; }
+    .input, select, textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
+    textarea { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
+    .input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
+    .checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+    .checkbox input { accent-color: var(--brand); }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: none; padding: 8px 14px; font-weight: 500; transition: background 0.15s, opacity 0.15s, color 0.15s; }
+    .btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .btn.primary { background: var(--brand); color: var(--fg); }
+    .btn.primary:hover { background: var(--brand-light); }
+    .btn.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); }
+    .btn.secondary:hover { background: var(--card-hover); }
+    .btn.ghost { background: transparent; color: var(--fg-dim); }
+    .btn.ghost:hover { background: var(--card-hover); color: var(--fg); }
+    .btn.danger { background: var(--danger); color: var(--fg); }
+    .btn.danger:hover { opacity: 0.85; }
+    .btn.small { padding: 4px 10px; font-size: 0.8rem; }
+    .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+    .error, .success { margin-top: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg-2); font-size: 0.85rem; white-space: pre-wrap; }
+    .error { border: 1px solid var(--danger); color: var(--danger); }
+    .success { border: 1px solid var(--success); color: var(--success); }
+
+    .doc-list { display: flex; flex-direction: column; gap: 6px; }
+    .doc-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+    .doc-row:hover { border-color: var(--border-bright); }
+    .doc-name { font-weight: 600; }
+    .doc-meta { color: var(--fg-dim); font-size: 0.85rem; }
+
+    .badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; }
+    .badge.info  { color: var(--info);  border-color: var(--info); }
+    .badge.ok    { color: var(--success); border-color: var(--success); }
+    .badge.warn  { color: var(--warning); border-color: var(--warning); }
+    .badge.danger { color: var(--danger); border-color: var(--danger); }
+    .badge.units { color: var(--accent-teal); border-color: var(--accent-teal); }
+    .badge .spin {
+      display: inline-block; width: 8px; height: 8px; margin-right: 5px;
+      border: 1.5px solid currentColor; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state { text-align: center; color: var(--fg-dim); padding: 24px; }
+
+    .arch-layers { display: flex; flex-direction: column; gap: 8px; }
+    .arch-layer { display: grid; grid-template-columns: 60px 200px 1fr; gap: 12px; align-items: center; padding: 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
+    .arch-num { font-family: "Orbitron", sans-serif; font-size: 1.6rem; color: var(--brand-light); text-align: center; }
+    .arch-name { font-weight: 600; }
+    .arch-desc { color: var(--fg-dim); font-size: 0.85rem; }
+    .arch-flow { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .arch-step { display: flex; gap: 10px; padding: 8px 12px; background: var(--bg-2); border-left: 3px solid var(--brand); border-radius: 4px; font-size: 0.9rem; }
+    .arch-step .step-n { color: var(--brand-light); font-family: "JetBrains Mono", monospace; font-weight: 700; }
+
+    .slicer { display: flex; flex-wrap: wrap; gap: 8px; }
+    .slicer-pill { background: transparent; border: 1px solid var(--border); color: var(--fg-dim); padding: 6px 14px; border-radius: 9999px; cursor: pointer; font-size: 0.85rem; font-family: inherit; transition: all 0.12s ease-out; }
+    .slicer-pill:hover { border-color: var(--brand-light); color: var(--fg); }
+    .slicer-pill.active { background: var(--brand); border-color: var(--brand); color: var(--fg); }
+    .slicer-pill:focus-visible { outline: 2px solid var(--brand-light); outline-offset: 2px; }
+
+    .red-file-block { margin-bottom: 14px; }
+    .red-file-header { padding: 8px 12px; background: var(--bg-2); border-radius: 6px; border-left: 3px solid var(--brand); margin-bottom: 8px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; user-select: none; }
+    .red-file-header:hover { background: var(--card-hover); }
+    .red-file-header .caret { display: inline-block; transition: transform 0.15s ease-out; color: var(--fg-dim); margin-right: 6px; font-family: "JetBrains Mono", monospace; }
+    .red-file-block.collapsed .red-anomalies-wrap { display: none; }
+    .red-file-block.collapsed .caret { transform: rotate(-90deg); }
+    /* Reviewer hierarchy: doc-level wrapper hosts page-level red-file-block(s) */
+    .red-doc-block { margin-bottom: 18px; padding: 10px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+    .red-doc-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 4px; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .red-doc-header:hover { color: var(--fg); }
+    .red-doc-header .caret { display: inline-block; transition: transform 0.15s ease-out; color: var(--fg-dim); margin-right: 8px; font-family: "JetBrains Mono", monospace; }
+    .red-doc-block.collapsed .red-doc-body { display: none; }
+    .red-doc-block.collapsed .caret { transform: rotate(-90deg); }
+    .red-doc-block.collapsed .red-doc-header { border-bottom: none; margin-bottom: 0; }
+    .red-doc-name { font-weight: 600; color: var(--fg); display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .red-doc-name .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .red-doc-stats { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+    .red-anomaly { padding: 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; }
+    .red-anomaly.selected { border-color: var(--brand-light); }
+    .red-anomaly-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; font-size: 0.78rem; }
+    .red-anomaly-meta .loc { color: var(--brand-light); font-family: "JetBrains Mono", monospace; }
+    .red-anomaly-msg { margin: 4px 0; }
+    .red-anomaly-diff { font-family: "JetBrains Mono", monospace; font-size: 0.82rem; padding: 6px 8px; border-left: 2px solid var(--brand-light); background: var(--bg); border-radius: 4px; margin: 6px 0; }
+    .red-anomaly-diff .del { background: rgba(239,68,68,0.18); color: var(--danger); padding: 0 3px; text-decoration: line-through; }
+    .red-anomaly-diff .ins { background: rgba(16,185,129,0.18); color: var(--success); padding: 0 3px; }
+    .red-anomaly-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; margin-top: 6px; }
+    .red-anomaly-edit { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+    .red-anomaly-edit label { font-size: 0.72rem; color: var(--fg-dim); font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; }
+
+    .dropzone {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 36px 24px; min-height: 180px;
+      border: 2px dashed var(--border-bright);
+      border-radius: 12px; background: var(--bg-2);
+      color: var(--fg-dim); cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.05s;
+    }
+    .dropzone:hover { background: var(--card-hover); border-color: var(--brand-light); }
+    .dropzone.drag {
+      background: var(--card-hover); border-color: var(--brand-light); border-style: solid;
+      transform: scale(1.005);
+    }
+    .dropzone-icon { font-size: 2rem; line-height: 1; }
+    .dropzone-title { color: var(--fg); font-weight: 600; font-size: 0.95rem; text-align: center; }
+    .dropzone-hint { font-size: 0.8rem; text-align: center; }
+    .dropzone input[type=file] { display: none; }
+
+    .toast { position: fixed; bottom: 20px; right: 20px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow-card); max-width: 320px; z-index: 100; }
+    .toast.error { border-color: var(--danger); }
+    .toast.success { border-color: var(--success); }
+
+    .bar-row { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr 44px; gap: 10px; align-items: center; padding: 5px 0; font-size: 0.85rem; }
+    .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .bar-track { height: 8px; background: var(--bg-2); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--brand-light); transition: width 0.2s ease; }
+    .bar-fill.warn { background: var(--warning); }
+    .bar-fill.err { background: var(--danger); }
+    .bar-fill.units { background: var(--accent-teal); }
+    .bar-count { font-family: "JetBrains Mono", monospace; color: var(--fg-dim); text-align: right; font-variant-numeric: tabular-nums; }
+
+    .progress { height: 4px; background: var(--bg-2); border-radius: 2px; overflow: hidden; margin: 8px 0; }
+    .progress-bar { height: 100%; background: var(--brand-light); transition: width 0.2s; }
+
+    .rules-table { width: 100%; border-collapse: collapse; }
+    .rules-table th { padding: 6px 8px; text-align: left; color: var(--fg-dim); text-transform: uppercase; font-size: 0.65rem; letter-spacing: 1px; font-family: "JetBrains Mono", monospace; }
+    .rules-table td { padding: 6px 8px; border-top: 1px solid var(--border); vertical-align: middle; }
+    .rules-table tr.editing td { background: var(--bg-2); }
+    .rules-table input.input, .rules-table select.input { padding: 4px 6px; font-size: 0.85rem; }
+
+    .upload-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+    .upload-row { padding: 8px 10px; background: var(--bg-2); border-radius: 6px; }
+    .upload-row .name { font-family: "JetBrains Mono", monospace; font-size: 0.78rem; }
+    .upload-row.error .name { color: var(--danger); }
+    .upload-row.done .name { color: var(--success); }
+
+    .viewer-wrap { position: relative; display: inline-block; max-width: 100%; }
+    .viewer-img { display: block; width: 100%; height: auto; border-radius: 6px; }
+    .viewer-overlay {
+      position: absolute; cursor: pointer;
+      border: 2px solid var(--warning); background: rgba(245,158,11,0.18);
+      transition: background 0.15s, transform 0.1s;
+    }
+    .viewer-overlay:hover { background: rgba(245,158,11,0.32); transform: scale(1.02); }
+    .viewer-overlay.units { border-color: var(--accent-teal); background: rgba(6,182,212,0.18); }
+    .viewer-overlay.units:hover { background: rgba(6,182,212,0.32); }
+    .viewer-overlay.danger { border-color: var(--danger); background: rgba(239,68,68,0.18); }
+    .viewer-overlay.danger:hover { background: rgba(239,68,68,0.32); }
+    .viewer-overlay.applied { border-color: var(--success); background: rgba(16,185,129,0.14); }
+    .viewer-overlay.rejected { opacity: 0.4; }
+    .viewer-overlay.selected { box-shadow: 0 0 0 3px var(--brand-light); z-index: 2; }
+    .viewer-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="brand">PDF Reviewer</span><span class="label">v2</span>
+        <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+          <svg class="theme-toggle-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+          <svg class="theme-toggle-moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+      <nav>
+        <button type="button" class="nav-item active" data-page="dashboard"    data-i18n="nav.dashboard">Tableau de bord</button>
+        <button type="button" class="nav-item"        data-page="documents"    data-i18n="nav.documents">Documents</button>
+        <button type="button" class="nav-item"        data-page="architecture" data-i18n="nav.architecture">Architecture</button>
+        <button type="button" class="nav-item"        data-page="data"         data-i18n="nav.data">Données</button>
+        <button type="button" class="nav-item"        data-page="settings"     data-i18n="nav.settings">Paramètres</button>
+      </nav>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn active" data-lang="fr">FR</button>
+        <button class="lang-btn"        data-lang="en">EN</button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="page-header">
+        <h1 id="page-title">Tableau de bord</h1>
+        <p id="page-sub"></p>
+      </div>
+
+      <!-- ===== DASHBOARD ===== -->
+      <div data-view="dashboard">
+        <div class="card">
+          <h2 class="card-title" data-i18n="dashboard.kpis">Indicateurs clés</h2>
+          <div class="kpi-grid" id="dash-kpis"><div class="empty-state" data-i18n="common.loading">Chargement…</div></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h2 class="card-title" data-i18n="dashboard.bySev">Suggestions par sévérité</h2>
+            <div id="dash-by-sev"><div class="empty-state">—</div></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title" data-i18n="dashboard.byKind">Suggestions par type de règle</h2>
+            <div id="dash-by-kind"><div class="empty-state">—</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title" data-i18n="dashboard.topDocs">Top documents (suggestions ouvertes)</h2>
+          <div id="dash-top-docs"><div class="empty-state">—</div></div>
+        </div>
+      </div>
+
+      <!-- ===== DOCUMENTS ===== -->
+      <div data-view="documents" hidden>
+        <div data-pview="list">
+          <div class="card">
+            <h2 class="card-title" data-i18n="documents.upload">Importer des PDFs</h2>
+
+            <div class="banner" style="margin-bottom:14px">
+              <span data-i18n="documents.activeStandardLabel">Norme cible active :</span>
+              <strong id="documents-active-standard" style="margin-left:6px">—</strong>
+              <a href="#" id="documents-edit-standard" style="margin-left:10px;color:var(--brand-light)" data-i18n="documents.changeStandard">Modifier dans Paramètres →</a>
+            </div>
+
+            <p class="label" style="margin-bottom:8px" data-i18n="documents.targetUnit">Système d'unités cible</p>
+            <div class="slicer" id="upload-target">
+              <button type="button" class="slicer-pill active" data-target="auto" data-i18n="settings.targetUnit.auto">Auto</button>
+              <button type="button" class="slicer-pill" data-target="metric" data-i18n="settings.targetUnit.metric">Métrique</button>
+              <button type="button" class="slicer-pill" data-target="imperial" data-i18n="settings.targetUnit.imperial">Impérial</button>
+            </div>
+            <label class="dropzone" id="dropzone" style="margin-top:14px">
+              <input type="file" id="file-input" accept="application/pdf" multiple />
+              <div class="dropzone-icon" aria-hidden="true">📄</div>
+              <div class="dropzone-title" data-i18n="documents.dropTitle">Glisse un ou plusieurs PDFs ici</div>
+              <div class="dropzone-hint" data-i18n="documents.dropHint">— ou clique pour parcourir. Multi-sélection acceptée.</div>
+              <div class="label" data-i18n="documents.dropLimit">PDF uniquement · max 20 fichiers · 100 Mo chacun</div>
+            </label>
+            <div id="upload-error" class="error" hidden></div>
+            <div class="upload-list" id="upload-list"></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title" data-i18n="documents.list">Documents importés</h2>
+            <div id="doc-list" class="doc-list"><div class="empty-state" data-i18n="common.loading">Chargement…</div></div>
+          </div>
+        </div>
+
+        <div data-pview="detail" hidden>
+          <div class="row" style="margin-bottom:12px">
+            <button class="btn ghost" id="back-to-docs" data-i18n="documents.back">← Retour aux documents</button>
+            <button class="btn danger small" id="doc-delete" data-i18n="documents.delete">Supprimer le PDF</button>
+          </div>
+          <div class="card">
+            <h2 class="card-title" id="doc-detail-name">…</h2>
+            <div id="doc-detail-meta" class="kpi-grid"></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title" data-i18n="documents.analysis">Analyse</h2>
+            <div class="row">
+              <button class="btn primary" id="run-analysis" data-i18n="documents.runAnalysis">▶ Lancer l'analyse</button>
+              <button class="btn secondary" id="export-pdf" data-i18n="documents.export">⬇ Exporter le PDF édité</button>
+              <label class="checkbox" style="margin-left:auto;gap:6px">
+                <input type="checkbox" id="run-with-vision" />
+                <span data-i18n="documents.runWithVision">Inclure la vision (Pixtral)</span>
+              </label>
+            </div>
+            <div class="progress" id="progress-wrap" hidden>
+              <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+            </div>
+            <div id="analysis-result" hidden style="margin-top:10px"></div>
+            <div id="analysis-error" class="error" hidden></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title" data-i18n="documents.viewer">Aperçu PDF</h2>
+            <div class="viewer-toolbar">
+              <button class="btn ghost small" id="viewer-prev" data-i18n="viewer.prev">◀ Précédent</button>
+              <span class="label" id="viewer-page-label">—</span>
+              <button class="btn ghost small" id="viewer-next" data-i18n="viewer.next">Suivant ▶</button>
+            </div>
+            <div id="viewer-wrap" class="viewer-wrap" style="background:var(--bg-2);min-height:200px;border-radius:6px"></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title" data-i18n="documents.suggestions">Suggestions du document</h2>
+            <div id="doc-suggestions"><div class="empty-state" data-i18n="documents.suggestions.empty">Lance l'analyse pour générer des suggestions.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ARCHITECTURE ===== -->
+      <div data-view="architecture" hidden>
+        <div class="card">
+          <h2 class="card-title" data-i18n="arch.split.title">Backend ↔ Frontend en 30 secondes</h2>
+          <div class="grid-2">
+            <div style="padding:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px">
+              <div class="label" style="color:var(--brand-light);margin-bottom:6px">BACKEND</div>
+              <div data-i18n-html="arch.split.back">Python 3.11+ · FastAPI sous <code>/api/v1/</code> · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic · PyMuPDF (édition PDF + vision) · httpx (Mistral chat + Pixtral) · structlog · SSE pour l'analyse.</div>
+            </div>
+            <div style="padding:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px">
+              <div class="label" style="color:var(--accent-teal);margin-bottom:6px">FRONTEND</div>
+              <div data-i18n-html="arch.split.front">Preview HTML (sans Node) intégrée au backend — vanilla JS · i18n FR/EN · overlays bbox cliquables · forms accept/edit/reject · pages Documents · Normes · Règles · Données · Paramètres. Build React + Vite + react-pdf v9 optionnel pour reviewer plus riche.</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title" data-i18n="arch.workflow">Workflow utilisateur</h2>
+          <div class="arch-flow">
+            <div class="arch-step"><span class="step-n">1.</span> <span data-i18n-html="arch.f1">Onglet « Documents » → glisser un ou plusieurs PDFs dans la dropzone et choisir le système d'unités cible. Versionnage SHA-256 automatique.</span></div>
+            <div class="arch-step"><span class="step-n">2.</span> <span data-i18n-html="arch.f2">« Lancer l'analyse » → 3 contrôles parallèles (6 règles S1000D/STE built-in + règles custom + conversions d'unités) ; les suggestions sont créées avec le statut <code>open</code>, surlignées sur la page concernée.</span></div>
+            <div class="arch-step"><span class="step-n">3.</span> <span data-i18n-html="arch.f3">Vue Rédacteur : suggestions groupées par document et par page. Chaque ligne : <code>original</code> → <code>proposed</code> + sévérité + type. La suggestion est éditable avant Accept.</span></div>
+            <div class="arch-step"><span class="step-n">4.</span> <span data-i18n-html="arch.f4">Cycle suggestion : <code>open → accepted → applied</code> (PyMuPDF édite avec auto-shrink/reflow, crée <code>v_{N+1}.pdf</code>) ou <code>rejected</code>.</span></div>
+            <div class="arch-step"><span class="step-n">5.</span> <span data-i18n-html="arch.f5">Tableau de bord : KPIs agrégés (PDFs · suggestions ouvertes / appliquées · top documents · répartition par sévérité et par type de règle).</span></div>
+            <div class="arch-step"><span class="step-n">6.</span> <span data-i18n-html="arch.f6">Export PDF édité (<code>vN.pdf</code> courant) ou rollback à n'importe quelle version antérieure. <code>EditHistory</code> trace tous les patchs.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== DATA ADMIN ===== -->
+      <div data-view="data" hidden>
+        <div class="card">
+          <h2 class="card-title" data-i18n="data.overview">Vue d'ensemble</h2>
+          <div id="data-stats" class="kpi-grid"><div class="empty-state" data-i18n="common.loading">Chargement…</div></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title" data-i18n="data.reset">Réinitialiser</h2>
+          <div class="banner" data-i18n="data.resetWarn">Toutes ces opérations sont <strong>irréversibles</strong>. Les règles custom et la config Mistral sont préservées.</div>
+          <div class="row" style="gap:12px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn secondary" id="data-reset-suggestions" data-i18n="data.resetSugs">Effacer toutes les suggestions</button>
+            <button class="btn danger" id="data-reset-all" data-i18n="data.resetAll">Tout supprimer (PDFs + suggestions + fichiers disque)</button>
+            <span id="data-reset-feedback" style="margin-left:auto;color:var(--fg-dim)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SETTINGS ===== -->
+      <div data-view="settings" hidden>
+        <div class="card" id="settings-target-standard-card">
+          <h2 class="card-title" data-i18n="settings.activeStandards.title">Normes cibles actives</h2>
+          <p style="color:var(--fg-dim);margin-top:0" data-i18n="settings.activeStandards.hint">
+            Sélectionne une ou plusieurs normes — leurs catalogues sont fusionnés à chaque analyse et appliqués à tous les nouveaux PDFs importés. Le choix est persistant.
+          </p>
+          <div id="active-standards-pills" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div class="row" style="margin-top:10px">
+            <span class="label" id="active-standards-summary" style="color:var(--fg-dim)"></span>
+            <button class="btn ghost small" type="button" id="active-standards-clear" style="margin-left:auto" data-i18n="settings.activeStandards.clear">Tout désactiver</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title" data-i18n="settings.standardsAdmin.title">Administration des normes</h2>
+          <p style="color:var(--fg-dim);margin-top:0" data-i18n-html="settings.standardsAdmin.hint">
+            Liste les normes built-in et tes normes custom. Sélectionne une version pour voir son catalogue de règles (lecture seule pour les built-in), ajouter des règles custom attachées à cette version, ou demander à l'IA d'en proposer de nouvelles.
+          </p>
+
+          <div class="grid-2" style="margin-top:10px">
+            <div>
+              <div class="label" style="margin-bottom:6px" data-i18n="standards.listTitle">Catalogue</div>
+              <div id="standards-list"><div class="empty-state" data-i18n="common.loading">Chargement…</div></div>
+
+              <form id="standards-create-form" class="form" autocomplete="off" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+                <div class="label" data-i18n="standards.createCustom">Créer une norme custom</div>
+                <input class="input" name="code" required data-i18n-placeholder="standards.codePh" placeholder="Code (ex : MYCO-DOC)" />
+                <input class="input" name="label" required data-i18n-placeholder="standards.labelPh" placeholder="Libellé" />
+                <input class="input" name="description" data-i18n-placeholder="standards.descPh" placeholder="Description (optionnelle)" />
+                <button class="btn primary small" type="submit" data-i18n="standards.create">+ Créer la norme</button>
+                <span id="standards-create-feedback" style="font-size:0.85rem;color:var(--fg-dim)"></span>
+              </form>
+            </div>
+
+            <div>
+              <div id="standards-detail-header" class="row" style="align-items:center;gap:10px;margin-bottom:8px">
+                <h3 id="standards-detail-title" style="margin:0;font-family:'Orbitron',sans-serif;font-size:1.0rem;color:var(--fg)" data-i18n="standards.detailTitle">Détail de la norme</h3>
+              </div>
+              <div id="standards-detail"><div class="empty-state" data-i18n="standards.detailEmpty">Sélectionne une norme pour voir ses versions et son catalogue.</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title" data-i18n="settings.mistral">Configuration Mistral</h2>
+          <p style="color:var(--fg-dim);margin-top:0" data-i18n="settings.mistralHint">
+            Optionnel — utilisé pour les suggestions enrichies par LLM. La pipeline d'analyse fonctionne sans clé.
+          </p>
+          <form id="mistral-form" class="form">
+            <label>
+              <div class="label"><span data-i18n="settings.apiKey">Clé API</span> <span id="mistral-status" style="margin-left:8px"></span></div>
+              <input class="input" name="api_key" type="password" data-i18n-placeholder="settings.apiKeyPh" placeholder="laisse vide pour conserver la clé actuelle" autocomplete="off" />
+            </label>
+            <label>
+              <div class="label" data-i18n="settings.baseUrl">Base URL</div>
+              <input class="input" name="base_url" value="https://api.mistral.ai" />
+            </label>
+            <label>
+              <div class="label" data-i18n="settings.chatModel">Modèle chat</div>
+              <input class="input" name="chat_model" value="mistral-small-latest" />
+            </label>
+            <label>
+              <div class="label" data-i18n="settings.visionModel">Modèle vision (Pixtral)</div>
+              <input class="input" name="vision_model" value="pixtral-12b-2409" />
+            </label>
+            <label class="checkbox" style="gap:8px">
+              <input type="checkbox" name="vision_enabled" id="mistral-vision-enabled" />
+              <span data-i18n="settings.visionEnabled">Activer l'analyse vision (Pixtral) sur les illustrations du PDF</span>
+            </label>
+            <div class="row">
+              <button class="btn primary" type="submit" data-i18n="common.save">Sauvegarder</button>
+              <button class="btn secondary" type="button" id="mistral-test" data-i18n="settings.test">Tester la connexion</button>
+              <span id="mistral-feedback" style="font-size:0.85rem;color:var(--fg-dim)"></span>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title" data-i18n="settings.aiPrompt">Consignes IA personnalisées</h2>
+          <p style="color:var(--fg-dim);margin-top:0" data-i18n="settings.aiPromptHint">
+            Consignes en langage naturel passées à Mistral pendant chaque analyse.
+            Mistral scanne le texte de chaque page et propose des corrections selon ces consignes.
+            Nécessite une clé API Mistral configurée. Limite : 30 premières pages par PDF.
+          </p>
+          <textarea id="ai-prompt" rows="5" data-i18n-placeholder="settings.aiPromptPh"
+                    placeholder="Ex : Pas de mot en complètes majuscules, pas d'oubli d'accents, pas d'espace entre les parenthèses."
+                    style="font-family: 'Inter', sans-serif"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn primary" type="button" id="ai-prompt-save" data-i18n="common.save">Sauvegarder</button>
+            <button class="btn ghost" type="button" id="ai-prompt-clear" data-i18n="settings.aiPromptClear">Effacer</button>
+            <span id="ai-prompt-feedback" style="font-size:0.85rem;color:var(--fg-dim)"></span>
+          </div>
+        </div>
+
+
+        <div class="card">
+          <h2 class="card-title" data-i18n="settings.customRules">Règles custom</h2>
+          <div class="banner" data-i18n="settings.customHint">
+            S'exécutent en plus des règles S1000D et des conversions d'unités. Stockées en base. Édition inline.
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn ghost" type="button" id="rules-suggest" data-i18n="rules.suggest">✨ Suggérer depuis les PDFs</button>
+            <span id="rules-suggest-feedback" style="font-size:0.85rem;color:var(--fg-dim)"></span>
+          </div>
+          <div id="rules-suggestions-wrap" hidden style="margin-top:14px;padding:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px">
+            <div class="row" style="align-items:center">
+              <h3 style="font-size:0.95rem;margin:0;color:var(--fg);font-weight:600" data-i18n="rules.suggestionsTitle">Suggestions Mistral</h3>
+              <span id="rules-suggest-meta" class="label" style="margin-left:auto;font-size:0.7rem;color:var(--fg-dim)"></span>
+            </div>
+            <div id="rules-suggestions-body" style="margin-top:10px"></div>
+            <div class="row" style="margin-top:10px">
+              <button class="btn primary" type="button" id="rules-suggest-apply" data-i18n="rules.applySelected">Appliquer la sélection</button>
+              <button class="btn ghost" type="button" id="rules-suggest-close" data-i18n="rules.discard">Fermer</button>
+            </div>
+          </div>
+          <form id="rule-form" class="form" autocomplete="off" style="margin-top:12px">
+            <div class="row">
+              <input class="input" name="name" required data-i18n-placeholder="rules.namePh" placeholder="Nom (ex: Préférer 'shall')" />
+              <select class="input" name="kind" style="max-width:260px">
+                <option value="term_replace" data-i18n="rules.kind.term">Terme exact</option>
+                <option value="regex_replace" data-i18n="rules.kind.regexReplace">Regex (remplacement)</option>
+                <option value="regex_flag" data-i18n="rules.kind.regexFlag">Regex (signaler)</option>
+                <option value="case_capitalize" data-i18n="rules.kind.caseCap">MAJUS → Capitalize</option>
+                <option value="accent_fix" data-i18n="rules.kind.accentFix">Accent FR (mots fréquents)</option>
+              </select>
+              <select class="input" name="severity" style="max-width:140px">
+                <option value="info">info</option>
+                <option value="warning" selected>warning</option>
+                <option value="error">error</option>
+              </select>
+            </div>
+            <div class="row">
+              <input class="input" name="pattern" required data-i18n-placeholder="rules.patternPh" placeholder="Motif (ex: must)" />
+              <input class="input" name="replacement" data-i18n-placeholder="rules.replacementPh" placeholder="Remplacement (ex: shall)" />
+            </div>
+            <input class="input" name="message" data-i18n-placeholder="rules.messagePh" placeholder="Message affiché à l'utilisateur" />
+            <div><button class="btn primary" type="submit" data-i18n="rules.create">+ Créer la règle</button></div>
+          </form>
+          <div id="rule-form-error" class="error" hidden></div>
+          <h3 style="font-size:0.95rem;margin:18px 0 6px;color:var(--fg);font-weight:600" data-i18n="rules.existing">Règles existantes</h3>
+          <div id="rules-list"><div class="empty-state" data-i18n="common.loading">Chargement…</div></div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title" data-i18n="settings.targetUnit">Système d'unités cible par défaut</h2>
+          <p style="color:var(--fg-dim);margin-top:0" data-i18n="settings.targetUnitHint">
+            Appliqué aux nouveaux PDFs uploadés. Persisté dans <code>localStorage</code>.
+          </p>
+          <div class="slicer" id="settings-target">
+            <button type="button" class="slicer-pill" data-target="auto" data-i18n="settings.targetUnit.auto">Auto</button>
+            <button type="button" class="slicer-pill" data-target="metric" data-i18n="settings.targetUnit.metric">Métrique</button>
+            <button type="button" class="slicer-pill" data-target="imperial" data-i18n="settings.targetUnit.imperial">Impérial</button>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <div id="toast-container"></div>
+
+<script>
+const API = "/api/v1";
+
+function _loadActiveVersionIds() {
+  const raw = localStorage.getItem("pdfreviewer.standardVersionIds");
+  if (raw) return raw.split(",").filter(Boolean);
+  // Legacy single-id key — promote to the new multi-set.
+  const single = localStorage.getItem("pdfreviewer.standardVersionId");
+  return single ? [single] : [];
+}
+
+function _persistActiveVersionIds(ids) {
+  localStorage.setItem("pdfreviewer.standardVersionIds", (ids || []).join(","));
+}
+
+const STATE = {
+  page: "dashboard",
+  lang: localStorage.getItem("pdfreviewer.lang") || "fr",
+  docs: [],
+  suggestions: [],
+  currentDocId: null,
+  currentPage: 1,
+  selectedSuggestionId: null,
+  uploadTarget: localStorage.getItem("pdfreviewer.target") || "auto",
+  // v2: normes cibles actives (multi-sélection), définies dans Paramètres
+  // et appliquées à chaque upload + chaque analyse. Liste de version IDs.
+  activeStandardVersionIds: _loadActiveVersionIds(),
+  standards: [],
+  // Admin "Normes" dans Paramètres : norme en cours d'édition (≠ norme cible active).
+  adminStandardId: null,
+  adminStandardVersionId: null,
+  adminCatalog: null,         // catalogue built-in de la version sélectionnée
+  adminCustomRules: [],       // règles custom rattachées à la version sélectionnée
+  adminEditingCatalogCode: null, // expert : code de règle en cours d'édition
+  editingId: null,
+};
+
+const I18N = {
+  fr: {
+    "nav.dashboard": "Tableau de bord", "nav.documents": "Documents",
+    "nav.architecture": "Architecture", "nav.data": "Données", "nav.settings": "Paramètres",
+    "documents.activeStandardLabel": "Norme cible active :",
+    "documents.changeStandard": "Modifier dans Paramètres →",
+    "settings.activeStandards.title": "Normes cibles actives",
+    "settings.activeStandards.hint": "Sélectionne une ou plusieurs normes — leurs catalogues sont fusionnés à chaque analyse et appliqués à tous les nouveaux PDFs importés. Le choix est persistant.",
+    "settings.activeStandards.clear": "Tout désactiver",
+    "standards.activeNowMulti": "Actives · {list}",
+    "settings.standardsAdmin.title": "Administration des normes",
+    "settings.standardsAdmin.hint": "Liste les normes built-in et tes normes custom. Sélectionne une version pour voir son catalogue de règles (lecture seule pour les built-in), ajouter des règles custom attachées à cette version, ou demander à l'IA d'en proposer de nouvelles.",
+    "standards.selectStandard": "Norme",
+    "standards.selectVersion": "Version",
+    "standards.activeNow": "Active · {code} {version}",
+    "standards.activeNone": "Aucune norme active",
+    "standards.listTitle": "Normes disponibles",
+    "standards.detailTitle": "Détail de la norme",
+    "standards.detailEmpty": "Sélectionne une norme dans la liste de gauche.",
+    "standards.catalogTitle": "Règles built-in de la version",
+    "standards.catalogEmpty": "Aucune règle built-in dans cette version.",
+    "standards.customRulesTitle": "Règles custom attachées à cette version",
+    "standards.customRulesEmpty": "Aucune règle custom. Ajoute-en une ci-dessous.",
+    "standards.addCustomRule": "Ajouter une règle custom à cette version",
+    "standards.createCustom": "Créer une norme custom",
+    "standards.create": "+ Créer la norme",
+    "standards.codePh": "Code (ex : MYCO-DOC)",
+    "standards.labelPh": "Libellé",
+    "standards.descPh": "Description (optionnelle)",
+    "standards.confirmDelete": "Supprimer cette norme custom ?",
+    "standards.transverse": "Transverse (aucune norme cible)",
+    "standards.builtin": "built-in",
+    "standards.custom": "custom",
+    "standards.noVersion": "Aucune version",
+    "rules.kind.fieldRequired": "Champ requis (structurel)",
+    "rules.kind.sectionRequired": "Section requise (structurel)",
+    "rules.kind.stepPattern": "Format d'étape (verbe…)",
+    "rules.kind.enumValue": "Valeur énumérée",
+    "rules.confirmDelete": "Supprimer cette règle custom ?",
+    "rules.suggestionsAppliedNone": "Aucune règle sélectionnée.",
+    "rules.enabled": "Active",
+    "rules.disabled": "Désactivée",
+    "standards.editRule": "✎ Modifier",
+    "standards.resetRule": "↶ Restaurer la version d'origine",
+    "standards.resetRuleConfirm": "Restaurer la règle {code} aux valeurs d'origine ? Tes modifications expert seront perdues.",
+    "common.loading": "Chargement…", "common.save": "Sauvegarder", "common.cancel": "Annuler",
+    "common.delete": "Supprimer", "common.empty": "Aucun élément",
+    "common.confirmAgain": "Cliquer encore pour confirmer",
+    "page.dashboard.title": "Tableau de bord", "page.dashboard.sub": "KPIs des PDFs et des suggestions agrégées.",
+    "page.documents.title": "Documents", "page.documents.sub": "Upload, analyse et application des suggestions par PDF.",
+    "page.architecture.title": "Architecture", "page.architecture.sub": "Stack technique et workflow utilisateur.",
+    "page.data.title": "Données", "page.data.sub": "Statistiques DB et opérations de reset.",
+    "page.settings.title": "Paramètres", "page.settings.sub": "Mistral, règles S1000D, règles custom, unités.",
+    "dashboard.kpis": "Indicateurs clés", "dashboard.bySev": "Suggestions par sévérité",
+    "dashboard.byKind": "Suggestions par type de règle", "dashboard.topDocs": "Top documents (suggestions ouvertes)",
+    "dashboard.noOpen": "Aucune suggestion ouverte.",
+    "dashboard.kpi.pdfs": "PDFs", "dashboard.kpi.open": "Ouvertes", "dashboard.kpi.applied": "Appliquées",
+    "dashboard.kpi.rejected": "Rejetées", "dashboard.kpi.total": "Total",
+    "status.uploaded": "uploadé", "status.analyzing": "en cours d'analyse",
+    "status.analyzed": "analysée", "status.edited": "éditée",
+    "status.failed": "analyse échouée",
+    "documents.upload": "Importer des PDFs", "documents.targetUnit": "Système d'unités cible",
+    "documents.dropTitle": "Glisse un ou plusieurs PDFs ici",
+    "documents.dropHint": "— ou clique pour parcourir. Multi-sélection acceptée.",
+    "documents.dropLimit": "PDF uniquement · max 20 fichiers · 100 Mo chacun",
+    "documents.list": "Documents importés", "documents.empty": "Aucun PDF importé.",
+    "documents.correct": "🔍 Corriger",
+    "documents.back": "← Retour aux documents", "documents.delete": "Supprimer le PDF",
+    "documents.analysis": "Analyse", "documents.runAnalysis": "▶ Lancer l'analyse",
+    "documents.runWithVision": "Inclure la vision (Pixtral)",
+    "documents.export": "⬇ Exporter le PDF édité", "documents.viewer": "Aperçu PDF",
+    "documents.suggestions": "Suggestions du document",
+    "documents.suggestions.empty": "Lance l'analyse pour générer des suggestions.",
+    "documents.meta.pages": "Pages", "documents.meta.version": "Version courante",
+    "documents.meta.target": "Cible", "documents.meta.status": "Statut",
+    "viewer.prev": "◀ Précédent", "viewer.next": "Suivant ▶", "viewer.page": "Page {n}/{total}",
+    "viewer.noText": "Page non rendue (PDF scanné ou erreur).",
+    "reviewer.suggestions": "Suggestions de tous les documents",
+    "reviewer.hint": "Suggestions groupées par document puis par page. Cliquez sur un en-tête pour replier/déplier.",
+    "reviewer.collapseAll": "Tout replier", "reviewer.expandAll": "Tout déplier",
+    "reviewer.empty": "Importe un PDF pour voir les suggestions.",
+    "reviewer.noSugs": "Aucune suggestion. Lance une analyse depuis l'onglet Documents.",
+    "sug.accept": "✓ Accepter & appliquer", "sug.reject": "✗ Rejeter", "sug.edit": "✎ Modifier",
+    "sug.editProposal": "✎ Proposer une correction",
+    "sug.editLabel": "Texte proposé (modifiable)", "sug.saveAccept": "Sauvegarder & accepter",
+    "sug.applied": "appliquée", "sug.rejected": "rejetée", "sug.units": "📏 unités",
+    "sug.detectionOnly": "détection seule",
+    "sug.flag": "à corriger",
+    "sug.multiPageBadge": "{pages} pages",
+    "sug.multiPageHint": "Cette anomalie apparaît sur {pages} pages.",
+    "sug.applyGroup": "Corriger les {count} occurrences",
+    "sug.groupAppliedToast": "{n} occurrence(s) corrigée(s)",
+    "sug.groupNoneToast": "Aucune occurrence applicable",
+    "sug.revert": "↶ Annuler la correction",
+    "sug.revertConfirm": "Annuler cette correction et revenir à la version précédente du PDF ?",
+    "sug.pageOf": "Page {p}", "sug.appliedToast": "Suggestion appliquée",
+    "sug.rejectedToast": "Suggestion rejetée",
+    "sug.revertedToast": "Correction annulée",
+    "arch.workflow": "Workflow utilisateur",
+    "arch.split.title": "Backend ↔ Frontend en 30 secondes",
+    "arch.split.back": "Python 3.11+ · FastAPI sous <code>/api/v1/</code> · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic (7 migrations) · PyMuPDF (édition PDF + extraction images) · httpx (Mistral chat + Pixtral vision) · structlog · SSE pour l'analyse · routeur <code>/admin</code> pour le reset.",
+    "arch.split.front": "Preview HTML embarquée dans le backend (sans Node) — vanilla JS · i18n FR/EN · overlays bbox cliquables · tooltips multi-occurrences · pages Documents · Normes · Règles · Données · Paramètres. Build React + Vite + react-pdf v9 optionnel pour un reviewer plus riche.",
+    "arch.f1": "Onglet « Documents » → drop PDF + cascade Norme/Version active (Paramètres). Upload sait gérer le multi-norms via <code>standard_version_ids</code> ; SHA-256 et analyse auto en parallèle (queue 3 simultanés).",
+    "arch.f2": "« Lancer l'analyse » → checkbox per-run pour inclure la vision Pixtral. Le moteur fusionne les catalogues des normes actives + règles custom + conversions d'unités + (optionnel) IA enrichissement + vision sur images extraites.",
+    "arch.f3": "Vue Rédacteur : suggestions triées <code>(page, span_index, id)</code>, tooltips <code>rule_code (i/N) · severity</code> pour désambiguïser les doublons. Diff <code>original → proposed</code> sauf si <strong>détection-only</strong> (règles structurelles, vision) où <code>Accept</code> est masqué.",
+    "arch.f4": "Cycle : <code>open → accepted → applied</code>. À l'apply : invalidation automatique des suggestions « stale » (texte modifié englobant). Restaure version factory possible sur n'importe quelle règle built-in.",
+    "arch.f5": "Tableau de bord : KPIs PDFs / suggestions open-applied-rejected / top docs / répartition severity-kind. Aperçu serveur PNG par page avec overlays bbox précis (search_for natif).",
+    "arch.f6": "Export PDF édité ou rollback. Admin → <code>/admin/wipe-suggestions</code> (toutes statuts) ou <code>/admin/reset</code> (DB + dossiers disque + orphelins) pour reset complet à zéro.",
+    "data.overview": "Vue d'ensemble", "data.reset": "Réinitialiser",
+    "data.resetSugs": "Effacer toutes les suggestions",
+    "data.resetAll": "Tout supprimer (PDFs + suggestions + fichiers disque)",
+    "data.confirmSugs": "Effacer TOUTES les suggestions (ouvertes, rejetées, appliquées, éditées) ? Irréversible.",
+    "data.confirmAll": "Supprimer TOUS les PDFs, toutes les suggestions, et nettoyer les fichiers sur disque ? Irréversible.",
+    "data.wipedSugs": "{n} suggestion(s) supprimée(s).",
+    "data.resetDone": "Reset effectué : {n} document(s) supprimé(s), {o} dossier(s) nettoyé(s) sur disque.",
+    "data.kpi.pdfs": "PDFs", "data.kpi.sugs": "Suggestions", "data.kpi.rules": "Règles custom",
+    "settings.mistral": "Configuration Mistral",
+    "settings.mistralHint": "Optionnel — utilisé pour les suggestions enrichies par LLM. La pipeline d'analyse fonctionne sans clé.",
+    "settings.apiKey": "Clé API", "settings.apiKeyPh": "laisse vide pour conserver la clé actuelle",
+    "settings.baseUrl": "Base URL", "settings.chatModel": "Modèle chat",
+    "settings.visionModel": "Modèle vision (Pixtral)",
+    "settings.visionEnabled": "Activer l'analyse vision (Pixtral) sur les illustrations du PDF",
+    "settings.test": "Tester la connexion", "settings.testing": "Test en cours…",
+    "settings.saving": "Enregistrement…", "settings.savedOk": "Sauvegardé.",
+    "settings.cfgYes": "configurée", "settings.cfgNo": "non configurée",
+    "settings.aiPrompt": "Consignes IA personnalisées",
+    "settings.aiPromptHint": "Consignes en langage naturel passées à Mistral pendant chaque analyse. Mistral scanne le texte de chaque page et propose des corrections selon ces consignes. Nécessite une clé API Mistral configurée. Limite : 30 premières pages par PDF.",
+    "settings.aiPromptPh": "Ex : Pas de mot en complètes majuscules, pas d'oubli d'accents, pas d'espace entre les parenthèses.",
+    "settings.aiPromptClear": "Effacer",
+    "settings.aiPromptConfirmClear": "Effacer toutes les consignes IA personnalisées ?",
+    "settings.s1000d": "Règles S1000D built-in",
+    "settings.s1000dHint": "Règles intégrées en lecture seule. Toggle on/off par code — les règles désactivées sont skippées par les analyses suivantes.",
+    "settings.customRules": "Règles custom",
+    "settings.customHint": "S'exécutent en plus des règles S1000D et des conversions d'unités. Stockées en base. Édition inline.",
+    "settings.targetUnit": "Système d'unités cible par défaut",
+    "settings.targetUnitHint": "Appliqué aux nouveaux PDFs uploadés. Persisté dans localStorage.",
+    "settings.targetUnit.auto": "Auto", "settings.targetUnit.metric": "Métrique",
+    "settings.targetUnit.imperial": "Impérial",
+    "rules.kind.term": "Terme exact", "rules.kind.regexReplace": "Regex (remplacement)",
+    "rules.kind.regexFlag": "Regex (signaler)",
+    "rules.kind.caseCap": "MAJUS → Capitalize", "rules.kind.accentFix": "Accent FR (mots fréquents)",
+    "rules.namePh": "Nom (ex: Préférer 'shall')", "rules.patternPh": "Motif (ex: must)",
+    "rules.replacementPh": "Remplacement (ex: shall)",
+    "rules.messagePh": "Message affiché à l'utilisateur",
+    "rules.create": "+ Créer la règle", "rules.existing": "Règles existantes",
+    "rules.empty": "Aucune règle custom.",
+    "rules.col.name": "Nom", "rules.col.kind": "Type", "rules.col.pattern": "Motif",
+    "rules.col.severity": "Sévérité", "rules.col.enabled": "Active", "rules.col.actions": "",
+    "rules.s1000d.col.code": "Code", "rules.s1000d.col.severity": "Sévérité",
+    "rules.s1000d.col.title": "Titre", "rules.s1000d.col.description": "Description",
+    "rules.s1000d.col.enabled": "Active",
+    "rules.s1000d.exampleValid": "Valide", "rules.s1000d.exampleInvalid": "Invalide",
+    "rules.suggest": "✨ Suggérer depuis les PDFs",
+    "rules.suggesting": "Mistral analyse vos PDFs…",
+    "rules.suggestionsTitle": "Suggestions Mistral",
+    "rules.docsAnalyzed": "{n} document(s) analysé(s)",
+    "rules.applySelected": "Appliquer la sélection",
+    "rules.discard": "Fermer",
+    "rules.noSuggestions": "Aucune suggestion à afficher.",
+    "rules.suggestionsApplied": "✓ {n} règle(s) ajoutée(s)",
+  },
+  en: {
+    "nav.dashboard": "Dashboard", "nav.documents": "Documents",
+    "nav.architecture": "Architecture", "nav.data": "Data", "nav.settings": "Settings",
+    "documents.activeStandardLabel": "Active target standard:",
+    "documents.changeStandard": "Change in Settings →",
+    "settings.activeStandards.title": "Active target standards",
+    "settings.activeStandards.hint": "Pick one or more standards — their catalogs are merged at every analyse and applied to every new PDF upload. Persistent across sessions.",
+    "settings.activeStandards.clear": "Disable all",
+    "standards.activeNowMulti": "Active · {list}",
+    "settings.standardsAdmin.title": "Standards administration",
+    "settings.standardsAdmin.hint": "Lists built-in standards and your custom ones. Pick a version to see its rule catalog (read-only for built-ins), attach custom rules, or have the AI suggest new ones.",
+    "standards.selectStandard": "Standard",
+    "standards.selectVersion": "Version",
+    "standards.activeNow": "Active · {code} {version}",
+    "standards.activeNone": "No active standard",
+    "standards.listTitle": "Available standards",
+    "standards.detailTitle": "Standard detail",
+    "standards.detailEmpty": "Pick a standard in the list on the left.",
+    "standards.catalogTitle": "Built-in rules of this version",
+    "standards.catalogEmpty": "No built-in rule in this version.",
+    "standards.customRulesTitle": "Custom rules attached to this version",
+    "standards.customRulesEmpty": "No custom rule yet. Add one below.",
+    "standards.addCustomRule": "Add a custom rule attached to this version",
+    "standards.createCustom": "Create a custom standard",
+    "standards.create": "+ Create the standard",
+    "standards.codePh": "Code (e.g. MYCO-DOC)",
+    "standards.labelPh": "Label",
+    "standards.descPh": "Description (optional)",
+    "standards.confirmDelete": "Delete this custom standard?",
+    "standards.transverse": "Transverse (no target standard)",
+    "standards.builtin": "built-in",
+    "standards.custom": "custom",
+    "standards.noVersion": "No version",
+    "rules.kind.fieldRequired": "Required field (structural)",
+    "rules.kind.sectionRequired": "Required section (structural)",
+    "rules.kind.stepPattern": "Step format (verb…)",
+    "rules.kind.enumValue": "Enumerated value",
+    "rules.confirmDelete": "Delete this custom rule?",
+    "rules.suggestionsAppliedNone": "No rule selected.",
+    "rules.enabled": "Enabled",
+    "rules.disabled": "Disabled",
+    "standards.editRule": "✎ Edit",
+    "standards.resetRule": "↶ Restore factory default",
+    "standards.resetRuleConfirm": "Restore rule {code} to factory defaults? Your expert edits will be lost.",
+    "common.loading": "Loading…", "common.save": "Save", "common.cancel": "Cancel",
+    "common.delete": "Delete", "common.empty": "Nothing to show",
+    "common.confirmAgain": "Click again to confirm",
+    "page.dashboard.title": "Dashboard", "page.dashboard.sub": "Aggregated KPIs across PDFs and suggestions.",
+    "page.documents.title": "Documents", "page.documents.sub": "Upload, analyse and apply suggestions per PDF.",
+    "page.architecture.title": "Architecture", "page.architecture.sub": "Technical stack and user workflow.",
+    "page.data.title": "Data", "page.data.sub": "DB stats and reset operations.",
+    "page.settings.title": "Settings", "page.settings.sub": "Mistral, S1000D rules, custom rules, units.",
+    "dashboard.kpis": "Key indicators", "dashboard.bySev": "Suggestions by severity",
+    "dashboard.byKind": "Suggestions by rule kind", "dashboard.topDocs": "Top documents (open suggestions)",
+    "dashboard.noOpen": "No open suggestions.",
+    "dashboard.kpi.pdfs": "PDFs", "dashboard.kpi.open": "Open", "dashboard.kpi.applied": "Applied",
+    "dashboard.kpi.rejected": "Rejected", "dashboard.kpi.total": "Total",
+    "status.uploaded": "uploaded", "status.analyzing": "analysing",
+    "status.analyzed": "analysed", "status.edited": "edited",
+    "status.failed": "analysis failed",
+    "documents.upload": "Upload PDFs", "documents.targetUnit": "Target unit system",
+    "documents.dropTitle": "Drop one or more PDFs here",
+    "documents.dropHint": "— or click to browse. Multi-selection supported.",
+    "documents.dropLimit": "PDF only · max 20 files · 100 MB each",
+    "documents.list": "Imported documents", "documents.empty": "No PDF uploaded yet.",
+    "documents.correct": "🔍 Review",
+    "documents.back": "← Back to documents", "documents.delete": "Delete PDF",
+    "documents.analysis": "Analysis", "documents.runAnalysis": "▶ Run analysis",
+    "documents.runWithVision": "Include vision (Pixtral)",
+    "documents.export": "⬇ Export edited PDF", "documents.viewer": "PDF preview",
+    "documents.suggestions": "Document suggestions",
+    "documents.suggestions.empty": "Run the analysis to generate suggestions.",
+    "documents.meta.pages": "Pages", "documents.meta.version": "Current version",
+    "documents.meta.target": "Target", "documents.meta.status": "Status",
+    "viewer.prev": "◀ Previous", "viewer.next": "Next ▶", "viewer.page": "Page {n}/{total}",
+    "viewer.noText": "Page not rendered (scanned PDF or error).",
+    "reviewer.suggestions": "Suggestions across all documents",
+    "reviewer.hint": "Suggestions grouped by document then by page. Click a header to collapse/expand.",
+    "reviewer.collapseAll": "Collapse all", "reviewer.expandAll": "Expand all",
+    "reviewer.empty": "Upload a PDF to see suggestions.",
+    "reviewer.noSugs": "No suggestion yet. Run an analysis from the Documents tab.",
+    "sug.accept": "✓ Accept & apply", "sug.reject": "✗ Reject", "sug.edit": "✎ Edit",
+    "sug.editProposal": "✎ Propose a fix",
+    "sug.editLabel": "Proposed text (editable)", "sug.saveAccept": "Save & accept",
+    "sug.applied": "applied", "sug.rejected": "rejected", "sug.units": "📏 units",
+    "sug.detectionOnly": "detection only",
+    "sug.flag": "needs fix",
+    "sug.multiPageBadge": "{pages} pages",
+    "sug.multiPageHint": "This issue appears on {pages} pages.",
+    "sug.applyGroup": "Fix all {count} occurrences",
+    "sug.groupAppliedToast": "{n} occurrence(s) fixed",
+    "sug.groupNoneToast": "No applicable occurrence",
+    "sug.revert": "↶ Undo this fix",
+    "sug.revertConfirm": "Undo this fix and roll back to the previous PDF version?",
+    "sug.pageOf": "Page {p}", "sug.appliedToast": "Suggestion applied",
+    "sug.rejectedToast": "Suggestion rejected",
+    "sug.revertedToast": "Fix undone",
+    "arch.workflow": "User workflow",
+    "arch.split.title": "Backend ↔ Frontend in 30 seconds",
+    "arch.split.back": "Python 3.11+ · FastAPI under <code>/api/v1/</code> · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic (7 migrations) · PyMuPDF (PDF editing + image extraction) · httpx (Mistral chat + Pixtral vision) · structlog · SSE for analysis · <code>/admin</code> router for reset.",
+    "arch.split.front": "Preview HTML embedded in the backend (no Node) — vanilla JS · FR/EN i18n · clickable bbox overlays · multi-occurrence tooltips · pages Documents · Standards · Rules · Data · Settings. Optional React + Vite + react-pdf v9 build for a richer reviewer.",
+    "arch.f1": "« Documents » tab → drop PDF + cascade Standard/Version active (in Settings). Upload supports multi-norms via <code>standard_version_ids</code>; SHA-256 and auto-analysis in parallel (queue 3 concurrent).",
+    "arch.f2": "« Run analysis » → per-run checkbox to include Pixtral vision. The engine merges active standards catalogs + custom rules + unit conversions + (optional) AI enrichment + vision on extracted images.",
+    "arch.f3": "Reviewer: suggestions ordered by <code>(page, span_index, id)</code>, tooltips <code>rule_code (i/N) · severity</code> disambiguate duplicates. <code>original → proposed</code> diff unless <strong>detection-only</strong> (structural rules, vision) where <code>Accept</code> is hidden.",
+    "arch.f4": "Lifecycle: <code>open → accepted → applied</code>. On apply: stale siblings (overlapping text) are auto-rejected. Restore factory version available on any built-in rule.",
+    "arch.f5": "Dashboard: KPIs PDFs / suggestions open-applied-rejected / top docs / severity-kind breakdown. Server-rendered PNG preview per page with precise bbox overlays (native search_for).",
+    "arch.f6": "Export edited PDF or rollback. Admin → <code>/admin/wipe-suggestions</code> (every status) or <code>/admin/reset</code> (DB + disk folders + orphans) for a full zero reset.",
+    "data.overview": "Overview", "data.reset": "Reset",
+    "data.resetSugs": "Wipe all suggestions",
+    "data.resetAll": "Delete everything (PDFs + suggestions + disk files)",
+    "data.confirmSugs": "Wipe EVERY suggestion (open, rejected, applied, edited)? Irreversible.",
+    "data.confirmAll": "Delete EVERY PDF, every suggestion, and clean disk storage? Irreversible.",
+    "data.wipedSugs": "{n} suggestion(s) deleted.",
+    "data.resetDone": "Reset done: {n} document(s) deleted, {o} folder(s) cleaned on disk.",
+    "data.kpi.pdfs": "PDFs", "data.kpi.sugs": "Suggestions", "data.kpi.rules": "Custom rules",
+    "settings.mistral": "Mistral configuration",
+    "settings.mistralHint": "Optional — used for LLM-enriched suggestions. The analysis pipeline runs without a key.",
+    "settings.apiKey": "API key", "settings.apiKeyPh": "leave empty to keep the current key",
+    "settings.baseUrl": "Base URL", "settings.chatModel": "Chat model",
+    "settings.visionModel": "Vision model (Pixtral)",
+    "settings.visionEnabled": "Enable vision (Pixtral) on the PDF's illustrations",
+    "settings.test": "Test connection", "settings.testing": "Testing…",
+    "settings.saving": "Saving…", "settings.savedOk": "Saved.",
+    "settings.cfgYes": "configured", "settings.cfgNo": "not configured",
+    "settings.aiPrompt": "Custom AI guidelines",
+    "settings.aiPromptHint": "Free-text guidelines passed to Mistral on every analysis. Mistral scans each page text and proposes corrections matching these guidelines. Requires a Mistral API key. Limit: first 30 pages per PDF.",
+    "settings.aiPromptPh": "e.g. No full-uppercase words, no missing accents, no space inside parentheses.",
+    "settings.aiPromptClear": "Clear",
+    "settings.aiPromptConfirmClear": "Clear every custom AI guideline?",
+    "settings.s1000d": "S1000D built-in rules",
+    "settings.s1000dHint": "Read-only built-in rules. Toggle on/off per code — disabled rules are skipped by future analyses.",
+    "settings.customRules": "Custom rules",
+    "settings.customHint": "Run alongside S1000D and unit conversions. Stored in DB. Inline edit.",
+    "settings.targetUnit": "Default target unit system",
+    "settings.targetUnitHint": "Applied to newly uploaded PDFs. Persisted in localStorage.",
+    "settings.targetUnit.auto": "Auto", "settings.targetUnit.metric": "Metric",
+    "settings.targetUnit.imperial": "Imperial",
+    "rules.kind.term": "Exact term", "rules.kind.regexReplace": "Regex (replace)",
+    "rules.kind.regexFlag": "Regex (flag only)",
+    "rules.kind.caseCap": "ALL-CAPS → Capitalize", "rules.kind.accentFix": "FR accent fix",
+    "rules.namePh": "Name (e.g. Prefer 'shall')", "rules.patternPh": "Pattern (e.g. must)",
+    "rules.replacementPh": "Replacement (e.g. shall)",
+    "rules.messagePh": "Message shown to the user",
+    "rules.create": "+ Create rule", "rules.existing": "Existing rules",
+    "rules.empty": "No custom rule yet.",
+    "rules.col.name": "Name", "rules.col.kind": "Kind", "rules.col.pattern": "Pattern",
+    "rules.col.severity": "Severity", "rules.col.enabled": "Enabled", "rules.col.actions": "",
+    "rules.s1000d.col.code": "Code", "rules.s1000d.col.severity": "Severity",
+    "rules.s1000d.col.title": "Title", "rules.s1000d.col.description": "Description",
+    "rules.s1000d.col.enabled": "Enabled",
+    "rules.suggest": "✨ Suggest from PDFs",
+    "rules.suggesting": "Mistral is scanning your PDFs…",
+    "rules.suggestionsTitle": "Mistral suggestions",
+    "rules.docsAnalyzed": "{n} document(s) analyzed",
+    "rules.applySelected": "Apply selection",
+    "rules.discard": "Close",
+    "rules.noSuggestions": "No suggestion to show.",
+    "rules.suggestionsApplied": "✓ {n} rule(s) added",
+    "rules.s1000d.exampleValid": "Valid", "rules.s1000d.exampleInvalid": "Invalid",
+  },
+};
+
+function tt(key, params) {
+  let s = (I18N[STATE.lang] || I18N.fr)[key] || I18N.fr[key] || key;
+  if (params) for (const k in params) s = s.replace(`{${k}}`, params[k]);
+  return s;
+}
+function applyI18n() {
+  document.documentElement.lang = STATE.lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = tt(el.dataset.i18n); });
+  // i18n-html: dictionary value contains markup (<strong>, <code>, <br>) that
+  // textContent would render as raw text. innerHTML is safe here because the
+  // dictionary is a static JS literal — no user input flows through it.
+  document.querySelectorAll("[data-i18n-html]").forEach(el => { el.innerHTML = tt(el.dataset.i18nHtml); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = tt(el.dataset.i18nPlaceholder); });
+  document.getElementById("page-title").textContent = tt(`page.${STATE.page}.title`);
+  document.getElementById("page-sub").textContent = tt(`page.${STATE.page}.sub`);
+}
+
+document.querySelectorAll(".lang-btn").forEach(b => {
+  if (b.dataset.lang === STATE.lang) b.classList.add("active"); else b.classList.remove("active");
+  b.addEventListener("click", () => {
+    STATE.lang = b.dataset.lang;
+    localStorage.setItem("pdfreviewer.lang", STATE.lang);
+    document.querySelectorAll(".lang-btn").forEach(x => x.classList.toggle("active", x === b));
+    applyI18n();
+    refreshCurrentPage();
+  });
+});
+
+document.querySelectorAll(".nav-item").forEach(btn => btn.addEventListener("click", () => switchPage(btn.dataset.page)));
+
+function switchPage(page) {
+  STATE.page = page;
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.page === page));
+  document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.dataset.view !== page);
+  applyI18n();
+  refreshCurrentPage();
+}
+function refreshCurrentPage() {
+  if (STATE.page === "dashboard") loadDashboard();
+  if (STATE.page === "documents") { loadDocs(); refreshDocumentsActiveStandardBanner(); }
+  if (STATE.page === "data") loadDataStats();
+  if (STATE.page === "settings") { loadSettings(); loadStandardsAdmin(); }
+}
+
+function toast(msg, kind = "success") {
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.textContent = msg;
+  document.getElementById("toast-container").appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// Destructive-action guard (rules #2 / #13): replaces the banned
+// confirm(). First click arms `btn` (label -> « click again to
+// confirm »); a second click within 3 s runs `onConfirm`, otherwise the
+// button disarms on its own. `armLabel` overrides the label for tiny
+// icon-only buttons.
+function armConfirm(btn, onConfirm, armLabel) {
+  if (btn.dataset.armed === "1") {
+    clearTimeout(Number(btn.dataset.armTimer || 0));
+    btn.dataset.armed = "";
+    btn.textContent = btn.dataset.armLabel || btn.textContent;
+    btn.classList.remove("danger");
+    onConfirm();
+    return;
+  }
+  btn.dataset.armLabel = btn.textContent;
+  btn.dataset.armed = "1";
+  btn.textContent = armLabel || tt("common.confirmAgain");
+  btn.classList.add("danger");
+  btn.dataset.armTimer = String(setTimeout(() => {
+    btn.dataset.armed = "";
+    btn.textContent = btn.dataset.armLabel || btn.textContent;
+    btn.classList.remove("danger");
+  }, 3000));
+}
+
+async function apiGet(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.status === 204 ? null : r.json();
+}
+async function apiSend(method, path, body) {
+  const r = await fetch(API + path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || r.statusText);
+  return r.status === 204 ? null : r.json();
+}
+
+async function fetchAll() {
+  const [docs, sugs] = await Promise.all([apiGet("/documents"), apiGet("/suggestions")]);
+  STATE.docs = docs || [];
+  STATE.suggestions = sugs || [];
+}
+
+// ---- Dashboard ----
+async function loadDashboard() {
+  const kpiBox = document.getElementById("dash-kpis");
+  try {
+    await fetchAll();
+    const total = STATE.suggestions.length;
+    const open = STATE.suggestions.filter(s => s.status === "open").length;
+    const applied = STATE.suggestions.filter(s => s.status === "applied").length;
+    const rejected = STATE.suggestions.filter(s => s.status === "rejected").length;
+    kpiBox.innerHTML = `
+      <div class="kpi"><span class="label">${tt("dashboard.kpi.pdfs")}</span><div class="kpi-value info">${STATE.docs.length}</div></div>
+      <div class="kpi"><span class="label">${tt("dashboard.kpi.open")}</span><div class="kpi-value warn">${open}</div></div>
+      <div class="kpi"><span class="label">${tt("dashboard.kpi.applied")}</span><div class="kpi-value ok">${applied}</div></div>
+      <div class="kpi"><span class="label">${tt("dashboard.kpi.rejected")}</span><div class="kpi-value">${rejected}</div></div>
+      <div class="kpi"><span class="label">${tt("dashboard.kpi.total")}</span><div class="kpi-value">${total}</div></div>`;
+
+    const sev = { error: 0, warning: 0, info: 0 };
+    STATE.suggestions.forEach(s => { if (sev[s.severity] !== undefined) sev[s.severity]++; });
+    document.getElementById("dash-by-sev").innerHTML = renderBars([
+      { label: "error", count: sev.error, cls: "err" },
+      { label: "warning", count: sev.warning, cls: "warn" },
+      { label: "info", count: sev.info, cls: "" },
+    ], total);
+
+    // Aggregate every rule_kind dynamically so the chart stays correct
+    // when new kinds are added (v2 introduced `standard` + `vision`, the
+    // legacy hardcoded set hid them silently). Colours are mapped per
+    // functional category, not per specific norm — S1000D/MAT10000/ATA…
+    // all share the `standard` bucket as emitted by catalog_runner.
+    const kindCounts = new Map();
+    STATE.suggestions.forEach(s => {
+      const k = s.rule_kind || "?";
+      kindCounts.set(k, (kindCounts.get(k) || 0) + 1);
+    });
+    const KIND_CSS = {
+      standard: "warn",  // built-in rules of any standard
+      custom: "",        // user-defined rules
+      units: "units",    // unit conversions
+      vision: "info",    // Pixtral
+    };
+    const kindBars = [...kindCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count]) => ({ label, count, cls: KIND_CSS[label] || "" }));
+    document.getElementById("dash-by-kind").innerHTML = renderBars(kindBars, total);
+
+    const byDoc = new Map();
+    STATE.suggestions.filter(s => s.status === "open").forEach(s => byDoc.set(s.document_id, (byDoc.get(s.document_id) || 0) + 1));
+    const docName = id => (STATE.docs.find(d => d.id === id) || {}).original_filename || id;
+    const top = [...byDoc.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    document.getElementById("dash-top-docs").innerHTML = top.length
+      ? renderBars(top.map(([id, count]) => ({ label: docName(id), count, cls: "warn" })), Math.max(...top.map(t => t[1])))
+      : `<div class="empty-state">${tt("dashboard.noOpen")}</div>`;
+  } catch (err) {
+    kpiBox.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderBars(rows, max) {
+  if (!rows.length) return '<div class="empty-state">—</div>';
+  const m = Math.max(1, max);
+  return rows.map(r => `
+    <div class="bar-row">
+      <span class="bar-label" title="${escapeAttr(r.label)}">${escapeHtml(r.label)}</span>
+      <div class="bar-track"><div class="bar-fill ${r.cls || ''}" style="width:${(r.count / m) * 100}%"></div></div>
+      <span class="bar-count">${r.count}</span>
+    </div>`).join("");
+}
+
+// ---- Documents list ----
+function statusBadge(s) {
+  const map = {
+    "uploaded":         { cls: "info",   key: "status.uploaded"   },
+    "analyzing":        { cls: "warn",   key: "status.analyzing"  },
+    "analyzed":         { cls: "ok",     key: "status.analyzed"   },
+    "edited":           { cls: "info",   key: "status.edited"     },
+    "analysis_failed":  { cls: "danger", key: "status.failed"     },
+  };
+  const m = map[s] || { cls: "info", key: null };
+  const label = m.key ? tt(m.key) : escapeHtml(s);
+  const spin = s === "analyzing" ? '<span class="spin" aria-hidden="true"></span>' : "";
+  return `<span class="badge ${m.cls}">${spin}${label}</span>`;
+}
+
+async function loadDocs() {
+  const list = document.getElementById("doc-list");
+  document.querySelector('[data-view="documents"] [data-pview="list"]').hidden = false;
+  document.querySelector('[data-view="documents"] [data-pview="detail"]').hidden = true;
+  try {
+    STATE.docs = await apiGet("/documents") || [];
+    if (!STATE.docs.length) {
+      list.innerHTML = `<div class="empty-state">${tt("documents.empty")}</div>`;
+      stopAnalyzingPoll();
+      return;
+    }
+    list.innerHTML = STATE.docs.map(d => `
+      <div class="doc-row" data-id="${d.id}">
+        <div>
+          <div class="doc-name">${escapeHtml(d.original_filename)}</div>
+          <div class="doc-meta">${d.page_count} pages · v${d.current_version} · ${d.target_unit_system}</div>
+        </div>
+        <div class="row">
+          ${statusBadge(d.status)}
+          <button class="btn primary small" data-correct="${d.id}">${tt("documents.correct")}</button>
+          <button class="btn ghost small" data-del="${d.id}">🗑</button>
+        </div>
+      </div>`).join("");
+    list.querySelectorAll(".doc-row").forEach(r => r.addEventListener("click", e => {
+      if (e.target.dataset.del || e.target.dataset.correct) return;
+      openDocDetail(r.dataset.id);
+    }));
+    list.querySelectorAll("[data-correct]").forEach(b => b.addEventListener("click", e => {
+      e.stopPropagation();
+      openDocDetail(b.dataset.correct);
+    }));
+    list.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async e => {
+      e.stopPropagation();
+      try { await apiSend("DELETE", "/documents/" + b.dataset.del); toast("OK"); loadDocs(); }
+      catch (err) { toast(err.message, "error"); }
+    }));
+    // Auto-refresh while at least one doc is analyzing.
+    if (STATE.docs.some(d => d.status === "analyzing")) {
+      startAnalyzingPoll();
+    } else {
+      stopAnalyzingPoll();
+    }
+  } catch (err) { list.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`; }
+}
+
+let _analyzingPollHandle = null;
+function startAnalyzingPoll() {
+  if (_analyzingPollHandle) return;
+  _analyzingPollHandle = setInterval(() => {
+    if (STATE.page === "documents") loadDocs();
+    else stopAnalyzingPoll();
+  }, 2000);
+}
+function stopAnalyzingPoll() {
+  if (_analyzingPollHandle) {
+    clearInterval(_analyzingPollHandle);
+    _analyzingPollHandle = null;
+  }
+}
+
+// Upload target slicer
+document.querySelectorAll('#upload-target .slicer-pill').forEach(p => {
+  if (p.dataset.target === STATE.uploadTarget) p.classList.add("active");
+  else p.classList.remove("active");
+  p.addEventListener("click", () => {
+    document.querySelectorAll('#upload-target .slicer-pill').forEach(x => x.classList.toggle("active", x === p));
+    STATE.uploadTarget = p.dataset.target;
+    localStorage.setItem("pdfreviewer.target", p.dataset.target);
+    document.querySelectorAll('#settings-target .slicer-pill').forEach(x => x.classList.toggle("active", x.dataset.target === p.dataset.target));
+  });
+});
+
+// Dropzone (multi)
+const dz = document.getElementById("dropzone");
+const fi = document.getElementById("file-input");
+dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
+dz.addEventListener("drop", e => {
+  e.preventDefault(); dz.classList.remove("drag");
+  const files = [...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith(".pdf"));
+  if (files.length) uploadBatch(files);
+});
+fi.addEventListener("change", () => {
+  const files = [...fi.files].filter(f => f.name.toLowerCase().endsWith(".pdf"));
+  if (files.length) uploadBatch(files);
+  fi.value = "";
+});
+
+async function uploadBatch(files) {
+  const errBox = document.getElementById("upload-error");
+  const listBox = document.getElementById("upload-list");
+  errBox.hidden = true;
+  listBox.innerHTML = files.map((f, i) => `
+    <div class="upload-row" data-idx="${i}">
+      <div class="name">${escapeHtml(f.name)} <span class="label">…</span></div>
+    </div>`).join("");
+
+  const fd = new FormData();
+  files.forEach(f => fd.append("files", f));
+  try {
+    const params = new URLSearchParams({ target: STATE.uploadTarget });
+    if (STATE.activeStandardVersionIds && STATE.activeStandardVersionIds.length) {
+      params.set("standard_version_ids", STATE.activeStandardVersionIds.join(","));
+    }
+    const r = await fetch(`${API}/documents/batch?${params.toString()}`, { method: "POST", body: fd });
+    const data = await r.json().catch(() => ({}));
+    const created = data.created || [];
+    const failed = data.failed || [];
+    files.forEach((f, i) => {
+      const row = listBox.querySelector(`[data-idx="${i}"]`);
+      const c = created.find(x => x.original_filename === f.name);
+      const fail = failed.find(x => x.filename === f.name);
+      if (c) { row.classList.add("done"); row.querySelector(".name").innerHTML = `${escapeHtml(f.name)} <span class="label">OK · v0</span>`; }
+      else if (fail) { row.classList.add("error"); row.querySelector(".name").innerHTML = `${escapeHtml(f.name)} <span class="label">${escapeHtml(fail.code)}</span>`; }
+    });
+
+    if (created.length) {
+      toast(`${created.length} PDF(s) OK`);
+      runAnalysisQueue(created.map(c => c.id));
+    }
+    if (failed.length && !created.length) {
+      errBox.textContent = failed.map(f => `${f.filename}: ${f.message}`).join("\n");
+      errBox.hidden = false;
+    }
+    await loadDocs();
+  } catch (err) { errBox.textContent = err.message; errBox.hidden = false; }
+}
+
+async function runAnalysisQueue(docIds) {
+  const queue = [...docIds];
+  const workers = Array.from({ length: Math.min(3, queue.length) }, () => (async function loop() {
+    while (queue.length) {
+      const id = queue.shift();
+      try { await runAnalysisFor(id); } catch (err) { /* logged */ }
+    }
+  })());
+  await Promise.all(workers);
+  if (STATE.page === "documents") loadDocs();
+  if (STATE.page === "dashboard") loadDashboard();
+}
+
+async function runAnalysisFor(docId) {
+  // Per-run vision override: when the user explicitly ticks the
+  // « Inclure la vision (Pixtral) » checkbox on the doc detail page,
+  // pass `?vision=true|false`. Outside the detail page (auto-analyse
+  // after batch upload), let the backend fall back to the persisted
+  // global setting.
+  const cb = document.getElementById("run-with-vision");
+  let url = `${API}/documents/${docId}/analyze`;
+  if (cb && STATE.currentDocId === docId) {
+    url += `?vision=${cb.checked ? "true" : "false"}`;
+  }
+  const r = await fetch(url, { method: "POST" });
+  if (!r.ok || !r.body) throw new Error("analyze " + r.status);
+  const reader = r.body.getReader();
+  while (true) { const { done } = await reader.read(); if (done) break; }
+}
+
+// ---- Document detail ----
+async function openDocDetail(id) {
+  STATE.currentDocId = id;
+  STATE.currentPage = 1;
+  STATE.selectedSuggestionId = null;
+  STATE.editingId = null;
+  document.querySelector('[data-view="documents"] [data-pview="list"]').hidden = true;
+  document.querySelector('[data-view="documents"] [data-pview="detail"]').hidden = false;
+  try {
+    const doc = await apiGet("/documents/" + id);
+    document.getElementById("doc-detail-name").textContent = doc.original_filename;
+    document.getElementById("doc-detail-meta").innerHTML = `
+      <div class="kpi"><span class="label">${tt("documents.meta.pages")}</span><div class="kpi-value">${doc.page_count}</div></div>
+      <div class="kpi"><span class="label">${tt("documents.meta.version")}</span><div class="kpi-value info">v${doc.current_version}</div></div>
+      <div class="kpi"><span class="label">${tt("documents.meta.target")}</span><div class="kpi-value">${doc.target_unit_system}</div></div>
+      <div class="kpi"><span class="label">${tt("documents.meta.status")}</span><div class="kpi-value">${doc.status}</div></div>`;
+    await loadDocSuggestions(id);
+    renderViewer(doc);
+    // Pre-tick the « Inclure la vision (Pixtral) » checkbox to mirror
+    // the persisted setting from Paramètres — the user can still
+    // override it per analyse.
+    try {
+      const s = await apiGet("/settings/mistral");
+      const cb = document.getElementById("run-with-vision");
+      if (cb) cb.checked = !!s.vision_enabled;
+    } catch { /* setting unavailable — leave checkbox unchecked */ }
+  } catch (err) { toast(err.message, "error"); }
+}
+
+document.getElementById("back-to-docs").addEventListener("click", () => { STATE.currentDocId = null; loadDocs(); });
+document.getElementById("doc-delete").addEventListener("click", async () => {
+  if (!STATE.currentDocId) return;
+  try { await apiSend("DELETE", "/documents/" + STATE.currentDocId); toast("OK"); STATE.currentDocId = null; loadDocs(); }
+  catch (err) { toast(err.message, "error"); }
+});
+document.getElementById("export-pdf").addEventListener("click", () => {
+  if (STATE.currentDocId) window.open(`${API}/documents/${STATE.currentDocId}/export`, "_blank");
+});
+document.getElementById("run-analysis").addEventListener("click", () => analyzeWithProgress());
+document.getElementById("viewer-prev").addEventListener("click", () => { if (STATE.currentPage > 1) { STATE.currentPage--; refreshViewer(); } });
+document.getElementById("viewer-next").addEventListener("click", async () => {
+  if (!STATE.currentDocId) return;
+  const doc = await apiGet("/documents/" + STATE.currentDocId);
+  if (STATE.currentPage < doc.page_count) { STATE.currentPage++; refreshViewer(); }
+});
+
+async function analyzeWithProgress() {
+  if (!STATE.currentDocId) return;
+  const wrap = document.getElementById("progress-wrap");
+  const bar = document.getElementById("progress-bar");
+  const result = document.getElementById("analysis-result");
+  const errBox = document.getElementById("analysis-error");
+  result.hidden = true; errBox.hidden = true;
+  wrap.hidden = false; bar.style.width = "5%";
+  try {
+    const r = await fetch(`${API}/documents/${STATE.currentDocId}/analyze`, { method: "POST" });
+    if (!r.ok || !r.body) throw new Error("Échec analyse");
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "", evt = "", count = 0;
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i = buf.indexOf("\n\n");
+      while (i !== -1) {
+        for (const line of buf.slice(0, i).split("\n")) {
+          if (line.startsWith("event:")) evt = line.slice(6).trim();
+          else if (line.startsWith("data:")) {
+            try {
+              const d = JSON.parse(line.slice(5).trim());
+              if (evt === "progress" && d.pct) bar.style.width = d.pct + "%";
+              if (evt === "suggestion") count++;
+              if (evt === "done") bar.style.width = "100%";
+            } catch {}
+          }
+        }
+        buf = buf.slice(i + 2); i = buf.indexOf("\n\n");
+      }
+    }
+    result.textContent = `${count} suggestion(s).`;
+    result.className = "success"; result.hidden = false;
+    setTimeout(() => wrap.hidden = true, 1200);
+    await loadDocSuggestions(STATE.currentDocId);
+    refreshViewer();
+  } catch (err) {
+    errBox.textContent = err.message; errBox.hidden = false;
+    wrap.hidden = true;
+  }
+}
+
+async function loadDocSuggestions(id) {
+  const box = document.getElementById("doc-suggestions");
+  try {
+    const sugs = await apiGet(`/documents/${id}/suggestions`);
+    STATE.suggestions = sugs || [];
+    if (!sugs.length) { box.innerHTML = `<div class="empty-state">${tt("documents.suggestions.empty")}</div>`; return; }
+    box.innerHTML = sugs.map(s => renderSuggestion(s)).join("");
+    bindSuggestionActions(box);
+  } catch (err) { box.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`; }
+}
+
+// Same anomaly = identical rule + detected text + proposed fix.
+const PENDING_SUG_STATUSES = ["open", "accepted", "edited"];
+function suggestionGroupKey(s) {
+  return `${s.rule_code} ${s.original_text} ${s.proposed_text}`;
+}
+function suggestionGroupInfo(s) {
+  const key = suggestionGroupKey(s);
+  const pending = STATE.suggestions.filter(x =>
+    PENDING_SUG_STATUSES.includes(x.status)
+    && x.proposed_text && x.proposed_text !== x.original_text
+    && suggestionGroupKey(x) === key);
+  const pages = new Set(pending.map(x => x.page));
+  return { occurrences: pending.length, pages: pages.size };
+}
+
+function renderSuggestion(s) {
+  const sevCls = s.severity === "error" ? "danger" : s.severity === "warning" ? "warn" : "info";
+  const kindBadge = s.rule_kind === "units" ? `<span class="badge units">${tt("sug.units")}</span>` : `<span class="badge info">${escapeHtml(s.rule_kind)}</span>`;
+  const detectionOnly = !s.proposed_text || s.proposed_text === s.original_text;
+  const statusBadge = s.status === "applied" ? `<span class="badge ok">${tt("sug.applied")}</span>`
+    : s.status === "rejected" ? `<span class="badge warn">${tt("sug.rejected")}</span>`
+    : detectionOnly ? `<span class="badge info">${tt("sug.detectionOnly")}</span>` : '';
+  const isEditing = STATE.editingId === s.id;
+  const isSelected = STATE.selectedSuggestionId === s.id;
+  const isPending = PENDING_SUG_STATUSES.includes(s.status);
+  let body, actions;
+
+  if (isEditing) {
+    body = `
+      <div class="red-anomaly-edit">
+        <label>${tt("sug.editLabel")}</label>
+        <textarea data-edit-textarea="${s.id}" rows="2">${escapeHtml(s.proposed_text)}</textarea>
+      </div>`;
+    actions = `
+      <button class="btn ghost small" data-cancel-edit="${s.id}">${tt("common.cancel")}</button>
+      <button class="btn primary small" data-save-accept="${s.id}">${tt("sug.saveAccept")}</button>`;
+  } else if (detectionOnly) {
+    // Structural rules don't propose a verbatim replacement — show the
+    // matched text in context but skip the misleading « X → X » arrow.
+    body = s.original_text
+      ? `<div class="red-anomaly-diff"><span class="del" style="text-decoration:none;background:rgba(245,158,11,0.18);color:var(--warning)">${escapeHtml(s.original_text)}</span></div>`
+      : "";
+    actions = (s.status === "applied" || s.status === "rejected")
+      ? ""
+      : `<button class="btn ghost small" data-reject="${s.id}">${tt("sug.reject")}</button>`;
+  } else {
+    body = `<div class="red-anomaly-diff"><span class="del">${escapeHtml(s.original_text)}</span> → <span class="ins">${escapeHtml(s.proposed_text)}</span></div>`;
+    if (s.status === "applied") {
+      actions = `<button class="btn ghost small" data-revert="${s.id}">${tt("sug.revert")}</button>`;
+    } else if (s.status === "rejected") {
+      actions = "";
+    } else {
+      actions = `
+        <button class="btn ghost small" data-edit="${s.id}">${tt("sug.edit")}</button>
+        <button class="btn ghost small" data-reject="${s.id}">${tt("sug.reject")}</button>
+        <button class="btn primary small" data-accept="${s.id}">${tt("sug.accept")}</button>`;
+    }
+  }
+
+  // Same anomaly detected on several pages: offer a one-click fix-all.
+  let groupBanner = "", multiPageBadge = "";
+  if (!detectionOnly && !isEditing && isPending) {
+    const gi = suggestionGroupInfo(s);
+    if (gi.pages > 1) {
+      multiPageBadge = `<span class="badge info">${tt("sug.multiPageBadge", { pages: gi.pages })}</span>`;
+      groupBanner = `
+        <div class="banner" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span>${tt("sug.multiPageHint", { pages: gi.pages })}</span>
+          <button class="btn primary small" data-apply-group="${s.id}">${tt("sug.applyGroup", { count: gi.occurrences })}</button>
+        </div>`;
+    }
+  }
+
+  return `
+    <div class="red-anomaly${isSelected ? ' selected' : ''}" data-suggestion-id="${s.id}">
+      <div class="red-anomaly-meta">
+        <span class="badge ${sevCls}">${escapeHtml(s.severity)}</span>
+        ${kindBadge}
+        ${statusBadge}
+        ${multiPageBadge}
+        <span class="loc">${tt("sug.pageOf", { p: s.page })} · ${escapeHtml(s.rule_code)}</span>
+      </div>
+      <div class="red-anomaly-msg">${escapeHtml(s.message)}</div>
+      ${body}
+      ${groupBanner}
+      <div class="red-anomaly-actions">${actions}</div>
+    </div>`;
+}
+
+function bindSuggestionActions(scope) {
+  scope.querySelectorAll("[data-suggestion-id]").forEach(el => el.addEventListener("click", e => {
+    if (e.target.closest("button, textarea, label")) return;
+    STATE.selectedSuggestionId = el.dataset.suggestionId;
+    refreshViewerOverlays();
+    el.classList.add("selected");
+  }));
+  scope.querySelectorAll("[data-accept]").forEach(b => b.addEventListener("click", () => acceptSug(b.dataset.accept)));
+  scope.querySelectorAll("[data-apply-group]").forEach(b => b.addEventListener("click", () => applyGroupSug(b.dataset.applyGroup)));
+  scope.querySelectorAll("[data-reject]").forEach(b => b.addEventListener("click", () => rejectSug(b.dataset.reject)));
+  scope.querySelectorAll("[data-revert]").forEach(b => b.addEventListener("click", () => armConfirm(b, () => revertSug(b.dataset.revert))));
+  scope.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => { STATE.editingId = b.dataset.edit; rerenderSuggestions(); }));
+  scope.querySelectorAll("[data-cancel-edit]").forEach(b => b.addEventListener("click", () => { STATE.editingId = null; rerenderSuggestions(); }));
+  scope.querySelectorAll("[data-save-accept]").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.saveAccept;
+    const ta = scope.querySelector(`[data-edit-textarea="${id}"]`);
+    const newText = ta ? ta.value : "";
+    saveAndAccept(id, newText);
+  }));
+}
+
+function rerenderSuggestions() {
+  const box = document.getElementById("doc-suggestions");
+  if (box) {
+    box.innerHTML = STATE.suggestions.map(s => renderSuggestion(s)).join("");
+    bindSuggestionActions(box);
+  }
+}
+
+async function acceptSug(id) {
+  try {
+    await apiSend("PATCH", "/suggestions/" + id, { status: "accepted" });
+    await apiSend("POST", `/suggestions/${id}/apply`);
+    toast(tt("sug.appliedToast"));
+    if (STATE.currentDocId) await loadDocSuggestions(STATE.currentDocId);
+    refreshViewer();
+  } catch (err) { toast(err.message, "error"); }
+}
+async function applyGroupSug(id) {
+  try {
+    const res = await apiSend("POST", `/suggestions/${id}/apply-group`);
+    toast(res.applied_count > 0
+      ? tt("sug.groupAppliedToast", { n: res.applied_count })
+      : tt("sug.groupNoneToast"));
+    if (STATE.currentDocId) await loadDocSuggestions(STATE.currentDocId);
+    refreshViewer();
+  } catch (err) { toast(err.message, "error"); }
+}
+async function rejectSug(id) {
+  try {
+    await apiSend("PATCH", "/suggestions/" + id, { status: "rejected" });
+    toast(tt("sug.rejectedToast"));
+    if (STATE.currentDocId) await loadDocSuggestions(STATE.currentDocId);
+    refreshViewer();
+  } catch (err) { toast(err.message, "error"); }
+}
+async function revertSug(id) {
+  try {
+    await apiSend("POST", `/suggestions/${id}/revert`);
+    toast(tt("sug.revertedToast"));
+    if (STATE.currentDocId) {
+      await loadDocSuggestions(STATE.currentDocId);
+      // Refresh document meta to get the new current_version.
+      const doc = await apiGet("/documents/" + STATE.currentDocId);
+      document.getElementById("doc-detail-meta").innerHTML = `
+        <div class="kpi"><span class="label">${tt("documents.meta.pages")}</span><div class="kpi-value">${doc.page_count}</div></div>
+        <div class="kpi"><span class="label">${tt("documents.meta.version")}</span><div class="kpi-value info">v${doc.current_version}</div></div>
+        <div class="kpi"><span class="label">${tt("documents.meta.target")}</span><div class="kpi-value">${doc.target_unit_system}</div></div>
+        <div class="kpi"><span class="label">${tt("documents.meta.status")}</span><div class="kpi-value">${doc.status}</div></div>`;
+    }
+    refreshViewer();
+  } catch (err) { toast(err.message, "error"); }
+}
+async function saveAndAccept(id, newText) {
+  try {
+    await apiSend("PATCH", "/suggestions/" + id, { status: "edited", proposed_text: newText });
+    await apiSend("POST", `/suggestions/${id}/apply`);
+    STATE.editingId = null;
+    toast(tt("sug.appliedToast"));
+    if (STATE.currentDocId) await loadDocSuggestions(STATE.currentDocId);
+    refreshViewer();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+// ---- Viewer ----
+async function renderViewer(doc) {
+  const wrap = document.getElementById("viewer-wrap");
+  const lbl = document.getElementById("viewer-page-label");
+  if (!doc) doc = await apiGet("/documents/" + STATE.currentDocId);
+  lbl.textContent = tt("viewer.page", { n: STATE.currentPage, total: doc.page_count });
+  const url = `${API}/documents/${STATE.currentDocId}/pages/${STATE.currentPage}.png?dpi=120&v=${doc.current_version}`;
+  wrap.innerHTML = `<img class="viewer-img" id="viewer-img" alt="" />`;
+  const img = document.getElementById("viewer-img");
+  img.onload = () => drawOverlays(img);
+  img.onerror = () => { wrap.innerHTML = `<div class="empty-state">${tt("viewer.noText")}</div>`; };
+  img.src = url;
+}
+
+function refreshViewer() {
+  if (!STATE.currentDocId) return;
+  apiGet("/documents/" + STATE.currentDocId).then(renderViewer).catch(() => {});
+}
+
+function _convertPdfRectToCss(b, pageW, pageH, rotation, displayW, displayH) {
+  // Source: PDF points, origin top-left. PyMuPDF accounts for the page
+  // rotation when reporting search_for rects, so we only need to scale
+  // to the displayed image size — no manual rotation transform needed.
+  const sx = displayW / (pageW || displayW);
+  const sy = displayH / (pageH || displayH);
+  return {
+    left: b.x0 * sx,
+    top: b.y0 * sy,
+    width: (b.x1 - b.x0) * sx,
+    height: (b.y1 - b.y0) * sy,
+  };
+}
+
+function drawOverlays(img) {
+  const wrap = document.getElementById("viewer-wrap");
+  wrap.querySelectorAll(".viewer-overlay").forEach(el => el.remove());
+  if (!img.naturalWidth || !img.naturalHeight) return;
+  // Displayed (CSS) size of the image vs the PDF page size in points.
+  // The PNG is rasterised at server-side DPI and resized by the browser;
+  // we scale directly from page_w/page_h carried in each bbox so the
+  // overlay tracks the page even if the server DPI changes.
+  const displayW = img.clientWidth;
+  const displayH = img.clientHeight;
+  const sugs = STATE.suggestions
+    .filter(s => s.page === STATE.currentPage && s.status !== "applied")
+    .slice()
+    .sort((a, b) => (a.span_index - b.span_index) || a.id.localeCompare(b.id));
+  // Count duplicates per (page, original_text) so the tooltip can show
+  // « 1/2 », « 2/2 » and remove any ambiguity for the user.
+  const groupTotals = new Map();
+  for (const s of sugs) {
+    const k = s.original_text || s.rule_code;
+    groupTotals.set(k, (groupTotals.get(k) || 0) + 1);
+  }
+  const groupCursor = new Map();
+  for (const s of sugs) {
+    const b = s.bbox || {};
+    if (typeof b.x0 !== "number") continue;
+    const pageW = (typeof b.page_w === "number" && b.page_w > 0) ? b.page_w : (img.naturalWidth * 72 / 120);
+    const pageH = (typeof b.page_h === "number" && b.page_h > 0) ? b.page_h : (img.naturalHeight * 72 / 120);
+    const rect = _convertPdfRectToCss(b, pageW, pageH, b.page_rotation || 0, displayW, displayH);
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    const overlay = document.createElement("div");
+    let cls = "viewer-overlay";
+    if (s.rule_kind === "units") cls += " units";
+    else if (s.severity === "error") cls += " danger";
+    if (s.status === "rejected") cls += " rejected";
+    if (s.id === STATE.selectedSuggestionId) cls += " selected";
+    overlay.className = cls;
+    overlay.style.left = rect.left + "px";
+    overlay.style.top = rect.top + "px";
+    overlay.style.width = Math.max(rect.width, 6) + "px";
+    overlay.style.height = Math.max(rect.height, 10) + "px";
+    overlay.dataset.suggestionOverlayId = s.id;
+    const k = s.original_text || s.rule_code;
+    const total = groupTotals.get(k) || 1;
+    const cur = (groupCursor.get(k) || 0) + 1;
+    groupCursor.set(k, cur);
+    const counter = total > 1 ? ` (${cur}/${total})` : "";
+    const detectionOnly = !s.proposed_text || s.proposed_text === s.original_text;
+    const proposedLine = detectionOnly
+      ? "Détection — pas de correction automatique"
+      : `Proposé : ${s.proposed_text}`;
+    overlay.title =
+      `${s.rule_code}${counter} · ${s.severity}\n` +
+      `${s.message || ""}\n` +
+      `Original : ${s.original_text}\n` +
+      `${proposedLine}`;
+    overlay.addEventListener("click", () => {
+      STATE.selectedSuggestionId = s.id;
+      refreshViewerOverlays();
+      const item = document.querySelector(`[data-suggestion-id="${s.id}"]`);
+      if (item) item.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    wrap.appendChild(overlay);
+  }
+}
+
+function refreshViewerOverlays() {
+  const img = document.getElementById("viewer-img");
+  if (img && img.complete) drawOverlays(img);
+  document.querySelectorAll(".red-anomaly").forEach(el => el.classList.toggle("selected", el.dataset.suggestionId === STATE.selectedSuggestionId));
+}
+
+
+// ---- Settings ----
+async function loadSettings() {
+  // v2: la carte « Règles S1000D built-in » a été retirée (redondante avec
+  // l'Administration des normes). Les toggles sont désormais gérés via les
+  // règles custom rattachées à une version de norme.
+  await Promise.all([loadMistralSettings(), loadAiPromptSettings(), loadRules()]);
+}
+
+async function loadAiPromptSettings() {
+  const ta = document.getElementById("ai-prompt");
+  try {
+    const data = await apiGet("/settings/ai-prompt");
+    ta.value = data.prompt || "";
+  } catch (err) { /* leave empty */ }
+}
+
+document.getElementById("ai-prompt-save").addEventListener("click", async () => {
+  const fb = document.getElementById("ai-prompt-feedback");
+  const ta = document.getElementById("ai-prompt");
+  fb.textContent = tt("settings.saving"); fb.style.color = "var(--fg-dim)";
+  try {
+    await apiSend("POST", "/settings/ai-prompt", { prompt: ta.value });
+    fb.textContent = tt("settings.savedOk"); fb.style.color = "var(--success)";
+    toast(tt("settings.savedOk"));
+  } catch (err) { fb.textContent = err.message; fb.style.color = "var(--danger)"; }
+});
+
+document.getElementById("ai-prompt-clear").addEventListener("click", (e) => {
+  const ta = document.getElementById("ai-prompt");
+  if (!ta.value && !ta.value.length) return;
+  armConfirm(e.currentTarget, async () => {
+    ta.value = "";
+    try {
+      await apiSend("POST", "/settings/ai-prompt", { prompt: "" });
+      toast("OK");
+    } catch (err) { toast(err.message, "error"); }
+  });
+});
+
+async function loadMistralSettings() {
+  const status = document.getElementById("mistral-status");
+  const fb = document.getElementById("mistral-feedback");
+  fb.textContent = "";
+  try {
+    const s = await apiGet("/settings/mistral");
+    const form = document.getElementById("mistral-form");
+    form.elements["base_url"].value = s.base_url;
+    form.elements["chat_model"].value = s.chat_model;
+    if (form.elements["vision_model"]) {
+      form.elements["vision_model"].value = s.vision_model || "pixtral-12b-2409";
+    }
+    if (form.elements["vision_enabled"]) {
+      form.elements["vision_enabled"].checked = !!s.vision_enabled;
+    }
+    form.elements["api_key"].value = "";
+    form.elements["api_key"].placeholder = s.api_key_set
+      ? `${s.api_key_preview} — ${tt("settings.apiKeyPh")}`
+      : tt("settings.apiKey");
+    status.innerHTML = s.api_key_set
+      ? `<span class="badge ok">${tt("settings.cfgYes")}</span>`
+      : `<span class="badge warn">${tt("settings.cfgNo")}</span>`;
+  } catch (err) {
+    status.innerHTML = `<span class="badge danger">err</span>`;
+    fb.textContent = err.message;
+  }
+}
+
+document.getElementById("mistral-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const fb = document.getElementById("mistral-feedback");
+  fb.textContent = tt("settings.saving"); fb.style.color = "var(--fg-dim)";
+  const fd = new FormData(e.target);
+  const body = {
+    api_key: fd.get("api_key") || "",
+    base_url: fd.get("base_url") || "https://api.mistral.ai",
+    chat_model: fd.get("chat_model") || "mistral-small-latest",
+    vision_model: fd.get("vision_model") || "pixtral-12b-2409",
+    vision_enabled: !!fd.get("vision_enabled"),
+  };
+  try {
+    await apiSend("POST", "/settings/mistral", body);
+    fb.textContent = tt("settings.savedOk"); fb.style.color = "var(--success)";
+    loadMistralSettings();
+  } catch (err) { fb.textContent = err.message; fb.style.color = "var(--danger)"; }
+});
+
+document.getElementById("mistral-test").addEventListener("click", async () => {
+  const fb = document.getElementById("mistral-feedback");
+  fb.textContent = tt("settings.testing"); fb.style.color = "var(--fg-dim)";
+  try {
+    const r = await apiSend("POST", "/settings/mistral/test");
+    fb.textContent = r.ok ? `OK — ${r.message}` : `${r.message}`;
+    fb.style.color = r.ok ? "var(--success)" : "var(--danger)";
+  } catch (err) { fb.textContent = err.message; fb.style.color = "var(--danger)"; }
+});
+
+async function loadRules() {
+  const list = document.getElementById("rules-list");
+  try {
+    const rules = await apiGet("/rules") || [];
+    if (!rules.length) { list.innerHTML = `<div class="empty-state">${tt("rules.empty")}</div>`; return; }
+    list.innerHTML = `
+      <table class="rules-table">
+        <thead><tr>
+          <th>${tt("rules.col.name")}</th>
+          <th>${tt("rules.col.kind")}</th>
+          <th>${tt("rules.col.pattern")}</th>
+          <th>${tt("rules.col.severity")}</th>
+          <th>${tt("rules.col.enabled")}</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${rules.map(r => renderRuleRow(r)).join("")}</tbody>
+      </table>`;
+    bindRuleRows(list);
+  } catch (err) { list.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`; }
+}
+
+function renderRuleRow(r) {
+  return `
+    <tr data-rule-id="${r.id}">
+      <td><input class="input" data-field="name" value="${escapeAttr(r.name)}" /></td>
+      <td>
+        <select class="input" data-field="kind">
+          <option value="term_replace" ${r.kind === "term_replace" ? "selected" : ""}>${tt("rules.kind.term")}</option>
+          <option value="regex_replace" ${r.kind === "regex_replace" ? "selected" : ""}>${tt("rules.kind.regexReplace")}</option>
+          <option value="regex_flag" ${r.kind === "regex_flag" ? "selected" : ""}>${tt("rules.kind.regexFlag")}</option>
+          <option value="case_capitalize" ${r.kind === "case_capitalize" ? "selected" : ""}>${tt("rules.kind.caseCap")}</option>
+          <option value="accent_fix" ${r.kind === "accent_fix" ? "selected" : ""}>${tt("rules.kind.accentFix")}</option>
+        </select>
+      </td>
+      <td><input class="input" data-field="pattern" value="${escapeAttr(r.pattern)}" /></td>
+      <td>
+        <select class="input" data-field="severity">
+          <option value="info" ${r.severity === "info" ? "selected" : ""}>info</option>
+          <option value="warning" ${r.severity === "warning" ? "selected" : ""}>warning</option>
+          <option value="error" ${r.severity === "error" ? "selected" : ""}>error</option>
+        </select>
+      </td>
+      <td><input type="checkbox" data-field="enabled" ${r.enabled ? "checked" : ""} /></td>
+      <td>
+        <button class="btn primary small" data-rule-save="${r.id}" disabled>${tt("common.save")}</button>
+        <button class="btn ghost small" data-rule-del="${r.id}">🗑</button>
+      </td>
+    </tr>`;
+}
+
+function bindRuleRows(scope) {
+  scope.querySelectorAll("tr[data-rule-id]").forEach(tr => {
+    const saveBtn = tr.querySelector("[data-rule-save]");
+    tr.querySelectorAll("[data-field]").forEach(f => {
+      const evt = (f.tagName === "SELECT" || f.type === "checkbox") ? "change" : "input";
+      f.addEventListener(evt, () => { tr.classList.add("editing"); saveBtn.disabled = false; });
+    });
+    saveBtn.addEventListener("click", async () => {
+      const body = {};
+      tr.querySelectorAll("[data-field]").forEach(f => {
+        body[f.dataset.field] = f.type === "checkbox" ? f.checked : f.value;
+      });
+      try {
+        await apiSend("PATCH", "/rules/" + tr.dataset.ruleId, body);
+        tr.classList.remove("editing");
+        saveBtn.disabled = true;
+        toast("OK");
+      } catch (err) { toast(err.message, "error"); }
+    });
+    tr.querySelector("[data-rule-del]").addEventListener("click", async () => {
+      try { await apiSend("DELETE", "/rules/" + tr.dataset.ruleId); toast("OK"); loadRules(); }
+      catch (err) { toast(err.message, "error"); }
+    });
+  });
+}
+
+document.getElementById("rule-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {
+    name: fd.get("name").trim(),
+    kind: fd.get("kind"),
+    pattern: fd.get("pattern"),
+    replacement: fd.get("replacement") || "",
+    severity: fd.get("severity"),
+    message: fd.get("message") || "",
+    enabled: true,
+  };
+  const errBox = document.getElementById("rule-form-error");
+  errBox.hidden = true;
+  try { await apiSend("POST", "/rules", body); toast("OK"); e.target.reset(); loadRules(); }
+  catch (err) { errBox.textContent = err.message; errBox.hidden = false; }
+});
+
+// ---- Rule suggestions (Mistral) ----
+let _suggestState = null;
+
+function renderSuggestionItems(suggestions) {
+  if (!suggestions.length) {
+    return `<div class="empty-state">${escapeHtml(tt("rules.noSuggestions"))}</div>`;
+  }
+  return suggestions.map((s, idx) => `
+    <label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" data-sk="${idx}" checked style="margin-top:4px" />
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--fg)">${escapeHtml(s.name)}</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--fg-dim)">
+          ${escapeHtml(s.kind)} · /${escapeHtml(s.pattern)}/${s.replacement ? " → " + escapeHtml(s.replacement) : ""} · ${escapeHtml(s.severity)}
+        </div>
+        ${s.message ? `<div style="font-size:0.8rem;color:var(--fg-dim);margin-top:4px">${escapeHtml(s.message)}</div>` : ""}
+      </div>
+    </label>
+  `).join("");
+}
+
+document.getElementById("rules-suggest").addEventListener("click", async () => {
+  const wrap = document.getElementById("rules-suggestions-wrap");
+  const body = document.getElementById("rules-suggestions-body");
+  const meta = document.getElementById("rules-suggest-meta");
+  const feedback = document.getElementById("rules-suggest-feedback");
+  feedback.textContent = "";
+  wrap.hidden = false;
+  meta.textContent = "";
+  body.innerHTML = `<div class="empty-state">${escapeHtml(tt("rules.suggesting"))}</div>`;
+  try {
+    const result = await apiSend("POST", "/rules/suggest", {});
+    _suggestState = result;
+    meta.textContent = tt("rules.docsAnalyzed", { n: result.documents_analyzed });
+    body.innerHTML = renderSuggestionItems(result.suggestions || []);
+  } catch (err) {
+    body.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`;
+    _suggestState = null;
+  }
+});
+
+document.getElementById("rules-suggest-close").addEventListener("click", () => {
+  document.getElementById("rules-suggestions-wrap").hidden = true;
+  document.getElementById("rules-suggest-feedback").textContent = "";
+  _suggestState = null;
+});
+
+document.getElementById("rules-suggest-apply").addEventListener("click", async () => {
+  if (!_suggestState || !_suggestState.suggestions) return;
+  const checkedIdx = [];
+  document.querySelectorAll("#rules-suggestions-body input[type=checkbox][data-sk]:checked")
+    .forEach(cb => checkedIdx.push(parseInt(cb.dataset.sk, 10)));
+  if (!checkedIdx.length) { toast(tt("rules.noSuggestions")); return; }
+  let added = 0;
+  for (const i of checkedIdx) {
+    const s = _suggestState.suggestions[i];
+    if (!s) continue;
+    try {
+      await apiSend("POST", "/rules", {
+        name: s.name, kind: s.kind, pattern: s.pattern,
+        replacement: s.replacement || "", severity: s.severity,
+        message: s.message || "", enabled: true,
+      });
+      added += 1;
+    } catch (err) { toast(err.message, "error"); }
+  }
+  document.getElementById("rules-suggest-feedback").textContent = tt("rules.suggestionsApplied", { n: added });
+  document.getElementById("rules-suggestions-wrap").hidden = true;
+  _suggestState = null;
+  loadRules();
+});
+
+// ---- Data admin ----
+async function loadDataStats() {
+  const box = document.getElementById("data-stats");
+  try {
+    await fetchAll();
+    const rules = await apiGet("/rules") || [];
+    box.innerHTML = `
+      <div class="kpi"><span class="label">${tt("data.kpi.pdfs")}</span><div class="kpi-value">${STATE.docs.length}</div></div>
+      <div class="kpi"><span class="label">${tt("data.kpi.sugs")}</span><div class="kpi-value">${STATE.suggestions.length}</div></div>
+      <div class="kpi"><span class="label">${tt("data.kpi.rules")}</span><div class="kpi-value">${rules.length}</div></div>`;
+  } catch (err) { box.innerHTML = `<div class="empty-state">${escapeHtml(err.message)}</div>`; }
+}
+document.getElementById("data-reset-suggestions").addEventListener("click", (e) => {
+  armConfirm(e.currentTarget, async () => {
+    try {
+      const r = await apiSend("POST", "/admin/wipe-suggestions");
+      toast(tt("data.wipedSugs", { n: r.deleted || 0 }));
+      loadDataStats();
+    } catch (err) { toast(err.message, "error"); }
+  });
+});
+document.getElementById("data-reset-all").addEventListener("click", (e) => {
+  armConfirm(e.currentTarget, async () => {
+    try {
+      const r = await apiSend("POST", "/admin/reset");
+      toast(tt("data.resetDone", {
+        n: r.documents_deleted || 0,
+        o: (r.storage_folders_cleaned || 0) + (r.orphan_folders_cleaned || 0),
+      }));
+      STATE.currentDocId = null;
+      loadDataStats();
+    } catch (err) { toast(err.message, "error"); }
+  });
+});
+
+document.querySelectorAll('#settings-target .slicer-pill').forEach(p => {
+  if (p.dataset.target === STATE.uploadTarget) p.classList.add("active");
+  p.addEventListener("click", () => {
+    document.querySelectorAll('#settings-target .slicer-pill, #upload-target .slicer-pill').forEach(x => {
+      x.classList.toggle("active", x.dataset.target === p.dataset.target);
+    });
+    STATE.uploadTarget = p.dataset.target;
+    localStorage.setItem("pdfreviewer.target", p.dataset.target);
+  });
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ====================================================================
+// v2 — Multi-norms support (Settings tab only)
+// ====================================================================
+
+async function fetchStandards() {
+  try {
+    STATE.standards = (await apiGet("/standards")) || [];
+  } catch (err) {
+    STATE.standards = [];
+  }
+  refreshActiveStandardUI();
+  refreshDocumentsActiveStandardBanner();
+}
+
+function _activeLabels() {
+  const labels = [];
+  for (const std of STATE.standards) {
+    for (const v of (std.versions || [])) {
+      if (STATE.activeStandardVersionIds.includes(v.id)) {
+        labels.push(`${std.code} ${v.label}`);
+      }
+    }
+  }
+  return labels;
+}
+
+// --- Normes cibles actives (carte multi-select dans Paramètres) --------
+function refreshActiveStandardUI() {
+  const box = document.getElementById("active-standards-pills");
+  const summary = document.getElementById("active-standards-summary");
+  if (!box) return;
+
+  // Drop any orphan id whose version no longer exists (e.g. deleted custom).
+  const validIds = new Set();
+  STATE.standards.forEach(s => (s.versions || []).forEach(v => validIds.add(v.id)));
+  STATE.activeStandardVersionIds = STATE.activeStandardVersionIds.filter(id => validIds.has(id));
+
+  if (!STATE.standards.length) {
+    box.innerHTML = `<div class="empty-state">${escapeHtml(tt("common.loading"))}</div>`;
+    return;
+  }
+  box.innerHTML = STATE.standards.map(s => `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:8px">
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--fg);min-width:120px">${escapeHtml(s.code)}</span>
+      <span class="label" style="color:var(--fg-dim);flex:1;min-width:0">${escapeHtml(s.label)}</span>
+      ${(s.versions || []).map(v => {
+        const active = STATE.activeStandardVersionIds.includes(v.id);
+        return `<button type="button" class="slicer-pill ${active ? "active" : ""}" data-toggle-active-version="${v.id}">${escapeHtml(v.label)}${v.builtin ? "" : " (" + escapeHtml(tt("standards.custom")) + ")"}</button>`;
+      }).join("")}
+    </div>
+  `).join("");
+
+  box.querySelectorAll("[data-toggle-active-version]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.toggleActiveVersion;
+      const idx = STATE.activeStandardVersionIds.indexOf(id);
+      if (idx >= 0) STATE.activeStandardVersionIds.splice(idx, 1);
+      else STATE.activeStandardVersionIds.push(id);
+      _persistActiveVersionIds(STATE.activeStandardVersionIds);
+      refreshActiveStandardUI();
+      refreshDocumentsActiveStandardBanner();
+    });
+  });
+
+  const labels = _activeLabels();
+  if (summary) {
+    summary.textContent = labels.length
+      ? tt("standards.activeNowMulti", { list: labels.join(" · ") })
+      : tt("standards.activeNone");
+  }
+}
+
+function refreshDocumentsActiveStandardBanner() {
+  const lbl = document.getElementById("documents-active-standard");
+  if (!lbl) return;
+  const labels = _activeLabels();
+  lbl.textContent = labels.length ? labels.join(" · ") : tt("standards.transverse");
+}
+
+// --- Admin des règles d'une norme (panneau Administration) -------------
+async function refreshAdminList() {
+  const listBox = document.getElementById("standards-list");
+  if (!listBox) return;
+  if (!STATE.standards.length) {
+    listBox.innerHTML = `<div class="empty-state">${escapeHtml(tt("common.empty"))}</div>`;
+    return;
+  }
+  listBox.innerHTML = STATE.standards.map(s => `
+    <div class="doc-row" data-std="${s.id}" style="cursor:pointer;${s.id === STATE.adminStandardId ? "border-color:var(--brand-light)" : ""}">
+      <div class="grow">
+        <div class="doc-name">${escapeHtml(s.code)}</div>
+        <div class="doc-meta">${escapeHtml(s.label)}</div>
+      </div>
+      <div class="row" style="gap:6px;align-items:center">
+        <span class="badge ${s.builtin ? "info" : "warn"}">${escapeHtml(s.builtin ? tt("standards.builtin") : tt("standards.custom"))}</span>
+        <span class="badge">${(s.versions || []).length} v</span>
+        ${s.builtin ? "" : `<button class="btn ghost small" data-del-std="${s.id}" title="${escapeAttr(tt("common.delete"))}">✕</button>`}
+      </div>
+    </div>`).join("");
+  listBox.querySelectorAll("[data-std]").forEach(row => {
+    row.addEventListener("click", e => {
+      if (e.target.closest("[data-del-std]")) return;
+      STATE.adminStandardId = row.dataset.std;
+      const std = STATE.standards.find(s => s.id === row.dataset.std);
+      STATE.adminStandardVersionId = (std?.versions || [])[0]?.id || null;
+      refreshAdminList();
+      refreshAdminDetail();
+    });
+  });
+  listBox.querySelectorAll("[data-del-std]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      armConfirm(btn, async () => {
+        try {
+          await apiSend("DELETE", "/standards/" + btn.dataset.delStd);
+          toast(tt("settings.savedOk"));
+          if (STATE.adminStandardId === btn.dataset.delStd) {
+            STATE.adminStandardId = null;
+            STATE.adminStandardVersionId = null;
+          }
+          await fetchStandards();
+          refreshAdminList();
+          refreshAdminDetail();
+        } catch (err) { toast(err.message, "error"); }
+      }, "OK ?");
+    });
+  });
+}
+
+async function refreshAdminDetail() {
+  const detailBox = document.getElementById("standards-detail");
+  const titleBox = document.getElementById("standards-detail-title");
+  if (!detailBox) return;
+
+  const std = STATE.standards.find(s => s.id === STATE.adminStandardId);
+  if (!std) {
+    if (titleBox) titleBox.textContent = tt("standards.detailTitle");
+    detailBox.innerHTML = `<div class="empty-state">${escapeHtml(tt("standards.detailEmpty"))}</div>`;
+    return;
+  }
+  if (titleBox) titleBox.textContent = `${std.code} · ${std.label}`;
+
+  const versions = std.versions || [];
+  let detail = null;
+  if (STATE.adminStandardVersionId) {
+    try {
+      detail = await apiGet(`/standards/${std.id}/versions/${STATE.adminStandardVersionId}`);
+    } catch (err) { /* ignore */ }
+  }
+  STATE.adminCatalog = detail?.catalog || [];
+  STATE.adminCustomRules = detail?.custom_rules || [];
+
+  const versionPills = versions.map(v =>
+    `<button class="slicer-pill ${v.id === STATE.adminStandardVersionId ? "active" : ""}" data-adver="${v.id}">${escapeHtml(v.label)}${v.builtin ? "" : " (" + escapeHtml(tt("standards.custom")) + ")"}</button>`
+  ).join("");
+
+  const disabled = new Set(detail?.disabled_rule_codes || []);
+  const editingCode = STATE.adminEditingCatalogCode || null;
+  const builtinList = (detail?.catalog || []).map(c => {
+    const off = disabled.has(c.code);
+    const isEditing = editingCode === c.code;
+    const editor = isEditing ? `
+      <form data-edit-catalog="${escapeAttr(c.code)}" class="form" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);gap:6px">
+        <div class="row" style="gap:6px">
+          <input class="input" name="title" value="${escapeAttr(c.title || "")}" placeholder="Titre" />
+          <select class="input" name="severity" style="max-width:140px">
+            ${["info","warning","error"].map(s => `<option value="${s}"${c.severity===s?" selected":""}>${s}</option>`).join("")}
+          </select>
+        </div>
+        <div class="row" style="gap:6px">
+          <select class="input" name="kind" style="max-width:220px">
+            ${["regex_flag","regex_replace","term_replace","case_capitalize","accent_fix","field_required","section_required","step_pattern","enum_value","field_consistency"].map(k => `<option value="${k}"${c.kind===k?" selected":""}>${k}</option>`).join("")}
+          </select>
+          <input class="input" name="pattern" value="${escapeAttr(c.pattern || "")}" placeholder="Pattern" style="font-family:'JetBrains Mono',monospace" />
+        </div>
+        <input class="input" name="replacement" value="${escapeAttr(c.replacement || "")}" placeholder="Remplacement (vide pour les kinds non-replace)" style="font-family:'JetBrains Mono',monospace" />
+        <input class="input" name="message" value="${escapeAttr(c.message || "")}" placeholder="Message affiché" />
+        <textarea class="input" name="description" rows="3" placeholder="Description / référence à la balise XML">${escapeHtml(c.description || "")}</textarea>
+        <div class="row" style="gap:6px">
+          <button class="btn primary small" type="submit">${escapeHtml(tt("common.save"))}</button>
+          <button class="btn ghost small" type="button" data-cancel-edit-catalog="${escapeAttr(c.code)}">${escapeHtml(tt("common.cancel"))}</button>
+          <button class="btn ghost small" type="button" data-reset-catalog="${escapeAttr(c.code)}" style="margin-left:auto">${escapeHtml(tt("standards.resetRule"))}</button>
+        </div>
+      </form>` : "";
+    return `
+    <div style="padding:8px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;opacity:${off ? "0.55" : "1"}">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-family:'JetBrains Mono',monospace;color:var(--fg)">${escapeHtml(c.code)}</span>
+        <span class="label" style="margin-left:auto">${escapeHtml(c.kind)} · ${escapeHtml(c.severity)}</span>
+        <button class="btn ghost small" type="button" data-edit-catalog="${escapeAttr(c.code)}">${escapeHtml(tt(isEditing ? "common.cancel" : "standards.editRule"))}</button>
+        <label class="checkbox" style="white-space:nowrap">
+          <input type="checkbox" data-toggle-catalog="${escapeAttr(c.code)}" ${off ? "" : "checked"} />
+          <span style="margin-left:4px">${escapeHtml(tt(off ? "rules.disabled" : "rules.enabled"))}</span>
+        </label>
+      </div>
+      <div style="margin-top:2px;font-size:0.9rem">${escapeHtml(c.title)}</div>
+      <div style="color:var(--fg-dim);font-size:0.82rem;margin-top:2px">${escapeHtml(c.description)}</div>
+      ${editor}
+    </div>`;
+  }).join("");
+
+  const customRows = (detail?.custom_rules || []).map(r => `
+    <div class="row" style="padding:8px 10px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;gap:8px;align-items:center">
+      <div class="grow" style="min-width:0">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;color:var(--fg)">${escapeHtml(r.name)}</div>
+        <div class="label" style="color:var(--fg-dim)">${escapeHtml(r.kind)} · /${escapeHtml(r.pattern)}/ · ${escapeHtml(r.severity)}</div>
+      </div>
+      <label class="checkbox"><input type="checkbox" data-toggle-rule="${r.id}" ${r.enabled ? "checked" : ""}/>${escapeHtml(tt("rules.col.enabled"))}</label>
+      <button class="btn ghost small" data-del-rule="${r.id}">${escapeHtml(tt("common.delete"))}</button>
+    </div>`).join("");
+
+  const customFormDisabled = !STATE.adminStandardVersionId;
+
+  detailBox.innerHTML = `
+    <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      ${versionPills || `<span class="empty-state">${escapeHtml(tt("standards.noVersion"))}</span>`}
+    </div>
+    ${std.description ? `<p style="color:var(--fg-dim);margin-top:0;margin-bottom:10px">${escapeHtml(std.description)}</p>` : ""}
+
+    <div class="label" style="margin-bottom:6px">
+      ${escapeHtml(tt("standards.catalogTitle"))} · ${(detail?.catalog || []).length}
+    </div>
+    <div style="max-height:260px;overflow-y:auto;margin-bottom:14px">${builtinList || `<div class="empty-state">${escapeHtml(tt("standards.catalogEmpty"))}</div>`}</div>
+
+    <div class="label" style="margin-bottom:6px">
+      ${escapeHtml(tt("standards.customRulesTitle"))} · ${(detail?.custom_rules || []).length}
+    </div>
+    <div>${customRows || `<div class="empty-state">${escapeHtml(tt("standards.customRulesEmpty"))}</div>`}</div>
+
+    <form id="standards-add-rule" class="form" autocomplete="off" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" ${customFormDisabled ? "data-disabled" : ""}>
+      <div class="label" data-i18n="standards.addCustomRule">Ajouter une règle custom à cette version</div>
+      <div class="row" style="gap:6px">
+        <input class="input" name="name" required placeholder="${escapeAttr(tt("rules.namePh"))}" />
+        <select class="input" name="kind" style="max-width:200px">
+          <option value="term_replace">${escapeHtml(tt("rules.kind.term"))}</option>
+          <option value="regex_replace">${escapeHtml(tt("rules.kind.regexReplace"))}</option>
+          <option value="regex_flag">${escapeHtml(tt("rules.kind.regexFlag"))}</option>
+          <option value="field_required">${escapeHtml(tt("rules.kind.fieldRequired"))}</option>
+          <option value="section_required">${escapeHtml(tt("rules.kind.sectionRequired"))}</option>
+          <option value="step_pattern">${escapeHtml(tt("rules.kind.stepPattern"))}</option>
+          <option value="enum_value">${escapeHtml(tt("rules.kind.enumValue"))}</option>
+        </select>
+      </div>
+      <div class="row" style="gap:6px">
+        <input class="input" name="pattern" required placeholder="${escapeAttr(tt("rules.patternPh"))}" />
+        <input class="input" name="replacement" placeholder="${escapeAttr(tt("rules.replacementPh"))}" />
+      </div>
+      <div class="row" style="gap:6px">
+        <select class="input" name="severity" style="max-width:160px">
+          <option value="info">info</option>
+          <option value="warning" selected>warning</option>
+          <option value="error">error</option>
+        </select>
+        <input class="input" name="message" placeholder="${escapeAttr(tt("rules.messagePh"))}" />
+      </div>
+      <div class="row">
+        <button class="btn primary small" type="submit" ${customFormDisabled ? "disabled" : ""}>${escapeHtml(tt("rules.create"))}</button>
+        <span id="standards-add-rule-feedback" style="font-size:0.85rem;color:var(--fg-dim)"></span>
+      </div>
+    </form>
+  `;
+
+  detailBox.querySelectorAll("[data-adver]").forEach(p => p.addEventListener("click", () => {
+    STATE.adminStandardVersionId = p.dataset.adver;
+    refreshAdminDetail();
+  }));
+
+  detailBox.querySelectorAll("[data-toggle-rule]").forEach(cb => cb.addEventListener("change", async () => {
+    try {
+      await apiSend("PATCH", "/rules/" + cb.dataset.toggleRule, { enabled: cb.checked });
+      toast(tt("settings.savedOk"));
+    } catch (err) { toast(err.message, "error"); cb.checked = !cb.checked; }
+  }));
+  detailBox.querySelectorAll("[data-toggle-catalog]").forEach(cb => cb.addEventListener("change", async () => {
+    try {
+      await apiSend(
+        "POST",
+        `/standards/${STATE.adminStandardId}/versions/${STATE.adminStandardVersionId}/rules/toggle`,
+        { code: cb.dataset.toggleCatalog, enabled: cb.checked },
+      );
+      toast(tt("settings.savedOk"));
+      refreshAdminDetail();
+    } catch (err) { toast(err.message, "error"); cb.checked = !cb.checked; }
+  }));
+
+  // Expert: edit / cancel / reset on each built-in catalog rule.
+  detailBox.querySelectorAll("[data-edit-catalog]").forEach(btn => btn.addEventListener("click", () => {
+    const code = btn.dataset.editCatalog;
+    STATE.adminEditingCatalogCode = (STATE.adminEditingCatalogCode === code) ? null : code;
+    refreshAdminDetail();
+  }));
+  detailBox.querySelectorAll("[data-cancel-edit-catalog]").forEach(btn => btn.addEventListener("click", () => {
+    STATE.adminEditingCatalogCode = null;
+    refreshAdminDetail();
+  }));
+  detailBox.querySelectorAll("[data-reset-catalog]").forEach(btn => btn.addEventListener("click", () => {
+    const code = btn.dataset.resetCatalog;
+    armConfirm(btn, async () => {
+      try {
+        await apiSend(
+          "POST",
+          `/standards/${STATE.adminStandardId}/versions/${STATE.adminStandardVersionId}/rules/${encodeURIComponent(code)}/reset`,
+        );
+        toast(tt("settings.savedOk"));
+        STATE.adminEditingCatalogCode = null;
+        refreshAdminDetail();
+      } catch (err) { toast(err.message, "error"); }
+    });
+  }));
+  detailBox.querySelectorAll("[data-edit-catalog]").forEach(_ => {}); // placeholder
+  detailBox.querySelectorAll("form[data-edit-catalog]").forEach(form => form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = form.dataset.editCatalog;
+    const fd = new FormData(form);
+    const payload = {};
+    for (const k of ["title", "severity", "kind", "pattern", "replacement", "message", "description"]) {
+      const v = fd.get(k);
+      if (v !== null) payload[k] = v;
+    }
+    try {
+      await apiSend(
+        "PATCH",
+        `/standards/${STATE.adminStandardId}/versions/${STATE.adminStandardVersionId}/rules/${encodeURIComponent(code)}`,
+        payload,
+      );
+      toast(tt("settings.savedOk"));
+      STATE.adminEditingCatalogCode = null;
+      refreshAdminDetail();
+    } catch (err) { toast(err.message, "error"); }
+  }));
+  detailBox.querySelectorAll("[data-del-rule]").forEach(btn => btn.addEventListener("click", () => {
+    armConfirm(btn, async () => {
+      try {
+        await apiSend("DELETE", "/rules/" + btn.dataset.delRule);
+        toast(tt("settings.savedOk"));
+        refreshAdminDetail();
+      } catch (err) { toast(err.message, "error"); }
+    });
+  }));
+}
+
+// --- Settings tab orchestration -----------------------------------------
+async function loadStandardsAdmin() {
+  await fetchStandards();
+  refreshAdminList();
+  refreshAdminDetail();
+}
+
+// "Tout désactiver" button on the active-standards card
+document.addEventListener("click", e => {
+  if (e.target && e.target.closest && e.target.closest("#active-standards-clear")) {
+    STATE.activeStandardVersionIds = [];
+    _persistActiveVersionIds([]);
+    refreshActiveStandardUI();
+    refreshDocumentsActiveStandardBanner();
+  }
+});
+
+// Documents banner "Modifier dans Paramètres →".
+// Use closest() so clicks on nested children (icons, <span>) still match.
+document.addEventListener("click", e => {
+  if (!e.target || !e.target.closest) return;
+  if (e.target.closest("#documents-edit-standard")) {
+    e.preventDefault();
+    switchPage("settings");
+  }
+});
+
+// Submit handlers (delegated)
+document.addEventListener("submit", async (e) => {
+  if (e.target && e.target.id === "standards-create-form") {
+    e.preventDefault();
+    const fb = document.getElementById("standards-create-feedback");
+    const fd = new FormData(e.target);
+    try {
+      const std = await apiSend("POST", "/standards", {
+        code: fd.get("code"),
+        label: fd.get("label"),
+        description: fd.get("description") || null,
+      });
+      e.target.reset();
+      fb.textContent = tt("settings.savedOk");
+      STATE.adminStandardId = std.id;
+      STATE.adminStandardVersionId = null;
+      await fetchStandards();
+      refreshAdminList();
+      refreshAdminDetail();
+    } catch (err) {
+      fb.textContent = err.message;
+    }
+  } else if (e.target && e.target.id === "standards-add-rule") {
+    e.preventDefault();
+    if (!STATE.adminStandardVersionId) return;
+    const fb = document.getElementById("standards-add-rule-feedback");
+    const fd = new FormData(e.target);
+    try {
+      await apiSend("POST", "/rules", {
+        name: fd.get("name"),
+        kind: fd.get("kind"),
+        pattern: fd.get("pattern"),
+        replacement: fd.get("replacement") || "",
+        severity: fd.get("severity") || "warning",
+        message: fd.get("message") || "",
+        enabled: true,
+        standard_version_id: STATE.adminStandardVersionId,
+      });
+      e.target.reset();
+      if (fb) fb.textContent = tt("settings.savedOk");
+      refreshAdminDetail();
+    } catch (err) {
+      if (fb) fb.textContent = err.message;
+    }
+  }
+});
+
+applyI18n();
+fetchStandards().then(() => {
+  // First boot: if no active version persisted, suggest S1000D 6.0 +
+  // ASD-STE100 issue 7 by default so the user immediately sees the value
+  // of multi-norm targeting. The user can deselect either with one click.
+  if (!STATE.activeStandardVersionIds.length && STATE.standards.length) {
+    const defaults = [];
+    const s1k = STATE.standards.find(s => s.code === "S1000D");
+    if (s1k) {
+      const v = (s1k.versions || []).find(v => v.label === "6.0") || (s1k.versions || [])[0];
+      if (v) defaults.push(v.id);
+    }
+    const ste = STATE.standards.find(s => s.code === "ASD-STE100");
+    if (ste) {
+      const v = (ste.versions || [])[0];
+      if (v) defaults.push(v.id);
+    }
+    if (defaults.length) {
+      STATE.activeStandardVersionIds = defaults;
+      _persistActiveVersionIds(defaults);
+      refreshActiveStandardUI();
+      refreshDocumentsActiveStandardBanner();
+    }
+  }
+});
+loadDashboard();
+</script>
+<script>
+  (function () {
+    var btn = document.querySelector("[data-theme-toggle]");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var html = document.documentElement;
+      if (html.classList.contains("dark")) {
+        html.classList.remove("dark");
+        localStorage.setItem("theme", "light");
+      } else {
+        html.classList.add("dark");
+        localStorage.setItem("theme", "dark");
+      }
+    });
+  })();
+</script>
+</body>
+</html>

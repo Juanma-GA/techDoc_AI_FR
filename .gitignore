@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Node
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+.turbo/
+.vite/
+
+# Build outputs
+**/dist/
+**/build/
+
+# Tests
+playwright-report/
+test-results/
+coverage/
+.nyc_output/
+
+# Local data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+
+# Misc
+*.log
+.cache/
+
+# Legacy v1 — contient son propre .git, exclu pour eviter
+# le conflit nested repo (cf. git status).
+legacy/ftm-v1/FTM Agent/
+
+# Claude Code local config (paths machine, hooks, permissions)
+.claude/
+
+# Backup .git dirs (cf. session anonymisation 2026-05-26)
+.git.backup-*/

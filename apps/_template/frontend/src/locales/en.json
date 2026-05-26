@@ -1,0 +1,10 @@
+{
+  "app": {
+    "title": "TEMPLATE",
+    "version": "0.1.0"
+  },
+  "home": {
+    "title": "Welcome",
+    "subtitle": "POC skeleton — adapt routes/Home.tsx, app/api/, and locales/."
+  }
+}

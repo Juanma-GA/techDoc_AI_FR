@@ -1,0 +1,10 @@
+{
+  "app": {
+    "title": "TEMPLATE",
+    "version": "0.1.0"
+  },
+  "home": {
+    "title": "Bienvenue",
+    "subtitle": "Squelette POC — adapte routes/Home.tsx, app/api/, et locales/."
+  }
+}

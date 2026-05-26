@@ -1,0 +1,58 @@
+{
+  "app": {
+    "title": "FTM Agent",
+    "version": "v2",
+    "tagline": "Analyse et indexation des fiches de tâches de maintenance",
+    "titleTooltip": "Permet de piloter la conformité du contenu d'un corpus documentaire à partir de règles prédéfinies et de règles custom. L'opérationnel garde la main sur les modifications de fichier pour assurer une intervention humaine et un contrôle métier."
+  },
+  "nav": {
+    "section": "Navigation",
+    "dashboard": "Tableau de bord",
+    "projects": "Projets",
+    "chat": "Chatbot",
+    "settings": "Paramètres"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "retry": "Réessayer",
+    "empty": "Aucun élément à afficher"
+  },
+  "errors": {
+    "generic": "Une erreur inattendue s'est produite",
+    "network": "Le serveur est injoignable",
+    "validation": "Données d'entrée invalides",
+    "boundary": {
+      "title": "Quelque chose a mal tourné",
+      "description": "L'interface a rencontré une erreur. Vous pouvez recharger la page pour réessayer.",
+      "reload": "Recharger la page"
+    }
+  },
+  "health": {
+    "ok": "Opérationnel",
+    "degraded": "Dégradé",
+    "configured": "Configuré",
+    "notConfigured": "Non configuré"
+  },
+  "routes": {
+    "dashboard": {
+      "title": "Tableau de bord",
+      "subtitle": "KPI et indicateurs"
+    },
+    "projects": {
+      "title": "Projets",
+      "subtitle": "Gérer les projets et leurs fichiers"
+    },
+    "chat": {
+      "title": "Chatbot",
+      "subtitle": "Posez des questions sur le corpus indexé"
+    },
+    "settings": {
+      "title": "Paramètres",
+      "subtitle": "Configuration Mistral et règles métier"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+@import "@internal/design-tokens/theme.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  body {
+    @apply min-h-screen antialiased;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-blue-light ring-offset-0;
+  }
+  /* Uppercase mono labels per STANDARD §4.3 */
+  .label {
+    @apply font-mono uppercase tracking-widest text-fg-dim;
+    font-size: 0.6rem;
+    letter-spacing: 1px;
+  }
+}

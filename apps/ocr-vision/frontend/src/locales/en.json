@@ -1,0 +1,110 @@
+{
+  "app": {
+    "title": "OCR Vision",
+    "version": "0.1.0"
+  },
+  "nav": {
+    "ocr": "OCR / Vision",
+    "home": "Home",
+    "architecture": "Architecture",
+    "data": "Data",
+    "settings": "Settings"
+  },
+  "routes": {
+    "ocr": {
+      "title": "OCR / Vision",
+      "sub": "Test OCR and image recognition via Mistral models."
+    },
+    "home": {
+      "title": "Home",
+      "sub": "POC skeleton. Add your business tabs here."
+    },
+    "architecture": {
+      "title": "Architecture",
+      "sub": "Backend, frontend and user workflow."
+    },
+    "data": {
+      "title": "Data",
+      "sub": "Overview and reset operations."
+    },
+    "settings": {
+      "title": "Settings",
+      "sub": "Mistral API key and models used."
+    }
+  },
+  "ocr": {
+    "card_title": "Test OCR and image recognition",
+    "banner": "Send an image (or a PDF) to Mistral models: OCR-transcribed text + content description. Requires the Mistral API key configured in the Settings tab.",
+    "prompt_label": "Prompt for image recognition (no effect on raw OCR)",
+    "prompt_placeholder": "E.g.: Focus on safety pictograms and numbered markers.",
+    "run": "Analyze",
+    "running": "Analyzing...",
+    "no_file": "Pick a file first.",
+    "warning_prefix": "Warning: ",
+    "ocr_result_title": "Transcribed text (OCR)",
+    "ocr_empty": "(no text detected)",
+    "desc_result_title": "Content recognition",
+    "desc_empty": "(no description)"
+  },
+  "home": {
+    "title": "Welcome",
+    "body_intro": "You see this skeleton because ",
+    "body_dist": " hasn't been built (yet). The standalone HTML preview is served by the backend — no Node dependency required.",
+    "body_edit": "To customize this POC, edit:",
+    "edit_api": "add your own routers",
+    "edit_models": "add your tables (and an Alembic migration)",
+    "edit_preview": "replace this home page with your business tabs",
+    "edit_package": "adapt the packaging",
+    "status_backend": "Backend status",
+    "status_unknown": "UNKNOWN",
+    "status_llm": "LLM",
+    "status_version": "version"
+  },
+  "arch": {
+    "title": "Backend ↔ Frontend in 30 seconds",
+    "workflow_title": "User workflow (adapt per POC)",
+    "step1": "Settings tab → enter the Mistral key (stored in SQLite, app_config table).",
+    "step2": "Test the connection — lists the available Mistral models.",
+    "step3": "Data tab → view counters and reset tables if needed.",
+    "step4": "Insert the POC-specific workflow here once your business tabs are added."
+  },
+  "data": {
+    "overview": "Overview",
+    "documents": "Documents",
+    "chunks": "Chunks",
+    "sessions": "Sessions",
+    "messages": "Messages",
+    "total_size": "Total size",
+    "stats_unavailable": "Stats unavailable.",
+    "reset_title": "Reset",
+    "reset_warning_prefix": "Operation is ",
+    "reset_warning_strong": "irreversible",
+    "reset_warning_suffix": ". The Mistral configuration (app_config table) is preserved.",
+    "reset_all": "Delete everything",
+    "confirm_again": "Click again to confirm",
+    "reset_ok_prefix": "Reset OK (",
+    "reset_ok_suffix": ").",
+    "reset_empty": "(nothing to delete)"
+  },
+  "settings": {
+    "title": "Mistral configuration",
+    "badge_configured": "CONFIGURED",
+    "badge_not_configured": "NOT CONFIGURED",
+    "api_key": "Mistral API key",
+    "api_key_existing": "A key is already saved (leave empty to keep it).",
+    "base_url": "Base URL",
+    "chat_model": "Chat model",
+    "embed_model": "Embeddings model",
+    "vision_model": "Vision model",
+    "save": "Save",
+    "test": "Test connection",
+    "saved": "Settings saved.",
+    "connection_ok_prefix": "Connection OK (",
+    "connection_ok_suffix": " models available).",
+    "connection_ko_prefix": "Failed: ",
+    "models_available": "Models available on the deployment"
+  },
+  "common": {
+    "error": "Error"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "app": {
+    "title": "FTM Agent",
+    "version": "v2",
+    "tagline": "Maintenance task sheet analysis and indexing",
+    "titleTooltip": "Drives content compliance across a document corpus using both predefined and custom rules. The operator keeps full control over file edits, ensuring human review and business oversight."
+  },
+  "nav": {
+    "section": "Navigation",
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "chat": "Chatbot",
+    "settings": "Settings"
+  },
+  "common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "retry": "Retry",
+    "empty": "Nothing to display"
+  },
+  "errors": {
+    "generic": "An unexpected error occurred",
+    "network": "The server is unreachable",
+    "validation": "Invalid input",
+    "boundary": {
+      "title": "Something went wrong",
+      "description": "The interface ran into an error. You can reload the page to try again.",
+      "reload": "Reload page"
+    }
+  },
+  "health": {
+    "ok": "Operational",
+    "degraded": "Degraded",
+    "configured": "Configured",
+    "notConfigured": "Not configured"
+  },
+  "routes": {
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "KPIs and indicators"
+    },
+    "projects": {
+      "title": "Projects",
+      "subtitle": "Manage projects and their files"
+    },
+    "chat": {
+      "title": "Chatbot",
+      "subtitle": "Ask questions about the indexed corpus"
+    },
+    "settings": {
+      "title": "Settings",
+      "subtitle": "Mistral configuration and business rules"
+    }
+  }
+}
