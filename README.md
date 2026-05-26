@@ -1,18 +1,22 @@
 # Internal POC Monorepo
 
-Monorepo interne hébergeant des POC IA full-stack (FastAPI + React),
-développés dans un tronc commun et conformes à
-[`STANDARD_POC.md`](STANDARD_POC.md). Trois apps embarquées :
+Monorepo interne hébergeant plusieurs POC IA full-stack (FastAPI + React),
+développés dans un **tronc commun partagé** (`packages/ui`, `design-tokens/`,
+scripts, standard) et conformes à [`STANDARD_POC.md`](STANDARD_POC.md).
+Chaque app est indépendante côté runtime mais s'aligne sur les mêmes
+règles, les mêmes composants UI et les mêmes tokens.
 
 | App | Rôle | Port |
 |---|---|---|
 | [`apps/ftm/`](apps/ftm/) | FTM Agent v2 — analyse de Fiches de Tâches de Maintenance | 8000 |
 | [`apps/pdf-reviewer/`](apps/pdf-reviewer/) | Détection et correction d'anomalies dans des PDF techniques | 8001 |
 | [`apps/doc-writer/`](apps/doc-writer/) | Génération de contenu rédactionnel en RAG streaming | 8002 |
+| [`apps/ocr-vision/`](apps/ocr-vision/) | OCR + extraction visuelle sur documents techniques | 8003 |
+| [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
 
 > **Principe directeur** : ces apps sont des **POC local-first stricts**
 > — ils tournent localement sur le PC du dev. Pas de Docker, pas de CI,
-> pas de déploiement dans le périmètre du standard (voir CLAUDE.md).
+> pas de déploiement dans le périmètre du standard (voir [`CLAUDE.md`](CLAUDE.md)).
 
 ## Démarrage
 
@@ -52,13 +56,14 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 
 ```
 .
-├── apps/
+├── apps/                       # 1 dossier = 1 POC autonome
 │   ├── _template/              # squelette canonique — copie pour chaque nouveau POC
-│   ├── ftm/                 # POC FTM Agent v2
+│   ├── ftm/                    # POC FTM Agent v2
 │   ├── pdf-reviewer/           # POC PDF Reviewer
-│   └── doc-writer/             # POC Doc Writer
-│       ├── start.bat + _run.bat        # lancement local
-│       ├── package.bat + _package.bat  # generation du ZIP partageable
+│   ├── doc-writer/             # POC Doc Writer
+│   └── ocr-vision/             # POC OCR Vision
+│       ├── start.bat + _run.bat        # lancement local (wrapper + logique)
+│       ├── package.bat + _package.bat  # génération du ZIP partageable
 │       ├── start.sh                    # lanceur Unix
 │       ├── backend/                    # FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic
 │       └── frontend/                   # React 18 + Vite + TS strict
@@ -67,26 +72,31 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 ├── design-tokens/              # tokens.json (dual-theme dark/light) + preset Tailwind
 ├── docs/
 │   └── adr/                    # Architecture Decision Records
-├── scripts/                    # check_standard.sh + package_<poc>.py
+├── scripts/                    # check_standard.sh + package_<poc>.py (un par app)
 ├── tools/                      # binaires optionnels (ex. installeur Python silencieux)
 ├── legacy/
 │   └── ftm-v1/                 # code FTM v1 — lecture seule
 ├── STANDARD_POC.md             # référence technique du standard
-├── CLAUDE.md                   # règles non-negociables (lu par Claude Code)
+├── CLAUDE.md                   # règles non-négociables (lu par Claude Code)
 ├── PROMPT_AUDIT_STANDARD.md    # prompt d'audit d'un POC contre le standard
 ├── package.json                # workspace pnpm racine — scripts dev:<poc>
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json
 ```
 
+> **Chaque POC est indépendant** : aucune dépendance runtime entre
+> `apps/<poc-a>/` et `apps/<poc-b>/`. Le partage se fait uniquement via
+> `packages/ui/` et `design-tokens/`.
+
 ## Développement frontend (optionnel, nécessite Node 20 + pnpm)
 
 ```bash
 pnpm install
-pnpm dev:ftm        # backend uvicorn + frontend Vite (HMR) en parallèle
+pnpm dev:ftm            # backend uvicorn + frontend Vite (HMR) en parallèle
+pnpm dev:pdf-reviewer   # idem sur port 8001
+pnpm dev:doc-writer     # idem sur port 8002
+pnpm dev:ocr-vision     # idem sur port 8003
 ```
-
-Idem `pnpm dev:pdf-reviewer` et `pnpm dev:doc-writer`.
 
 ## Observabilité
 
@@ -117,11 +127,11 @@ Avant chaque commit :
 bash scripts/check_standard.sh
 ```
 
-Vérifie 8 contraintes structurelles : préfixe `/api/v1/`, absence de
+Vérifie 7 contraintes structurelles : préfixe `/api/v1/`, absence de
 `console.log` / `print()` / hex en dur / `alert` / `confirm` /
-`debug=True`, et présence de la variable `PORT` + check de port dans
-chaque `_run.bat`. Voir [`STANDARD_POC.md`](STANDARD_POC.md) pour le
-détail de chaque règle.
+`debug=True`, et présence de la variable `PORT` + check de port +
+bascule auto sur port libre dans chaque `_run.bat`. Voir
+[`STANDARD_POC.md`](STANDARD_POC.md) pour le détail de chaque règle.
 
 Toute exception au standard doit être documentée dans la section
 « Écarts au standard » du README de l'app concernée.
