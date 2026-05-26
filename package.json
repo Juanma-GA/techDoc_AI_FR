@@ -20,9 +20,11 @@
     "test:e2e:ftm": "pnpm --filter @apps/ftm-frontend --if-present test:e2e",
     "test:e2e:pdf-reviewer": "pnpm --filter @apps/pdf-reviewer-frontend --if-present test:e2e",
     "test:e2e:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present test:e2e",
+    "test:e2e:ocr-vision": "pnpm --filter @apps/ocr-vision-frontend --if-present test:e2e",
     "openapi:gen:ftm": "pnpm --filter @apps/ftm-frontend --if-present openapi:gen",
     "openapi:gen:pdf-reviewer": "pnpm --filter @apps/pdf-reviewer-frontend --if-present openapi:gen",
-    "openapi:gen:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present openapi:gen"
+    "openapi:gen:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present openapi:gen",
+    "openapi:gen:ocr-vision": "pnpm --filter @apps/ocr-vision-frontend --if-present openapi:gen"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"

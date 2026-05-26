@@ -1,27 +1,26 @@
-"""Package the TEMPLATE app into a standalone zip ready to share.
-
-This is the canonical packaging script for new POCs. To instantiate :
-
-    cp scripts/package_TEMPLATE.py scripts/package_<poc>.py
-
-Then replace `TEMPLATE`/`template` with the new POC name throughout
-(name, default --out, sources list, embed prefix, LISEZ-MOI/PACKAGE_README).
+"""Package the ocr-vision app into a standalone zip ready to share.
 
 Layout of the produced archive (with `--embed-python`, default ON):
 
-    TEMPLATE-vX.Y.Z-YYYYMMDD/
-    ├── start.bat               # one-click launcher → calls apps/<poc>/start.bat
+    ocr-vision-vX.Y.Z-YYYYMMDD/
+    ├── start.bat               # one-click launcher → calls apps/ocr-vision/start.bat
     ├── LISEZ-MOI.txt           # quick-start FR for the colleague
     ├── PACKAGE_README.md       # detailed reference
-    ├── apps/<poc>/             # full app (backend + frontend sources, no node_modules / .venv / data)
+    ├── apps/ocr-vision/        # full app (backend + frontend sources, no node_modules / .venv / data)
     │   └── frontend/dist/      # built React UI (only if pnpm + node are available distributor-side)
     ├── design-tokens/          # design-token assets used by the React build
     └── python-embed/           # bundled Python 3.11 (Windows embeddable + bootstrapped pip)
 
+Excluded everywhere:
+    - `.venv/`, `__pycache__/`, `*.pyc`     — runtime venv & bytecode (recreated at first launch)
+    - `data/`                               — local SQLite + uploaded docs (user state)
+    - `node_modules/`, `.cache/`            — package manager + script caches
+    - `.git/`, `.claude/`, IDE / cache dirs
+
 Usage:
-    python scripts/package_TEMPLATE.py
-    python scripts/package_TEMPLATE.py --version 0.2.0 --out dist
-    python scripts/package_TEMPLATE.py --no-embed-python
+    python scripts/package_ocr_vision.py
+    python scripts/package_ocr_vision.py --version 0.2.0 --out dist
+    python scripts/package_ocr_vision.py --no-embed-python
 """
 
 from __future__ import annotations
