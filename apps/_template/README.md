@@ -1,5 +1,18 @@
 # TEMPLATE
 
+> **CE README EST CELUI DU TEMPLATE — À RÉÉCRIRE INTÉGRALEMENT après instanciation.**
+>
+> Pour créer un nouveau POC, **n'éditez pas ce fichier**. Lancez à la place :
+>
+> ```bash
+> bash scripts/new_poc.sh <slug> [<port>]
+> ```
+>
+> Le script copie ce template, fait les substitutions, et écrase
+> `apps/<slug>/README.md` par un stub propre que vous remplirez avec la
+> description métier de votre POC (cf. `apps/doc-writer/README.md` ou
+> `apps/pdf-reviewer/README.md` comme références).
+
 Squelette canonique pour démarrer un nouveau POC. Conforme à [`STANDARD_POC.md`](../../STANDARD_POC.md).
 
 ## Auth
@@ -37,72 +50,13 @@ pnpm dev:TEMPLATE
 
 ## Adaptation pour un nouveau POC
 
-```bash
-cp -r apps/_template apps/<nouveau-poc>
-```
+Voir [`STANDARD_POC.md` §11](../../STANDARD_POC.md#11-ajout-dun-nouveau-poc).
+Deux méthodes y sont documentées :
 
-Puis, dans l'ordre :
+- **Recommandée** : `bash scripts/new_poc.sh <slug> [<port>]` — automatise les ~15 substitutions et passe `check_standard.sh`.
+- **Manuelle (fallback)** : liste exhaustive des fichiers à éditer si le script n'est pas utilisable.
 
-### 1. Renommer les identifiants
-
-| Fichier | À modifier |
-|---|---|
-| `apps/<poc>/backend/pyproject.toml` | `name = "<poc>-backend"` + adapter `description` |
-| `apps/<poc>/backend/app/config.py` | `app_name = "<poc>"`, `database_url` (`data/<poc>.db`) |
-| `apps/<poc>/backend/alembic.ini` | `sqlalchemy.url = sqlite:///./data/<poc>.db` |
-| `apps/<poc>/backend/.env.example` | `APP_NAME`, `DATABASE_URL` |
-| `apps/<poc>/frontend/package.json` | `"name": "@apps/<poc>-frontend"` |
-| `apps/<poc>/frontend/index.html` | `<title><poc></title>` |
-| `apps/<poc>/frontend/src/locales/{fr,en}.json` | `app.title` |
-| `apps/<poc>/README.md` | titre + bind + palier |
-
-### 2. Choisir un port unique
-
-| Fichier | À modifier |
-|---|---|
-| `apps/<poc>/_run.bat` | `set "PORT=80XX"` (XX libre dans le repo) |
-| `apps/<poc>/start.sh` | `PORT="${PORT:-80XX}"` |
-| `apps/<poc>/frontend/vite.config.ts` | proxy `"/api": "http://127.0.0.1:80XX"` |
-
-### 3. Adapter le packaging
-
-```bash
-cp scripts/package_TEMPLATE.py scripts/package_<poc>.py
-```
-
-Puis adapter en tête de `scripts/package_<poc>.py` :
-- `APP_NAME = "<poc>"`
-- `APP_SLUG = "<poc>"` (nom du dossier sous apps/)
-- `EMBED_PREFIX = "<poc>"`
-- `_LISEZ_MOI` et `_PACKAGE_README` : adapter au métier du POC
-
-Mettre à jour `apps/<poc>/_package.bat` pour appeler `scripts/package_<poc>.py`.
-
-### 4. Ajouter ta logique métier
-
-| Étape | Fichier |
-|---|---|
-| Tables métier | `backend/app/db/models.py` (en plus de `AppConfig`) |
-| Migration | `backend/alembic/versions/0002_<feature>.py` |
-| Schémas Pydantic | `backend/app/schemas.py` |
-| Routes métier | `backend/app/api/<feature>.py` + register dans `main.py` |
-| Compteurs | `backend/app/api/admin.py` (étendre `stats()` et `reset_all()` pour tes tables) |
-| UI preview | `backend/app/templates/preview.html` (remplacer page Home + ajouter onglets métier) |
-| Workflow Architecture | `backend/app/templates/preview.html` section `renderArchitecture` |
-| Tests | `backend/tests/test_<feature>.py` |
-
-### 5. Wirer dans le monorepo
-
-| Fichier | À modifier |
-|---|---|
-| `package.json` racine | Ajouter scripts `dev:<poc>`, `test:e2e:<poc>`, `openapi:gen:<poc>` |
-
-### 6. Vérification
-
-```bash
-bash scripts/check_standard.sh    # doit retourner exit 0
-cd apps/<poc>/backend && pytest   # doit être vert
-```
+Après instanciation, les étapes restant à la charge du dev (logique métier, migration, routes, preview) sont listées dans le stub de README généré par le script.
 
 ## Écarts au standard
 

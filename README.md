@@ -127,11 +127,27 @@ Avant chaque commit :
 bash scripts/check_standard.sh
 ```
 
-Vérifie 7 contraintes structurelles : préfixe `/api/v1/`, absence de
-`console.log` / `print()` / hex en dur / `alert` / `confirm` /
-`debug=True`, et présence de la variable `PORT` + check de port +
-bascule auto sur port libre dans chaque `_run.bat`. Voir
-[`STANDARD_POC.md`](STANDARD_POC.md) pour le détail de chaque règle.
+Vérifie 13 contraintes — 7 structurelles (préfixe `/api/v1/`, absence
+de `console.log` / `print()` / hex en dur / `alert` / `confirm` /
+`debug=True`, et variable `PORT` + bascule auto dans chaque `_run.bat`)
++ 6 d'instanciation qui rattrapent les copier-coller incomplets depuis
+`apps/_template/` (nom `pyproject.toml`, README réécrit, DB renommée,
+section `## Auth`, scripts racine wirés, bind `127.0.0.1`). Voir
+[`STANDARD_POC.md`](STANDARD_POC.md#8-tests) pour le détail de chaque règle.
+
+## Créer un nouveau POC
+
+```bash
+bash scripts/new_poc.sh <slug> [<port>]
+```
+
+Le script copie `apps/_template/` → `apps/<slug>/`, substitue les ~15
+marqueurs `TEMPLATE` / `8000` dans tous les fichiers, génère
+`scripts/package_<slug>.py`, wire les scripts `dev:<slug>` /
+`test:e2e:<slug>` / `openapi:gen:<slug>` dans `package.json`, et
+exécute `check_standard.sh` pour valider. Voir
+[`STANDARD_POC.md` §11](STANDARD_POC.md#11-ajout-dun-nouveau-poc) pour
+la procédure manuelle de fallback.
 
 Toute exception au standard doit être documentée dans la section
 « Écarts au standard » du README de l'app concernée.

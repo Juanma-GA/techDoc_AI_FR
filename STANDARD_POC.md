@@ -459,14 +459,25 @@ while (true) {
 | Parcours critiques | Playwright | 1 smoke test par parcours métier majeur |
 | Linter | ruff (Python) + ESLint (TS) | Bloquant à la sauvegarde |
 
-`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie au minimum :
-- Préfixe `/api/v1/` monté dans chaque `apps/*/backend/app/main.py`.
-- Absence de `console.log` dans `apps/*/frontend/src/`.
-- Absence de `print(` dans `apps/*/backend/app/`.
-- Absence de hex en dur hors `tokens.json` et `tailwind-preset.ts`.
-- Absence de `alert(`/`confirm(` dans `apps/*/frontend/src/`.
-- Absence de `debug=True` dans `apps/*/backend/app/`.
-- Chaque `apps/*/_run.bat` déclare `set "PORT=80XX"` et vérifie le port libre (`findstr "LISTENING"`) avant uvicorn.
+`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie 13 contraintes — 7 structurelles et 6 d'instanciation (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`) :
+
+**Structurelles** :
+1. Préfixe `/api/v1/` monté dans chaque `apps/*/backend/app/main.py`.
+2. Absence de `console.log` dans `apps/*/frontend/src/`.
+3. Absence de `print(` dans `apps/*/backend/app/`.
+4. Absence de hex en dur hors `tokens.json` / `tailwind-preset.ts` / `theme.css`.
+5. Absence de `alert(`/`confirm(` dans `apps/*/frontend/src/`.
+6. Absence de `debug=True` dans `apps/*/backend/app/`.
+7. Chaque `apps/*/_run.bat` déclare `set "PORT=80XX"`, vérifie le port (`findstr "LISTENING"`) et bascule auto (`:find_port`).
+
+**Instanciation** (rattrape les copier-coller incomplets depuis `_template`) :
+
+8. Aucun `apps/<poc>/backend/pyproject.toml` ne porte encore `name = "TEMPLATE-backend"`.
+9. Aucun `apps/<poc>/README.md` ne contient encore la phrase « Squelette canonique » (texte du template).
+10. Aucun `apps/<poc>/backend/{app/config.py, alembic.ini}` ne référence encore `TEMPLATE.db`.
+11. Section `## Auth` présente dans chaque `apps/<poc>/README.md` (palier 1 explicite).
+12. Chaque dossier `apps/<poc>/` (sauf `_template`) a un script `dev:<poc>` dans le `package.json` racine.
+13. Aucun `--host 0.0.0.0` dans les `_run.bat` / `start.sh` (palier 1 strict).
 
 ## 9. Lanceurs locaux et packaging
 
@@ -691,19 +702,42 @@ document.querySelectorAll("[data-reset]").forEach((btn) => {
 
 ## 11. Ajout d'un nouveau POC
 
+### Méthode recommandée — script d'instanciation
+
 ```bash
-cp -r apps/_template apps/<nouveau-poc>
+bash scripts/new_poc.sh <slug> [<port>]
 ```
 
-Puis :
+Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 
-1. Renommer dans `apps/<nouveau-poc>/backend/pyproject.toml`, `apps/<nouveau-poc>/frontend/package.json`, `apps/<nouveau-poc>/README.md`.
-2. Choisir un port unique pour le backend (8000, 8001, 8002…) et le poser dans la variable `PORT=` de `_run.bat` + `PORT=` en haut de `start.sh`.
-3. `cp scripts/package_TEMPLATE.py scripts/package_<nouveau-poc>.py`, puis adapter `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête de fichier. Mettre à jour aussi `apps/<nouveau-poc>/_package.bat` pour qu'il appelle ton nouveau script.
-4. Initialiser Alembic : première migration vide via `alembic revision -m "0001 initial"`.
-5. Ajouter une entrée dans `package.json` racine : `"dev:<nouveau-poc>": "pnpm --filter @apps/<nouveau-poc>-frontend dev"`.
-6. Vérifier `bash scripts/check_standard.sh` exit 0.
-7. Premier commit : `feat(<nouveau-poc>): bootstrap from template`.
+- Vérifie que `<slug>` est en kebab-case et que `apps/<slug>/` n'existe pas.
+- Choisit automatiquement le prochain port libre dès 8000 si le 2e argument est omis (sinon vérifie qu'il n'est pas déjà pris par un autre POC).
+- Copie `apps/_template/` → `apps/<slug>/` puis substitue tous les marqueurs `TEMPLATE` / `8000` / `'template'` dans `pyproject.toml`, `config.py`, `alembic.ini`, `.env.example`, les 4 `.bat` + `start.sh`, `frontend/package.json`, `vite.config.ts`, `index.html`, `locales/{fr,en}.json`, `backend/README.md`, `db/models.py`, `templates/preview.html`, `App.tsx`, `tests/e2e/home.spec.ts`.
+- Génère `scripts/package_<slug>.py` depuis `package_TEMPLATE.py` avec les bons `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX`.
+- Ajoute `dev:<slug>` / `test:e2e:<slug>` / `openapi:gen:<slug>` dans `package.json` racine.
+- Écrase `apps/<slug>/README.md` par un stub avec bannière **« À RÉÉCRIRE »** + section `## Auth` palier 1.
+- Exécute `scripts/check_standard.sh` pour valider l'instanciation. Rollback automatique en cas d'échec.
+
+**Après le script**, il reste à la charge du dev :
+
+1. **Réécrire `apps/<slug>/README.md`** — titre + description métier + endpoints exposés (cf. `apps/doc-writer/README.md` ou `apps/pdf-reviewer/README.md` comme références).
+2. **Ajouter la logique métier** dans `backend/app/api/<feature>.py` (+ register dans `main.py`) et `backend/app/db/models.py` (au-delà d'`AppConfig`).
+3. **Générer la migration métier** : `alembic revision -m "0002 <feature>"`. La migration `0001_initial` (table `AppConfig`) est déjà fournie par le template.
+4. **Adapter `backend/app/templates/preview.html`** (remplacer page Home + ajouter onglets métier au-delà des 4 standards).
+5. **Implémenter les routes React** dans `frontend/src/routes/` + remplir `locales/{fr,en}.json`.
+6. **Premier commit** : `feat(<slug>): bootstrap from template`.
+
+### Méthode manuelle (fallback)
+
+Si `scripts/new_poc.sh` n'est pas utilisable (système sans bash, debug du script), les substitutions à faire à la main sont :
+
+1. `cp -r apps/_template apps/<slug>`.
+2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/backend/app/templates/preview.html` (`<title>` + `.brand`), `apps/<slug>/frontend/src/App.tsx` (`<span>`), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
+3. Choisir un port unique (8000, 8001, …) et le poser dans `set "PORT=80XX"` (`_run.bat`), `PORT="${PORT:-80XX}"` (`start.sh`), proxy `"/api"` (`vite.config.ts`), `openapi:gen` (`frontend/package.json`), `cors_origins` (`config.py`).
+4. `cp scripts/package_TEMPLATE.py scripts/package_<slug>.py` puis adapter `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête. Mettre à jour `_package.bat` pour appeler le nouveau script.
+5. Ajouter dans `package.json` racine : `dev:<slug>`, `test:e2e:<slug>`, `openapi:gen:<slug>`.
+6. Vérifier `bash scripts/check_standard.sh` exit 0 — les checks 8 à 13 valident l'instanciation (nom `pyproject`, README réécrit, DB renommée, section Auth, scripts racine, bind 127.0.0.1).
+7. Premier commit : `feat(<slug>): bootstrap from template`.
 
 ## 12. Écarts au standard
 

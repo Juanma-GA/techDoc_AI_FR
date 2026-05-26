@@ -25,7 +25,7 @@ for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
 done
 
-step()  { printf "[%d/8] %-38s" "$1" "$2"; }
+step()  { printf "[%d/14] %-38s" "$1" "$2"; }
 pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
@@ -119,9 +119,106 @@ if [[ -z "$missing" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 8. Summary
+# 8. Aucun pyproject.toml d'app ne porte encore le nom TEMPLATE-backend
+#    (instanciation oubliee depuis apps/_template/).
 # ------------------------------------------------------------------
-step 8 "Summary"
+step 8 "pyproject.toml renomme"
+hits=""
+for f in apps/*/backend/pyproject.toml; do
+  [[ -f "$f" ]] || continue
+  [[ "$f" == "apps/_template/backend/pyproject.toml" ]] && continue
+  if grep -q '^name = "TEMPLATE-backend"' "$f"; then
+    hits+="$f\n"
+  fi
+done
+if [[ -z "$hits" ]]; then pass; else
+  fail "Le 'name' de pyproject.toml doit etre <slug>-backend (instanciation incomplete) :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 9. Aucun README d'app n'est encore celui du _template
+#    (contient la phrase 'Squelette canonique').
+# ------------------------------------------------------------------
+step 9 "README d'app reecrit"
+hits=""
+for f in apps/*/README.md; do
+  [[ -f "$f" ]] || continue
+  [[ "$f" == "apps/_template/README.md" ]] && continue
+  if grep -q 'Squelette canonique' "$f"; then
+    hits+="$f\n"
+  fi
+done
+if [[ -z "$hits" ]]; then pass; else
+  fail "Le README de l'app contient encore le texte du template ('Squelette canonique') :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 10. config.py / alembic.ini ne referencent plus 'TEMPLATE.db'.
+# ------------------------------------------------------------------
+step 10 "DB renommee (pas TEMPLATE.db)"
+hits=""
+for f in apps/*/backend/app/config.py apps/*/backend/alembic.ini; do
+  [[ -f "$f" ]] || continue
+  case "$f" in
+    apps/_template/*) continue ;;
+  esac
+  if grep -q 'TEMPLATE\.db' "$f"; then
+    hits+="$f\n"
+  fi
+done
+if [[ -z "$hits" ]]; then pass; else
+  fail "config.py / alembic.ini doivent pointer sur <slug>.db, pas TEMPLATE.db :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 11. Section '## Auth' presente dans chaque apps/<poc>/README.md
+#    (palier 1 declare explicitement, cf. STANDARD §3.5).
+# ------------------------------------------------------------------
+step 11 "Section Auth presente"
+missing=""
+for f in apps/*/README.md; do
+  [[ -f "$f" ]] || continue
+  if ! grep -q '^## Auth' "$f"; then
+    missing+="$f\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else
+  fail "Section '## Auth' obligatoire dans chaque apps/<poc>/README.md (STANDARD §3.5) :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 12. Le package.json racine declare 'dev:<poc>' pour chaque dossier
+#    sous apps/ (sauf _template).
+# ------------------------------------------------------------------
+step 12 "package.json racine wire"
+missing=""
+if [[ -f package.json ]]; then
+  for d in apps/*/; do
+    poc="$(basename "$d")"
+    [[ "$poc" == "_template" ]] && continue
+    if ! grep -q "\"dev:${poc}\"" package.json; then
+      missing+="apps/$poc/ -- manque 'dev:${poc}' dans package.json racine\n"
+    fi
+  done
+fi
+if [[ -z "$missing" ]]; then pass; else
+  fail "Chaque POC doit avoir un script 'dev:<poc>' au niveau racine :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 13. Aucun --host 0.0.0.0 dans les lanceurs (palier 1 strict).
+# ------------------------------------------------------------------
+step 13 "Bind 127.0.0.1 dans lanceurs"
+hits=$(grep -rnE "${exclude_args[@]}" --include='*.bat' --include='*.sh' \
+  'host[[:space:]=]+0\.0\.0\.0|--host[[:space:]]+0\.0\.0\.0' apps/ 2>/dev/null || true)
+if [[ -z "$hits" ]]; then pass; else
+  fail "Bind 0.0.0.0 interdit (palier 1 - STANDARD §3.5) :\n$hits"
+fi
+
+# ------------------------------------------------------------------
+# 14. Summary
+# ------------------------------------------------------------------
+step 14 "Summary"
 if [[ $violations -gt 0 ]]; then
   printf " \033[31m%d violation(s)\033[0m\n" "$violations"
   exit 1
