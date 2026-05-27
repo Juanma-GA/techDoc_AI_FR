@@ -7,6 +7,7 @@ import {
   EmptyState,
   MarkdownView,
   MultiSelect,
+  Select,
   Spinner,
   Textarea,
 } from "@internal/ui";
@@ -34,19 +35,21 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export function Generate() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const cancelRef = useRef<(() => void) | null>(null);
 
   const {
     scopeDocIds,
     templateDocId,
+    outputLang,
     output,
     status,
     errorMessage,
     currentSessionId,
     setScopeDocIds,
     setTemplateDocId,
+    setOutputLang,
     beginStream,
     appendToken,
     finishStream,
@@ -79,7 +82,9 @@ export function Generate() {
     try {
       const session = await sessionsApi.create({
         scope_doc_ids: scopeDocIds,
-        lang: i18n.language?.startsWith("en") ? "en" : "fr",
+        // Langue de sortie decouplee de la langue UI (i18n.language).
+        // Geree par le selector dedie + store outputLang.
+        lang: outputLang,
         template_doc_id: templateDocId,
       });
       beginStream(session.id);
@@ -137,6 +142,23 @@ export function Generate() {
               <TemplatePanel
                 templateDocId={templateDocId}
                 onChange={setTemplateDocId}
+                disabled={isStreaming}
+              />
+
+              <label className="label" htmlFor="outputLang">
+                {t("generate.outputLang")}
+              </label>
+              <Select
+                id="outputLang"
+                value={outputLang}
+                onChange={(e) =>
+                  setOutputLang(e.target.value as "fr" | "en" | "es")
+                }
+                options={[
+                  { value: "fr", label: t("generate.outputLangFr") },
+                  { value: "en", label: t("generate.outputLangEn") },
+                  { value: "es", label: t("generate.outputLangEs") },
+                ]}
                 disabled={isStreaming}
               />
 

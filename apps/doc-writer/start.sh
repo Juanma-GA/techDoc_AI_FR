@@ -38,6 +38,11 @@ fi
 echo "[setup] Migrations Alembic..."
 alembic upgrade head
 
+# Pre-fetch Inter TTF (best-effort, on ignore les erreurs réseau)
+echo "[setup] Vérification de la police Inter pour les exports PDF..."
+python -c "from app.core.fonts import ensure_inter; ensure_inter()" 2>/dev/null \
+    || echo "[info] Police Inter non téléchargée, exports PDF en Helvetica."
+
 # Vérifier que le port est libre
 if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
     echo "[erreur] Le port $PORT est deja utilise :"

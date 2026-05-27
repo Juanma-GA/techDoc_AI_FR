@@ -132,9 +132,10 @@
     .doc-checklist label:hover { background: var(--card-hover); }
     .doc-checklist input[type="checkbox"] { accent-color: var(--brand); }
 
-    /* Output streaming */
+    /* Output streaming. Le placeholder est injecte en JS via data-empty pour
+       rester traduisible (sinon CSS content figerait la chaine en FR). */
     .output { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; min-height: 240px; white-space: pre-wrap; font-family: "Inter", sans-serif; line-height: 1.6; color: var(--fg); }
-    .output:empty::before { content: 'Le contenu genere apparaitra ici.'; color: var(--fg-muted); }
+    .output:empty::before { content: attr(data-empty); color: var(--fg-muted); }
 
     /* Architecture */
     .arch-flow { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
@@ -248,11 +249,6 @@
         "generate.length.short": "Court",
         "generate.length.medium": "Moyen",
         "generate.length.long": "Long",
-        "generate.tone": "Ton",
-        "generate.tone.professional": "Professionnel",
-        "generate.tone.pedagogical": "Pedagogique",
-        "generate.tone.technical": "Technique",
-        "generate.tone.synthetic": "Synthetique",
         "generate.template": "Template a remplir",
         "generate.template.none": "(Aucun)",
         "generate.template.hint": "Uploade un .pptx dans l onglet Parametres. Mets des marqueurs {{cle}} OU simplement XXX aux endroits a remplir : le LLM devine le contenu d apres le titre/label qui precede.",
@@ -306,6 +302,10 @@
         "documents.sourcesHint": "Ce sont les fichiers de contenu indexes pour le RAG. Pour uploader un template ou un exemple de style, va dans l'onglet Parametres.",
         "generate.style": "Style / syntaxe",
         "generate.style.none": "(Aucun)",
+        "generate.outputLang": "Langue de sortie",
+        "generate.outputLang.fr": "Francais",
+        "generate.outputLang.en": "Anglais",
+        "generate.outputLang.es": "Espagnol",
       },
       en: {
         "nav.generate": "Generate",
@@ -357,11 +357,6 @@
         "generate.length.short": "Short",
         "generate.length.medium": "Medium",
         "generate.length.long": "Long",
-        "generate.tone": "Tone",
-        "generate.tone.professional": "Professional",
-        "generate.tone.pedagogical": "Pedagogical",
-        "generate.tone.technical": "Technical",
-        "generate.tone.synthetic": "Synthetic",
         "generate.template": "Template to fill",
         "generate.template.none": "(None)",
         "generate.template.hint": "Upload a .pptx in the Settings tab. Use {{key}} markers OR just plain XXX where content should go: the LLM infers each from the preceding title/label.",
@@ -415,6 +410,10 @@
         "documents.sourcesHint": "These are the content files indexed for RAG. To upload a template or a style example, go to Settings.",
         "generate.style": "Style / syntax",
         "generate.style.none": "(None)",
+        "generate.outputLang": "Output language",
+        "generate.outputLang.fr": "French",
+        "generate.outputLang.en": "English",
+        "generate.outputLang.es": "Spanish",
       },
     };
 
@@ -466,12 +465,16 @@
       currentSessionId: null,
       outputFormat: "markdown",
       length: "medium",
-      tone: "professional",
       templateDocId: null,
       styleDocId: null,
       templates: [],
       styles: [],
       outputFilename: "",
+      // Langue de sortie : decouplee de la langue UI (LANG), persistee a part.
+      // Defaut = langue UI au premier chargement.
+      outputLang: localStorage.getItem("doc-writer-output-lang")
+        || localStorage.getItem("doc-writer-lang")
+        || "fr",
     };
 
     document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -570,11 +573,10 @@
         { v: "medium", k: "generate.length.medium" },
         { v: "long",   k: "generate.length.long" },
       ];
-      const tones = [
-        { v: "professional", k: "generate.tone.professional" },
-        { v: "pedagogical",  k: "generate.tone.pedagogical" },
-        { v: "technical",    k: "generate.tone.technical" },
-        { v: "synthetic",    k: "generate.tone.synthetic" },
+      const outputLangs = [
+        { v: "fr", k: "generate.outputLang.fr" },
+        { v: "en", k: "generate.outputLang.en" },
+        { v: "es", k: "generate.outputLang.es" },
       ];
       const renderOpts = (opts, current) => opts.map((o) =>
         '<option value="' + o.v + '"' + (o.v === current ? ' selected' : '') + '>' + escapeHtml(t(o.k)) + '</option>'
@@ -608,8 +610,8 @@
                   <select class="input" id="lengthSelect">${renderOpts(lengths, state.length)}</select>
                 </label>
                 <label class="grow">
-                  <div class="label">${escapeHtml(t("generate.tone"))}</div>
-                  <select class="input" id="toneSelect">${renderOpts(tones, state.tone)}</select>
+                  <div class="label">${escapeHtml(t("generate.outputLang"))}</div>
+                  <select class="input" id="outputLangSelect">${renderOpts(outputLangs, state.outputLang)}</select>
                 </label>
               </div>
 
@@ -646,7 +648,7 @@
 
           <div class="card">
             <h2 class="card-title">${escapeHtml(t("generate.output"))}</h2>
-            <div class="output" id="output">${escapeHtml(state.output)}</div>
+            <div class="output" id="output" data-empty="${escapeHtml(t("generate.outputEmpty"))}">${escapeHtml(state.output)}</div>
             <div id="citations" class="msg-citations" style="margin-top:10px;"></div>
             <div id="exportRow" style="margin-top:12px;${state.output ? "" : "display:none"}">
               <label>
@@ -676,7 +678,10 @@
         state.outputFormat = e.target.value;
       });
       document.getElementById("lengthSelect").addEventListener("change", (e) => { state.length = e.target.value; });
-      document.getElementById("toneSelect").addEventListener("change", (e) => { state.tone = e.target.value; });
+      document.getElementById("outputLangSelect").addEventListener("change", (e) => {
+        state.outputLang = e.target.value;
+        try { localStorage.setItem("doc-writer-output-lang", e.target.value); } catch (err) { /* ignore */ }
+      });
       const tplSel = document.getElementById("templateSelect");
       if (tplSel) tplSel.addEventListener("change", (e) => { state.templateDocId = e.target.value || null; });
       const styleSel = document.getElementById("styleSelect");
@@ -784,10 +789,12 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             scope_doc_ids: state.scopeIds,
-            lang: LANG,
+            // lang = langue de SORTIE du contenu genere (fr/en/es).
+            // Decouplee de la langue UI : on envoie le selecteur dedie.
+            lang: state.outputLang,
             output_format: state.outputFormat,
             length: state.length,
-            tone: state.tone,
+            // tone : non expose dans l'UI, backend applique son defaut.
             template_doc_id: state.templateDocId || null,
             style_doc_id: state.styleDocId || null,
           }),
@@ -968,10 +975,10 @@
       content.innerHTML = `
         <div class="grid-2">
           <div class="card">
-            <h2 class="card-title">Sessions</h2>
+            <h2 class="card-title">${escapeHtml(t("sessions.title"))}</h2>
             ${
               state.sessions.length === 0
-                ? '<div class="empty-state">Aucune session.</div>'
+                ? '<div class="empty-state">' + escapeHtml(t("sessions.empty")) + '</div>'
                 : `<div class="session-list">
                   ${state.sessions.map((s) => `
                     <div class="session-row" data-open="${s.id}">
@@ -981,15 +988,15 @@
                       </div>
                       <div class="row">
                         <span class="badge">${escapeHtml(s.lang)}</span>
-                        <button class="btn ghost small" data-del="${s.id}">Supprimer</button>
+                        <button class="btn ghost small" data-del="${s.id}">${escapeHtml(t("documents.delete"))}</button>
                       </div>
                     </div>`).join("")}
                 </div>`
             }
           </div>
           <div class="card">
-            <h2 class="card-title" id="sessionDetailTitle">Selectionne une session</h2>
-            <div id="sessionDetailBody"><div class="empty-state">Aucune session selectionnee.</div></div>
+            <h2 class="card-title" id="sessionDetailTitle">${escapeHtml(t("sessions.selectOne"))}</h2>
+            <div id="sessionDetailBody"><div class="empty-state">${escapeHtml(t("sessions.none"))}</div></div>
           </div>
         </div>
       `;
@@ -1015,13 +1022,13 @@
             document.getElementById("sessionDetailTitle").textContent = session ? (session.title || sid) : sid;
             const body = document.getElementById("sessionDetailBody");
             body.innerHTML = msgs.length === 0
-              ? '<div class="empty-state">Pas encore de message dans cette session.</div>'
+              ? '<div class="empty-state">' + escapeHtml(t("sessions.noMessages")) + '</div>'
               : msgs.map((m) =>
                   '<div class="msg ' + escapeHtml(m.role) + '">' +
                   '<div class="msg-role">' + escapeHtml(m.role) + '</div>' +
                   '<div style="white-space:pre-wrap">' + escapeHtml(m.content) + '</div>' +
                   ((m.citations || []).length
-                    ? '<div class="msg-citations">Sources : ' + m.citations.map((c) => '[' + escapeHtml(c.filename) + ']').join(" ") + '</div>'
+                    ? '<div class="msg-citations">' + escapeHtml(t("sessions.sources")) + ' : ' + m.citations.map((c) => '[' + escapeHtml(c.filename) + ']').join(" ") + '</div>'
                     : "") +
                   '</div>'
                 ).join("");

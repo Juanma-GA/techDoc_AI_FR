@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.core.fonts import ensure_inter
 from app.core.mistral_client import MistralClient, MistralError
 from app.core.pptx_llm_analysis import split_zones
 from app.core.pptx_template import Zone, fill_zones
@@ -70,11 +71,42 @@ def _last_assistant_content(db: Session, session_id: uuid.UUID) -> tuple[Optiona
     return session.title or "", msg.content or ""
 
 
+def _set_docx_default_font(doc, name: str = "Inter") -> None:  # type: ignore[no-untyped-def]
+    """Force la police par defaut a `name` sur le style Normal (et les styles
+    Heading 1/2/3). Word substitue cote client si la police n'est pas
+    installee, donc le .docx reste portable.
+    """
+    from docx.oxml.ns import qn  # type: ignore[import-untyped]
+    from docx.shared import Pt  # type: ignore[import-untyped]
+
+    target_styles = ("Normal", "Heading 1", "Heading 2", "Heading 3",
+                     "List Bullet", "List Number")
+    for style_name in target_styles:
+        try:
+            style = doc.styles[style_name]
+        except KeyError:
+            continue
+        font = style.font
+        font.name = name
+        # Couvre les ecritures non-Latines : python-docx ne setExpose pas eastAsia.
+        rpr = style.element.get_or_add_rPr()
+        rfonts = rpr.find(qn("w:rFonts"))
+        if rfonts is None:
+            from docx.oxml import OxmlElement  # type: ignore[import-untyped]
+            rfonts = OxmlElement("w:rFonts")
+            rpr.append(rfonts)
+        for attr in ("ascii", "hAnsi", "cs", "eastAsia"):
+            rfonts.set(qn(f"w:{attr}"), name)
+        if style_name == "Normal" and font.size is None:
+            font.size = Pt(11)
+
+
 def _markdown_to_docx_bytes(markdown_text: str) -> bytes:
-    """Parsing markdown ligne-a-ligne, best-effort."""
+    """Parsing markdown ligne-a-ligne, best-effort. Police = Inter (cf. CLAUDE.md)."""
     from docx import Document  # type: ignore[import-untyped]
 
     doc = Document()
+    _set_docx_default_font(doc, "Inter")
     lines = (markdown_text or "").splitlines()
     in_table = False
     table_rows: list[list[str]] = []
@@ -135,7 +167,9 @@ def _markdown_to_docx_bytes(markdown_text: str) -> bytes:
 
 
 def _markdown_to_pdf_bytes(markdown_text: str) -> bytes:
-    """Rendu PDF via reportlab Platypus, best-effort."""
+    """Rendu PDF via reportlab Platypus, best-effort. Police = Inter si les
+    TTF ont pu etre telecharges (cf. `app.core.fonts`), sinon Helvetica.
+    """
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.platypus import (
@@ -150,7 +184,18 @@ def _markdown_to_pdf_bytes(markdown_text: str) -> bytes:
     )
     from reportlab.lib import colors
 
+    has_inter = ensure_inter()
+    font_regular = "Inter" if has_inter else "Helvetica"
+    font_bold = "Inter-Bold" if has_inter else "Helvetica-Bold"
+
     styles = getSampleStyleSheet()
+    # Override des styles utilises pour pointer vers Inter / Helvetica.
+    for style_name in ("BodyText", "Heading1", "Heading2", "Heading3"):
+        try:
+            s = styles[style_name]
+        except KeyError:
+            continue
+        s.fontName = font_bold if style_name.startswith("Heading") else font_regular
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
@@ -183,7 +228,8 @@ def _markdown_to_pdf_bytes(markdown_text: str) -> bytes:
             ("BOX", (0, 0), (-1, -1), 0.5, colors.grey),
             ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.grey),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), font_bold),
+            ("FONTNAME", (0, 1), (-1, -1), font_regular),
         ]))
         story.append(t)
         story.append(Spacer(1, 6))
@@ -248,7 +294,21 @@ _PPTX_SYSTEM = (
     "utilise leur location pour les differencier : si la source contient "
     "plusieurs occurrences, attribue chacune a une location distincte. "
     "Tu peux utiliser des sauts de ligne (\\n) dans les valeurs. Si une zone "
-    "n'a pas de matiere pertinente dans la source, mets une chaine vide."
+    "n'a pas de matiere pertinente dans la source, mets une chaine vide.\n\n"
+    "GLOSSAIRE FR (CV / dossier technique - a respecter strictement) :\n"
+    "- 'Habilitations' = certifications professionnelles techniques : ATEX "
+    "(0/1/2), electriques NF C18-510 (H0/H0V/B0/BR/B1V/B2V/BC/BE/HC), CACES "
+    "(R486/R489/etc.), SST, ADR/IMDG, nucleaire (CSQ, SCN1/2, PR1/2, RP1/2), "
+    "aeronautique (PART145, EWIS, HF), travail en hauteur, soudure (ASME IX, "
+    "ISO 9606), etc. Une habilitation est nominative, datee, delivree par un "
+    "organisme agree. ELLE N'EST JAMAIS UN PERMIS DE CONDUIRE.\n"
+    "- 'Permis de conduire' = Permis B, C, D, EC, BE, motos (A/A1/A2). C'est "
+    "une categorie SEPAREE, geree par la prefecture, pas par un organisme de "
+    "certification professionnelle.\n"
+    "Si une zone est etiquetee 'Habilitations' / 'Habilitation' / "
+    "'Certifications', ne met JAMAIS de permis de conduire dedans. Si la "
+    "source ne mentionne aucune habilitation pro, met une chaine vide plutot "
+    "qu'une valeur inventee ou un permis."
 )
 
 

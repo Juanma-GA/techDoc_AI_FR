@@ -37,7 +37,11 @@
     "exportDocx": "Download as .docx",
     "exportPdf": "Download as .pdf",
     "exportPptx": "Download as .pptx",
-    "exportPptxHint": "PPTX export becomes available once a template is attached to the session."
+    "exportPptxHint": "PPTX export becomes available once a template is attached to the session.",
+    "outputLang": "Output language",
+    "outputLangFr": "French",
+    "outputLangEn": "English",
+    "outputLangEs": "Spanish"
   },
   "documents": {
     "title": "Documents",

@@ -37,7 +37,11 @@
     "exportDocx": "Télécharger en .docx",
     "exportPdf": "Télécharger en .pdf",
     "exportPptx": "Télécharger en .pptx",
-    "exportPptxHint": "Le bouton PPTX devient actif quand un template est attaché à la session."
+    "exportPptxHint": "Le bouton PPTX devient actif quand un template est attaché à la session.",
+    "outputLang": "Langue de sortie",
+    "outputLangFr": "Français",
+    "outputLangEn": "Anglais",
+    "outputLangEs": "Espagnol"
   },
   "documents": {
     "title": "Documents",

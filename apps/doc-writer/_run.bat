@@ -108,6 +108,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- Pre-fetch Inter TTF (best-effort, ignore les erreurs reseau) --------
+echo [setup] Verification de la police Inter pour les exports PDF...
+"%PYTHON%" -c "from app.core.fonts import ensure_inter; ensure_inter()" 2>nul
+if errorlevel 1 echo [info] Police Inter non telechargee, exports PDF en Helvetica.
+
 REM ---- Recherche d'un port libre (defaut %PORT%, sinon les suivants) -------
 set /a PORT_TRY=%PORT%
 set /a PORT_MAX=%PORT% + 20

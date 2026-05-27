@@ -109,4 +109,9 @@ def render_preview() -> HTMLResponse:
     fr_json = json.dumps(fr_dict, ensure_ascii=False)
     html = template.replace(_VARS_PLACEHOLDER, css)
     html = html.replace(_I18N_FR_PLACEHOLDER, fr_json)
-    return HTMLResponse(content=html)
+    # Preview en dev : on ne veut JAMAIS de cache navigateur, sinon un edit du
+    # template ne se voit qu'apres Ctrl+F5.
+    return HTMLResponse(
+        content=html,
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )

@@ -43,6 +43,9 @@ data/
 *.sqlite
 *.sqlite3
 
+# Polices telechargees au runtime (cf. apps/doc-writer/backend/app/core/fonts.py)
+apps/*/backend/app/assets/fonts/*.ttf
+
 # Env / secrets
 .env
 .env.local

@@ -40,9 +40,28 @@ SYSTEM_PROMPT_EN = (
     "Do not repeat the brief in your answer, deliver the written content directly."
 )
 
+SYSTEM_PROMPT_ES = (
+    "Eres un asistente de redacción técnica. A partir de un brief del usuario y de los "
+    "extractos de documentos proporcionados, produces un contenido estructurado, factual y "
+    "completo en MARKDOWN (títulos, listas, párrafos — sin bloques de código salvo si son "
+    "pertinentes).\n"
+    "Citas sistemáticamente tus fuentes con la forma [nombre_archivo] después de cada "
+    "afirmación factual basada en un extracto.\n"
+    "Si una información solicitada por el brief no está en los extractos, indícalo "
+    "explícitamente en lugar de inventarla.\n"
+    "No repitas el brief en tu respuesta, entrega directamente el contenido redactado."
+)
+
+
+_PROMPTS_BY_LANG: dict[str, str] = {
+    "fr": SYSTEM_PROMPT_FR,
+    "en": SYSTEM_PROMPT_EN,
+    "es": SYSTEM_PROMPT_ES,
+}
+
 
 def system_prompt(lang: str) -> str:
-    return SYSTEM_PROMPT_EN if lang == "en" else SYSTEM_PROMPT_FR
+    return _PROMPTS_BY_LANG.get((lang or "fr").lower(), SYSTEM_PROMPT_FR)
 
 
 # Préambules à concaténer au system prompt selon les options de la Session.
