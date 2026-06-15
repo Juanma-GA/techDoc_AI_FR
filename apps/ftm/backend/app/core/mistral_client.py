@@ -1,12 +1,14 @@
 """Mistral API client — sync + async, with DB-backed settings.
 
 Ported and consolidated from legacy. UUID-aware where relevant.
+Secrets (API keys) are encrypted at rest using Fernet symmetric encryption.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any, Optional
 
@@ -21,6 +23,8 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
+logger = logging.getLogger(__name__)
+
 
 CONFIG_KEYS = {
     "api_key":      "MISTRAL_API_KEY",
@@ -30,17 +34,53 @@ CONFIG_KEYS = {
     "vision_model": "MISTRAL_VISION_MODEL",
 }
 
+# Keys that should be encrypted (sensitive data)
+ENCRYPTED_KEYS = {"MISTRAL_API_KEY"}
+
 
 class MistralError(RuntimeError):
     """Raised when Mistral API rejects a call or is not configured."""
 
 
+def _get_secret_manager():
+    """Get SecretManager instance configured from settings."""
+    from app.config import settings
+    from app.core.encryption import SecretManager
+
+    if not settings.encryption_key:
+        logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
+        return SecretManager(None)
+
+    return SecretManager(settings.encryption_key)
+
+
 def _get_config(db: Session, key: str, default: str = "") -> str:
+    """Get config value from DB, decrypting if necessary."""
     row = db.get(AppConfig, key)
-    return row.value if row and row.value else default
+    if not row or not row.value:
+        return default
+
+    if key in ENCRYPTED_KEYS:
+        try:
+            manager = _get_secret_manager()
+            return manager.decrypt(row.value)
+        except Exception as e:
+            logger.error(f"Failed to decrypt {key}: {e}")
+            return default
+
+    return row.value
 
 
 def _set_config(db: Session, key: str, value: str) -> None:
+    """Set config value in DB, encrypting if necessary."""
+    if key in ENCRYPTED_KEYS and value:
+        try:
+            manager = _get_secret_manager()
+            value = manager.encrypt(value)
+        except Exception as e:
+            logger.error(f"Failed to encrypt {key}: {e}")
+            raise MistralError(f"Encryption failed: {e}") from e
+    
     row = db.get(AppConfig, key)
     if row is None:
         db.add(AppConfig(key=key, value=value))

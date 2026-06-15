@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "FTM Agent",
-    "version": "v2",
+    "version": "v4",
     "tagline": "Maintenance task sheet analysis and indexing",
     "titleTooltip": "Drives content compliance across a document corpus using both predefined and custom rules. The operator keeps full control over file edits, ensuring human review and business oversight."
   },
@@ -36,6 +36,55 @@
     "degraded": "Degraded",
     "configured": "Configured",
     "notConfigured": "Not configured"
+  },
+  "projects": {
+    "new": "New project",
+    "name": "Name",
+    "namePlaceholder": "e.g. FTM Engine A320",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional",
+    "visionEnabled": "AI Vision enabled",
+    "create": "Create project",
+    "deleteArm": "Click again to confirm",
+    "empty": "No projects yet. Create one to get started.",
+    "createdAt": "Created"
+  },
+  "settings": {
+    "mistral": "Mistral Configuration",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Leave blank to keep current",
+    "apiKeySet": "Key configured",
+    "apiKeyNotSet": "Not configured",
+    "baseUrl": "Base URL",
+    "chatModel": "Chat model",
+    "embedModel": "Embed model",
+    "visionModel": "Vision model",
+    "test": "Test connection",
+    "testing": "Testing…",
+    "testSuccess": "Connection OK",
+    "testError": "Connection failed",
+    "saveSuccess": "Settings saved"
+  },
+  "dashboard": {
+    "openAnomalies": "Open anomalies",
+    "filesTotal": "Indexed files",
+    "filesWithAnomalies": "Files with anomalies",
+    "resolutionRate": "Resolution rate",
+    "avgAgeDays": "Avg age (days)",
+    "noData": "No data — create a project and analyse files."
+  },
+  "chat": {
+    "placeholder": "Ask a question about the corpus…",
+    "send": "Send",
+    "sending": "Sending…",
+    "allProjects": "All projects",
+    "selectProjects": "Projects (empty = all)",
+    "newSession": "New session",
+    "sessions": "Sessions",
+    "noSessions": "No sessions",
+    "you": "You",
+    "assistant": "Agent",
+    "errorStream": "Error during response"
   },
   "routes": {
     "dashboard": {

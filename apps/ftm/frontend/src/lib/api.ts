@@ -95,3 +95,87 @@ export type HealthResponse = {
   db: string;
   llm: "configured" | "not_configured";
 };
+
+export type Project = {
+  id: string;
+  name: string;
+  description: string;
+  vision_enabled: boolean;
+  created_at: string;
+};
+
+export type MistralSettingsOut = {
+  api_key_set: boolean;
+  api_key_preview: string;
+  base_url: string;
+  chat_model: string;
+  embed_model: string;
+  vision_model: string;
+};
+
+export type MistralSettingsIn = {
+  api_key?: string;
+  base_url?: string;
+  chat_model?: string;
+  embed_model?: string;
+  vision_model?: string;
+};
+
+export type TestConnectionOut = {
+  ok: boolean;
+  message: string;
+  models: string[];
+};
+
+export type KpiOut = {
+  open_anomalies: number;
+  anomalies_by_severity: Record<string, number>;
+  anomalies_by_type: Record<string, number>;
+  anomalies_by_status: Record<string, number>;
+  resolution_rate: number;
+  files_total: number;
+  files_with_anomalies: number;
+  avg_age_days: number;
+  avg_resolution_days: number;
+  top_files: Array<{ filename: string; count: number }>;
+  top_rules: Array<{ rule: string; count: number }>;
+};
+
+export type ChatSession = {
+  id: string;
+  title: string;
+  created_at: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+};
+
+export const resources = {
+  projects: {
+    list: () => api.get<Project[]>("/projects"),
+    create: (body: { name: string; description: string; vision_enabled: boolean }) =>
+      api.post<Project>("/projects", body),
+    delete: (id: string) => api.delete<void>(`/projects/${id}`),
+  },
+  settings: {
+    getMistral: () => api.get<MistralSettingsOut>("/settings/mistral"),
+    updateMistral: (body: MistralSettingsIn) =>
+      api.post<MistralSettingsOut>("/settings/mistral", body),
+    testMistral: () => api.post<TestConnectionOut>("/settings/mistral/test"),
+  },
+  kpis: {
+    global: () => api.get<KpiOut>("/kpis"),
+  },
+  chat: {
+    sessions: () => api.get<ChatSession[]>("/chat/sessions"),
+    messages: (sessionId: string) =>
+      api.get<ChatMessage[]>(`/chat/sessions/${sessionId}/messages`),
+    deleteSession: (sessionId: string) =>
+      api.delete<void>(`/chat/sessions/${sessionId}`),
+  },
+};

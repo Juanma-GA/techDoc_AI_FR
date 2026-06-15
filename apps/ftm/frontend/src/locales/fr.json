@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "FTM Agent",
-    "version": "v2",
+    "version": "v4",
     "tagline": "Analyse et indexation des fiches de tâches de maintenance",
     "titleTooltip": "Permet de piloter la conformité du contenu d'un corpus documentaire à partir de règles prédéfinies et de règles custom. L'opérationnel garde la main sur les modifications de fichier pour assurer une intervention humaine et un contrôle métier."
   },
@@ -36,6 +36,55 @@
     "degraded": "Dégradé",
     "configured": "Configuré",
     "notConfigured": "Non configuré"
+  },
+  "projects": {
+    "new": "Nouveau projet",
+    "name": "Nom",
+    "namePlaceholder": "Ex : FTM Moteur A320",
+    "description": "Description",
+    "descriptionPlaceholder": "Optionnel",
+    "visionEnabled": "Vision IA activée",
+    "create": "Créer le projet",
+    "deleteArm": "Cliquer encore pour confirmer",
+    "empty": "Aucun projet. Créez-en un pour commencer.",
+    "createdAt": "Créé le"
+  },
+  "settings": {
+    "mistral": "Configuration Mistral",
+    "apiKey": "Clé API",
+    "apiKeyPlaceholder": "Laisser vide pour ne pas modifier",
+    "apiKeySet": "Clé configurée",
+    "apiKeyNotSet": "Non configurée",
+    "baseUrl": "URL de base",
+    "chatModel": "Modèle chat",
+    "embedModel": "Modèle embed",
+    "visionModel": "Modèle vision",
+    "test": "Tester la connexion",
+    "testing": "Test en cours…",
+    "testSuccess": "Connexion OK",
+    "testError": "Connexion échouée",
+    "saveSuccess": "Paramètres enregistrés"
+  },
+  "dashboard": {
+    "openAnomalies": "Anomalies ouvertes",
+    "filesTotal": "Fichiers indexés",
+    "filesWithAnomalies": "Fichiers avec anomalies",
+    "resolutionRate": "Taux de résolution",
+    "avgAgeDays": "Âge moyen (j)",
+    "noData": "Aucune donnée — créez un projet et analysez des fichiers."
+  },
+  "chat": {
+    "placeholder": "Posez votre question sur le corpus…",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "allProjects": "Tous les projets",
+    "selectProjects": "Projets (vide = tous)",
+    "newSession": "Nouvelle session",
+    "sessions": "Sessions",
+    "noSessions": "Aucune session",
+    "you": "Vous",
+    "assistant": "Agent",
+    "errorStream": "Erreur lors de la réponse"
   },
   "routes": {
     "dashboard": {
