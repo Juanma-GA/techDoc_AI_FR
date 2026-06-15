@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
@@ -66,15 +67,27 @@ def create_app() -> FastAPI:
     return app
 
 
-def _mount_frontend(app: FastAPI) -> None:
-    """Serve the prebuilt SPA if the Vite bundle is present, otherwise
-    fall back to the static preview page (token-driven, no Node required).
+def _serve_spa_enabled() -> bool:
+    """The React SPA is served only when explicitly opted in via FTM_SERVE_SPA."""
+    return os.getenv("FTM_SERVE_SPA", "").strip().lower() in {"1", "true", "yes", "on"}
 
-    API routes are registered first, so /api/v1/* never reaches either
-    fallback. Real files (favicon, vite.svg…) are served from disk after
-    a path-traversal guard; anything else hands back index.html.
+
+def _mount_frontend(app: FastAPI) -> None:
+    """Serve the complete preview.html by default; the React SPA only on opt-in.
+
+    The delivered UI is the backend's `preview.html` (the React frontend in
+    `frontend/src/routes/*` is currently a non-functional stub). Serving the
+    preview by default guarantees that a repo-based deploy (clone main + launch)
+    shows the COMPLETE app — 7 tabs, Vue Rédacteur included — whether or not the
+    frontend was built. Without this, a deploy that runs `pnpm build` produces
+    `frontend/dist/` and the (empty) SPA gets served instead.
+
+    Re-enable the React SPA once it reaches feature parity with preview.html by
+    setting `FTM_SERVE_SPA=1` (and having a built `frontend/dist/`).
+
+    API routes are registered first, so /api/v1/* never reaches either branch.
     """
-    if FRONTEND_DIST.is_dir():
+    if _serve_spa_enabled() and FRONTEND_DIST.is_dir():
         _mount_vite_dist(app)
     else:
         _mount_preview(app)
