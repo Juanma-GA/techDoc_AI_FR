@@ -105,20 +105,71 @@ def _detect_header(rows: list[list], max_scan: int = 20) -> tuple[int, dict[str,
     return best_row, best_map
 
 
-def parse_nomenclature(path: str, sheet: Optional[str] = None) -> dict:
-    """Parse la nomenclature -> {sheet, columns, items[], summary}.
-
-    `items` : liste de dict {catpart, designation, sin, version, to_treat,
-    mono_color, color_r/g/b, source_row}.
-    """
+def _load(path: str):
     try:
-        wb = load_workbook(filename=path, read_only=True, data_only=True, keep_vba=False)
+        return load_workbook(filename=path, read_only=True, data_only=True, keep_vba=False)
     except Exception as e:  # noqa: BLE001 - openpyxl leve des erreurs variees
         raise AppError(
             "NOMENCLATURE_READ_FAILED",
             f"Lecture du fichier nomenclature impossible : {type(e).__name__}",
             status_code=400,
         ) from e
+
+
+def list_sheets(path: str) -> list[str]:
+    """Liste les onglets (feuilles) du classeur."""
+    wb = _load(path)
+    try:
+        return list(wb.sheetnames)
+    finally:
+        wb.close()
+
+
+def preview_sheet(path: str, sheet: Optional[str] = None, rows: int = 15) -> dict:
+    """Apercu des `rows` premieres lignes d'un onglet (facon corpus / FTM).
+
+    Renvoie {sheets, sheet, header_row_detected (1-based), columns_detected, rows}.
+    `rows` est une grille de chaines (cellules vides -> "").
+    """
+    wb = _load(path)
+    try:
+        sheets = list(wb.sheetnames)
+        title = sheet if (sheet and sheet in sheets) else sheets[0]
+        ws = wb[title]
+        scanned: list[list] = []
+        scan_cap = max(int(rows or 15), 25)  # assez de lignes pour detecter l'en-tete
+        for r in ws.iter_rows(values_only=True):
+            scanned.append(list(r))
+            if len(scanned) >= scan_cap:
+                break
+        title = ws.title
+    finally:
+        wb.close()
+
+    header_idx, colmap = _detect_header(scanned)
+    n = max(1, min(int(rows or 15), len(scanned)))
+    view = scanned[:n]
+    max_cols = max((len(r) for r in view), default=0)
+    grid = [
+        ["" if (i >= len(r) or r[i] is None) else str(r[i]).strip() for i in range(max_cols)]
+        for r in view
+    ]
+    return {
+        "sheets": sheets,
+        "sheet": title,
+        "header_row_detected": header_idx + 1 if header_idx >= 0 else 0,
+        "columns_detected": sorted(colmap.keys()),
+        "rows": grid,
+    }
+
+
+def parse_nomenclature(path: str, sheet: Optional[str] = None) -> dict:
+    """Parse la nomenclature -> {sheet, columns, items[], summary}.
+
+    `items` : liste de dict {catpart, designation, sin, version, to_treat,
+    mono_color, color_r/g/b, source_row}.
+    """
+    wb = _load(path)
 
     try:
         ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb[wb.sheetnames[0]]

@@ -46,6 +46,7 @@ class SettingsOut(BaseModel):
     chat_model: str
     embed_model: str
     llm_enabled: bool
+    llm_tested: bool = False
     onedrive_input_root: str = ""
     onedrive_output_root: str = ""
 
@@ -411,6 +412,21 @@ class NomenclatureParseIn(BaseModel):
     scope: str = Field(default="input")
     path: str = Field(..., min_length=1)
     sheet: Optional[str] = None
+
+
+class NomenclaturePreviewIn(BaseModel):
+    scope: str = Field(default="input")
+    path: str = Field(..., min_length=1)
+    sheet: Optional[str] = None
+    rows: int = Field(default=15, ge=1, le=100)
+
+
+class NomenclaturePreviewOut(BaseModel):
+    sheets: list[str] = Field(default_factory=list)
+    sheet: str = ""
+    header_row_detected: int = 0
+    columns_detected: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
 
 
 class NomenclatureItemOut(BaseModel):

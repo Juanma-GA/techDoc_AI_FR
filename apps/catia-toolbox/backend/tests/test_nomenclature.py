@@ -66,6 +66,40 @@ def test_nomenclature_rejects_outside_root(client, tmp_path):
     assert r.json()["code"] == "PATH_OUTSIDE_ROOT"
 
 
+def test_preview_sheets_and_rows(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    # Classeur a 2 onglets : la nomenclature est sur le 2eme.
+    wb = Workbook()
+    wb.active.title = "Garde"
+    wb.active.append(["Page de garde"])
+    ws2 = wb.create_sheet("BD Gestion")
+    ws2.append(["Titre", None])
+    ws2.append(["CATPart", "SIN", "Couleur"])
+    ws2.append(["PIECE_001.CATPart", "SIN-001", "rouge"])
+    p = tmp_path / "multi.xlsx"
+    wb.save(p)
+
+    # Apercu onglet par defaut (1er).
+    r = client.post("/api/v1/identification/preview", json={"scope": "input", "path": str(p)})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["sheets"] == ["Garde", "BD Gestion"]
+    assert body["sheet"] == "Garde"
+
+    # Apercu de l'onglet choisi -> header detecte ligne 2, colonnes reconnues, grille.
+    r2 = client.post("/api/v1/identification/preview", json={"scope": "input", "path": str(p), "sheet": "BD Gestion"})
+    b2 = r2.json()
+    assert b2["sheet"] == "BD Gestion"
+    assert b2["header_row_detected"] == 2
+    assert "catpart" in b2["columns_detected"]
+    assert b2["rows"][1][0] == "CATPart"  # 2eme ligne = en-tete
+
+    # Analyser en designant l'onglet.
+    run = client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p), "sheet": "BD Gestion"}).json()
+    assert run["sheet"] == "BD Gestion"
+    assert run["summary"]["rows"] == 1
+
+
 def test_list_zip(client, tmp_path):
     _set_input_root(client, str(tmp_path))
     z = tmp_path / "DE.zip"

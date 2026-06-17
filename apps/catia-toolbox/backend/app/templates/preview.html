@@ -52,6 +52,9 @@
     .table th { text-align: left; color: var(--fg-dim); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
     .table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
     .table tbody tr:hover { background: var(--card-hover); }
+    .table.grid td { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .table.grid tr.hl { background: var(--bg-3); font-weight: 600; }
+    .table.grid .rownum { color: var(--fg-muted); font-family: "JetBrains Mono", monospace; text-align: right; }
 
     .lang-switch { display: flex; gap: 4px; padding: 12px; border-top: 1px solid var(--border); }
     .lang-btn { flex: 1; padding: 6px; border: 1px solid var(--border); background: transparent; color: var(--fg-dim); border-radius: 6px; font-size: 0.75rem; }
@@ -530,6 +533,7 @@
             body: JSON.stringify(payload),
           });
           showFeedback(fb, "success", "Parametres enregistres.");
+          refreshLlmStatus(); // une nouvelle cle / base_url repasse le badge a A TESTER
           setTimeout(renderSettings, 500);
         } catch (e) { showFeedback(fb, "error", e.message); }
       });
@@ -540,6 +544,7 @@
           const r = await apiRequest("/settings/test", { method: "POST" });
           if (r.ok) showFeedback(fb, "success", "Connexion OK (" + r.models.length + " modeles disponibles).");
           else showFeedback(fb, "error", "Echec : " + (r.error || ""));
+          refreshLlmStatus(); // le test (re)positionne le badge ON / A TESTER
         } catch (e) { showFeedback(fb, "error", e.message); }
       });
 
@@ -1393,6 +1398,40 @@
       document.getElementById("nomenTreat").addEventListener("click", () => loadNomenItems(runId, true));
     }
 
+    function nomenSelectedSheet() {
+      const el = document.getElementById("nomenSheet");
+      return el ? el.value : undefined;
+    }
+
+    async function loadNomenPreview(sheet) {
+      const fb = document.getElementById("nomenFeedback");
+      const box = document.getElementById("nomenPreview");
+      const path = document.getElementById("nomenPath").value.trim();
+      if (!path) { showFeedback(fb, "error", "Renseignez un chemin."); return; }
+      let p;
+      try {
+        p = await apiRequest("/identification/preview", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "input", path, sheet: sheet || undefined, rows: 15 }),
+        });
+      } catch (e) { box.innerHTML = '<div class="empty-state">' + escapeHtml(e.message) + "</div>"; return; }
+      const sheetOpts = p.sheets.map((s) => '<option value="' + escapeHtml(s) + '"' + (s === p.sheet ? " selected" : "") + ">" + escapeHtml(s) + "</option>").join("");
+      const cols = (p.columns_detected || []).length
+        ? p.columns_detected.map((c) => '<span class="badge ok">' + escapeHtml(c) + "</span>").join(" ")
+        : '<span class="badge warn">aucune colonne reconnue</span>';
+      const grid = p.rows.map((r, ri) =>
+        '<tr class="' + ((ri + 1) === p.header_row_detected ? "hl" : "") + '"><td class="rownum">' + (ri + 1) + "</td>"
+        + r.map((c) => "<td>" + escapeHtml(c) + "</td>").join("") + "</tr>"
+      ).join("");
+      box.innerHTML = '<div class="card" style="margin-top:8px">'
+        + '<div class="row" style="gap:10px;align-items:flex-end;margin-bottom:8px">'
+        + '<label><div class="label">Onglet</div><select id="nomenSheet">' + sheetOpts + "</select></label>"
+        + '<div class="grow" style="font-size:0.82rem;color:var(--fg-dim)">Colonnes detectees : ' + cols + " &middot; en-tete : ligne " + p.header_row_detected + "</div></div>"
+        + '<div style="overflow:auto;max-height:340px"><table class="table grid"><tbody>' + grid + "</tbody></table></div>"
+        + '<p style="font-size:0.78rem;color:var(--fg-dim);margin-top:6px">Apercu des ' + p.rows.length + " premieres lignes. La ligne surlignee est l en-tete detectee. Choisissez l onglet puis cliquez Analyser.</p></div>";
+      document.getElementById("nomenSheet").addEventListener("change", (e) => loadNomenPreview(e.target.value));
+    }
+
     async function renderIdentification() {
       const content = document.getElementById("content");
       const runs = await apiRequest("/identification").catch(() => []);
@@ -1404,8 +1443,9 @@
             <label><div class="label">Fichier nomenclature (.xlsm / .xlsx)</div>
               <div class="row" style="gap:6px"><input class="input grow" id="nomenPath" type="text" placeholder="Parcourir ou coller un chemin ...xlsm" /><button class="btn secondary" type="button" id="nomenBrowse">Parcourir</button></div></label>
             <div id="nomenPicker" style="display:none;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
-            <div class="row"><button class="btn primary" id="nomenBtn">Analyser</button><span id="nomenFeedback" class="grow"></span></div>
+            <div class="row"><button class="btn secondary" id="nomenPreviewBtn">Apercu / onglets</button><button class="btn primary" id="nomenBtn">Analyser</button><span id="nomenFeedback" class="grow"></span></div>
           </div>
+          <div id="nomenPreview"></div>
           <div id="nomenResult"></div>
         </div>
         <div class="card">
@@ -1430,6 +1470,7 @@
             : '<div class="empty-state">Aucune nomenclature analysee.</div>'}
         </div>
       `;
+      document.getElementById("nomenPreviewBtn").addEventListener("click", () => loadNomenPreview(nomenSelectedSheet()));
       document.getElementById("nomenBtn").addEventListener("click", async () => {
         const fb = document.getElementById("nomenFeedback");
         const path = document.getElementById("nomenPath").value.trim();
@@ -1437,9 +1478,9 @@
         try {
           const run = await apiRequest("/identification/nomenclature", {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ scope: "input", path }),
+            body: JSON.stringify({ scope: "input", path, sheet: nomenSelectedSheet() }),
           });
-          showFeedback(fb, "success", run.summary.rows + " ligne(s), " + run.summary.to_treat + " a traiter, " + run.summary.mono_color + " mono-couleur. Colonnes: " + (run.summary.detected_columns || []).join(", "));
+          showFeedback(fb, "success", "Onglet \"" + run.sheet + "\" : " + run.summary.rows + " ligne(s), " + run.summary.to_treat + " a traiter, " + run.summary.mono_color + " mono-couleur. Colonnes: " + (run.summary.detected_columns || []).join(", "));
           loadNomenItems(run.id, true);
         } catch (e) { showFeedback(fb, "error", e.message); }
       });
@@ -1647,13 +1688,14 @@
 
     // ---- Indicateur global LLM (sidebar) --------------------------------
     function llmBadgeClass(state) {
-      if (state === "ok") return "badge ok";
-      if (state === "disabled") return "badge off";
-      return "badge warn"; // not_configured / inconnu
+      if (state === "ok") return "badge ok";       // configure + teste + active
+      if (state === "disabled") return "badge off"; // interrupteur OFF
+      return "badge warn"; // not_configured / untested / inconnu
     }
     function llmBadgeLabel(state) {
       if (state === "ok") return "ON";
       if (state === "disabled") return "OFF";
+      if (state === "untested") return "A TESTER";
       if (state === "not_configured") return "NO KEY";
       return "?";
     }

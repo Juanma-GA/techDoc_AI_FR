@@ -27,6 +27,8 @@ from app.db.session import get_db
 from app.schemas import (
     NomenclatureItemOut,
     NomenclatureParseIn,
+    NomenclaturePreviewIn,
+    NomenclaturePreviewOut,
     NomenclatureRunOut,
     ZipEntryOut,
     ZipListOut,
@@ -74,6 +76,18 @@ def parse_route(payload: NomenclatureParseIn, db: Session = Depends(get_db)) -> 
     db.refresh(run)
     log.info("nomenclature %s : %d lignes", run.id, result["summary"]["rows"])
     return _run_out(run)
+
+
+@router.post("/preview", response_model=NomenclaturePreviewOut)
+def preview_route(payload: NomenclaturePreviewIn, db: Session = Depends(get_db)) -> NomenclaturePreviewOut:
+    """Apercu : liste les onglets + affiche les premieres lignes d'un onglet."""
+    if payload.scope not in ("input", "output"):
+        raise AppError("SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
+    root = onedrive.root_for_scope(db, payload.scope)
+    target = safe_under_root(root, payload.path)
+    if not target.is_file():
+        raise AppError("NOMENCLATURE_NOT_FOUND", "Fichier introuvable.", status_code=404, detail={"path": str(target)})
+    return NomenclaturePreviewOut(**nomen.preview_sheet(str(target), sheet=payload.sheet, rows=payload.rows))
 
 
 @router.post("/zip", response_model=ZipListOut)
