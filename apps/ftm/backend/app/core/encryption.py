@@ -133,7 +133,7 @@ def generate_key() -> str:
     
     Example:
         >>> key = generate_key()
-        >>> print(key)
-        'vF8dXxK3qJ...'  # 44 characters
+        >>> len(key)
+        44
     """
     return Fernet.generate_key().decode()

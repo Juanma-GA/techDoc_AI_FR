@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     rate_limit_default: str = "60/minute"  # 60 requests per minute per IP
     rate_limit_llm: str = "10/minute"      # LLM endpoints más restrictivos
     
-    # Encryption key for secrets (generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    # Encryption key for secrets (generate with: python -c "from cryptography.fernet import Fernet; k=Fernet.generate_key(); open('key.txt','w').write(k.decode())")
     # MUST be set in production - 32 url-safe base64-encoded bytes
     encryption_key: str = ""
 
