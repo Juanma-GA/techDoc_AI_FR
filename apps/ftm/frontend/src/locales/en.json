@@ -7,8 +7,13 @@
   },
   "nav": {
     "section": "Navigation",
+    "manager": "Dashboard",
     "dashboard": "Dashboard",
     "projects": "Projects",
+    "redacteur": "Editor view",
+    "architecture": "Architecture",
+    "data": "Data",
+    "chatbot": "Chatbot",
     "chat": "Chatbot",
     "settings": "Settings"
   },
@@ -19,7 +24,10 @@
     "delete": "Delete",
     "confirm": "Confirm",
     "retry": "Retry",
-    "empty": "Nothing to display"
+    "empty": "Nothing to display",
+    "selectProject": "— Select —",
+    "allProjects": "All projects",
+    "slicerHint": "Empty = all projects"
   },
   "errors": {
     "generic": "An unexpected error occurred",
@@ -63,7 +71,18 @@
     "testing": "Testing…",
     "testSuccess": "Connection OK",
     "testError": "Connection failed",
-    "saveSuccess": "Settings saved"
+    "saveSuccess": "Settings saved",
+    "rulesSection": "Business rules (read-only)",
+    "rulesReadOnlyBanner": "The engine applies FTM business rules defined by domain experts. This page lists them in read-only mode for transparency. Any change goes through the technical team — no runtime editing of defaults.",
+    "exportRulesMd": "Export rules as Markdown",
+    "exportRulesMdHint": "Downloads a RULES.md document reflecting the current engine state (sections, parameters, examples).",
+    "atmColumnsMoved": "The ATM tracking Excel columns (script, granules) are now configured at ATM tracking upload, in the project detail.",
+    "customRules": "Custom rules (AI)",
+    "customRulesIntro": "Rules evaluated by the embedded Mistral on each analysed FTM. Active only if Mistral is configured. Anomalies of type « personnalisee ».",
+    "customRulesEmpty": "(no custom rules)",
+    "refColumnPlaceholder": "Tip: in a rule instruction, write {column_name} to inject values from a project reference column.",
+    "freeInstructions": "AI instructions",
+    "rulesOverride": "override active"
   },
   "dashboard": {
     "openAnomalies": "Open anomalies",
@@ -84,7 +103,114 @@
     "noSessions": "No sessions",
     "you": "You",
     "assistant": "Agent",
-    "errorStream": "Error during response"
+    "errorStream": "Error during response",
+    "selectProject": "Conversation scope",
+    "scopeN": "{{count}} projects"
+  },
+  "page": {
+    "manager": "KPIs and indicators",
+    "redacteur": "Anomalies grouped by file",
+    "architecture": "Workflows and synthetic architecture",
+    "data": "Analysed data administration"
+  },
+  "data": {
+    "overview": "Overview",
+    "resetTitle": "Reset",
+    "resetHint": "All these operations are <strong>irreversible</strong>. Mistral settings and business rules are preserved.",
+    "resetAnalyses": "Reset analyses",
+    "resetChat": "Reset chat",
+    "resetAll": "Wipe everything",
+    "confirmAnalyses": "Confirm: erase anomalies + runs?",
+    "confirmChat": "Confirm: erase all sessions?",
+    "confirmAll": "Confirm: wipe everything?",
+    "scopeAnalyses": "analyses",
+    "scopeChat": "chat",
+    "scopeAll": "all",
+    "kpi": {
+      "projects": "Projects",
+      "files": "Files",
+      "versions": "versions",
+      "anomalies": "Anomalies",
+      "runs": "Analysis runs",
+      "chunks": "Indexed chunks",
+      "chatSessions": "Chat sessions",
+      "messages": "msgs",
+      "storage": "Disk storage",
+      "db": "SQLite DB"
+    }
+  },
+  "arch": {
+    "split": {
+      "title": "Backend ↔ Frontend in 30 seconds",
+      "back": "Python 3.11+ · FastAPI under <code>/api/v1/</code> · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic · 5 parsers (.docx, .pdf, .xlsx, .xml/S1000D, .csv) · 4 business checks (DMC coverage, Jaccard renames, consistency, illustrations) · Mistral API (chat + RAG embeddings + optional multimodal vision) · httpx async + SSE · structlog.",
+      "front": "Preview HTML embedded in the backend (no Node) — vanilla JS · FR/EN i18n · Projects · Manager · Editor · Chatbot · Data · Settings views. Optional React + Vite build for richer UI."
+    },
+    "flowTitle": "User workflow",
+    "f1": "\"Projects\" tab → create a project (name + description).",
+    "f2": "Upload the DMC reference (.csv/.xlsx) expected by the client + the FTM files (.docx/.pdf/.xlsx/.xml/S1000D). Automatic SHA-256 versioning.",
+    "f3": "\"Run analysis\" → 4 sequential checks applied to the latest version of each file; anomalies are created with status <code>open</code>.",
+    "f4": "If Mistral is configured: RAG indexing (chunking + embeddings) stored in SQLite, to enable the chatbot.",
+    "f5": "Manager view: project KPIs. Editor view: anomalies grouped by file with suggestions. Chatbot: RAG Q&A with [file_name] citations.",
+    "f6": "Anomaly lifecycle: <code>open → acknowledged → fixed</code> (resolved) or <code>rejected</code> (false positive). CSV export anytime."
+  },
+  "manager": {
+    "gotoProject": "Open project page →",
+    "gotoProjectHint": "Select a single project to open its page.",
+    "gotoRedacteur": "View file-by-file detail →",
+    "selectProject": "Scope",
+    "kpis": "Key indicators",
+    "openAnomalies": "Open anomalies",
+    "resolutionRate": "Resolution rate",
+    "totalFiles": "Indexed files",
+    "withAnomalies": "with anomalies",
+    "avgAge": "Avg age (days)",
+    "avgRes": "Avg resolution time (days)",
+    "byStatus": "By status",
+    "byConfidence": "By AI confidence",
+    "bySeverity": "By severity",
+    "byType": "By type",
+    "topFiles": "Most affected files",
+    "overTime": "Trends over time",
+    "confHigh": "High",
+    "confMedium": "Medium",
+    "confLow": "Low",
+    "fam": {
+      "scriptGranule": "Script / Granule",
+      "texte": "Text / Spelling",
+      "taches": "Tasks",
+      "logistique": "Logistics",
+      "valeurs": "Values",
+      "illustration": "Illustrations"
+    }
+  },
+  "redacteur": {
+    "selectProject": "Project",
+    "title": "Anomalies by file",
+    "bulkFix": "Resolve all",
+    "bulkReject": "Reject all",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "filterAll": "— All —",
+    "filterCategory": "Category",
+    "filterSeverity": "Criticality",
+    "filterConfidence": "AI confidence",
+    "filterStatus": "Status",
+    "sevHigh": "High",
+    "sevMedium": "Medium",
+    "sevLow": "Low",
+    "confHigh": "High",
+    "confMedium": "Medium",
+    "confLow": "Low",
+    "confNone": "Not evaluated",
+    "statusOpen": "Open",
+    "statusAck": "Taken into account",
+    "statusFixed": "Fixed",
+    "statusRejected": "Rejected",
+    "orphanFile": "Unlinked"
+  },
+  "files": {
+    "duplicate": "duplicate",
+    "duplicateOf": "Identical to"
   },
   "routes": {
     "dashboard": {

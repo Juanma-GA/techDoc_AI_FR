@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../components/PageHeader";
+import { RulesCatalog } from "../components/RulesCatalog";
 import { resources, type MistralSettingsIn } from "../lib/api";
 
 export function Settings() {
@@ -144,6 +145,9 @@ export function Settings() {
           </div>
         </form>
       )}
+      <div className="mt-8">
+        <RulesCatalog />
+      </div>
     </div>
   );
 }
