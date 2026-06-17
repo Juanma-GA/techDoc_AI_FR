@@ -46,8 +46,23 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8000",
+        "https://172.21.28.92",  # Production server
     ]
     max_upload_size_mb: int = 50
+    
+    # === Security ===
+    # Host binding - use 0.0.0.0 for production, 127.0.0.1 for local dev
+    bind_host: str = "127.0.0.1"
+    bind_port: int = 8000
+    
+    # Rate limiting (requests per minute)
+    rate_limit_enabled: bool = True
+    rate_limit_default: str = "60/minute"  # 60 requests per minute per IP
+    rate_limit_llm: str = "10/minute"      # LLM endpoints más restrictivos
+    
+    # Encryption key for secrets (generate with: python -c "from cryptography.fernet import Fernet; k=Fernet.generate_key(); open('key.txt','w').write(k.decode())")
+    # MUST be set in production - 32 url-safe base64-encoded bytes
+    encryption_key: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -61,8 +76,17 @@ class Settings(BaseSettings):
         return self.max_upload_size_mb * 1024 * 1024
 
     @property
+    def max_upload_size_bytes(self) -> int:
+        return self.max_upload_size_mb * 1024 * 1024
+
+    @property
     def llm_configured(self) -> bool:
         return bool(self.mistral_api_key)
+    
+    @property
+    def encryption_configured(self) -> bool:
+        """Check if encryption key is set for production."""
+        return bool(self.encryption_key and len(self.encryption_key) >= 32)
 
 
 settings = Settings()

@@ -19,6 +19,7 @@ from app.core.chat_engine import (
 )
 from app.core.errors import AppError
 from app.core.mistral_client import MistralClient, MistralError
+from app.core.prompt_sanitizer import sanitize_prompt
 from app.db.models import ChatMessage, ChatSession, Project
 from app.db.session import SessionLocal, get_db
 from app.schemas import ChatAskIn, ChatMessageOut, ChatSessionOut
@@ -75,13 +76,16 @@ def _resolve_projects(db: Session, project_ids: list[uuid.UUID]) -> list[Project
 @router.post("/ask")
 async def ask(body: ChatAskIn, db: Session = Depends(get_db)):
     projects = _resolve_projects(db, list(body.project_ids))
+    
+    # Sanitize user question to prevent prompt injection
+    sanitized_question = sanitize_prompt(body.question, context="chat_message")
 
     try:
         mistral = MistralClient.from_db(db)
     except MistralError as e:
         raise AppError("MISTRAL_NOT_CONFIGURED", str(e), status_code=400) from e
 
-    session = get_or_create_session(db, [p.id for p in projects], body.session_id, body.question)
+    session = get_or_create_session(db, [p.id for p in projects], body.session_id, sanitized_question)
 
     # Si la session existe déjà → reprendre son scope (pas celui du body).
     scope_ids = session_scope_ids(session)
@@ -92,7 +96,7 @@ async def ask(body: ChatAskIn, db: Session = Depends(get_db)):
     session_id = session.id
     session_title = session.title
     project_ids_for_stream = [p.id for p in projects]
-    question = body.question
+    question = sanitized_question
     lang = body.lang or "fr"
 
     async def event_gen():

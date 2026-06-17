@@ -5,10 +5,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.api import (
     admin, analysis, anomalies, chat, files, health, i18n, kpis, projects,
@@ -23,6 +26,13 @@ from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
 # Vite build output, served only when present (i.e. after `pnpm build`
 # or when the repo has been packaged with `scripts/package.bat`).
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+# Rate limiter instance (configured with default from settings)
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[settings.rate_limit_default] if settings.rate_limit_enabled else [],
+    enabled=settings.rate_limit_enabled,
+)
 
 
 def create_app() -> FastAPI:
@@ -46,6 +56,10 @@ def create_app() -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(RequestIdMiddleware)
+
+    if settings.rate_limit_enabled:
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     register_error_handlers(app)
 
