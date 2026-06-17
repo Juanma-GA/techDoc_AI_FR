@@ -60,7 +60,8 @@ def parse_route(payload: NomenclatureParseIn, db: Session = Depends(get_db)) -> 
     if not target.is_file():
         raise AppError("NOMENCLATURE_NOT_FOUND", "Fichier nomenclature introuvable.", status_code=404, detail={"path": str(target)})
 
-    result = nomen.parse_nomenclature(str(target), sheet=payload.sheet)
+    mapping = payload.mapping.model_dump() if payload.mapping else None
+    result = nomen.parse_nomenclature(str(target), sheet=payload.sheet, mapping=mapping)
 
     run = NomenclatureRun(
         source_ref=str(target),

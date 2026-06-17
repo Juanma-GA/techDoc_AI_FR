@@ -159,41 +159,41 @@ def preview_sheet(path: str, sheet: Optional[str] = None, rows: int = 15) -> dic
         "sheet": title,
         "header_row_detected": header_idx + 1 if header_idx >= 0 else 0,
         "columns_detected": sorted(colmap.keys()),
+        "columns_map": dict(colmap),  # champ -> index colonne (0-based) detecte
         "rows": grid,
     }
 
 
-def parse_nomenclature(path: str, sheet: Optional[str] = None) -> dict:
-    """Parse la nomenclature -> {sheet, columns, items[], summary}.
+_FIELDS = ("catpart", "designation", "sin", "version", "to_treat", "color")
 
-    `items` : liste de dict {catpart, designation, sin, version, to_treat,
-    mono_color, color_r/g/b, source_row}.
-    """
-    wb = _load(path)
 
-    try:
-        ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb[wb.sheetnames[0]]
-        rows: list[list] = []
-        for r in ws.iter_rows(values_only=True):
-            rows.append(list(r))
-            if len(rows) >= _MAX_ROWS:
-                break
-    finally:
-        wb.close()
+def _resolve_columns(rows: list[list], mapping: Optional[dict]) -> tuple[int, dict[str, int]]:
+    """En-tete + colonnes : mapping manuel fourni, sinon detection auto."""
+    if mapping:
+        header_idx = int(mapping.get("header_row") or 0) - 1
+        if header_idx < 0:
+            raise AppError("MAPPING_INVALID", "header_row doit etre >= 1.", status_code=400)
+        colmap = {f: int(mapping[f]) for f in _FIELDS if mapping.get(f) is not None}
+        if "catpart" not in colmap:
+            raise AppError("MAPPING_NO_CATPART", "La colonne CATPart est obligatoire dans le mapping.", status_code=400)
+        return header_idx, colmap
 
     header_idx, colmap = _detect_header(rows)
     if header_idx < 0 or "catpart" not in colmap:
         raise AppError(
             "NOMENCLATURE_NO_HEADER",
             "En-tete introuvable (aucune colonne CATPart detectee). "
-            "Verifiez la feuille ou ajustez les mots-cles d'en-tete.",
+            "Configurez le mapping (ligne d'en-tete + colonnes) ou ajustez les mots-cles.",
             status_code=400,
             detail={"detected_columns": list(colmap.keys())},
         )
+    return header_idx, colmap
 
+
+def _build_items(rows: list[list], header_idx: int, colmap: dict[str, int]) -> list[dict]:
     def _cell(row: list, field: str) -> object:
         idx = colmap.get(field)
-        if idx is None or idx >= len(row):
+        if idx is None or idx < 0 or idx >= len(row):
             return None
         return row[idx]
 
@@ -218,6 +218,30 @@ def parse_nomenclature(path: str, sheet: Optional[str] = None) -> dict:
                 "source_row": ridx + 1,  # 1-based comme Excel
             }
         )
+    return items
+
+
+def parse_nomenclature(path: str, sheet: Optional[str] = None, mapping: Optional[dict] = None) -> dict:
+    """Parse la nomenclature -> {sheet, columns, items[], summary}.
+
+    `mapping` (optionnel) : {header_row (1-based), catpart, designation, sin,
+    version, to_treat, color} ou chaque champ est un index de colonne 0-based.
+    Quand fourni, court-circuite la detection automatique.
+    """
+    wb = _load(path)
+    try:
+        ws = wb[sheet] if sheet and sheet in wb.sheetnames else wb[wb.sheetnames[0]]
+        title = ws.title
+        rows: list[list] = []
+        for r in ws.iter_rows(values_only=True):
+            rows.append(list(r))
+            if len(rows) >= _MAX_ROWS:
+                break
+    finally:
+        wb.close()
+
+    header_idx, colmap = _resolve_columns(rows, mapping)
+    items = _build_items(rows, header_idx, colmap)
 
     summary = {
         "rows": len(items),
@@ -225,8 +249,9 @@ def parse_nomenclature(path: str, sheet: Optional[str] = None) -> dict:
         "mono_color": sum(1 for it in items if it["mono_color"]),
         "detected_columns": sorted(colmap.keys()),
         "header_row": header_idx + 1,
+        "manual_mapping": mapping is not None,
     }
-    return {"sheet": ws.title, "columns": sorted(colmap.keys()), "items": items, "summary": summary}
+    return {"sheet": title, "columns": sorted(colmap.keys()), "items": items, "summary": summary}
 
 
 def list_zip(path: str, max_entries: int = 50000) -> list[dict]:

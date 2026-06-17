@@ -1403,33 +1403,96 @@
       return el ? el.value : undefined;
     }
 
+    let nomenPreviewData = null;
+
+    function colLetter(idx) {
+      let s = "", n = idx + 1;
+      while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+      return s;
+    }
+
+    function colLabel(p, idx, headerRow) {
+      const hrow = p.rows[headerRow - 1] || [];
+      const name = (hrow[idx] == null ? "" : String(hrow[idx])).trim();
+      return colLetter(idx) + (name ? " - " + name : "");
+    }
+
+    function nomenFieldSelect(p, field, headerRow, required) {
+      const ncols = p.rows.reduce((m, r) => Math.max(m, r.length), 0);
+      const detected = p.columns_map ? p.columns_map[field] : undefined;
+      let opts = required ? "" : '<option value="">(aucune)</option>';
+      for (let i = 0; i < ncols; i++) {
+        opts += '<option value="' + i + '"' + (detected === i ? " selected" : "") + ">" + escapeHtml(colLabel(p, i, headerRow)) + "</option>";
+      }
+      return '<select data-field="' + field + '">' + opts + "</select>";
+    }
+
+    function renderNomenBody(headerRow) {
+      const p = nomenPreviewData;
+      const box = document.getElementById("nomenPreview");
+      if (!p || !box) return;
+      const nrows = p.rows.length;
+      const grid = p.rows.map((r, ri) =>
+        '<tr class="' + ((ri + 1) === headerRow ? "hl" : "") + '"><td class="rownum">' + (ri + 1) + "</td>"
+        + r.map((c) => "<td>" + escapeHtml(c) + "</td>").join("") + "</tr>"
+      ).join("");
+      let hrOpts = "";
+      for (let i = 1; i <= nrows; i++) hrOpts += '<option value="' + i + '"' + (i === headerRow ? " selected" : "") + ">" + i + "</option>";
+      const sheetOpts = p.sheets.map((s) => '<option value="' + escapeHtml(s) + '"' + (s === p.sheet ? " selected" : "") + ">" + escapeHtml(s) + "</option>").join("");
+      const fields = [["catpart", "CATPart *", true], ["sin", "SIN", false], ["version", "Version", false], ["to_treat", "A traiter", false], ["color", "Couleur", false], ["designation", "Designation", false]];
+      const mapCells = fields.map(([f, lbl, req]) =>
+        '<label style="display:flex;flex-direction:column;gap:3px"><span class="label">' + lbl + "</span>" + nomenFieldSelect(p, f, headerRow, req) + "</label>"
+      ).join("");
+      box.innerHTML = '<div class="card" style="margin-top:8px">'
+        + '<div class="row" style="gap:10px;align-items:flex-end;margin-bottom:8px">'
+        + '<label><div class="label">Onglet</div><select id="nomenSheet">' + sheetOpts + "</select></label>"
+        + '<label><div class="label">Ligne d en-tete</div><select id="nomenHeaderRow">' + hrOpts + "</select></label>"
+        + '<div class="grow" style="font-size:0.82rem;color:var(--fg-dim)">Donnees lues a partir de la ligne ' + (headerRow + 1) + "</div></div>"
+        + '<div style="overflow:auto;max-height:300px"><table class="table grid"><tbody>' + grid + "</tbody></table></div>"
+        + '<p class="label" style="margin:12px 0 6px">Mapping des colonnes (designez chaque champ ; * obligatoire)</p>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">' + mapCells + "</div>"
+        + '<div class="row" style="margin-top:12px"><button class="btn primary" id="nomenAnalyzeMap">Analyser avec ce mapping</button><span id="nomenMapFeedback" class="grow"></span></div></div>';
+      document.getElementById("nomenSheet").addEventListener("change", (e) => loadNomenPreview(e.target.value));
+      document.getElementById("nomenHeaderRow").addEventListener("change", (e) => renderNomenBody(parseInt(e.target.value, 10)));
+      document.getElementById("nomenAnalyzeMap").addEventListener("click", analyzeWithMapping);
+    }
+
+    function currentNomenMapping() {
+      const mapping = { header_row: parseInt(document.getElementById("nomenHeaderRow").value, 10) };
+      document.querySelectorAll("#nomenPreview [data-field]").forEach((sel) => {
+        if (sel.value !== "") mapping[sel.dataset.field] = parseInt(sel.value, 10);
+      });
+      return mapping;
+    }
+
+    async function analyzeWithMapping() {
+      const fb = document.getElementById("nomenMapFeedback");
+      const path = document.getElementById("nomenPath").value.trim();
+      const sheet = document.getElementById("nomenSheet").value;
+      const mapping = currentNomenMapping();
+      if (mapping.catpart === undefined) { showFeedback(fb, "error", "Designez la colonne CATPart (obligatoire)."); return; }
+      try {
+        const run = await apiRequest("/identification/nomenclature", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "input", path, sheet, mapping }),
+        });
+        showFeedback(fb, "success", run.summary.rows + " ligne(s), " + run.summary.to_treat + " a traiter, " + run.summary.mono_color + " mono-couleur.");
+        loadNomenItems(run.id, false);
+      } catch (e) { showFeedback(fb, "error", e.message); }
+    }
+
     async function loadNomenPreview(sheet) {
       const fb = document.getElementById("nomenFeedback");
       const box = document.getElementById("nomenPreview");
       const path = document.getElementById("nomenPath").value.trim();
       if (!path) { showFeedback(fb, "error", "Renseignez un chemin."); return; }
-      let p;
       try {
-        p = await apiRequest("/identification/preview", {
+        nomenPreviewData = await apiRequest("/identification/preview", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope: "input", path, sheet: sheet || undefined, rows: 15 }),
+          body: JSON.stringify({ scope: "input", path, sheet: sheet || undefined, rows: 20 }),
         });
       } catch (e) { box.innerHTML = '<div class="empty-state">' + escapeHtml(e.message) + "</div>"; return; }
-      const sheetOpts = p.sheets.map((s) => '<option value="' + escapeHtml(s) + '"' + (s === p.sheet ? " selected" : "") + ">" + escapeHtml(s) + "</option>").join("");
-      const cols = (p.columns_detected || []).length
-        ? p.columns_detected.map((c) => '<span class="badge ok">' + escapeHtml(c) + "</span>").join(" ")
-        : '<span class="badge warn">aucune colonne reconnue</span>';
-      const grid = p.rows.map((r, ri) =>
-        '<tr class="' + ((ri + 1) === p.header_row_detected ? "hl" : "") + '"><td class="rownum">' + (ri + 1) + "</td>"
-        + r.map((c) => "<td>" + escapeHtml(c) + "</td>").join("") + "</tr>"
-      ).join("");
-      box.innerHTML = '<div class="card" style="margin-top:8px">'
-        + '<div class="row" style="gap:10px;align-items:flex-end;margin-bottom:8px">'
-        + '<label><div class="label">Onglet</div><select id="nomenSheet">' + sheetOpts + "</select></label>"
-        + '<div class="grow" style="font-size:0.82rem;color:var(--fg-dim)">Colonnes detectees : ' + cols + " &middot; en-tete : ligne " + p.header_row_detected + "</div></div>"
-        + '<div style="overflow:auto;max-height:340px"><table class="table grid"><tbody>' + grid + "</tbody></table></div>"
-        + '<p style="font-size:0.78rem;color:var(--fg-dim);margin-top:6px">Apercu des ' + p.rows.length + " premieres lignes. La ligne surlignee est l en-tete detectee. Choisissez l onglet puis cliquez Analyser.</p></div>";
-      document.getElementById("nomenSheet").addEventListener("change", (e) => loadNomenPreview(e.target.value));
+      renderNomenBody(nomenPreviewData.header_row_detected > 0 ? nomenPreviewData.header_row_detected : 1);
     }
 
     async function renderIdentification() {

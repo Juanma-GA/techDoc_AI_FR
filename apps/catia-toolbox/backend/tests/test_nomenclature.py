@@ -47,6 +47,45 @@ def test_parse_nomenclature(client, tmp_path):
     assert (red["color_r"], red["color_g"], red["color_b"]) == (255, 0, 0)
 
 
+def test_parse_with_manual_mapping(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    xlsx = _make_xlsx(tmp_path)  # en-tete ligne 2 ; cols: 0 CATPart,2 SIN,4 A traiter,5 Couleur
+    # Mapping explicite : on designe CATPart=col0, SIN=col2, couleur=col5, sans "a traiter".
+    r = client.post("/api/v1/identification/nomenclature", json={
+        "scope": "input", "path": str(xlsx),
+        "mapping": {"header_row": 2, "catpart": 0, "sin": 2, "color": 5},
+    })
+    assert r.status_code == 200, r.text
+    s = r.json()["summary"]
+    assert s["manual_mapping"] is True
+    assert s["rows"] == 3
+    assert s["to_treat"] == 0  # colonne 'a traiter' non mappee -> tout False
+    assert s["mono_color"] == 2
+
+    run_id = r.json()["id"]
+    items = client.get(f"/api/v1/identification/{run_id}/items").json()
+    # CATPart vient bien de la colonne 0.
+    assert {i["catpart"] for i in items} == {"PIECE_001.CATPart", "PIECE_002.CATPart", "PIECE_003.CATPart"}
+
+
+def test_parse_mapping_requires_catpart(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    xlsx = _make_xlsx(tmp_path)
+    # Pydantic exige catpart -> 422 si absent.
+    r = client.post("/api/v1/identification/nomenclature", json={
+        "scope": "input", "path": str(xlsx), "mapping": {"header_row": 2, "sin": 2},
+    })
+    assert r.status_code == 422
+
+
+def test_preview_exposes_columns_map(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    xlsx = _make_xlsx(tmp_path)
+    r = client.post("/api/v1/identification/preview", json={"scope": "input", "path": str(xlsx)})
+    cm = r.json()["columns_map"]
+    assert cm["catpart"] == 0 and cm["sin"] == 2
+
+
 def test_export_csv(client, tmp_path):
     _set_input_root(client, str(tmp_path))
     xlsx = _make_xlsx(tmp_path)

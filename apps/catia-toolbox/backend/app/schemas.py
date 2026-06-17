@@ -408,10 +408,23 @@ class ColorizationRunOut(BaseModel):
 # ----- Etape 1 : Identification (nomenclature .xlsm + DE .zip) ---------------
 
 
+class NomenclatureMapping(BaseModel):
+    """Mapping manuel : ligne d'en-tete (1-based) + index de colonne (0-based)."""
+
+    header_row: int = Field(..., ge=1)
+    catpart: int = Field(..., ge=0)
+    designation: Optional[int] = Field(default=None, ge=0)
+    sin: Optional[int] = Field(default=None, ge=0)
+    version: Optional[int] = Field(default=None, ge=0)
+    to_treat: Optional[int] = Field(default=None, ge=0)
+    color: Optional[int] = Field(default=None, ge=0)
+
+
 class NomenclatureParseIn(BaseModel):
     scope: str = Field(default="input")
     path: str = Field(..., min_length=1)
     sheet: Optional[str] = None
+    mapping: Optional[NomenclatureMapping] = None
 
 
 class NomenclaturePreviewIn(BaseModel):
@@ -426,6 +439,7 @@ class NomenclaturePreviewOut(BaseModel):
     sheet: str = ""
     header_row_detected: int = 0
     columns_detected: list[str] = Field(default_factory=list)
+    columns_map: dict[str, int] = Field(default_factory=dict)
     rows: list[list[str]] = Field(default_factory=list)
 
 
