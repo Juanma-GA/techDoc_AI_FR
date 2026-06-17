@@ -1,0 +1,128 @@
+"""Routes /api/v1/admin - stats globales + operations de reset.
+
+La cle Mistral (table app_config) est preservee par convention lors d'un reset.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.core.errors import AppError
+from app.db.models import (
+    CheckResult,
+    CheckRun,
+    ColorizationItem,
+    ColorizationRun,
+    ConversionItem,
+    ConversionRun,
+    DiffEntry,
+    DiffRun,
+    NomenclatureItem,
+    NomenclatureRun,
+    OptimizationRun,
+    QcChecklist,
+    QcItem,
+    ReplacementItem,
+    ReplacementRun,
+    SmgxmlChange,
+    SmgxmlRun,
+    StructureImport,
+    Suggestion,
+    TreeNode,
+)
+from app.db.session import get_db
+from app.schemas import AdminResetOut, AdminStatsOut
+
+
+log = logging.getLogger("catia_toolbox.admin")
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/stats", response_model=AdminStatsOut)
+def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
+    return AdminStatsOut(
+        imports=db.scalar(select(func.count(StructureImport.id))) or 0,
+        nodes=db.scalar(select(func.count(TreeNode.id))) or 0,
+        runs=db.scalar(select(func.count(OptimizationRun.id))) or 0,
+        suggestions=db.scalar(select(func.count(Suggestion.id))) or 0,
+        diffs=db.scalar(select(func.count(DiffRun.id))) or 0,
+        checks=db.scalar(select(func.count(CheckRun.id))) or 0,
+        conversions=db.scalar(select(func.count(ConversionRun.id))) or 0,
+        replacements=db.scalar(select(func.count(ReplacementRun.id))) or 0,
+        colorizations=db.scalar(select(func.count(ColorizationRun.id))) or 0,
+        nomenclatures=db.scalar(select(func.count(NomenclatureRun.id))) or 0,
+        smgxml_runs=db.scalar(select(func.count(SmgxmlRun.id))) or 0,
+        qc_checklists=db.scalar(select(func.count(QcChecklist.id))) or 0,
+        total_size_bytes=db.scalar(select(func.coalesce(func.sum(TreeNode.size), 0))) or 0,
+    )
+
+
+def _purge(db: Session, *models) -> dict[str, int]:
+    deleted: dict[str, int] = {}
+    for model in models:
+        count = db.scalar(select(func.count()).select_from(model)) or 0
+        db.query(model).delete()
+        deleted[model.__tablename__] = int(count)
+    db.commit()
+    return deleted
+
+
+# Tables filles (leaf-first) purgees avant StructureImport pour des compteurs exacts.
+_RUN_TABLES = (
+    Suggestion,
+    OptimizationRun,
+    DiffEntry,
+    DiffRun,
+    CheckResult,
+    CheckRun,
+    ConversionItem,
+    ConversionRun,
+    ReplacementItem,
+    ReplacementRun,
+    ColorizationItem,
+    ColorizationRun,
+)
+
+# Tables du pipeline 5 etapes, independantes des imports (leaf-first).
+_PIPELINE_TABLES = (
+    NomenclatureItem,
+    NomenclatureRun,
+    SmgxmlChange,
+    SmgxmlRun,
+    QcItem,
+    QcChecklist,
+)
+
+
+@router.post("/reset/all", response_model=AdminResetOut)
+def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
+    """Reset complet sauf `app_config` (preserve la cle Mistral)."""
+    deleted = _purge(db, *_RUN_TABLES, *_PIPELINE_TABLES, TreeNode, StructureImport)
+    log.info("admin reset all : %s", deleted)
+    return AdminResetOut(scope="all", deleted=deleted)
+
+
+@router.post("/reset/{scope}", response_model=AdminResetOut)
+def reset_scope(scope: str, db: Session = Depends(get_db)) -> AdminResetOut:
+    if scope == "all":
+        return reset_all(db)
+    if scope == "imports":
+        deleted = _purge(db, *_RUN_TABLES, TreeNode, StructureImport)
+    elif scope == "runs":
+        deleted = _purge(db, *_RUN_TABLES)
+    elif scope == "pipeline":
+        deleted = _purge(db, *_PIPELINE_TABLES)
+    else:
+        raise AppError(
+            "RESET_SCOPE_INVALID",
+            "Scope inconnu. Valeurs : all | imports | runs | pipeline.",
+            status_code=400,
+            detail={"scope": scope},
+        )
+    log.info("admin reset %s : %s", scope, deleted)
+    return AdminResetOut(scope=scope, deleted=deleted)

@@ -1,0 +1,1674 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Catia Toolbox</title>
+  <script>
+    (function () {
+      var stored = localStorage.getItem("theme");
+      var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700&display=swap" />
+  <style>
+    /*__CSS_VARS__*/
+
+    .theme-toggle { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--fg-dim); border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+    .theme-toggle:hover { background: var(--card-hover); color: var(--fg); }
+    .theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .theme-toggle-sun { display: none; }
+    .theme-toggle-moon { display: block; }
+    .dark .theme-toggle-sun { display: block; }
+    .dark .theme-toggle-moon { display: none; }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    html { font-size: 13.5px; }
+    body { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; }
+    a { color: var(--brand-light); text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    [hidden] { display: none !important; }
+
+    .layout { display: flex; height: 100vh; }
+    aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+    .sidebar-header { display: flex; align-items: baseline; gap: 8px; padding: 16px; border-bottom: 1px solid var(--border); }
+    .brand { font-family: "Orbitron", sans-serif; font-size: 1.15rem; color: var(--brand-light); }
+    .label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); }
+    .sidebar nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; flex: 1; }
+    .nav-item { display: flex; align-items: center; padding: 8px 12px; border-radius: 8px; color: var(--fg-dim); transition: background 0.15s, color 0.15s; border: none; background: transparent; width: 100%; text-align: left; }
+    .nav-item:hover { background: var(--card-hover); color: var(--fg); }
+    .nav-item.active { background: var(--brand); color: var(--fg); }
+    .nav-item:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .nav-item.sub { font-size: 0.86rem; padding-left: 22px; }
+    .nav-group { font-family: "JetBrains Mono", monospace; font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-muted); padding: 10px 12px 2px; }
+    .table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+    .table th { text-align: left; color: var(--fg-dim); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    .table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+    .table tbody tr:hover { background: var(--card-hover); }
+
+    .lang-switch { display: flex; gap: 4px; padding: 12px; border-top: 1px solid var(--border); }
+    .lang-btn { flex: 1; padding: 6px; border: 1px solid var(--border); background: transparent; color: var(--fg-dim); border-radius: 6px; font-size: 0.75rem; }
+    .lang-btn.active { background: var(--brand); color: var(--fg); border-color: var(--brand); }
+
+    main { flex: 1; overflow-y: auto; padding: 24px 32px; }
+    .page-header { margin-bottom: 24px; }
+    .page-header h1 { font-family: "Orbitron", sans-serif; font-size: 1.5rem; margin: 0 0 4px 0; }
+    .page-header p { color: var(--fg-dim); margin: 0; }
+
+    .banner { background: var(--card); border: 1px solid var(--border-bright); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--fg-dim); }
+    .banner strong { color: var(--fg); }
+    .banner.warn { border-color: var(--warning); color: var(--warning); }
+    .banner code { font-family: "JetBrains Mono", monospace; background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-card); margin-bottom: 16px; }
+    .card-title { font-family: "Orbitron", sans-serif; font-size: 1.05rem; margin: 0 0 14px 0; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .grow { flex: 1; min-width: 0; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .kpi-value { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
+    .kpi-value.info { color: var(--info); }
+
+    .form { display: flex; flex-direction: column; gap: 10px; }
+    .input, select, textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
+    .input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; border: none; padding: 8px 14px; font-weight: 500; transition: background 0.15s, opacity 0.15s, color 0.15s; }
+    .btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+    .btn.primary { background: var(--brand); color: var(--fg); }
+    .btn.primary:hover { background: var(--brand-light); }
+    .btn.secondary { background: var(--bg-2); color: var(--fg); border: 1px solid var(--border); }
+    .btn.secondary:hover { background: var(--card-hover); }
+    .btn.ghost { background: transparent; color: var(--fg-dim); }
+    .btn.ghost:hover { background: var(--card-hover); color: var(--fg); }
+    .btn.danger { background: var(--danger); color: var(--fg); }
+    .btn.danger:hover { opacity: 0.85; }
+
+    .error, .success { margin-top: 8px; padding: 8px 12px; border-radius: 8px; background: var(--bg-2); font-size: 0.85rem; white-space: pre-wrap; }
+    .error { border: 1px solid var(--danger); color: var(--danger); }
+    .success { border: 1px solid var(--success); color: var(--success); }
+
+    .badge { display: inline-flex; align-items: center; padding: 1px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; }
+    .badge.ok    { color: var(--success); border-color: var(--success); }
+    .badge.warn  { color: var(--warning); border-color: var(--warning); }
+    .badge.off   { color: var(--fg-dim); border-color: var(--border); }
+
+    .llm-status { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-family: "JetBrains Mono", monospace; font-size: 0.62rem; letter-spacing: 1px; color: var(--fg-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+
+    /* Switch on/off (toggle non destructif - pas de double-clic) */
+    .switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+    .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .track { position: absolute; cursor: pointer; inset: 0; background: var(--bg-3); border: 1px solid var(--border); border-radius: 24px; transition: background 0.15s, border-color 0.15s; }
+    .switch .track::before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: var(--fg-dim); border-radius: 50%; transition: transform 0.15s, background 0.15s; }
+    .switch input:checked + .track { background: var(--brand); border-color: var(--brand); }
+    .switch input:checked + .track::before { transform: translateX(18px); background: var(--fg); }
+    .switch input:focus-visible + .track { box-shadow: 0 0 0 2px var(--brand-light); }
+
+    .empty-state { text-align: center; color: var(--fg-dim); padding: 24px; }
+
+    /* Architecture */
+    .arch-flow { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .arch-step { display: flex; gap: 10px; padding: 8px 12px; background: var(--bg-2); border-left: 3px solid var(--brand); border-radius: 4px; font-size: 0.9rem; }
+    .arch-step .step-n { color: var(--brand-light); font-family: "JetBrains Mono", monospace; font-weight: 700; flex-shrink: 0; }
+    .arch-split { padding: 12px 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
+    .arch-split .label.brand-color { color: var(--brand-light); margin-bottom: 6px; }
+    .arch-split .label.accent-color { color: var(--success); margin-bottom: 6px; }
+    .arch-split code { background: var(--bg-3); padding: 1px 5px; border-radius: 3px; font-family: "JetBrains Mono", monospace; font-size: 0.8rem; }
+
+    /* Tree + suggestions metier */
+    .badge.danger { color: var(--danger); border-color: var(--danger); }
+    .badge.info   { color: var(--info); border-color: var(--info); }
+    .tree { font-family: "JetBrains Mono", monospace; font-size: 0.82rem; max-height: 420px; overflow-y: auto; }
+    .tree ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px solid var(--border); }
+    .tree > ul { padding-left: 0; border-left: none; }
+    .tree li { padding: 2px 0; }
+    .tree .node-folder { color: var(--brand-light); }
+    .tree .node-file { color: var(--fg-dim); }
+    .tree .node-size { color: var(--fg-muted); font-size: 0.72rem; margin-left: 6px; }
+    .dropzone { border: 1px dashed var(--border-bright); border-radius: 8px; padding: 18px; text-align: center; color: var(--fg-dim); }
+    .sugg-list { display: flex; flex-direction: column; gap: 8px; }
+    .sugg { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .sugg.accepted { border-color: var(--success); }
+    .sugg.rejected { opacity: 0.55; }
+    .sugg .paths { font-family: "JetBrains Mono", monospace; font-size: 0.8rem; word-break: break-all; }
+    .sugg .paths .arrow { color: var(--brand-light); }
+    .sugg .why { color: var(--fg-dim); font-size: 0.8rem; margin-top: 4px; }
+    .sugg .acts { margin-top: 8px; display: flex; gap: 6px; }
+    .stream-out { font-family: "JetBrains Mono", monospace; font-size: 0.8rem; white-space: pre-wrap; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 220px; overflow-y: auto; }
+    .btn.small { padding: 4px 10px; font-size: 0.78rem; }
+    .color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+    .color-tile { border-radius: 6px; padding: 8px 10px; overflow: hidden; }
+    .color-tile .ct-name { font-family: "JetBrains Mono", monospace; font-weight: 600; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .color-tile .ct-why { font-size: 0.7rem; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="brand">Catia Toolbox</span><span class="label">v0.1</span>
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+          <svg class="theme-toggle-sun" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+          </svg>
+          <svg class="theme-toggle-moon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="llm-status" id="llmStatus" title="Etat du LLM (voir Parametres)">
+        LLM <span class="badge" id="llmBadge">...</span>
+      </div>
+      <nav>
+        <button type="button" class="nav-item active" data-route="home">Home</button>
+
+        <div class="nav-group">1 - Identification</div>
+        <button type="button" class="nav-item sub" data-route="identification">Nomenclature / DE</button>
+        <button type="button" class="nav-item sub" data-route="import">Source (scan / selection)</button>
+        <button type="button" class="nav-item sub" data-route="diff">Comparaison</button>
+
+        <div class="nav-group">2 - Preparation</div>
+        <button type="button" class="nav-item sub" data-route="conversion">Conversion -&gt; Composer</button>
+
+        <div class="nav-group">3 - Traitement</div>
+        <button type="button" class="nav-item sub" data-route="smgxmlRecolor">SMGXML : couleur</button>
+        <button type="button" class="nav-item sub" data-route="colorization">Colorisation (plan)</button>
+        <button type="button" class="nav-item sub" data-route="tree">Arborescence</button>
+        <button type="button" class="nav-item sub" data-route="suggestions">Optimisation</button>
+        <button type="button" class="nav-item sub" data-route="export">Export plan</button>
+
+        <div class="nav-group">4 - Integration</div>
+        <button type="button" class="nav-item sub" data-route="smgxmlRename">SMGXML : renommage</button>
+        <button type="button" class="nav-item sub" data-route="replacement">Remplacement (plan)</button>
+
+        <div class="nav-group">5 - Controle</div>
+        <button type="button" class="nav-item sub" data-route="qc">Checklist QC</button>
+        <button type="button" class="nav-item sub" data-route="checks">Verifications auto</button>
+
+        <div class="nav-group">Outils</div>
+        <button type="button" class="nav-item sub" data-route="architecture">Architecture</button>
+        <button type="button" class="nav-item sub" data-route="data">Donnees</button>
+        <button type="button" class="nav-item sub" data-route="settings">Parametres</button>
+      </nav>
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button class="lang-btn active" data-lang="fr">FR</button>
+        <button class="lang-btn"        data-lang="en">EN</button>
+      </div>
+    </aside>
+
+    <main>
+      <div class="page-header">
+        <h1 id="pageTitle">Home</h1>
+        <p id="pageSub"></p>
+      </div>
+      <div id="content"></div>
+    </main>
+  </div>
+
+  <script type="application/json" id="i18n-fr">/*__I18N_FR__*/</script>
+
+  <script>
+    const API = "/api/v1";
+
+    const routes = {
+      home: { title: "Home", sub: "Optimisation d arborescence CATIA a partir de donnees exportees.", render: renderHome },
+      identification: { title: "1 - Identification", sub: "Lire la nomenclature (.xlsm) et les donnees d entree (.zip) pour identifier les CATPart a traiter.", render: renderIdentification },
+      smgxmlRecolor: { title: "3 - SMGXML : couleur", sub: "Appliquer la couleur des SIN mono-couleur dans le SMGXML (dry-run par defaut).", render: renderSmgxmlRecolor },
+      smgxmlRename: { title: "4 - SMGXML : renommage", sub: "Remplacer le nom de l ancienne piece par la nouvelle dans le SMGXML (dry-run par defaut).", render: renderSmgxmlRename },
+      qc: { title: "5 - Controle Qualite", sub: "Checklist de verification des pieces dans l assemblage.", render: renderQc },
+      import: { title: "Import", sub: "Scanner un dossier local ou importer un listing CSV / JSON.", render: renderImport },
+      tree: { title: "Arborescence", sub: "Metriques et structure de l import courant.", render: renderTree },
+      suggestions: { title: "Suggestions", sub: "Generer un plan de reorganisation puis accepter / rejeter.", render: renderSuggestions },
+      export: { title: "Export", sub: "Telecharger le plan (CSV) et le script relisable (.bat / .sh).", render: renderExport },
+      diff: { title: "Comparaison", sub: "Detecter les pieces ajoutees / supprimees / modifiees entre deux imports.", render: renderDiff },
+      checks: { title: "Verifications", sub: "Lancer des verifications configurables sur l import courant.", render: renderChecks },
+      conversion: { title: "Conversion", sub: "Plan de conversion CATIA 3D vers Composer (dry-run).", render: renderConversion },
+      replacement: { title: "Remplacement", sub: "Plan de remplacement de pieces a partir d un mapping.", render: renderReplacement },
+      colorization: { title: "Colorisation", sub: "Attribuer une couleur aux pieces (par etat / type / profondeur).", render: renderColorization },
+      architecture: { title: "Architecture", sub: "Backend, frontend et workflow utilisateur.", render: renderArchitecture },
+      data: { title: "Donnees", sub: "Vue d ensemble et operations de reset.", render: renderData },
+      settings: { title: "Parametres", sub: "Cle API Mistral et modeles utilises.", render: renderSettings },
+    };
+
+    // Etat partage entre onglets (import courant + run courant).
+    const state = {
+      get importId() { try { return localStorage.getItem("cto-import"); } catch (e) { return null; } },
+      set importId(v) { try { v ? localStorage.setItem("cto-import", v) : localStorage.removeItem("cto-import"); } catch (e) { /* ignore */ } },
+      get runId() { try { return localStorage.getItem("cto-run"); } catch (e) { return null; } },
+      set runId(v) { try { v ? localStorage.setItem("cto-run", v) : localStorage.removeItem("cto-run"); } catch (e) { /* ignore */ } },
+    };
+
+    document.querySelectorAll(".nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => navigate(btn.dataset.route));
+    });
+
+    document.getElementById("themeToggle").addEventListener("click", () => {
+      const root = document.documentElement;
+      const isDark = root.classList.contains("dark");
+      root.classList.toggle("dark", !isDark);
+      try { localStorage.setItem("theme", isDark ? "light" : "dark"); } catch (e) { /* ignore */ }
+    });
+
+    function navigate(route) {
+      document.querySelectorAll(".nav-item").forEach((b) => {
+        b.classList.toggle("active", b.dataset.route === route);
+      });
+      const cfg = routes[route] || routes.home;
+      document.getElementById("pageTitle").textContent = cfg.title;
+      document.getElementById("pageSub").textContent = cfg.sub || "";
+      cfg.render();
+    }
+
+    async function apiRequest(path, options) {
+      const res = await fetch(API + path, options);
+      if (res.status === 204) return null;
+      const text = await res.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch (e) { /* not json */ }
+      if (!res.ok) {
+        const msg = body && body.message ? body.message : (res.statusText || "Erreur");
+        const err = new Error(msg);
+        err.code = body && body.code;
+        throw err;
+      }
+      return body;
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function showFeedback(node, kind, msg) {
+      node.innerHTML = '<div class="' + kind + '">' + escapeHtml(msg) + '</div>';
+    }
+
+    // ---- Home -----------------------------------------------------------
+    async function renderHome() {
+      const health = await apiRequest("/health").catch(() => null);
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Optimiser une arborescence CATIA</h2>
+          <p>Ce POC reorganise une structure de fichiers CATIA <strong>desorganisee</strong> a partir
+          de donnees <strong>exportees</strong> (aucun CATIA requis). Il produit un <strong>plan</strong>
+          relisable - il ne deplace, renomme ou supprime <strong>jamais</strong> vos fichiers.</p>
+          <div class="arch-flow">
+            <div class="arch-step"><span class="step-n">1.</span><span>Onglet <strong>Import</strong> : scanner un dossier local (metadonnees seules) ou importer un listing CSV / JSON.</span></div>
+            <div class="arch-step"><span class="step-n">2.</span><span>Onglet <strong>Arborescence</strong> : metriques (profondeur, fan-out, doublons, nommage).</span></div>
+            <div class="arch-step"><span class="step-n">3.</span><span>Onglet <strong>Suggestions</strong> : generer le plan (heuristiques + Mistral), accepter / rejeter.</span></div>
+            <div class="arch-step"><span class="step-n">4.</span><span>Onglet <strong>Export</strong> : telecharger le plan CSV et le script <code>.bat</code> / <code>.sh</code> a executer vous-meme.</span></div>
+          </div>
+          <div class="banner" style="margin-top:14px">
+            Statut backend : ${health ? '<span class="badge ok">' + escapeHtml(health.status) + '</span>' : '<span class="badge warn">INCONNU</span>'}
+            ${health ? ' &middot; LLM : <span class="' + llmBadgeClass(health.llm) + '">' + escapeHtml(health.llm) + '</span>' : ''}
+            ${health ? ' &middot; version : <code>' + escapeHtml(health.version) + '</code>' : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // ---- Architecture ---------------------------------------------------
+    function renderArchitecture() {
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Backend &harr; Frontend en 30 secondes</h2>
+          <div class="grid-2">
+            <div class="arch-split">
+              <div class="label brand-color">BACKEND</div>
+              <div>
+                Python 3.11+ &middot; FastAPI sous <code>/api/v1/</code> &middot; Pydantic v2 &middot;
+                SQLAlchemy 2 + SQLite + Alembic &middot; <code>structlog</code> JSON +
+                <code>X-Request-Id</code>. Mistral via <code>httpx</code> async (chat
+                streaming SSE) + sync (embeddings). Pas de SDK Mistral.
+              </div>
+            </div>
+            <div class="arch-split">
+              <div class="label accent-color">FRONTEND</div>
+              <div>
+                Preview HTML autonome embarque dans le backend (vanilla JS, sans Node) &mdash;
+                consomme l API REST directement. Build React + Vite optionnel
+                (TS strict, Tailwind, RHF + Zod, i18next, Zustand, TanStack Query)
+                avec <code>@internal/ui</code> et <code>@internal/design-tokens</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Workflow utilisateur (a adapter par POC)</h2>
+          <div class="arch-flow">
+            <div class="arch-step"><span class="step-n">1.</span><span>Onglet <strong>Parametres</strong> &rarr; renseigner la cle Mistral (stockee en SQLite, table <code>app_config</code>).</span></div>
+            <div class="arch-step"><span class="step-n">2.</span><span>Tester la connexion - liste les modeles Mistral disponibles.</span></div>
+            <div class="arch-step"><span class="step-n">3.</span><span>Onglet <strong>Donnees</strong> &rarr; voir les compteurs et reset les tables si besoin.</span></div>
+            <div class="arch-step"><span class="step-n">4.</span><span><em>Insere ici le workflow specifique a ton POC une fois ajoutes tes onglets metier.</em></span></div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ---- Donnees --------------------------------------------------------
+    async function renderData() {
+      const stats = await apiRequest("/admin/stats").catch(() => null);
+      const content = document.getElementById("content");
+      const fmtSize = (n) => (n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " kB" : (n / 1048576).toFixed(2) + " MB");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Vue d ensemble</h2>
+          ${
+            stats
+              ? `<div class="kpi-grid">
+                <div class="kpi"><div class="label">Imports</div><div class="kpi-value info">${stats.imports}</div></div>
+                <div class="kpi"><div class="label">Noeuds</div><div class="kpi-value info">${stats.nodes}</div></div>
+                <div class="kpi"><div class="label">Runs</div><div class="kpi-value info">${stats.runs}</div></div>
+                <div class="kpi"><div class="label">Suggestions</div><div class="kpi-value info">${stats.suggestions}</div></div>
+                <div class="kpi"><div class="label">Comparaisons</div><div class="kpi-value info">${stats.diffs}</div></div>
+                <div class="kpi"><div class="label">Verifications</div><div class="kpi-value info">${stats.checks}</div></div>
+                <div class="kpi"><div class="label">Conversions</div><div class="kpi-value info">${stats.conversions}</div></div>
+                <div class="kpi"><div class="label">Remplacements</div><div class="kpi-value info">${stats.replacements}</div></div>
+                <div class="kpi"><div class="label">Colorisations</div><div class="kpi-value info">${stats.colorizations}</div></div>
+                <div class="kpi"><div class="label">Taille totale</div><div class="kpi-value">${fmtSize(stats.total_size_bytes)}</div></div>
+              </div>`
+              : '<div class="empty-state">Stats indisponibles.</div>'
+          }
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Reinitialiser</h2>
+          <div class="banner warn">Operation <strong>irreversible</strong>. La configuration Mistral (table <code>app_config</code>) est preservee.</div>
+          <div class="row">
+            <button class="btn danger" data-reset="all">Tout supprimer</button>
+          </div>
+          <div id="resetFeedback" style="margin-top: 12px;"></div>
+        </div>
+      `;
+
+      // Double-clic pour confirmer (pas de confirm() natif, interdit par standard).
+      document.querySelectorAll("[data-reset]").forEach((btn) => {
+        let armed = false;
+        let timer = null;
+        const original = btn.textContent;
+        btn.addEventListener("click", async () => {
+          const scope = btn.dataset.reset;
+          if (!armed) {
+            armed = true;
+            btn.textContent = "Cliquer encore pour confirmer";
+            timer = setTimeout(() => { armed = false; btn.textContent = original; }, 3000);
+            return;
+          }
+          clearTimeout(timer);
+          armed = false;
+          btn.textContent = original;
+          try {
+            const r = await apiRequest("/admin/reset/" + scope, { method: "POST" });
+            const items = Object.entries(r.deleted || {}).map(([k, v]) => k + ": " + v).join(", ") || "(rien a supprimer)";
+            showFeedback(document.getElementById("resetFeedback"), "success", "Reset OK (" + items + ").");
+            setTimeout(() => renderData(), 800);
+          } catch (e) { showFeedback(document.getElementById("resetFeedback"), "error", e.message); }
+        });
+      });
+    }
+
+    // ---- Settings -------------------------------------------------------
+    async function renderSettings() {
+      const cfg = await apiRequest("/settings").catch(() => null);
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Intelligence artificielle</h2>
+          <div class="switch-row">
+            <div>
+              <div class="label">LLM active</div>
+              <small style="color:var(--fg-dim);font-size:0.78rem">Desactiver coupe les taches confiees a l IA (generation du plan). La cle Mistral est conservee.</small>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="llmEnabled" ${cfg && cfg.llm_enabled ? "checked" : ""} />
+              <span class="track"></span>
+            </label>
+          </div>
+          <div id="llmToggleFeedback" style="margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">
+            <span style="display:inline-flex;align-items:center;gap:10px">Configuration Mistral
+              ${cfg && cfg.api_key_set ? '<span class="badge ok">CONFIGURED</span>' : '<span class="badge warn">NOT CONFIGURED</span>'}
+            </span>
+          </h2>
+          <form id="settingsForm" class="form">
+            <label>
+              <div class="label">Cle API Mistral</div>
+              <input class="input" id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+              ${cfg && cfg.api_key_set ? '<small style="color:var(--fg-dim);font-size:0.78rem">Une cle est deja enregistree (laisser vide pour la conserver).</small>' : ""}
+            </label>
+            <label>
+              <div class="label">Base URL</div>
+              <input class="input" id="baseUrl" type="url" value="${escapeHtml(cfg ? cfg.base_url : "https://api.mistral.ai")}" />
+            </label>
+            <div class="row">
+              <label class="grow">
+                <div class="label">Modele chat</div>
+                <input class="input" id="chatModel" type="text" value="${escapeHtml(cfg ? cfg.chat_model : "mistral-small-latest")}" />
+              </label>
+              <label class="grow">
+                <div class="label">Modele embeddings</div>
+                <input class="input" id="embedModel" type="text" value="${escapeHtml(cfg ? cfg.embed_model : "mistral-embed")}" />
+              </label>
+            </div>
+            <div class="row">
+              <button class="btn primary" type="button" id="saveBtn">Enregistrer</button>
+              <button class="btn secondary" type="button" id="testBtn">Tester la connexion</button>
+              <span id="settingsFeedback" class="grow"></span>
+            </div>
+          </form>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Dossiers Source / Sortie</h2>
+          <div class="banner">Source = dossier <strong>synchronise local</strong> (OneDrive, partage reseau UNC <code>\\\\serveur\\...</code>, ou local) lu en metadonnees. La Sortie recoit les livrables generes (plans CSV, scripts). Pas de connexion cloud.</div>
+          <form id="odForm" class="form">
+            <label>
+              <div class="label">Racine entree (input)</div>
+              <input class="input" id="odInput" type="text" placeholder="C:\\Users\\moi\\OneDrive - Entreprise\\CATIA" value="${escapeHtml(cfg ? (cfg.onedrive_input_root || "") : "")}" />
+            </label>
+            <label>
+              <div class="label">Racine sortie (output)</div>
+              <input class="input" id="odOutput" type="text" placeholder="C:\\Users\\moi\\OneDrive - Entreprise\\CATIA\\exports" value="${escapeHtml(cfg ? (cfg.onedrive_output_root || "") : "")}" />
+            </label>
+            <div class="row">
+              <button class="btn primary" type="button" id="odSaveBtn">Enregistrer</button>
+              <button class="btn secondary" type="button" id="odDetectBtn">Auto-detecter</button>
+              <span id="odSettingsFeedback" class="grow"></span>
+            </div>
+            <div id="odDetected"></div>
+          </form>
+        </div>
+      `;
+
+      document.getElementById("llmEnabled").addEventListener("change", async (e) => {
+        const fb = document.getElementById("llmToggleFeedback");
+        try {
+          await apiRequest("/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ llm_enabled: e.target.checked }),
+          });
+          showFeedback(fb, "success", e.target.checked ? "LLM active." : "LLM desactive.");
+          refreshLlmStatus();
+        } catch (err) {
+          showFeedback(fb, "error", err.message);
+          e.target.checked = !e.target.checked;
+        }
+      });
+
+      document.getElementById("saveBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("settingsFeedback");
+        const payload = {
+          base_url: document.getElementById("baseUrl").value,
+          chat_model: document.getElementById("chatModel").value,
+          embed_model: document.getElementById("embedModel").value,
+        };
+        const apiKey = document.getElementById("apiKey").value;
+        if (apiKey) payload.api_key = apiKey;
+        try {
+          await apiRequest("/settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          showFeedback(fb, "success", "Parametres enregistres.");
+          setTimeout(renderSettings, 500);
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.getElementById("testBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("settingsFeedback");
+        try {
+          const r = await apiRequest("/settings/test", { method: "POST" });
+          if (r.ok) showFeedback(fb, "success", "Connexion OK (" + r.models.length + " modeles disponibles).");
+          else showFeedback(fb, "error", "Echec : " + (r.error || ""));
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.getElementById("odSaveBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("odSettingsFeedback");
+        try {
+          await apiRequest("/settings", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              onedrive_input_root: document.getElementById("odInput").value.trim(),
+              onedrive_output_root: document.getElementById("odOutput").value.trim(),
+            }),
+          });
+          showFeedback(fb, "success", "Dossiers Source / Sortie enregistres.");
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.getElementById("odDetectBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("odSettingsFeedback");
+        const list = document.getElementById("odDetected");
+        try {
+          const r = await apiRequest("/browse/roots");
+          const detected = r.detected || [];
+          if (!detected.length) { showFeedback(fb, "error", "Aucun dossier OneDrive detecte."); list.innerHTML = ""; return; }
+          if (!document.getElementById("odInput").value.trim()) document.getElementById("odInput").value = detected[0];
+          list.innerHTML = '<div class="label" style="margin-top:8px">Detectes (cliquer pour utiliser comme entree)</div>'
+            + detected.map((d) => '<div class="row" style="margin-top:4px"><code class="grow">' + escapeHtml(d) + '</code>'
+              + '<button class="btn ghost small" type="button" data-od-use="' + escapeHtml(d) + '">Entree</button>'
+              + '<button class="btn ghost small" type="button" data-od-useout="' + escapeHtml(d) + '">Sortie</button></div>').join("");
+          list.querySelectorAll("[data-od-use]").forEach((b) => b.addEventListener("click", () => { document.getElementById("odInput").value = b.dataset.odUse; }));
+          list.querySelectorAll("[data-od-useout]").forEach((b) => b.addEventListener("click", () => { document.getElementById("odOutput").value = b.dataset.odUseout; }));
+          showFeedback(fb, "success", detected.length + " dossier(s) detecte(s).");
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+    }
+
+    function fmtBytes(n) {
+      n = Number(n) || 0;
+      return n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " kB" : (n / 1048576).toFixed(2) + " MB";
+    }
+
+    // ---- SSE (fetch + ReadableStream ; EventSource ne sait pas POST) -----
+    async function streamSSE(path, body, handlers) {
+      const res = await fetch(API + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+      });
+      if (!res.ok || !res.body) {
+        const txt = await res.text().catch(() => "");
+        throw new Error("Echec stream (" + res.status + ") " + txt);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) !== -1) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          let event = "message";
+          let data = "";
+          frame.split("\n").forEach((line) => {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).replace(/^ /, "");
+          });
+          if (handlers[event]) handlers[event](data);
+        }
+      }
+    }
+
+    // ---- Import ---------------------------------------------------------
+    // Etat du navigateur OneDrive (input). Selection accumulee par chemin absolu.
+    const browseState = { path: "", absPath: "", root: "", entries: [], recursive: false, allFiles: [], filter: "", selection: new Set() };
+
+    function browseParent(absPath, root) {
+      const norm = String(absPath || "").replace(/\\/g, "/").replace(/\/+$/, "");
+      const rootNorm = String(root || "").replace(/\\/g, "/").replace(/\/+$/, "");
+      if (!norm || norm === rootNorm) return "";
+      const idx = norm.lastIndexOf("/");
+      const parent = idx > 0 ? norm.slice(0, idx) : "";
+      if (parent.length < rootNorm.length) return rootNorm;
+      return parent;
+    }
+
+    // Case de selection stylee (visible en dark).
+    function odCheck(path, sel) {
+      return '<span data-toggle="' + escapeHtml(path) + '" role="checkbox" aria-checked="' + sel
+        + '" title="Selectionner" style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:4px;flex-shrink:0;cursor:pointer;font-size:12px;line-height:1;border:1px solid '
+        + (sel ? "var(--brand)" : "var(--border)") + ";background:" + (sel ? "var(--brand)" : "var(--bg-3)")
+        + ';color:var(--fg)">' + (sel ? "&#10003;" : "") + "</span>";
+    }
+
+    function odBg(sel) {
+      return 'style="align-items:center;gap:8px;padding:4px 6px;border-radius:6px;background:' + (sel ? "var(--bg-3)" : "transparent") + '"';
+    }
+
+    // Vue niveau : dossier (cliquer le nom = ouvrir, la case = selectionner) ou fichier.
+    function odRowHtml(e) {
+      const sel = browseState.selection.has(e.path);
+      const isFolder = e.kind === "folder";
+      const name = isFolder
+        ? '<button data-open="' + escapeHtml(e.path) + '" class="node-folder" title="Ouvrir" style="flex:1;background:none;border:none;padding:0;text-align:left;cursor:pointer;font:inherit">' + escapeHtml(e.name) + "/</button>"
+        : '<span data-toggle="' + escapeHtml(e.path) + '" class="node-file" style="flex:1;cursor:pointer">' + escapeHtml(e.name) + "</span>";
+      const meta = isFolder ? '<span class="badge">dossier</span>' : '<span class="node-size">' + fmtBytes(e.size) + "</span>";
+      return '<div class="row" ' + odBg(sel) + ">" + odCheck(e.path, sel) + name + meta + "</div>";
+    }
+
+    // Vue recursive : un fichier (chemin relatif affiche).
+    function odFileRowHtml(e) {
+      const sel = browseState.selection.has(e.path);
+      const label = '<span data-toggle="' + escapeHtml(e.path) + '" class="node-file" style="flex:1;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(e.rel || e.name) + "</span>";
+      const meta = '<span class="node-size">' + fmtBytes(e.size) + "</span>";
+      return '<div class="row" ' + odBg(sel) + ">" + odCheck(e.path, sel) + label + meta + "</div>";
+    }
+
+    function odVisibleItems() {
+      if (browseState.recursive) {
+        const f = browseState.filter.trim().toLowerCase();
+        return browseState.allFiles.filter((e) => !f || (e.rel || e.name).toLowerCase().indexOf(f) !== -1);
+      }
+      return browseState.entries;
+    }
+
+    function odPaint() {
+      const rowsEl = document.getElementById("odRows");
+      if (rowsEl) {
+        const items = odVisibleItems();
+        if (browseState.recursive) {
+          rowsEl.innerHTML = items.length
+            ? items.map(odFileRowHtml).join("")
+            : '<div class="empty-state">Aucun fichier (essayez un autre filtre).</div>';
+        } else {
+          rowsEl.innerHTML = items.length
+            ? items.map(odRowHtml).join("")
+            : '<div class="empty-state">Dossier vide.</div>';
+        }
+      }
+      const cnt = document.getElementById("odCount");
+      if (cnt) {
+        cnt.textContent = browseState.recursive
+          ? odVisibleItems().length + " fichier(s) - " + browseState.selection.size + " coche(s)"
+          : "";
+      }
+      const btn = document.getElementById("odImportSel");
+      if (btn) btn.textContent = "Importer la selection (" + browseState.selection.size + ")";
+    }
+
+    function odInput(ev) {
+      if (ev.target && ev.target.id === "odFilter") {
+        browseState.filter = ev.target.value;
+        odPaint();
+      }
+    }
+
+    async function odLoadFiles() {
+      const fb = document.getElementById("odFeedback");
+      try {
+        const data = await apiRequest("/browse/files", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "input", path: browseState.absPath }),
+        });
+        browseState.allFiles = data.entries || [];
+        browseState.recursive = true;
+        renderBrowser();
+      } catch (e) { if (fb) showFeedback(fb, "error", e.message); }
+    }
+
+    async function odClick(ev) {
+      const open = ev.target.closest("[data-open]");
+      if (open) { browseState.path = open.dataset.open; browseState.recursive = false; loadBrowser(); return; }
+
+      const tog = ev.target.closest("[data-toggle]");
+      if (tog) {
+        const p = tog.dataset.toggle;
+        if (browseState.selection.has(p)) browseState.selection.delete(p);
+        else browseState.selection.add(p);
+        odPaint();
+        return;
+      }
+
+      if (ev.target.closest("#odUp")) {
+        browseState.path = browseParent(browseState.absPath, browseState.root);
+        browseState.recursive = false;
+        loadBrowser();
+        return;
+      }
+      if (ev.target.closest("#odToggleRec")) {
+        if (browseState.recursive) { browseState.recursive = false; renderBrowser(); }
+        else { odLoadFiles(); }
+        return;
+      }
+      if (ev.target.closest("#odSelectAll")) {
+        odVisibleItems().forEach((e) => browseState.selection.add(e.path));
+        odPaint();
+        return;
+      }
+      if (ev.target.closest("#odClearSel")) { browseState.selection.clear(); odPaint(); return; }
+
+      const importBtn = ev.target.closest("#odImportSel");
+      if (importBtn) {
+        const fb = document.getElementById("odFeedback");
+        const paths = Array.from(browseState.selection);
+        if (!paths.length) { showFeedback(fb, "error", "Cochez au moins un fichier ou dossier."); return; }
+        importBtn.disabled = true;
+        try {
+          const imp = await apiRequest("/imports/select", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: "input", paths }),
+          });
+          state.importId = imp.id; state.runId = null;
+          browseState.selection.clear();
+          showFeedback(fb, "success", "Import OK (" + imp.node_count + " noeuds). Voir l onglet Arborescence.");
+          setTimeout(renderImport, 800);
+        } catch (e) { importBtn.disabled = false; showFeedback(fb, "error", e.message); }
+        return;
+      }
+
+      const scanBtn = ev.target.closest("#odScanHere");
+      if (scanBtn) {
+        const fb = document.getElementById("odFeedback");
+        scanBtn.disabled = true;
+        try {
+          const imp = await apiRequest("/imports/scan", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: browseState.absPath }),
+          });
+          state.importId = imp.id; state.runId = null;
+          showFeedback(fb, "success", "Dossier scanne (" + imp.node_count + " noeuds).");
+          setTimeout(renderImport, 800);
+        } catch (e) { scanBtn.disabled = false; showFeedback(fb, "error", e.message); }
+        return;
+      }
+    }
+
+    // Rend tout le navigateur depuis browseState (sans refetch).
+    function renderBrowser() {
+      const box = document.getElementById("odBrowser");
+      if (!box) return;
+      const rec = browseState.recursive;
+      const atRoot = browseState.absPath === browseState.root;
+      const hint = rec
+        ? "Vue recursive : tous les fichiers sous ce dossier. Filtrez (ex: CATPart), cochez, puis Importer la selection."
+        : "Cochez les fichiers ou dossiers, puis Importer la selection. Cliquez le nom d un dossier pour l ouvrir, ou listez tous les fichiers en recursif.";
+      box.innerHTML = `
+        <div class="row" style="align-items:center;gap:8px;margin-bottom:6px">
+          <button class="btn ghost small" id="odUp" ${atRoot ? "disabled" : ""}>Remonter</button>
+          <code class="grow" style="overflow:hidden;text-overflow:ellipsis">${escapeHtml(browseState.absPath)}</code>
+          <button class="btn ${rec ? "secondary" : "ghost"} small" id="odToggleRec">${rec ? "Vue niveau" : "Choisir des fichiers (recursif)"}</button>
+        </div>
+        ${rec ? `<div class="row" style="margin-bottom:6px"><input class="input grow" id="odFilter" type="text" placeholder="Filtrer par nom / extension (ex: CATPart)" value="${escapeHtml(browseState.filter)}" /></div>` : ""}
+        <div style="font-size:0.8rem;color:var(--fg-dim);margin-bottom:8px">${hint}</div>
+        <div id="odRows"></div>
+        <div class="row" style="margin-top:8px;gap:8px;align-items:center">
+          <button class="btn ghost small" id="odSelectAll">Tout cocher</button>
+          <button class="btn ghost small" id="odClearSel">Vider la selection</button>
+          <span id="odCount" style="font-size:0.8rem;color:var(--fg-dim)"></span>
+        </div>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <button class="btn primary" id="odImportSel">Importer la selection (${browseState.selection.size})</button>
+          <button class="btn secondary" id="odScanHere">Scanner tout le dossier</button>
+          <span id="odFeedback" class="grow"></span>
+        </div>
+      `;
+      box.onclick = odClick;   // assignation = idempotent
+      box.oninput = odInput;
+      odPaint();
+    }
+
+    async function loadBrowser() {
+      const box = document.getElementById("odBrowser");
+      if (!box) return;
+      let data;
+      try {
+        data = await apiRequest("/browse/list", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "input", path: browseState.path }),
+        });
+      } catch (e) {
+        box.innerHTML = '<div class="empty-state">' + escapeHtml(e.message) + "</div>";
+        return;
+      }
+      browseState.root = data.root;
+      browseState.absPath = data.path;
+      browseState.entries = data.entries || [];
+      browseState.recursive = false;
+      renderBrowser();
+    }
+
+    async function renderImport() {
+      const content = document.getElementById("content");
+      const imports = await apiRequest("/imports").catch(() => []);
+      const roots = await apiRequest("/browse/roots").catch(() => null);
+      const inputRoot = roots && roots.input;
+      const current = state.importId;
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Naviguer la Source (entree)</h2>
+          <div class="banner warn">Lecture des <strong>metadonnees uniquement</strong> (nom, taille, date). Le contenu des fichiers n est jamais lu, rien n est ecrit.</div>
+          ${inputRoot
+            ? '<div id="odBrowser"><div class="empty-state">Chargement...</div></div>'
+            : '<div class="empty-state">Aucune racine OneDrive d entree configuree. Renseignez-la dans l onglet <strong>Parametres</strong>.</div>'}
+        </div>
+        <div class="card">
+          <h2 class="card-title">Scanner un dossier (chemin manuel)</h2>
+          <div class="form">
+            <label><div class="label">Chemin du dossier</div>
+              <input class="input" id="scanPath" type="text" placeholder="C:\\chemin\\vers\\export_catia" /></label>
+            <div class="row"><button class="btn primary" id="scanBtn">Scanner</button><span id="importFeedback" class="grow"></span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Importer un listing</h2>
+          <div class="dropzone">
+            <p>Fichier CSV ou JSON (colonnes <code>path, size, date</code>).</p>
+            <input type="file" id="listingFile" accept=".csv,.json" />
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Imports existants</h2>
+          ${imports.length ? `<div class="sugg-list">${imports.map((i) => `
+            <div class="sugg ${i.id === current ? "accepted" : ""}">
+              <div class="row">
+                <div class="grow"><strong>${escapeHtml(i.root_label)}</strong>
+                  <span class="badge info">${i.node_count} noeuds</span>
+                  <span class="badge">${escapeHtml(i.source_mode)}</span>
+                  ${i.id === current ? '<span class="badge ok">COURANT</span>' : ""}</div>
+                <button class="btn secondary small" data-pick="${i.id}">Choisir</button>
+                <button class="btn danger small" data-del="${i.id}">Suppr.</button>
+              </div>
+            </div>`).join("")}</div>` : '<div class="empty-state">Aucun import. Naviguez OneDrive, scannez un dossier ou importez un listing.</div>'}
+        </div>
+      `;
+
+      if (inputRoot) { browseState.path = ""; loadBrowser(); }
+
+      document.getElementById("scanBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("importFeedback");
+        const path = document.getElementById("scanPath").value.trim();
+        if (!path) { showFeedback(fb, "error", "Renseignez un chemin."); return; }
+        try {
+          const imp = await apiRequest("/imports/scan", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path }),
+          });
+          state.importId = imp.id; state.runId = null;
+          showFeedback(fb, "success", "Import OK (" + imp.node_count + " noeuds). Voir l onglet Arborescence.");
+          setTimeout(renderImport, 700);
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.getElementById("listingFile").addEventListener("change", async (ev) => {
+        const fb = document.getElementById("importFeedback");
+        const file = ev.target.files[0];
+        if (!file) return;
+        const fd = new FormData(); fd.append("file", file);
+        try {
+          const imp = await apiRequest("/imports/upload", { method: "POST", body: fd });
+          state.importId = imp.id; state.runId = null;
+          showFeedback(fb, "success", "Listing importe (" + imp.node_count + " noeuds).");
+          setTimeout(renderImport, 700);
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => {
+        state.importId = b.dataset.pick; state.runId = null; renderImport();
+      }));
+      content.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => {
+        try {
+          await apiRequest("/imports/" + b.dataset.del, { method: "DELETE" });
+          if (state.importId === b.dataset.del) { state.importId = null; state.runId = null; }
+          renderImport();
+        } catch (e) { /* ignore */ }
+      }));
+    }
+
+    // ---- Arborescence ---------------------------------------------------
+    function treeHtml(nodes) {
+      if (!nodes || !nodes.length) return "";
+      return "<ul>" + nodes.map((n) => {
+        const cls = n.kind === "folder" ? "node-folder" : "node-file";
+        const size = n.kind === "file" ? '<span class="node-size">' + fmtBytes(n.size) + "</span>" : "";
+        return '<li><span class="' + cls + '">' + escapeHtml(n.name) + "</span>" + size + treeHtml(n.children) + "</li>";
+      }).join("") + "</ul>";
+    }
+
+    async function renderTree() {
+      const content = document.getElementById("content");
+      if (!state.importId) { content.innerHTML = '<div class="empty-state">Aucun import courant. Allez dans l onglet Import.</div>'; return; }
+      let data;
+      try { data = await apiRequest("/imports/" + state.importId + "/tree"); }
+      catch (e) { content.innerHTML = '<div class="empty-state">Import introuvable. Reimportez.</div>'; return; }
+      const m = data.metrics || {};
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Metriques - ${escapeHtml(data.root_label)}</h2>
+          <div class="kpi-grid">
+            <div class="kpi"><div class="label">Fichiers</div><div class="kpi-value info">${m.file_count || 0}</div></div>
+            <div class="kpi"><div class="label">Dossiers</div><div class="kpi-value info">${m.folder_count || 0}</div></div>
+            <div class="kpi"><div class="label">Profondeur max</div><div class="kpi-value">${m.max_depth || 0}</div></div>
+            <div class="kpi"><div class="label">Fan-out max</div><div class="kpi-value">${m.max_fanout || 0}</div></div>
+            <div class="kpi"><div class="label">Doublons de noms</div><div class="kpi-value">${m.duplicate_basenames_count || 0}</div></div>
+            <div class="kpi"><div class="label">Nesting profond</div><div class="kpi-value">${m.deep_nesting_count || 0}</div></div>
+          </div>
+          <div class="banner" style="margin-top:12px">Nommage : ${(m.naming && m.naming.inconsistent) ? '<span class="badge warn">INCOHERENT</span>' : '<span class="badge ok">COHERENT</span>'}
+            ${m.naming ? " &middot; styles : " + escapeHtml(Object.keys(m.naming.styles || {}).join(", ")) : ""}</div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Structure (${data.node_count} noeuds)</h2>
+          <div class="tree">${treeHtml(data.nodes) || '<div class="empty-state">Vide.</div>'}</div>
+        </div>
+      `;
+    }
+
+    // ---- Suggestions ----------------------------------------------------
+    async function renderSuggestions() {
+      const content = document.getElementById("content");
+      if (!state.importId) { content.innerHTML = '<div class="empty-state">Aucun import courant. Allez dans l onglet Import.</div>'; return; }
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Generer un plan de reorganisation</h2>
+          <div class="row">
+            <label class="grow"><div class="label">Profondeur cible max</div><input class="input" id="maxDepth" type="number" value="5" min="1" max="20" /></label>
+            <label style="display:flex;align-items:center;gap:8px;margin-top:18px"><input type="checkbox" id="useLlm" checked /> Utiliser Mistral (sinon baseline seul)</label>
+          </div>
+          <div class="row" style="margin-top:10px"><button class="btn primary" id="runBtn">Lancer l optimisation</button><span id="runFeedback" class="grow"></span></div>
+          <div class="stream-out" id="streamOut" hidden></div>
+        </div>
+        <div class="card">
+          <div class="row"><h2 class="card-title grow">Suggestions</h2>
+            <button class="btn secondary small" id="bulkAccept">Tout accepter</button>
+            <button class="btn ghost small" id="bulkReject">Tout rejeter</button></div>
+          <div id="suggList"><div class="empty-state">Lancez l optimisation pour generer des suggestions.</div></div>
+        </div>
+      `;
+
+      const out = document.getElementById("streamOut");
+      document.getElementById("runBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("runFeedback");
+        const body = {
+          target_max_depth: parseInt(document.getElementById("maxDepth").value, 10) || 5,
+          use_llm: document.getElementById("useLlm").checked,
+        };
+        out.hidden = false; out.textContent = ""; showFeedback(fb, "success", "Generation en cours...");
+        try {
+          await streamSSE("/imports/" + state.importId + "/optimize", body, {
+            session: (d) => { try { state.runId = JSON.parse(d).run_id; } catch (e) { /* ignore */ } },
+            token: (d) => { out.textContent += d; out.scrollTop = out.scrollHeight; },
+            done: () => { showFeedback(fb, "success", "Plan genere."); loadSuggestions(); },
+            error: (d) => { let m = d; try { m = JSON.parse(d).message; } catch (e) { /* ignore */ } showFeedback(fb, "error", m); },
+          });
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+
+      document.getElementById("bulkAccept").addEventListener("click", () => bulkStatus("accepted"));
+      document.getElementById("bulkReject").addEventListener("click", () => bulkStatus("rejected"));
+
+      if (state.runId) loadSuggestions();
+    }
+
+    async function loadSuggestions() {
+      const host = document.getElementById("suggList");
+      if (!host || !state.runId) return;
+      const items = await apiRequest("/runs/" + state.runId + "/suggestions").catch(() => []);
+      if (!items.length) { host.innerHTML = '<div class="empty-state">Aucune suggestion.</div>'; return; }
+      host.innerHTML = '<div class="sugg-list">' + items.map((s) => `
+        <div class="sugg ${escapeHtml(s.status)}">
+          <div class="paths">${escapeHtml(s.old_path)} <span class="arrow">&rarr;</span> ${escapeHtml(s.new_path)}</div>
+          <div class="row" style="margin-top:4px">
+            <span class="badge info">${escapeHtml(s.action)}</span>
+            <span class="badge">${escapeHtml(s.source)}</span>
+            <span class="badge ${s.confidence === "elevee" ? "ok" : s.confidence === "faible" ? "danger" : "warn"}">${escapeHtml(s.confidence)}</span>
+            <span class="badge ${s.status === "accepted" ? "ok" : s.status === "rejected" ? "danger" : "warn"}">${escapeHtml(s.status)}</span>
+          </div>
+          ${s.rationale ? '<div class="why">' + escapeHtml(s.rationale) + "</div>" : ""}
+          <div class="acts">
+            <button class="btn secondary small" data-acc="${s.id}">Accepter</button>
+            <button class="btn ghost small" data-rej="${s.id}">Rejeter</button>
+          </div>
+        </div>`).join("") + "</div>";
+      host.querySelectorAll("[data-acc]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.acc, "accepted")));
+      host.querySelectorAll("[data-rej]").forEach((b) => b.addEventListener("click", () => setStatus(b.dataset.rej, "rejected")));
+    }
+
+    async function setStatus(id, status) {
+      try {
+        await apiRequest("/suggestions/" + id, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+        });
+        loadSuggestions();
+      } catch (e) { /* ignore */ }
+    }
+
+    async function bulkStatus(status) {
+      if (!state.runId) return;
+      const items = await apiRequest("/runs/" + state.runId + "/suggestions").catch(() => []);
+      const ids = items.map((s) => s.id);
+      if (!ids.length) return;
+      try {
+        await apiRequest("/suggestions/bulk-status", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, status }),
+        });
+        loadSuggestions();
+      } catch (e) { /* ignore */ }
+    }
+
+    // ---- Export ---------------------------------------------------------
+    function renderExport() {
+      const content = document.getElementById("content");
+      if (!state.runId) { content.innerHTML = '<div class="empty-state">Aucun plan genere. Lancez l optimisation dans l onglet Suggestions.</div>'; return; }
+      const base = API + "/runs/" + state.runId;
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Telecharger le plan</h2>
+          <div class="banner warn"><strong>Dry-run.</strong> Le script est execute par <strong>vous</strong> ; l application ne deplace, ne renomme et ne supprime rien.</div>
+          <div class="row">
+            <label class="grow"><div class="label">Suggestions a inclure</div>
+              <select id="expStatus"><option value="accepted">Acceptees seulement</option><option value="all">Toutes</option></select></label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <a class="btn primary" id="dlCsv" href="#">Plan CSV</a>
+            <a class="btn secondary" id="dlBat" href="#">Script .bat (Windows)</a>
+            <a class="btn secondary" id="dlSh" href="#">Script .sh (Unix)</a>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Enregistrer dans OneDrive (sortie)</h2>
+          <div class="banner">Ecrit le livrable genere dans le dossier OneDrive de <strong>sortie</strong> (configure dans Parametres). Seul le plan / script est ecrit ; aucune piece CATIA n est modifiee.</div>
+          <div class="row">
+            <label class="grow"><div class="label">Nom du fichier</div>
+              <input class="input" id="saveName" type="text" placeholder="plan_lot3" value="plan_lot3" /></label>
+            <label><div class="label">Format</div>
+              <select id="saveKind"><option value="csv">CSV</option><option value="bat">Script .bat</option><option value="sh">Script .sh</option></select></label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn primary" id="saveOutBtn">Enregistrer dans la sortie</button>
+            <span id="saveOutFeedback" class="grow"></span>
+          </div>
+        </div>
+      `;
+      const sync = () => {
+        const st = document.getElementById("expStatus").value;
+        document.getElementById("dlCsv").href = base + "/export.csv?status=" + st;
+        document.getElementById("dlBat").href = base + "/export.script?os=bat&status=" + st;
+        document.getElementById("dlSh").href = base + "/export.script?os=sh&status=" + st;
+      };
+      document.getElementById("expStatus").addEventListener("change", sync);
+      sync();
+
+      document.getElementById("saveOutBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("saveOutFeedback");
+        const filename = document.getElementById("saveName").value.trim();
+        if (!filename) { showFeedback(fb, "error", "Renseignez un nom de fichier."); return; }
+        try {
+          const r = await apiRequest("/runs/" + state.runId + "/export/save", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename,
+              kind: document.getElementById("saveKind").value,
+              status: document.getElementById("expStatus").value,
+            }),
+          });
+          showFeedback(fb, "success", "Ecrit : " + r.path + " (" + fmtBytes(r.bytes_written) + ").");
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+    }
+
+    // ---- Comparaison ----------------------------------------------------
+    async function renderDiff() {
+      const content = document.getElementById("content");
+      const imports = await apiRequest("/imports").catch(() => []);
+      if (imports.length < 2) {
+        content.innerHTML = '<div class="empty-state">Il faut au moins 2 imports (onglet Import) pour comparer.</div>';
+        return;
+      }
+      const opts = imports.map((i) => '<option value="' + i.id + '">' + escapeHtml(i.root_label) + " (" + i.node_count + ")</option>").join("");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Comparer deux imports</h2>
+          <div class="row">
+            <label class="grow"><div class="label">Reference (base)</div><select id="diffBase">${opts}</select></label>
+            <label class="grow"><div class="label">Candidat (autre)</div><select id="diffOther">${opts}</select></label>
+            <button class="btn primary" id="diffRun" style="margin-top:18px">Comparer</button>
+          </div>
+          <div id="diffFeedback" style="margin-top:8px"></div>
+        </div>
+        <div class="card"><div id="diffResult"><div class="empty-state">Lancez une comparaison.</div></div></div>
+      `;
+      document.getElementById("diffRun").addEventListener("click", async () => {
+        const base = document.getElementById("diffBase").value;
+        const other = document.getElementById("diffOther").value;
+        try {
+          const run = await apiRequest("/diff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base_import_id: base, other_import_id: other }) });
+          const entries = await apiRequest("/diff/" + run.id + "/entries");
+          const s = run.summary || {};
+          const badge = (e) => e.change_type === "added" ? "ok" : e.change_type === "removed" ? "danger" : "warn";
+          document.getElementById("diffResult").innerHTML = `
+            <h2 class="card-title">Resultat</h2>
+            <div class="kpi-grid">
+              <div class="kpi"><div class="label">Ajoutees</div><div class="kpi-value info">${s.added || 0}</div></div>
+              <div class="kpi"><div class="label">Supprimees</div><div class="kpi-value info">${s.removed || 0}</div></div>
+              <div class="kpi"><div class="label">Modifiees</div><div class="kpi-value info">${s.modified || 0}</div></div>
+            </div>
+            <div class="row" style="margin-top:10px"><a class="btn secondary" href="${API}/diff/${run.id}/export.csv">Export CSV</a></div>
+            <div class="sugg-list" style="margin-top:12px">${entries.map((e) => '<div class="sugg"><span class="badge ' + badge(e) + '">' + escapeHtml(e.change_type) + '</span> <span class="paths">' + escapeHtml(e.rel_path) + '</span>' + (e.detail ? ' <span class="why">' + escapeHtml(e.detail) + '</span>' : '') + '</div>').join("") || '<div class="empty-state">Aucune difference.</div>'}</div>
+          `;
+        } catch (e) { showFeedback(document.getElementById("diffFeedback"), "error", e.message); }
+      });
+    }
+
+    // ---- Verifications --------------------------------------------------
+    async function renderChecks() {
+      const content = document.getElementById("content");
+      if (!state.importId) { content.innerHTML = '<div class="empty-state">Aucun import courant (onglet Import).</div>'; return; }
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Lancer les verifications</h2>
+          <div class="row">
+            <label class="grow"><div class="label">Profondeur max toleree</div><input class="input" id="chkDepth" type="number" value="6" min="1" max="20" /></label>
+            <button class="btn primary" id="chkRun" style="margin-top:18px">Verifier</button>
+          </div>
+          <div id="chkFeedback" style="margin-top:8px"></div>
+        </div>
+        <div class="card"><div id="chkResult"><div class="empty-state">Lancez les verifications.</div></div></div>
+      `;
+      document.getElementById("chkRun").addEventListener("click", async () => {
+        const depth = parseInt(document.getElementById("chkDepth").value, 10) || 6;
+        try {
+          const run = await apiRequest("/imports/" + state.importId + "/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ max_depth: depth }) });
+          const results = await apiRequest("/checks/" + run.id + "/results");
+          const sev = (s) => s === "danger" ? "danger" : s === "info" ? "info" : "warn";
+          document.getElementById("chkResult").innerHTML = `
+            <h2 class="card-title">${results.length} violation(s)</h2>
+            <div class="row" style="margin-bottom:10px"><a class="btn secondary" href="${API}/checks/${run.id}/export.csv">Export CSV</a></div>
+            <div class="sugg-list">${results.map((r) => '<div class="sugg"><span class="badge ' + sev(r.severity) + '">' + escapeHtml(r.rule) + '</span> <span class="paths">' + escapeHtml(r.rel_path || "(global)") + '</span><div class="why">' + escapeHtml(r.message) + '</div></div>').join("") || '<div class="empty-state">Aucune violation.</div>'}</div>
+          `;
+        } catch (e) { showFeedback(document.getElementById("chkFeedback"), "error", e.message); }
+      });
+    }
+
+    // ---- Conversion -----------------------------------------------------
+    async function renderConversion() {
+      const content = document.getElementById("content");
+      if (!state.importId) { content.innerHTML = '<div class="empty-state">Aucun import courant (onglet Import).</div>'; return; }
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Plan de conversion CATIA 3D -> Composer</h2>
+          <div class="banner warn"><strong>Dry-run.</strong> Genere un mapping + un script Python (win32com) pilotant Composer, relisable (DRY_RUN par defaut). Aucune conversion n est lancee par l app.</div>
+          <button class="btn primary" id="convRun">Generer le plan</button>
+          <div id="convFeedback" style="margin-top:8px"></div>
+        </div>
+        <div class="card"><div id="convResult"><div class="empty-state">Generez le plan.</div></div></div>
+      `;
+      document.getElementById("convRun").addEventListener("click", async () => {
+        try {
+          const run = await apiRequest("/imports/" + state.importId + "/conversion", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+          const items = await apiRequest("/conversions/" + run.id + "/items");
+          document.getElementById("convResult").innerHTML = `
+            <h2 class="card-title">${items.length} fichier(s) convertible(s)</h2>
+            <div class="row" style="margin-bottom:10px">
+              <a class="btn secondary" href="${API}/conversions/${run.id}/export.csv">Export CSV</a>
+              <a class="btn secondary" href="${API}/conversions/${run.id}/export.script">Script Composer (Python)</a>
+            </div>
+            <div class="sugg-list">${items.map((it) => '<div class="sugg"><span class="badge info">' + escapeHtml(it.source_ext) + '</span> <span class="paths">' + escapeHtml(it.source_path) + ' <span class="arrow">&rarr;</span> ' + escapeHtml(it.target_path) + '</span></div>').join("") || '<div class="empty-state">Aucun fichier convertible.</div>'}</div>
+          `;
+        } catch (e) { showFeedback(document.getElementById("convFeedback"), "error", e.message); }
+      });
+    }
+
+    // ---- Remplacement ---------------------------------------------------
+    async function renderReplacement() {
+      const content = document.getElementById("content");
+      if (!state.importId) { content.innerHTML = '<div class="empty-state">Aucun import courant (onglet Import).</div>'; return; }
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Plan de remplacement de pieces</h2>
+          <div class="banner warn"><strong>Dry-run.</strong> Mapping CSV / JSON (colonnes <code>old, new</code>). Le POC produit un plan + une macro CATIA squelette, jamais execute.</div>
+          <label><div class="label">Mapping depuis la Source</div>
+            <div class="row" style="gap:6px"><input class="input grow" id="replPath" type="text" placeholder="Parcourir ou coller un chemin ...csv / .json" /><button class="btn secondary" type="button" id="replBrowse">Parcourir</button><button class="btn primary" type="button" id="replSrcBtn">Utiliser</button></div></label>
+          <div id="replPicker" style="display:none;border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px"></div>
+          <p class="label" style="margin:10px 0 4px">ou importer un fichier</p>
+          <div class="dropzone"><input type="file" id="replFile" accept=".csv,.json" /></div>
+          <div id="replFeedback" style="margin-top:8px"></div>
+        </div>
+        <div class="card"><div id="replResult"><div class="empty-state">Choisissez un mapping.</div></div></div>
+      `;
+      async function showReplResult(run) {
+        const items = await apiRequest("/replacements/" + run.id + "/items");
+        document.getElementById("replResult").innerHTML = `
+          <h2 class="card-title">${items.length} occurrence(s)</h2>
+          <div class="row" style="margin-bottom:10px">
+            <a class="btn secondary" href="${API}/replacements/${run.id}/export.csv">Export CSV</a>
+            <a class="btn secondary" href="${API}/replacements/${run.id}/export.macro">Macro CATIA</a>
+          </div>
+          <div class="sugg-list">${items.map((it) => '<div class="sugg"><span class="paths">' + escapeHtml(it.occurrence_path) + '</span><div class="why">' + escapeHtml(it.old_ref) + ' <span class="arrow">&rarr;</span> ' + escapeHtml(it.new_ref) + '</div></div>').join("") || '<div class="empty-state">Aucune occurrence trouvee.</div>'}</div>
+        `;
+      }
+      document.getElementById("replFile").addEventListener("change", async (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        const fd = new FormData(); fd.append("file", file);
+        try { await showReplResult(await apiRequest("/imports/" + state.importId + "/replacement", { method: "POST", body: fd })); }
+        catch (e) { showFeedback(document.getElementById("replFeedback"), "error", e.message); }
+      });
+      document.getElementById("replSrcBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("replFeedback");
+        const path = document.getElementById("replPath").value.trim();
+        if (!path) { showFeedback(fb, "error", "Choisissez un mapping dans la Source."); return; }
+        try {
+          await showReplResult(await apiRequest("/imports/" + state.importId + "/replacement/source", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: "input", path }),
+          }));
+          showFeedback(fb, "success", "Mapping applique.");
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+      setupPicker("replBrowse", "replPicker", "replPath", [".csv", ".json"]);
+    }
+
+    // ---- Colorisation ---------------------------------------------------
+    async function renderColorization() {
+      const content = document.getElementById("content");
+      if (!state.importId) { content.innerHTML = '<div class="empty-state">Aucun import courant (onglet Import).</div>'; return; }
+      const diffs = await apiRequest("/imports/" + state.importId + "/diffs").catch(() => []);
+      const diffOpts = diffs.map((d) => '<option value="' + d.id + '">comparaison ' + d.id.slice(0, 8) + '</option>').join("");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Coloriser les pieces</h2>
+          <div class="banner warn"><strong>Dry-run.</strong> Genere un mapping couleur (RGB) + une macro CATIA (<code>SetRealColor</code>) relisable. Rien n est applique.</div>
+          <div class="row">
+            <label class="grow"><div class="label">Strategie</div>
+              <select id="colStrat">
+                <option value="by_type">Par type d extension</option>
+                <option value="by_depth">Par profondeur</option>
+                <option value="by_change">Par etat (depuis une comparaison)</option>
+              </select></label>
+            <label class="grow" id="colDiffWrap" hidden><div class="label">Comparaison</div>
+              <select id="colDiff">${diffOpts || '<option value="">(aucune - lancez l onglet Comparaison)</option>'}</select></label>
+            <button class="btn primary" id="colRun" style="margin-top:18px">Coloriser</button>
+          </div>
+          <div id="colFeedback" style="margin-top:8px"></div>
+        </div>
+        <div class="card"><div id="colResult"><div class="empty-state">Lancez une colorisation.</div></div></div>
+      `;
+      const strat = document.getElementById("colStrat");
+      const diffWrap = document.getElementById("colDiffWrap");
+      strat.addEventListener("change", () => { diffWrap.hidden = strat.value !== "by_change"; });
+      document.getElementById("colRun").addEventListener("click", async () => {
+        const body = { strategy: strat.value };
+        if (strat.value === "by_change") {
+          const d = document.getElementById("colDiff").value;
+          if (!d) { showFeedback(document.getElementById("colFeedback"), "error", "Lancez d abord une comparaison (onglet Comparaison)."); return; }
+          body.diff_run_id = d;
+        }
+        try {
+          const run = await apiRequest("/imports/" + state.importId + "/colorization", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+          const items = await apiRequest("/colorizations/" + run.id + "/items");
+          document.getElementById("colResult").innerHTML = `
+            <h2 class="card-title">${items.length} piece(s) colorisee(s)</h2>
+            <div class="row" style="margin-bottom:10px">
+              <a class="btn secondary" href="${API}/colorizations/${run.id}/export.csv">Export CSV</a>
+              <a class="btn secondary" href="${API}/colorizations/${run.id}/export.composer.py">Script Composer (Python)</a>
+              <a class="btn secondary" href="${API}/colorizations/${run.id}/export.macro">Macro CATIA V5</a>
+              <a class="btn secondary" href="${API}/colorizations/${run.id}/simulation.svg" target="_blank">Simulation (SVG)</a>
+            </div>
+            <p class="label" style="margin-bottom:6px">Simulation - chaque piece dans sa couleur attribuee</p>
+            <div class="color-grid">${items.map((it) => { var lum = (it.color_r*299 + it.color_g*587 + it.color_b*114)/1000; var fg = lum > 140 ? "black" : "white"; return '<div class="color-tile" style="background:rgb(' + it.color_r + ',' + it.color_g + ',' + it.color_b + ');color:' + fg + '" title="' + escapeHtml(it.rel_path) + '"><div class="ct-name">' + escapeHtml(it.rel_path.split("/").pop()) + '</div><div class="ct-why">' + escapeHtml(it.reason) + '</div></div>'; }).join("")}</div>
+          `;
+        } catch (e) { showFeedback(document.getElementById("colFeedback"), "error", e.message); }
+      });
+    }
+
+    // ---- Selecteur de fichier reutilisable (navigue la Source, filtre par ext) ----
+    const pickerState = {};  // panelId -> { path, root, absPath, exts, target }
+
+    async function pickerLoad(panelId) {
+      const st = pickerState[panelId];
+      const panel = document.getElementById(panelId);
+      if (!panel || !st) return;
+      let data;
+      try {
+        data = await apiRequest("/browse/list", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "input", path: st.path }),
+        });
+      } catch (e) { panel.innerHTML = '<div class="empty-state">' + escapeHtml(e.message) + " (configurez la racine Source dans Parametres)</div>"; return; }
+      st.root = data.root; st.absPath = data.path;
+      const atRoot = data.path === data.root;
+      const items = (data.entries || []).filter((e) =>
+        e.kind === "folder" || !st.exts.length || st.exts.some((x) => e.name.toLowerCase().endsWith(x))
+      );
+      const rows = items.map((e) => e.kind === "folder"
+        ? '<div class="row" style="gap:6px;padding:3px 4px;align-items:center"><button class="btn ghost small" data-pkopen="' + escapeHtml(e.path) + '">Ouvrir</button><span class="node-folder grow">' + escapeHtml(e.name) + "/</span></div>"
+        : '<div class="row" style="gap:6px;padding:3px 4px;align-items:center"><button class="btn secondary small" data-pkfile="' + escapeHtml(e.path) + '">Choisir</button><span class="node-file grow">' + escapeHtml(e.name) + "</span><span class=\"node-size\">" + fmtBytes(e.size) + "</span></div>"
+      ).join("");
+      panel.innerHTML = '<div class="row" style="gap:6px;margin-bottom:6px;align-items:center"><button class="btn ghost small" id="' + panelId + '_up" ' + (atRoot ? "disabled" : "") + '>Remonter</button><code class="grow" style="overflow:hidden;text-overflow:ellipsis">' + escapeHtml(data.path) + "</code></div>"
+        + '<div style="max-height:240px;overflow:auto">' + (rows || '<div class="empty-state">Aucun element' + (st.exts.length ? " (" + st.exts.join(", ") + ")" : "") + " ici.</div>") + "</div>";
+      panel.onclick = function (ev) {
+        const op = ev.target.closest("[data-pkopen]");
+        if (op) { st.path = op.dataset.pkopen; pickerLoad(panelId); return; }
+        const f = ev.target.closest("[data-pkfile]");
+        if (f) {
+          const inp = document.getElementById(st.target);
+          if (inp) inp.value = f.dataset.pkfile;
+          panel.style.display = "none";
+          return;
+        }
+        if (ev.target.closest("#" + panelId + "_up")) { st.path = browseParent(st.absPath, st.root); pickerLoad(panelId); return; }
+      };
+    }
+
+    function setupPicker(toggleId, panelId, targetId, exts) {
+      pickerState[panelId] = { path: "", root: "", absPath: "", exts: exts || [], target: targetId };
+      const btn = document.getElementById(toggleId);
+      const panel = document.getElementById(panelId);
+      if (!btn || !panel) return;
+      btn.addEventListener("click", () => {
+        if (panel.style.display !== "block") { panel.style.display = "block"; pickerState[panelId].path = ""; pickerLoad(panelId); }
+        else { panel.style.display = "none"; }
+      });
+    }
+
+    // ---- Etape 1 : Identification (nomenclature .xlsm + DE .zip) ---------
+    function colorDot(it) {
+      if (!it.mono_color) return "";
+      return '<span title="' + it.color_r + ',' + it.color_g + ',' + it.color_b + '" style="display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--border);vertical-align:middle;background:rgb(' + it.color_r + ',' + it.color_g + ',' + it.color_b + ')"></span>';
+    }
+
+    async function loadNomenItems(runId, toTreatOnly) {
+      const box = document.getElementById("nomenResult");
+      if (!box) return;
+      const q = toTreatOnly ? "?to_treat=true" : "";
+      let items;
+      try { items = await apiRequest("/identification/" + runId + "/items" + q); }
+      catch (e) { box.innerHTML = '<div class="empty-state">' + escapeHtml(e.message) + "</div>"; return; }
+      const rows = items.map((it) =>
+        "<tr><td>" + escapeHtml(it.catpart) + "</td><td>" + escapeHtml(it.sin) + "</td><td>" + escapeHtml(it.version) + "</td>"
+        + '<td style="text-align:center">' + (it.to_treat ? '<span class="badge ok">oui</span>' : "") + "</td>"
+        + '<td style="text-align:center">' + colorDot(it) + "</td></tr>"
+      ).join("");
+      box.innerHTML = '<div class="row" style="gap:8px;margin:8px 0">'
+        + '<button class="btn ghost small" id="nomenAll">Tout</button>'
+        + '<button class="btn ghost small" id="nomenTreat">A traiter</button>'
+        + '<a class="btn secondary small" href="' + API + '/identification/' + runId + '/export.csv?to_treat=true">Export CSV a traiter</a>'
+        + '<span class="grow" style="color:var(--fg-dim);font-size:0.8rem">' + items.length + ' ligne(s)</span></div>'
+        + '<table class="table"><thead><tr><th>CATPart</th><th>SIN</th><th>Version</th><th>A traiter</th><th>Couleur</th></tr></thead><tbody>' + rows + "</tbody></table>";
+      document.getElementById("nomenAll").addEventListener("click", () => loadNomenItems(runId, false));
+      document.getElementById("nomenTreat").addEventListener("click", () => loadNomenItems(runId, true));
+    }
+
+    async function renderIdentification() {
+      const content = document.getElementById("content");
+      const runs = await apiRequest("/identification").catch(() => []);
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Analyser la nomenclature (.xlsm)</h2>
+          <div class="banner">Chemin sous la racine <strong>Source</strong> (onglet Parametres). Identifie les CATPart a traiter + les SIN mono-couleur.</div>
+          <div class="form">
+            <label><div class="label">Fichier nomenclature (.xlsm / .xlsx)</div>
+              <div class="row" style="gap:6px"><input class="input grow" id="nomenPath" type="text" placeholder="Parcourir ou coller un chemin ...xlsm" /><button class="btn secondary" type="button" id="nomenBrowse">Parcourir</button></div></label>
+            <div id="nomenPicker" style="display:none;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+            <div class="row"><button class="btn primary" id="nomenBtn">Analyser</button><span id="nomenFeedback" class="grow"></span></div>
+          </div>
+          <div id="nomenResult"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Donnees d entree (.zip)</h2>
+          <div class="form">
+            <label><div class="label">Fichier .zip DE</div>
+              <div class="row" style="gap:6px"><input class="input grow" id="zipPath" type="text" placeholder="Parcourir ou coller un chemin ...zip" /><button class="btn secondary" type="button" id="zipBrowse">Parcourir</button></div></label>
+            <div id="zipPicker" style="display:none;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+            <div class="row"><button class="btn secondary" id="zipBtn">Lister le contenu</button><span id="zipFeedback" class="grow"></span></div>
+          </div>
+          <div id="zipResult"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Nomenclatures analysees</h2>
+          ${runs.length ? '<div class="sugg-list">' + runs.map((r) =>
+            '<div class="sugg"><div class="row"><div class="grow"><strong>' + escapeHtml((r.source_ref || "").split(/[\\\\/]/).pop()) + '</strong> '
+            + '<span class="badge info">' + (r.summary.rows || 0) + ' lignes</span> '
+            + '<span class="badge ok">' + (r.summary.to_treat || 0) + ' a traiter</span> '
+            + '<span class="badge">' + (r.summary.mono_color || 0) + ' mono</span></div>'
+            + '<button class="btn secondary small" data-nomen="' + r.id + '">Voir</button>'
+            + '<button class="btn danger small" data-nomendel="' + r.id + '">Suppr.</button></div></div>').join("") + '</div>'
+            : '<div class="empty-state">Aucune nomenclature analysee.</div>'}
+        </div>
+      `;
+      document.getElementById("nomenBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("nomenFeedback");
+        const path = document.getElementById("nomenPath").value.trim();
+        if (!path) { showFeedback(fb, "error", "Renseignez un chemin."); return; }
+        try {
+          const run = await apiRequest("/identification/nomenclature", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: "input", path }),
+          });
+          showFeedback(fb, "success", run.summary.rows + " ligne(s), " + run.summary.to_treat + " a traiter, " + run.summary.mono_color + " mono-couleur. Colonnes: " + (run.summary.detected_columns || []).join(", "));
+          loadNomenItems(run.id, true);
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+      document.getElementById("zipBtn").addEventListener("click", async () => {
+        const fb = document.getElementById("zipFeedback");
+        const path = document.getElementById("zipPath").value.trim();
+        if (!path) { showFeedback(fb, "error", "Renseignez un chemin."); return; }
+        try {
+          const r = await apiRequest("/identification/zip", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: "input", path }),
+          });
+          const sample = r.entries.slice(0, 50).map((e) => '<div class="node-file">' + escapeHtml(e.name) + "</div>").join("");
+          document.getElementById("zipResult").innerHTML = '<p class="label" style="margin:8px 0">' + r.count + ' entree(s) (50 premieres)</p>' + sample;
+          showFeedback(fb, "success", r.count + " entree(s).");
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+      content.querySelectorAll("[data-nomen]").forEach((b) => b.addEventListener("click", () => loadNomenItems(b.dataset.nomen, false)));
+      content.querySelectorAll("[data-nomendel]").forEach((b) => b.addEventListener("click", async () => {
+        try { await apiRequest("/identification/" + b.dataset.nomendel, { method: "DELETE" }); renderIdentification(); } catch (e) { /* ignore */ }
+      }));
+      setupPicker("nomenBrowse", "nomenPicker", "nomenPath", [".xlsm", ".xlsx"]);
+      setupPicker("zipBrowse", "zipPicker", "zipPath", [".zip"]);
+    }
+
+    // ---- Helper SMGXML : affiche le resultat d un run -------------------
+    async function showSmgxmlResult(boxId, run) {
+      const box = document.getElementById(boxId);
+      let changes = [];
+      try { changes = await apiRequest("/smgxml/" + run.id + "/changes"); } catch (e) { /* ignore */ }
+      const rows = changes.slice(0, 200).map((c) =>
+        "<tr><td>" + escapeHtml(c.target) + "</td><td>" + escapeHtml(c.change_type) + "</td><td>" + escapeHtml(c.old_value) + "</td><td>" + escapeHtml(c.new_value) + "</td></tr>"
+      ).join("");
+      box.innerHTML = '<div class="banner ' + (run.applied ? "" : "warn") + '">' + (run.applied
+            ? "Applique. Sauvegarde : <code>" + escapeHtml(run.backup_path || "(aucune)") + "</code>"
+            : "Dry-run : " + run.summary.changes + " changement(s) calcule(s), <strong>rien ecrit</strong>.") + "</div>"
+        + (changes.length ? '<table class="table"><thead><tr><th>Cible</th><th>Type</th><th>Avant</th><th>Apres</th></tr></thead><tbody>' + rows + "</tbody></table>"
+            : '<div class="empty-state">Aucun changement.</div>');
+    }
+
+    // ---- Etape 3 : SMGXML couleur ---------------------------------------
+    async function renderSmgxmlRecolor() {
+      const content = document.getElementById("content");
+      const runs = await apiRequest("/identification").catch(() => []);
+      const opts = runs.map((r) => '<option value="' + r.id + '">' + escapeHtml((r.source_ref || "").split(/[\\\\/]/).pop()) + " (" + (r.summary.mono_color || 0) + " mono)</option>").join("");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Appliquer la couleur dans le SMGXML</h2>
+          <div class="banner warn">Etape 3. Pose la couleur des pieces mono-couleur (depuis une nomenclature) sur les acteurs du SMGXML. <strong>Dry-run</strong> par defaut ; appliquer ecrit le fichier en conservant un <code>.bak</code>.</div>
+          <div class="form">
+            <label><div class="label">Fichier SMGXML (sous la racine Source)</div>
+              <div class="row" style="gap:6px"><input class="input grow" id="smgPath" type="text" placeholder="Parcourir ou coller un chemin ...smgxml" /><button class="btn secondary" type="button" id="smgBrowse">Parcourir</button></div></label>
+            <div id="smgPicker" style="display:none;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+            <div class="row">
+              <label class="grow"><div class="label">Nomenclature (SIN mono-couleur)</div>
+                <select id="smgNomen">${opts || '<option value="">(aucune - analysez d abord une nomenclature)</option>'}</select></label>
+              <label><div class="label">Correspondance</div>
+                <select id="smgMatch"><option value="sin">par SIN</option><option value="catpart">par CATPart</option></select></label>
+            </div>
+            <label class="switch-row" style="justify-content:flex-start;gap:8px;cursor:pointer"><input type="checkbox" id="smgApply" /> Appliquer (ecrit le SMGXML, .bak conserve)</label>
+            <div class="row"><button class="btn primary" id="smgBtn">Lancer</button><span id="smgFeedback" class="grow"></span></div>
+          </div>
+          <div id="smgResult"></div>
+        </div>
+      `;
+      bindSmgxmlAction("recolor");
+    }
+
+    // ---- Etape 4 : SMGXML renommage -------------------------------------
+    async function renderSmgxmlRename() {
+      const content = document.getElementById("content");
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Renommer des pieces dans le SMGXML</h2>
+          <div class="banner warn">Etape 4. Remplace le nom de l ancienne piece par la nouvelle (attributs + references). <strong>Dry-run</strong> par defaut ; appliquer ecrit le fichier en conservant un <code>.bak</code>.</div>
+          <div class="form">
+            <label><div class="label">Fichier SMGXML (sous la racine Source)</div>
+              <div class="row" style="gap:6px"><input class="input grow" id="smgPath" type="text" placeholder="Parcourir ou coller un chemin ...smgxml" /><button class="btn secondary" type="button" id="smgBrowse">Parcourir</button></div></label>
+            <div id="smgPicker" style="display:none;border:1px solid var(--border);border-radius:6px;padding:8px"></div>
+            <label><div class="label">Correspondances (une par ligne : ancien=nouveau)</div>
+              <textarea class="input" id="smgMap" rows="6" placeholder="LEAP_U320_n-1.CATPart=LEAP_U320_n.CATPart"></textarea></label>
+            <label class="switch-row" style="justify-content:flex-start;gap:8px;cursor:pointer"><input type="checkbox" id="smgApply" /> Appliquer (ecrit le SMGXML, .bak conserve)</label>
+            <div class="row"><button class="btn primary" id="smgBtn">Lancer</button><span id="smgFeedback" class="grow"></span></div>
+          </div>
+          <div id="smgResult"></div>
+        </div>
+      `;
+      bindSmgxmlAction("rename");
+    }
+
+    function parseRenameMap(text) {
+      const out = [];
+      (text || "").split(/\n/).forEach((line) => {
+        const m = line.split(/=|;/);
+        if (m.length >= 2 && m[0].trim() && m[1].trim()) out.push({ old: m[0].trim(), new: m.slice(1).join("=").trim() });
+      });
+      return out;
+    }
+
+    function bindSmgxmlAction(operation) {
+      setupPicker("smgBrowse", "smgPicker", "smgPath", [".smgxml", ".smg", ".xml"]);
+      const btn = document.getElementById("smgBtn");
+      let armed = false, timer = null;
+      btn.addEventListener("click", async () => {
+        const fb = document.getElementById("smgFeedback");
+        const path = document.getElementById("smgPath").value.trim();
+        if (!path) { showFeedback(fb, "error", "Renseignez le chemin du SMGXML."); return; }
+        const apply = document.getElementById("smgApply").checked;
+        let body = { scope: "input", path, apply };
+        if (operation === "recolor") {
+          const nomen = document.getElementById("smgNomen").value;
+          if (!nomen) { showFeedback(fb, "error", "Choisissez une nomenclature."); return; }
+          body.nomenclature_run_id = nomen;
+          body.match_by = document.getElementById("smgMatch").value;
+        } else {
+          const mapping = parseRenameMap(document.getElementById("smgMap").value);
+          if (!mapping.length) { showFeedback(fb, "error", "Ajoutez au moins une correspondance ancien=nouveau."); return; }
+          body.mapping = mapping;
+        }
+        // Ecriture = action a confirmer (double-clic).
+        if (apply && !armed) {
+          armed = true; btn.textContent = "Cliquer encore pour ecrire";
+          timer = setTimeout(() => { armed = false; btn.textContent = "Lancer"; }, 3000);
+          return;
+        }
+        clearTimeout(timer); armed = false; btn.textContent = "Lancer";
+        try {
+          const run = await apiRequest("/smgxml/" + operation, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          showFeedback(fb, "success", run.applied ? "Applique (" + run.summary.changes + " changements)." : "Dry-run : " + run.summary.changes + " changement(s).");
+          showSmgxmlResult("smgResult", run);
+        } catch (e) { showFeedback(fb, "error", e.message); }
+      });
+    }
+
+    // ---- Etape 5 : Controle Qualite (checklist) -------------------------
+    function qcStatusBtns(item) {
+      const opts = [["ok", "OK", "ok"], ["ko", "KO", "danger"], ["na", "N/A", "off"]];
+      return opts.map(([val, lbl, cls]) =>
+        '<button class="btn ' + (item.status === val ? "primary" : "ghost") + ' small" data-qcset="' + item.id + '" data-qcval="' + val + '">' + lbl + "</button>"
+      ).join("");
+    }
+
+    async function loadQc(checklistId) {
+      const box = document.getElementById("qcDetail");
+      if (!box) return;
+      let cl;
+      try { cl = await apiRequest("/qc/checklists/" + checklistId); }
+      catch (e) { box.innerHTML = '<div class="empty-state">' + escapeHtml(e.message) + "</div>"; return; }
+      const s = cl.summary;
+      const rows = cl.items.map((it) =>
+        '<div class="card" style="padding:10px;margin-bottom:8px">'
+        + '<div class="row" style="align-items:center;gap:8px"><span class="badge">' + escapeHtml(it.category || "-") + "</span>"
+        + '<span class="grow">' + escapeHtml(it.label) + "</span>" + qcStatusBtns(it) + "</div>"
+        + '<input class="input" data-qccomment="' + it.id + '" style="margin-top:6px" placeholder="Commentaire" value="' + escapeHtml(it.comment) + '" /></div>'
+      ).join("");
+      box.innerHTML = '<div class="row" style="gap:8px;margin-bottom:8px;align-items:center">'
+        + '<strong class="grow">' + escapeHtml(cl.title) + "</strong>"
+        + '<span class="badge ok">' + s.ok + " OK</span> <span class=\"badge danger\">" + s.ko + ' KO</span> <span class="badge off">' + s.na + " N/A</span> <span class=\"badge info\">" + s.done + "/" + s.total + "</span>"
+        + '<a class="btn secondary small" href="' + API + "/qc/checklists/" + checklistId + '/export.csv">Export CSV</a></div>'
+        + rows;
+      box.querySelectorAll("[data-qcset]").forEach((b) => b.addEventListener("click", async () => {
+        try {
+          await apiRequest("/qc/items/" + b.dataset.qcset, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: b.dataset.qcval }) });
+          loadQc(checklistId);
+        } catch (e) { /* ignore */ }
+      }));
+      box.querySelectorAll("[data-qccomment]").forEach((inp) => inp.addEventListener("change", async () => {
+        try { await apiRequest("/qc/items/" + inp.dataset.qccomment, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ comment: inp.value }) }); } catch (e) { /* ignore */ }
+      }));
+    }
+
+    async function renderQc() {
+      const content = document.getElementById("content");
+      const lists = await apiRequest("/qc/checklists").catch(() => []);
+      content.innerHTML = `
+        <div class="card">
+          <h2 class="card-title">Checklist Controle Qualite</h2>
+          <div class="banner">Etape 5. Verification des pieces dans l assemblage, facon revue. Cochez OK / KO / N/A et commentez chaque point.</div>
+          <div class="row" style="gap:8px">
+            <input class="input grow" id="qcTitle" type="text" placeholder="Titre (ex: QC Lot 3 - U320 n)" value="Controle qualite - assemblage" />
+            <button class="btn primary" id="qcNew">Nouvelle checklist (modele assemblage)</button>
+          </div>
+          ${lists.length ? '<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">' + lists.map((c) =>
+            '<button class="btn secondary small" data-qcopen="' + c.id + '">' + escapeHtml(c.title) + " (" + c.summary.done + "/" + c.summary.total + ")</button>"
+            + '<button class="btn danger small" data-qcdel="' + c.id + '">x</button>').join("") + "</div>" : ""}
+        </div>
+        <div id="qcDetail"></div>
+      `;
+      document.getElementById("qcNew").addEventListener("click", async () => {
+        try {
+          const cl = await apiRequest("/qc/checklists", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: document.getElementById("qcTitle").value.trim(), template: "assembly" }) });
+          renderQc();
+          setTimeout(() => loadQc(cl.id), 100);
+        } catch (e) { /* ignore */ }
+      });
+      content.querySelectorAll("[data-qcopen]").forEach((b) => b.addEventListener("click", () => loadQc(b.dataset.qcopen)));
+      content.querySelectorAll("[data-qcdel]").forEach((b) => b.addEventListener("click", async () => {
+        try { await apiRequest("/qc/checklists/" + b.dataset.qcdel, { method: "DELETE" }); renderQc(); } catch (e) { /* ignore */ }
+      }));
+      if (lists.length) loadQc(lists[0].id);
+    }
+
+    // ---- Indicateur global LLM (sidebar) --------------------------------
+    function llmBadgeClass(state) {
+      if (state === "ok") return "badge ok";
+      if (state === "disabled") return "badge off";
+      return "badge warn"; // not_configured / inconnu
+    }
+    function llmBadgeLabel(state) {
+      if (state === "ok") return "ON";
+      if (state === "disabled") return "OFF";
+      if (state === "not_configured") return "NO KEY";
+      return "?";
+    }
+    async function refreshLlmStatus() {
+      const health = await apiRequest("/health").catch(() => null);
+      const badge = document.getElementById("llmBadge");
+      if (!badge) return;
+      const state = health ? health.llm : "?";
+      badge.className = llmBadgeClass(state);
+      badge.textContent = llmBadgeLabel(state);
+    }
+
+    // Bootstrap
+    refreshLlmStatus();
+    navigate("home");
+  </script>
+</body>
+</html>
