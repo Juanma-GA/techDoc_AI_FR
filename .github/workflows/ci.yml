@@ -1,9 +1,9 @@
 name: CI
 
 # Garde la branche main saine avant deploiement (l'IT deploie depuis main).
-# Perimetre : ftm — backend (pytest + check_standard) et frontend (typecheck +
-# build, le "pnpm build" demande par l'IT). CI seule, pas de deploiement.
-# Ecart au standard "pas de CI" assume — voir apps/ftm/README.md.
+# Perimetre : ftm + corpus-agent — backend (pytest, + check_standard pour ftm)
+# et frontend (build, le "pnpm build" demande par l'IT). CI seule, pas de
+# deploiement. Ecart au standard "pas de CI" assume — voir les README d'app.
 # Pas de cache (pip/pnpm) : le repo ne versionne pas de lockfile.
 
 on:
@@ -65,3 +65,45 @@ jobs:
 
       - name: Typecheck + build ftm frontend
         run: pnpm --filter "@apps/ftm-frontend" build
+
+  corpus-agent-backend:
+    name: corpus-agent backend (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install corpus-agent backend (+ dev deps)
+        run: python -m pip install --upgrade pip && pip install -e "./apps/corpus-agent/backend[dev]"
+
+      - name: Run corpus-agent backend tests
+        working-directory: apps/corpus-agent/backend
+        run: pytest -q
+
+  corpus-agent-frontend:
+    name: corpus-agent frontend (build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install workspace deps
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build corpus-agent frontend
+        run: pnpm --filter "@apps/corpus-agent-frontend" build
