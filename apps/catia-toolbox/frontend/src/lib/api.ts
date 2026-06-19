@@ -125,7 +125,8 @@ export type SettingsDto = {
   base_url: string;
   chat_model: string;
   embed_model: string;
-  llm_enabled?: boolean;
+  llm_enabled: boolean;
+  llm_tested?: boolean;
   onedrive_input_root: string;
   onedrive_output_root: string;
 };
@@ -165,6 +166,12 @@ export type BrowseListDto = {
   entries: BrowseEntryDto[];
 };
 
+export type BrowsePreviewDto = {
+  sheets: string[];
+  sheet: string;
+  rows: string[][];
+};
+
 export type ExportSaveDto = { path: string; bytes_written: number };
 
 export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
@@ -174,6 +181,14 @@ export type AdminStatsDto = {
   nodes: number;
   runs: number;
   suggestions: number;
+  diffs: number;
+  checks: number;
+  conversions: number;
+  replacements: number;
+  colorizations: number;
+  nomenclatures: number;
+  smgxml_runs: number;
+  qc_checklists: number;
   total_size_bytes: number;
 };
 
@@ -253,6 +268,141 @@ export type ColorizationItemDto = {
 };
 export type ColorizationInput = { strategy: string; diff_run_id?: string };
 
+// ----- Health --------------------------------------------------------------
+
+export type LlmState = "ok" | "untested" | "not_configured" | "disabled";
+
+export type HealthDto = {
+  status: string;
+  version: string;
+  db: string;
+  llm: LlmState;
+};
+
+// ----- Etape 1 : Identification (nomenclature .xlsm + DE .zip) --------------
+
+export type NomenclatureRunDto = {
+  id: string;
+  source_ref: string;
+  sheet: string;
+  status: string;
+  summary: Record<string, number | string[] | string>;
+  created_at: string;
+};
+
+export type NomenclatureItemDto = {
+  id: string;
+  catpart: string;
+  designation: string;
+  sin: string;
+  version: string;
+  to_treat: boolean;
+  mono_color: boolean;
+  color_r: number;
+  color_g: number;
+  color_b: number;
+  source_row: number;
+};
+
+export type NomenclaturePreviewDto = {
+  sheets: string[];
+  sheet: string;
+  header_row_detected: number;
+  columns_detected: string[];
+  columns_map: Record<string, number>;
+  rows: string[][];
+};
+
+export type NomenclatureMapping = {
+  header_row: number;
+  catpart: number;
+  designation?: number;
+  sin?: number;
+  version?: number;
+  to_treat?: number;
+  color?: number;
+};
+
+export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
+
+export type ZipListDto = { path: string; count: number; entries: ZipEntryDto[] };
+
+// ----- Etapes 3 & 4 : SMGXML -----------------------------------------------
+
+export type SmgxmlRunDto = {
+  id: string;
+  source_ref: string;
+  operation: string;
+  status: string;
+  applied: boolean;
+  backup_path: string;
+  output_path: string;
+  summary: Record<string, number>;
+  created_at: string;
+};
+
+export type SmgxmlChangeDto = {
+  id: string;
+  target: string;
+  change_type: string;
+  old_value: string;
+  new_value: string;
+};
+
+export type RenamePair = { old: string; new: string };
+
+export type SmgxmlRecolorInput = {
+  scope?: BrowseScope;
+  path: string;
+  nomenclature_run_id: string;
+  match_by?: "sin" | "catpart";
+  apply?: boolean;
+};
+
+export type SmgxmlRenameInput = {
+  scope?: BrowseScope;
+  path: string;
+  mapping: RenamePair[];
+  apply?: boolean;
+};
+
+// ----- Etape 5 : Controle Qualite (checklist) ------------------------------
+
+export type QcItemDto = {
+  id: string;
+  label: string;
+  category: string;
+  status: "pending" | "ok" | "ko" | "na";
+  comment: string;
+  position: number;
+};
+
+export type QcSummaryDto = {
+  pending: number;
+  ok: number;
+  ko: number;
+  na: number;
+  done: number;
+  total: number;
+};
+
+export type QcChecklistDto = {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  items: QcItemDto[];
+  summary: QcSummaryDto;
+};
+
+export type QcChecklistCreateInput = {
+  title?: string;
+  template?: string | null;
+  items?: { label: string; category?: string }[];
+};
+
+export type QcItemUpdateInput = { status?: string; comment?: string };
+
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
@@ -292,6 +442,12 @@ export const browseApi = {
     request<BrowseListDto>("/browse/files", {
       method: "POST",
       body: JSON.stringify({ scope, path }),
+    }),
+  /** Apercu generique d'un classeur Excel : onglets + premieres lignes. */
+  preview: (body: { scope?: BrowseScope; path: string; sheet?: string; rows?: number }) =>
+    request<BrowsePreviewDto>("/browse/preview", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", ...body }),
     }),
 };
 
@@ -356,6 +512,12 @@ export const replacementApi = {
     fd.append("file", file);
     return request<ReplacementRunDto>(`/imports/${importId}/replacement`, { method: "POST", body: fd });
   },
+  /** Mapping depuis un fichier de la Source (scope input) — preview /replacement/source. */
+  source: (importId: string, path: string, scope: BrowseScope = "input") =>
+    request<ReplacementRunDto>(`/imports/${importId}/replacement/source`, {
+      method: "POST",
+      body: JSON.stringify({ scope, path }),
+    }),
   items: (runId: string) => request<ReplacementItemDto[]>(`/replacements/${runId}/items`),
 };
 
@@ -376,6 +538,70 @@ export const adminApi = {
     request<{ scope: string; deleted: Record<string, number> }>(`/admin/reset/${scope}`, {
       method: "POST",
     }),
+  resetAll: () =>
+    request<{ scope: string; deleted: Record<string, number> }>("/admin/reset/all", {
+      method: "POST",
+    }),
+};
+
+export const healthApi = {
+  get: () => request<HealthDto>("/health"),
+};
+
+export const identificationApi = {
+  list: () => request<NomenclatureRunDto[]>("/identification"),
+  get: (id: string) => request<NomenclatureRunDto>(`/identification/${id}`),
+  preview: (body: { scope?: BrowseScope; path: string; sheet?: string; rows?: number }) =>
+    request<NomenclaturePreviewDto>("/identification/preview", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", ...body }),
+    }),
+  nomenclature: (body: {
+    scope?: BrowseScope;
+    path: string;
+    sheet?: string;
+    mapping?: NomenclatureMapping;
+  }) =>
+    request<NomenclatureRunDto>("/identification/nomenclature", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", ...body }),
+    }),
+  items: (id: string, toTreat?: boolean) => {
+    const qs = toTreat === undefined ? "" : `?to_treat=${toTreat}`;
+    return request<NomenclatureItemDto[]>(`/identification/${id}/items${qs}`);
+  },
+  zip: (body: { scope?: BrowseScope; path: string }) =>
+    request<ZipListDto>("/identification/zip", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", ...body }),
+    }),
+  remove: (id: string) => request<void>(`/identification/${id}`, { method: "DELETE" }),
+};
+
+export const smgxmlApi = {
+  list: () => request<SmgxmlRunDto[]>("/smgxml"),
+  get: (id: string) => request<SmgxmlRunDto>(`/smgxml/${id}`),
+  recolor: (body: SmgxmlRecolorInput) =>
+    request<SmgxmlRunDto>("/smgxml/recolor", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", match_by: "sin", apply: false, ...body }),
+    }),
+  rename: (body: SmgxmlRenameInput) =>
+    request<SmgxmlRunDto>("/smgxml/rename", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", apply: false, ...body }),
+    }),
+  changes: (id: string) => request<SmgxmlChangeDto[]>(`/smgxml/${id}/changes`),
+};
+
+export const qcApi = {
+  list: () => request<QcChecklistDto[]>("/qc/checklists"),
+  get: (id: string) => request<QcChecklistDto>(`/qc/checklists/${id}`),
+  create: (body: QcChecklistCreateInput) =>
+    request<QcChecklistDto>("/qc/checklists", { method: "POST", body: JSON.stringify(body) }),
+  remove: (id: string) => request<void>(`/qc/checklists/${id}`, { method: "DELETE" }),
+  setItem: (id: string, patch: QcItemUpdateInput) =>
+    request<QcItemDto>(`/qc/items/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
 };
 
 /** URL de telechargement direct (CSV / script) — consommee via <a href>. */
@@ -394,6 +620,9 @@ export const exportUrl = {
   colorizationMacro: (runId: string) => `${API_BASE}/colorizations/${runId}/export.macro`,
   colorizationComposer: (runId: string) => `${API_BASE}/colorizations/${runId}/export.composer.py`,
   colorizationSvg: (runId: string) => `${API_BASE}/colorizations/${runId}/simulation.svg`,
+  identificationCsv: (runId: string, toTreat = true) =>
+    `${API_BASE}/identification/${runId}/export.csv?to_treat=${toTreat}`,
+  qcCsv: (checklistId: string) => `${API_BASE}/qc/checklists/${checklistId}/export.csv`,
 };
 
 // ---------------------------------------------------------------------------

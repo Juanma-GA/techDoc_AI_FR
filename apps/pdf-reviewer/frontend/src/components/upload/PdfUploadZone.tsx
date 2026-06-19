@@ -29,15 +29,13 @@ export function PdfUploadZone({ onFile, disabled }: Props) {
   return (
     <div
       {...getRootProps()}
-      className={[
-        "flex h-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-bg-2 text-center transition-colors",
-        isDragActive ? "border-bright bg-card-hover" : "border-md hover:bg-card-hover",
-        disabled ? "cursor-not-allowed opacity-50" : "",
-      ].join(" ")}
+      className={["dropzone", isDragActive ? "over" : "", disabled ? "disabled" : ""]
+        .filter(Boolean)
+        .join(" ")}
     >
       <input {...getInputProps()} aria-label={t("documents.upload.dropHint")} />
-      <UploadCloud size={28} className="text-fg-dim" aria-hidden="true" />
-      <p className="text-sm text-fg-dim">{t("documents.upload.dropHint")}</p>
+      <UploadCloud size={28} aria-hidden="true" />
+      <p>{t("documents.upload.dropHint")}</p>
     </div>
   );
 }

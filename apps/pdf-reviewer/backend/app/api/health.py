@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.mistral_settings import get_effective, get_llm_enabled, get_llm_tested
 from app.db.session import get_db
 
 
@@ -26,9 +27,21 @@ def health(db: Session = Depends(get_db)) -> dict[str, Any]:
 
     overall = "ok" if db_status == "ok" else "degraded"
 
+    # Green (configured = ON) only when: effective key present (DB or .env) +
+    # last test succeeded + LLM switch on. Otherwise: disabled /
+    # not_configured (no key) / untested (key present but test not passed).
+    if not get_llm_enabled(db):
+        llm = "disabled"
+    elif not get_effective(db)["api_key"]:
+        llm = "not_configured"
+    elif not get_llm_tested(db):
+        llm = "untested"
+    else:
+        llm = "configured"
+
     return {
         "status": overall,
         "version": settings.app_version,
         "db": db_status,
-        "llm": "configured" if settings.llm_configured else "not_configured",
+        "llm": llm,
     }

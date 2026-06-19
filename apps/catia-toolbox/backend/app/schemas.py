@@ -84,6 +84,22 @@ class BrowseListOut(BaseModel):
     entries: list[BrowseEntryOut] = Field(default_factory=list)
 
 
+class BrowsePreviewIn(BaseModel):
+    scope: str = Field(default="input")  # input | output
+    path: str = Field(..., min_length=1)
+    sheet: Optional[str] = None  # onglet a previsualiser (defaut : le premier)
+    rows: int = Field(default=15, ge=1, le=100)  # nombre de lignes a afficher
+
+
+class BrowsePreviewOut(BaseModel):
+    """Apercu generique d'un classeur Excel : onglets + premieres lignes.
+    Contrairement a `NomenclaturePreviewOut`, sans le mapping metier."""
+
+    sheets: list[str] = Field(default_factory=list)
+    sheet: str = ""
+    rows: list[list[str]] = Field(default_factory=list)
+
+
 # ----- Import par selection (fichiers ET dossiers) --------------------------
 
 

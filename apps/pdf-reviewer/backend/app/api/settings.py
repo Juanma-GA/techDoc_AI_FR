@@ -14,10 +14,14 @@ from app.core.mistral_settings import (
     get_ai_custom_prompt,
     get_disabled_s1000d,
     get_effective,
+    get_llm_enabled,
+    get_llm_tested,
     get_vision_enabled,
     save,
     set_ai_custom_prompt,
     set_disabled_s1000d,
+    set_llm_enabled,
+    set_llm_tested,
     set_vision_enabled,
 )
 from app.db.session import get_db
@@ -52,6 +56,8 @@ def _build_out(db: Session) -> MistralSettingsOut:
         chat_model=s["chat_model"],
         vision_model=s.get("vision_model", "pixtral-12b-2409"),
         vision_enabled=get_vision_enabled(db),
+        llm_enabled=get_llm_enabled(db),
+        llm_tested=get_llm_tested(db),
     )
 
 
@@ -72,9 +78,12 @@ def update_mistral_settings(
     # `vision_enabled` is stored separately (boolean flag, not in Mistral
     # client config). Pop it before delegating to `save()`.
     vision_enabled = payload.pop("vision_enabled", None)
+    llm_enabled = payload.pop("llm_enabled", None)
     save(db, payload)
     if vision_enabled is not None:
         set_vision_enabled(db, bool(vision_enabled))
+    if llm_enabled is not None:
+        set_llm_enabled(db, bool(llm_enabled))
     return _build_out(db)
 
 
@@ -92,8 +101,12 @@ def toggle_vision(body: VisionToggleIn, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/mistral/test", response_model=TestConnectionOut)
 def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
+    if not get_llm_enabled(db):
+        set_llm_tested(db, False)
+        return TestConnectionOut(ok=False, message="LLM desactive", models=[])
     s = get_effective(db)
     if not s["api_key"]:
+        set_llm_tested(db, False)
         return TestConnectionOut(ok=False, message="Aucune clé API configurée.", models=[])
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -102,6 +115,7 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
                 headers={"Authorization": f"Bearer {s['api_key']}"},
             )
         if r.status_code != 200:
+            set_llm_tested(db, False)
             return TestConnectionOut(
                 ok=False,
                 message=f"HTTP {r.status_code} — {r.text[:200]}",
@@ -109,6 +123,7 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
             )
         data = r.json() or {}
         ids = [m.get("id") for m in (data.get("data") or []) if m.get("id")]
+        set_llm_tested(db, True)
         return TestConnectionOut(
             ok=True,
             message=f"{len(ids)} modèle(s) accessible(s).",
@@ -118,6 +133,7 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         # Catch broad — Mistral test must never raise a 500 to the UI; any
         # network/SSL/proxy/parsing problem is reported as `ok=false`.
         logger.warning("mistral_test_failed", error=type(exc).__name__, message=str(exc))
+        set_llm_tested(db, False)
         return TestConnectionOut(
             ok=False,
             message=f"{type(exc).__name__}: {exc}",

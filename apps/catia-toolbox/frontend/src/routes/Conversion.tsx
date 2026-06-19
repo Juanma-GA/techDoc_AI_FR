@@ -1,6 +1,4 @@
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from "@internal/ui";
 import { useMutation } from "@tanstack/react-query";
-import { Boxes } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,56 +24,61 @@ export function Conversion() {
   });
 
   if (!importId) {
-    return <EmptyState icon={Boxes} title={t("conversion.noImport")} description={t("tree.noImportDesc")} />;
+    return (
+      <div className="empty-state">
+        <h3 className="card-title">{t("conversion.noImport")}</h3>
+        <p className="hint">{t("tree.noImportDesc")}</p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("conversion.title")}</h1>
-        <p className="text-fg-dim">{t("conversion.subtitle")}</p>
-      </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("conversion.planTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 rounded-sm border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
-            <strong>{t("export.dryRunTitle")}</strong> {t("conversion.dryRun")}
+    <div className="grow form" style={{ maxWidth: "56rem" }}>
+      <article className="card">
+        <h2 className="card-title">{t("conversion.planTitle")}</h2>
+        <p className="banner warn">
+          <strong>{t("export.dryRunTitle")}</strong> {t("conversion.dryRun")}
+        </p>
+        <button type="button" className="btn primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          {t("conversion.generate")}
+        </button>
+        {mutation.isError ? (
+          <p className="error" style={{ marginTop: "0.5rem" }}>
+            {(mutation.error as Error).message}
           </p>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-            {t("conversion.generate")}
-          </Button>
-        </CardContent>
-      </Card>
+        ) : null}
+      </article>
 
       {run ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("conversion.resultTitle", { count: items.length })}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-3 flex gap-2">
-              <a href={exportUrl.conversionCsv(run.id)}>
-                <Button variant="secondary" size="sm">{t("common.exportCsv")}</Button>
-              </a>
-              <a href={exportUrl.conversionScript(run.id)}>
-                <Button variant="secondary" size="sm">{t("conversion.composerScript")}</Button>
-              </a>
-            </div>
-            <ul className="flex flex-col gap-1">
+        <article className="card">
+          <h2 className="card-title">{t("conversion.resultTitle", { count: items.length })}</h2>
+          <div className="row" style={{ marginBottom: "0.75rem" }}>
+            <a href={exportUrl.conversionCsv(run.id)}>
+              <button type="button" className="btn secondary small">
+                {t("common.exportCsv")}
+              </button>
+            </a>
+            <a href={exportUrl.conversionScript(run.id)}>
+              <button type="button" className="btn secondary small">
+                {t("conversion.composerScript")}
+              </button>
+            </a>
+          </div>
+          {items.length === 0 ? (
+            <p className="hint">{t("conversion.noItems")}</p>
+          ) : (
+            <ul className="item-list">
               {items.map((it) => (
-                <li key={it.id} className="flex items-center gap-2 rounded-sm bg-bg-2 px-3 py-1.5 font-mono text-sm">
-                  <Badge variant="info">{it.source_ext}</Badge>
-                  <span className="break-all">
-                    {it.source_path} <span className="text-brand-blue-light">&rarr;</span> {it.target_path}
+                <li key={it.id} className="item-row">
+                  <span className="badge info">{it.source_ext}</span>
+                  <span className="item-main" style={{ fontFamily: '"JetBrains Mono", monospace', wordBreak: "break-all" }}>
+                    {it.source_path} <span className="label">&rarr;</span> {it.target_path}
                   </span>
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
+          )}
+        </article>
       ) : null}
     </div>
   );

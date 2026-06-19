@@ -3,12 +3,69 @@
     "title": "PDF Reviewer",
     "version": "v2"
   },
+  "llm": {
+    "label": "LLM",
+    "title": "LLM status (see Settings)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "UNTESTED",
+    "noKey": "NO KEY"
+  },
   "nav": {
     "section": "Navigation",
+    "dashboard": "Dashboard",
     "documents": "Documents",
     "standards": "Standards",
     "rules": "Rules",
+    "architecture": "Architecture",
+    "data": "Data",
     "settings": "Settings"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Aggregated suggestion indicators",
+    "kpis": "Key indicators",
+    "bySev": "Suggestions by severity",
+    "byKind": "Suggestions by rule kind",
+    "topDocs": "Top documents (open suggestions)",
+    "noOpen": "No open suggestions.",
+    "kpi.pdfs": "PDFs",
+    "kpi.open": "Open",
+    "kpi.applied": "Applied",
+    "kpi.rejected": "Rejected",
+    "kpi.total": "Total"
+  },
+  "arch": {
+    "title": "Architecture",
+    "subtitle": "Backend, frontend and user workflow",
+    "workflow": "User workflow",
+    "split.title": "Backend ↔ Frontend in 30 seconds",
+    "split.backLabel": "Backend",
+    "split.frontLabel": "Frontend",
+    "split.back": "Python 3.11+ · FastAPI under /api/v1/ · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic · PyMuPDF (PDF editing + image extraction) · httpx (Mistral chat + Pixtral vision) · structlog · SSE for analysis · /admin router for reset.",
+    "split.front": "React + Vite + TypeScript · TanStack Query · Zustand · react-pdf v9 · FR/EN i18n · clickable bbox overlays · accept/edit/reject suggestion panel · pages Documents · Standards · Rules · Data · Settings.",
+    "f1": "« Documents » tab → drop one or more PDFs + cascade active Standard/Version (in Settings). SHA-256 and auto-analysis in parallel.",
+    "f2": "« Run analysis » → the engine merges active standards catalogs + custom rules + unit conversions + (optional) AI enrichment + vision on extracted images.",
+    "f3": "Reviewer view: suggestions ordered by (page, span_index, id). original → proposed diff unless detection-only (structural rules, vision) where Accept is hidden.",
+    "f4": "Lifecycle: open → accepted → applied. On apply: stale siblings (overlapping text) are auto-rejected.",
+    "f5": "Dashboard: KPIs PDFs / suggestions open-applied-rejected / top docs / severity-kind breakdown.",
+    "f6": "Export edited PDF or rollback. Admin → /admin/wipe-suggestions (every status) or /admin/reset (DB + disk folders + orphans) for a full zero reset."
+  },
+  "data": {
+    "title": "Data",
+    "subtitle": "Overview and reset",
+    "overview": "Overview",
+    "reset": "Reset",
+    "resetWarn": "All these operations are irreversible. Custom rules and Mistral config are preserved.",
+    "resetSugs": "Wipe all suggestions",
+    "resetAll": "Delete everything (PDFs + suggestions + disk files)",
+    "confirmSugs": "Wipe EVERY suggestion (open, rejected, applied, edited)? Irreversible.",
+    "confirmAll": "Delete EVERY PDF, every suggestion, and clean disk storage? Irreversible.",
+    "wipedSugs": "{{count}} suggestion(s) deleted.",
+    "resetDone": "Reset done: {{docs}} document(s) deleted, {{folders}} folder(s) cleaned on disk.",
+    "kpi.pdfs": "PDFs",
+    "kpi.sugs": "Suggestions",
+    "kpi.rules": "Custom rules"
   },
   "common": {
     "loading": "Loading…",
@@ -28,7 +85,18 @@
     "upload.dropHint": "Drop a PDF here or click to browse",
     "upload.tooLarge": "File too large (max {{max}} MB)",
     "open": "Open",
-    "delete": "Delete document"
+    "delete": "Delete document",
+    "back": "← Back to documents",
+    "activeStandardLabel": "Active target standard:",
+    "changeStandard": "Change in Settings →",
+    "targetUnit": "Target unit system"
+  },
+  "status": {
+    "uploaded": "uploaded",
+    "analyzing": "analysing",
+    "analyzed": "analysed",
+    "edited": "edited",
+    "analysis_failed": "analysis failed"
   },
   "reviewer": {
     "toolbar.zoomIn": "Zoom in",

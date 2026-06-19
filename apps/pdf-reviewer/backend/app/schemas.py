@@ -285,6 +285,7 @@ class MistralSettingsIn(BaseModel):
     chat_model: str = "mistral-small-latest"
     vision_model: str = "pixtral-12b-2409"
     vision_enabled: Optional[bool] = None
+    llm_enabled: Optional[bool] = None
 
 
 class MistralSettingsOut(BaseModel):
@@ -294,6 +295,8 @@ class MistralSettingsOut(BaseModel):
     chat_model: str
     vision_model: str = "pixtral-12b-2409"
     vision_enabled: bool = False
+    llm_enabled: bool = True
+    llm_tested: bool = False
 
 
 class TestConnectionOut(BaseModel):

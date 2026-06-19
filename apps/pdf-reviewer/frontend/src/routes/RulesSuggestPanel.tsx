@@ -71,26 +71,26 @@ export function RulesSuggestPanel() {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 px-6 pt-4">
+      <div className="row" style={{ justifyContent: "space-between" }}>
         <button
           type="button"
           onClick={runSuggest}
           disabled={suggest.isPending}
-          className="inline-flex items-center gap-2 rounded-sm border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand hover:bg-brand/20 disabled:opacity-50"
+          className="btn secondary"
         >
           <Sparkles size={14} />
           {suggest.isPending ? t("rules.suggest.loading") : t("rules.suggest.cta")}
         </button>
-        {appliedMsg ? <span className="text-xs text-success">{appliedMsg}</span> : null}
+        {appliedMsg ? <span className="success">{appliedMsg}</span> : null}
       </div>
 
       {open ? (
-        <section className="mx-6 mt-3 rounded-lg border bg-card p-4">
-          <header className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="font-display text-fg">{t("rules.suggest.title")}</h2>
-            <div className="flex items-center gap-3">
+        <section className="card">
+          <header className="row" style={{ justifyContent: "space-between" }}>
+            <div className="card-title">{t("rules.suggest.title")}</div>
+            <div className="row">
               {suggest.data ? (
-                <span className="text-xs text-fg-dim">
+                <span className="card-sub">
                   {t("rules.suggest.docsAnalyzed", {
                     count: suggest.data.documents_analyzed,
                   })}
@@ -100,7 +100,7 @@ export function RulesSuggestPanel() {
                 type="button"
                 onClick={close}
                 aria-label={t("rules.suggest.close")}
-                className="rounded-sm border p-1 text-fg-dim hover:bg-bg-2"
+                className="btn ghost small"
               >
                 <X size={14} />
               </button>
@@ -108,49 +108,48 @@ export function RulesSuggestPanel() {
           </header>
 
           {suggest.isPending ? (
-            <p className="text-fg-dim">{t("rules.suggest.loading")}</p>
+            <p className="empty-state">{t("rules.suggest.loading")}</p>
           ) : suggest.isError ? (
-            <p className="text-xs text-danger">
+            <p className="error">
               {errorCode && t(`errors.${errorCode}`, { defaultValue: "" })
                 ? t(`errors.${errorCode}`)
                 : (suggest.error as Error).message}
             </p>
           ) : count === 0 ? (
-            <p className="text-fg-dim">{t("rules.suggest.empty")}</p>
+            <p className="empty-state">{t("rules.suggest.empty")}</p>
           ) : (
             <>
-              <ul className="flex flex-col gap-2">
+              <ul className="item-list">
                 {suggest.data!.suggestions.map((s, idx) => (
                   <li
                     key={`${s.kind}-${s.pattern}-${idx}`}
-                    className="flex items-start gap-3 rounded-sm border bg-bg-2 p-3"
+                    className="item-row"
                   >
                     <input
                       id={`pick-${idx}`}
                       type="checkbox"
                       checked={picks.has(idx)}
                       onChange={() => togglePick(idx)}
-                      className="mt-1"
                     />
-                    <label htmlFor={`pick-${idx}`} className="flex-1 cursor-pointer">
-                      <div className="font-mono text-sm text-fg">{s.name}</div>
-                      <div className="font-mono text-xs text-fg-dim">
+                    <label htmlFor={`pick-${idx}`} className="item-main" style={{ cursor: "pointer" }}>
+                      <div className="item-name">{s.name}</div>
+                      <div className="item-meta">
                         {t(`rules.kind.${s.kind}`)} · /{s.pattern}/
                         {s.replacement ? ` → ${s.replacement}` : ""} · {s.severity}
                       </div>
                       {s.message ? (
-                        <div className="mt-1 text-xs text-fg-dim">{s.message}</div>
+                        <div className="item-meta">{s.message}</div>
                       ) : null}
                     </label>
                   </li>
                 ))}
               </ul>
-              <div className="mt-3 flex justify-end">
+              <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
                 <button
                   type="button"
                   onClick={applySelected}
                   disabled={create.isPending || picks.size === 0}
-                  className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-fg hover:bg-brand-blue-light disabled:opacity-50"
+                  className="btn primary"
                 >
                   <Plus size={14} />
                   {t("rules.suggest.applySelected", { count: picks.size })}

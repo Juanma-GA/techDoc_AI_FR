@@ -5,12 +5,14 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_list_standards_returns_5_builtin(client: TestClient) -> None:
+def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     resp = client.get("/api/v1/standards")
     assert resp.status_code == 200
     body = resp.json()
     codes = {s["code"] for s in body}
-    assert codes == {"S1000D", "MAT10000", "S2000M", "ATA100", "ATA2200"}
+    # Les normes purement XML/données (S1000D, ATA2200, S2000M) ont été
+    # retirées du catalogue — seules restent les normes texte/rendu.
+    assert codes == {"ASD-STE100", "MAT10000", "ATA100"}
     for std in body:
         assert std["builtin"] is True
         assert len(std["versions"]) >= 1
@@ -38,7 +40,7 @@ def test_create_custom_standard_and_version(client: TestClient) -> None:
 
 def test_delete_builtin_standard_refused(client: TestClient) -> None:
     resp = client.get("/api/v1/standards")
-    builtin = next(s for s in resp.json() if s["code"] == "S1000D")
+    builtin = next(s for s in resp.json() if s["code"] == "MAT10000")
     delete = client.delete(f"/api/v1/standards/{builtin['id']}")
     assert delete.status_code == 409
     assert delete.json()["code"] == "STANDARD_BUILTIN_PROTECTED"

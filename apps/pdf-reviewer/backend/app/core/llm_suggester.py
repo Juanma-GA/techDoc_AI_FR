@@ -22,7 +22,7 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.mistral_settings import get_effective
+from app.core.mistral_settings import get_effective, get_llm_enabled
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
 try:
@@ -99,6 +99,12 @@ def _extract_first_json_object(text: str) -> str | None:
 
 
 def _call_mistral(db: Session, system: str, user: str) -> str:
+    if not get_llm_enabled(db):
+        raise AppError(
+            "LLM_DISABLED",
+            "Les suggestions IA sont desactivees dans Parametres.",
+            status_code=400,
+        )
     s = get_effective(db)
     if not s["api_key"]:
         raise AppError(
@@ -224,6 +230,8 @@ def scan_with_prompt(
     Returns a list of dicts `{original, proposed, message}` filtered to
     keep only items whose `original` appears verbatim in the page text.
     Empty list on Mistral failure or unparseable response."""
+    if not get_llm_enabled(db):
+        return []
     rules_block = _format_rules_block(s1000d_rules, custom_rules_list, custom_prompt)
     if not rules_block or not page_text.strip():
         return []
@@ -347,6 +355,8 @@ def suggest_rules_from_corpus(
     """
     if not samples:
         return []
+    if not get_llm_enabled(db):
+        return []
     user_payload = _format_standard_context(standard_context) + "Extraits :\n\n" + "\n\n".join(samples)
     content = _call_mistral(db, _RULE_SUGGEST_SYSTEM, user_payload)
     json_text = _extract_first_json_object(content) or content
@@ -420,6 +430,9 @@ def rephrase_batch(db: Session, rule_code: str, originals: list[str]) -> list[st
     """
     if not originals:
         return []
+    if not get_llm_enabled(db):
+        # LLM off: return the originals unchanged (no rewrite).
+        return [None] * len(originals)
     base_system = _RULE_PROMPTS.get(
         rule_code,
         "Tu es un éditeur de manuels de maintenance. Réécris chaque extrait selon la règle "

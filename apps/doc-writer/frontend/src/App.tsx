@@ -1,62 +1,82 @@
-import { ThemeToggle } from "@internal/ui";
-import { FileText, History, Settings as SettingsIcon, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { LlmBadge } from "./components/LlmBadge";
+import { ThemeToggleButton } from "./components/ThemeToggleButton";
+import { Architecture } from "./routes/Architecture";
+import { Data } from "./routes/Data";
 import { Documents } from "./routes/Documents";
 import { Generate } from "./routes/Generate";
 import { Sessions } from "./routes/Sessions";
 import { Settings } from "./routes/Settings";
 
+// Coquille pixel-identique au preview.html : .layout / .sidebar / .nav-item /
+// .lang-switch (CSS dans styles/preview-skin.css). Pas de logos sur les onglets.
 const navItems = [
-  { to: "/", labelKey: "nav.generate", icon: Sparkles },
-  { to: "/documents", labelKey: "nav.documents", icon: FileText },
-  { to: "/sessions", labelKey: "nav.sessions", icon: History },
-  { to: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
+  { to: "/", labelKey: "nav.generate" },
+  { to: "/documents", labelKey: "nav.documents" },
+  { to: "/sessions", labelKey: "nav.sessions" },
+  { to: "/architecture", labelKey: "nav.architecture" },
+  { to: "/data", labelKey: "nav.data" },
+  { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
+const LANGS = ["fr", "en"] as const;
+
 export function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const currentLang = (i18n.language || "fr").slice(0, 2);
+
   return (
-    <div className="flex h-screen bg-bg font-sans text-base text-fg">
-      <aside className="flex w-sidebar-w shrink-0 flex-col border-r bg-bg-2">
-        <div className="flex h-topbar-h items-center px-4">
-          <span className="font-display text-lg text-brand-blue-light">
-            {t("app.title")}
-          </span>
-        </div>
-        <nav className="flex flex-1 flex-col gap-1 p-2">
-          {navItems.map(({ to, labelKey, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                [
-                  "flex items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors",
-                  isActive
-                    ? "bg-card text-fg"
-                    : "text-fg-dim hover:bg-card-hover hover:text-fg",
-                ].join(" ")
-              }
-            >
-              <Icon size={16} aria-hidden="true" />
-              <span>{t(labelKey)}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-topbar-h items-center justify-end border-b px-4">
-          <ThemeToggle />
-        </header>
-        <main className="flex-1 overflow-auto p-6">
+    <div className="dw">
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-header">
+            <span className="brand">doc-writer</span>
+            <span className="label">v{t("app.version")}</span>
+            <ThemeToggleButton />
+          </div>
+
+          <LlmBadge />
+
+          <nav>
+            {navItems.map(({ to, labelKey }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  isActive ? "nav-item active" : "nav-item"
+                }
+              >
+                {t(labelKey)}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="lang-switch" role="group" aria-label="Language">
+            {LANGS.map((lng) => (
+              <button
+                key={lng}
+                type="button"
+                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
+                onClick={() => void i18n.changeLanguage(lng)}
+              >
+                {lng.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <main>
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Generate />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/sessions" element={<Sessions />} />
+              <Route path="/architecture" element={<Architecture />} />
+              <Route path="/data" element={<Data />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </ErrorBoundary>

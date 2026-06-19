@@ -9,8 +9,8 @@
 # Excluded from every check: legacy/, node_modules, .venv, __pycache__,
 # build/dist artefacts, Playwright reports, and the .git folder. The hex
 # check additionally tolerates tokens.json (the canonical palette),
-# tailwind-preset.ts (consumes tokens), theme.css (CSS variables for
-# dark/light), and any *.test.* / tests/ file.
+# tailwind-preset.ts (consumes tokens), theme.css + preview-skin.css (CSS
+# variables for dark/light), and any *.test.* / tests/ file.
 
 set -o pipefail
 
@@ -25,7 +25,7 @@ for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
 done
 
-step()  { printf "[%d/14] %-38s" "$1" "$2"; }
+step()  { printf "[%d/15] %-38s" "$1" "$2"; }
 pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
@@ -71,6 +71,7 @@ hits=$(grep -rEn "${exclude_args[@]}" \
   | grep -v '/tokens.json:' \
   | grep -v '/tailwind-preset.ts:' \
   | grep -v '/theme.css:' \
+  | grep -v '/preview-skin.css:' \
   | grep -vE '\.test\.(ts|tsx|py):' \
   | grep -vE '/tests/' \
   || true)
@@ -216,9 +217,26 @@ if [[ -z "$hits" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 14. Summary
+# 14. Interrupteur LLM : chaque app expose la cle llm_enabled
+#     (helper get_llm_enabled + champ settings), cf. STANDARD §3.7 / §6.
 # ------------------------------------------------------------------
-step 14 "Summary"
+step 14 "Interrupteur LLM (llm_enabled)"
+missing=""
+for d in apps/*/backend/app; do
+  [[ -d "$d" ]] || continue
+  if ! grep -rq 'llm_enabled' "$d" 2>/dev/null; then
+    poc="$(basename "$(dirname "$(dirname "$d")")")"
+    missing+="apps/$poc — manque l'interrupteur LLM 'llm_enabled' (get_llm_enabled + champ /settings)\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else
+  fail "Chaque app doit exposer l'interrupteur LLM 'llm_enabled' (STANDARD §3.7 / §6) :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 15. Summary
+# ------------------------------------------------------------------
+step 15 "Summary"
 if [[ $violations -gt 0 ]]; then
   printf " \033[31m%d violation(s)\033[0m\n" "$violations"
   exit 1

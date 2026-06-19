@@ -1,0 +1,21 @@
+{
+  "app": {
+    "title": "S1000D Extractor",
+    "version": "0.1.0"
+  },
+  "nav": {
+    "home": "Home",
+    "migration": "Migration",
+    "architecture": "Architecture",
+    "data": "Data",
+    "settings": "Settings"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "LLM status (see Settings)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "UNTESTED",
+    "noKey": "NO KEY"
+  }
+}

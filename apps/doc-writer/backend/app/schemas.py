@@ -37,6 +37,16 @@ class DocumentOut(BaseModel):
     uploaded_at: datetime
 
 
+class DocumentContentOut(BaseModel):
+    """Texte extrait d'un document (pour visualiser ce que le parsing/OCR a
+    produit). `char_count` aide a reperer une extraction vide/partielle."""
+    id: uuid.UUID
+    filename: str
+    kind: str
+    char_count: int
+    text: str
+
+
 class ZoneOut(BaseModel):
     id: str
     kind: str          # "placeholder" | "xxx" | "llm"
@@ -45,11 +55,132 @@ class ZoneOut(BaseModel):
     label: str
     location: str
     target: str = ""   # Pour kind="llm" : path encode vers shape/cellule.
+    active: bool = True  # False = exclue du remplissage a l'export.
+    instruction: str = ""  # Consignes libres pour le LLM de remplissage.
+    align: str = ""  # Alignement force : ""=auto|left|center|right|justify.
 
 
 class ZonesOut(BaseModel):
     zones: list[ZoneOut]
+    # Zones supprimees par l'utilisateur (soft-delete). Restaurables via
+    # POST /documents/<id>/zones/<zone_id>/restore. Permet d'annuler une
+    # suppression accidentelle sans re-analyser tout le template.
+    removed: list[ZoneOut] = Field(default_factory=list)
     llm_used: bool = False
+    # Zones LLM rejetees par les checks de coherence (cf.
+    # pptx_llm_analysis.analyse_template). Diagnostic uniquement, expose dans
+    # l'UI pour signaler que le LLM a propose des zones en conflit.
+    dropped_count: int = 0
+    # True = l'utilisateur (ou l'auto-validation) a confirme que les zones
+    # detectees sont correctes pour ce template. Tant que false, l'export
+    # PPTX est refuse (400 ZONES_NOT_VALIDATED). Auto-true si
+    # dropped_count == 0 && len(zones) > 0 au write_cache.
+    validated: bool = False
+
+
+class ZoneIn(BaseModel):
+    """Body pour POST /documents/<id>/zones — ajout manuel d'une zone.
+
+    kind est force a 'llm' (les zones regex viennent du parsing pptx, pas
+    d'un ajout manuel). target doit etre un id de shape ou cellule valide
+    visible dans GET /documents/<id>/structure.
+    """
+    target: str
+    label: str
+    slide_index: int
+    slide_title: str = ""
+    location: str = ""
+    instruction: str = ""
+    align: str = ""
+
+
+class ZonePatch(BaseModel):
+    label: Optional[str] = None
+    target: Optional[str] = None
+    active: Optional[bool] = None
+    instruction: Optional[str] = None
+    # ""=auto (preserve l'alignement du template) | left | center | right |
+    # justify. Validation des valeurs cote endpoint (patch_zone).
+    align: Optional[str] = None
+
+
+class ZonesValidateIn(BaseModel):
+    validated: bool
+
+
+class StructureBbox(BaseModel):
+    """Position d'une shape dans le slide, en EMU (English Metric Unit).
+    914400 EMU = 1 pouce. Utilise par le rendu SVG cote UI."""
+    left: int
+    top: int
+    width: int
+    height: int
+
+
+class StructureShape(BaseModel):
+    """Une shape ou cellule du template, candidate cible pour ajouter une zone.
+
+    `slide_index` et `slide_title` sont redondants avec `StructureSlide` parent
+    mais utiles pour l'UI quand on construit une liste flat des shapes
+    (formulaire 'Ajouter une zone').
+    """
+    id: str
+    kind: str                      # "text_box" | "table_cell"
+    slide_index: int
+    slide_title: str
+    location: str
+    text: str                      # contenu actuel (tronque, max 300 chars)
+    bbox: Optional[StructureBbox] = None
+
+
+class StructureSlide(BaseModel):
+    index: int
+    title: str
+    shapes: list[StructureShape]
+
+
+class StructureOut(BaseModel):
+    # Dimensions du slide en EMU pour cadrer le viewBox du SVG.
+    slide_width_emu: int
+    slide_height_emu: int
+    slides: list[StructureSlide]
+
+
+class ZonesBulkDeleteIn(BaseModel):
+    """Body pour POST /documents/<id>/zones/bulk-delete."""
+    ids: list[str] = Field(default_factory=list)
+
+
+# ----- Apercu PPTX editable (preview/render decouples) -----------------------
+
+
+class PptxPreviewOut(BaseModel):
+    """Reponse de POST /sessions/<id>/preview-pptx : zones + mapping Mistral
+    a editer cote UI avant le rendu definitif."""
+    zones: list[ZoneOut]
+    mapping: dict[str, str] = Field(default_factory=dict)
+
+
+class PptxRenderIn(BaseModel):
+    """Body de POST /sessions/<id>/render-pptx : mapping (potentiellement
+    edite par l'utilisateur dans la modal d'apercu)."""
+    mapping: dict[str, str] = Field(default_factory=dict)
+    filename: Optional[str] = None
+
+
+class RefillZonesIn(BaseModel):
+    """Body de POST /sessions/<id>/refill-zones : re-genere via Mistral le
+    contenu pour un sous-ensemble de zones. `force=True` ajoute une
+    instruction qui relache la regle de pertinence (utile pour combler des
+    zones vides ou apres edit manuel rate)."""
+    zone_ids: list[str] = Field(default_factory=list)
+    force: bool = False
+
+
+class RefillZonesOut(BaseModel):
+    """Subset du mapping pour les zones rejoues seulement. Le client fait le
+    merge avec le mapping en cours dans la modal."""
+    mapping: dict[str, str] = Field(default_factory=dict)
 
 
 class UploadItemResult(BaseModel):
@@ -147,6 +278,9 @@ class SettingsIn(BaseModel):
     base_url: Optional[str] = None
     chat_model: Optional[str] = None
     embed_model: Optional[str] = None
+    vision_model: Optional[str] = None
+    ocr_model: Optional[str] = None
+    llm_enabled: Optional[bool] = None
 
 
 class SettingsOut(BaseModel):
@@ -154,12 +288,35 @@ class SettingsOut(BaseModel):
     base_url: str
     chat_model: str
     embed_model: str
+    vision_model: str
+    ocr_model: str
+    llm_enabled: bool
+    llm_tested: bool = False
 
 
 class TestConnectionOut(BaseModel):
     ok: bool
     models: list[str] = Field(default_factory=list)
     error: Optional[str] = None
+
+
+# ----- Prompts (editables runtime via /settings/prompts) ---------------------
+
+
+class PromptEntryOut(BaseModel):
+    value: str
+    is_default: bool
+
+
+class PromptsOut(BaseModel):
+    pptx_analysis: PromptEntryOut
+    pptx_fill: PromptEntryOut
+
+
+class PromptsIn(BaseModel):
+    # None = champ ignore (pas de changement). Chaine vide = reset au defaut.
+    pptx_analysis: Optional[str] = None
+    pptx_fill: Optional[str] = None
 
 
 # ----- Admin -----------------------------------------------------------------

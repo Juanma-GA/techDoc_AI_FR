@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import admin, documents, export, health, sessions
 from app.api import settings as settings_route
-from app.api.preview import render_preview
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -60,14 +59,14 @@ def create_app() -> FastAPI:
 
 
 def _mount_frontend(app: FastAPI) -> None:
-    """Sert le SPA Vite si `frontend/dist/` existe, sinon retombe sur le
-    preview HTML autonome (vanilla JS + design-tokens). Routes /api/v1/*
-    sont enregistrees AVANT, donc elles ont priorite.
+    """Sert l'app React buildee (`frontend/dist/`). React est obligatoire (plus
+    de preview HTML). Si le dist est absent, `/` renvoie un message 503 « build
+    requis ». Les routes `/api/v1/*` sont enregistrees AVANT, donc prioritaires.
     """
     if FRONTEND_DIST.is_dir():
         _mount_vite_dist(app)
     else:
-        _mount_preview(app)
+        _mount_missing_dist(app)
 
 
 def _mount_vite_dist(app: FastAPI) -> None:
@@ -77,6 +76,12 @@ def _mount_vite_dist(app: FastAPI) -> None:
 
     dist_resolved = FRONTEND_DIST.resolve()
     index_html = FRONTEND_DIST / "index.html"
+
+    # index.html ne doit JAMAIS etre mis en cache par le navigateur : sinon,
+    # apres un rebuild, il continue de pointer vers d'anciens assets hashes
+    # (et l'UI ne se met pas a jour). Les assets sous /assets sont hashes donc
+    # cacheables sans risque.
+    _NO_CACHE = {"Cache-Control": "no-store, no-cache, must-revalidate"}
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str) -> FileResponse:
@@ -89,19 +94,30 @@ def _mount_vite_dist(app: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=404) from exc
 
-        if candidate.is_file():
+        if candidate.is_file() and candidate.name != "index.html":
             return FileResponse(candidate)
         if not index_html.exists():
             raise HTTPException(status_code=500, detail="frontend dist incomplete")
-        return FileResponse(index_html)
+        return FileResponse(index_html, headers=_NO_CACHE)
 
 
-def _mount_preview(app: FastAPI) -> None:
-    """Fallback statique quand frontend/dist/ n'existe pas (Node absent)."""
+def _mount_missing_dist(app: FastAPI) -> None:
+    """Pas de `frontend/dist/` : plus de preview de repli. Message clair invitant
+    a builder le front (React obligatoire)."""
 
     @app.get("/", include_in_schema=False)
-    def preview_root() -> HTMLResponse:
-        return render_preview()
+    def _missing() -> HTMLResponse:
+        return HTMLResponse(
+            "<!doctype html><meta charset='utf-8'>"
+            "<body style='font-family:sans-serif;padding:40px;max-width:640px'>"
+            "<h1>Frontend non builde</h1>"
+            "<p>L'UI React n'est pas buildee. Lance <code>vite build</code> "
+            "(ou <code>pnpm build</code>) dans <code>frontend/</code> puis relance "
+            "le backend.</p>"
+            "<p>API disponible sur <a href='/api/v1/docs'>/api/v1/docs</a>.</p>"
+            "</body>",
+            status_code=503,
+        )
 
 
 app = create_app()

@@ -4,13 +4,13 @@ type Props = { children: ReactNode };
 type State = { error: Error | null };
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     // Pas de logging navigateur (interdit par check_standard.sh). Le backend
     // structlog capture l'incident via X-Request-Id au prochain appel.
     void error;
@@ -19,17 +19,24 @@ export class ErrorBoundary extends Component<Props, State> {
 
   reset = () => this.setState({ error: null });
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-          <h1 className="font-display text-xl text-fg">Une erreur est survenue</h1>
-          <p className="max-w-md text-fg-dim">{this.state.error.message}</p>
-          <button
-            type="button"
-            onClick={this.reset}
-            className="rounded-sm border border-md bg-card px-3 py-2 text-fg hover:bg-card-hover"
-          >
+        <div
+          style={{
+            display: "flex",
+            height: "100vh",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.75rem",
+            padding: "1.5rem",
+            textAlign: "center",
+          }}
+        >
+          <h1 style={{ fontFamily: '"Orbitron", sans-serif' }}>Une erreur est survenue</h1>
+          <p className="hint">{this.state.error.message}</p>
+          <button type="button" className="btn primary" onClick={this.reset}>
             Reessayer
           </button>
         </div>

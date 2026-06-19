@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.errors import AppError
-from app.core.mistral_client import MistralClient, MistralError
+from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
 from app.core.writer_engine import ensure_session_title, stream_answer
 from app.db.models import Message, Session as SessionRow
 from app.db.session import SessionLocal, get_db
@@ -80,6 +80,17 @@ async def ask(session_id: uuid.UUID, body: AskIn, db: Session = Depends(get_db))
             "SESSION_NOT_FOUND", "Session introuvable.", status_code=404,
             detail={"id": str(session_id)},
         )
+
+    # Interrupteur LLM OFF : on ne lance pas la generation. SSE 200 avec un
+    # event `error` gracieux (jamais de 5xx), la cle Mistral est conservee.
+    if not get_llm_enabled(db):
+        async def disabled_gen():
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": "LLM desactive."}),
+            }
+
+        return EventSourceResponse(disabled_gen())
 
     try:
         mistral = MistralClient.from_db(db)

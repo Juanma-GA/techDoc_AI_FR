@@ -75,7 +75,7 @@ Conforme a [`STANDARD_POC.md`](../../STANDARD_POC.md). Bootstrap depuis
 | Backend | FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog |
 | LLM | Mistral via `httpx` async + SSE (pas de SDK) |
 | Frontend | React 18 + TS + Vite + Tailwind + RHF + Zod + i18next + Zustand + TanStack Query |
-| UI | `@internal/ui` exclusivement |
+| UI | Skin CSS `frontend/src/styles/preview-skin.css` (écart #3/#4 assumé, voir ci-dessous) + primitives `@internal/ui` (`FileDropzone`) |
 | Persistance | SQLite (`backend/data/catia-toolbox.db`), Alembic des J1 |
 
 ## Workflow (module Arborescence ; les autres modules suivent le meme schema import -> analyse -> plan)
@@ -191,3 +191,13 @@ pnpm dev:catia-toolbox
    metadonnees). *Justification* : coeur fonctionnel des etapes 1/3/4.
    *Mitigations* : lecture **seule** ; openpyxl en `read_only` valeurs seules ;
    `.zip` liste sans extraction ; aucune donnee persistee hors la DB applicative.
+
+7. **Skin CSS au lieu de `@internal/ui`** (regles #3 / #4). *Justification* :
+   pour un rendu visuellement coherent avec les POCs recents (corpus-agent /
+   doc-writer), le React reutilise un CSS sur-mesure
+   `frontend/src/styles/preview-skin.css` (classes `.card/.btn/.kpi/.badge/`
+   `.nav-item/.tree/.pill/...`) plutot que les composants `@internal/ui`. Les
+   variables CSS reprennent les valeurs de `design-tokens/tokens.json` (`:root`
+   clair, `.dark` sombre) — pas de hex « magique ». Les primitives riches
+   (`FileDropzone`) viennent quand meme de `@internal/ui`. *Retour au standard* :
+   migrer les classes skin vers `@internal/ui` si l'app est perennisee.

@@ -67,17 +67,17 @@ export function Settings() {
   };
 
   return (
-    <div className="flex flex-col">
+    <div>
       <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
 
-      <section className="grid max-w-3xl gap-8 p-6">
+      <section className="form">
         <Card title={t("settings.language")}>
           <select
             value={i18n.language.startsWith("en") ? "en" : "fr"}
             onChange={(e) => {
               void i18n.changeLanguage(e.target.value);
             }}
-            className="w-full max-w-xs rounded-sm border bg-bg-2 px-2 py-1 text-fg"
+            className="input"
           >
             <option value="fr">Français</option>
             <option value="en">English</option>
@@ -85,18 +85,15 @@ export function Settings() {
         </Card>
 
         <Card title={t("settings.targetUnit.title")}>
-          <div className="flex gap-2">
+          <div className="row">
             {(["metric", "imperial", "auto"] as const).map((opt) => (
               <button
                 key={opt}
                 type="button"
                 onClick={() => setTargetUnit(opt)}
-                className={[
-                  "rounded-sm border px-3 py-1.5 text-sm",
-                  targetUnit === opt
-                    ? "bg-brand text-fg"
-                    : "text-fg-dim hover:bg-card-hover hover:text-fg",
-                ].join(" ")}
+                className={["btn small", targetUnit === opt ? "primary" : "secondary"].join(
+                  " ",
+                )}
               >
                 {t(`settings.targetUnit.${opt}`)}
               </button>
@@ -119,26 +116,23 @@ export function Settings() {
           title={t("settings.standardsSummary.title")}
           description={t("settings.standardsSummary.description")}
         >
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border bg-bg-2 px-4 py-3">
-            <div className="flex items-center gap-2 text-fg">
+          <div className="banner row" style={{ justifyContent: "space-between" }}>
+            <div className="row">
               <BookOpen size={16} aria-hidden="true" />
-              <span className="font-mono">
+              <span className="label">
                 {t("settings.standardsSummary.builtin", { count: builtinCount })}
                 {" · "}
                 {t("settings.standardsSummary.custom", { count: customCount })}
               </span>
             </div>
-            <Link
-              to="/standards"
-              className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1 text-sm text-fg hover:bg-brand-blue-light"
-            >
+            <Link to="/standards" className="btn primary small">
               {t("settings.standardsSummary.manage")}
               <ArrowRight size={14} aria-hidden="true" />
             </Link>
           </div>
-          <ul className="mt-3 grid grid-cols-2 gap-1 text-xs text-fg-dim md:grid-cols-3">
+          <ul className="grid-2" style={{ marginTop: 12 }}>
             {STRUCTURAL_KINDS.map((kind) => (
-              <li key={kind} className="font-mono">
+              <li key={kind} className="label">
                 · {t(`rules.kind.${kind}`)}
               </li>
             ))}
@@ -150,10 +144,10 @@ export function Settings() {
           description={t("settings.mistral.description")}
         >
           {mistral.isLoading ? (
-            <p className="text-fg-dim">{t("common.loading")}</p>
+            <p className="hint">{t("common.loading")}</p>
           ) : (
-            <div className="flex flex-col gap-3">
-              <p className="font-mono text-xs text-fg-dim">
+            <div className="form">
+              <p className="hint" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                 {mistral.data?.api_key_set
                   ? t("settings.mistral.keySet", { preview: mistral.data.api_key_preview })
                   : t("settings.mistral.keyMissing")}
@@ -170,7 +164,7 @@ export function Settings() {
                   placeholder={t("settings.mistral.apiKeyPlaceholder")}
                   value={apiKeyDraft}
                   onChange={(e) => setApiKeyDraft(e.target.value)}
-                  className="w-full rounded-sm border bg-bg-2 px-2 py-1 font-mono text-fg"
+                  className="input mono"
                 />
               </Field>
               <Field label={t("settings.mistral.baseUrl")}>
@@ -178,7 +172,7 @@ export function Settings() {
                   placeholder={mistral.data?.base_url ?? "https://api.mistral.ai"}
                   value={baseUrlDraft}
                   onChange={(e) => setBaseUrlDraft(e.target.value)}
-                  className="w-full rounded-sm border bg-bg-2 px-2 py-1 font-mono text-fg"
+                  className="input mono"
                 />
               </Field>
               <Field label={t("settings.mistral.chatModel")}>
@@ -186,34 +180,29 @@ export function Settings() {
                   placeholder={mistral.data?.chat_model ?? "mistral-small-latest"}
                   value={modelDraft}
                   onChange={(e) => setModelDraft(e.target.value)}
-                  className="w-full rounded-sm border bg-bg-2 px-2 py-1 font-mono text-fg"
+                  className="input mono"
                 />
               </Field>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="row">
                 <button
                   type="button"
+                  className="btn primary"
                   onClick={submitMistral}
                   disabled={updateMistral.isPending}
-                  className="rounded-sm bg-brand px-3 py-1.5 text-sm text-fg hover:bg-brand-blue-light disabled:opacity-50"
                 >
                   {t("common.save")}
                 </button>
                 <button
                   type="button"
+                  className="btn secondary"
                   onClick={() => testMistral.mutate()}
                   disabled={testMistral.isPending}
-                  className="rounded-sm border px-3 py-1.5 text-sm text-fg-dim hover:bg-card-hover hover:text-fg disabled:opacity-50"
                 >
                   {t("settings.mistral.test")}
                 </button>
                 {testMistral.data ? (
-                  <span
-                    className={[
-                      "text-xs",
-                      testMistral.data.ok ? "text-fg" : "text-danger",
-                    ].join(" ")}
-                  >
+                  <span className={testMistral.data.ok ? "hint" : "error"}>
                     {testMistral.data.message}
                   </span>
                 ) : null}
@@ -227,19 +216,20 @@ export function Settings() {
           description={t("settings.aiPrompt.description")}
         >
           {aiPrompt.isLoading ? (
-            <p className="text-fg-dim">{t("common.loading")}</p>
+            <p className="hint">{t("common.loading")}</p>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="form">
               <textarea
                 rows={6}
                 value={effectivePrompt}
                 onChange={(e) => setPromptDraft(e.target.value)}
                 placeholder={t("settings.aiPrompt.placeholder")}
-                className="w-full rounded-sm border bg-bg-2 px-2 py-2 font-mono text-fg"
+                className="input mono"
               />
-              <div className="flex gap-2">
+              <div className="row">
                 <button
                   type="button"
+                  className="btn primary"
                   onClick={() => {
                     if (promptDraft === null) return;
                     updateAiPrompt.mutate(promptDraft, {
@@ -247,15 +237,14 @@ export function Settings() {
                     });
                   }}
                   disabled={promptDraft === null || updateAiPrompt.isPending}
-                  className="rounded-sm bg-brand px-3 py-1.5 text-sm text-fg hover:bg-brand-blue-light disabled:opacity-50"
                 >
                   {t("common.save")}
                 </button>
                 {promptDraft !== null ? (
                   <button
                     type="button"
+                    className="btn secondary"
                     onClick={() => setPromptDraft(null)}
-                    className="rounded-sm border px-3 py-1.5 text-sm text-fg-dim hover:bg-card-hover"
                   >
                     {t("common.cancel")}
                   </button>
@@ -279,11 +268,9 @@ function Card({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <article className="flex flex-col gap-3 rounded-lg border bg-card p-5">
-      <header>
-        <h2 className="font-display text-fg">{title}</h2>
-        {description ? <p className="text-xs text-fg-dim">{description}</p> : null}
-      </header>
+    <article className="card">
+      <h2 className="card-title">{title}</h2>
+      {description ? <p className="card-sub">{description}</p> : null}
       {children}
     </article>
   );
@@ -297,8 +284,8 @@ function Field({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-xs text-fg-dim">
-      <span className="label">{label}</span>
+    <label className="field">
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );

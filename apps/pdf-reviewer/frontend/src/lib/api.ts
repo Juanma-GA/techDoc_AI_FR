@@ -89,3 +89,18 @@ export const api = {
 };
 
 export const API_BASE_URL = BASE_URL;
+
+// ----- Health ---------------------------------------------------------------
+
+export type LlmState = "ok" | "untested" | "not_configured" | "disabled";
+
+export type HealthDto = {
+  status: string;
+  version: string;
+  db: string;
+  llm: LlmState;
+};
+
+export const healthApi = {
+  read: () => api.get<HealthDto>("/health"),
+};

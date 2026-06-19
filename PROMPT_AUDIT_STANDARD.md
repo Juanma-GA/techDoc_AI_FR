@@ -151,6 +151,11 @@ Une case par règle de `STANDARD_POC.md`. Pour chaque ligne, statut + fichier:li
 - [ ] Aucune trace de LangChain (LangGraph standalone toléré)
 - [ ] Table `llm_invocation_audit` présente dans le schéma DB (si appels LLM)
 - [ ] Audit row écrit pour 100% des appels LLM
+- [ ] Clé `AppConfig` `llm_enabled` gérée (helpers `get_llm_enabled`/`set_llm_enabled`, défaut `true`)
+- [ ] Garde-fou `get_llm_enabled(db)` avant chaque `MistralClient.from_db(db)` des routes métier
+- [ ] OFF = fallback gracieux (HTTP 200 + résultat déterministe/vide, jamais 5xx ; clé conservée)
+- [ ] `GET/POST /api/v1/settings` expose/accepte `llm_enabled` ; `/health` reporte `llm:"disabled"` quand OFF
+- [ ] UI : badge d'état LLM (sidebar+home) + `.switch` dans l'onglet Paramètres
 
 ### i18n
 

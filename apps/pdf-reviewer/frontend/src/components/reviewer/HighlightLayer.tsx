@@ -9,18 +9,6 @@ type Props = {
   onSuggestionClick: (id: string) => void;
 };
 
-const KIND_CLASSES: Record<string, string> = {
-  units: "bg-accent-teal/20 ring-1 ring-accent-teal/60 hover:bg-accent-teal/30",
-  s1000d: "bg-warning/20 ring-1 ring-warning/60 hover:bg-warning/30",
-  custom: "bg-info/20 ring-1 ring-info/60 hover:bg-info/30",
-};
-
-const SEVERITY_FALLBACK: Record<string, string> = {
-  error: "bg-danger/20 ring-1 ring-danger/60 hover:bg-danger/30",
-  warning: "bg-warning/20 ring-1 ring-warning/60 hover:bg-warning/30",
-  info: "bg-info/20 ring-1 ring-info/60 hover:bg-info/30",
-};
-
 export function HighlightLayer({
   viewport,
   dpr,
@@ -45,13 +33,13 @@ export function HighlightLayer({
   const groupCursor = new Map<string, number>();
 
   return (
-    <div className="pointer-events-none absolute inset-0">
+    <div
+      style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
+    >
       {sorted.map((s) => {
         if (!hasValidBbox(s.bbox)) return null;
         const rect = bboxToCssRect(s.bbox, viewport, dpr);
         if (rect.width <= 0 || rect.height <= 0) return null;
-        const baseClass =
-          KIND_CLASSES[s.rule_kind] ?? SEVERITY_FALLBACK[s.severity] ?? KIND_CLASSES.custom;
         const isSelected = s.id === selectedSuggestionId;
         const k = s.original_text || s.rule_code;
         const total = groupTotals.get(k) ?? 1;
@@ -78,11 +66,14 @@ export function HighlightLayer({
             aria-label={label}
             title={tooltip}
             className={[
-              "pointer-events-auto absolute cursor-pointer rounded-sm transition-colors",
-              baseClass,
-              isSelected ? "ring-2 ring-brand-blue-light" : "",
-            ].join(" ")}
+              "pdf-highlight",
+              s.severity === "error" ? "error" : "",
+              isSelected ? "active" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={{
+              pointerEvents: "auto",
               left: rect.left,
               top: rect.top,
               width: Math.max(rect.width, 4),

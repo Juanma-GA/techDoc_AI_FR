@@ -1,0 +1,22 @@
+{
+  "app": {
+    "title": "Word-Reviewer",
+    "version": "0.1.0"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "documents": "Documents",
+    "rules": "Standards & Règles",
+    "architecture": "Architecture",
+    "data": "Données",
+    "settings": "Paramètres"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "État du LLM (voir Paramètres)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  }
+}

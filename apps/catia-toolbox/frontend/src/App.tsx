@@ -1,91 +1,181 @@
-import { ThemeToggle } from "@internal/ui";
-import {
-  Boxes,
-  Download,
-  FolderTree,
-  GitCompare,
-  Home as HomeIcon,
-  Palette,
-  Replace,
-  Settings as SettingsIcon,
-  ShieldCheck,
-  Upload,
-  Wand2,
-} from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { LlmBadge } from "./components/LlmBadge";
+import { ThemeToggleButton } from "./components/ThemeToggleButton";
+import i18n from "./i18n";
+import { Architecture } from "./routes/Architecture";
 import { Checks } from "./routes/Checks";
 import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
+import { Data } from "./routes/Data";
 import { Diff } from "./routes/Diff";
 import { Export } from "./routes/Export";
 import { Home } from "./routes/Home";
+import { Identification } from "./routes/Identification";
 import { Import } from "./routes/Import";
+import { Qc } from "./routes/Qc";
 import { Replacement } from "./routes/Replacement";
 import { Settings } from "./routes/Settings";
+import { SmgxmlRecolor } from "./routes/SmgxmlRecolor";
+import { SmgxmlRename } from "./routes/SmgxmlRename";
 import { Suggestions } from "./routes/Suggestions";
 import { Tree } from "./routes/Tree";
 
-const navItems = [
-  { to: "/", labelKey: "nav.home", icon: HomeIcon },
-  { to: "/import", labelKey: "nav.import", icon: Upload },
-  { to: "/tree", labelKey: "nav.tree", icon: FolderTree },
-  { to: "/suggestions", labelKey: "nav.suggestions", icon: Wand2 },
-  { to: "/export", labelKey: "nav.export", icon: Download },
-  { to: "/diff", labelKey: "nav.diff", icon: GitCompare },
-  { to: "/checks", labelKey: "nav.checks", icon: ShieldCheck },
-  { to: "/conversion", labelKey: "nav.conversion", icon: Boxes },
-  { to: "/replacement", labelKey: "nav.replacement", icon: Replace },
-  { to: "/colorization", labelKey: "nav.colorization", icon: Palette },
-  { to: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
-] as const;
+type NavLeaf = { to: string; labelKey: string; end?: boolean };
+type NavGroup = { groupKey: string; items: NavLeaf[] };
+type NavEntry = NavLeaf | NavGroup;
+
+const isGroup = (e: NavEntry): e is NavGroup => "groupKey" in e;
+
+/** Navigation groupee, ordre et libelles fideles au preview (lignes 176-206). */
+const NAV: NavEntry[] = [
+  { to: "/", labelKey: "nav.home", end: true },
+  {
+    groupKey: "nav.groups.identification",
+    items: [
+      { to: "/identification", labelKey: "nav.identification" },
+      { to: "/import", labelKey: "nav.import" },
+      { to: "/diff", labelKey: "nav.diff" },
+    ],
+  },
+  {
+    groupKey: "nav.groups.preparation",
+    items: [{ to: "/conversion", labelKey: "nav.conversion" }],
+  },
+  {
+    groupKey: "nav.groups.traitement",
+    items: [
+      { to: "/smgxml-recolor", labelKey: "nav.smgxmlRecolor" },
+      { to: "/colorization", labelKey: "nav.colorization" },
+      { to: "/tree", labelKey: "nav.tree" },
+      { to: "/suggestions", labelKey: "nav.suggestions" },
+      { to: "/export", labelKey: "nav.export" },
+    ],
+  },
+  {
+    groupKey: "nav.groups.integration",
+    items: [
+      { to: "/smgxml-rename", labelKey: "nav.smgxmlRename" },
+      { to: "/replacement", labelKey: "nav.replacement" },
+    ],
+  },
+  {
+    groupKey: "nav.groups.controle",
+    items: [
+      { to: "/qc", labelKey: "nav.qc" },
+      { to: "/checks", labelKey: "nav.checks" },
+    ],
+  },
+  {
+    groupKey: "nav.groups.outils",
+    items: [
+      { to: "/architecture", labelKey: "nav.architecture" },
+      { to: "/data", labelKey: "nav.data" },
+      { to: "/settings", labelKey: "nav.settings" },
+    ],
+  },
+];
+
+/** Titre + sous-titre par route (entete centralise du main). */
+export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = {
+  "/": { titleKey: "page.home.title", subKey: "page.home.sub" },
+  "/identification": { titleKey: "page.identification.title", subKey: "page.identification.sub" },
+  "/import": { titleKey: "page.import.title", subKey: "page.import.sub" },
+  "/diff": { titleKey: "page.diff.title", subKey: "page.diff.sub" },
+  "/conversion": { titleKey: "page.conversion.title", subKey: "page.conversion.sub" },
+  "/smgxml-recolor": { titleKey: "page.smgxmlRecolor.title", subKey: "page.smgxmlRecolor.sub" },
+  "/colorization": { titleKey: "page.colorization.title", subKey: "page.colorization.sub" },
+  "/tree": { titleKey: "page.tree.title", subKey: "page.tree.sub" },
+  "/suggestions": { titleKey: "page.suggestions.title", subKey: "page.suggestions.sub" },
+  "/export": { titleKey: "page.export.title", subKey: "page.export.sub" },
+  "/smgxml-rename": { titleKey: "page.smgxmlRename.title", subKey: "page.smgxmlRename.sub" },
+  "/replacement": { titleKey: "page.replacement.title", subKey: "page.replacement.sub" },
+  "/qc": { titleKey: "page.qc.title", subKey: "page.qc.sub" },
+  "/checks": { titleKey: "page.checks.title", subKey: "page.checks.sub" },
+  "/architecture": { titleKey: "page.architecture.title", subKey: "page.architecture.sub" },
+  "/data": { titleKey: "page.data.title", subKey: "page.data.sub" },
+  "/settings": { titleKey: "page.settings.title", subKey: "page.settings.sub" },
+};
+
+const navItemClass = ({ isActive }: { isActive: boolean }) =>
+  isActive ? "nav-item active" : "nav-item";
 
 export function App() {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
+  const meta = ROUTE_META[pathname] ?? ROUTE_META["/"]!;
+  const lang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
+
   return (
-    <div className="flex h-screen bg-bg font-sans text-base text-fg">
-      <aside className="flex w-sidebar-w shrink-0 flex-col border-r bg-bg-2">
-        <div className="flex h-topbar-h items-center px-4">
-          <span className="font-display text-lg text-brand-blue-light">{t("app.title")}</span>
-        </div>
-        <nav className="flex flex-1 flex-col gap-1 p-2">
-          {navItems.map(({ to, labelKey, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                [
-                  "flex items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors",
-                  isActive ? "bg-card text-fg" : "text-fg-dim hover:bg-card-hover hover:text-fg",
-                ].join(" ")
-              }
-            >
-              <Icon size={16} aria-hidden="true" />
-              <span>{t(labelKey)}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="flex h-topbar-h items-center justify-end border-b px-4">
-          <ThemeToggle />
-        </header>
-        <main className="flex-1 overflow-auto p-6">
+    <div className="ct">
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-header">
+            <span className="brand">{t("app.title")}</span>
+            <span className="label">v{t("app.version")}</span>
+            <ThemeToggleButton />
+          </div>
+
+          <LlmBadge />
+
+          <nav>
+            {NAV.map((entry) =>
+              isGroup(entry) ? (
+                <div key={entry.groupKey} className="nav-group">
+                  <div className="nav-group-title">{t(entry.groupKey)}</div>
+                  {entry.items.map((it) => (
+                    <NavLink key={it.to} to={it.to} className={navItemClass}>
+                      {t(it.labelKey)}
+                    </NavLink>
+                  ))}
+                </div>
+              ) : (
+                <NavLink key={entry.to} to={entry.to} end={entry.end} className={navItemClass}>
+                  {t(entry.labelKey)}
+                </NavLink>
+              ),
+            )}
+          </nav>
+
+          <div className="lang-switch" role="group" aria-label="Language">
+            {(["fr", "en"] as const).map((code) => (
+              <button
+                key={code}
+                type="button"
+                className={lang === code ? "lang-btn active" : "lang-btn"}
+                onClick={() => void i18n.changeLanguage(code)}
+              >
+                {code.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <main>
+          <div className="page-header">
+            <h1>{t(meta.titleKey)}</h1>
+            <p>{t(meta.subKey)}</p>
+          </div>
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/identification" element={<Identification />} />
               <Route path="/import" element={<Import />} />
+              <Route path="/diff" element={<Diff />} />
+              <Route path="/conversion" element={<Conversion />} />
+              <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />
+              <Route path="/colorization" element={<Colorization />} />
               <Route path="/tree" element={<Tree />} />
               <Route path="/suggestions" element={<Suggestions />} />
               <Route path="/export" element={<Export />} />
-              <Route path="/diff" element={<Diff />} />
-              <Route path="/checks" element={<Checks />} />
-              <Route path="/conversion" element={<Conversion />} />
+              <Route path="/smgxml-rename" element={<SmgxmlRename />} />
               <Route path="/replacement" element={<Replacement />} />
-              <Route path="/colorization" element={<Colorization />} />
+              <Route path="/qc" element={<Qc />} />
+              <Route path="/checks" element={<Checks />} />
+              <Route path="/architecture" element={<Architecture />} />
+              <Route path="/data" element={<Data />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </ErrorBoundary>

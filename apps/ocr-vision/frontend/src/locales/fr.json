@@ -10,6 +10,14 @@
     "data": "Données",
     "settings": "Paramètres"
   },
+  "llm": {
+    "label": "LLM",
+    "title": "État du LLM (voir Paramètres)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  },
   "routes": {
     "ocr": {
       "title": "OCR / Vision",
@@ -33,40 +41,43 @@
     }
   },
   "ocr": {
-    "card_title": "Test OCR et reconnaissance d'image",
+    "cardTitle": "Test OCR et reconnaissance d'image",
     "banner": "Envoie une image (ou un PDF) aux modèles Mistral : texte transcrit par OCR + description du contenu. Nécessite la clé API Mistral configurée dans l'onglet Paramètres.",
-    "prompt_label": "Prompt pour la reconnaissance d'image (sans effet sur l'OCR brut)",
-    "prompt_placeholder": "Ex : Concentre-toi sur les pictogrammes de sécurité et les repères numérotés.",
+    "promptLabel": "Prompt pour la reconnaissance d'image (sans effet sur l'OCR brut)",
+    "promptPlaceholder": "Ex : Concentre-toi sur les pictogrammes de sécurité et les repères numérotés.",
     "run": "Analyser",
-    "running": "Analyse en cours...",
-    "no_file": "Choisis d'abord un fichier.",
-    "warning_prefix": "Avertissement : ",
-    "ocr_result_title": "Texte transcrit (OCR)",
-    "ocr_empty": "(aucun texte détecté)",
-    "desc_result_title": "Reconnaissance du contenu",
-    "desc_empty": "(aucune description)"
+    "running": "Analyse en cours…",
+    "noFile": "Choisis d'abord un fichier.",
+    "warningPrefix": "Avertissement : ",
+    "ocrResultTitle": "Texte transcrit (OCR)",
+    "ocrEmpty": "(aucun texte détecté)",
+    "descResultTitle": "Reconnaissance du contenu",
+    "descEmpty": "(aucune description)"
   },
   "home": {
     "title": "Bienvenue",
-    "body_intro": "Tu vois ce squelette parce que ",
-    "body_dist": " n'est pas (encore) généré. La preview HTML autonome est servie par le backend — aucune dépendance Node requise.",
-    "body_edit": "Pour personnaliser ce POC, édite :",
-    "edit_api": "ajoute tes propres routers",
-    "edit_models": "ajoute tes tables (et une migration Alembic)",
-    "edit_preview": "remplace cette page d'accueil par tes onglets métier",
-    "edit_package": "adapte le packaging",
-    "status_backend": "Statut backend",
-    "status_unknown": "INCONNU",
-    "status_llm": "LLM",
-    "status_version": "version"
+    "bodyIntro": "Pour personnaliser ce POC, édite :",
+    "editApi": "ajoute tes propres routers",
+    "editModels": "ajoute tes tables (et une migration Alembic)",
+    "editRoutes": "ajoute / adapte les onglets React",
+    "statusBackend": "Statut backend",
+    "statusUnknown": "INCONNU",
+    "statusLlm": "LLM",
+    "statusVersion": "version"
   },
   "arch": {
     "title": "Backend ↔ Frontend en 30 secondes",
-    "workflow_title": "Workflow utilisateur (à adapter par POC)",
-    "step1": "Onglet Paramètres → renseigner la clé Mistral (stockée en SQLite, table app_config).",
-    "step2": "Tester la connexion — liste les modèles Mistral disponibles.",
-    "step3": "Onglet Données → voir les compteurs et reset les tables si besoin.",
-    "step4": "Insère ici le workflow spécifique à ton POC une fois ajoutés tes onglets métier."
+    "backend": "Backend",
+    "backendBody": "Python 3.11+ · FastAPI sous /api/v1/ · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic · structlog JSON + X-Request-Id. Mistral via httpx async (chat streaming SSE) + sync (embeddings/vision). Pas de SDK Mistral.",
+    "frontend": "Frontend",
+    "frontendBody": "React 18 + TypeScript strict + Vite + Tailwind + i18next + TanStack Query, composants @internal/ui et tokens @internal/design-tokens. L'app React buildée est servie par le backend à /.",
+    "workflowTitle": "Workflow utilisateur",
+    "steps": [
+      "Onglet Paramètres → renseigner la clé Mistral (stockée en SQLite, table app_config).",
+      "Tester la connexion — liste les modèles Mistral disponibles.",
+      "Onglet OCR / Vision → envoyer une image/PDF, obtenir le texte OCR + la description.",
+      "Onglet Données → voir les compteurs et reset les tables si besoin."
+    ]
   },
   "data": {
     "overview": "Vue d'ensemble",
@@ -74,37 +85,43 @@
     "chunks": "Chunks",
     "sessions": "Sessions",
     "messages": "Messages",
-    "total_size": "Taille totale",
-    "stats_unavailable": "Stats indisponibles.",
-    "reset_title": "Réinitialiser",
-    "reset_warning_prefix": "Opération ",
-    "reset_warning_strong": "irréversible",
-    "reset_warning_suffix": ". La configuration Mistral (table app_config) est préservée.",
-    "reset_all": "Tout supprimer",
-    "confirm_again": "Cliquer encore pour confirmer",
-    "reset_ok_prefix": "Reset OK (",
-    "reset_ok_suffix": ").",
-    "reset_empty": "(rien à supprimer)"
+    "totalSize": "Taille totale",
+    "statsUnavailable": "Stats indisponibles.",
+    "resetTitle": "Réinitialiser",
+    "resetWarning": "Opération irréversible. La configuration Mistral (table app_config) est préservée.",
+    "resetAll": "Tout supprimer",
+    "confirmAgain": "Cliquer encore pour confirmer",
+    "resetEmpty": "(rien à supprimer)",
+    "resetOkPrefix": "Reset OK : "
   },
   "settings": {
+    "llmTitle": "Intelligence artificielle",
+    "llmToggle": "LLM activé",
+    "llmToggleHint": "Désactiver coupe les tâches confiées à l'IA. La clé Mistral est conservée.",
     "title": "Configuration Mistral",
-    "badge_configured": "CONFIGURÉ",
-    "badge_not_configured": "NON CONFIGURÉ",
-    "api_key": "Clé API Mistral",
-    "api_key_existing": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
-    "base_url": "Base URL",
-    "chat_model": "Modèle chat",
-    "embed_model": "Modèle embeddings",
-    "vision_model": "Modèle vision",
+    "badgeConfigured": "CONFIGURÉ",
+    "badgeNotConfigured": "NON CONFIGURÉ",
+    "apiKey": "Clé API Mistral",
+    "apiKeyExisting": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
+    "baseUrl": "Base URL",
+    "chatModel": "Modèle chat",
+    "embedModel": "Modèle embeddings",
+    "visionModel": "Modèle vision",
     "save": "Enregistrer",
     "test": "Tester la connexion",
     "saved": "Paramètres enregistrés.",
-    "connection_ok_prefix": "Connexion OK (",
-    "connection_ok_suffix": " modèles disponibles).",
-    "connection_ko_prefix": "Échec : ",
-    "models_available": "Modèles disponibles sur le déploiement"
+    "connectionOk": "Connexion OK ({{n}} modèles disponibles).",
+    "connectionKo": "Échec : ",
+    "modelsAvailable": "Modèles disponibles"
   },
   "common": {
     "error": "Erreur"
+  },
+  "errors": {
+    "boundary": {
+      "title": "Une erreur est survenue",
+      "description": "L'interface a rencontre une erreur inattendue. Recharge la page pour reprendre.",
+      "reload": "Recharger"
+    }
   }
 }

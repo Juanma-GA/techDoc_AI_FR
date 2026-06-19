@@ -1,4 +1,4 @@
-"""Mistral vision (Pixtral) helpers — ported from `apps/ftm`.
+"""Mistral vision (Pixtral) helpers — ported from `apps/corpus`.
 
 Two entry points :
 
@@ -24,7 +24,7 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.mistral_settings import get_effective
+from app.core.mistral_settings import get_effective, get_llm_enabled
 
 # Inject the OS trust store — same trick used by the chat client so
 # corporate SSL proxies don't sink the multimodal call.
@@ -63,6 +63,12 @@ def _extract_first_json_object(text: str) -> str | None:
 
 
 def _call_pixtral(db: Session, messages: list[dict], *, response_format: dict | None = None) -> str:
+    if not get_llm_enabled(db):
+        raise AppError(
+            "LLM_DISABLED",
+            "Les analyses IA sont desactivees dans Parametres.",
+            status_code=400,
+        )
     s = get_effective(db)
     if not s["api_key"]:
         raise AppError(

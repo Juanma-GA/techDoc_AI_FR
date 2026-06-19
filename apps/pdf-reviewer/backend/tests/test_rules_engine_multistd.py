@@ -44,7 +44,7 @@ def test_mat10000_run_does_not_emit_ata_codes() -> None:
             "Périodicité: 200 FH.\n"
             "1. Le panneau est retiré.\n"
         )
-        out = run_all(parsed, _doc(), session, mat_v)
+        out = run_all(parsed, _doc(), session, [mat_v])
         codes = {s.rule_code for s in out}
         assert not any(c.startswith("ATA22_") for c in codes)
         assert not any(c.startswith("ATA_") for c in codes)

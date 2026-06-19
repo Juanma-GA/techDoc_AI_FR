@@ -1,6 +1,4 @@
-import { Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Input, Select, Spinner } from "@internal/ui";
 import { useMutation } from "@tanstack/react-query";
-import { Download } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -23,84 +21,85 @@ export function Export() {
   });
 
   if (!runId) {
-    return <EmptyState icon={Download} title={t("export.noRun")} description={t("export.noRunDesc")} />;
+    return (
+      <div className="empty-state">
+        <h3 className="card-title">{t("export.noRun")}</h3>
+        <p className="hint">{t("export.noRunDesc")}</p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("export.title")}</h1>
-        <p className="text-fg-dim">{t("export.subtitle")}</p>
-      </header>
+    <div className="form" style={{ maxWidth: "42rem" }}>
+      <article className="card">
+        <h2 className="card-title">{t("export.downloadTitle")}</h2>
+        <p className="banner warn">
+          <strong>{t("export.dryRunTitle")}</strong> {t("export.dryRunBody")}
+        </p>
+        <label className="field" style={{ maxWidth: "20rem" }}>
+          <span className="field-label">{t("export.statusLabel")}</span>
+          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+            {[
+              { value: "accepted", label: t("export.statusAccepted") },
+              { value: "all", label: t("export.statusAll") },
+            ].map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <a href={exportUrl.csv(runId, status)}>
+            <button type="button" className="btn primary">{t("export.csv")}</button>
+          </a>
+          <a href={exportUrl.script(runId, "bat", status)}>
+            <button type="button" className="btn secondary">{t("export.scriptBat")}</button>
+          </a>
+          <a href={exportUrl.script(runId, "sh", status)}>
+            <button type="button" className="btn secondary">{t("export.scriptSh")}</button>
+          </a>
+        </div>
+      </article>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("export.downloadTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 rounded-sm border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
-            <strong>{t("export.dryRunTitle")}</strong> {t("export.dryRunBody")}
-          </p>
-          <label className="mb-3 flex max-w-xs flex-col gap-1">
-            <span className="label">{t("export.statusLabel")}</span>
-            <Select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              options={[
-                { value: "accepted", label: t("export.statusAccepted") },
-                { value: "all", label: t("export.statusAll") },
-              ]}
-            />
+      <article className="card">
+        <h2 className="card-title">{t("export.saveTitle")}</h2>
+        <p className="banner">{t("export.saveNotice")}</p>
+        <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label className="field grow">
+            <span className="field-label">{t("export.filename")}</span>
+            <input className="input" value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="plan_lot3" />
           </label>
-          <div className="flex flex-wrap gap-2">
-            <a href={exportUrl.csv(runId, status)}>
-              <Button>{t("export.csv")}</Button>
-            </a>
-            <a href={exportUrl.script(runId, "bat", status)}>
-              <Button variant="secondary">{t("export.scriptBat")}</Button>
-            </a>
-            <a href={exportUrl.script(runId, "sh", status)}>
-              <Button variant="secondary">{t("export.scriptSh")}</Button>
-            </a>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("export.saveTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 rounded-sm border border-info/40 bg-info/10 px-3 py-2 text-sm text-fg-dim">
-            {t("export.saveNotice")}
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("export.filename")}</span>
-              <Input value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="plan_lot3" />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="label">{t("export.format")}</span>
-              <Select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as "csv" | "bat" | "sh")}
-                options={[
-                  { value: "csv", label: "CSV" },
-                  { value: "bat", label: t("export.scriptBat") },
-                  { value: "sh", label: t("export.scriptSh") },
-                ]}
-              />
-            </label>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !filename.trim()}>
-              {saveMutation.isPending ? <Spinner size="sm" /> : null}
-              <span>{t("export.saveToOutput")}</span>
-            </Button>
-          </div>
-          {saveMsg ? (
-            <p className={saveMsg.ok ? "mt-2 text-sm text-success" : "mt-2 text-sm text-danger"}>{saveMsg.text}</p>
-          ) : null}
-        </CardContent>
-      </Card>
+          <label className="field">
+            <span className="field-label">{t("export.format")}</span>
+            <select
+              className="input"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as "csv" | "bat" | "sh")}
+            >
+              {[
+                { value: "csv", label: "CSV" },
+                { value: "bat", label: t("export.scriptBat") },
+                { value: "sh", label: t("export.scriptSh") },
+              ].map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !filename.trim()}
+          >
+            {saveMutation.isPending ? <span className="spinner" /> : null}
+            <span>{t("export.saveToOutput")}</span>
+          </button>
+        </div>
+        {saveMsg ? <p className={saveMsg.ok ? "success" : "error"}>{saveMsg.text}</p> : null}
+      </article>
     </div>
   );
 }

@@ -30,26 +30,17 @@ export function ConfirmDialog({
         <DialogTitle>{title}</DialogTitle>
         {description ? <DialogDescription>{description}</DialogDescription> : null}
         {children}
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="rounded-sm border px-3 py-1.5 text-sm text-fg-dim hover:bg-card-hover hover:text-fg"
-          >
+        <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
+          <button type="button" className="btn secondary" onClick={() => onOpenChange(false)}>
             {cancelLabel}
           </button>
           <button
             type="button"
+            className={destructive ? "btn danger" : "btn primary"}
             onClick={() => {
               onConfirm();
               onOpenChange(false);
             }}
-            className={[
-              "rounded-sm px-3 py-1.5 text-sm text-fg",
-              destructive
-                ? "bg-danger hover:bg-danger/80"
-                : "bg-brand hover:bg-brand-blue-light",
-            ].join(" ")}
           >
             {confirmLabel}
           </button>

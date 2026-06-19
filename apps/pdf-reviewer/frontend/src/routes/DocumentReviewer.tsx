@@ -1,17 +1,22 @@
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PdfViewer } from "../components/reviewer/PdfViewer";
 import { ReviewerToolbar } from "../components/reviewer/ReviewerToolbar";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useApplyGroup, useApplySuggestion } from "../hooks/useApplySuggestion";
-import { useDocument } from "../hooks/useDocuments";
+import { useDeleteDocument, useDocument } from "../hooks/useDocuments";
 import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
 import { API_BASE_URL } from "../lib/api";
 import { useViewerStore } from "../stores/viewerStore";
 
 export function DocumentReviewer() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
   const params = useParams();
   const documentId = params.id;
 
@@ -21,6 +26,9 @@ export function DocumentReviewer() {
   const applyGroup = useApplyGroup(documentId);
   const patch = usePatchSuggestion(documentId);
   const analyze = useAnalyze(documentId);
+  const deleteDoc = useDeleteDocument();
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const pdfVersion = useViewerStore((s) => s.pdfVersion);
   const setPdfVersion = useViewerStore((s) => s.setPdfVersion);
@@ -79,25 +87,50 @@ export function DocumentReviewer() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  return (
-    <div className="flex h-screen flex-col">
-      <ReviewerToolbar
-        filename={document.data?.original_filename ?? "—"}
-        version={pdfVersion}
-        zoom={zoom}
-        page={currentPage}
-        totalPages={totalPages}
-        analyzeStatus={analyze.status}
-        onZoomIn={() => setZoom(zoom + 0.1)}
-        onZoomOut={() => setZoom(zoom - 0.1)}
-        onPrev={() => setCurrentPage(currentPage - 1)}
-        onNext={() => setCurrentPage(currentPage + 1)}
-        onAnalyze={analyze.start}
-        onExport={handleExport}
-      />
+  // Mirrors the preview's "Supprimer le PDF" detail action; on success we
+  // return to the list at its new path (/documents, not / which is now the
+  // Dashboard — per the rewired route table).
+  const handleDelete = (): void => {
+    if (!documentId) return;
+    deleteDoc.mutate(documentId, {
+      onSuccess: () => navigate("/documents"),
+    });
+  };
 
-      <div className="flex flex-1 overflow-hidden">
-        <main className="flex flex-1 items-start justify-center overflow-auto bg-bg-3 p-4">
+  return (
+    <div className="reviewer">
+      <div className="reviewer-viewer">
+        <div className="reviewer-panel-head">
+          <button type="button" onClick={() => navigate("/documents")} className="btn ghost small">
+            <ArrowLeft size={14} />
+            {t("documents.back")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="btn danger small"
+          >
+            <Trash2 size={14} />
+            {t("documents.delete")}
+          </button>
+        </div>
+
+        <ReviewerToolbar
+          filename={document.data?.original_filename ?? "—"}
+          version={pdfVersion}
+          zoom={zoom}
+          page={currentPage}
+          totalPages={totalPages}
+          analyzeStatus={analyze.status}
+          onZoomIn={() => setZoom(zoom + 0.1)}
+          onZoomOut={() => setZoom(zoom - 0.1)}
+          onPrev={() => setCurrentPage(currentPage - 1)}
+          onNext={() => setCurrentPage(currentPage + 1)}
+          onAnalyze={analyze.start}
+          onExport={handleExport}
+        />
+
+        <main className="reviewer-canvas">
           <PdfViewer
             pdfUrl={pdfUrl}
             pageNumber={currentPage}
@@ -108,20 +141,32 @@ export function DocumentReviewer() {
             onTotalPages={setTotalPages}
           />
         </main>
-        <SuggestionPanel
-          suggestions={suggestions.data ?? []}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            setSelected(id);
-            const s = suggestions.data?.find((x) => x.id === id);
-            if (s) setCurrentPage(s.page);
-          }}
-          onAccept={handleAccept}
-          onReject={handleReject}
-          onSaveEdit={handleSaveEdit}
-          onApplyGroup={handleApplyGroup}
-        />
       </div>
+
+      <SuggestionPanel
+        suggestions={suggestions.data ?? []}
+        selectedId={selectedId}
+        onSelect={(id) => {
+          setSelected(id);
+          const s = suggestions.data?.find((x) => x.id === id);
+          if (s) setCurrentPage(s.page);
+        }}
+        onAccept={handleAccept}
+        onReject={handleReject}
+        onSaveEdit={handleSaveEdit}
+        onApplyGroup={handleApplyGroup}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={t("documents.delete")}
+        description={document.data?.original_filename}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -1,6 +1,4 @@
-import { Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Select } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Palette } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -45,7 +43,12 @@ export function Colorization() {
   });
 
   if (!importId) {
-    return <EmptyState icon={Palette} title={t("colorization.noImport")} description={t("tree.noImportDesc")} />;
+    return (
+      <div className="empty-state">
+        <h3 className="card-title">{t("colorization.noImport")}</h3>
+        <p className="hint">{t("tree.noImportDesc")}</p>
+      </div>
+    );
   }
 
   const textOn = (r: number, g: number, b: number) =>
@@ -59,105 +62,98 @@ export function Colorization() {
   ];
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("colorization.title")}</h1>
-        <p className="text-fg-dim">{t("colorization.subtitle")}</p>
-      </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("colorization.runTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 rounded-sm border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
-            <strong>{t("export.dryRunTitle")}</strong> {t("colorization.dryRun")}
-          </p>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("colorization.strategy")}</span>
-              <Select options={stratOptions} value={strategy} onChange={(e) => setStrategy(e.target.value)} />
+    <div className="form" style={{ maxWidth: "56rem" }}>
+      <article className="card">
+        <h2 className="card-title">{t("colorization.runTitle")}</h2>
+        <p className="banner warn">
+          <strong>{t("export.dryRunTitle")}</strong> {t("colorization.dryRun")}
+        </p>
+        <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label className="field grow">
+            <span className="field-label">{t("colorization.strategy")}</span>
+            <select className="input" value={strategy} onChange={(e) => setStrategy(e.target.value)}>
+              {stratOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {strategy === "by_change" ? (
+            <label className="field grow">
+              <span className="field-label">{t("colorization.comparison")}</span>
+              <select
+                className="input"
+                value={diffRunId || diffs[0]?.id || ""}
+                onChange={(e) => setDiffRunId(e.target.value)}
+              >
+                {(diffs.length
+                  ? diffs.map((d) => ({ value: d.id, label: `${t("nav.diff")} ${d.id.slice(0, 8)}` }))
+                  : [{ value: "", label: t("colorization.noDiff") }]
+                ).map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </label>
-            {strategy === "by_change" ? (
-              <label className="flex flex-1 flex-col gap-1">
-                <span className="label">{t("colorization.comparison")}</span>
-                <Select
-                  options={
-                    diffs.length
-                      ? diffs.map((d) => ({ value: d.id, label: `${t("nav.diff")} ${d.id.slice(0, 8)}` }))
-                      : [{ value: "", label: t("colorization.noDiff") }]
-                  }
-                  value={diffRunId || diffs[0]?.id || ""}
-                  onChange={(e) => setDiffRunId(e.target.value)}
-                />
-              </label>
-            ) : null}
-            <Button
-              onClick={() => mutation.mutate()}
-              disabled={mutation.isPending || (strategy === "by_change" && !diffs.length)}
-            >
-              {t("colorization.run")}
-            </Button>
-          </div>
-          {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-        </CardContent>
-      </Card>
+          ) : null}
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || (strategy === "by_change" && !diffs.length)}
+          >
+            {t("colorization.run")}
+          </button>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+      </article>
 
       {run ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("colorization.resultTitle", { count: items.length })}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-3 flex flex-wrap gap-2">
-              <a href={exportUrl.colorizationCsv(run.id)}>
-                <Button variant="secondary" size="sm">{t("common.exportCsv")}</Button>
-              </a>
-              <a href={exportUrl.colorizationComposer(run.id)}>
-                <Button variant="secondary" size="sm">{t("colorization.composerScript")}</Button>
-              </a>
-              <a href={exportUrl.colorizationMacro(run.id)}>
-                <Button variant="secondary" size="sm">{t("colorization.macro")}</Button>
-              </a>
-              <a href={exportUrl.colorizationSvg(run.id)} target="_blank" rel="noreferrer">
-                <Button variant="secondary" size="sm">{t("colorization.svg")}</Button>
-              </a>
-            </div>
+        <article className="card">
+          <h2 className="card-title">{t("colorization.resultTitle", { count: items.length })}</h2>
+          <div className="row" style={{ flexWrap: "wrap", marginBottom: "0.75rem" }}>
+            <a href={exportUrl.colorizationCsv(run.id)}>
+              <button type="button" className="btn secondary small">{t("common.exportCsv")}</button>
+            </a>
+            <a href={exportUrl.colorizationComposer(run.id)}>
+              <button type="button" className="btn secondary small">{t("colorization.composerScript")}</button>
+            </a>
+            <a href={exportUrl.colorizationMacro(run.id)}>
+              <button type="button" className="btn secondary small">{t("colorization.macro")}</button>
+            </a>
+            <a href={exportUrl.colorizationSvg(run.id)} target="_blank" rel="noreferrer">
+              <button type="button" className="btn secondary small">{t("colorization.svg")}</button>
+            </a>
+          </div>
 
-            {/* Simulation : chaque piece dans sa couleur attribuee. */}
-            <p className="mb-2 text-sm text-fg-dim">{t("colorization.simulation")}</p>
-            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {items.map((it) => (
-                <div
-                  key={it.id}
-                  className="overflow-hidden rounded-sm px-2 py-2 text-xs"
-                  style={{
-                    backgroundColor: `rgb(${it.color_r}, ${it.color_g}, ${it.color_b})`,
-                    color: textOn(it.color_r, it.color_g, it.color_b),
-                  }}
-                  title={`${it.rel_path} — ${it.reason}`}
-                >
-                  <div className="truncate font-mono font-medium">{it.rel_path.split("/").pop()}</div>
-                  <div className="truncate opacity-80">{it.reason}</div>
+          {/* Simulation : chaque piece dans sa couleur attribuee. */}
+          <p className="hint">{t("colorization.simulation")}</p>
+          <div className="grid-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(10rem, 1fr))" }}>
+            {items.map((it) => (
+              <div
+                key={it.id}
+                style={{
+                  overflow: "hidden",
+                  borderRadius: "4px",
+                  padding: "0.5rem",
+                  fontSize: "0.75rem",
+                  backgroundColor: `rgb(${it.color_r}, ${it.color_g}, ${it.color_b})`,
+                  color: textOn(it.color_r, it.color_g, it.color_b),
+                }}
+                title={it.rel_path}
+              >
+                <div className="label" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {it.rel_path.split("/").pop()}
                 </div>
-              ))}
-            </div>
-
-            <ul className="flex flex-col gap-1">
-              {items.map((it) => (
-                <li key={it.id} className="flex items-center gap-2 rounded-sm bg-bg-2 px-3 py-1.5 text-sm">
-                  <span
-                    className="inline-block h-4 w-4 shrink-0 rounded-sm border border-md"
-                    style={{ backgroundColor: `rgb(${it.color_r}, ${it.color_g}, ${it.color_b})` }}
-                    aria-hidden="true"
-                  />
-                  <span className="grow break-all font-mono">{it.rel_path}</span>
-                  <span className="text-fg-dim">{it.reason}</span>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.8 }}>
+                  {it.reason}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
       ) : null}
     </div>
   );

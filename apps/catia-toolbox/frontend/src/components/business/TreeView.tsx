@@ -12,19 +12,17 @@ function Node({ node }: { node: TreeNodeDto }) {
   const isFolder = node.kind === "folder";
   return (
     <li>
-      <span className="flex items-center gap-1.5 py-0.5">
+      <span className={isFolder ? "tree-node folder" : "tree-node file"}>
         {isFolder ? (
-          <Folder size={13} className="shrink-0 text-brand-blue-light" aria-hidden="true" />
+          <Folder size={13} className="shrink-0" aria-hidden="true" />
         ) : (
-          <FileText size={13} className="shrink-0 text-fg-muted" aria-hidden="true" />
+          <FileText size={13} className="shrink-0" aria-hidden="true" />
         )}
-        <span className={isFolder ? "text-brand-blue-light" : "text-fg-dim"}>{node.name}</span>
-        {!isFolder ? (
-          <span className="text-label text-fg-muted">{formatBytes(node.size)}</span>
-        ) : null}
+        <span>{node.name}</span>
+        {!isFolder ? <span className="tree-size">{formatBytes(node.size)}</span> : null}
       </span>
       {node.children.length ? (
-        <ul className="ml-2 border-l border-md pl-3">
+        <ul>
           {node.children.map((c) => (
             <Node key={c.id} node={c} />
           ))}
@@ -35,12 +33,14 @@ function Node({ node }: { node: TreeNodeDto }) {
 }
 
 export function TreeView({ nodes }: { nodes: TreeNodeDto[] }) {
-  if (!nodes.length) return <p className="text-fg-dim">Arborescence vide.</p>;
+  if (!nodes.length) return <p className="hint">Arborescence vide.</p>;
   return (
-    <ul className="max-h-[420px] overflow-y-auto font-mono text-sm">
-      {nodes.map((n) => (
-        <Node key={n.id} node={n} />
-      ))}
-    </ul>
+    <div className="tree">
+      <ul>
+        {nodes.map((n) => (
+          <Node key={n.id} node={n} />
+        ))}
+      </ul>
+    </div>
   );
 }

@@ -52,7 +52,7 @@ export type Document = {
   page_count: number;
   target_unit_system: "metric" | "imperial" | "auto";
   standard_version_id: string | null;
-  status: "uploaded" | "analyzing" | "analyzed" | "edited";
+  status: "uploaded" | "analyzing" | "analyzed" | "edited" | "analysis_failed";
   current_version: number;
   created_at: string;
 };
@@ -131,3 +131,16 @@ export type SuggestionGroupApplyResult = {
 };
 
 export type StandardVersionId = string | null;
+
+// Admin reset results (Data view). Mirror the backend `/admin/*` shapes:
+// `POST /admin/wipe-suggestions` -> {deleted}; `POST /admin/reset` ->
+// {documents_deleted, storage_folders_cleaned, orphan_folders_cleaned}.
+export type WipeSuggestionsResult = {
+  deleted: number;
+};
+
+export type ResetAllResult = {
+  documents_deleted: number;
+  storage_folders_cleaned: number;
+  orphan_folders_cleaned: number;
+};

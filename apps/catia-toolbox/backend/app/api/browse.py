@@ -18,12 +18,23 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core import nomenclature as nomen
 from app.core import onedrive
 from app.core import parser as parser_mod
 from app.core.errors import AppError
 from app.core.security import safe_under_root
 from app.db.session import get_db
-from app.schemas import BrowseEntryOut, BrowseListIn, BrowseListOut, BrowseRootsOut
+from app.schemas import (
+    BrowseEntryOut,
+    BrowseListIn,
+    BrowseListOut,
+    BrowsePreviewIn,
+    BrowsePreviewOut,
+    BrowseRootsOut,
+)
+
+
+_EXCEL_EXTS = (".xlsx", ".xlsm")
 
 
 log = logging.getLogger("catia_toolbox.browse")
@@ -126,6 +137,32 @@ def browse_files(payload: BrowseListIn, db: Session = Depends(get_db)) -> Browse
     ]
     entries.sort(key=lambda e: e.rel.lower())
     return BrowseListOut(scope=payload.scope, root=root, path=str(target), entries=entries)
+
+
+@router.post("/preview", response_model=BrowsePreviewOut)
+def browse_preview(payload: BrowsePreviewIn, db: Session = Depends(get_db)) -> BrowsePreviewOut:
+    """Apercu generique d'un classeur Excel : liste les onglets et affiche les
+    premieres lignes de l'onglet choisi (defaut : le premier). Reutilise le coeur
+    `nomenclature.preview_sheet` sans exposer le mapping metier. Confine sous la
+    racine du scope ; refuse tout fichier non-Excel."""
+    if payload.scope not in ("input", "output"):
+        raise AppError("BROWSE_SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
+
+    root = onedrive.root_for_scope(db, payload.scope)
+    target = safe_under_root(root, payload.path)
+
+    if not target.is_file():
+        raise AppError("BROWSE_PATH_NOT_FOUND", "Le fichier n'existe pas.", status_code=404, detail={"path": str(target)})
+    if target.suffix.lower() not in _EXCEL_EXTS:
+        raise AppError(
+            "BROWSE_NOT_EXCEL",
+            "L'apercu d'onglets ne s'applique qu'aux fichiers .xlsx / .xlsm.",
+            status_code=400,
+            detail={"path": str(target)},
+        )
+
+    data = nomen.preview_sheet(str(target), sheet=payload.sheet, rows=payload.rows)
+    return BrowsePreviewOut(sheets=data["sheets"], sheet=data["sheet"], rows=data["rows"])
 
 
 def _safe_size(de: os.DirEntry) -> int:

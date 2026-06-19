@@ -38,11 +38,11 @@ export function PdfViewer({
   const filtered = suggestions.filter((s) => s.page === pageNumber);
 
   return (
-    <div className="relative inline-block">
+    <div className="pdf-page-wrap">
       <Document
         file={pdfUrl}
         onLoadSuccess={({ numPages }) => onTotalPages(numPages)}
-        loading={<div className="p-8 text-fg-dim">Loading…</div>}
+        loading={<div className="empty-state">Loading…</div>}
       >
         <Page
           pageNumber={pageNumber}
@@ -50,7 +50,6 @@ export function PdfViewer({
           renderTextLayer
           renderAnnotationLayer={false}
           onRenderSuccess={(page) => setViewport(page as unknown as ViewportLike)}
-          className="bg-card shadow-card"
         />
       </Document>
       <HighlightLayer

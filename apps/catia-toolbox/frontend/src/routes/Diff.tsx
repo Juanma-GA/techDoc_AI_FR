@@ -1,15 +1,13 @@
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, KpiCard, Select } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { GitCompare } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { diffApi, exportUrl, importsApi, type DiffEntryDto, type DiffRunDto, type ImportDto } from "../lib/api";
+import { ApiClientError, diffApi, exportUrl, importsApi, type DiffEntryDto, type DiffRunDto, type ImportDto } from "../lib/api";
 
-const CHANGE_VARIANT: Record<string, "success" | "danger" | "warning"> = {
-  added: "success",
+const CHANGE_VARIANT: Record<string, "ok" | "danger" | "warn"> = {
+  added: "ok",
   removed: "danger",
-  modified: "warning",
+  modified: "warn",
 };
 
 export function Diff() {
@@ -20,79 +18,110 @@ export function Diff() {
   const [other, setOther] = useState("");
   const [run, setRun] = useState<DiffRunDto | null>(null);
   const [entries, setEntries] = useState<DiffEntryDto[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const r = await diffApi.create(base || imports[0]?.id, other || imports[1]?.id);
+      const r = await diffApi.create(base || imports[0]!.id, other || imports[1]!.id);
       const e = await diffApi.entries(r.id);
       return { r, e };
     },
     onSuccess: ({ r, e }) => {
+      setError(null);
       setRun(r);
       setEntries(e);
+    },
+    onError: (err) => {
+      setError(err instanceof ApiClientError ? err.message : String(err));
     },
   });
 
   if (imports.length < 2) {
-    return <EmptyState icon={GitCompare} title={t("diff.needTwo")} description={t("diff.needTwoDesc")} />;
+    return (
+      <div className="empty-state">
+        <h3 className="card-title">{t("diff.needTwo")}</h3>
+        <p className="hint">{t("diff.needTwoDesc")}</p>
+      </div>
+    );
   }
 
   const opts = imports.map((i) => ({ value: i.id, label: `${i.root_label} (${i.node_count})` }));
 
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("diff.title")}</h1>
-        <p className="text-fg-dim">{t("diff.subtitle")}</p>
-      </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("diff.compareTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("diff.base")}</span>
-              <Select options={opts} value={base || opts[0].value} onChange={(e) => setBase(e.target.value)} />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("diff.other")}</span>
-              <Select options={opts} value={other || opts[1].value} onChange={(e) => setOther(e.target.value)} />
-            </label>
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-              {t("diff.compare")}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {run ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("diff.resultTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-3 grid grid-cols-3 gap-3">
-              <KpiCard label={t("diff.added")} value={run.summary.added ?? 0} />
-              <KpiCard label={t("diff.removed")} value={run.summary.removed ?? 0} />
-              <KpiCard label={t("diff.modified")} value={run.summary.modified ?? 0} />
-            </div>
-            <a href={exportUrl.diffCsv(run.id)} className="mb-3 inline-block">
-              <Button variant="secondary" size="sm">{t("common.exportCsv")}</Button>
-            </a>
-            <ul className="flex flex-col gap-1">
-              {entries.map((e) => (
-                <li key={e.id} className="flex items-center gap-2 rounded-sm bg-bg-2 px-3 py-1.5 font-mono text-sm">
-                  <Badge variant={CHANGE_VARIANT[e.change_type]}>{e.change_type}</Badge>
-                  <span className="break-all">{e.rel_path}</span>
-                  {e.detail ? <span className="text-fg-dim">— {e.detail}</span> : null}
-                </li>
+    <div className="form" style={{ maxWidth: "56rem" }}>
+      <article className="card">
+        <h2 className="card-title">{t("diff.compareTitle")}</h2>
+        <div className="row" style={{ alignItems: "flex-end" }}>
+          <label className="field grow">
+            <span className="field-label">{t("diff.base")}</span>
+            <select className="input" value={base || opts[0]!.value} onChange={(e) => setBase(e.target.value)}>
+              {opts.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ) : null}
+            </select>
+          </label>
+          <label className="field grow">
+            <span className="field-label">{t("diff.other")}</span>
+            <select className="input" value={other || opts[1]!.value} onChange={(e) => setOther(e.target.value)}>
+              {opts.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="btn primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {t("diff.compare")}
+          </button>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+      </article>
+
+      <article className="card">
+        {run ? (
+          <>
+            <h2 className="card-title">{t("diff.resultTitle")}</h2>
+            <div className="kpi-grid grid-2" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+              <div className="kpi">
+                <span className="label">{t("diff.added")}</span>
+                <span className="kpi-value">{run.summary.added ?? 0}</span>
+              </div>
+              <div className="kpi">
+                <span className="label">{t("diff.removed")}</span>
+                <span className="kpi-value">{run.summary.removed ?? 0}</span>
+              </div>
+              <div className="kpi">
+                <span className="label">{t("diff.modified")}</span>
+                <span className="kpi-value">{run.summary.modified ?? 0}</span>
+              </div>
+            </div>
+            <a href={exportUrl.diffCsv(run.id)}>
+              <button type="button" className="btn secondary small">
+                {t("common.exportCsv")}
+              </button>
+            </a>
+            {entries.length > 0 ? (
+              <ul className="item-list">
+                {entries.map((e) => (
+                  <li key={e.id} className="item-row">
+                    <span className={`badge ${CHANGE_VARIANT[e.change_type] ?? "default"}`}>{e.change_type}</span>
+                    <div className="item-main">
+                      <span className="item-name">{e.rel_path}</span>
+                      {e.detail ? <span className="item-meta">{`— ${e.detail}`}</span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="empty-state">
+                <h3 className="card-title">{t("diff.noDifference")}</h3>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="empty-state">
+            <h3 className="card-title">{t("diff.runPrompt")}</h3>
+          </div>
+        )}
+      </article>
     </div>
   );
 }

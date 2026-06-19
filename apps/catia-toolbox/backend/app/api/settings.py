@@ -13,8 +13,10 @@ from app.core.mistral_client import (
     MistralError,
     get_effective_settings,
     get_llm_enabled,
+    get_llm_tested,
     save_settings,
     set_llm_enabled,
+    set_llm_tested,
 )
 from app.db.session import get_db
 from app.schemas import SettingsIn, SettingsOut, TestConnectionOut
@@ -34,6 +36,7 @@ def _settings_out(db: Session) -> SettingsOut:
         chat_model=s["chat_model"],
         embed_model=s["embed_model"],
         llm_enabled=get_llm_enabled(db),
+        llm_tested=get_llm_tested(db),
         onedrive_input_root=roots["input"],
         onedrive_output_root=roots["output"],
     )
@@ -65,10 +68,13 @@ def test_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
     try:
         mistral = MistralClient.from_db(db)
     except MistralError as e:
+        set_llm_tested(db, False)
         return TestConnectionOut(ok=False, error=str(e))
     try:
         models = mistral.list_models()
     except Exception as e:  # noqa: BLE001
         log.exception("test connection failed")
+        set_llm_tested(db, False)
         return TestConnectionOut(ok=False, error=f"{type(e).__name__}: {e}")
+    set_llm_tested(db, True)
     return TestConnectionOut(ok=True, models=models)

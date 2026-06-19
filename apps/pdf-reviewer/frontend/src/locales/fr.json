@@ -3,12 +3,69 @@
     "title": "PDF Reviewer",
     "version": "v2"
   },
+  "llm": {
+    "label": "LLM",
+    "title": "Etat du LLM (voir Paramètres)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "A TESTER",
+    "noKey": "NO KEY"
+  },
   "nav": {
     "section": "Navigation",
+    "dashboard": "Tableau de bord",
     "documents": "Documents",
     "standards": "Normes",
     "rules": "Règles",
+    "architecture": "Architecture",
+    "data": "Données",
     "settings": "Paramètres"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "subtitle": "Indicateurs agrégés des suggestions",
+    "kpis": "Indicateurs clés",
+    "bySev": "Suggestions par sévérité",
+    "byKind": "Suggestions par type de règle",
+    "topDocs": "Top documents (suggestions ouvertes)",
+    "noOpen": "Aucune suggestion ouverte.",
+    "kpi.pdfs": "PDFs",
+    "kpi.open": "Ouvertes",
+    "kpi.applied": "Appliquées",
+    "kpi.rejected": "Rejetées",
+    "kpi.total": "Total"
+  },
+  "arch": {
+    "title": "Architecture",
+    "subtitle": "Backend, frontend et workflow utilisateur",
+    "workflow": "Workflow utilisateur",
+    "split.title": "Backend ↔ Frontend en 30 secondes",
+    "split.backLabel": "Backend",
+    "split.frontLabel": "Frontend",
+    "split.back": "Python 3.11+ · FastAPI sous /api/v1/ · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic · PyMuPDF (édition PDF + extraction images) · httpx (Mistral chat + Pixtral vision) · structlog · SSE pour l'analyse · routeur /admin pour le reset.",
+    "split.front": "React + Vite + TypeScript · TanStack Query · Zustand · react-pdf v9 · i18n FR/EN · overlays bbox cliquables · panneau de suggestions accept/edit/reject · pages Documents · Normes · Règles · Données · Paramètres.",
+    "f1": "Onglet « Documents » → glisser un ou plusieurs PDFs + cascade Norme/Version active (Paramètres). SHA-256 et analyse auto en parallèle.",
+    "f2": "« Lancer l'analyse » → le moteur fusionne les catalogues des normes actives + règles custom + conversions d'unités + (optionnel) IA enrichissement + vision sur images extraites.",
+    "f3": "Vue Rédacteur : suggestions triées (page, span_index, id). Diff original → proposed sauf si détection-only (règles structurelles, vision) où Accept est masqué.",
+    "f4": "Cycle : open → accepted → applied. À l'apply : invalidation automatique des suggestions « stale » (texte modifié englobant).",
+    "f5": "Tableau de bord : KPIs PDFs / suggestions open-applied-rejected / top docs / répartition severity-kind.",
+    "f6": "Export PDF édité ou rollback. Admin → /admin/wipe-suggestions (toutes statuts) ou /admin/reset (DB + dossiers disque + orphelins) pour reset complet à zéro."
+  },
+  "data": {
+    "title": "Données",
+    "subtitle": "Vue d'ensemble et réinitialisation",
+    "overview": "Vue d'ensemble",
+    "reset": "Réinitialiser",
+    "resetWarn": "Toutes ces opérations sont irréversibles. Les règles custom et la config Mistral sont préservées.",
+    "resetSugs": "Effacer toutes les suggestions",
+    "resetAll": "Tout supprimer (PDFs + suggestions + fichiers disque)",
+    "confirmSugs": "Effacer TOUTES les suggestions (ouvertes, rejetées, appliquées, éditées) ? Irréversible.",
+    "confirmAll": "Supprimer TOUS les PDFs, toutes les suggestions, et nettoyer les fichiers sur disque ? Irréversible.",
+    "wipedSugs": "{{count}} suggestion(s) supprimée(s).",
+    "resetDone": "Reset effectué : {{docs}} document(s) supprimé(s), {{folders}} dossier(s) nettoyé(s) sur disque.",
+    "kpi.pdfs": "PDFs",
+    "kpi.sugs": "Suggestions",
+    "kpi.rules": "Règles custom"
   },
   "common": {
     "loading": "Chargement…",
@@ -28,7 +85,18 @@
     "upload.dropHint": "Glissez un PDF ici ou cliquez pour parcourir",
     "upload.tooLarge": "Fichier trop volumineux (max {{max}} Mo)",
     "open": "Ouvrir",
-    "delete": "Supprimer le document"
+    "delete": "Supprimer le document",
+    "back": "← Retour aux documents",
+    "activeStandardLabel": "Norme cible active :",
+    "changeStandard": "Modifier dans Paramètres →",
+    "targetUnit": "Système d'unités cible"
+  },
+  "status": {
+    "uploaded": "uploadé",
+    "analyzing": "en cours d'analyse",
+    "analyzed": "analysée",
+    "edited": "éditée",
+    "analysis_failed": "analyse échouée"
   },
   "reviewer": {
     "toolbar.zoomIn": "Zoom +",

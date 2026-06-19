@@ -130,6 +130,33 @@ exit /b 1
 if not "%PORT_TRY%"=="%PORT%" echo [info] Port %PORT% occupe -- bascule auto sur le port %PORT_TRY%.
 set "PORT=%PORT_TRY%"
 
+REM ---- Front React : on sert le build (dist) sur le meme port que le backend.
+REM  Rebuild AUTO si le dist est absent OU si une source front est plus recente
+REM  que le dernier build (helper _needs_rebuild.ps1). Restart instantane si
+REM  rien n'a change. Node portable (sans install admin) prefixe au PATH si present.
+set "FRONTEND_DIR=%APP_DIR%frontend"
+set "NODE_DIR="
+for /d %%D in ("%LOCALAPPDATA%\node-portable\node-v*-win-x64") do set "NODE_DIR=%%D"
+if defined NODE_DIR set "PATH=%NODE_DIR%;%PATH%"
+
+where pnpm >nul 2>nul
+if errorlevel 1 goto :front_ready
+
+set "NEED_BUILD=0"
+if not exist "%FRONTEND_DIR%\dist\index.html" set "NEED_BUILD=1"
+if "%NEED_BUILD%"=="0" if exist "%APP_DIR%_needs_rebuild.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%"
+    if errorlevel 1 set "NEED_BUILD=1"
+)
+if "%NEED_BUILD%"=="0" goto :front_ready
+
+echo [setup] Build du front React - dist absent ou sources modifiees, 5 a 30 s...
+pushd "%FRONTEND_DIR%"
+call pnpm install
+call pnpm build
+popd
+:front_ready
+
 echo.
 echo [run] Backend sur http://127.0.0.1:%PORT%/
 echo       OpenAPI docs : http://127.0.0.1:%PORT%/api/v1/docs

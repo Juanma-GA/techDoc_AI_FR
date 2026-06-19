@@ -7,11 +7,15 @@ binaire**.
 
 Les règles combinent :
 
-- **Catalogues built-in multi-normes** : S1000D (5.0 / 6.0), MAT10000
-  (v1), S2000M (issue 7), ATA100 (rev 38), ATA iSpec 2200 (2018-1).
-  Chaque norme expose ses règles textuelles (terminologie, formats DMC
-  / ATA) **et** structurelles (champ requis, section requise,
-  cohérence inter-champs, format d'étape, valeur énumérée).
+- **Catalogues built-in multi-normes** : ASD-STE100 (style rédactionnel),
+  MAT10000 (v1), ATA 100 (rev 38). Chaque norme expose des règles
+  textuelles (terminologie, casse, chapitrage) **et** structurelles
+  (champ requis, section requise, format d'étape, valeur énumérée)
+  vérifiables sur le **rendu PDF**. Les normes purement XML/gestion de
+  données (S1000D, ATA iSpec 2200, S2000M) sont hors périmètre : leurs
+  règles portaient sur des codes/champs (DMC, NSN, CAGE, SMR, QPA…) qui
+  n'existent que dans la source XML/SGML. Les règles de style S1000D/STE
+  restent disponibles via le moteur transverse intégré.
 - **Normes & versions custom** : créer ses propres normes et règles
   via `/standards` puis les attacher à un document à l'upload.
 - **Règles custom transverses** (regex / terme exact, CRUD
@@ -108,10 +112,20 @@ limitations explicitement :
   `Suggestion.status = applied` (POC mono-utilisateur).
 - **Taille `app/templates/preview.html`** ~480 lignes (CLAUDE.md
   recommande < 200 lignes par fichier). Justifié comme pour
-  `apps/ftm/.../preview.html` (1543 lignes) : page autonome
+  `apps/corpus-agent/.../preview.html` (1543 lignes) : page autonome
   HTML/CSS/JS qui ne peut pas être splittée sans bundler en mode
   preview. Tokens CSS injectés au request-time depuis
   `design-tokens/tokens.json`, donc zéro hex en dur.
+
+- **Skin CSS au lieu de `@internal/ui` (règles #3/#4)** : pour un rendu
+  visuellement cohérent avec les POCs récents (corpus-agent / doc-writer),
+  le React réutilise un CSS sur-mesure `frontend/src/styles/preview-skin.css`
+  (classes `.card/.btn/.kpi/.badge/.sev/.reviewer-*`...) plutôt que les
+  composants `@internal/ui`. Les variables CSS reprennent les valeurs de
+  `design-tokens/tokens.json` (`:root` clair, `.dark` sombre) — donc zéro hex
+  « magique ». Les primitives riches (`Dialog`) viennent quand même de
+  `@internal/ui`. Plan de retour : migrer les classes skin vers `@internal/ui`
+  si l'app est pérennisée.
 
 Toute extension hors de ce périmètre doit être documentée ici.
 

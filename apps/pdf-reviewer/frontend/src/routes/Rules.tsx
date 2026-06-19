@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -57,13 +57,13 @@ export function Rules() {
   };
 
   return (
-    <div className="flex flex-col">
+    <div className="pr">
       <PageHeader title={t("rules.title")} subtitle={t("rules.subtitle")} />
 
       <RulesSuggestPanel />
 
-      <section className="flex flex-col gap-3 px-6 pt-2">
-        <h2 className="font-display text-sm text-fg-dim">{t("rules.filterTitle")}</h2>
+      <div className="card">
+        <div className="card-title">{t("rules.filterTitle")}</div>
         <StandardPicker
           standardId={filterStdId}
           versionId={filterVerId}
@@ -72,63 +72,41 @@ export function Rules() {
             setFilterVerId(verId);
           }}
         />
-      </section>
+      </div>
 
-      <section className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[1fr_360px]">
-        <div className="flex flex-col gap-2">
+      <section className="grid-2">
+        <div className="grow">
           {rules.isLoading ? (
-            <p className="text-fg-dim">{t("common.loading")}</p>
+            <p className="empty-state">{t("common.loading")}</p>
           ) : rules.data && rules.data.length > 0 ? (
-            <ul className="flex flex-col gap-2">
+            <ul className="item-list">
               {rules.data.map((r) => (
-                <li
+                <RuleRow
                   key={r.id}
-                  className="flex items-center justify-between gap-3 rounded-sm border bg-card p-3"
-                >
-                  <div className="min-w-0">
-                    <p className="font-mono text-fg">{r.name}</p>
-                    <p className="font-mono text-xs text-fg-dim">
-                      {r.kind} · /{r.pattern}/ ·{" "}
-                      {r.standard_version_id
-                        ? versionLabelById.get(r.standard_version_id) ?? r.standard_version_id
-                        : t("standards.transverse")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-1 text-xs text-fg-dim">
-                      <input
-                        type="checkbox"
-                        checked={r.enabled}
-                        onChange={(e) =>
-                          patch.mutate({ id: r.id, enabled: e.target.checked })
-                        }
-                      />
-                      {t("rules.form.enabled")}
-                    </label>
-                    <button
-                      type="button"
-                      aria-label={t("common.delete")}
-                      onClick={() => setConfirmDelete(r)}
-                      className="rounded-sm border p-1 text-fg-dim hover:bg-danger/10 hover:text-danger"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </li>
+                  rule={r}
+                  scopeLabel={
+                    r.standard_version_id
+                      ? versionLabelById.get(r.standard_version_id) ?? r.standard_version_id
+                      : t("standards.transverse")
+                  }
+                  onSave={(changes) => patch.mutate({ id: r.id, ...changes })}
+                  saving={patch.isPending}
+                  onDelete={() => setConfirmDelete(r)}
+                />
               ))}
             </ul>
           ) : (
-            <p className="text-fg-dim">{t("common.empty")}</p>
+            <p className="empty-state">{t("common.empty")}</p>
           )}
         </div>
 
-        <aside className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-          <h2 className="font-display text-fg">{t("rules.create")}</h2>
+        <aside className="card form">
+          <div className="card-title">{t("rules.create")}</div>
           <Field label={t("rules.form.name")}>
             <input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="w-full rounded-sm border bg-bg-2 px-2 py-1 text-fg"
+              className="input"
             />
           </Field>
           <Field label={t("rules.form.kind")}>
@@ -137,7 +115,7 @@ export function Rules() {
               onChange={(e) =>
                 setDraft({ ...draft, kind: e.target.value as RuleInput["kind"] })
               }
-              className="w-full rounded-sm border bg-bg-2 px-2 py-1 text-fg"
+              className="input"
             >
               <option value="term_replace">{t("rules.kind.term_replace")}</option>
               <option value="regex_replace">{t("rules.kind.regex_replace")}</option>
@@ -157,7 +135,7 @@ export function Rules() {
                   standard_version_id: e.target.value === "" ? null : e.target.value,
                 })
               }
-              className="w-full rounded-sm border bg-bg-2 px-2 py-1 text-fg"
+              className="input"
             >
               <option value="">{t("standards.transverse")}</option>
               {(standards.data ?? []).flatMap((s) =>
@@ -173,7 +151,7 @@ export function Rules() {
             <input
               value={draft.pattern}
               onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
-              className="w-full rounded-sm border bg-bg-2 px-2 py-1 font-mono text-fg"
+              className="input mono"
             />
           </Field>
           {draft.kind !== "regex_flag" && draft.kind !== "step_pattern" && draft.kind !== "field_required" && draft.kind !== "section_required" ? (
@@ -181,7 +159,7 @@ export function Rules() {
               <input
                 value={draft.replacement}
                 onChange={(e) => setDraft({ ...draft, replacement: e.target.value })}
-                className="w-full rounded-sm border bg-bg-2 px-2 py-1 font-mono text-fg"
+                className="input mono"
               />
             </Field>
           ) : null}
@@ -191,7 +169,7 @@ export function Rules() {
               onChange={(e) =>
                 setDraft({ ...draft, severity: e.target.value as RuleInput["severity"] })
               }
-              className="w-full rounded-sm border bg-bg-2 px-2 py-1 text-fg"
+              className="input"
             >
               <option value="info">info</option>
               <option value="warning">warning</option>
@@ -202,20 +180,20 @@ export function Rules() {
             <input
               value={draft.message}
               onChange={(e) => setDraft({ ...draft, message: e.target.value })}
-              className="w-full rounded-sm border bg-bg-2 px-2 py-1 text-fg"
+              className="input"
             />
           </Field>
           <button
             type="button"
             onClick={submit}
             disabled={create.isPending || !draft.name || !draft.pattern}
-            className="inline-flex items-center justify-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-fg hover:bg-brand-blue-light disabled:opacity-50"
+            className="btn primary"
           >
             <Plus size={14} />
             {t("rules.create")}
           </button>
           {create.isError ? (
-            <p className="text-xs text-danger">{(create.error as Error).message}</p>
+            <p className="error">{(create.error as Error).message}</p>
           ) : null}
         </aside>
       </section>
@@ -239,10 +217,123 @@ export function Rules() {
   );
 }
 
+type RuleRowChanges = Pick<
+  RuleInput,
+  "name" | "kind" | "pattern" | "severity" | "enabled"
+>;
+
+function RuleRow({
+  rule,
+  scopeLabel,
+  onSave,
+  saving,
+  onDelete,
+}: {
+  rule: Rule;
+  scopeLabel: string;
+  onSave: (changes: Partial<RuleRowChanges>) => void;
+  saving: boolean;
+  onDelete: () => void;
+}) {
+  const { t } = useTranslation();
+  const [edit, setEdit] = useState<RuleRowChanges>({
+    name: rule.name,
+    kind: rule.kind,
+    pattern: rule.pattern,
+    severity: rule.severity,
+    enabled: rule.enabled,
+  });
+
+  const dirty: Partial<RuleRowChanges> = {};
+  if (edit.name !== rule.name) dirty.name = edit.name;
+  if (edit.kind !== rule.kind) dirty.kind = edit.kind;
+  if (edit.pattern !== rule.pattern) dirty.pattern = edit.pattern;
+  if (edit.severity !== rule.severity) dirty.severity = edit.severity;
+  if (edit.enabled !== rule.enabled) dirty.enabled = edit.enabled;
+  const isDirty = Object.keys(dirty).length > 0;
+
+  return (
+    <li className="item-row">
+      <div className="row">
+        <input
+          aria-label={t("rules.form.name")}
+          value={edit.name}
+          onChange={(e) => setEdit({ ...edit, name: e.target.value })}
+          className="input mono grow"
+        />
+        <select
+          aria-label={t("rules.form.kind")}
+          value={edit.kind}
+          onChange={(e) =>
+            setEdit({ ...edit, kind: e.target.value as RuleInput["kind"] })
+          }
+          className="input"
+        >
+          <option value="term_replace">{t("rules.kind.term_replace")}</option>
+          <option value="regex_replace">{t("rules.kind.regex_replace")}</option>
+          <option value="regex_flag">{t("rules.kind.regex_flag")}</option>
+          <option value="field_required">{t("rules.kind.field_required")}</option>
+          <option value="section_required">{t("rules.kind.section_required")}</option>
+          <option value="step_pattern">{t("rules.kind.step_pattern")}</option>
+          <option value="enum_value">{t("rules.kind.enum_value")}</option>
+        </select>
+        <select
+          aria-label={t("rules.form.severity")}
+          value={edit.severity}
+          onChange={(e) =>
+            setEdit({ ...edit, severity: e.target.value as RuleInput["severity"] })
+          }
+          className="input"
+        >
+          <option value="info">info</option>
+          <option value="warning">warning</option>
+          <option value="error">error</option>
+        </select>
+      </div>
+      <div className="row">
+        <input
+          aria-label={t("rules.form.pattern")}
+          value={edit.pattern}
+          onChange={(e) => setEdit({ ...edit, pattern: e.target.value })}
+          className="input mono grow"
+        />
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={edit.enabled}
+            onChange={(e) => setEdit({ ...edit, enabled: e.target.checked })}
+          />
+          {t("rules.form.enabled")}
+        </label>
+        <span className="label">{scopeLabel}</span>
+        <div className="item-actions">
+          <button
+            type="button"
+            onClick={() => onSave(dirty)}
+            disabled={!isDirty || saving}
+            className="btn primary small"
+          >
+            <Check size={12} />
+            {t("common.save")}
+          </button>
+          <button
+            type="button"
+            aria-label={t("common.delete")}
+            onClick={onDelete}
+            className="btn ghost small"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </li>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-fg-dim">
-      <span className="label">{label}</span>
+    <label className="field">
+      <span className="field-label">{label}</span>
       {children}
     </label>
   );

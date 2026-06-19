@@ -7,7 +7,8 @@ Layout of the produced archive (with `--embed-python`, default ON):
     ├── LISEZ-MOI.txt           # quick-start FR for the colleague
     ├── PACKAGE_README.md       # detailed reference
     ├── apps/pdf-reviewer/      # full app (backend + frontend sources, no node_modules / .venv / data)
-    │   └── frontend/dist/      # built React UI (only if pnpm + node are available distributor-side)
+    │                           # the delivered UI is backend/app/templates/preview.html (no Node).
+    │                           # frontend/dist/ is shipped only with --build-frontend (React parity).
     ├── design-tokens/          # required by the preview HTML for CSS variables
     └── python-embed/           # bundled Python 3.11 (Windows embeddable + bootstrapped pip)
 
@@ -55,8 +56,15 @@ _EXCLUDED_DIRS = {
 _EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".log", ".zip"}
 
 
-def _should_skip(rel: Path) -> bool:
+def _should_skip(rel: Path, include_frontend_dist: bool = False) -> bool:
     if any(part in _EXCLUDED_DIRS for part in rel.parts):
+        return True
+    # By default never ship the built React SPA: the delivered UI is the backend's
+    # complete preview.html. A bundled frontend/dist makes main.py serve the (stub)
+    # React app instead — exactly the "empty app at IT" bug. Only included when the
+    # caller explicitly opts in via --build-frontend (React parity reached).
+    parts = set(rel.parts)
+    if not include_frontend_dist and "frontend" in parts and "dist" in parts:
         return True
     if rel.suffix.lower() in _EXCLUDED_SUFFIXES:
         return True
@@ -318,7 +326,9 @@ Cette app est un POC interne. Pour tout retour, contacte le porteur du POC.
 """
 
 
-def _walk_sources(repo: Path, source_paths: list[str]) -> list[tuple[Path, Path]]:
+def _walk_sources(
+    repo: Path, source_paths: list[str], include_frontend_dist: bool = False
+) -> list[tuple[Path, Path]]:
     out: list[tuple[Path, Path]] = []
     for src_rel in source_paths:
         src_root = repo / src_rel
@@ -329,7 +339,7 @@ def _walk_sources(repo: Path, source_paths: list[str]) -> list[tuple[Path, Path]
             if not path.is_file():
                 continue
             rel = path.relative_to(repo)
-            if _should_skip(rel):
+            if _should_skip(rel, include_frontend_dist):
                 continue
             out.append((path, rel))
     return out
@@ -358,10 +368,12 @@ def main(argv: list[str] | None = None) -> int:
         "--build-frontend",
         dest="build_frontend",
         action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Run `pnpm install && pnpm build` before zipping so the React UI "
-             "is included (default: enabled, skipped gracefully if pnpm/node "
-             "are absent). Use --no-build-frontend to ship preview-only.",
+        default=False,
+        help="Run `pnpm install && pnpm build` before zipping to bundle the React "
+             "UI (default: DISABLED). The delivered UI is the backend's complete "
+             "preview.html, which needs no Node. Only enable this once the React "
+             "frontend reaches feature parity with preview.html; even then the "
+             "built dist is excluded from the zip unless this is set.",
     )
     args = parser.parse_args(argv)
 
@@ -379,9 +391,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.build_frontend:
         _build_frontend(repo / "apps" / "pdf-reviewer" / "frontend")
+    else:
+        print("[frontend] skipped — delivering backend preview.html as the UI "
+              "(no Node needed). Pass --build-frontend once React reaches parity.")
 
     sources = ["apps/pdf-reviewer", "design-tokens"]
-    files = _walk_sources(repo, sources)
+    files = _walk_sources(repo, sources, include_frontend_dist=args.build_frontend)
 
     embed_dir: Path | None = None
     if args.embed_python:

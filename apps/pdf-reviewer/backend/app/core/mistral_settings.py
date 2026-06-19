@@ -9,6 +9,7 @@ analysis pipeline still runs.
 from __future__ import annotations
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -65,10 +66,76 @@ def set_vision_enabled(db: Session, enabled: bool) -> None:
     db.commit()
 
 
+_LLM_ENABLED_KEY = "llm_enabled"
+
+
+def get_llm_enabled(db: Session) -> bool:
+    try:
+        row = db.get(AppConfig, _LLM_ENABLED_KEY)
+    except SQLAlchemyError:
+        db.rollback()
+        return True
+    if row is None or not row.value:
+        return True  # defaut active
+    return row.value.strip().lower() in {"1", "true", "yes"}
+
+
+def set_llm_enabled(db: Session, enabled: bool) -> None:
+    value = "true" if enabled else "false"
+    row = db.get(AppConfig, _LLM_ENABLED_KEY)
+    if row is None:
+        db.add(AppConfig(key=_LLM_ENABLED_KEY, value=value))
+    else:
+        row.value = value
+    db.commit()
+
+
 def save(db: Session, payload: dict[str, str]) -> None:
+    invalidate_test = False
     for k in _KEYS:
         if k in payload:
             _set(db, k, payload[k])
+            if k in {"api_key", "base_url"}:
+                invalidate_test = True
+    # Changing the key or endpoint invalidates the last successful test
+    # (a re-test is mandatory before the badge can go green again).
+    # NB: `_set` prefixes the key; the tested flag is a bare key, so write it
+    # directly rather than through `_set`.
+    if invalidate_test:
+        row = db.get(AppConfig, _LLM_TESTED_KEY)
+        if row is None:
+            db.add(AppConfig(key=_LLM_TESTED_KEY, value="false"))
+        else:
+            row.value = "false"
+    db.commit()
+
+
+# ---- Last Mistral connection test result -----------------------------------
+# `true` only after `/settings/mistral/test` succeeded. The LLM badge turns
+# green (ON) only when the key is configured, the LLM switch is on AND this
+# flag is true. Reset to "false" whenever the api_key / base_url changes.
+
+_LLM_TESTED_KEY = "llm_last_test_ok"
+
+
+def get_llm_tested(db: Session) -> bool:
+    try:
+        row = db.get(AppConfig, _LLM_TESTED_KEY)
+    except SQLAlchemyError:
+        db.rollback()
+        return False
+    if row is None or not row.value:
+        return False
+    return row.value.strip().lower() in {"1", "true", "yes"}
+
+
+def set_llm_tested(db: Session, ok: bool) -> None:
+    value = "true" if ok else "false"
+    row = db.get(AppConfig, _LLM_TESTED_KEY)
+    if row is None:
+        db.add(AppConfig(key=_LLM_TESTED_KEY, value=value))
+    else:
+        row.value = value
     db.commit()
 
 

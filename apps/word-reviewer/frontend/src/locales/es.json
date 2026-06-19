@@ -1,0 +1,10 @@
+{
+  "app": {
+    "title": "Word-Reviewer",
+    "version": "0.1.0"
+  },
+  "home": {
+    "title": "Word-Reviewer",
+    "subtitle": "Revisión de conformidad de documentos Word (.docx) — ATA100 + checklist cliente."
+  }
+}

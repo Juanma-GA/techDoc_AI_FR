@@ -1,4 +1,3 @@
-import { Badge, Button, Checkbox, Spinner } from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronUp, File, Folder } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -24,7 +23,7 @@ export type DirectoryBrowserProps = {
 
 /**
  * Navigateur d'arborescence OneDrive (lazy, un niveau par appel). Cases a cocher
- * sur fichiers ET dossiers. Compose uniquement des primitives @internal/ui.
+ * sur fichiers ET dossiers. Skin "preview-skin" (classes .item-list / .checkbox).
  */
 export function DirectoryBrowser({ scope = "input", selection, onSelectionChange }: DirectoryBrowserProps) {
   const { t } = useTranslation();
@@ -45,10 +44,10 @@ export function DirectoryBrowser({ scope = "input", selection, onSelectionChange
     onSelectionChange(next);
   };
 
-  if (listQuery.isLoading) return <Spinner />;
+  if (listQuery.isLoading) return <span className="spinner" />;
   if (listQuery.isError) {
     return (
-      <p className="text-sm text-danger">
+      <p className="error">
         {listQuery.error instanceof Error ? listQuery.error.message : String(listQuery.error)}
       </p>
     );
@@ -56,51 +55,59 @@ export function DirectoryBrowser({ scope = "input", selection, onSelectionChange
   if (!data) return null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
+    <div className="form">
+      <div className="row">
+        <button
+          type="button"
+          className="btn ghost small"
           disabled={atRoot}
           onClick={() => setPath(parentPath(data.path, data.root))}
         >
           <ChevronUp className="mr-1 h-4 w-4" />
           {t("browse.up")}
-        </Button>
-        <code className="flex-1 truncate text-xs text-fg-dim">{data.path}</code>
+        </button>
+        <code className="hint grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {data.path}
+        </code>
       </div>
 
-      <ul className="flex flex-col divide-y divide-border rounded-sm border border-md">
+      <div className="item-list">
         {data.entries.length ? (
           data.entries.map((e) => (
-            <li key={e.path} className="flex items-center gap-2 px-2 py-1.5">
-              <Checkbox
-                checked={selection.has(e.path)}
-                onCheckedChange={() => toggle(e.path)}
-                aria-label={e.name}
-              />
+            <div key={e.path} className="item-row">
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={selection.has(e.path)}
+                  onChange={() => toggle(e.path)}
+                  aria-label={e.name}
+                />
+              </label>
               {e.kind === "folder" ? (
                 <button
                   type="button"
-                  className="flex flex-1 items-center gap-2 truncate text-left hover:text-brand-light"
+                  className="item-main clickable"
+                  style={{ textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
                   onClick={() => setPath(e.path)}
                 >
                   <Folder className="h-4 w-4 shrink-0 text-brand-light" />
-                  <span className="truncate">{e.name}</span>
+                  <span className="item-name">{e.name}</span>
                 </button>
               ) : (
-                <span className="flex flex-1 items-center gap-2 truncate">
+                <span className="item-main">
                   <File className="h-4 w-4 shrink-0 text-fg-muted" />
-                  <span className="truncate">{e.name}</span>
+                  <span className="item-name">{e.name}</span>
                 </span>
               )}
-              {e.kind === "file" ? <Badge>{e.ext || "?"}</Badge> : null}
-            </li>
+              {e.kind === "file" ? <span className="badge default">{e.ext || "?"}</span> : null}
+            </div>
           ))
         ) : (
-          <li className="px-2 py-2 text-sm text-fg-dim">{t("browse.empty")}</li>
+          <div className="item-row">
+            <span className="hint">{t("browse.empty")}</span>
+          </div>
         )}
-      </ul>
+      </div>
     </div>
   );
 }

@@ -9,10 +9,19 @@ from the DB so the user can clone/override built-in catalogs.
 
 from __future__ import annotations
 
-from app.checks.standards import ata100, ata2200, mat10000, s1000d, s2000m, ste100
+from app.checks.standards import ata100, mat10000, ste100
 from app.checks.standards._base import StandardRule
 
 
+# Le PDF Reviewer analyse le **rendu PDF** publié, jamais la source. Les
+# normes purement XML/gestion de données (S1000D, ATA iSpec 2200, S2000M)
+# ont été retirées du catalogue : leurs règles vérifiaient des champs/codes
+# (DMC, NSN, CAGE, Information Code, SMR, QPA…) qui n'existent que dans le
+# XML/SGML source et n'ont pas de sens sur un PDF. Seules restent les normes
+# dont les règles portent sur le texte/rendu : ASD-STE100 (style), MAT10000
+# (description de tâche) et ATA 100 (chapitrage). Les règles de style
+# rédactionnel S1000D/STE conservées vivent dans `app.checks.s1000d_checks`
+# (moteur transverse toujours actif).
 BUILTIN_STANDARDS: list[dict[str, object]] = [
     {
         "code": "ASD-STE100",
@@ -27,17 +36,6 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
         "versions": ste100.CATALOG,
     },
     {
-        "code": "S1000D",
-        "label": "S1000D — Aerospace technical publication standard",
-        "description": (
-            "Norme de structure documentaire ASD/AIA pour la "
-            "documentation technique aéronautique modulaire (Data "
-            "Modules, DMC, BREX, IETP). Pour les règles de style "
-            "rédactionnel, voir la norme distincte ASD-STE100."
-        ),
-        "versions": s1000d.CATALOG,
-    },
-    {
         "code": "MAT10000",
         "label": "MAT10000 — Maintenance task description (Dassault Aviation)",
         "description": (
@@ -48,16 +46,6 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
         "versions": mat10000.CATALOG,
     },
     {
-        "code": "S2000M",
-        "label": "S2000M — Material management spec (ASD/AIA)",
-        "description": (
-            "Standard international pour la gestion des matériels et "
-            "rechanges. Couvre la nomenclature, les codes de "
-            "maintenance, les listes de pièces."
-        ),
-        "versions": s2000m.CATALOG,
-    },
-    {
         "code": "ATA100",
         "label": "ATA 100 — Specification for manufacturers' technical data",
         "description": (
@@ -66,16 +54,6 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
             "par iSpec 2200 mais toujours référencé."
         ),
         "versions": ata100.CATALOG,
-    },
-    {
-        "code": "ATA2200",
-        "label": "ATA iSpec 2200 — Information standards for aviation maintenance",
-        "description": (
-            "Successeur ATA 100 : standard d'échange de données de "
-            "maintenance aéronautique civile, SGML/XML, références "
-            "structurées."
-        ),
-        "versions": ata2200.CATALOG,
     },
 ]
 

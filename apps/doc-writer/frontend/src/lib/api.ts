@@ -73,17 +73,81 @@ export type DocumentDto = {
   uploaded_at: string;
 };
 
+export type DocumentContentDto = {
+  id: string;
+  filename: string;
+  kind: DocumentKind;
+  char_count: number;
+  text: string;
+};
+
 export type ZoneDto = {
   id: string;
-  kind: "placeholder" | "xxx" | "llm";
+  kind: "placeholder" | "xxx" | "llm" | "frame";
   slide_index: number;
   slide_title: string;
   label: string;
   location: string;
   target: string;
+  active: boolean;
+  // Consignes libres pour le LLM de remplissage (format, ton, longueur...).
+  instruction: string;
+  // Alignement force du texte ecrit dans la zone (rendu PPTX). "" = auto
+  // (preserve l'alignement du template).
+  align: "" | "left" | "center" | "right" | "justify";
 };
 
-export type ZonesDto = { zones: ZoneDto[]; llm_used: boolean };
+export type ZonesDto = {
+  zones: ZoneDto[];
+  // Zones soft-deleted, restaurables via documentsApi.restoreZone.
+  removed: ZoneDto[];
+  llm_used: boolean;
+  // Zones LLM rejetees pour conflit de coherence (diagnostic).
+  dropped_count: number;
+  // Tant que false, l'export PPTX est refuse (ZONES_NOT_VALIDATED), sauf
+  // auto-validation backend (dropped_count == 0 && zones > 0).
+  validated: boolean;
+};
+
+// Structure geometrique d'un template PPTX (apercu de la modale d'export).
+export type PptxBBox = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+export type PptxShape = {
+  id: string;
+  slide_index: number;
+  slide_title: string;
+  location: string;
+  kind: string;
+  text: string;
+  bbox: PptxBBox | null;
+};
+
+export type PptxSlide = {
+  index: number;
+  title: string;
+  shapes: PptxShape[];
+};
+
+export type PptxStructureDto = {
+  slides: PptxSlide[];
+  slide_width_emu: number;
+  slide_height_emu: number;
+};
+
+// Apercu du remplissage : zones (avec etat actif) + mapping zone_id -> contenu.
+export type PreviewPptxDto = {
+  zones: ZoneDto[];
+  mapping: Record<string, string>;
+};
+
+export type RefillZonesDto = {
+  mapping: Record<string, string>;
+};
 
 export type UploadItemResult = {
   filename: string;
@@ -125,6 +189,12 @@ export type SettingsDto = {
   base_url: string;
   chat_model: string;
   embed_model: string;
+  // Modele vision (multimodal) pour lire les PDF (drapeaux, jauges...).
+  vision_model: string;
+  // Modele OCR document Mistral (/v1/ocr), repli de la vision.
+  ocr_model: string;
+  // Interrupteur LLM global (false = les taches IA sont sautees).
+  llm_enabled: boolean;
 };
 
 export type TestConnectionDto = {
@@ -144,10 +214,73 @@ export const documentsApi = {
   },
   remove: (id: string) =>
     request<void>(`/documents/${id}`, { method: "DELETE" }),
+  reparse: (id: string) =>
+    request<DocumentDto>(`/documents/${id}/reparse`, { method: "POST" }),
+  content: (id: string) =>
+    request<DocumentContentDto>(`/documents/${id}/content`),
   zones: (id: string, refresh = false) =>
     request<ZonesDto>(
       `/documents/${id}/zones${refresh ? "?refresh=true" : ""}`,
     ),
+  setZoneActive: (id: string, zoneId: string, active: boolean) =>
+    request<ZonesDto>(`/documents/${id}/zones/${zoneId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active }),
+    }),
+  setZoneAlign: (id: string, zoneId: string, align: ZoneDto["align"]) =>
+    request<ZonesDto>(`/documents/${id}/zones/${zoneId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ align }),
+    }),
+  deleteZone: (id: string, zoneId: string) =>
+    request<ZonesDto>(`/documents/${id}/zones/${zoneId}`, {
+      method: "DELETE",
+    }),
+  restoreZone: (id: string, zoneId: string) =>
+    request<ZonesDto>(`/documents/${id}/zones/${zoneId}/restore`, {
+      method: "POST",
+    }),
+  // Suppression groupee de zones (corbeille douce, restaurables).
+  bulkDeleteZones: (id: string, ids: string[]) =>
+    request<ZonesDto>(`/documents/${id}/zones/bulk-delete`, {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
+  // Edition du label / de la consigne (instruction) d'une zone, persistee sur
+  // le template (relue par /refill-zones).
+  updateZoneMeta: (
+    id: string,
+    zoneId: string,
+    body: { label?: string; instruction?: string },
+  ) =>
+    request<ZonesDto>(`/documents/${id}/zones/${zoneId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  // Ajout d'une zone (transforme une shape libre en zone a remplir).
+  addZone: (
+    id: string,
+    body: {
+      target: string;
+      label: string;
+      slide_index: number;
+      slide_title: string;
+      location: string;
+    },
+  ) =>
+    request<ZonesDto>(`/documents/${id}/zones`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // Structure geometrique du template (slides + shapes + bbox EMU), pour
+  // l'apercu PPTX.
+  structure: (id: string) =>
+    request<PptxStructureDto>(`/documents/${id}/structure`),
+  validateZones: (id: string, validated: boolean) =>
+    request<ZonesDto>(`/documents/${id}/zones/validate`, {
+      method: "POST",
+      body: JSON.stringify({ validated }),
+    }),
   upload: async (
     files: File[],
     kind: DocumentKind = "source",
@@ -185,7 +318,11 @@ export const sessionsApi = {
     title?: string;
     scope_doc_ids: string[];
     lang?: string;
+    output_format?: string;
+    length?: string;
+    tone?: string;
     template_doc_id?: string | null;
+    style_doc_id?: string | null;
   }) =>
     request<SessionDto>("/sessions", {
       method: "POST",
@@ -195,6 +332,57 @@ export const sessionsApi = {
     request<void>(`/sessions/${id}`, { method: "DELETE" }),
   messages: (id: string) =>
     request<MessageDto[]>(`/sessions/${id}/messages`),
+  // Apercu du remplissage PPTX (zones + mapping propose) avant render.
+  previewPptx: (id: string) =>
+    request<PreviewPptxDto>(`/sessions/${id}/preview-pptx`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  // (Re)remplissage IA de zones precises. force=true relache la regle de
+  // pertinence (remplit meme si la source est maigre).
+  refillZones: (id: string, body: { zone_ids: string[]; force: boolean }) =>
+    request<RefillZonesDto>(`/sessions/${id}/refill-zones`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  // Render final du PPTX avec le mapping edite : declenche le download du blob.
+  renderPptx: async (
+    id: string,
+    mapping: Record<string, string>,
+    filename?: string | null,
+  ): Promise<void> => {
+    const response = await fetch(`${API_BASE}/sessions/${id}/render-pptx`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mapping, filename: filename ?? null }),
+    });
+    if (!response.ok) {
+      let payload: ApiError;
+      try {
+        payload = (await response.json()) as ApiError;
+      } catch {
+        payload = {
+          code: "UNKNOWN",
+          message: response.statusText,
+          detail: null,
+          request_id: "",
+        };
+      }
+      throw new ApiClientError(payload, response.status);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const m = /filename="?([^"]+)"?/.exec(disposition);
+    const outName = m?.[1] ?? `${filename ?? id}.pptx`;
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = outName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objUrl);
+  },
   exportUrl: (id: string, format: ExportFormat, filename?: string): string => {
     const qs = new URLSearchParams({ format });
     if (filename) qs.set("filename", filename);
@@ -224,7 +412,7 @@ export const sessionsApi = {
     const blob = await response.blob();
     const disposition = response.headers.get("Content-Disposition") || "";
     const m = /filename="?([^"]+)"?/.exec(disposition);
-    const outName = m ? m[1] : `${filename ?? "session"}.${format}`;
+    const outName = m?.[1] ?? `${filename ?? "session"}.${format}`;
     const objUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = objUrl;
@@ -236,6 +424,45 @@ export const sessionsApi = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Health (badge LLM sidebar)
+// ---------------------------------------------------------------------------
+
+// `llm` reflete l'etat runtime : "ok" (cle + active), "disabled" (interrupteur
+// off), "not_configured" (pas de cle), "untested" (cle non encore testee).
+export type LlmStatus = "ok" | "disabled" | "not_configured" | "untested";
+
+export type HealthDto = {
+  status: string;
+  llm: LlmStatus | string;
+};
+
+export const healthApi = {
+  read: () => request<HealthDto>("/health"),
+};
+
+// ---------------------------------------------------------------------------
+// Admin (onglet Donnees : stats + reset)
+// ---------------------------------------------------------------------------
+
+export type AdminStatsDto = {
+  documents: number;
+  chunks: number;
+  sessions: number;
+  messages: number;
+  total_size_bytes: number;
+};
+
+export type AdminResetScope = "documents" | "sessions" | "all";
+
+export type AdminResetDto = { deleted: Record<string, number> };
+
+export const adminApi = {
+  stats: () => request<AdminStatsDto>("/admin/stats"),
+  reset: (scope: AdminResetScope) =>
+    request<AdminResetDto>(`/admin/reset/${scope}`, { method: "POST" }),
+};
+
 export const settingsApi = {
   read: () => request<SettingsDto>("/settings"),
   write: (body: {
@@ -243,6 +470,9 @@ export const settingsApi = {
     base_url?: string;
     chat_model?: string;
     embed_model?: string;
+    vision_model?: string;
+    ocr_model?: string;
+    llm_enabled?: boolean;
   }) =>
     request<SettingsDto>("/settings", {
       method: "POST",
@@ -250,6 +480,27 @@ export const settingsApi = {
     }),
   test: () =>
     request<TestConnectionDto>("/settings/test", { method: "POST" }),
+};
+
+// ---------------------------------------------------------------------------
+// Prompts LLM editables runtime (/settings/prompts)
+// ---------------------------------------------------------------------------
+
+export type PromptEntryDto = { value: string; is_default: boolean };
+
+export type PromptsDto = {
+  pptx_analysis: PromptEntryDto;
+  pptx_fill: PromptEntryDto;
+};
+
+export const promptsApi = {
+  read: () => request<PromptsDto>("/settings/prompts"),
+  // Chaque champ : undefined/null = inchange, chaine vide = reset au defaut.
+  write: (body: { pptx_analysis?: string | null; pptx_fill?: string | null }) =>
+    request<PromptsDto>("/settings/prompts", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };
 
 // ---------------------------------------------------------------------------

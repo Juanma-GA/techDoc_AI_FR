@@ -46,20 +46,17 @@ export function SuggestionItem({
       data-testid="suggestion-item"
       data-suggestion-id={suggestion.id}
       onClick={onSelect}
-      className={[
-        "rounded-sm border bg-card p-3 text-sm transition-colors",
-        isSelected ? "border-bright bg-card-hover" : "hover:bg-card-hover",
-      ].join(" ")}
+      className={isSelected ? "suggestion active" : "suggestion"}
     >
-      <header className="mb-2 flex flex-wrap items-center gap-2">
+      <header className="suggestion-head">
         <SeverityBadge severity={suggestion.severity} />
         {suggestion.rule_kind === "units" ? <UnitChip /> : null}
-        <span className="font-mono text-[0.65rem] uppercase tracking-wider text-fg-muted">
+        <span className="suggestion-loc">
           p.{suggestion.page} · {suggestion.rule_code}
         </span>
         {isMultiPage ? (
           <span
-            className="inline-flex items-center gap-1 rounded-sm bg-brand/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-wider text-brand-blue-light"
+            className="badge info"
             title={t("reviewer.suggestion.multiPageHint", { pages: groupPages })}
           >
             <Layers size={11} />
@@ -67,24 +64,24 @@ export function SuggestionItem({
           </span>
         ) : null}
         {isApplied ? (
-          <span className="ml-auto rounded-sm bg-success/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-wider text-success">
+          <span className="badge ok" style={{ marginLeft: "auto" }}>
             {t("reviewer.suggestion.applied")}
           </span>
         ) : null}
         {isRejected ? (
-          <span className="ml-auto rounded-sm bg-fg-muted/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-wider text-fg-dim">
+          <span className="badge off" style={{ marginLeft: "auto" }}>
             {t("reviewer.suggestion.rejected")}
           </span>
         ) : null}
       </header>
 
-      <p className="mb-2 text-fg-dim">{suggestion.message}</p>
+      <p className="suggestion-msg">{suggestion.message}</p>
 
       {editing ? (
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          className="mb-2 w-full rounded-sm border bg-bg-2 p-2 font-mono text-xs text-fg focus-visible:ring-2 focus-visible:ring-brand-blue-light"
+          className="input mono"
           rows={2}
         />
       ) : (
@@ -92,18 +89,18 @@ export function SuggestionItem({
       )}
 
       {isMultiPage ? (
-        <div className="mt-2 flex items-center justify-between gap-2 rounded-sm bg-brand/10 px-2 py-1.5">
-          <span className="text-xs text-fg-dim">
+        <div className="banner row" style={{ justifyContent: "space-between", marginTop: 8 }}>
+          <span className="hint">
             {t("reviewer.suggestion.multiPageHint", { pages: groupPages })}
           </span>
           <button
             type="button"
+            className="btn primary small"
             data-testid="suggestion-apply-group"
             onClick={(e) => {
               e.stopPropagation();
               onApplyGroup();
             }}
-            className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-brand px-2 py-1 text-xs text-fg hover:bg-brand-blue-light"
           >
             <Layers size={12} />
             {t("reviewer.suggestion.applyGroup", { count: groupOccurrences })}
@@ -112,28 +109,28 @@ export function SuggestionItem({
       ) : null}
 
       {!isApplied && !isRejected ? (
-        <footer className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        <footer className="suggestion-actions" style={{ justifyContent: "flex-end" }}>
           {editing ? (
             <>
               <button
                 type="button"
+                className="btn secondary small"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditing(false);
                   setDraft(suggestion.proposed_text);
                 }}
-                className="rounded-sm border px-2 py-1 text-xs text-fg-dim hover:bg-card-hover hover:text-fg"
               >
                 {t("common.cancel")}
               </button>
               <button
                 type="button"
+                className="btn primary small"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditing(false);
                   onSaveEdit(draft);
                 }}
-                className="rounded-sm bg-brand px-2 py-1 text-xs text-fg hover:bg-brand-blue-light"
               >
                 {t("common.save")}
               </button>
@@ -142,34 +139,34 @@ export function SuggestionItem({
             <>
               <button
                 type="button"
+                className="btn danger small"
                 onClick={(e) => {
                   e.stopPropagation();
                   onReject();
                 }}
-                className="inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-xs text-danger hover:bg-danger/10"
               >
                 <X size={12} />
                 {t("reviewer.suggestion.reject")}
               </button>
               <button
                 type="button"
+                className="btn secondary small"
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditing(true);
                 }}
-                className="inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-xs text-fg-dim hover:bg-card-hover hover:text-fg"
               >
                 <Pencil size={12} />
                 {t("reviewer.suggestion.edit")}
               </button>
               <button
                 type="button"
+                className="btn primary small"
                 data-testid="suggestion-accept"
                 onClick={(e) => {
                   e.stopPropagation();
                   onAccept();
                 }}
-                className="inline-flex items-center gap-1 rounded-sm bg-brand px-2 py-1 text-xs text-fg hover:bg-brand-blue-light"
               >
                 <Check size={12} />
                 {t("reviewer.suggestion.accept")}

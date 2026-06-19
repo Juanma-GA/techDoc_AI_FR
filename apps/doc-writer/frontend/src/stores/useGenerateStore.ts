@@ -3,6 +3,13 @@ import { create } from "zustand";
 type Status = "idle" | "streaming" | "done" | "error";
 
 export type OutputLang = "fr" | "en" | "es";
+export type OutputFormat =
+  | "markdown"
+  | "faq"
+  | "structured"
+  | "table"
+  | "template";
+export type OutputLength = "short" | "medium" | "long";
 
 const OUTPUT_LANG_KEY = "doc-writer-output-lang";
 
@@ -21,7 +28,11 @@ type GenerateState = {
   prompt: string;
   scopeDocIds: string[];
   templateDocId: string | null;
+  styleDocId: string | null;
   outputLang: OutputLang;
+  outputFormat: OutputFormat;
+  length: OutputLength;
+  outputFilename: string;
   output: string;
   status: Status;
   errorMessage: string | null;
@@ -29,7 +40,11 @@ type GenerateState = {
   setPrompt: (value: string) => void;
   setScopeDocIds: (ids: string[]) => void;
   setTemplateDocId: (id: string | null) => void;
+  setStyleDocId: (id: string | null) => void;
   setOutputLang: (lang: OutputLang) => void;
+  setOutputFormat: (format: OutputFormat) => void;
+  setLength: (length: OutputLength) => void;
+  setOutputFilename: (name: string) => void;
   beginStream: (sessionId: string) => void;
   appendToken: (delta: string) => void;
   finishStream: () => void;
@@ -41,7 +56,11 @@ export const useGenerateStore = create<GenerateState>((set) => ({
   prompt: "",
   scopeDocIds: [],
   templateDocId: null,
+  styleDocId: null,
   outputLang: readInitialOutputLang(),
+  outputFormat: "markdown",
+  length: "medium",
+  outputFilename: "",
   output: "",
   status: "idle",
   errorMessage: null,
@@ -49,12 +68,16 @@ export const useGenerateStore = create<GenerateState>((set) => ({
   setPrompt: (value) => set({ prompt: value }),
   setScopeDocIds: (ids) => set({ scopeDocIds: ids }),
   setTemplateDocId: (id) => set({ templateDocId: id }),
+  setStyleDocId: (id) => set({ styleDocId: id }),
   setOutputLang: (lang) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(OUTPUT_LANG_KEY, lang);
     }
     set({ outputLang: lang });
   },
+  setOutputFormat: (format) => set({ outputFormat: format }),
+  setLength: (length) => set({ length }),
+  setOutputFilename: (name) => set({ outputFilename: name }),
   beginStream: (sessionId) =>
     set({
       status: "streaming",

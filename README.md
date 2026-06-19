@@ -8,7 +8,7 @@ règles, les mêmes composants UI et les mêmes tokens.
 
 | App | Rôle | Port |
 |---|---|---|
-| [`apps/ftm/`](apps/ftm/) | FTM Agent v2 — analyse de Fiches de Tâches de Maintenance | 8000 |
+| [`apps/corpus-agent/`](apps/corpus-agent/) | Corpus Agent v2 — analyse de Fiches de Tâches de Maintenance | 8000 |
 | [`apps/pdf-reviewer/`](apps/pdf-reviewer/) | Détection et correction d'anomalies dans des PDF techniques | 8001 |
 | [`apps/doc-writer/`](apps/doc-writer/) | Génération de contenu rédactionnel en RAG streaming | 8002 |
 | [`apps/ocr-vision/`](apps/ocr-vision/) | OCR + extraction visuelle sur documents techniques | 8003 |
@@ -58,7 +58,7 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 .
 ├── apps/                       # 1 dossier = 1 POC autonome
 │   ├── _template/              # squelette canonique — copie pour chaque nouveau POC
-│   ├── ftm/                    # POC FTM Agent v2
+│   ├── corpus-agent/           # POC Corpus Agent v2
 │   ├── pdf-reviewer/           # POC PDF Reviewer
 │   ├── doc-writer/             # POC Doc Writer
 │   └── ocr-vision/             # POC OCR Vision
@@ -92,7 +92,7 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 
 ```bash
 pnpm install
-pnpm dev:ftm            # backend uvicorn + frontend Vite (HMR) en parallèle
+pnpm dev:corpus-agent   # backend uvicorn + frontend Vite (HMR) en parallèle
 pnpm dev:pdf-reviewer   # idem sur port 8001
 pnpm dev:doc-writer     # idem sur port 8002
 pnpm dev:ocr-vision     # idem sur port 8003

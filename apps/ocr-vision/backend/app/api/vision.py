@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.mistral_client import MistralClient, MistralError
+from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
 from app.db.session import get_db
 
 
@@ -30,6 +30,15 @@ def vision_test(
     prompt: str = Form(""),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+    # Interrupteur global LLM (standard) : OFF -> on saute l'appel Mistral
+    # et on renvoie une reponse vide gracieuse (HTTP 200, jamais 5xx).
+    if not get_llm_enabled(db):
+        return {
+            "ocr_text": "",
+            "description": "",
+            "warning": "LLM desactive — traitement OCR/reconnaissance ignore.",
+        }
+
     try:
         client = MistralClient.from_db(db)
     except MistralError as exc:

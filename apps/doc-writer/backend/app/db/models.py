@@ -11,7 +11,7 @@ Cinq entités :
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
@@ -28,8 +28,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.session import Base
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+def _now_local() -> datetime:
+    """Heure locale systeme (naive). POC local-first mono-machine : on stocke
+    l'heure murale locale pour que l'UI l'affiche telle quelle. SQLite ne
+    conserve pas le fuseau ; un timestamp UTC serialise sans offset etait
+    interprete comme heure locale cote JS -> decalage du fuseau a l'affichage.
+    """
+    return datetime.now()
 
 
 def _uuid4() -> uuid.UUID:
@@ -51,7 +56,7 @@ class Document(Base):
     # source = contenu input pour RAG ; template = structure {{placeholders}} a remplir ;
     # style = exemple de syntaxe / ton a reproduire.
     kind: Mapped[str] = mapped_column(String(16), default="source", server_default="source", nullable=False)
-    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_local)
 
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         back_populates="document",
@@ -79,7 +84,8 @@ class Session(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
     title: Mapped[str] = mapped_column(String(255), default="", server_default="")
-    # JSON list of doc UUIDs (kind=source) ; chaîne vide ou "[]" = tous les docs source.
+    # JSON list of doc UUIDs (kind=source). Chaîne vide ou "[]" = AUCUNE source :
+    # génération libre depuis le seul brief (cf. writer_engine.build_messages).
     scope_doc_ids: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
     lang: Mapped[str] = mapped_column(String(8), default="fr", server_default="fr")
     # Options de generation (cf. core/writer_engine.py FORMAT_PROMPTS / LENGTH_HINTS / TONE_HINTS).
@@ -93,7 +99,7 @@ class Session(Base):
     style_doc_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_local)
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="session",
@@ -112,7 +118,7 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(16), nullable=False)  # user | assistant
     content: Mapped[str] = mapped_column(Text, default="", server_default="")
     citations: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")  # JSON
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_local)
 
     session: Mapped[Session] = relationship(back_populates="messages")
 

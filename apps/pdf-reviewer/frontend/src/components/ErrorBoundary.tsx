@@ -6,37 +6,47 @@ type Props = { children: ReactNode };
 type State = { error: Error | null };
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
-    if (import.meta.env.DEV) {
-      console.error("[ErrorBoundary]", error, info);
-    }
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Pas de logging navigateur (regle #2). structlog cote backend capture
+    // l'incident via X-Request-Id au prochain appel.
+    void error;
+    void info;
   }
 
   private handleReload = (): void => {
     window.location.reload();
   };
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (!this.state.error) return this.props.children;
 
     return (
       <div
         role="alert"
-        className="flex h-screen flex-col items-center justify-center gap-4 bg-bg p-8 text-center text-fg"
+        style={{
+          display: "flex",
+          height: "100vh",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          padding: 32,
+          textAlign: "center",
+        }}
       >
-        <h1 className="font-display text-2xl">{i18n.t("errors.boundary.title")}</h1>
-        <p className="max-w-md text-fg-dim">{i18n.t("errors.boundary.description")}</p>
-        <button
-          type="button"
-          onClick={this.handleReload}
-          className="rounded-lg bg-brand px-4 py-2 text-fg shadow-card transition-colors hover:bg-brand-blue-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light"
-        >
+        <h1 style={{ fontFamily: '"Orbitron", sans-serif', fontSize: "1.5rem", margin: 0 }}>
+          {i18n.t("errors.boundary.title")}
+        </h1>
+        <p className="hint" style={{ maxWidth: "28rem" }}>
+          {i18n.t("errors.boundary.description")}
+        </p>
+        <button type="button" className="btn primary" onClick={this.handleReload}>
           {i18n.t("errors.boundary.reload")}
         </button>
       </div>

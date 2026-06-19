@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from typing import Any, Optional
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models import AppConfig
@@ -30,6 +31,16 @@ CONFIG_KEYS = {
     "chat_model": "MISTRAL_CHAT_MODEL",
     "embed_model": "MISTRAL_EMBED_MODEL",
 }
+
+# Interrupteur global LLM (standard). Cle bare dans `app_config`, defaut "true".
+# OFF = on saute la tache confiee a l'IA (fallback gracieux), la cle Mistral est conservee.
+LLM_ENABLED_KEY = "llm_enabled"
+
+# Dernier test de connexion Mistral reussi ? (standard). Cle bare dans
+# `app_config`, defaut "false". Le badge LLM ne passe au vert (ON) que si la cle
+# est configuree, le LLM active ET ce flag vrai. Remis a "false" des que la cle
+# ou la base_url change (re-test obligatoire).
+LLM_TESTED_KEY = "llm_last_test_ok"
 
 
 class MistralError(RuntimeError):
@@ -63,9 +74,43 @@ def get_effective_settings(db: Session) -> dict[str, str]:
 
 
 def save_settings(db: Session, data: dict[str, Any]) -> None:
+    invalidate_test = False
     for k, v in data.items():
         if k in CONFIG_KEYS and v is not None:
             _write_config(db, CONFIG_KEYS[k], str(v))
+            if k in {"api_key", "base_url"}:
+                invalidate_test = True
+    # Changer la cle ou l'endpoint invalide le dernier test reussi.
+    if invalidate_test:
+        _write_config(db, LLM_TESTED_KEY, "false")
+    db.commit()
+
+
+def get_llm_enabled(db: Session) -> bool:
+    """Etat de l'interrupteur LLM (defaut: active)."""
+    try:
+        return _read_config(db, LLM_ENABLED_KEY, "true").strip().lower() in {"1", "true", "yes"}
+    except SQLAlchemyError:
+        db.rollback()
+        return True
+
+
+def set_llm_enabled(db: Session, enabled: bool) -> None:
+    _write_config(db, LLM_ENABLED_KEY, "true" if enabled else "false")
+    db.commit()
+
+
+def get_llm_tested(db: Session) -> bool:
+    """Dernier test de connexion Mistral reussi ? (defaut: false)."""
+    try:
+        return _read_config(db, LLM_TESTED_KEY, "false").strip().lower() in {"1", "true", "yes"}
+    except SQLAlchemyError:
+        db.rollback()
+        return False
+
+
+def set_llm_tested(db: Session, ok: bool) -> None:
+    _write_config(db, LLM_TESTED_KEY, "true" if ok else "false")
     db.commit()
 
 

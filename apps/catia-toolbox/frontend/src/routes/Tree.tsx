@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle, EmptyState, Spinner } from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -19,38 +18,39 @@ export function Tree() {
   });
 
   if (!importId) {
-    return <EmptyState icon={FolderTree} title={t("tree.noImport")} description={t("tree.noImportDesc")} />;
+    return (
+      <div className="empty-state">
+        <FolderTree size={28} aria-hidden="true" />
+        <h3 className="card-title">{t("tree.noImport")}</h3>
+        <p className="hint">{t("tree.noImportDesc")}</p>
+      </div>
+    );
   }
-  if (treeQuery.isLoading) return <Spinner />;
+  if (treeQuery.isLoading) return <span className="spinner" />;
   if (!treeQuery.data) {
-    return <EmptyState icon={FolderTree} title={t("tree.notFound")} description={t("tree.notFoundDesc")} />;
+    return (
+      <div className="empty-state">
+        <FolderTree size={28} aria-hidden="true" />
+        <h3 className="card-title">{t("tree.notFound")}</h3>
+        <p className="hint">{t("tree.notFoundDesc")}</p>
+      </div>
+    );
   }
 
   const data = treeQuery.data;
   return (
     <div className="flex max-w-4xl flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("tree.title")}</h1>
-        <p className="text-fg-dim">{data.root_label}</p>
-      </header>
+      <article className="card">
+        <h2 className="card-title">
+          {t("tree.metricsTitle")} - {data.root_label}
+        </h2>
+        <MetricsPanel metrics={data.metrics} />
+      </article>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("tree.metricsTitle")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MetricsPanel metrics={data.metrics} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("tree.structureTitle", { count: data.node_count })}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TreeView nodes={data.nodes} />
-        </CardContent>
-      </Card>
+      <article className="card">
+        <h2 className="card-title">{t("tree.structureTitle", { count: data.node_count })}</h2>
+        <TreeView nodes={data.nodes} />
+      </article>
     </div>
   );
 }
