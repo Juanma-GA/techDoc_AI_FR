@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     rate_limit_llm: str = "10/minute"
 
     # Cle de chiffrement des secrets stockes en base (cle Mistral). Vide = off
-    # (plaintext, dev). En prod l'IT la fournit via .env. Generer avec :
-    #   python -c "from app.core.encryption import generate_key; print(generate_key())"
+    # (plaintext, dev). En prod l'IT la fournit via .env. Generer via la fonction
+    # generate_key() de app.core.encryption (commande dans .env.example).
     encryption_key: str = ""
 
     @field_validator("cors_origins", mode="before")

@@ -71,6 +71,7 @@ hits=$(grep -rEn "${exclude_args[@]}" \
   | grep -v '/tokens.json:' \
   | grep -v '/tailwind-preset.ts:' \
   | grep -v '/theme.css:' \
+  | grep -v '/preview-skin.css:' \
   | grep -vE '\.test\.(ts|tsx|py):' \
   | grep -vE '/tests/' \
   || true)
