@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/i18n.ts","./src/main.tsx","./src/components/errorboundary.tsx","./src/components/pageheader.tsx","./src/lib/api.ts","./src/routes/chat.tsx","./src/routes/dashboard.tsx","./src/routes/projects.tsx","./src/routes/settings.tsx"],"errors":true,"version":"5.9.3"}

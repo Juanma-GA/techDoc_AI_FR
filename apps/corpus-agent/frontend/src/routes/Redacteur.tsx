@@ -1,0 +1,213 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { anomaliesApi, filesApi, projectsApi } from "../lib/api";
+import { resolveAnomalyText } from "../lib/anomalyText";
+import { severityClass } from "../lib/format";
+import { useScopeStore } from "../stores/useScopeStore";
+import type { AnomalyOut, AnomalyStatus, FileOut, ProjectOut } from "../lib/types";
+
+const STATUSES: AnomalyStatus[] = ["open", "acknowledged", "fixed", "rejected"];
+const STATUS_KEY: Record<AnomalyStatus, string> = {
+  open: "redacteur.statusOpen",
+  acknowledged: "redacteur.statusAck",
+  fixed: "redacteur.statusFixed",
+  rejected: "redacteur.statusRejected",
+};
+const SEV_KEY: Record<string, string> = { high: "redacteur.sevHigh", medium: "redacteur.sevMedium", low: "redacteur.sevLow" };
+
+// Liste fixe des catégories d'anomalie (parité preview), affichées même sans occurrence.
+const TYPE_OPTIONS: string[] = [
+  "script",
+  "granule",
+  "texte",
+  "ordre_taches",
+  "tache_induite",
+  "orthographe",
+  "rechange",
+  "outillage",
+  "infrastructure",
+  "entete",
+  "securite",
+  "preliminaire",
+  "valeur_numerique",
+  "serrage",
+  "complementaire",
+  "illustration",
+  "personnalisee",
+];
+
+// Niveau de confiance IA porté par l'anomalie → libellé humain (parité preview `_confLabel`).
+function confLabel(c: string | null | undefined): string {
+  if (c === "elevee") return "confiance élevée";
+  if (c === "moyenne") return "confiance moyenne";
+  if (c === "faible") return "confiance faible";
+  return "";
+}
+
+export function Redacteur() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const presel = useScopeStore((s) => s.redacteurProjectId);
+  const [pid, setPid] = useState<string>(presel ?? "");
+  const [fType, setFType] = useState("");
+  const [fSev, setFSev] = useState("");
+  const [fConf, setFConf] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const projectsQuery = useQuery<ProjectOut[]>({ queryKey: ["projects"], queryFn: projectsApi.list });
+  const filesQuery = useQuery<FileOut[]>({ queryKey: ["files", pid], queryFn: () => filesApi.list(pid), enabled: !!pid });
+  const anomaliesQuery = useQuery<AnomalyOut[]>({ queryKey: ["anomalies", pid], queryFn: () => anomaliesApi.list(pid), enabled: !!pid });
+
+  const setStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: AnomalyStatus }) => anomaliesApi.setStatus(id, status),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["anomalies", pid] }),
+  });
+  const bulk = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: AnomalyStatus }) => anomaliesApi.bulkStatus(ids, status),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["anomalies", pid] }),
+  });
+
+  const filenameOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const f of filesQuery.data ?? []) for (const v of f.versions) m.set(v.id, f.current_name);
+    return m;
+  }, [filesQuery.data]);
+
+  const anomalies = (anomaliesQuery.data ?? []).filter((a) => a.type !== "dmc_missing");
+  const filtered = anomalies.filter(
+    (a) =>
+      (!fType || a.type === fType) &&
+      (!fSev || a.severity === fSev) &&
+      (!fConf || a.confidence === fConf) &&
+      (!fStatus || a.status === fStatus),
+  );
+
+  const byFile = useMemo(() => {
+    const groups = new Map<string, AnomalyOut[]>();
+    for (const a of filtered) {
+      const key = a.file_version_id ?? "—";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(a);
+    }
+    return [...groups.entries()];
+  }, [filtered]);
+
+  const toggle = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  return (
+    <>
+      <div className="page-header">
+        <h1>{t("nav.redacteur")}</h1>
+        <p>{t("redacteur.title")}</p>
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <select value={pid} onChange={(e) => setPid(e.target.value)} style={{ maxWidth: 280 }}>
+            <option value="">{t("redacteur.selectProject")}</option>
+            {(projectsQuery.data ?? []).map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {pid && (
+            <button type="button" className="btn ghost small" onClick={() => void anomaliesApi.exportCsv(pid)}>
+              CSV
+            </button>
+          )}
+        </div>
+      </div>
+
+      {pid && (
+        <div className="card">
+          <div className="row">
+            <Filter value={fType} onChange={setFType} label={t("redacteur.filterCategory")} options={TYPE_OPTIONS.map((ty) => [ty, t(`projects.kpi.type.${ty}`)])} allLabel={t("redacteur.filterAll")} />
+            <Filter value={fSev} onChange={setFSev} label={t("redacteur.filterSeverity")} options={["high", "medium", "low"].map((s) => [s, t(SEV_KEY[s] ?? s)])} allLabel={t("redacteur.filterAll")} />
+            <Filter value={fConf} onChange={setFConf} label={t("redacteur.filterConfidence")} options={[["elevee", t("redacteur.confHigh")], ["moyenne", t("redacteur.confMedium")], ["faible", t("redacteur.confLow")]]} allLabel={t("redacteur.filterAll")} />
+            <Filter value={fStatus} onChange={setFStatus} label={t("redacteur.filterStatus")} options={STATUSES.map((s) => [s, t(STATUS_KEY[s])])} allLabel={t("redacteur.filterAll")} />
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button type="button" className="btn ghost small" onClick={() => setCollapsed(new Set(byFile.map(([k]) => k)))}>{t("redacteur.collapseAll")}</button>
+            <button type="button" className="btn ghost small" onClick={() => setCollapsed(new Set())}>{t("redacteur.expandAll")}</button>
+          </div>
+        </div>
+      )}
+
+      {pid && (anomaliesQuery.isLoading ? (
+        <div className="card"><div className="empty-state">{t("common.loading")}</div></div>
+      ) : byFile.length === 0 ? (
+        <div className="card"><div className="empty-state">—</div></div>
+      ) : (
+        byFile.map(([key, items]) => {
+          const isCollapsed = collapsed.has(key);
+          const openIds = items.filter((a) => a.status === "open" || a.status === "acknowledged").map((a) => a.id);
+          return (
+            <div className={`red-file-block${isCollapsed ? " collapsed" : ""}`} key={key}>
+              <div className="red-file-header" onClick={() => toggle(key)}>
+                <span><span className="caret">▼</span>{filenameOf.get(key) ?? "—"} <span className="badge danger">{items.length}</span></span>
+                <span className="red-file-actions" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className="btn ghost small" disabled={!openIds.length} onClick={() => bulk.mutate({ ids: openIds, status: "fixed" })}>
+                    {t("redacteur.bulkFix")} ({openIds.length})
+                  </button>
+                  <button type="button" className="btn ghost small" disabled={!openIds.length} onClick={() => bulk.mutate({ ids: openIds, status: "rejected" })}>
+                    {t("redacteur.bulkReject")} ({openIds.length})
+                  </button>
+                </span>
+              </div>
+              <div className="red-anomalies-wrap">
+                {items.map((a) => (
+                  <AnomalyRow key={a.id} a={a} onStatus={(status) => setStatus.mutate({ id: a.id, status })} />
+                ))}
+              </div>
+            </div>
+          );
+        })
+      ))}
+    </>
+  );
+}
+
+function Filter({ value, onChange, label, options, allLabel }: { value: string; onChange: (v: string) => void; label: string; options: Array<readonly [string, string]>; allLabel: string }) {
+  return (
+    <label className="grow" style={{ minWidth: 160 }}>
+      <span className="label">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{allLabel}</option>
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>{l}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function AnomalyRow({ a, onStatus }: { a: AnomalyOut; onStatus: (s: AnomalyStatus) => void }) {
+  const { t } = useTranslation();
+  const message = resolveAnomalyText(t, a.message, a.message_key, a.message_params_json);
+  const suggestion = resolveAnomalyText(t, a.suggestion, a.suggestion_key, a.suggestion_params_json);
+  return (
+    <div className="red-anomaly">
+      <div className="red-anomaly-head">
+        <span className="badge">{t(`projects.kpi.type.${a.type}`)}</span>
+        <span className={`badge ${severityClass(a.severity)}`}>{a.severity}</span>
+        {a.confidence && <span className="badge off">{confLabel(a.confidence)}</span>}
+        <select className="red-status-select" value={a.status} onChange={(e) => onStatus(e.target.value as AnomalyStatus)}>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>{t(STATUS_KEY[s])}</option>
+          ))}
+        </select>
+      </div>
+      <div className="red-anomaly-msg">{message}</div>
+      {a.location && <div className="red-anomaly-loc">📍 {a.location}</div>}
+      {suggestion && <div className="red-anomaly-suggestion">→ {suggestion}</div>}
+    </div>
+  );
+}
