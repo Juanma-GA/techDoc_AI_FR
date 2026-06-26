@@ -241,14 +241,36 @@ export type ChatStreamHandlers = {
  * Consomme l'endpoint SSE POST /chat/ask via fetch + ReadableStream
  * (EventSource natif ne supporte pas POST). Retourne une fonction d'annulation.
  */
+// Timeout d'inactivite du flux SSE (ms). Si aucune donnee n'arrive dans cet
+// intervalle, on annule la requete pour ne pas laisser l'UI bloquee
+// indefiniment sur un flux suspendu. Configurable via .env (VITE_SSE_IDLE_TIMEOUT_MS).
+const SSE_IDLE_TIMEOUT_MS = Number(import.meta.env.VITE_SSE_IDLE_TIMEOUT_MS) || 60_000;
+
 export function streamAsk(
   body: { session_id: string | null; project_ids: string[]; question: string; lang: string },
   handlers: ChatStreamHandlers,
 ): () => void {
   const controller = new AbortController();
+  // Annulation par timeout : on distingue l'abort manuel (cleanup) de l'abort
+  // par inactivite pour pouvoir remonter une erreur explicite dans le 2e cas.
+  let timedOut = false;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  const armIdleTimeout = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, SSE_IDLE_TIMEOUT_MS);
+  };
+  const clearIdleTimeout = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = undefined;
+  };
+
   void (async () => {
     let response: Response;
     try {
+      armIdleTimeout();
       response = await fetch(`${BASE_URL}/chat/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
@@ -256,6 +278,11 @@ export function streamAsk(
         signal: controller.signal,
       });
     } catch (err) {
+      clearIdleTimeout();
+      if (timedOut) {
+        handlers.onError?.("Le flux a expire (aucune reponse du serveur).");
+        return;
+      }
       if (controller.signal.aborted) return;
       handlers.onError?.(err instanceof Error ? err.message : String(err));
       return;
@@ -282,6 +309,7 @@ export function streamAsk(
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        armIdleTimeout(); // donnees recues -> on repousse le timeout d'inactivite
         buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
         let sep;
         while ((sep = buffer.indexOf("\n\n")) !== -1) {
@@ -291,12 +319,19 @@ export function streamAsk(
         }
       }
     } catch (err) {
-      if (!controller.signal.aborted) {
+      if (timedOut) {
+        handlers.onError?.("Le flux a expire (aucune donnee recue).");
+      } else if (!controller.signal.aborted) {
         handlers.onError?.(err instanceof Error ? err.message : String(err));
       }
+    } finally {
+      clearIdleTimeout();
     }
   })();
-  return () => controller.abort();
+  return () => {
+    clearIdleTimeout();
+    controller.abort();
+  };
 }
 
 function processChunk(chunk: string, handlers: ChatStreamHandlers) {

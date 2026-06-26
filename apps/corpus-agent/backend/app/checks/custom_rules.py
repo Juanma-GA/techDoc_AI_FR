@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.checks.ftm_doc import latest_version, make_anomaly
 from app.core.mistral_client import MistralClient
+from app.core.prompt_sanitizer import sanitize_document
 from app.core.rules import load_rules, reference_column
 from app.db.models import Anomaly, Project
 from app.parsers.reference import reference_column_values
@@ -150,6 +151,9 @@ def run_custom_rules(
 def _llm_eval(mistral: MistralClient, text: str, rules: list[dict]) -> list[dict]:
     """Soumet les règles personnalisées + le contenu FTM à Mistral.
     Renvoie la liste d'écarts (dicts), `[]` en cas d'erreur."""
+    # Contenu de document non fiable -> neutralise les sequences d'injection
+    # (tokens speciaux, delimiteurs d'instruction) avant de l'envoyer au LLM.
+    text = sanitize_document(text)
     excerpt = text if len(text) <= _MAX_TEXT else text[:_MAX_TEXT] + "\n[...document tronqué...]"
     general = (load_rules().get("instructions_libres") or "").strip()
     rules_json = json.dumps(

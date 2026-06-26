@@ -158,7 +158,9 @@ DATABASE_URL=sqlite:///./data/corpus-agent.db
 STORAGE_DIR=./data/storage
 
 # === HTTP ===
-CORS_ORIGINS=https://172.21.28.92,http://localhost:5173
+# Solo origenes de produccion. NO incluir localhost/127.0.0.1 : con un
+# BIND_HOST expuesto, el arranque falla (fail-fast) si hay origenes locales.
+CORS_ORIGINS=https://172.21.28.92
 MAX_UPLOAD_SIZE_MB=50
 
 # === Security ===
@@ -172,6 +174,30 @@ RATE_LIMIT_LLM=10/minute
 # Copiar la clave generada en el Paso 1
 ENCRYPTION_KEY=<CLAVE_GENERADA_EN_PASO_1>
 ```
+
+> **Validacion de postura de seguridad (fail-fast).** En cuanto `BIND_HOST` no
+> es local (`127.0.0.1`/`localhost`/`::1`) — es decir, en despliegue — la app
+> **rechaza arrancar** si:
+> - `ENCRYPTION_KEY` falta o es demasiado corta (la clave Mistral quedaria en
+>   claro), o
+> - `CORS_ORIGINS` contiene origenes locales de dev.
+>
+> En local (`BIND_HOST=127.0.0.1`, regla #8) la validacion es inerte.
+
+> **Rate limiting detras de IIS (proxy de confianza).** El limitador
+> (`slowapi`) usa la IP del cliente del socket (`request.client.host`). Detras
+> del reverse proxy IIS, esa IP es la del proxy, no la del cliente real. Para
+> que el rate limiting (y los logs) reflejen la IP real, lanzar uvicorn con
+> `--proxy-headers --forwarded-allow-ips <IP_del_proxy_IIS>`. **Nunca** usar
+> `--forwarded-allow-ips '*'` : permitiria a cualquiera falsificar
+> `X-Forwarded-For` y eludir el rate limiting.
+
+> **Autenticacion (regla #8).** El POC no implementa auth a nivel de aplicacion
+> (local-first, palier 1). En despliegue, la autenticacion se **delega a la capa
+> IIS** : activar Windows Authentication / restriccion por IP / SSO en el sitio
+> IIS que expone la app, de modo que los endpoints (incluido `/admin/reset`) no
+> queden accesibles sin autenticar. uvicorn debe bindear solo a la interfaz que
+> IIS reverse-proxea, nunca exponerse directamente sin el filtro de IIS.
 
 ### Paso 3: Inicializar Base de Datos
 

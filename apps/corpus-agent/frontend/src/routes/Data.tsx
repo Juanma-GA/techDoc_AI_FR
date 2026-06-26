@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { RichText } from "../components/RichText";
 import { useDoubleClickConfirm } from "../hooks/useDoubleClickConfirm";
 import { adminApi } from "../lib/api";
 import { fmtBytes } from "../lib/format";
@@ -91,8 +92,7 @@ export function Data() {
 
       <div className="card">
         <h2 className="card-title">{t("data.resetTitle")}</h2>
-        {/* eslint-disable-next-line react/no-danger -- i18n statique de confiance */}
-        <div className="banner" dangerouslySetInnerHTML={{ __html: t("data.resetHint") }} />
+        <div className="banner"><RichText text={t("data.resetHint")} /></div>
         <div className="row">
           <ResetButton scope="analyses" labelKey="data.resetAnalyses" confirmKey="data.confirmAnalyses" onDone={onDone} />
           <ResetButton scope="chat" labelKey="data.resetChat" confirmKey="data.confirmChat" onDone={onDone} />
