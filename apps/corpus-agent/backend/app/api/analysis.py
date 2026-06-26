@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.checks.custom_rules import run_custom_rules
 from app.checks.granule import run_granule
@@ -23,7 +23,7 @@ from app.core.errors import AppError
 from app.core.indexer import index_file_version
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
 from app.core.rules import ANOMALY_TYPES
-from app.db.models import AnalysisRun, Anomaly, Project
+from app.db.models import AnalysisRun, Anomaly, File, Project
 from app.db.session import get_db
 from app.parsers import parse_any
 from app.schemas import AnalysisRunOut
@@ -83,7 +83,19 @@ def _project_or_404(db: Session, project_id: uuid.UUID) -> Project:
 
 @router.post("/projects/{project_id}/analysis/run", response_model=AnalysisRunOut)
 def run_analysis(project_id: uuid.UUID, db: Session = Depends(get_db)) -> AnalysisRun:
-    project = _project_or_404(db, project_id)
+    # Eager load files + versions en 2 requetes (au lieu de 1 + N) : le pipeline
+    # parcourt project.files et accede a f.versions dans plusieurs boucles
+    # (re-parse, chaque check, indexation RAG). Avec expire_on_commit=False, ces
+    # collections restent chargees a travers les commits successifs -> plus de
+    # N+1 sur le chargement des versions.
+    project = db.scalars(
+        select(Project)
+        .where(Project.id == project_id)
+        .options(selectinload(Project.files).selectinload(File.versions))
+    ).first()
+    if project is None:
+        raise AppError("PROJECT_NOT_FOUND", "Projet introuvable",
+                       status_code=404, detail={"id": str(project_id)})
 
     run = AnalysisRun(project_id=project.id, status="running")
     db.add(run)
