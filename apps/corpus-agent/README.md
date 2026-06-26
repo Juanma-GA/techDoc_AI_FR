@@ -1,0 +1,96 @@
+# Corpus Agent
+
+**Corpus Agent** — application interne d'analyse documentaire (DOCX/XLSM/PDF) à l'échelle d'un corpus multi-fichiers, détection d'anomalies selon des règles métier configurables, dashboard et chat assisté par Mistral.
+
+## Auth
+
+**Palier** : 1 — local seul, bind 127.0.0.1, pas d'authentification.
+
+POC local-first stricte conforme à [`STANDARD_POC.md §3.5`](../../STANDARD_POC.md). Aucun déploiement dans le périmètre du standard.
+
+## Démarrage rapide
+
+Double-clic sur `start.bat` (Windows) ou `bash start.sh` (Unix).
+
+Le script détecte Python 3.11+, crée le venv, installe les deps, applique les migrations Alembic et lance le backend sur `http://127.0.0.1:8000/`.
+
+Pour lancer le frontend en mode dev (port 5173) :
+
+```bash
+pnpm install                                  # depuis la racine du monorepo
+pnpm dev:corpus-agent                      # backend + frontend en parallèle
+```
+
+## Structure
+
+```
+apps/corpus-agent/
+├── README.md          # ce fichier
+├── start.bat          # lanceur Windows
+├── start.sh           # lanceur Unix
+├── backend/           # FastAPI + SQLite + Alembic + Mistral
+│   ├── README.md      # détail tech backend, conventions
+│   ├── app/
+│   ├── alembic/
+│   ├── data/          # SQLite + uploads (gitignoré)
+│   ├── tests/
+│   ├── pyproject.toml
+│   └── .env.example
+└── frontend/          # React 18 + Vite + Tailwind + i18next
+    ├── src/
+    ├── tests/e2e/
+    └── package.json
+```
+
+## UI : React (Vite), servie à `/` — React-only (règle #13)
+
+Le **front React** (`frontend/`) est l'**UI unique** (7 onglets, chat SSE). Plus de preview HTML autonome : le `preview.html` et son routeur `api/preview.py` ont été **retirés** (2026-06-19), conformément à la règle #13 (React obligatoire, le build Vite est un pré-requis).
+
+- **Servi par défaut** : `app/main.py::_mount_frontend` sert `frontend/dist/` **dès qu'il existe**. Si le dist est **absent**, `/` renvoie un **503 « frontend non buildé »** (jamais une UI de substitution).
+- **Parité visuelle** : le React réutilise le CSS sur-mesure via `frontend/src/styles/preview-skin.css` (classes `.card/.btn/.kpi/.slicer-pill/.red-*`, variables reprises de `design-tokens/tokens.json`) — voir l'écart #4 ci-dessous. Les primitives riches (FileDropzone) viennent de `@internal/ui`.
+- **i18n** : le React charge les traductions depuis le backend `GET /api/v1/i18n/{lang}` ; `src/locales/*.json` ne sont qu'un fallback offline minimal.
+- **Packaging** : `scripts/package_corpus_agent.py` embarque `frontend/dist/` (build local, ou `--build-frontend` pour le (re)builder). Le dist devient donc **requis** dans le ZIP (sans lui, le recipient obtient un 503).
+- **Dev** : `pnpm dev:corpus-agent` (Vite :5173, proxy `/api`→:8000). `apps/corpus-agent/start.bat` lance le backend (:8000) et, si pnpm est dispo, une fenêtre Vite (:5173).
+
+## Documents de travail métier
+
+`regles-metier-pour-validation.docx` à la racine de l'app est un document de travail synchronisé avec les experts métier. Il sert de source de vérité hors-code pour les règles de validation embarquées dans `backend/app/checks/`. Il est commit pour rester aligné entre l'équipe technique et les experts ; il n'est pas chargé au runtime (les règles vivent dans `backend/data/rules.json` ou les défauts en dur de `app/core/rules.py`).
+
+## Écarts au standard
+
+### 2026-06-19 — Durcissement sécurité production (chiffrement, anti-injection, rate-limit, bind)
+**Règle visée** : #8 (auth = local seul, palier 1, bind `127.0.0.1` obligatoire, jamais `0.0.0.0`) + posture local-first stricte.
+**Justification** : l'app est déployée par l'IT (palier 2/3, hors périmètre du standard). Travail de durcissement rapatrié depuis `main`/ftm pour ne pas régresser en sécurité lors de la bascule ftm → corpus-agent :
+- `app/core/encryption.py` — chiffrement Fernet de la clé Mistral au repos (`ENCRYPTED_KEYS`), câblé dans `mistral_client.py`. Off par défaut (`ENCRYPTION_KEY` vide = clair, local).
+- `app/core/prompt_sanitizer.py` — défense anti-injection, appliquée sur la question dans `api/chat.py`.
+- Rate-limiting `slowapi` (`main.py` + `rate_limit_*` dans `config.py`).
+- `bind_host`/`bind_port` configurables (`0.0.0.0` en prod via `.env`). Voir [`DEPLOYMENT_GUIDE.md`](./DEPLOYMENT_GUIDE.md).
+
+Tous ces réglages restent **inertes en local** (défauts sûrs : bind `127.0.0.1`, pas d'origine CORS prod, chiffrement off), donc le palier 1 local-first est préservé tant que le `.env` n'est pas surchargé.
+**Plan de retour à la conformité** : sans objet tant que l'app est déployée ; si elle redevient un POC local-first jetable, ces réglages restent neutres (défauts) ou peuvent être retirés.
+**Validation** : à compléter — porteur du POC.
+
+### 2026-06-17 — React porté à parité 1:1 (résout l'écart « UI = preview »)
+**Historique** : tant que le React n'était qu'une coquille, le `preview.html` était l'UI livrée (écart à la règle #1/#3). Le React est désormais à parité 1:1 et redevient l'UI primaire. Écart **résolu**. Le `preview.html`/`api/preview.py` ont ensuite été **supprimés** (2026-06-19) : React-only, plus de fallback HTML.
+
+### 2026-06-17 — Skin CSS du preview réutilisé dans le React (au lieu de `@internal/ui`)
+**Règle visée** : #3 (composants via `@internal/ui`) / #4 (tokens design).
+**Justification** : pour un rendu **strictement identique** à l'UI historique (parité 1:1 demandée), le React réutilise le CSS sur-mesure (`frontend/src/styles/preview-skin.css`, classes `.card/.btn/.kpi/...`) plutôt que les composants `@internal/ui`. Les variables CSS reprennent `design-tokens/tokens.json`. Les primitives riches (`FileDropzone`) viennent quand même de `@internal/ui`.
+**Plan de retour à la conformité** : migrer progressivement les classes skin vers les composants `@internal/ui` si l'app est pérennisée.
+**Validation** : à compléter — porteur du POC.
+
+### 2026-06-15 — Ajout d'une CI GitHub Actions
+**Règle violée** : posture local-first stricte (`CLAUDE.md`) — « pas de CI » dans le périmètre du standard.
+**Justification** : l'app est passée en palier 2/3 (déploiement réel par l'IT depuis `main`). Une CI (`.github/workflows/ci.yml`, périmètre corpus-agent : pytest + `check_standard.sh`) garde `main` saine avant déploiement. CI seule, pas de CD/déploiement auto.
+**Plan de retour à la conformité** : sans objet tant que l'app est déployée ; si elle redevient un POC local-first jetable, retirer le workflow.
+**Validation** : à compléter — porteur du POC.
+
+Format pour les prochains écarts :
+
+```markdown
+### <date> — <titre court>
+**Règle violée** : §<numéro section> — <énoncé court>
+**Justification** : <pourquoi>
+**Plan de retour à la conformité** : <si applicable>
+**Validation** : <mainteneur>
+```
