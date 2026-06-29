@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
@@ -5,14 +6,23 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { setAppLanguage } from "./i18n";
-import { Architecture } from "./routes/Architecture";
-import { Chatbot } from "./routes/Chatbot";
-import { Data } from "./routes/Data";
-import { Manager } from "./routes/Manager";
-import { ProjectDetail } from "./routes/ProjectDetail";
-import { Projects } from "./routes/Projects";
-import { Redacteur } from "./routes/Redacteur";
-import { Settings } from "./routes/Settings";
+
+// Routes chargees en lazy (code-splitting) : chaque onglet devient un chunk
+// separe, charge a la navigation. Reduit le bundle initial / le TTI : on ne
+// telecharge Settings/Chatbot/etc. que quand l'utilisateur y va. Les exports
+// sont nommes -> on les mappe sur `default` attendu par React.lazy.
+const Manager = lazy(() => import("./routes/Manager").then((m) => ({ default: m.Manager })));
+const Projects = lazy(() => import("./routes/Projects").then((m) => ({ default: m.Projects })));
+const ProjectDetail = lazy(() =>
+  import("./routes/ProjectDetail").then((m) => ({ default: m.ProjectDetail })),
+);
+const Redacteur = lazy(() => import("./routes/Redacteur").then((m) => ({ default: m.Redacteur })));
+const Chatbot = lazy(() => import("./routes/Chatbot").then((m) => ({ default: m.Chatbot })));
+const Architecture = lazy(() =>
+  import("./routes/Architecture").then((m) => ({ default: m.Architecture })),
+);
+const Data = lazy(() => import("./routes/Data").then((m) => ({ default: m.Data })));
+const Settings = lazy(() => import("./routes/Settings").then((m) => ({ default: m.Settings })));
 
 // Coquille pixel-identique au preview.html (.layout / .sidebar / .nav-item /
 // .lang-switch dans styles/preview-skin.css). Pas de logos sur les onglets.
@@ -75,16 +85,18 @@ export function App() {
 
         <main>
           <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Manager />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-              <Route path="/redacteur" element={<Redacteur />} />
-              <Route path="/chatbot" element={<Chatbot />} />
-              <Route path="/architecture" element={<Architecture />} />
-              <Route path="/data" element={<Data />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
+            <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
+              <Routes>
+                <Route path="/" element={<Manager />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/projects/:id" element={<ProjectDetail />} />
+                <Route path="/redacteur" element={<Redacteur />} />
+                <Route path="/chatbot" element={<Chatbot />} />
+                <Route path="/architecture" element={<Architecture />} />
+                <Route path="/data" element={<Data />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
