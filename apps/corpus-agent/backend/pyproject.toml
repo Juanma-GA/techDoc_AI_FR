@@ -27,7 +27,9 @@ dependencies = [
     "reportlab>=4.2",
     "slowapi>=0.1.9",
     "numpy>=1.26",
-    "cryptography>=42.0",
+    # Floor de securite : >=44 embarque OpenSSL 3.4 et exclut la ligne 42/43
+    # (CVE OpenSSL debut 2024). pip installe la derniere compatible au-dessus.
+    "cryptography>=44.0",
 ]
 
 [project.optional-dependencies]
