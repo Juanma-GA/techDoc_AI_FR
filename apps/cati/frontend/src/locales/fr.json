@@ -1,0 +1,118 @@
+{
+  "app": {
+    "title": "CATI",
+    "version": "0.1.0"
+  },
+  "nav": {
+    "home": "Accueil",
+    "import": "Import",
+    "table": "Tableau",
+    "architecture": "Architecture",
+    "data": "Données",
+    "settings": "Paramètres"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "État de la connexion Mistral",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  },
+  "common": {
+    "confirm": "Cliquer encore",
+    "delete": "Supprimer",
+    "save": "Enregistrer",
+    "saved": "Enregistré"
+  },
+  "home": {
+    "title": "CATI — PDF plan de montage vers Excel",
+    "subtitle": "Automatise la retranscription d'une nomenclature (BOM) depuis un PDF plan de montage vers le template Excel Catalogue.",
+    "steps": [
+      "Importer un PDF plan de montage (format CATI).",
+      "Vérifier et corriger les lignes extraites dans le Tableau.",
+      "Renseigner les métadonnées document (module, fournisseur…).",
+      "Exporter le template Excel Catalogue rempli."
+    ],
+    "cta": "Importer un PDF"
+  },
+  "architecture": {
+    "pipelineTitle": "Pipeline d'extraction",
+    "stackTitle": "Stack technique",
+    "steps": [
+      "Upload du PDF, validation (type, taille), déduplication SHA-256.",
+      "Extraction déterministe du tableau (PyMuPDF find_tables).",
+      "Regroupement des sous-lignes Client / Interne / Fournisseur par FIG REP.",
+      "Filet LLM Mistral optionnel si l'extraction déterministe échoue.",
+      "Écriture du template Excel Catalogue (openpyxl), feuille Suivi préservée."
+    ]
+  },
+  "import": {
+    "title": "Importer un plan de montage",
+    "dropLabel": "Déposez un PDF ici",
+    "dropDescription": "PDF plan de montage (format CATI). Le tableau de nomenclature est extrait automatiquement.",
+    "uploading": "Extraction en cours…",
+    "uploadError": "Échec de l'import.",
+    "listTitle": "Documents",
+    "emptyTitle": "Aucun document",
+    "emptyDescription": "Importez un PDF pour commencer.",
+    "itemCount": "{{count}} ligne(s)",
+    "warnings": "{{count}} avertissement(s)",
+    "open": "Ouvrir",
+    "statusError": "Erreur",
+    "methodLlm": "LLM",
+    "methodDeterministic": "Déterministe"
+  },
+  "table": {
+    "metaTitle": "Métadonnées document",
+    "meta": {
+      "module": "Code module / plan",
+      "bom_title": "Titre du BOM",
+      "otan_supplier": "Nom fournisseur",
+      "top_assembly": "Top-assembly (ex. +1A)",
+      "drw": "Illustration (nom de fichier)"
+    },
+    "saveMeta": "Enregistrer les métadonnées",
+    "itemsTitle": "Lignes de nomenclature",
+    "reextract": "Ré-extraire",
+    "addRow": "Ajouter une ligne",
+    "export": "Exporter Excel",
+    "emptyTitle": "Aucune ligne extraite",
+    "emptyDescription": "Ajoutez une ligne ou relancez l'extraction.",
+    "edited": "corrigée",
+    "noDocTitle": "Aucun document sélectionné",
+    "noDocDescription": "Importez ou sélectionnez un document depuis l'onglet Import.",
+    "col": {
+      "fig": "FIG REP",
+      "aplomb": "Aplomb",
+      "description": "Désignation",
+      "matiere": "Matière",
+      "ref_client": "Client",
+      "ref_interne": "Interne",
+      "ref_fournisseur": "Fournisseur",
+      "qty": "Qté",
+      "symbole": "Symbole"
+    }
+  },
+  "data": {
+    "title": "Statistiques",
+    "documents": "Documents",
+    "items": "Lignes",
+    "size": "Stockage",
+    "resetTitle": "Réinitialisation",
+    "resetDocuments": "Purger les documents",
+    "resetAll": "Tout réinitialiser",
+    "resetHint": "Double-clic pour confirmer. La clé Mistral est préservée."
+  },
+  "settings": {
+    "title": "Paramètres Mistral",
+    "llmEnabled": "LLM activé",
+    "apiKey": "Clé API Mistral",
+    "apiKeyPlaceholder": "Collez votre clé…",
+    "baseUrl": "URL de base",
+    "chatModel": "Modèle chat",
+    "test": "Tester la connexion",
+    "testOk": "Connexion OK — {{count}} modèle(s) disponible(s).",
+    "testFailed": "Échec du test"
+  }
+}

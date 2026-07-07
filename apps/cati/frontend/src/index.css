@@ -1,0 +1,19 @@
+@import "@internal/design-tokens/theme.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}
+
+@layer utilities {
+  .label {
+    @apply font-mono text-label uppercase tracking-wider text-fg-dim;
+  }
+}

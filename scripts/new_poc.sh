@@ -222,9 +222,13 @@ sed_inplace "$APP_DIR/backend/README.md" \
 sed_inplace "$APP_DIR/backend/app/db/models.py" \
     -e "s|squelette TEMPLATE|squelette ${TITLE_HUMAN}|g"
 
-sed_inplace "$APP_DIR/backend/app/templates/preview.html" \
-    -e "s|<title>TEMPLATE</title>|<title>${TITLE_HUMAN}</title>|g" \
-    -e "s|class=\"brand\">TEMPLATE</span>|class=\"brand\">${TITLE_HUMAN}</span>|g"
+# preview.html a ete supprime par la migration React-only : on ne le sed que
+# s'il existe encore (retro-compat template ancien).
+if [[ -f "$APP_DIR/backend/app/templates/preview.html" ]]; then
+    sed_inplace "$APP_DIR/backend/app/templates/preview.html" \
+        -e "s|<title>TEMPLATE</title>|<title>${TITLE_HUMAN}</title>|g" \
+        -e "s|class=\"brand\">TEMPLATE</span>|class=\"brand\">${TITLE_HUMAN}</span>|g"
+fi
 
 sed_inplace "$APP_DIR/frontend/src/App.tsx" \
     -e "s|>TEMPLATE<|>${TITLE_HUMAN}<|g"
