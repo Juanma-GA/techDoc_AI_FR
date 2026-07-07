@@ -53,6 +53,30 @@ export type HeaderMeta = {
   bom_title: string;
 };
 
+export type ChallengeIssue = { field: string; deterministic: string; llm: string };
+export type ChallengeVerdict = "ok" | "warning" | "missing" | "extra";
+export type ChallengeRow = {
+  fig: string;
+  verdict: ChallengeVerdict;
+  issues: ChallengeIssue[];
+  llm_only?: Record<string, string> | null;
+};
+export type ChallengeSummary = {
+  ok: number;
+  warning: number;
+  missing: number;
+  extra: number;
+  total: number;
+  clean: boolean;
+};
+export type ChallengeReport = {
+  status: "none" | "done" | "skipped";
+  reason?: string | null;
+  method?: string | null;
+  summary: ChallengeSummary;
+  rows: ChallengeRow[];
+};
+
 export type DocumentDto = {
   id: string;
   filename: string;
@@ -63,6 +87,7 @@ export type DocumentDto = {
   item_count: number;
   header_meta: HeaderMeta;
   warnings: string[];
+  challenge: ChallengeReport;
   error: string | null;
   created_at: string;
 };
@@ -119,6 +144,8 @@ export const documentsApi = {
   remove: (id: string) => api<DocumentDto>(`/documents/${id}`, { method: "DELETE" }),
   items: (id: string) => api<ItemsDto>(`/documents/${id}/items`),
   reextract: (id: string) => api<ItemsDto>(`/documents/${id}/extract?refresh=true`, { method: "POST" }),
+  challenge: (id: string) => api<ChallengeReport>(`/documents/${id}/challenge`, { method: "POST" }),
+  getChallenge: (id: string) => api<ChallengeReport>(`/documents/${id}/challenge`),
   saveHeaderMeta: (id: string, meta: HeaderMeta) =>
     api<DocumentDto>(`/documents/${id}/header-meta`, { method: "PUT", body: JSON.stringify(meta) }),
   upload: async (files: File[]): Promise<{ results: UploadItemResult[] }> => {

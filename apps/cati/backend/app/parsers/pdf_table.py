@@ -298,6 +298,20 @@ def extract_bom(
     }
 
 
+def llm_reextract(path: str, mistral: Any) -> list[dict]:
+    """Force une extraction INDEPENDANTE par le LLM (pour le challenge/controle).
+
+    Contrairement a `extract_bom`, ne fait pas de deterministe : c'est une
+    seconde lecture, volontairement independante, a diffuser avec le resultat
+    deterministe. Renvoie [] si le LLM echoue (jamais d'exception propagee)."""
+    doc = fitz.open(path)
+    try:
+        items, _ = _extract_via_llm(doc, mistral)
+    finally:
+        doc.close()
+    return items
+
+
 def dumps_meta(warnings: list[str], detected: Optional[dict] = None) -> str:
     """Serialise les metadonnees d'extraction pour la colonne `extraction_meta`."""
     return json.dumps({"warnings": warnings, "detected": detected or {}}, ensure_ascii=False)

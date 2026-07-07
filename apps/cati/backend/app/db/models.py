@@ -52,6 +52,7 @@ class CatiDocument(Base):
 
     header_meta: Mapped[str] = mapped_column(Text, default="{}")     # JSON (metadonnees document saisies)
     extraction_meta: Mapped[str] = mapped_column(Text, default="{}")  # JSON (colonnes detectees, warnings)
+    challenge: Mapped[str] = mapped_column(Text, default="{}")        # JSON (rapport de controle LLM)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

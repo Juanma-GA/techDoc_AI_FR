@@ -80,6 +80,18 @@
     "emptyTitle": "Aucune ligne extraite",
     "emptyDescription": "Ajoutez une ligne ou relancez l'extraction.",
     "edited": "corrigée",
+    "challenge": {
+      "verify": "Vérifier avec l'IA",
+      "running": "Vérification…",
+      "clean": "IA : conforme",
+      "warnings": "{{count}} écart(s)",
+      "extras": "{{count}} en trop",
+      "missings": "{{count}} manquante(s)",
+      "skipped": "Contrôle IA non effectué (activez le LLM dans Paramètres).",
+      "mismatch": "écart IA",
+      "extra": "absent du PDF (IA)",
+      "missingTitle": "Lignes vues par l'IA mais absentes de l'extraction :"
+    },
     "noDocTitle": "Aucun document sélectionné",
     "noDocDescription": "Importez ou sélectionnez un document depuis l'onglet Import.",
     "col": {

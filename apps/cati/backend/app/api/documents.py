@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.challenge import run_challenge
 from app.core.errors import AppError
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
 from app.core.security import read_and_validate, safe_storage_join
@@ -24,6 +25,7 @@ from app.db.models import CatiDocument, CatiItem
 from app.db.session import get_db
 from app.parsers.pdf_table import dumps_meta, extract_bom
 from app.schemas import (
+    ChallengeReport,
     DocumentOut,
     HeaderMeta,
     ItemOut,
@@ -56,6 +58,19 @@ def _extraction_warnings(doc: CatiDocument) -> list[str]:
         return []
 
 
+def _challenge_report(doc: CatiDocument) -> ChallengeReport:
+    try:
+        raw = json.loads(doc.challenge or "{}")
+    except (json.JSONDecodeError, TypeError):
+        raw = {}
+    if not raw:
+        return ChallengeReport()
+    try:
+        return ChallengeReport(**raw)
+    except (TypeError, ValueError):
+        return ChallengeReport(status=str(raw.get("status", "none")))
+
+
 def _document_out(db: Session, doc: CatiDocument) -> DocumentOut:
     item_count = db.scalar(
         select(func.count(CatiItem.id)).where(CatiItem.document_id == doc.id)
@@ -74,9 +89,34 @@ def _document_out(db: Session, doc: CatiDocument) -> DocumentOut:
         item_count=int(item_count),
         header_meta=header_meta,
         warnings=_extraction_warnings(doc),
+        challenge=_challenge_report(doc),
         error=doc.error,
         created_at=doc.created_at.isoformat() if doc.created_at else "",
     )
+
+
+def _current_items_payload(db: Session, doc_id: str) -> list[dict]:
+    """Champs des items persistes (pour diffuser avec la relecture LLM)."""
+    rows = db.scalars(
+        select(CatiItem).where(CatiItem.document_id == doc_id).order_by(CatiItem.order_index)
+    ).all()
+    payload: list[dict] = []
+    for r in rows:
+        try:
+            payload.append(json.loads(r.fields or "{}"))
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return payload
+
+
+def _run_and_store_challenge(db: Session, doc: CatiDocument, mistral: MistralClient | None) -> None:
+    """Controle LLM (relecture + diff) stocke sur le document. Best-effort."""
+    try:
+        report = run_challenge(doc.storage_path, _current_items_payload(db, doc.id), mistral)
+    except Exception as e:  # noqa: BLE001 - controle non bloquant, jamais de 5xx
+        log.warning("challenge failed for %s: %s", doc.id, e)
+        report = {"status": "skipped", "reason": f"{type(e).__name__}", "summary": {}, "rows": []}
+    doc.challenge = json.dumps(report, ensure_ascii=False)
 
 
 def _item_out(item: CatiItem) -> ItemOut:
@@ -194,6 +234,9 @@ def upload_documents(
         doc.status = "extracted"
         doc.extraction_meta = dumps_meta(res["warnings"])
         _persist_items(db, doc, res["items"])
+        db.flush()
+        # Controle LLM systematique quand le LLM est disponible (sinon skipped).
+        _run_and_store_challenge(db, doc, mistral)
         db.commit()
 
         results.append(
@@ -264,5 +307,23 @@ def reextract(doc_id: str, refresh: bool = True, db: Session = Depends(get_db)) 
     doc.status = "extracted"
     doc.extraction_meta = dumps_meta(res["warnings"])
     _persist_items(db, doc, res["items"])
+    db.flush()
+    _run_and_store_challenge(db, doc, mistral)
     db.commit()
     return get_items(doc_id, db)
+
+
+@router.post("/{doc_id}/challenge", response_model=ChallengeReport)
+def challenge(doc_id: str, db: Session = Depends(get_db)) -> ChallengeReport:
+    """Relance le controle LLM (relecture independante + diff). Gracieux si LLM OFF."""
+    doc = _get_doc(db, doc_id)
+    if not doc.storage_path or not Path(doc.storage_path).is_file():
+        raise AppError("DOCUMENT_FILE_MISSING", "Fichier PDF source introuvable.", status_code=410)
+    _run_and_store_challenge(db, doc, _mistral_or_none(db))
+    db.commit()
+    return _challenge_report(doc)
+
+
+@router.get("/{doc_id}/challenge", response_model=ChallengeReport)
+def get_challenge(doc_id: str, db: Session = Depends(get_db)) -> ChallengeReport:
+    return _challenge_report(_get_doc(db, doc_id))

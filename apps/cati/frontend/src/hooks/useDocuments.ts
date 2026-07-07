@@ -51,3 +51,11 @@ export function useReextract(docId: string) {
     },
   });
 }
+
+export function useChallenge(docId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => documentsApi.challenge(docId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["document", docId] }),
+  });
+}

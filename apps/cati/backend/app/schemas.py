@@ -69,6 +69,36 @@ class HeaderMeta(BaseModel):
     bom_title: str = ""
 
 
+class ChallengeIssue(BaseModel):
+    field: str
+    deterministic: str
+    llm: str
+
+
+class ChallengeRow(BaseModel):
+    fig: str
+    verdict: str  # ok | warning | missing | extra
+    issues: list[ChallengeIssue] = Field(default_factory=list)
+    llm_only: Optional[dict[str, str]] = None
+
+
+class ChallengeSummary(BaseModel):
+    ok: int = 0
+    warning: int = 0
+    missing: int = 0
+    extra: int = 0
+    total: int = 0
+    clean: bool = False
+
+
+class ChallengeReport(BaseModel):
+    status: str = "none"  # none | done | skipped
+    reason: Optional[str] = None
+    method: Optional[str] = None
+    summary: ChallengeSummary = Field(default_factory=ChallengeSummary)
+    rows: list[ChallengeRow] = Field(default_factory=list)
+
+
 class DocumentOut(BaseModel):
     id: str
     filename: str
@@ -79,6 +109,7 @@ class DocumentOut(BaseModel):
     item_count: int
     header_meta: HeaderMeta
     warnings: list[str] = Field(default_factory=list)
+    challenge: ChallengeReport = Field(default_factory=ChallengeReport)
     error: Optional[str] = None
     created_at: str
 

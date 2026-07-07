@@ -80,6 +80,18 @@
     "emptyTitle": "No rows extracted",
     "emptyDescription": "Add a row or re-run extraction.",
     "edited": "edited",
+    "challenge": {
+      "verify": "Verify with AI",
+      "running": "Verifying…",
+      "clean": "AI: consistent",
+      "warnings": "{{count}} mismatch(es)",
+      "extras": "{{count}} extra",
+      "missings": "{{count}} missing",
+      "skipped": "AI check not run (enable the LLM in Settings).",
+      "mismatch": "AI mismatch",
+      "extra": "not in PDF (AI)",
+      "missingTitle": "Rows seen by AI but missing from extraction:"
+    },
     "noDocTitle": "No document selected",
     "noDocDescription": "Import or select a document from the Import tab.",
     "col": {
