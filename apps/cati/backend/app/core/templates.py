@@ -46,9 +46,15 @@ def validate_template_xlsx(path: str, sheet_name: str) -> dict[str, Any]:
     return {"sheets": sheets, "header_columns": [h for h in header if h]}
 
 
-def resolve_template(db: Session) -> dict[str, Any]:
-    """Template a utiliser a l'export : le defaut enregistre, sinon le fichier livre."""
-    tpl = db.scalar(select(CatiTemplate).where(CatiTemplate.is_default.is_(True)))
+def resolve_template(db: Session, preferred_id: str | None = None) -> dict[str, Any]:
+    """Template a utiliser a l'export.
+
+    Priorite : `preferred_id` (template d'un profil) > defaut enregistre >
+    dernier enregistre > fichier livre avec l'app.
+    """
+    tpl = db.get(CatiTemplate, preferred_id) if preferred_id else None
+    if tpl is None:
+        tpl = db.scalar(select(CatiTemplate).where(CatiTemplate.is_default.is_(True)))
     if tpl is None:
         tpl = db.scalar(select(CatiTemplate).order_by(CatiTemplate.created_at.desc()))
     if tpl is not None and tpl.storage_path:

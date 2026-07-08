@@ -107,6 +107,7 @@ class DocumentOut(BaseModel):
     status: str
     extraction_method: str
     item_count: int
+    profile_id: Optional[str] = None
     header_meta: HeaderMeta
     warnings: list[str] = Field(default_factory=list)
     challenge: ChallengeReport = Field(default_factory=ChallengeReport)
@@ -168,4 +169,24 @@ class TemplateOut(BaseModel):
     data_start_row: int
     is_default: bool
     header_columns: list[str] = Field(default_factory=list)
+    created_at: str
+
+
+# ----- CATI : profils (detection PDF + mapping Excel + template) -------------
+
+
+class ProfileIn(BaseModel):
+    name: str
+    template_id: Optional[str] = None
+    pdf_map: dict[str, int] = Field(default_factory=dict)
+    excel_map: dict[str, str] = Field(default_factory=dict)
+
+
+class ProfileOut(BaseModel):
+    id: str
+    name: str
+    is_default: bool
+    template_id: Optional[str] = None
+    pdf_map: dict[str, int] = Field(default_factory=dict)
+    excel_map: dict[str, str] = Field(default_factory=dict)
     created_at: str

@@ -7,6 +7,7 @@
     "home": "Home",
     "import": "Import",
     "table": "Table",
+    "profiles": "Profiles",
     "architecture": "Architecture",
     "data": "Data",
     "settings": "Settings"
@@ -22,8 +23,47 @@
   "common": {
     "confirm": "Click again",
     "delete": "Delete",
+    "edit": "Edit",
     "save": "Save",
     "saved": "Saved"
+  },
+  "profiles": {
+    "title": "CATI profiles",
+    "hint": "A profile adapts the tool to a PDF format: fix the PDF column detection and the target column in the Excel template. Selectable at import.",
+    "empty": "No profile. Default detection and mapping are used.",
+    "default": "default",
+    "setDefault": "Set as default",
+    "newTitle": "New profile",
+    "editTitle": "Edit profile",
+    "name": "Profile name",
+    "template": "Linked Excel template",
+    "templateDefault": "(default template)",
+    "createBtn": "Create profile",
+    "newBtn": "New",
+    "auto": "auto",
+    "excelDefault": "(default)",
+    "pdfMapTitle": "PDF detection — column index (0 = first column, empty = auto)",
+    "excelMapTitle": "Excel target — template column for each field",
+    "pdfField": {
+      "fig": "FIG REP",
+      "designation": "Designation",
+      "symbole": "Symbol",
+      "code": "Code (role)",
+      "reference": "Reference",
+      "qty": "Quantity"
+    },
+    "itemField": {
+      "fig": "FIG REP",
+      "figreflink": "Fig no.",
+      "aplomb": "Level",
+      "description": "Designation",
+      "matiere": "Material",
+      "ref_client": "Client ref",
+      "ref_interne": "Internal ref",
+      "ref_fournisseur": "Supplier ref",
+      "qty": "Quantity",
+      "symbole": "Symbol"
+    }
   },
   "home": {
     "title": "CATI — assembly PDF to Excel",
@@ -56,6 +96,7 @@
     "listTitle": "Documents",
     "emptyTitle": "No documents",
     "emptyDescription": "Import a PDF to get started.",
+    "profile": "CATI profile",
     "itemCount": "{{count}} row(s)",
     "warnings": "{{count}} warning(s)",
     "open": "Open",

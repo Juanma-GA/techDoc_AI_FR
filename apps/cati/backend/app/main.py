@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, documents, export, health, items, templates
+from app.api import admin, documents, export, health, items, profiles, templates
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(items.router)
     api_v1.include_router(export.router)
     api_v1.include_router(templates.router)
+    api_v1.include_router(profiles.router)
     app.include_router(api_v1)
 
     _mount_frontend(app)

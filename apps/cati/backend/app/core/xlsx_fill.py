@@ -60,10 +60,12 @@ def fill_catalogue(
     sheet_name: str = "Catalogue",
     header_row: int = 1,
     data_start_row: int = 2,
+    excel_map: dict[str, str] | None = None,
 ) -> bytes:
     """Remplit le template et renvoie les bytes du .xlsx.
 
     `items` : articles (champs logiques). `header_meta` : constantes document.
+    `excel_map` (profil) : override champ_article -> cle_colonne_excel.
     """
     meta = header_meta or {}
     try:
@@ -86,7 +88,7 @@ def fill_catalogue(
 
     # Bloc en-tete module (0/1/2 lignes) + une ligne par article.
     rows: list[dict[str, Any]] = module_header_rows(meta)
-    rows += [item_to_row(it, meta) for it in items]
+    rows += [item_to_row(it, meta, excel_map) for it in items]
 
     # Style de reference : la ligne-modele du template (si stylee).
     col_count = len(CATALOGUE_COLUMNS)

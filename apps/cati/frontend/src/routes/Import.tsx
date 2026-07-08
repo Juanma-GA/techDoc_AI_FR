@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, FileDropzone, Spinner } from "@internal/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, EmptyState, FileDropzone, Select, Spinner } from "@internal/ui";
 
 import { ConfirmButton } from "../components/ConfirmButton";
 import { useDeleteDocument, useDocuments, useUploadDocuments } from "../hooks/useDocuments";
+import { useProfiles } from "../hooks/useProfiles";
 import { useCatiStore } from "../stores/useCatiStore";
 import type { DocumentDto } from "../lib/api";
 
@@ -18,9 +20,16 @@ export function Import() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { data: documents, isLoading } = useDocuments();
+  const { data: profiles } = useProfiles();
   const upload = useUploadDocuments();
   const del = useDeleteDocument();
   const setSelectedDocId = useCatiStore((s) => s.setSelectedDocId);
+
+  const [profileId, setProfileId] = useState("");
+  useEffect(() => {
+    const def = profiles?.find((p) => p.is_default);
+    if (def) setProfileId((cur) => cur || def.id);
+  }, [profiles]);
 
   const openInTable = (id: string) => {
     setSelectedDocId(id);
@@ -34,9 +43,19 @@ export function Import() {
           <CardTitle>{t("import.title")}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {profiles && profiles.length > 0 && (
+            <label className="flex flex-col gap-1">
+              <span className="label">{t("import.profile")}</span>
+              <Select
+                options={profiles.map((p) => ({ value: p.id, label: p.is_default ? `${p.name} ★` : p.name }))}
+                value={profileId}
+                onChange={(e) => setProfileId(e.target.value)}
+              />
+            </label>
+          )}
           <FileDropzone
             accept="application/pdf,.pdf"
-            onFiles={(files) => upload.mutate(files)}
+            onFiles={(files) => upload.mutate({ files, profileId: profileId || undefined })}
             disabled={upload.isPending}
             label={t("import.dropLabel")}
             description={t("import.dropDescription")}

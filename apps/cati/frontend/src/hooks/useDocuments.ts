@@ -17,7 +17,8 @@ export function useDocument(id: string | null) {
 export function useUploadDocuments() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (files: File[]) => documentsApi.upload(files),
+    mutationFn: (args: { files: File[]; profileId?: string }) =>
+      documentsApi.upload(args.files, args.profileId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["documents"] }),
   });
 }

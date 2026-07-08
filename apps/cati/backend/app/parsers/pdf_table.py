@@ -83,16 +83,33 @@ def _cell(row: list, idx: Optional[int]) -> object:
     return row[idx]
 
 
-def group_grid(grid: list[list], page: int = 1) -> list[dict]:
+def _first_data_row(grid: list[list], code_idx: int) -> int:
+    """Repli pour trouver la 1re ligne de donnees (a un role dans la colonne Code)."""
+    for i, row in enumerate(grid):
+        if role_of(_cell(row, code_idx)) is not None:
+            return i
+    return -1
+
+
+def group_grid(grid: list[list], page: int = 1, override: Optional[dict] = None) -> list[dict]:
     """Regroupe une grille de table (list[list]) en articles CATI.
 
     Fonction PURE (testable sans PDF) : detecte l'en-tete, puis regroupe les
-    sous-lignes Client/Interne/Fournisseur par FIG REP. Renvoie [] si la grille
-    n'est pas une nomenclature exploitable (pas de colonnes fig+code).
+    sous-lignes Client/Interne/Fournisseur par FIG REP. `override` (profil) force
+    certaines colonnes {champ: index} par-dessus la detection auto. Renvoie [] si
+    la grille n'est pas une nomenclature exploitable (pas de colonnes fig+code).
     """
     if not grid:
         return []
     header_idx, colmap = detect_header(grid)
+    if override:
+        colmap = {
+            **colmap,
+            **{k: int(v) for k, v in override.items() if v is not None and str(v) != ""},
+        }
+        if header_idx < 0 and "code" in colmap:
+            first = _first_data_row(grid, colmap["code"])
+            header_idx = first - 1 if first > 0 else header_idx
     if header_idx < 0 or "code" not in colmap or "fig" not in colmap:
         return []
 
@@ -138,7 +155,7 @@ def group_grid(grid: list[list], page: int = 1) -> list[dict]:
     return items
 
 
-def _extract_via_tables(doc: "fitz.Document") -> tuple[list[dict], list[str]]:
+def _extract_via_tables(doc: "fitz.Document", pdf_map: Optional[dict] = None) -> tuple[list[dict], list[str]]:
     warnings: list[str] = []
     items: list[dict] = []
 
@@ -150,7 +167,7 @@ def _extract_via_tables(doc: "fitz.Document") -> tuple[list[dict], list[str]]:
             warnings.append(f"find_tables page {pno + 1}: {type(e).__name__}")
             continue
         for table in found.tables:
-            items.extend(group_grid(table.extract(), pno + 1))
+            items.extend(group_grid(table.extract(), pno + 1, override=pdf_map))
 
     return items, warnings
 
@@ -260,16 +277,18 @@ def extract_bom(
     *,
     mistral: Any = None,
     llm_enabled: bool = False,
+    pdf_map: Optional[dict] = None,
 ) -> dict[str, Any]:
     """Extrait la nomenclature d'un PDF -> {items, warnings, method, page_count}.
 
     `method` : 'deterministic' | 'llm' | 'mixed'. Le filet LLM n'est sollicite
     que si l'extraction deterministe ne rend aucun article ET `llm_enabled`.
+    `pdf_map` (profil) : override de detection de colonnes {champ: index}.
     """
     doc = fitz.open(path)
     try:
         page_count = doc.page_count
-        items, warnings = _extract_via_tables(doc)
+        items, warnings = _extract_via_tables(doc, pdf_map)
         method = "deterministic"
 
         if not items:

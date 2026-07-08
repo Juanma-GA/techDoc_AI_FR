@@ -8,6 +8,7 @@ import { Architecture } from "./routes/Architecture";
 import { Data } from "./routes/Data";
 import { Home } from "./routes/Home";
 import { Import } from "./routes/Import";
+import { Profiles } from "./routes/Profiles";
 import { Settings } from "./routes/Settings";
 import { Table } from "./routes/Table";
 
@@ -15,6 +16,7 @@ const navItems = [
   { to: "/", labelKey: "nav.home" },
   { to: "/import", labelKey: "nav.import" },
   { to: "/table", labelKey: "nav.table" },
+  { to: "/profiles", labelKey: "nav.profiles" },
   { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
@@ -78,6 +80,7 @@ export function App() {
             <Route path="/" element={<Home />} />
             <Route path="/import" element={<Import />} />
             <Route path="/table" element={<Table />} />
+            <Route path="/profiles" element={<Profiles />} />
             <Route path="/architecture" element={<Architecture />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />

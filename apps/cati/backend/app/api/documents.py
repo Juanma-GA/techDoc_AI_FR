@@ -11,7 +11,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Form, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -19,6 +19,7 @@ from app.config import settings
 from app.core.challenge import run_challenge
 from app.core.errors import AppError
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
+from app.core.profiles import get_profile, pdf_map_of
 from app.core.security import read_and_validate, safe_storage_join
 from app.core.versioning import sha256_of_bytes
 from app.db.models import CatiDocument, CatiItem
@@ -87,6 +88,7 @@ def _document_out(db: Session, doc: CatiDocument) -> DocumentOut:
         status=doc.status,
         extraction_method=doc.extraction_method,
         item_count=int(item_count),
+        profile_id=doc.profile_id,
         header_meta=header_meta,
         warnings=_extraction_warnings(doc),
         challenge=_challenge_report(doc),
@@ -179,10 +181,13 @@ def _persist_items(db: Session, doc: CatiDocument, items: list[dict]) -> None:
 @router.post("", response_model=UploadResultOut)
 def upload_documents(
     files: list[UploadFile],
+    profile_id: str | None = Form(None),
     db: Session = Depends(get_db),
 ) -> UploadResultOut:
     mistral = _mistral_or_none(db)
     llm_enabled = mistral is not None
+    profile = get_profile(db, profile_id)
+    pdf_map = pdf_map_of(profile)
     results: list[UploadItemResult] = []
 
     for upload in files:
@@ -209,7 +214,10 @@ def upload_documents(
             )
             continue
 
-        doc = CatiDocument(filename=safe_name, mime_type="application/pdf", size=len(raw), sha256=digest)
+        doc = CatiDocument(
+            filename=safe_name, mime_type="application/pdf", size=len(raw), sha256=digest,
+            profile_id=(profile.id if profile else None),
+        )
         db.add(doc)
         db.flush()  # obtient doc.id
 
@@ -220,7 +228,7 @@ def upload_documents(
         doc.storage_path = str(pdf_path)
 
         try:
-            res = extract_bom(str(pdf_path), mistral=mistral, llm_enabled=llm_enabled)
+            res = extract_bom(str(pdf_path), mistral=mistral, llm_enabled=llm_enabled, pdf_map=pdf_map)
         except Exception as e:  # noqa: BLE001 - extraction defaillante -> doc en erreur, pas de 5xx
             log.exception("extraction failed for %s", safe_name)
             doc.status = "error"
@@ -301,7 +309,8 @@ def reextract(doc_id: str, refresh: bool = True, db: Session = Depends(get_db)) 
         raise AppError("DOCUMENT_FILE_MISSING", "Fichier PDF source introuvable.", status_code=410)
 
     mistral = _mistral_or_none(db)
-    res = extract_bom(doc.storage_path, mistral=mistral, llm_enabled=mistral is not None)
+    pdf_map = pdf_map_of(get_profile(db, doc.profile_id))
+    res = extract_bom(doc.storage_path, mistral=mistral, llm_enabled=mistral is not None, pdf_map=pdf_map)
     doc.page_count = int(res["page_count"])
     doc.extraction_method = res["method"]
     doc.status = "extracted"

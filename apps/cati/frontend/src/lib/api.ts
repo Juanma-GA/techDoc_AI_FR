@@ -148,9 +148,10 @@ export const documentsApi = {
   getChallenge: (id: string) => api<ChallengeReport>(`/documents/${id}/challenge`),
   saveHeaderMeta: (id: string, meta: HeaderMeta) =>
     api<DocumentDto>(`/documents/${id}/header-meta`, { method: "PUT", body: JSON.stringify(meta) }),
-  upload: async (files: File[]): Promise<{ results: UploadItemResult[] }> => {
+  upload: async (files: File[], profileId?: string): Promise<{ results: UploadItemResult[] }> => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
+    if (profileId) form.append("profile_id", profileId);
     const response = await fetch(`${API_BASE}/documents`, { method: "POST", body: form });
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as ApiError | null;
@@ -188,6 +189,32 @@ export const templatesApi = {
     }
     return (await response.json()) as TemplateDto;
   },
+};
+
+export type ProfileDto = {
+  id: string;
+  name: string;
+  is_default: boolean;
+  template_id: string | null;
+  pdf_map: Record<string, number>;
+  excel_map: Record<string, string>;
+  created_at: string;
+};
+
+export type ProfileInput = {
+  name: string;
+  template_id?: string | null;
+  pdf_map: Record<string, number>;
+  excel_map: Record<string, string>;
+};
+
+export const profilesApi = {
+  list: () => api<ProfileDto[]>("/profiles"),
+  create: (body: ProfileInput) => api<ProfileDto>("/profiles", { method: "POST", body: JSON.stringify(body) }),
+  update: (id: string, body: ProfileInput) =>
+    api<ProfileDto>(`/profiles/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  setDefault: (id: string) => api<ProfileDto>(`/profiles/${id}/default`, { method: "POST" }),
+  remove: (id: string) => api<ProfileDto>(`/profiles/${id}`, { method: "DELETE" }),
 };
 
 export const itemsApi = {

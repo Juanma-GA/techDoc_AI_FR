@@ -45,6 +45,8 @@ class CatiDocument(Base):
     storage_path: Mapped[str] = mapped_column(String(1000), default="")
     page_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    profile_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     # pending | extracted | error
     status: Mapped[str] = mapped_column(String(16), default="pending")
     # deterministic | llm | mixed
@@ -79,6 +81,25 @@ class CatiTemplate(Base):
     header_row: Mapped[int] = mapped_column(Integer, default=1)
     data_start_row: Mapped[int] = mapped_column(Integer, default=2)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CatiProfile(Base):
+    """Profil CATI : detection PDF + mapping Excel + template lie.
+
+    Permet de gerer plusieurs formats (fournisseurs) sans toucher au code.
+    `pdf_map`  : override de detection {champ_detection: index_colonne_PDF}.
+    `excel_map`: override cible {champ_article: cle_colonne_Excel}.
+    Preserve lors d'un reset admin (config utilisateur)."""
+
+    __tablename__ = "cati_profile"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(200))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    template_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    pdf_map: Mapped[str] = mapped_column(Text, default="{}")     # JSON {champ: index_colonne}
+    excel_map: Mapped[str] = mapped_column(Text, default="{}")   # JSON {champ: cle_colonne_excel}
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

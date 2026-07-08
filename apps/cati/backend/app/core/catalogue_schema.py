@@ -73,17 +73,26 @@ def blank_row() -> dict[str, Any]:
     return {col: None for col in CATALOGUE_COLUMNS}
 
 
-def item_to_row(item: dict[str, Any], header_meta: dict[str, Any] | None = None) -> dict[str, Any]:
+def item_to_row(
+    item: dict[str, Any],
+    header_meta: dict[str, Any] | None = None,
+    excel_map: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Projette un article extrait + metadonnees document sur une ligne Catalogue.
 
     `item` : champs logiques (fig, figreflink, aplomb, description, matiere,
     ref_interne, ref_client, ref_fournisseur, qty, symbole).
     `header_meta` : constantes document (module, otan_supplier, ...).
+    `excel_map` (profil) : override {champ_article: cle_colonne_excel} par-dessus
+    ITEM_FIELD_TO_COLUMN.
     """
     meta = header_meta or {}
+    mapping = {**ITEM_FIELD_TO_COLUMN, **(excel_map or {})}
     row = blank_row()
 
-    for field, col in ITEM_FIELD_TO_COLUMN.items():
+    for field, col in mapping.items():
+        if col not in row:
+            continue  # cle de colonne inconnue -> ignoree
         val = item.get(field)
         if val is not None and str(val).strip() != "":
             row[col] = val

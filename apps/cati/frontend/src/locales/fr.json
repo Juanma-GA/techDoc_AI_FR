@@ -7,6 +7,7 @@
     "home": "Accueil",
     "import": "Import",
     "table": "Tableau",
+    "profiles": "Profils",
     "architecture": "Architecture",
     "data": "Données",
     "settings": "Paramètres"
@@ -22,8 +23,47 @@
   "common": {
     "confirm": "Cliquer encore",
     "delete": "Supprimer",
+    "edit": "Éditer",
     "save": "Enregistrer",
     "saved": "Enregistré"
+  },
+  "profiles": {
+    "title": "Profils CATI",
+    "hint": "Un profil adapte l'outil à un format de PDF : corrigez la détection des colonnes du PDF et la cible dans le template Excel. Sélectionnable à l'import.",
+    "empty": "Aucun profil. La détection et le mapping par défaut sont utilisés.",
+    "default": "par défaut",
+    "setDefault": "Définir par défaut",
+    "newTitle": "Nouveau profil",
+    "editTitle": "Éditer le profil",
+    "name": "Nom du profil",
+    "template": "Template Excel lié",
+    "templateDefault": "(template par défaut)",
+    "createBtn": "Créer le profil",
+    "newBtn": "Nouveau",
+    "auto": "auto",
+    "excelDefault": "(défaut)",
+    "pdfMapTitle": "Détection PDF — n° de colonne (0 = 1re colonne, vide = auto)",
+    "excelMapTitle": "Cible Excel — colonne du template pour chaque champ",
+    "pdfField": {
+      "fig": "FIG REP",
+      "designation": "Désignation",
+      "symbole": "Symbole",
+      "code": "Code (rôle)",
+      "reference": "Référence",
+      "qty": "Quantité"
+    },
+    "itemField": {
+      "fig": "FIG REP",
+      "figreflink": "N° fig",
+      "aplomb": "Aplomb",
+      "description": "Désignation",
+      "matiere": "Matière",
+      "ref_client": "Réf. Client",
+      "ref_interne": "Réf. Interne",
+      "ref_fournisseur": "Réf. Fournisseur",
+      "qty": "Quantité",
+      "symbole": "Symbole"
+    }
   },
   "home": {
     "title": "CATI — PDF plan de montage vers Excel",
@@ -56,6 +96,7 @@
     "listTitle": "Documents",
     "emptyTitle": "Aucun document",
     "emptyDescription": "Importez un PDF pour commencer.",
+    "profile": "Profil CATI",
     "itemCount": "{{count}} ligne(s)",
     "warnings": "{{count}} avertissement(s)",
     "open": "Ouvrir",
