@@ -64,6 +64,24 @@ class CatiDocument(Base):
     )
 
 
+class CatiTemplate(Base):
+    """Template Excel de sortie, gere dans l'UI (remplace le fichier fige).
+
+    Preserve lors d'un reset admin (config utilisateur, comme AppConfig)."""
+
+    __tablename__ = "cati_template"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(200))
+    filename: Mapped[str] = mapped_column(String(500), default="")
+    storage_path: Mapped[str] = mapped_column(String(1000), default="")
+    sheet_name: Mapped[str] = mapped_column(String(120), default="Catalogue")
+    header_row: Mapped[int] = mapped_column(Integer, default=1)
+    data_start_row: Mapped[int] = mapped_column(Integer, default=2)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class CatiItem(Base):
     __tablename__ = "cati_item"
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Spinner, Switch } from "@internal/ui";
 
+import { TemplatesCard } from "../components/TemplatesCard";
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 
 export function Settings() {
@@ -113,6 +114,8 @@ export function Settings() {
           )}
         </CardContent>
       </Card>
+
+      <TemplatesCard />
     </div>
   );
 }

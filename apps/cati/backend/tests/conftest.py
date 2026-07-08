@@ -77,3 +77,26 @@ def _make_cati_pdf() -> bytes:
 @pytest.fixture
 def cati_pdf_bytes() -> bytes:
     return _make_cati_pdf()
+
+
+def _make_template_xlsx(sheet: str = "Catalogue") -> bytes:
+    """Template Excel synthetique : feuilles Suivi + <sheet> avec en-tete ligne 1."""
+    import io as _io
+
+    from openpyxl import Workbook
+
+    from app.core.catalogue_schema import CATALOGUE_COLUMNS
+
+    wb = Workbook()
+    wb.active.title = "Suivi"
+    ws = wb.create_sheet(sheet)
+    for c, key in enumerate(CATALOGUE_COLUMNS, start=1):
+        ws.cell(row=1, column=c, value=key)
+    buf = _io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def template_xlsx_bytes() -> bytes:
+    return _make_template_xlsx()

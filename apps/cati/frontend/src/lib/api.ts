@@ -160,6 +160,36 @@ export const documentsApi = {
   },
 };
 
+export type TemplateDto = {
+  id: string;
+  name: string;
+  filename: string;
+  sheet_name: string;
+  header_row: number;
+  data_start_row: number;
+  is_default: boolean;
+  header_columns: string[];
+  created_at: string;
+};
+
+export const templatesApi = {
+  list: () => api<TemplateDto[]>("/templates"),
+  setDefault: (id: string) => api<TemplateDto>(`/templates/${id}/default`, { method: "POST" }),
+  remove: (id: string) => api<TemplateDto>(`/templates/${id}`, { method: "DELETE" }),
+  upload: async (file: File, name: string, sheetName = "Catalogue"): Promise<TemplateDto> => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("name", name);
+    form.append("sheet_name", sheetName);
+    const response = await fetch(`${API_BASE}/templates`, { method: "POST", body: form });
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as ApiError | null;
+      throw error ?? { code: "TEMPLATE_UPLOAD_FAILED", message: response.statusText, detail: null, request_id: "" };
+    }
+    return (await response.json()) as TemplateDto;
+  },
+};
+
 export const itemsApi = {
   patch: (docId: string, itemId: string, body: { fields?: ItemFields; included?: boolean }) =>
     api<ItemDto>(`/documents/${docId}/items/${itemId}`, { method: "PATCH", body: JSON.stringify(body) }),

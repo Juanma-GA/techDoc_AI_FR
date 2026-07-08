@@ -116,6 +116,18 @@
     "resetAll": "Tout réinitialiser",
     "resetHint": "Double-clic pour confirmer. La clé Mistral est préservée."
   },
+  "templates": {
+    "title": "Templates Excel de sortie",
+    "hint": "Gérez ici les modèles Excel remplis à l'export. Le template « par défaut » est utilisé pour tous les exports.",
+    "namePlaceholder": "Nom du template (optionnel)",
+    "dropLabel": "Déposez un .xlsx",
+    "dropDescription": "Le classeur doit contenir une feuille « Catalogue ».",
+    "uploadError": "Import du template refusé (feuille Catalogue absente ?).",
+    "empty": "Aucun template. Le modèle livré avec l'app est utilisé par défaut.",
+    "default": "par défaut",
+    "columns": "colonnes",
+    "setDefault": "Définir par défaut"
+  },
   "settings": {
     "title": "Paramètres Mistral",
     "llmEnabled": "LLM activé",

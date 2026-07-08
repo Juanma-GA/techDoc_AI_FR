@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.documents import _get_doc
-from app.config import settings
+from app.core.templates import resolve_template
 from app.core.xlsx_fill import fill_catalogue, output_filename
 from app.db.models import CatiItem
 from app.db.session import get_db
@@ -46,13 +46,14 @@ def export_xlsx(doc_id: str, db: Session = Depends(get_db)) -> StreamingResponse
         except (json.JSONDecodeError, TypeError):
             continue
 
+    tpl = resolve_template(db)
     data = fill_catalogue(
-        settings.xlsx_template_path,
+        tpl["path"],
         items,
         header_meta,
-        sheet_name=settings.xlsx_sheet_name,
-        header_row=settings.xlsx_header_row,
-        data_start_row=settings.xlsx_data_start_row,
+        sheet_name=tpl["sheet_name"],
+        header_row=tpl["header_row"],
+        data_start_row=tpl["data_start_row"],
     )
 
     filename = output_filename(header_meta)

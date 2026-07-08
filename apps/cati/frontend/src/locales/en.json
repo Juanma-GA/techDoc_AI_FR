@@ -116,6 +116,18 @@
     "resetAll": "Reset all",
     "resetHint": "Double-click to confirm. The Mistral key is preserved."
   },
+  "templates": {
+    "title": "Output Excel templates",
+    "hint": "Manage the Excel templates filled at export. The default template is used for every export.",
+    "namePlaceholder": "Template name (optional)",
+    "dropLabel": "Drop a .xlsx",
+    "dropDescription": "The workbook must contain a \"Catalogue\" sheet.",
+    "uploadError": "Template rejected (missing Catalogue sheet?).",
+    "empty": "No template. The built-in one is used by default.",
+    "default": "default",
+    "columns": "columns",
+    "setDefault": "Set as default"
+  },
   "settings": {
     "title": "Mistral settings",
     "llmEnabled": "LLM enabled",

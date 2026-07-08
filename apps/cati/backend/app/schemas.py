@@ -154,3 +154,18 @@ class ItemCreate(BaseModel):
 
 class ReorderIn(BaseModel):
     ordered_ids: list[str]
+
+
+# ----- CATI : templates Excel de sortie -------------------------------------
+
+
+class TemplateOut(BaseModel):
+    id: str
+    name: str
+    filename: str
+    sheet_name: str
+    header_row: int
+    data_start_row: int
+    is_default: bool
+    header_columns: list[str] = Field(default_factory=list)
+    created_at: str
