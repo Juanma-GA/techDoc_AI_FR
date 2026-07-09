@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,12 +16,11 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AppConfig
 
-
 try:
     import truststore
 
     truststore.inject_into_ssl()
-except Exception:  # noqa: BLE001
+except Exception:
     pass
 
 
@@ -130,7 +129,7 @@ class MistralClient:
         self.embed_model = embed_model
 
     @classmethod
-    def from_db(cls, db: Session) -> "MistralClient":
+    def from_db(cls, db: Session) -> MistralClient:
         s = get_effective_settings(db)
         return cls(
             api_key=s["api_key"],
@@ -167,7 +166,7 @@ class MistralClient:
         self,
         messages: list[dict[str, Any]],
         *,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
         timeout: float = 120.0,
     ) -> dict[str, Any]:
@@ -207,7 +206,7 @@ class MistralClient:
         self,
         messages: list[dict[str, Any]],
         *,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.3,
     ) -> AsyncIterator[str]:
         payload = {

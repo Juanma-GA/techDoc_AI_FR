@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -18,11 +16,11 @@ class HealthResponse(BaseModel):
 
 
 class SettingsIn(BaseModel):
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    chat_model: Optional[str] = None
-    embed_model: Optional[str] = None
-    llm_enabled: Optional[bool] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    chat_model: str | None = None
+    embed_model: str | None = None
+    llm_enabled: bool | None = None
 
 
 class SettingsOut(BaseModel):
@@ -37,7 +35,7 @@ class SettingsOut(BaseModel):
 class TestConnectionOut(BaseModel):
     ok: bool
     models: list[str] = Field(default_factory=list)
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ----- Admin (stats + reset) ------------------------------------------------
@@ -79,7 +77,7 @@ class ChallengeRow(BaseModel):
     fig: str
     verdict: str  # ok | warning | missing | extra
     issues: list[ChallengeIssue] = Field(default_factory=list)
-    llm_only: Optional[dict[str, str]] = None
+    llm_only: dict[str, str] | None = None
 
 
 class ChallengeSummary(BaseModel):
@@ -93,8 +91,8 @@ class ChallengeSummary(BaseModel):
 
 class ChallengeReport(BaseModel):
     status: str = "none"  # none | done | skipped
-    reason: Optional[str] = None
-    method: Optional[str] = None
+    reason: str | None = None
+    method: str | None = None
     summary: ChallengeSummary = Field(default_factory=ChallengeSummary)
     rows: list[ChallengeRow] = Field(default_factory=list)
 
@@ -107,20 +105,20 @@ class DocumentOut(BaseModel):
     status: str
     extraction_method: str
     item_count: int
-    profile_id: Optional[str] = None
+    profile_id: str | None = None
     header_meta: HeaderMeta
     warnings: list[str] = Field(default_factory=list)
     challenge: ChallengeReport = Field(default_factory=ChallengeReport)
-    error: Optional[str] = None
+    error: str | None = None
     created_at: str
 
 
 class UploadItemResult(BaseModel):
     filename: str
-    document_id: Optional[str] = None
+    document_id: str | None = None
     status: str  # created | duplicate | error
     item_count: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class UploadResultOut(BaseModel):
@@ -130,7 +128,7 @@ class UploadResultOut(BaseModel):
 class ItemOut(BaseModel):
     id: str
     order_index: int
-    source_page: Optional[int] = None
+    source_page: int | None = None
     fields: dict[str, object]
     included: bool
     edited: bool
@@ -144,13 +142,13 @@ class ItemsOut(BaseModel):
 
 
 class ItemPatch(BaseModel):
-    fields: Optional[dict[str, object]] = None
-    included: Optional[bool] = None
+    fields: dict[str, object] | None = None
+    included: bool | None = None
 
 
 class ItemCreate(BaseModel):
     fields: dict[str, object] = Field(default_factory=dict)
-    after_id: Optional[str] = None
+    after_id: str | None = None
 
 
 class ReorderIn(BaseModel):
@@ -177,7 +175,7 @@ class TemplateOut(BaseModel):
 
 class ProfileIn(BaseModel):
     name: str
-    template_id: Optional[str] = None
+    template_id: str | None = None
     pdf_map: dict[str, int] = Field(default_factory=dict)
     excel_map: dict[str, str] = Field(default_factory=dict)
 
@@ -186,7 +184,7 @@ class ProfileOut(BaseModel):
     id: str
     name: str
     is_default: bool
-    template_id: Optional[str] = None
+    template_id: str | None = None
     pdf_map: dict[str, int] = Field(default_factory=dict)
     excel_map: dict[str, str] = Field(default_factory=dict)
     created_at: str

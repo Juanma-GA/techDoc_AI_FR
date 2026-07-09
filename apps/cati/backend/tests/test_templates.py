@@ -6,11 +6,13 @@ import io
 
 import openpyxl
 
+_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 
 def _upload_tpl(client, xlsx: bytes, name: str = "Mon template"):
     return client.post(
         "/api/v1/templates",
-        files=[("file", ("template.xlsx", xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))],
+        files=[("file", ("template.xlsx", xlsx, _XLSX_MIME))],
         data={"name": name, "sheet_name": "Catalogue"},
     )
 

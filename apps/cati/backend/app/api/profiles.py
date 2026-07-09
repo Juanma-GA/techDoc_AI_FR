@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select, update
@@ -32,7 +33,7 @@ ITEM_FIELDS = {
 
 
 def _profile_out(p: CatiProfile) -> ProfileOut:
-    def _load(raw: str) -> dict:
+    def _load(raw: str) -> dict[str, Any]:
         try:
             v = json.loads(raw or "{}")
             return v if isinstance(v, dict) else {}

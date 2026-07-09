@@ -13,7 +13,7 @@ plusieurs lignes d'en-tete par colonne avant de matcher.
 from __future__ import annotations
 
 import unicodedata
-from typing import Optional
+from typing import Any
 
 # Mot-cle d'en-tete (normalise) -> champ logique. Premier match gagne.
 # L'ordre compte : "reference" avant "rep" pour ne pas confondre Reference/FIG REP.
@@ -42,7 +42,7 @@ def norm(s: object) -> str:
     return " ".join(txt.lower().split())
 
 
-def match_field(header: str) -> Optional[str]:
+def match_field(header: str) -> str | None:
     """Retourne le champ logique correspondant a un libelle d'en-tete, ou None."""
     h = norm(header)
     if not h:
@@ -53,7 +53,7 @@ def match_field(header: str) -> Optional[str]:
     return None
 
 
-def role_of(value: object) -> Optional[str]:
+def role_of(value: object) -> str | None:
     """Mappe une valeur de colonne 'Code' (Client/Interne/Fournisseur) -> champ ref."""
     v = norm(value)
     for token, field in ROLE_TOKENS.items():
@@ -62,14 +62,15 @@ def role_of(value: object) -> Optional[str]:
     return None
 
 
-def detect_header(rows: list[list], max_scan: int = 8) -> tuple[int, dict[str, int]]:
+def detect_header(rows: list[list[Any]], max_scan: int = 8) -> tuple[int, dict[str, int]]:
     """Trouve la ligne d'en-tete (celle qui mappe le plus de champs).
 
     Combine chaque ligne candidate avec la suivante (en-tete CATI multi-lignes :
     'IDENTIFICATION' au-dessus de 'Code'/'Reference') pour maximiser les matches.
     Renvoie (index_ligne_0based, {champ: index_colonne_0based}). (-1, {}) si rien.
     """
-    best_row, best_map = -1, {}
+    best_row: int = -1
+    best_map: dict[str, int] = {}
     scan = rows[:max_scan]
     for i, row in enumerate(scan):
         combined = list(row)

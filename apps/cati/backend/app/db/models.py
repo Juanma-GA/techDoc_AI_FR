@@ -10,7 +10,7 @@ serialise en `Text` (pas de type JSON SQLite-specifique).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -24,7 +24,7 @@ def _uuid() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class AppConfig(Base):
@@ -59,7 +59,7 @@ class CatiDocument(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    items: Mapped[list["CatiItem"]] = relationship(
+    items: Mapped[list[CatiItem]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="CatiItem.order_index",
@@ -120,4 +120,4 @@ class CatiItem(Base):
     included: Mapped[bool] = mapped_column(Boolean, default=True)
     edited: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    document: Mapped["CatiDocument"] = relationship(back_populates="items")
+    document: Mapped[CatiDocument] = relationship(back_populates="items")

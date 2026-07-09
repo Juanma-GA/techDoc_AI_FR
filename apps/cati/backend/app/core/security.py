@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from fastapi import UploadFile
 
 from app.core.errors import AppError
-
 
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._\- ]+")
 
@@ -41,8 +39,8 @@ def read_and_validate(
     upload: UploadFile,
     *,
     max_size: int,
-    allowed_exts: Optional[set[str]] = None,
-    blocked_exts: Optional[set[str]] = None,
+    allowed_exts: set[str] | None = None,
+    blocked_exts: set[str] | None = None,
 ) -> tuple[bytes, str, str]:
     """Lit le payload, vérifie taille + extension, renvoie (bytes, safe_name, ext lowercase)."""
     raw = upload.file.read()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
@@ -40,7 +41,7 @@ def export_xlsx(doc_id: str, db: Session = Depends(get_db)) -> StreamingResponse
         .order_by(CatiItem.order_index)
     ).all()
 
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     for r in rows:
         try:
             items.append(json.loads(r.fields or "{}"))

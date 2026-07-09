@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, UploadFile
 from openpyxl import load_workbook
@@ -32,13 +33,13 @@ def _templates_dir() -> Path:
 def _header_columns(path: str, sheet_name: str) -> list[str]:
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return []
     try:
         if sheet_name not in wb.sheetnames:
             return []
         ws = wb[sheet_name]
-        row = next(ws.iter_rows(max_row=1), [])
+        row: tuple[Any, ...] = next(ws.iter_rows(max_row=1), ())
         return [str(c.value).strip() for c in row if c.value is not None and str(c.value).strip()]
     finally:
         wb.close()

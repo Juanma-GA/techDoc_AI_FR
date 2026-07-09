@@ -21,7 +21,6 @@ from copy import copy
 from typing import Any
 
 from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
 
 from app.core.catalogue_schema import (
     CATALOGUE_COLUMNS,
@@ -70,7 +69,7 @@ def fill_catalogue(
     meta = header_meta or {}
     try:
         wb = load_workbook(template_path)  # ni read_only ni data_only : on garde tout
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise AppError(
             "TEMPLATE_READ_FAILED",
             f"Lecture du template Excel impossible : {type(e).__name__}",

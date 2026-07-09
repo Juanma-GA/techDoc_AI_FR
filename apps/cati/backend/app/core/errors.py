@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -47,7 +47,7 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         rid = request.headers.get(REQUEST_ID_HEADER, "")
-        code = "HTTP_ERROR" if not isinstance(exc, HTTPException) else "HTTP_ERROR"
+        code = "HTTP_ERROR"
         return JSONResponse(
             status_code=exc.status_code,
             content=_payload(code, str(exc.detail), None, rid),

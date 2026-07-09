@@ -24,7 +24,7 @@ def validate_template_xlsx(path: str, sheet_name: str) -> dict[str, Any]:
     Renvoie {sheets, header_columns} ; leve AppError si invalide."""
     try:
         wb = load_workbook(path, read_only=True, data_only=True)
-    except Exception as e:  # noqa: BLE001 - openpyxl leve des erreurs variees
+    except Exception as e:
         raise AppError(
             "TEMPLATE_INVALID",
             f"Fichier Excel illisible : {type(e).__name__}",

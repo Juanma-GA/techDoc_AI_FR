@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.db.models import CatiProfile
 
 
-def get_profile(db: Session, profile_id: Optional[str]) -> Optional[CatiProfile]:
+def get_profile(db: Session, profile_id: str | None) -> CatiProfile | None:
     """Profil demande, sinon profil par defaut, sinon None."""
     if profile_id:
         p = db.get(CatiProfile, profile_id)
@@ -28,7 +28,7 @@ def _load(raw: str) -> dict[str, Any]:
         return {}
 
 
-def pdf_map_of(profile: Optional[CatiProfile]) -> dict[str, int]:
+def pdf_map_of(profile: CatiProfile | None) -> dict[str, int]:
     if profile is None:
         return {}
     out: dict[str, int] = {}
@@ -40,7 +40,7 @@ def pdf_map_of(profile: Optional[CatiProfile]) -> dict[str, int]:
     return out
 
 
-def excel_map_of(profile: Optional[CatiProfile]) -> dict[str, str]:
+def excel_map_of(profile: CatiProfile | None) -> dict[str, str]:
     if profile is None:
         return {}
     return {str(k): str(v) for k, v in _load(profile.excel_map).items() if v}

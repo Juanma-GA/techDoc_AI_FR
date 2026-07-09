@@ -10,6 +10,7 @@ import json
 import logging
 import shutil
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, UploadFile
 from sqlalchemy import func, select
@@ -97,12 +98,12 @@ def _document_out(db: Session, doc: CatiDocument) -> DocumentOut:
     )
 
 
-def _current_items_payload(db: Session, doc_id: str) -> list[dict]:
+def _current_items_payload(db: Session, doc_id: str) -> list[dict[str, Any]]:
     """Champs des items persistes (pour diffuser avec la relecture LLM)."""
     rows = db.scalars(
         select(CatiItem).where(CatiItem.document_id == doc_id).order_by(CatiItem.order_index)
     ).all()
-    payload: list[dict] = []
+    payload: list[dict[str, Any]] = []
     for r in rows:
         try:
             payload.append(json.loads(r.fields or "{}"))
@@ -115,7 +116,7 @@ def _run_and_store_challenge(db: Session, doc: CatiDocument, mistral: MistralCli
     """Controle LLM (relecture + diff) stocke sur le document. Best-effort."""
     try:
         report = run_challenge(doc.storage_path, _current_items_payload(db, doc.id), mistral)
-    except Exception as e:  # noqa: BLE001 - controle non bloquant, jamais de 5xx
+    except Exception as e:
         log.warning("challenge failed for %s: %s", doc.id, e)
         report = {"status": "skipped", "reason": f"{type(e).__name__}", "summary": {}, "rows": []}
     doc.challenge = json.dumps(report, ensure_ascii=False)
@@ -159,7 +160,7 @@ _ITEM_FIELDS = (
 )
 
 
-def _persist_items(db: Session, doc: CatiDocument, items: list[dict]) -> None:
+def _persist_items(db: Session, doc: CatiDocument, items: list[dict[str, Any]]) -> None:
     db.query(CatiItem).filter(CatiItem.document_id == doc.id).delete()
     for it in items:
         fields = {k: it.get(k, "") for k in _ITEM_FIELDS}
@@ -192,7 +193,7 @@ def upload_documents(
 
     for upload in files:
         try:
-            raw, safe_name, ext = read_and_validate(
+            raw, safe_name, _ext = read_and_validate(
                 upload,
                 max_size=settings.max_upload_size_bytes,
                 allowed_exts=ALLOWED_EXTS,
@@ -229,12 +230,14 @@ def upload_documents(
 
         try:
             res = extract_bom(str(pdf_path), mistral=mistral, llm_enabled=llm_enabled, pdf_map=pdf_map)
-        except Exception as e:  # noqa: BLE001 - extraction defaillante -> doc en erreur, pas de 5xx
+        except Exception as e:
             log.exception("extraction failed for %s", safe_name)
             doc.status = "error"
             doc.error = f"{type(e).__name__}: {e}"
             db.commit()
-            results.append(UploadItemResult(filename=safe_name, document_id=doc.id, status="error", error=doc.error))
+            results.append(
+                UploadItemResult(filename=safe_name, document_id=doc.id, status="error", error=doc.error)
+            )
             continue
 
         doc.page_count = int(res["page_count"])

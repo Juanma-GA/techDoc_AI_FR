@@ -25,7 +25,7 @@ from app.core.column_map import norm
 _HARD_FIELDS = ("ref_client", "ref_interne", "ref_fournisseur", "qty")
 
 
-def _fig_key(item: dict) -> str:
+def _fig_key(item: dict[str, Any]) -> str:
     return norm(item.get("fig"))
 
 
@@ -33,14 +33,14 @@ def _norm_val(v: object) -> str:
     return norm(v).replace(" ", "")
 
 
-def diff_items(deterministic: list[dict], llm: list[dict]) -> dict[str, Any]:
+def diff_items(deterministic: list[dict[str, Any]], llm: list[dict[str, Any]]) -> dict[str, Any]:
     """Diffe deux extractions par FIG REP. Fonction pure."""
-    det_by_fig: dict[str, dict] = {}
+    det_by_fig: dict[str, dict[str, Any]] = {}
     for it in deterministic:
         k = _fig_key(it)
         if k:
             det_by_fig.setdefault(k, it)
-    llm_by_fig: dict[str, dict] = {}
+    llm_by_fig: dict[str, dict[str, Any]] = {}
     for it in llm:
         k = _fig_key(it)
         if k:
@@ -89,7 +89,7 @@ def skipped_report(reason: str) -> dict[str, Any]:
     return {"status": "skipped", "reason": reason, "summary": {}, "rows": []}
 
 
-def run_challenge(pdf_path: str, deterministic_items: list[dict], mistral: Any) -> dict[str, Any]:
+def run_challenge(pdf_path: str, deterministic_items: list[dict[str, Any]], mistral: Any) -> dict[str, Any]:
     """Relecture LLM independante + diff. Degradation gracieuse si LLM absent."""
     if mistral is None:
         return skipped_report("LLM desactive")

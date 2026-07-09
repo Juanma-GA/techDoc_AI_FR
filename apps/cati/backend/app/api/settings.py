@@ -20,7 +20,6 @@ from app.core.mistral_client import (
 from app.db.session import get_db
 from app.schemas import SettingsIn, SettingsOut, TestConnectionOut
 
-
 log = logging.getLogger("template.settings")
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -62,7 +61,7 @@ def test_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         return TestConnectionOut(ok=False, error=str(e))
     try:
         models = mistral.list_models()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.exception("test connection failed")
         set_llm_tested(db, False)
         return TestConnectionOut(ok=False, error=f"{type(e).__name__}: {e}")

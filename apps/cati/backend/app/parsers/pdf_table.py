@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any
 
 import fitz  # PyMuPDF
 
@@ -45,13 +45,13 @@ def _split_aplomb(designation: str) -> tuple[str, str]:
     return aplomb, d[i:].strip()
 
 
-def _figreflink(fig: str) -> Optional[int]:
+def _figreflink(fig: str) -> int | None:
     """Partie numerique du FIG REP ('10A' -> 10)."""
     m = re.match(r"^(\d+)", fig or "")
     return int(m.group(1)) if m else None
 
 
-def _new_item(fig: str, designation: str, qty: object, symbole: object, page: int) -> dict[str, Any]:
+def _new_item(fig: str, designation: object, qty: object, symbole: object, page: int) -> dict[str, Any]:
     aplomb, desc = _split_aplomb(str(designation or ""))
     return {
         "fig": fig,
@@ -77,13 +77,13 @@ def _finalize(item: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # 1. Chemin nominal : table structuree (find_tables)
 # ---------------------------------------------------------------------------
-def _cell(row: list, idx: Optional[int]) -> object:
+def _cell(row: list[Any], idx: int | None) -> object:
     if idx is None or idx < 0 or idx >= len(row):
         return None
     return row[idx]
 
 
-def _first_data_row(grid: list[list], code_idx: int) -> int:
+def _first_data_row(grid: list[list[Any]], code_idx: int) -> int:
     """Repli pour trouver la 1re ligne de donnees (a un role dans la colonne Code)."""
     for i, row in enumerate(grid):
         if role_of(_cell(row, code_idx)) is not None:
@@ -91,7 +91,9 @@ def _first_data_row(grid: list[list], code_idx: int) -> int:
     return -1
 
 
-def group_grid(grid: list[list], page: int = 1, override: Optional[dict] = None) -> list[dict]:
+def group_grid(
+    grid: list[list[Any]], page: int = 1, override: dict[str, int] | None = None
+) -> list[dict[str, Any]]:
     """Regroupe une grille de table (list[list]) en articles CATI.
 
     Fonction PURE (testable sans PDF) : detecte l'en-tete, puis regroupe les
@@ -120,8 +122,8 @@ def group_grid(grid: list[list], page: int = 1, override: Optional[dict] = None)
     c_qty = colmap.get("qty")
     c_sym = colmap.get("symbole")
 
-    items: list[dict] = []
-    current: Optional[dict] = None
+    items: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
     for row in grid[header_idx + 1:]:
         role = role_of(_cell(row, c_code))
         fig_val = _cell(row, c_fig)
@@ -155,15 +157,17 @@ def group_grid(grid: list[list], page: int = 1, override: Optional[dict] = None)
     return items
 
 
-def _extract_via_tables(doc: "fitz.Document", pdf_map: Optional[dict] = None) -> tuple[list[dict], list[str]]:
+def _extract_via_tables(
+    doc: fitz.Document, pdf_map: dict[str, int] | None = None
+) -> tuple[list[dict[str, Any]], list[str]]:
     warnings: list[str] = []
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
 
     for pno in range(doc.page_count):
         page = doc[pno]
         try:
             found = page.find_tables()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             warnings.append(f"find_tables page {pno + 1}: {type(e).__name__}")
             continue
         for table in found.tables:
@@ -175,17 +179,16 @@ def _extract_via_tables(doc: "fitz.Document", pdf_map: Optional[dict] = None) ->
 # ---------------------------------------------------------------------------
 # 2. Repli texte lineaire
 # ---------------------------------------------------------------------------
-def _extract_via_text(doc: "fitz.Document") -> tuple[list[dict], list[str]]:
+def _extract_via_text(doc: fitz.Document) -> tuple[list[dict[str, Any]], list[str]]:
     warnings: list[str] = []
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
 
     role_labels = {"client": "ref_client", "interne": "ref_interne", "fournisseur": "ref_fournisseur"}
 
     for pno in range(doc.page_count):
         lines = [ln.strip() for ln in doc[pno].get_text("text").splitlines() if ln.strip()]
         # Cherche le debut du corps (apres l'en-tete) : 1re ligne FIG REP.
-        current: Optional[dict] = None
-        pending_desc: Optional[str] = None
+        current: dict[str, Any] | None = None
         for ln in lines:
             first = ln.split()[0] if ln.split() else ""
             low = norm(ln)
@@ -204,7 +207,6 @@ def _extract_via_text(doc: "fitz.Document") -> tuple[list[dict], list[str]]:
                 if current and _finalize(current):
                     items.append(current)
                 current = _new_item(first, "", None, None, pno + 1)
-                pending_desc = None
                 rest = ln[len(first):].strip()
                 if rest:
                     aplomb, desc = _split_aplomb(rest)
@@ -218,8 +220,6 @@ def _extract_via_text(doc: "fitz.Document") -> tuple[list[dict], list[str]]:
                     current["aplomb"], current["description"] = aplomb, desc
                 elif not current["qty"] and re.match(r"^[\d.,]+(\s*\w+)?$", ln):
                     current["qty"] = ln.strip()
-                elif not current["description"]:
-                    pending_desc = ln
 
         if current and _finalize(current):
             items.append(current)
@@ -240,7 +240,7 @@ _LLM_SYSTEM = (
 )
 
 
-def _extract_via_llm(doc: "fitz.Document", mistral: Any) -> tuple[list[dict], list[str]]:
+def _extract_via_llm(doc: fitz.Document, mistral: Any) -> tuple[list[dict[str, Any]], list[str]]:
     text = "\n".join(doc[p].get_text("text") for p in range(doc.page_count))
     try:
         parsed = mistral.chat_json(
@@ -249,14 +249,14 @@ def _extract_via_llm(doc: "fitz.Document", mistral: Any) -> tuple[list[dict], li
                 {"role": "user", "content": text[:20000]},
             ],
         )
-    except Exception as e:  # noqa: BLE001 - fallback gracieux, jamais 5xx
+    except Exception as e:
         return [], [f"filet LLM indisponible : {type(e).__name__}"]
 
     raw = parsed.get("items") if isinstance(parsed, dict) else None
     if not isinstance(raw, list):
         return [], ["filet LLM : reponse sans liste 'items'"]
 
-    items: list[dict] = []
+    items: list[dict[str, Any]] = []
     for entry in raw:
         if not isinstance(entry, dict):
             continue
@@ -277,7 +277,7 @@ def extract_bom(
     *,
     mistral: Any = None,
     llm_enabled: bool = False,
-    pdf_map: Optional[dict] = None,
+    pdf_map: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Extrait la nomenclature d'un PDF -> {items, warnings, method, page_count}.
 
@@ -317,7 +317,7 @@ def extract_bom(
     }
 
 
-def llm_reextract(path: str, mistral: Any) -> list[dict]:
+def llm_reextract(path: str, mistral: Any) -> list[dict[str, Any]]:
     """Force une extraction INDEPENDANTE par le LLM (pour le challenge/controle).
 
     Contrairement a `extract_bom`, ne fait pas de deterministe : c'est une
@@ -331,6 +331,6 @@ def llm_reextract(path: str, mistral: Any) -> list[dict]:
     return items
 
 
-def dumps_meta(warnings: list[str], detected: Optional[dict] = None) -> str:
+def dumps_meta(warnings: list[str], detected: dict[str, Any] | None = None) -> str:
     """Serialise les metadonnees d'extraction pour la colonne `extraction_meta`."""
     return json.dumps({"warnings": warnings, "detected": detected or {}}, ensure_ascii=False)
