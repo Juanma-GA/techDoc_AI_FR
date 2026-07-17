@@ -17,7 +17,7 @@ def test_health_returns_ok(client: TestClient) -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["db"] == "ok"
-    assert body["llm"] in {"configured", "not_configured", "untested", "disabled"}
+    assert body["llm"] in {"ok", "not_configured", "untested", "disabled"}
     assert body["version"]
 
 
@@ -43,7 +43,7 @@ def test_llm_state_not_configured_without_key(client: TestClient) -> None:
 
 def test_llm_state_untested_then_configured(client: TestClient) -> None:
     """Key present + enabled but no successful test -> untested; once the
-    tested flag flips true -> configured (green). Saving the key invalidates
+    tested flag flips true -> ok (green). Saving the key invalidates
     the test (back to untested)."""
     from app.core import mistral_settings
     from app.db.session import SessionLocal
@@ -63,7 +63,7 @@ def test_llm_state_untested_then_configured(client: TestClient) -> None:
         mistral_settings.set_llm_tested(db, True)
     finally:
         db.close()
-    assert _llm_state(client) == "configured"
+    assert _llm_state(client) == "ok"
 
     # A subsequent key change must invalidate the test -> untested again.
     db = SessionLocal()

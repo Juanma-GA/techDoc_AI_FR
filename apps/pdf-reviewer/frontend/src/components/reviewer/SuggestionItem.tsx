@@ -1,4 +1,4 @@
-import { Check, Layers, Pencil, X } from "lucide-react";
+import { Check, Layers, Pencil, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -19,6 +19,7 @@ type Props = {
   onReject: () => void;
   onSaveEdit: (newProposedText: string) => void;
   onApplyGroup: () => void;
+  onUndo: () => void;
 };
 
 export function SuggestionItem({
@@ -31,6 +32,7 @@ export function SuggestionItem({
   onReject,
   onSaveEdit,
   onApplyGroup,
+  onUndo,
 }: Props) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -173,6 +175,23 @@ export function SuggestionItem({
               </button>
             </>
           )}
+        </footer>
+      ) : null}
+
+      {isApplied ? (
+        <footer className="suggestion-actions" style={{ justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            className="btn ghost small"
+            data-testid="suggestion-undo"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUndo();
+            }}
+          >
+            <Undo2 size={12} />
+            {t("reviewer.suggestion.undo")}
+          </button>
         </footer>
       ) : null}
     </article>

@@ -10,18 +10,15 @@ import { Dashboard } from "./routes/Dashboard";
 import { Data } from "./routes/Data";
 import { DocumentReviewer } from "./routes/DocumentReviewer";
 import { DocumentsList } from "./routes/DocumentsList";
-import { Rules } from "./routes/Rules";
 import { Settings } from "./routes/Settings";
-import { Standards } from "./routes/Standards";
 
-// Coquille pixel-coherente avec les POCs recents (corpus-agent / doc-writer) :
-// .layout / .sidebar / .nav-item / .lang-switch dans styles/preview-skin.css.
-// Pas d'icones sur les onglets.
+// Coquille pixel-coherente avec le preview.html : 5 onglets (Tableau de bord /
+// Documents / Architecture / Donnees / Parametres). Normes + Regles vivent
+// DANS Parametres (cartes), le reviewer est embarque dans le detail Documents
+// (la sidebar reste visible) — parite 1:1 avec preview.html.
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
-  { to: "/standards", labelKey: "nav.standards" },
-  { to: "/rules", labelKey: "nav.rules" },
   { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
@@ -33,9 +30,11 @@ export function App() {
   const { t } = useTranslation();
   const location = useLocation();
   const currentLang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
-  // Le reviewer occupe tout le viewport — on masque le sidebar.
-  const isReviewer = location.pathname.startsWith("/documents/");
 
+  // Le reviewer (detail d'un document) occupe tout le viewport pour maximiser
+  // la lisibilite du PDF et des surlignages (disposition split plein ecran) —
+  // sidebar masquee. Deviation assumee vs le detail empile du preview.
+  const isReviewer = location.pathname.startsWith("/documents/");
   if (isReviewer) {
     return (
       <div className="pr">
@@ -92,8 +91,6 @@ export function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/documents" element={<DocumentsList />} />
-              <Route path="/standards" element={<Standards />} />
-              <Route path="/rules" element={<Rules />} />
               <Route path="/architecture" element={<Architecture />} />
               <Route path="/data" element={<Data />} />
               <Route path="/settings" element={<Settings />} />

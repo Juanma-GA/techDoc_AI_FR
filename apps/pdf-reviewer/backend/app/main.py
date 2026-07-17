@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
+
+# Windows n'enregistre pas `.mjs` dans son registre MIME : StaticFiles le sert
+# alors en application/octet-stream, et le navigateur REFUSE de charger un
+# worker ES-module avec ce type -> "failed to load pdf" (react-pdf charge
+# `pdf.worker.min.mjs` comme worker module). On force le bon type ici, au
+# niveau processus, avant tout mount StaticFiles. Idempotent.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles

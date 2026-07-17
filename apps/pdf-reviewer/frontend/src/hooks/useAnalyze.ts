@@ -11,14 +11,20 @@ export function useAnalyze(documentId: string | undefined) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (vision?: boolean) => {
     if (!documentId) return;
     setStatus("running");
     setProgress(0);
     setError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/documents/${documentId}/analyze`, {
+      // `vision` override le reglage persiste (.../settings/mistral) le temps
+      // d'un run — c'est la checkbox "Inclure la vision (Pixtral)" du preview.
+      const url =
+        vision === undefined
+          ? `${API_BASE_URL}/documents/${documentId}/analyze`
+          : `${API_BASE_URL}/documents/${documentId}/analyze?vision=${vision}`;
+      const response = await fetch(url, {
         method: "POST",
         headers: { Accept: "text/event-stream" },
       });

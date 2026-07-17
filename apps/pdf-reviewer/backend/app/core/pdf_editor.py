@@ -145,49 +145,53 @@ def _font_metrics(font_id: str) -> tuple[float, float]:
 
 
 def _sample_background(page: fitz.Page, rect: fitz.Rect) -> tuple[float, float, float]:
-    """Sample the page colour just *outside* the redact rect to pick a
-    fill that blends with the surrounding background. Returns RGB in
-    [0, 1]. Falls back to pure white when sampling can't establish a
-    stable colour (e.g. the rect butts against page edges)."""
-    page_rect = page.rect
-    margin = max(3.0, min(rect.height, rect.width) * 0.5)
-    candidates: list[fitz.Rect] = []
-    # Right of the rect
-    if rect.x1 + margin < page_rect.x1:
-        candidates.append(fitz.Rect(rect.x1 + 1, rect.y0, rect.x1 + margin, rect.y1))
-    # Left of the rect
-    if rect.x0 - margin > page_rect.x0:
-        candidates.append(fitz.Rect(rect.x0 - margin, rect.y0, rect.x0 - 1, rect.y1))
-    # Above the rect
-    if rect.y0 - margin > page_rect.y0:
-        candidates.append(fitz.Rect(rect.x0, rect.y0 - margin, rect.x1, rect.y0 - 1))
-    # Below the rect
-    if rect.y1 + margin < page_rect.y1:
-        candidates.append(fitz.Rect(rect.x0, rect.y1 + 1, rect.x1, rect.y1 + margin))
+    """Sample the page colour around the redact rect and return the
+    DOMINANT colour (the actual background), RGB in [0, 1].
 
-    samples: list[tuple[int, int, int]] = []
+    Picking the *dominant* colour (most frequent pixel, glyphs being a
+    minority) instead of the *brightest* one is what makes redactions on
+    coloured table cells / tinted headers work: on a dark-blue header the
+    brightest neighbour pixel is white, which would carve a white box into
+    the cell — the dominant pixel is the blue we actually want. Falls back
+    to pure white when nothing can be sampled (rect against page edges)."""
+    page_rect = page.rect
+    margin = max(4.0, min(rect.height, rect.width) * 0.6)
+    candidates: list[fitz.Rect] = []
+    # Left / right first (same row -> same cell as the text), then above /
+    # below as a fallback.
+    if rect.x1 + 1 < page_rect.x1:
+        candidates.append(fitz.Rect(rect.x1 + 1, rect.y0, min(rect.x1 + margin, page_rect.x1), rect.y1))
+    if rect.x0 - 1 > page_rect.x0:
+        candidates.append(fitz.Rect(max(rect.x0 - margin, page_rect.x0), rect.y0, rect.x0 - 1, rect.y1))
+    if rect.y0 - 1 > page_rect.y0:
+        candidates.append(fitz.Rect(rect.x0, max(rect.y0 - margin, page_rect.y0), rect.x1, rect.y0 - 1))
+    if rect.y1 + 1 < page_rect.y1:
+        candidates.append(fitz.Rect(rect.x0, rect.y1 + 1, rect.x1, min(rect.y1 + margin, page_rect.y1)))
+
+    # Count quantised colours (16-level buckets) across the sampled pixels.
+    counts: dict[tuple[int, int, int], int] = {}
     for clip in candidates:
+        if clip.is_empty or clip.width <= 0 or clip.height <= 0:
+            continue
         try:
             pix = page.get_pixmap(clip=clip, alpha=False)
         except Exception:  # noqa: BLE001
             continue
-        if pix.width == 0 or pix.height == 0:
+        if pix.width == 0 or pix.height == 0 or pix.n < 3:
             continue
-        # Pick the middle pixel of the clip — cheap, avoids edge artefacts.
-        px = pix.width // 2
-        py = pix.height // 2
-        try:
-            r, g, b = pix.pixel(px, py)[:3]
-        except Exception:  # noqa: BLE001
-            continue
-        samples.append((r, g, b))
+        samples = pix.samples
+        n = pix.n
+        total = pix.width * pix.height
+        step = max(1, total // 400)  # cap ~400 samples per clip for speed
+        for i in range(0, total, step):
+            base = i * n
+            key = (samples[base] // 16, samples[base + 1] // 16, samples[base + 2] // 16)
+            counts[key] = counts.get(key, 0) + 1
 
-    if not samples:
+    if not counts:
         return (1.0, 1.0, 1.0)
-    # Use the brightest sample (page background is usually the lightest
-    # colour around glyphs). Avoids picking up an accidental adjacent glyph.
-    r, g, b = max(samples, key=lambda s: s[0] + s[1] + s[2])
-    return (r / 255.0, g / 255.0, b / 255.0)
+    qr, qg, qb = max(counts, key=lambda k: counts[k])
+    return ((qr * 16 + 8) / 255.0, (qg * 16 + 8) / 255.0, (qb * 16 + 8) / 255.0)
 
 
 def _find_line_for_rect(
@@ -310,6 +314,9 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
             all_rects = [chosen]
 
         assert chosen is not None
+        # `color` = couleur d'origine du texte. On la REUTILISE telle quelle :
+        # l'edition ne doit jamais changer la couleur de la police (et fill=None
+        # preserve le fond, donc le contraste d'origine est conserve).
         font_name, font_size, color = _find_span_font(page, chosen)
         resolved_font, fallback = _resolve_font(font_name)
 
@@ -318,9 +325,17 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
             # the rest of the page), then insert the proposed text in a
             # textbox covering the union — `insert_textbox` wraps as needed.
             for r in all_rects:
-                fill = _sample_background(page, r)
-                page.add_redact_annot(r, fill=fill)
-            page.apply_redactions()
+                # fill=None : on ne peint AUCUN rectangle. La mise en forme
+                # d'origine (cellule coloree, image, degrade, filet) reste
+                # intacte ; seuls les glyphes du texte sont retires.
+                page.add_redact_annot(r, fill=None)
+            # Remove ONLY the text glyphs : keep line-art (coloured cells /
+            # tinted headers) and images, otherwise the whole cell background
+            # would be erased and turn white.
+            page.apply_redactions(
+                images=fitz.PDF_REDACT_IMAGE_NONE,
+                graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+            )
             redact_rect = chosen   # union, used for sizing only
             insert_text = patch.proposed_text
         else:
@@ -350,10 +365,14 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
         wrapped = False
         if not multi_line:
             # Single-line edits still need an explicit redact (multi-line
-            # already redacted each rect above).
-            fill = _sample_background(page, redact_rect)
-            page.add_redact_annot(redact_rect, fill=fill)
-            page.apply_redactions()
+            # already redacted each rect above). fill=None : aucun rectangle
+            # peint, la mise en forme d'origine est preservee.
+            page.add_redact_annot(redact_rect, fill=None)
+            # Keep line-art / images, drop only the text (see multi-line note).
+            page.apply_redactions(
+                images=fitz.PDF_REDACT_IMAGE_NONE,
+                graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+            )
 
         if not multi_line and text_w <= target_w * _OVERFLOW_TOLERANCE:
             # Baseline = top + ascender * font_size, calibrated on the

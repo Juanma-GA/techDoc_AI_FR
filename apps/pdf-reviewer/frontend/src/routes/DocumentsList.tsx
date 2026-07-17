@@ -1,13 +1,11 @@
-import { Trash2 } from "lucide-react";
+import { Play, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
-import { Badge, type BadgeProps, Spinner } from "@internal/ui";
-
 import { PageHeader } from "../components/PageHeader";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
-import { StandardPicker } from "../components/upload/StandardPicker";
+import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
@@ -17,10 +15,12 @@ type TargetUnit = "metric" | "imperial" | "auto";
 
 const TARGET_UNITS: TargetUnit[] = ["auto", "metric", "imperial"];
 
-const STATUS_VARIANT: Record<string, NonNullable<BadgeProps["variant"]>> = {
+// Classes du badge skin (.badge.*) — coherent avec le reste de l'app et le
+// preview (au lieu du <Badge> Tailwind de @internal/ui).
+const STATUS_BADGE: Record<string, string> = {
   uploaded: "info",
-  analyzing: "warning",
-  analyzed: "success",
+  analyzing: "warn",
+  analyzed: "ok",
   edited: "info",
   analysis_failed: "danger",
 };
@@ -34,24 +34,25 @@ export function DocumentsList() {
   const standards = useStandards();
   const targetUnit = useFiltersStore((s) => s.targetUnit);
   const setTargetUnit = useFiltersStore((s) => s.setTargetUnit);
-  const lastStandardId = useFiltersStore((s) => s.lastStandardId);
-  const lastStandardVersionId = useFiltersStore((s) => s.lastStandardVersionId);
-  const setLastStandard = useFiltersStore((s) => s.setLastStandard);
+  const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
 
-  // Active target-standard label for the banner (preview lines 289-293).
-  // React's filtersStore is single-valued (the Settings multi-select is a
-  // separate, flagged store change); we surface that single active standard.
+  // Bandeau "Normes cibles actives" (preview 289-293) : libelles des versions
+  // actives selectionnees dans Parametres. Le choix du standard ne se fait plus
+  // a l'upload (parite preview) — juste ici en lecture.
   const activeStandardLabel = useMemo(() => {
     const items = standards.data ?? [];
-    const std = items.find((s) => s.id === lastStandardId);
-    if (!std) return null;
-    const version = std.versions.find((v) => v.id === lastStandardVersionId);
-    return version ? `${std.code} ${version.label}` : std.code;
-  }, [standards.data, lastStandardId, lastStandardVersionId]);
+    const labels: string[] = [];
+    for (const std of items) {
+      for (const v of std.versions) {
+        if (activeStandardVersionIds.includes(v.id)) labels.push(`${std.code} ${v.label}`);
+      }
+    }
+    return labels.length > 0 ? labels.join(" · ") : null;
+  }, [standards.data, activeStandardVersionIds]);
 
   const handleUpload = (file: File): void => {
     upload.mutate(
-      { file, target: targetUnit, standardVersionId: lastStandardVersionId },
+      { file, target: targetUnit, standardVersionIds: activeStandardVersionIds },
       {
         onSuccess: (doc: Document) => navigate(`/documents/${doc.id}`),
       },
@@ -62,28 +63,31 @@ export function DocumentsList() {
     <div>
       <PageHeader title={t("documents.title")} subtitle={t("documents.subtitle")} />
 
+      {/* Carte 1 : import (banniere norme active + slicer unites + dropzone). */}
       <section className="card">
-        {/* Active target-standard banner (preview 289-293) */}
+        <h2 className="card-title">{t("documents.uploadTitle")}</h2>
+
         <div className="banner">
           <span>{t("documents.activeStandardLabel")}</span>
-          <strong className="label">{activeStandardLabel ?? "—"}</strong>
+          <strong className="label">
+            {activeStandardLabel ?? t("standards.transverse")}
+          </strong>
           <Link to="/settings" className="grow" style={{ textAlign: "right" }}>
             {t("documents.changeStandard")}
           </Link>
         </div>
 
         <div className="form">
-          {/* Per-upload target-unit slicer, synced with Settings (preview 295-300) */}
           <div className="field">
             <span className="field-label">{t("documents.targetUnit")}</span>
-            <div className="row">
+            <div className="slicer">
               {TARGET_UNITS.map((unit) => (
                 <button
                   key={unit}
                   type="button"
                   aria-pressed={targetUnit === unit}
                   onClick={() => setTargetUnit(unit)}
-                  className={["btn small", targetUnit === unit ? "primary" : "ghost"].join(" ")}
+                  className={targetUnit === unit ? "slicer-pill active" : "slicer-pill"}
                 >
                   {t(`settings.targetUnit.${unit}`)}
                 </button>
@@ -91,57 +95,96 @@ export function DocumentsList() {
             </div>
           </div>
 
-          <StandardPicker
-            standardId={lastStandardId}
-            versionId={lastStandardVersionId}
-            onChange={setLastStandard}
-          />
           <PdfUploadZone onFile={handleUpload} disabled={upload.isPending} />
         </div>
+      </section>
 
+      {/* Carte 2 : liste des documents importes (bien dissociee de l'import). */}
+      <section className="card">
+        <h2 className="card-title">{t("documents.listTitle")}</h2>
         {docs.isLoading ? (
           <p className="empty-state">{t("common.loading")}</p>
         ) : docs.data && docs.data.length > 0 ? (
-          <ul className="grid-2">
-            {docs.data.map((doc) => {
-              const variant = STATUS_VARIANT[doc.status] ?? "info";
-              return (
-                <li key={doc.id} className="card">
-                  <div className="row">
-                    <h3 className="card-title label grow">{doc.original_filename}</h3>
-                    <Badge variant={variant}>
-                      {doc.status === "analyzing" ? <Spinner size="sm" /> : null}
-                      {t(`status.${doc.status}`)}
-                    </Badge>
-                  </div>
-                  <p className="card-sub label">
-                    {doc.page_count} pages · v{doc.current_version} · {doc.target_unit_system}
-                  </p>
-                  <div className="item-actions" style={{ marginTop: "0.5rem" }}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/documents/${doc.id}`)}
-                      className="btn small primary"
-                    >
-                      {t("documents.open")}
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t("documents.delete")}
-                      onClick={() => remove.mutate(doc.id)}
-                      className="btn small danger"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="item-list">
+            {docs.data.map((doc) => (
+              <DocRow
+                key={doc.id}
+                doc={doc}
+                onOpen={() => navigate(`/documents/${doc.id}`)}
+                onDelete={() => remove.mutate(doc.id)}
+              />
+            ))}
+          </div>
         ) : (
           <p className="empty-state">{t("documents.empty")}</p>
         )}
       </section>
+    </div>
+  );
+}
+
+/**
+ * Ligne document (style preview `.doc-row`) avec lancement d'analyse en place :
+ * « Lancer l'analyse » declenche le SSE et rafraichit le statut/dashboard sans
+ * ouvrir le reviewer.
+ */
+function DocRow({
+  doc,
+  onOpen,
+  onDelete,
+}: {
+  doc: Document;
+  onOpen: () => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const analyze = useAnalyze(doc.id);
+  const badgeClass = STATUS_BADGE[doc.status] ?? "default";
+  const running = analyze.status === "running" || doc.status === "analyzing";
+
+  // Toute la ligne est cliquable (ouvre le detail), comme le preview ; les
+  // boutons stoppent la propagation pour garder leur action propre.
+  return (
+    <div className="item-row clickable" onClick={onOpen}>
+      <div className="item-main">
+        <p className="item-name">{doc.original_filename}</p>
+        <p className="item-meta">
+          {doc.page_count} pages · v{doc.current_version} · {doc.target_unit_system}
+        </p>
+        {analyze.status === "running" ? (
+          <div className="progress" style={{ marginTop: 6 }}>
+            <div className="progress-bar" style={{ width: `${analyze.progress}%` }} />
+          </div>
+        ) : null}
+      </div>
+
+      <span className={`badge ${badgeClass}`}>
+        {running ? <span className="spinner" style={{ width: 10, height: 10 }} /> : null}
+        {t(`status.${doc.status}`)}
+      </span>
+
+      <div className="item-actions" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => void analyze.start()}
+          disabled={running}
+          className="btn small secondary"
+        >
+          <Play size={14} />
+          {running ? t("reviewer.toolbar.analyzing") : t("reviewer.toolbar.analyze")}
+        </button>
+        <button type="button" onClick={onOpen} className="btn small primary">
+          {t("documents.open")}
+        </button>
+        <button
+          type="button"
+          aria-label={t("documents.delete")}
+          onClick={onDelete}
+          className="btn small danger"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   );
 }

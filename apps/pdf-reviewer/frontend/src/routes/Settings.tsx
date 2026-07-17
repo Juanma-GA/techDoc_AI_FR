@@ -1,50 +1,48 @@
-import { ArrowRight, BookOpen } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
-import { StandardPicker } from "../components/upload/StandardPicker";
 import {
   useAiPrompt,
   useMistralSettings,
   useTestMistralConnection,
+  useToggleLlm,
   useUpdateAiPrompt,
   useUpdateMistralSettings,
 } from "../hooks/useMistralSettings";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
 
-const STRUCTURAL_KINDS = [
-  "field_required",
-  "section_required",
-  "field_consistency",
-  "step_pattern",
-  "enum_value",
-] as const;
+import { Rules } from "./Rules";
+import { Standards } from "./Standards";
 
 export function Settings() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const targetUnit = useFiltersStore((s) => s.targetUnit);
   const setTargetUnit = useFiltersStore((s) => s.setTargetUnit);
-  const lastStandardId = useFiltersStore((s) => s.lastStandardId);
-  const lastStandardVersionId = useFiltersStore((s) => s.lastStandardVersionId);
-  const setLastStandard = useFiltersStore((s) => s.setLastStandard);
+  const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
+  const toggleActiveStandardVersion = useFiltersStore((s) => s.toggleActiveStandardVersion);
+  const clearActiveStandards = useFiltersStore((s) => s.clearActiveStandards);
 
   const standards = useStandards();
-  const standardCount = standards.data?.length ?? 0;
-  const builtinCount = (standards.data ?? []).filter((s) => s.builtin).length;
-  const customCount = standardCount - builtinCount;
+  // Libelles des versions actives, pour le resume « Actives · CODE v1 · … ».
+  const activeLabels = (standards.data ?? []).flatMap((s) =>
+    s.versions
+      .filter((v) => activeStandardVersionIds.includes(v.id))
+      .map((v) => `${s.code} ${v.label}`),
+  );
 
   const mistral = useMistralSettings();
   const updateMistral = useUpdateMistralSettings();
   const testMistral = useTestMistralConnection();
+  const toggleLlm = useToggleLlm();
   const aiPrompt = useAiPrompt();
   const updateAiPrompt = useUpdateAiPrompt();
 
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
   const [modelDraft, setModelDraft] = useState("");
+  const [visionModelDraft, setVisionModelDraft] = useState("");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
 
   const effectivePrompt = promptDraft ?? aiPrompt.data?.prompt ?? "";
@@ -55,12 +53,14 @@ export function Settings() {
         api_key: apiKeyDraft || undefined,
         base_url: baseUrlDraft || undefined,
         chat_model: modelDraft || undefined,
+        vision_model: visionModelDraft || undefined,
       },
       {
         onSuccess: () => {
           setApiKeyDraft("");
           setBaseUrlDraft("");
           setModelDraft("");
+          setVisionModelDraft("");
         },
       },
     );
@@ -71,73 +71,95 @@ export function Settings() {
       <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
 
       <section className="form">
-        <Card title={t("settings.language")}>
-          <select
-            value={i18n.language.startsWith("en") ? "en" : "fr"}
-            onChange={(e) => {
-              void i18n.changeLanguage(e.target.value);
-            }}
-            className="input"
-          >
-            <option value="fr">Français</option>
-            <option value="en">English</option>
-          </select>
-        </Card>
-
-        <Card title={t("settings.targetUnit.title")}>
-          <div className="row">
-            {(["metric", "imperial", "auto"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setTargetUnit(opt)}
-                className={["btn small", targetUnit === opt ? "primary" : "secondary"].join(
-                  " ",
-                )}
-              >
-                {t(`settings.targetUnit.${opt}`)}
-              </button>
-            ))}
-          </div>
-        </Card>
-
+        {/* 1. Normes cibles actives (multi-select pills, parite preview) :
+            chaque version selectionnee est fusionnee a l'analyse et appliquee
+            a chaque upload. Choix persistant (filtersStore). */}
         <Card
-          title={t("settings.defaultStandard.title")}
-          description={t("settings.defaultStandard.description")}
+          title={t("settings.activeStandards.title")}
+          description={t("settings.activeStandards.hint")}
         >
-          <StandardPicker
-            standardId={lastStandardId}
-            versionId={lastStandardVersionId}
-            onChange={setLastStandard}
-          />
-        </Card>
-
-        <Card
-          title={t("settings.standardsSummary.title")}
-          description={t("settings.standardsSummary.description")}
-        >
-          <div className="banner row" style={{ justifyContent: "space-between" }}>
-            <div className="row">
-              <BookOpen size={16} aria-hidden="true" />
-              <span className="label">
-                {t("settings.standardsSummary.builtin", { count: builtinCount })}
-                {" · "}
-                {t("settings.standardsSummary.custom", { count: customCount })}
-              </span>
+          {standards.isLoading ? (
+            <p className="hint">{t("common.loading")}</p>
+          ) : (standards.data ?? []).length === 0 ? (
+            <p className="empty-state">{t("common.empty")}</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {(standards.data ?? []).map((std) => {
+                const stdActive = std.versions.some((v) =>
+                  activeStandardVersionIds.includes(v.id),
+                );
+                return (
+                <div
+                  key={std.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
+                    padding: "8px 10px",
+                    // Surbrillance de la norme quand au moins une version est
+                    // active (en plus des pills bleues).
+                    background: stdActive ? "var(--card-hover)" : "var(--bg-2)",
+                    border: `1px solid ${stdActive ? "var(--brand-light)" : "var(--border)"}`,
+                    borderRadius: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: '"JetBrains Mono", monospace',
+                      color: "var(--fg)",
+                      minWidth: 120,
+                    }}
+                  >
+                    {std.code}
+                  </span>
+                  <span
+                    className="label"
+                    style={{ color: "var(--fg-dim)", flex: 1, minWidth: 0 }}
+                  >
+                    {std.label}
+                  </span>
+                  {std.versions.map((v) => {
+                    const on = activeStandardVersionIds.includes(v.id);
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleActiveStandardVersion(v.id)}
+                        className={on ? "slicer-pill active" : "slicer-pill"}
+                      >
+                        {v.label}
+                        {v.builtin ? "" : ` (${t("standards.custom")})`}
+                      </button>
+                    );
+                  })}
+                </div>
+                );
+              })}
             </div>
-            <Link to="/standards" className="btn primary small">
-              {t("settings.standardsSummary.manage")}
-              <ArrowRight size={14} aria-hidden="true" />
-            </Link>
+          )}
+          <div className="row" style={{ marginTop: 10 }}>
+            <span className="label" style={{ color: "var(--fg-dim)" }}>
+              {activeLabels.length > 0
+                ? t("settings.activeStandards.activeNow", { list: activeLabels.join(" · ") })
+                : t("settings.activeStandards.none")}
+            </span>
+            <button
+              type="button"
+              className="btn ghost small"
+              style={{ marginLeft: "auto" }}
+              onClick={clearActiveStandards}
+              disabled={activeStandardVersionIds.length === 0}
+            >
+              {t("settings.activeStandards.clear")}
+            </button>
           </div>
-          <ul className="grid-2" style={{ marginTop: 12 }}>
-            {STRUCTURAL_KINDS.map((kind) => (
-              <li key={kind} className="label">
-                · {t(`rules.kind.${kind}`)}
-              </li>
-            ))}
-          </ul>
         </Card>
+
+        {/* 2. Administration des normes (catalogue + versions + regles custom
+            par version) — imbriquee dans Parametres comme dans le preview */}
+        <Standards />
 
         <Card
           title={t("settings.mistral.title")}
@@ -147,6 +169,23 @@ export function Settings() {
             <p className="hint">{t("common.loading")}</p>
           ) : (
             <div className="form">
+              {/* Interrupteur LLM (regle #13) : bascule immediate, non
+                  destructive, qui rafraichit le badge LLM du sidebar. */}
+              <div className="switch-row">
+                <div>
+                  <div>{t("settings.mistral.llmEnabled")}</div>
+                  <div className="label">{t("settings.mistral.llmEnabledHint")}</div>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={!!mistral.data?.llm_enabled}
+                    onChange={(e) => toggleLlm.mutate(e.target.checked)}
+                  />
+                  <span className="track" />
+                </label>
+              </div>
+
               <p className="hint" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                 {mistral.data?.api_key_set
                   ? t("settings.mistral.keySet", { preview: mistral.data.api_key_preview })
@@ -183,6 +222,22 @@ export function Settings() {
                   className="input mono"
                 />
               </Field>
+              <Field label={t("settings.mistral.visionModel")}>
+                <input
+                  placeholder={mistral.data?.vision_model ?? "pixtral-12b-2409"}
+                  value={visionModelDraft}
+                  onChange={(e) => setVisionModelDraft(e.target.value)}
+                  className="input mono"
+                />
+              </Field>
+              <label className="checkbox" style={{ gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={!!mistral.data?.vision_enabled}
+                  onChange={(e) => updateMistral.mutate({ vision_enabled: e.target.checked })}
+                />
+                <span>{t("settings.mistral.visionEnabled")}</span>
+              </label>
 
               <div className="row">
                 <button
@@ -252,6 +307,26 @@ export function Settings() {
               </div>
             </div>
           )}
+        </Card>
+
+        {/* 5. Regles custom (linter user-defined) — imbriquee dans Parametres */}
+        <Rules />
+
+        {/* 6. Systeme d'unites cible par defaut */}
+        <Card title={t("settings.targetUnit.title")}>
+          <div className="slicer">
+            {(["auto", "metric", "imperial"] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                aria-pressed={targetUnit === opt}
+                onClick={() => setTargetUnit(opt)}
+                className={targetUnit === opt ? "slicer-pill active" : "slicer-pill"}
+              >
+                {t(`settings.targetUnit.${opt}`)}
+              </button>
+            ))}
+          </div>
         </Card>
       </section>
     </div>

@@ -1,4 +1,3 @@
-import { UploadCloud } from "lucide-react";
 import { useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -34,8 +33,11 @@ export function PdfUploadZone({ onFile, disabled }: Props) {
         .join(" ")}
     >
       <input {...getInputProps()} aria-label={t("documents.upload.dropHint")} />
-      <UploadCloud size={28} aria-hidden="true" />
-      <p>{t("documents.upload.dropHint")}</p>
+      <p style={{ fontWeight: 600, color: "var(--fg)", margin: 0 }}>
+        {t("documents.upload.dropTitle")}
+      </p>
+      <p style={{ margin: 0 }}>{t("documents.upload.dropHint")}</p>
+      <p className="label">{t("documents.upload.dropLimit")}</p>
     </div>
   );
 }

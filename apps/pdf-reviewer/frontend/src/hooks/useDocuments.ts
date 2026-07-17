@@ -24,16 +24,21 @@ export function useUploadDocument() {
     mutationFn: ({
       file,
       target,
-      standardVersionId,
+      standardVersionIds,
     }: {
       file: File;
       target: "metric" | "imperial" | "auto";
-      standardVersionId?: string | null;
+      // Set de normes cibles actives (Parametres). Le backend accepte un
+      // `standard_version_ids` repete et le persiste sur le document.
+      standardVersionIds?: string[];
     }) => {
       const fd = new FormData();
       fd.append("file", file);
       const params = new URLSearchParams({ target });
-      if (standardVersionId) params.set("standard_version_id", standardVersionId);
+      // Le backend attend une chaine CSV `standard_version_ids=id1,id2`
+      // (Query Optional[str], split sur ","), pas des params repetes.
+      const ids = (standardVersionIds ?? []).filter(Boolean);
+      if (ids.length > 0) params.set("standard_version_ids", ids.join(","));
       return api.upload<Document>(`/documents?${params.toString()}`, fd);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),

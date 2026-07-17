@@ -194,3 +194,49 @@ def test_apply_raises_when_original_missing(storage_dir_value: str) -> None:
             ),
         )
     assert info.value.code == "ORIGINAL_NOT_FOUND"
+
+
+def test_redaction_preserves_coloured_cell_background(tmp_path: Path) -> None:
+    """White text on a coloured cell (table header) must keep the cell colour
+    and re-insert visible text. Regression: `apply_redactions` used to wipe the
+    line-art, turning the whole cell white with invisible white text."""
+    src = tmp_path / "src.pdf"
+    dst = tmp_path / "dst.pdf"
+
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=220)
+    cell = fitz.Rect(40, 50, 360, 84)
+    page.draw_rect(cell, color=(0.0, 0.0, 0.45), fill=(0.10, 0.18, 0.55))
+    page.insert_text((48, 73), "OLD HEADER", fontname="helv", fontsize=13, color=(1, 1, 1))
+    doc.save(str(src))
+    doc.close()
+
+    apply_patch(
+        src,
+        dst,
+        PatchSpec(
+            page=1,
+            bbox=(48.0, 55.0, 200.0, 80.0),
+            original_text="OLD HEADER",
+            proposed_text="NEW HEADER",
+        ),
+    )
+
+    out = fitz.open(str(dst))
+    try:
+        opage = out[0]
+        text = opage.get_text()
+        assert "NEW HEADER" in text          # proposed text inserted
+        assert "OLD HEADER" not in text       # original glyphs removed (no ghost)
+        # Right half of the cell has no text: it must still read BLUE, not white
+        # (fill=None means no painted rectangle -> formatting untouched).
+        clip = fitz.Rect(cell.x0 + 180, cell.y0 + 4, cell.x1 - 4, cell.y1 - 4)
+        pix = opage.get_pixmap(clip=clip, alpha=False)
+        s, n, total = pix.samples, pix.n, pix.width * pix.height
+        avg_r = sum(s[i * n] for i in range(total)) / total
+        avg_b = sum(s[i * n + 2] for i in range(total)) / total
+        # Blue dominant (b clearly above r) and not a near-white box.
+        assert avg_b > avg_r + 25, f"cell turned non-blue (r={avg_r:.0f}, b={avg_b:.0f})"
+        assert avg_b < 230, "cell looks white (redaction wiped the fill)"
+    finally:
+        out.close()

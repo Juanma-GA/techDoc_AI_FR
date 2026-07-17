@@ -1,15 +1,16 @@
-import { ArrowLeft, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Download } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PdfViewer } from "../components/reviewer/PdfViewer";
-import { ReviewerToolbar } from "../components/reviewer/ReviewerToolbar";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
-import { useAnalyze } from "../hooks/useAnalyze";
-import { useApplyGroup, useApplySuggestion } from "../hooks/useApplySuggestion";
-import { useDeleteDocument, useDocument } from "../hooks/useDocuments";
+import {
+  useApplyGroup,
+  useApplySuggestion,
+  useRevertSuggestion,
+} from "../hooks/useApplySuggestion";
+import { useDocument } from "../hooks/useDocuments";
 import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
 import { API_BASE_URL } from "../lib/api";
 import { useViewerStore } from "../stores/viewerStore";
@@ -24,32 +25,30 @@ export function DocumentReviewer() {
   const suggestions = useSuggestions(documentId);
   const apply = useApplySuggestion(documentId);
   const applyGroup = useApplyGroup(documentId);
+  const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
-  const analyze = useAnalyze(documentId);
-  const deleteDoc = useDeleteDocument();
-
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const pdfVersion = useViewerStore((s) => s.pdfVersion);
   const setPdfVersion = useViewerStore((s) => s.setPdfVersion);
   const currentPage = useViewerStore((s) => s.currentPage);
   const setCurrentPage = useViewerStore((s) => s.setCurrentPage);
-  const zoom = useViewerStore((s) => s.zoom);
-  const setZoom = useViewerStore((s) => s.setZoom);
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
 
-  const [totalPages, setTotalPages] = useState(0);
+  // Nombre de pages = metadonnee du document (plus de chargement react-pdf).
+  const totalPages = document.data?.page_count ?? 0;
 
   // Sync the viewer version with the server-side current_version on load.
   useEffect(() => {
     if (document.data) setPdfVersion(document.data.current_version);
   }, [document.data, setPdfVersion]);
 
-  const pdfUrl = useMemo(() => {
+  // Image PNG rendue serveur pour la page courante (cf. PdfViewer). `v=`
+  // casse le cache apres une edition (nouvelle version du PDF).
+  const pageImageUrl = useMemo(() => {
     if (!documentId) return "";
-    return `${API_BASE_URL}/documents/${documentId}/pdf?v=${pdfVersion}`;
-  }, [documentId, pdfVersion]);
+    return `${API_BASE_URL}/documents/${documentId}/pages/${currentPage}.png?dpi=144&v=${pdfVersion}`;
+  }, [documentId, currentPage, pdfVersion]);
 
   if (!documentId) return null;
 
@@ -81,64 +80,74 @@ export function DocumentReviewer() {
     applyGroup.mutate(id);
   };
 
+  // Annule une suggestion deja appliquee (revert backend -> version PDF
+  // precedente ; cascade les patchs appliques par-dessus).
+  const handleUndo = (id: string): void => {
+    revert.mutate(id);
+  };
+
   const handleExport = (): void => {
     if (!document.data) return;
     const url = `${API_BASE_URL}/documents/${documentId}/export`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // Mirrors the preview's "Supprimer le PDF" detail action; on success we
-  // return to the list at its new path (/documents, not / which is now the
-  // Dashboard — per the rewired route table).
-  const handleDelete = (): void => {
-    if (!documentId) return;
-    deleteDoc.mutate(documentId, {
-      onSuccess: () => navigate("/documents"),
-    });
-  };
-
+  // Barre minimale (demande utilisateur) : Retour | navigation pages | Export.
+  // L'analyse se lance depuis la liste Documents ; pas d'unites/suppression ici.
   return (
     <div className="reviewer">
       <div className="reviewer-viewer">
-        <div className="reviewer-panel-head">
-          <button type="button" onClick={() => navigate("/documents")} className="btn ghost small">
-            <ArrowLeft size={14} />
-            {t("documents.back")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="btn danger small"
-          >
-            <Trash2 size={14} />
-            {t("documents.delete")}
-          </button>
-        </div>
+        <div className="reviewer-toolbar">
+          <div className="reviewer-toolbar-group">
+            <button
+              type="button"
+              onClick={() => navigate("/documents")}
+              className="btn ghost small"
+            >
+              <ArrowLeft size={14} />
+              {t("documents.back")}
+            </button>
+          </div>
 
-        <ReviewerToolbar
-          filename={document.data?.original_filename ?? "—"}
-          version={pdfVersion}
-          zoom={zoom}
-          page={currentPage}
-          totalPages={totalPages}
-          analyzeStatus={analyze.status}
-          onZoomIn={() => setZoom(zoom + 0.1)}
-          onZoomOut={() => setZoom(zoom - 0.1)}
-          onPrev={() => setCurrentPage(currentPage - 1)}
-          onNext={() => setCurrentPage(currentPage + 1)}
-          onAnalyze={analyze.start}
-          onExport={handleExport}
-        />
+          <div className="reviewer-toolbar-group">
+            <button
+              type="button"
+              onClick={() => setCurrentPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="btn ghost small"
+              aria-label={t("viewer.prev")}
+            >
+              ◀
+            </button>
+            <span className="label">
+              {currentPage}/{totalPages || "?"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={totalPages > 0 && currentPage >= totalPages}
+              className="btn ghost small"
+              aria-label={t("viewer.next")}
+            >
+              ▶
+            </button>
+          </div>
+
+          <div className="reviewer-toolbar-group">
+            <button type="button" onClick={handleExport} className="btn secondary small">
+              <Download size={14} />
+              {t("reviewer.toolbar.export")}
+            </button>
+          </div>
+        </div>
 
         <main className="reviewer-canvas">
           <PdfViewer
-            pdfUrl={pdfUrl}
+            pageImageUrl={pageImageUrl}
             pageNumber={currentPage}
-            zoom={zoom}
             suggestions={suggestions.data ?? []}
             selectedSuggestionId={selectedId}
             onSuggestionClick={setSelected}
-            onTotalPages={setTotalPages}
           />
         </main>
       </div>
@@ -155,17 +164,7 @@ export function DocumentReviewer() {
         onReject={handleReject}
         onSaveEdit={handleSaveEdit}
         onApplyGroup={handleApplyGroup}
-      />
-
-      <ConfirmDialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title={t("documents.delete")}
-        description={document.data?.original_filename}
-        confirmLabel={t("common.delete")}
-        cancelLabel={t("common.cancel")}
-        destructive
-        onConfirm={handleDelete}
+        onUndo={handleUndo}
       />
     </div>
   );

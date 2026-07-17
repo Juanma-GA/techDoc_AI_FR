@@ -11,12 +11,17 @@ type FiltersState = {
   targetUnit: "metric" | "imperial" | "auto";
   lastStandardId: string | null;
   lastStandardVersionId: string | null;
+  // Normes cibles actives (multi-select Parametres, parite preview) : liste de
+  // version IDs fusionnees a chaque analyse et appliquees a chaque upload.
+  activeStandardVersionIds: string[];
   toggleSeverity: (s: Severity) => void;
   toggleKind: (k: RuleKind) => void;
   setHideAccepted: (v: boolean) => void;
   setShowUnitConversions: (v: boolean) => void;
   setTargetUnit: (v: "metric" | "imperial" | "auto") => void;
   setLastStandard: (standardId: string | null, versionId: string | null) => void;
+  toggleActiveStandardVersion: (versionId: string) => void;
+  clearActiveStandards: () => void;
 };
 
 export const useFiltersStore = create<FiltersState>()(
@@ -29,6 +34,7 @@ export const useFiltersStore = create<FiltersState>()(
       targetUnit: "auto",
       lastStandardId: null,
       lastStandardVersionId: null,
+      activeStandardVersionIds: [],
       toggleSeverity: (s) =>
         set({
           severities: get().severities.includes(s)
@@ -46,6 +52,13 @@ export const useFiltersStore = create<FiltersState>()(
       setTargetUnit: (v) => set({ targetUnit: v }),
       setLastStandard: (standardId, versionId) =>
         set({ lastStandardId: standardId, lastStandardVersionId: versionId }),
+      toggleActiveStandardVersion: (versionId) =>
+        set({
+          activeStandardVersionIds: get().activeStandardVersionIds.includes(versionId)
+            ? get().activeStandardVersionIds.filter((x) => x !== versionId)
+            : [...get().activeStandardVersionIds, versionId],
+        }),
+      clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
     }),
     { name: "pdf-reviewer-filters" },
   ),

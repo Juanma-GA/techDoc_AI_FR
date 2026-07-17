@@ -46,6 +46,20 @@ export class ErrorBoundary extends Component<Props, State> {
         <p className="hint" style={{ maxWidth: "28rem" }}>
           {i18n.t("errors.boundary.description")}
         </p>
+        {this.state.error.message ? (
+          <pre
+            className="error"
+            style={{
+              maxWidth: "40rem",
+              maxHeight: "12rem",
+              overflow: "auto",
+              textAlign: "left",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {this.state.error.message}
+          </pre>
+        ) : null}
         <button type="button" className="btn primary" onClick={this.handleReload}>
           {i18n.t("errors.boundary.reload")}
         </button>

@@ -154,7 +154,7 @@ function Kpi({ label, value }: { label: string; value: number }): JSX.Element {
   return (
     <div className="kpi">
       <span className="label">{label}</span>
-      <span className="kpi-value">{value}</span>
+      <div className="kpi-value">{value}</div>
     </div>
   );
 }

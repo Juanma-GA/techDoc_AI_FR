@@ -56,7 +56,7 @@ export function StandardPicker({ standardId, versionId, onChange }: Props): JSX.
           <option value={TRANSVERSE_VALUE}>{t("standards.transverse")}</option>
           {items.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.code} — {s.label}
+              {s.code} · {s.label}
               {s.builtin ? "" : ` (${t("standards.custom")})`}
             </option>
           ))}

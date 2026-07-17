@@ -37,7 +37,9 @@ def health(db: Session = Depends(get_db)) -> dict[str, Any]:
     elif not get_llm_tested(db):
         llm = "untested"
     else:
-        llm = "configured"
+        # Regle #14 : l'etat vert est "ok" (et non "configured") — c'est la
+        # valeur attendue par le badge LLM du front (lib/api LlmState).
+        llm = "ok"
 
     return {
         "status": overall,

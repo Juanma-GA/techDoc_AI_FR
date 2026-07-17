@@ -155,9 +155,9 @@ function Kpi({
   return (
     <div className="kpi">
       <span className="label">{label}</span>
-      <span className={["kpi-value", KPI_TONE[tone]].filter(Boolean).join(" ")}>
+      <div className={["kpi-value", KPI_TONE[tone]].filter(Boolean).join(" ")}>
         {value}
-      </span>
+      </div>
     </div>
   );
 }
@@ -173,7 +173,7 @@ function BarList({
 }): JSX.Element {
   const { t } = useTranslation();
   if (loading) return <p className="hint">{t("common.loading")}</p>;
-  if (rows.length === 0) return <p className="hint">—</p>;
+  if (rows.length === 0) return <p className="hint">·</p>;
   const m = Math.max(1, max);
   return (
     <div className="form">

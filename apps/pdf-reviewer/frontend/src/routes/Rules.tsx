@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { PageHeader } from "../components/PageHeader";
 import { StandardPicker } from "../components/upload/StandardPicker";
 import {
   useCreateRule,
@@ -57,8 +56,9 @@ export function Rules() {
   };
 
   return (
-    <div className="pr">
-      <PageHeader title={t("rules.title")} subtitle={t("rules.subtitle")} />
+    <div className="card">
+      <h2 className="card-title">{t("rules.title")}</h2>
+      <p className="card-sub">{t("rules.subtitle")}</p>
 
       <RulesSuggestPanel />
 

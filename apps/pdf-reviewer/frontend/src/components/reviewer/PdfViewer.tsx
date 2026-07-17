@@ -1,64 +1,106 @@
-import "../../lib/pdfWorker";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useEffect, useState } from "react";
-import { Document, Page } from "react-pdf";
-
-import type { ViewportLike } from "../../lib/bbox";
 import type { Suggestion } from "../../types/domain";
 import { HighlightLayer } from "./HighlightLayer";
 
 type Props = {
-  pdfUrl: string;
+  /** URL de l'image PNG de la page courante (rendu serveur). */
+  pageImageUrl: string;
   pageNumber: number;
-  zoom: number;
   suggestions: Suggestion[];
   selectedSuggestionId: string | null;
   onSuggestionClick: (id: string) => void;
-  onTotalPages: (total: number) => void;
 };
 
+type Box = { left: number; top: number; width: number; height: number };
+
+/**
+ * Apercu PDF = image PNG rendue cote serveur (`/pages/{n}.png`), affichee a
+ * 100% (fit largeur), comme l'ancien preview.html.
+ *
+ * Alignement des surlignages : on NE suppose RIEN sur le conteneur. On MESURE
+ * la position et la taille reelles de l'image (`offsetLeft/Top`, `clientW/H`)
+ * et on pose le calque d'overlays exactement sur cette boite. Les overlays
+ * (en % via HighlightLayer) tombent alors pile sur le texte, quelle que soit
+ * la facon dont l'image est centree / redimensionnee.
+ */
 export function PdfViewer({
-  pdfUrl,
+  pageImageUrl,
   pageNumber,
-  zoom,
   suggestions,
   selectedSuggestionId,
   onSuggestionClick,
-  onTotalPages,
 }: Props) {
-  const [viewport, setViewport] = useState<ViewportLike | null>(null);
-  const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+  const [error, setError] = useState(false);
+  const [box, setBox] = useState<Box | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
 
-  // Reset viewport whenever the PDF source or current page changes — avoids
-  // overlay drift while react-pdf re-renders the canvas.
+  const measure = useCallback(() => {
+    const img = imgRef.current;
+    if (!img || !img.clientWidth || !img.clientHeight) return;
+    setBox({
+      left: img.offsetLeft,
+      top: img.offsetTop,
+      width: img.clientWidth,
+      height: img.clientHeight,
+    });
+  }, []);
+
+  // Re-mesure sur changement de taille de l'image (resize fenetre, panneau...).
   useEffect(() => {
-    setViewport(null);
-  }, [pdfUrl, pageNumber, zoom]);
+    const img = imgRef.current;
+    if (!img || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(img);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  // Reset au changement de page / version.
+  useEffect(() => {
+    setError(false);
+    setBox(null);
+  }, [pageImageUrl]);
 
   const filtered = suggestions.filter((s) => s.page === pageNumber);
 
   return (
-    <div className="pdf-page-wrap">
-      <Document
-        file={pdfUrl}
-        onLoadSuccess={({ numPages }) => onTotalPages(numPages)}
-        loading={<div className="empty-state">Loading…</div>}
-      >
-        <Page
-          pageNumber={pageNumber}
-          scale={zoom}
-          renderTextLayer
-          renderAnnotationLayer={false}
-          onRenderSuccess={(page) => setViewport(page as unknown as ViewportLike)}
-        />
-      </Document>
-      <HighlightLayer
-        viewport={viewport}
-        dpr={dpr}
-        suggestions={filtered}
-        selectedSuggestionId={selectedSuggestionId}
-        onSuggestionClick={onSuggestionClick}
-      />
+    <div style={{ width: "100%", textAlign: "center" }}>
+      {error ? (
+        <div className="empty-state">Apercu de page indisponible.</div>
+      ) : (
+        <div
+          className="viewer-wrap"
+          style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}
+        >
+          <img
+            ref={imgRef}
+            className="viewer-img"
+            src={pageImageUrl}
+            alt=""
+            draggable={false}
+            onLoad={measure}
+            onError={() => setError(true)}
+          />
+          {box ? (
+            <div
+              style={{
+                position: "absolute",
+                left: box.left,
+                top: box.top,
+                width: box.width,
+                height: box.height,
+                pointerEvents: "none",
+              }}
+            >
+              <HighlightLayer
+                suggestions={filtered}
+                selectedSuggestionId={selectedSuggestionId}
+                onSuggestionClick={onSuggestionClick}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { PageHeader } from "../components/PageHeader";
 import {
   useCreateRule,
   useDeleteRule,
@@ -145,8 +144,9 @@ export function Standards(): JSX.Element {
   };
 
   return (
-    <div>
-      <PageHeader title={t("standards.title")} subtitle={t("standards.subtitle")} />
+    <div className="card">
+      <h2 className="card-title">{t("settings.standardsAdmin.title")}</h2>
+      <p className="card-sub">{t("settings.standardsAdmin.hint")}</p>
 
       <section
         className="grid-2"
