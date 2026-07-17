@@ -19,6 +19,9 @@ dependencies = [
     "truststore>=0.10",
     "python-multipart>=0.0.9",
     "openpyxl>=3.1",
+    # Requis uniquement pour l'execution reelle de la conversion (win32com pilote
+    # Composer). Windows seulement ; sans effet sur le reste de l'app.
+    "pywin32>=306; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

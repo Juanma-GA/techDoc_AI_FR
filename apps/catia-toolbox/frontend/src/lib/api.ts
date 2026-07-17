@@ -223,7 +223,7 @@ export type ConversionRunDto = {
   id: string;
   import_id: string;
   status: string;
-  summary: Record<string, number>;
+  summary: Record<string, number | string>;
   created_at: string;
 };
 export type ConversionItemDto = {
@@ -232,6 +232,13 @@ export type ConversionItemDto = {
   target_path: string;
   source_ext: string;
   status: string;
+};
+export type ConversionExecDto = {
+  dry_run: boolean;
+  returncode: number;
+  stdout: string;
+  stderr: string;
+  base: string;
 };
 
 export type ReplacementRunDto = {
@@ -297,6 +304,14 @@ export type NomenclatureItemDto = {
   sin: string;
   version: string;
   to_treat: boolean;
+  to_treat_value: string;
+  replaced: boolean;
+  old_pn: string;
+  new_pn: string;
+  old_rev: string;
+  new_rev: string;
+  color_ref: string;
+  materials: string;
   mono_color: boolean;
   color_r: number;
   color_g: number;
@@ -315,17 +330,45 @@ export type NomenclaturePreviewDto = {
 
 export type NomenclatureMapping = {
   header_row: number;
-  catpart: number;
+  catpart?: number;
   designation?: number;
   sin?: number;
   version?: number;
   to_treat?: number;
   color?: number;
+  old_pn?: number;
+  new_pn?: number;
+  old_rev?: number;
+  new_rev?: number;
+  replaced?: number;
+  color_ref?: number;
+  materials?: number;
 };
 
 export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
 
 export type ZipListDto = { path: string; count: number; entries: ZipEntryDto[] };
+
+// Import unifie depuis un .zip : l'import cree + l'apercu du contenu.
+export type ZipImportDto = ImportDto & { count: number; entries: ZipEntryDto[] };
+
+// Comparaison de deux nomenclatures (versions A vs B) par SIN.
+export type SinEntryDto = { sin: string; pn: string; designation: string };
+export type PnChangeDto = {
+  sin: string;
+  old_pn: string;
+  new_pn: string;
+  old_rev: string;
+  new_rev: string;
+};
+export type NomenclatureCompareDto = {
+  base_run_id: string;
+  other_run_id: string;
+  added_sin: SinEntryDto[];
+  removed_sin: SinEntryDto[];
+  changed_pn: PnChangeDto[];
+  summary: Record<string, number>;
+};
 
 // ----- Etapes 3 & 4 : SMGXML -----------------------------------------------
 
@@ -355,7 +398,10 @@ export type SmgxmlRecolorInput = {
   scope?: BrowseScope;
   path: string;
   nomenclature_run_id: string;
-  match_by?: "sin" | "catpart";
+  match_by?: "sin" | "catpart" | "pn";
+  simple_only?: boolean;
+  set_style?: boolean;
+  set_color?: boolean;
   apply?: boolean;
 };
 
@@ -424,6 +470,12 @@ export const importsApi = {
     request<ImportDto>("/imports/select", {
       method: "POST",
       body: JSON.stringify({ scope, paths }),
+    }),
+  /** Import unifie d'un .zip : cree l'import ET renvoie le listing du contenu. */
+  zip: (path: string, scope: BrowseScope = "input") =>
+    request<ZipImportDto>("/imports/zip", {
+      method: "POST",
+      body: JSON.stringify({ scope, path }),
     }),
   remove: (id: string) => request<void>(`/imports/${id}`, { method: "DELETE" }),
   tree: (id: string) => request<TreeDto>(`/imports/${id}/tree`),
@@ -504,6 +556,23 @@ export const conversionApi = {
       body: JSON.stringify(config ?? {}),
     }),
   items: (runId: string) => request<ConversionItemDto[]>(`/conversions/${runId}/items`),
+  /** Selection / deselection manuelle d'un fichier a convertir. */
+  setItem: (runId: string, itemId: string, status: "accepted" | "rejected" | "pending") =>
+    request<ConversionItemDto>(`/conversions/${runId}/items/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  bulkStatus: (runId: string, itemIds: string[], status: "accepted" | "rejected" | "pending") =>
+    request<ConversionItemDto[]>(`/conversions/${runId}/items/bulk-status`, {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds, status }),
+    }),
+  /** Execute le script en local (dry_run par defaut ; reel exige confirm). */
+  execute: (runId: string, dryRun: boolean, confirm = false) =>
+    request<ConversionExecDto>(`/conversions/${runId}/execute`, {
+      method: "POST",
+      body: JSON.stringify({ dry_run: dryRun, confirm }),
+    }),
 };
 
 export const replacementApi = {
@@ -566,16 +635,36 @@ export const identificationApi = {
       method: "POST",
       body: JSON.stringify({ scope: "input", ...body }),
     }),
-  items: (id: string, toTreat?: boolean) => {
-    const qs = toTreat === undefined ? "" : `?to_treat=${toTreat}`;
-    return request<NomenclatureItemDto[]>(`/identification/${id}/items${qs}`);
+  items: (
+    id: string,
+    filters?: { toTreat?: boolean; monoColor?: boolean; replaced?: boolean; hasColor?: boolean },
+  ) => {
+    const qs = new URLSearchParams();
+    if (filters?.toTreat !== undefined) qs.set("to_treat", String(filters.toTreat));
+    if (filters?.monoColor !== undefined) qs.set("mono_color", String(filters.monoColor));
+    if (filters?.replaced !== undefined) qs.set("replaced", String(filters.replaced));
+    if (filters?.hasColor !== undefined) qs.set("has_color", String(filters.hasColor));
+    const s = qs.toString();
+    return request<NomenclatureItemDto[]>(`/identification/${id}/items${s ? `?${s}` : ""}`);
   },
-  zip: (body: { scope?: BrowseScope; path: string }) =>
-    request<ZipListDto>("/identification/zip", {
+  /** Comparaison de deux nomenclatures (versions A vs B) par SIN. */
+  compare: (baseRunId: string, otherRunId: string) =>
+    request<NomenclatureCompareDto>("/identification/compare", {
       method: "POST",
-      body: JSON.stringify({ scope: "input", ...body }),
+      body: JSON.stringify({ base_run_id: baseRunId, other_run_id: otherRunId }),
     }),
   remove: (id: string) => request<void>(`/identification/${id}`, { method: "DELETE" }),
+};
+
+export type ColorRefEntry = { name: string; r: number; g: number; b: number };
+
+export const colorRefApi = {
+  read: () => request<{ entries: ColorRefEntry[] }>("/colorref"),
+  write: (entries: ColorRefEntry[]) =>
+    request<{ entries: ColorRefEntry[] }>("/colorref", {
+      method: "POST",
+      body: JSON.stringify({ entries }),
+    }),
 };
 
 export const smgxmlApi = {
@@ -622,6 +711,8 @@ export const exportUrl = {
   colorizationSvg: (runId: string) => `${API_BASE}/colorizations/${runId}/simulation.svg`,
   identificationCsv: (runId: string, toTreat = true) =>
     `${API_BASE}/identification/${runId}/export.csv?to_treat=${toTreat}`,
+  nomenclatureCompareCsv: (baseRunId: string, otherRunId: string) =>
+    `${API_BASE}/identification/compare/export.csv?base_run_id=${baseRunId}&other_run_id=${otherRunId}`,
   qcCsv: (checklistId: string) => `${API_BASE}/qc/checklists/${checklistId}/export.csv`,
 };
 

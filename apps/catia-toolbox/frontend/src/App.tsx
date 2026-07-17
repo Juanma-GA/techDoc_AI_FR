@@ -14,7 +14,6 @@ import { Diff } from "./routes/Diff";
 import { Export } from "./routes/Export";
 import { Home } from "./routes/Home";
 import { Identification } from "./routes/Identification";
-import { Import } from "./routes/Import";
 import { Qc } from "./routes/Qc";
 import { Replacement } from "./routes/Replacement";
 import { Settings } from "./routes/Settings";
@@ -36,7 +35,6 @@ const NAV: NavEntry[] = [
     groupKey: "nav.groups.identification",
     items: [
       { to: "/identification", labelKey: "nav.identification" },
-      { to: "/import", labelKey: "nav.import" },
       { to: "/diff", labelKey: "nav.diff" },
     ],
   },
@@ -82,7 +80,6 @@ const NAV: NavEntry[] = [
 export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = {
   "/": { titleKey: "page.home.title", subKey: "page.home.sub" },
   "/identification": { titleKey: "page.identification.title", subKey: "page.identification.sub" },
-  "/import": { titleKey: "page.import.title", subKey: "page.import.sub" },
   "/diff": { titleKey: "page.diff.title", subKey: "page.diff.sub" },
   "/conversion": { titleKey: "page.conversion.title", subKey: "page.conversion.sub" },
   "/smgxml-recolor": { titleKey: "page.smgxmlRecolor.title", subKey: "page.smgxmlRecolor.sub" },
@@ -113,7 +110,9 @@ export function App() {
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-header">
-            <span className="brand">{t("app.title")}</span>
+            <span className="brand" title={t("app.description")} style={{ cursor: "help" }}>
+              {t("app.title")}
+            </span>
             <span className="label">v{t("app.version")}</span>
             <ThemeToggleButton />
           </div>
@@ -162,7 +161,6 @@ export function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/identification" element={<Identification />} />
-              <Route path="/import" element={<Import />} />
               <Route path="/diff" element={<Diff />} />
               <Route path="/conversion" element={<Conversion />} />
               <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />

@@ -3,11 +3,33 @@
 from __future__ import annotations
 
 import io
+import zipfile
 from pathlib import Path
 
 
 def _scan(client, path: str):
     return client.post("/api/v1/imports/scan", json={"path": path})
+
+
+def test_zip_import(client, tmp_path) -> None:
+    assert client.post("/api/v1/settings", json={"onedrive_input_root": str(tmp_path)}).status_code == 200
+    z = tmp_path / "pieces.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("LEAP/P1.CATPart", "x")
+        zf.writestr("LEAP/P2.CATProduct", "y")
+    r = client.post("/api/v1/imports/zip", json={"scope": "input", "path": str(z)})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["source_mode"] == "zip"
+    assert body["node_count"] >= 2
+    # Endpoint unifie : cree l'import ET renvoie le listing du contenu.
+    names = {e["name"] for e in body["entries"]}
+    assert "LEAP/P1.CATPart" in names
+    assert body["count"] >= 2
+
+    # L'import zip alimente la conversion en masse (Etape 2).
+    conv = client.post(f"/api/v1/imports/{body['id']}/conversion", json={}).json()
+    assert conv["summary"]["total"] >= 2
 
 
 def test_scan_folder(client, synthetic_tree) -> None:

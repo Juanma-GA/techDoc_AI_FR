@@ -2,7 +2,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ApiClientError, diffApi, exportUrl, importsApi, type DiffEntryDto, type DiffRunDto, type ImportDto } from "../lib/api";
+import {
+  ApiClientError,
+  diffApi,
+  exportUrl,
+  identificationApi,
+  importsApi,
+  type DiffEntryDto,
+  type DiffRunDto,
+  type ImportDto,
+  type NomenclatureCompareDto,
+  type NomenclatureRunDto,
+} from "../lib/api";
 
 const CHANGE_VARIANT: Record<string, "ok" | "danger" | "warn"> = {
   added: "ok",
@@ -10,7 +21,8 @@ const CHANGE_VARIANT: Record<string, "ok" | "danger" | "warn"> = {
   modified: "warn",
 };
 
-export function Diff() {
+/** Onglet 1 : comparaison de deux dossiers importés (existant). */
+function FoldersDiff() {
   const { t } = useTranslation();
   const importsQuery = useQuery<ImportDto[]>({ queryKey: ["imports"], queryFn: importsApi.list });
   const imports = importsQuery.data ?? [];
@@ -31,9 +43,7 @@ export function Diff() {
       setRun(r);
       setEntries(e);
     },
-    onError: (err) => {
-      setError(err instanceof ApiClientError ? err.message : String(err));
-    },
+    onError: (err) => setError(err instanceof ApiClientError ? err.message : String(err)),
   });
 
   if (imports.length < 2) {
@@ -122,6 +132,189 @@ export function Diff() {
           </div>
         )}
       </article>
+    </div>
+  );
+}
+
+/** Onglet 2 : comparaison de deux nomenclatures (par SIN). */
+function NomenclatureDiff() {
+  const { t } = useTranslation();
+  const runsQuery = useQuery<NomenclatureRunDto[]>({
+    queryKey: ["identification"],
+    queryFn: identificationApi.list,
+  });
+  const runs = runsQuery.data ?? [];
+  const [base, setBase] = useState("");
+  const [other, setOther] = useState("");
+  const [result, setResult] = useState<NomenclatureCompareDto | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: () => identificationApi.compare(base || runs[0]!.id, other || runs[1]!.id),
+    onSuccess: (data) => {
+      setError(null);
+      setResult(data);
+    },
+    onError: (err) => setError(err instanceof ApiClientError ? err.message : String(err)),
+  });
+
+  if (runs.length < 2) {
+    return (
+      <div className="empty-state">
+        <h3 className="card-title">{t("diff.nomenNeedTwo")}</h3>
+        <p className="hint">{t("diff.nomenNeedTwoDesc")}</p>
+      </div>
+    );
+  }
+
+  const fileName = (ref: string) => (ref || "").split(/[\\/]/).pop() ?? ref;
+  const opts = runs.map((r) => ({ value: r.id, label: fileName(r.source_ref) || r.id.slice(0, 8) }));
+  const baseId = base || opts[0]!.value;
+  const otherId = other || opts[1]!.value;
+
+  return (
+    <div className="form" style={{ maxWidth: "56rem" }}>
+      <article className="card">
+        <h2 className="card-title">{t("diff.nomenCompareTitle")}</h2>
+        <div className="row" style={{ alignItems: "flex-end" }}>
+          <label className="field grow">
+            <span className="field-label">{t("diff.nomenBase")}</span>
+            <select className="input" value={baseId} onChange={(e) => setBase(e.target.value)}>
+              {opts.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="field grow">
+            <span className="field-label">{t("diff.nomenOther")}</span>
+            <select className="input" value={otherId} onChange={(e) => setOther(e.target.value)}>
+              {opts.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="btn primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            {t("diff.compare")}
+          </button>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+      </article>
+
+      {result ? (
+        <article className="card">
+          <div className="row" style={{ marginBottom: 8 }}>
+            <h2 className="card-title" style={{ margin: 0 }}>{t("diff.resultTitle")}</h2>
+            <a href={exportUrl.nomenclatureCompareCsv(baseId, otherId)} style={{ marginLeft: "auto" }}>
+              <button type="button" className="btn secondary small">{t("diff.exportCsv")}</button>
+            </a>
+          </div>
+          <p className="hint">
+            {t("diff.nomenSummary", {
+              added: result.summary.added ?? 0,
+              removed: result.summary.removed ?? 0,
+              changed: result.summary.changed ?? 0,
+            })}
+          </p>
+
+          <h3 className="label" style={{ marginTop: 12 }}>{t("diff.sinAdded")}</h3>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>{t("diff.colSin")}</th>
+                <th>{t("diff.colPn")}</th>
+                <th>{t("diff.colDesignation")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.added_sin.map((e) => (
+                <tr key={`a-${e.sin}`}>
+                  <td>{e.sin}</td>
+                  <td>{e.pn}</td>
+                  <td>{e.designation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3 className="label" style={{ marginTop: 12 }}>{t("diff.sinRemoved")}</h3>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>{t("diff.colSin")}</th>
+                <th>{t("diff.colPn")}</th>
+                <th>{t("diff.colDesignation")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.removed_sin.map((e) => (
+                <tr key={`r-${e.sin}`}>
+                  <td>{e.sin}</td>
+                  <td>{e.pn}</td>
+                  <td>{e.designation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h3 className="label" style={{ marginTop: 12 }}>{t("diff.pnChanged")}</h3>
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>{t("diff.colSin")}</th>
+                <th>{t("diff.colOldPn")}</th>
+                <th>{t("diff.colNewPn")}</th>
+                <th>{t("diff.colOldRev")}</th>
+                <th>{t("diff.colNewRev")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.changed_pn.map((e) => (
+                <tr key={`c-${e.sin}`}>
+                  <td>{e.sin}</td>
+                  <td>{e.old_pn}</td>
+                  <td>{e.new_pn}</td>
+                  <td>{e.old_rev}</td>
+                  <td>{e.new_rev}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </article>
+      ) : (
+        <article className="card">
+          <div className="empty-state">
+            <h3 className="card-title">{t("diff.runPrompt")}</h3>
+          </div>
+        </article>
+      )}
+    </div>
+  );
+}
+
+export function Diff() {
+  const { t } = useTranslation();
+  // Focus sur la comparaison de nomenclatures (SIN / PN) par defaut.
+  const [tab, setTab] = useState<"folders" | "nomenclatures">("nomenclatures");
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="row">
+        <button
+          type="button"
+          className={`btn small ${tab === "folders" ? "secondary" : "ghost"}`}
+          onClick={() => setTab("folders")}
+        >
+          {t("diff.tabFolders")}
+        </button>
+        <button
+          type="button"
+          className={`btn small ${tab === "nomenclatures" ? "secondary" : "ghost"}`}
+          onClick={() => setTab("nomenclatures")}
+        >
+          {t("diff.tabNomenclatures")}
+        </button>
+      </div>
+      {tab === "folders" ? <FoldersDiff /> : <NomenclatureDiff />}
     </div>
   );
 }

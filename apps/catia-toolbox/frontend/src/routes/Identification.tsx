@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -10,22 +10,64 @@ import {
   type NomenclatureMapping,
   type NomenclaturePreviewDto,
   type NomenclatureRunDto,
-  type ZipListDto,
 } from "../lib/api";
 import { FilePicker } from "../components/FilePicker";
 import { useWorkspace } from "../stores/workspace";
 
 const NOMEN_EXTS = [".xlsm", ".xlsx"];
-const ZIP_EXTS = [".zip"];
 
-// Champs de mapping (cle backend, cle i18n du libelle, obligatoire).
+// Champs de mapping exposes : SIN, Designation, Piece remplacee, OLD/NEW P/N,
+// OLD/NEW REV, Ref Couleur. Aucun n'est individuellement obligatoire, mais il
+// faut au moins une colonne d'identite (SIN ou OLD/NEW P/N).
 const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; required: boolean }[] = [
-  { field: "catpart", labelKey: "identification.fieldCatpart", required: true },
   { field: "sin", labelKey: "identification.fieldSin", required: false },
-  { field: "version", labelKey: "identification.fieldVersion", required: false },
-  { field: "to_treat", labelKey: "identification.fieldToTreat", required: false },
-  { field: "color", labelKey: "identification.fieldColor", required: false },
   { field: "designation", labelKey: "identification.fieldDesignation", required: false },
+  { field: "to_treat", labelKey: "identification.fieldToTreat", required: false },
+  { field: "replaced", labelKey: "identification.fieldReplaced", required: false },
+  { field: "old_pn", labelKey: "identification.fieldOldPn", required: false },
+  { field: "new_pn", labelKey: "identification.fieldNewPn", required: false },
+  { field: "old_rev", labelKey: "identification.fieldOldRev", required: false },
+  { field: "new_rev", labelKey: "identification.fieldNewRev", required: false },
+  { field: "color_ref", labelKey: "identification.fieldColorRef", required: false },
+];
+
+// Colonnes qui suffisent a identifier une piece (au moins une requise).
+const IDENTITY_FIELDS: (keyof NomenclatureMapping)[] = ["sin", "old_pn", "new_pn"];
+
+// Registre des colonnes affichables (cle = cle backend du mapping). Le tableau
+// n'affiche QUE les colonnes reellement mappees (summary.detected_columns).
+// L'ordre ci-dessous est l'ordre d'affichage.
+type ColDef = {
+  key: string;
+  labelKey: string;
+  center?: boolean;
+  render: (it: NomenclatureItemDto, tr: (k: string) => string) => ReactNode;
+};
+const COLUMN_DEFS: ColDef[] = [
+  { key: "catpart", labelKey: "identification.colCatpart", render: (it) => it.catpart },
+  { key: "designation", labelKey: "identification.colDesignation", render: (it) => it.designation },
+  { key: "sin", labelKey: "identification.colSin", render: (it) => it.sin },
+  {
+    key: "to_treat",
+    labelKey: "identification.colToTreat",
+    center: true,
+    // Affiche le contenu brut de la cellule A TRAITER (ex. "MODIF"), pas un oui/non.
+    render: (it) => (it.to_treat_value ? <span className="badge ok">{it.to_treat_value}</span> : null),
+  },
+  { key: "version", labelKey: "identification.colVersion", render: (it) => it.version },
+  {
+    key: "replaced",
+    labelKey: "identification.colReplaced",
+    center: true,
+    render: (it, tr) => (it.replaced ? <span className="badge warn">{tr("common.yes")}</span> : null),
+  },
+  { key: "old_pn", labelKey: "identification.colOldPn", render: (it) => it.old_pn },
+  { key: "new_pn", labelKey: "identification.colNewPn", render: (it) => it.new_pn },
+  { key: "old_rev", labelKey: "identification.colOldRev", center: true, render: (it) => it.old_rev },
+  { key: "new_rev", labelKey: "identification.colNewRev", center: true, render: (it) => it.new_rev },
+  { key: "color_ref", labelKey: "identification.colColorRef", render: (it) => it.color_ref },
+  { key: "materials", labelKey: "identification.colMateriaux", render: (it) => it.materials },
+  { key: "color", labelKey: "identification.colColor", center: true, render: (it) => <ColorDot item={it} /> },
 ];
 
 function fileName(ref: string): string {
@@ -99,12 +141,12 @@ export function Identification() {
 
   // Resultat (items de la nomenclature analysee).
   const [resultRunId, setResultRunId] = useState<string | null>(null);
-  const [toTreatOnly, setToTreatOnly] = useState(false);
-
-  // ----- Carte ZIP ----------------------------------------------------------
-  const [zipPath, setZipPath] = useState("");
-  const [zipError, setZipError] = useState<string | null>(null);
-  const [zipNotice, setZipNotice] = useState<string | null>(null);
+  // Colonnes reellement mappees pour ce resultat : le tableau n'affiche QUE
+  // celles-ci (strictement le contenu du mapping).
+  const [resultColumns, setResultColumns] = useState<string[]>([]);
+  // Filtres d'affichage : "a traiter" par defaut, + remplacees / avec couleur.
+  type ItemFilter = "all" | "to_treat" | "replaced" | "color";
+  const [filter, setFilter] = useState<ItemFilter>("to_treat");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
     queryKey: ["identification"],
@@ -113,8 +155,13 @@ export function Identification() {
   const runs = runsQuery.data ?? [];
 
   const itemsQuery = useQuery<NomenclatureItemDto[]>({
-    queryKey: ["identification", resultRunId, "items", toTreatOnly],
-    queryFn: () => identificationApi.items(resultRunId!, toTreatOnly ? true : undefined),
+    queryKey: ["identification", resultRunId, "items", filter],
+    queryFn: () =>
+      identificationApi.items(resultRunId!, {
+        toTreat: filter === "to_treat" ? true : undefined,
+        replaced: filter === "replaced" ? true : undefined,
+        hasColor: filter === "color" ? true : undefined,
+      }),
     enabled: !!resultRunId,
   });
   const items = itemsQuery.data ?? [];
@@ -133,30 +180,6 @@ export function Identification() {
       const hr = data.header_row_detected > 0 ? data.header_row_detected : 1;
       setHeaderRow(hr);
       setMapping({ ...data.columns_map });
-    },
-    onError: onMutationError(setNomenError),
-  });
-
-  // Analyse rapide (sans mapping explicite) : "Analyser".
-  const analyzeMutation = useMutation({
-    mutationFn: () =>
-      identificationApi.nomenclature({ scope: "input", path: nomenPath.trim(), sheet: sheet || undefined }),
-    onSuccess: (run) => {
-      setNomenError(null);
-      setNomenNotice(
-        t("identification.analyzed", {
-          sheet: run.sheet,
-          rows: summaryNum(run.summary, "rows"),
-          toTreat: summaryNum(run.summary, "to_treat"),
-          mono: summaryNum(run.summary, "mono_color"),
-        }) +
-          (detectedColumns(run.summary).length
-            ? ` (${detectedColumns(run.summary).join(", ")})`
-            : ""),
-      );
-      setResultRunId(run.id);
-      setToTreatOnly(true);
-      void qc.invalidateQueries({ queryKey: ["identification"] });
     },
     onError: onMutationError(setNomenError),
   });
@@ -180,21 +203,14 @@ export function Identification() {
         }),
       );
       setResultRunId(run.id);
-      setToTreatOnly(false);
+      setResultColumns(detectedColumns(run.summary));
+      // Mapping manuel : on affiche toutes les lignes mappees (l'utilisateur
+      // filtre ensuite via les boutons Remplacees / Avec couleur / A traiter).
+      setFilter("all");
       void qc.invalidateQueries({ queryKey: ["identification"] });
     },
     onError: onMutationError(setNomenError),
   });
-
-  const zipMutation = useMutation({
-    mutationFn: () => identificationApi.zip({ scope: "input", path: zipPath.trim() }),
-    onSuccess: (data) => {
-      setZipError(null);
-      setZipNotice(t("identification.zipDone", { count: data.count }));
-    },
-    onError: onMutationError(setZipError),
-  });
-  const zipResult: ZipListDto | undefined = zipMutation.data;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => identificationApi.remove(id),
@@ -219,41 +235,24 @@ export function Identification() {
     previewMutation.mutate(s);
   };
 
-  const onAnalyze = () => {
-    setNomenNotice(null);
-    if (!nomenPath.trim()) {
-      setNomenError(t("identification.pathRequired"));
-      return;
-    }
-    analyzeMutation.mutate();
-  };
-
   const onAnalyzeMapping = () => {
     setNomenNotice(null);
-    if (mapping.catpart === undefined) {
-      setNomenError(t("identification.catpartRequired"));
+    if (!IDENTITY_FIELDS.some((f) => mapping[f] !== undefined)) {
+      setNomenError(t("identification.identityRequired"));
       return;
     }
-    const body: NomenclatureMapping = { header_row: headerRow, catpart: mapping.catpart };
+    const body: NomenclatureMapping = { header_row: headerRow };
     for (const { field } of MAPPING_FIELDS) {
-      if (field === "catpart") continue;
       const v = mapping[field];
       if (v !== undefined) body[field] = v;
     }
     analyzeMappingMutation.mutate(body);
   };
 
-  const onZip = () => {
-    setZipNotice(null);
-    if (!zipPath.trim()) {
-      setZipError(t("identification.pathRequired"));
-      return;
-    }
-    zipMutation.mutate();
-  };
-
   // Nombre max de colonnes dans l'apercu (pour les selects de mapping).
   const ncols = preview ? preview.rows.reduce((m, r) => Math.max(m, r.length), 0) : 0;
+  // Le mapping est "configure" des qu'au moins une colonne d'identite est choisie.
+  const hasIdentity = IDENTITY_FIELDS.some((f) => mapping[f] !== undefined);
 
   return (
     <div className="flex max-w-4xl flex-col gap-4">
@@ -271,22 +270,14 @@ export function Identification() {
           <div className="row">
             <button
               type="button"
-              className="btn secondary"
+              className="btn primary"
               onClick={onPreview}
               disabled={previewMutation.isPending}
             >
               {previewMutation.isPending ? <span className="spinner" /> : null}
               <span>{t("identification.preview")}</span>
             </button>
-            <button
-              type="button"
-              className="btn primary"
-              onClick={onAnalyze}
-              disabled={analyzeMutation.isPending}
-            >
-              {analyzeMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("identification.analyze")}</span>
-            </button>
+            <span className="hint">{t("identification.previewHint")}</span>
             {nomenNotice ? <span className="success">{nomenNotice}</span> : null}
             {nomenError ? <span className="error">{nomenError}</span> : null}
           </div>
@@ -399,39 +390,62 @@ export function Identification() {
                 })}
               </div>
 
-              <div style={{ marginTop: 12 }}>
+              <div className="row" style={{ marginTop: 12 }}>
                 <button
                   type="button"
                   className="btn primary"
                   onClick={onAnalyzeMapping}
-                  disabled={analyzeMappingMutation.isPending}
+                  disabled={analyzeMappingMutation.isPending || !hasIdentity}
                 >
                   {analyzeMappingMutation.isPending ? <span className="spinner" /> : null}
-                  <span>{t("identification.analyzeWithMapping")}</span>
+                  <span>{t("identification.analyze")}</span>
                 </button>
+                {!hasIdentity ? (
+                  <span className="hint">{t("identification.identityRequired")}</span>
+                ) : null}
               </div>
             </div>
           ) : null}
 
-          {/* ---- Resultat : items de la nomenclature ---- */}
+          {/* ---- Resultat : items de la nomenclature (colonnes = mapping) ---- */}
           {resultRunId ? (
             <div style={{ marginTop: 16 }}>
               <div className="row" style={{ marginBottom: 8 }}>
                 <button
                   type="button"
-                  className="btn ghost small"
-                  onClick={() => setToTreatOnly(false)}
+                  className={`btn small ${filter === "all" ? "secondary" : "ghost"}`}
+                  onClick={() => setFilter("all")}
                 >
                   {t("identification.all")}
                 </button>
-                <button
-                  type="button"
-                  className="btn ghost small"
-                  onClick={() => setToTreatOnly(true)}
-                >
-                  {t("identification.toTreat")}
-                </button>
-                <a href={exportUrl.identificationCsv(resultRunId, true)}>
+                {resultColumns.includes("to_treat") ? (
+                  <button
+                    type="button"
+                    className={`btn small ${filter === "to_treat" ? "secondary" : "ghost"}`}
+                    onClick={() => setFilter("to_treat")}
+                  >
+                    {t("identification.toTreat")}
+                  </button>
+                ) : null}
+                {resultColumns.includes("replaced") ? (
+                  <button
+                    type="button"
+                    className={`btn small ${filter === "replaced" ? "secondary" : "ghost"}`}
+                    onClick={() => setFilter("replaced")}
+                  >
+                    {t("identification.replacedOnly")}
+                  </button>
+                ) : null}
+                {resultColumns.includes("color") ? (
+                  <button
+                    type="button"
+                    className={`btn small ${filter === "color" ? "secondary" : "ghost"}`}
+                    onClick={() => setFilter("color")}
+                  >
+                    {t("identification.withColor")}
+                  </button>
+                ) : null}
+                <a href={exportUrl.identificationCsv(resultRunId, filter === "to_treat")}>
                   {t("identification.exportToTreat")}
                 </a>
                 <span className="hint" style={{ marginLeft: "auto" }}>
@@ -448,35 +462,35 @@ export function Identification() {
                     : String(itemsQuery.error)}
                 </p>
               ) : items.length ? (
-                <div style={{ overflow: "auto" }}>
-                  <table className="tbl">
+                // ~15 lignes visibles puis scroll vertical ; scroll horizontal
+                // quand les colonnes depassent la largeur.
+                <div style={{ maxHeight: "30rem", overflow: "auto" }}>
+                  <table className="tbl" style={{ whiteSpace: "nowrap" }}>
                     <thead>
                       <tr>
-                        <th>{t("identification.colCatpart")}</th>
-                        <th>{t("identification.colSin")}</th>
-                        <th>{t("identification.colVersion")}</th>
-                        <th style={{ textAlign: "center" }}>
-                          {t("identification.colToTreat")}
-                        </th>
-                        <th style={{ textAlign: "center" }}>
-                          {t("identification.colColor")}
-                        </th>
+                        {COLUMN_DEFS.filter((c) => resultColumns.includes(c.key)).map((c) => (
+                          <th
+                            key={c.key}
+                            style={{
+                              position: "sticky",
+                              top: 0,
+                              background: "var(--bg-2)",
+                              ...(c.center ? { textAlign: "center" } : {}),
+                            }}
+                          >
+                            {t(c.labelKey)}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {items.map((it) => (
                         <tr key={it.id}>
-                          <td>{it.catpart}</td>
-                          <td>{it.sin}</td>
-                          <td>{it.version}</td>
-                          <td style={{ textAlign: "center" }}>
-                            {it.to_treat ? (
-                              <span className="badge ok">{t("common.yes")}</span>
-                            ) : null}
-                          </td>
-                          <td style={{ textAlign: "center" }}>
-                            <ColorDot item={it} />
-                          </td>
+                          {COLUMN_DEFS.filter((c) => resultColumns.includes(c.key)).map((c) => (
+                            <td key={c.key} style={c.center ? { textAlign: "center" } : undefined}>
+                              {c.render(it, t)}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -491,46 +505,7 @@ export function Identification() {
           ) : null}
       </article>
 
-      {/* ---- Carte 2 : donnees d'entree .zip ------------------------------- */}
-      <article className="card">
-        <h2 className="card-title">{t("identification.zipTitle")}</h2>
-        <div className="flex flex-col gap-3">
-          <div>
-            <label className="label">{t("identification.zipFileLabel")}</label>
-            <FilePicker exts={ZIP_EXTS} value={zipPath} onChange={setZipPath} />
-          </div>
-          <div className="row">
-            <button
-              type="button"
-              className="btn secondary"
-              onClick={onZip}
-              disabled={zipMutation.isPending}
-            >
-              {zipMutation.isPending ? <span className="spinner" /> : null}
-              <span>{t("identification.zipList")}</span>
-            </button>
-            {zipNotice ? <span className="success">{zipNotice}</span> : null}
-            {zipError ? <span className="error">{zipError}</span> : null}
-          </div>
-        </div>
-
-        {zipResult ? (
-          <div style={{ marginTop: 12 }}>
-            <p className="label" style={{ marginBottom: 8 }}>
-              {t("identification.zipEntries", { count: zipResult.count })}
-            </p>
-            <div style={{ maxHeight: 288, overflow: "auto" }}>
-              {zipResult.entries.slice(0, 50).map((e, i) => (
-                <div key={i} className="label">
-                  {e.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </article>
-
-      {/* ---- Carte 3 : nomenclatures analysees ---------------------------- */}
+      {/* ---- Carte 2 : nomenclatures analysees ---------------------------- */}
       <article className="card">
         <h2 className="card-title">{t("identification.listTitle")}</h2>
         {runsQuery.isLoading ? (
@@ -557,7 +532,8 @@ export function Identification() {
                     className="btn secondary small"
                     onClick={() => {
                       setResultRunId(r.id);
-                      setToTreatOnly(false);
+                      setResultColumns(detectedColumns(r.summary));
+                      setFilter("all");
                     }}
                   >
                     {t("common.view")}

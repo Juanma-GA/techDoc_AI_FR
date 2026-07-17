@@ -14,6 +14,7 @@ from app.api import (
     browse,
     checks,
     colorization,
+    colorref,
     conversion,
     diff,
     export,
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(conversion.router)
     api_v1.include_router(replacement.router)
     api_v1.include_router(colorization.router)
+    api_v1.include_router(colorref.router)
     api_v1.include_router(identification.router)
     api_v1.include_router(smgxml.router)
     api_v1.include_router(qc.router)

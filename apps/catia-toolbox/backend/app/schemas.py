@@ -109,6 +109,14 @@ class SelectImportIn(BaseModel):
     max_nodes: int = Field(default=20000, ge=1, le=200000)
 
 
+class ZipImportIn(BaseModel):
+    """Import d'un dossier entier livre en .zip (metadonnees seules)."""
+
+    scope: str = Field(default="input")  # input | output
+    path: str = Field(..., min_length=1)  # chemin du .zip sous la racine
+    max_nodes: int = Field(default=20000, ge=1, le=200000)
+
+
 # ----- Ecriture des livrables dans le dossier de sortie ---------------------
 
 
@@ -328,8 +336,34 @@ class CheckRunOut(BaseModel):
 
 
 class ConversionIn(BaseModel):
-    target_dir: str = "composer"
-    target_ext: str = "smg"
+    # Vide => dossier de sortie auto '<NomDossierInput>_Converti' (a plat).
+    target_dir: str = ""
+    target_ext: str = "smgxml"
+
+
+class ConversionItemStatusIn(BaseModel):
+    # accepted (retenu) | rejected (deselectionne).
+    status: str = Field(..., pattern="^(accepted|rejected|pending)$")
+
+
+class ConversionBulkStatusIn(BaseModel):
+    item_ids: list[uuid.UUID] = Field(..., min_length=1)
+    status: str = Field(..., pattern="^(accepted|rejected|pending)$")
+
+
+class ConversionExecIn(BaseModel):
+    # dry_run=True (defaut) : lance le script en DRY_RUN (aucune action Composer).
+    # dry_run=False : execution reelle -> exige confirm=True (garde-fou).
+    dry_run: bool = True
+    confirm: bool = False
+
+
+class ConversionExecOut(BaseModel):
+    dry_run: bool
+    returncode: int
+    stdout: str = ""
+    stderr: str = ""
+    base: str = ""  # dossier racine utilise pour resoudre les chemins
 
 
 class ConversionItemOut(BaseModel):
@@ -428,12 +462,21 @@ class NomenclatureMapping(BaseModel):
     """Mapping manuel : ligne d'en-tete (1-based) + index de colonne (0-based)."""
 
     header_row: int = Field(..., ge=1)
-    catpart: int = Field(..., ge=0)
+    # Identite = au moins une colonne parmi catpart / sin / old_pn / new_pn
+    # (verifie cote parser). Aucune n'est individuellement obligatoire.
+    catpart: Optional[int] = Field(default=None, ge=0)
     designation: Optional[int] = Field(default=None, ge=0)
     sin: Optional[int] = Field(default=None, ge=0)
     version: Optional[int] = Field(default=None, ge=0)
     to_treat: Optional[int] = Field(default=None, ge=0)
     color: Optional[int] = Field(default=None, ge=0)
+    old_pn: Optional[int] = Field(default=None, ge=0)
+    new_pn: Optional[int] = Field(default=None, ge=0)
+    old_rev: Optional[int] = Field(default=None, ge=0)
+    new_rev: Optional[int] = Field(default=None, ge=0)
+    replaced: Optional[int] = Field(default=None, ge=0)
+    color_ref: Optional[int] = Field(default=None, ge=0)
+    materials: Optional[int] = Field(default=None, ge=0)
 
 
 class NomenclatureParseIn(BaseModel):
@@ -468,6 +511,14 @@ class NomenclatureItemOut(BaseModel):
     sin: str
     version: str
     to_treat: bool
+    to_treat_value: str
+    replaced: bool
+    old_pn: str
+    new_pn: str
+    old_rev: str
+    new_rev: str
+    color_ref: str
+    materials: str
     mono_color: bool
     color_r: int
     color_g: int
@@ -488,6 +539,36 @@ class NomenclatureRunOut(BaseModel):
     _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
 
 
+class NomenclatureCompareIn(BaseModel):
+    """Comparaison de deux runs de nomenclature (A = base, B = nouvelle)."""
+
+    base_run_id: uuid.UUID
+    other_run_id: uuid.UUID
+
+
+class SinEntryOut(BaseModel):
+    sin: str
+    pn: str = ""
+    designation: str = ""
+
+
+class PnChangeOut(BaseModel):
+    sin: str
+    old_pn: str = ""
+    new_pn: str = ""
+    old_rev: str = ""
+    new_rev: str = ""
+
+
+class NomenclatureCompareOut(BaseModel):
+    base_run_id: uuid.UUID
+    other_run_id: uuid.UUID
+    added_sin: list[SinEntryOut] = Field(default_factory=list)
+    removed_sin: list[SinEntryOut] = Field(default_factory=list)
+    changed_pn: list[PnChangeOut] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+
+
 class ZipEntryOut(BaseModel):
     name: str
     size: int = 0
@@ -500,7 +581,29 @@ class ZipListOut(BaseModel):
     entries: list[ZipEntryOut] = Field(default_factory=list)
 
 
+class ZipImportOut(ImportOut):
+    """Import cree depuis un .zip + apercu du contenu (listing unifie)."""
+
+    count: int = 0
+    entries: list[ZipEntryOut] = Field(default_factory=list)
+
+
 # ----- Etapes 3 & 4 : SMGXML ------------------------------------------------
+
+
+class ColorRefEntry(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    r: int = Field(default=0, ge=0, le=255)
+    g: int = Field(default=0, ge=0, le=255)
+    b: int = Field(default=0, ge=0, le=255)
+
+
+class ColorRefListIn(BaseModel):
+    entries: list[ColorRefEntry] = Field(default_factory=list)
+
+
+class ColorRefListOut(BaseModel):
+    entries: list[ColorRefEntry] = Field(default_factory=list)
 
 
 class SmgxmlInspectIn(BaseModel):
@@ -517,8 +620,12 @@ class SmgxmlActorOut(BaseModel):
 class SmgxmlRecolorIn(BaseModel):
     scope: str = Field(default="input")
     path: str = Field(..., min_length=1)
-    nomenclature_run_id: uuid.UUID  # source des SIN mono-couleur + couleurs
-    match_by: str = Field(default="sin")  # sin | catpart
+    nomenclature_run_id: uuid.UUID  # source des pieces + couleurs / ref couleur
+    match_by: str = Field(default="sin")  # sin | catpart | pn
+    # Ne cibler que les pieces simples (mono-corps) : colonne Materiaux vide.
+    simple_only: bool = False
+    set_style: bool = True   # poser Actor.Style Value (nom de style depuis Ref Couleur)
+    set_color: bool = True   # poser Actor.Color RGB (SCLIT > Neutral)
     apply: bool = False  # False = dry-run (rien ecrit)
 
 

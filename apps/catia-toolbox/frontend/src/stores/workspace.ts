@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/** Types de fichiers source memorises entre onglets (evite de re-piocher). */
+/** Types de fichiers source memorises entre onglets (evite de re-piocher).
+ *  Chaque etape memorise son propre chemin sous la racine commune. */
 export type SourceKind = "smgxml" | "nomenclature" | "mapping";
 
 /** Etat de travail partage entre onglets : import courant, run courant, et les

@@ -22,16 +22,24 @@ from app.core.errors import AppError
 
 
 # Mot-cle d'en-tete (normalise) -> champ logique. Premier match gagne.
+# NB: l'ordre compte (premier match) — les cles specifiques (old/new pn, ref
+# couleur) sont placees AVANT les cles generiques (catpart, color) pour ne pas
+# etre capturees par elles.
 HEADER_KEYS: dict[str, tuple[str, ...]] = {
-    "catpart": ("catpart", "cat part", "nom fichier", "fichier", "part number", "reference", "piece"),
+    "old_pn": ("old pn", "old p/n", "ancien pn", "ancien p/n", "ancienne ref", "pn ancien"),
+    "new_pn": ("new pn", "new p/n", "nouveau pn", "nouveau p/n", "nouvelle ref", "pn nouveau"),
+    "old_rev": ("old rev", "ancien indice", "ancienne rev", "rev ancien"),
+    "new_rev": ("new rev", "nouvel indice", "nouvelle rev", "rev nouveau"),
+    "replaced": ("piece remplacee", "remplacee", "remplacement", "replaced"),
+    "color_ref": ("ref couleur", "reference couleur", "ref color"),
+    "materials": ("materiaux", "materiau", "matiere", "matiere premiere", "material"),
     "designation": ("designation", "libelle", "description"),
     "sin": ("sin",),
     "version": ("version", "indice", "evolution"),
     "to_treat": ("a traiter", "traiter", "modifie", "modification", "maj", "statut", "status", "evolue"),
     "color": ("couleur", "color", "rvb", "rgb"),
+    "catpart": ("catpart", "cat part", "nom fichier", "fichier", "part number", "reference", "piece"),
 }
-
-_TRUE_TOKENS = {"x", "oui", "yes", "y", "1", "true", "vrai", "a traiter", "traiter", "modifie", "maj", "ok"}
 
 # Couleurs nommees frequentes -> RGB (table minimale, ajustable).
 _NAMED_COLORS: dict[str, tuple[int, int, int]] = {
@@ -85,10 +93,6 @@ def parse_color(val: object) -> Optional[tuple[int, int, int]]:
                 vals = [max(0, min(255, int(p))) for p in parts]
                 return (vals[0], vals[1], vals[2])
     return None
-
-
-def _is_true(val: object) -> bool:
-    return _norm(val) in _TRUE_TOKENS
 
 
 def _detect_header(rows: list[list], max_scan: int = 20) -> tuple[int, dict[str, int]]:
@@ -164,25 +168,40 @@ def preview_sheet(path: str, sheet: Optional[str] = None, rows: int = 15) -> dic
     }
 
 
-_FIELDS = ("catpart", "designation", "sin", "version", "to_treat", "color")
+_FIELDS = (
+    "catpart", "designation", "sin", "version", "to_treat", "color",
+    "old_pn", "new_pn", "old_rev", "new_rev", "replaced", "color_ref", "materials",
+)
+
+# Colonnes qui suffisent, seules ou combinees, a identifier une piece.
+_IDENTITY_FIELDS = ("catpart", "sin", "old_pn", "new_pn")
 
 
 def _resolve_columns(rows: list[list], mapping: Optional[dict]) -> tuple[int, dict[str, int]]:
-    """En-tete + colonnes : mapping manuel fourni, sinon detection auto."""
+    """En-tete + colonnes : mapping manuel fourni, sinon detection auto.
+
+    L'identite peut passer par CATPart *ou* SIN *ou* PN (old/new) : aucune de
+    ces colonnes n'est individuellement obligatoire, mais au moins une doit
+    exister.
+    """
     if mapping:
         header_idx = int(mapping.get("header_row") or 0) - 1
         if header_idx < 0:
             raise AppError("MAPPING_INVALID", "header_row doit etre >= 1.", status_code=400)
         colmap = {f: int(mapping[f]) for f in _FIELDS if mapping.get(f) is not None}
-        if "catpart" not in colmap:
-            raise AppError("MAPPING_NO_CATPART", "La colonne CATPart est obligatoire dans le mapping.", status_code=400)
+        if not any(f in colmap for f in _IDENTITY_FIELDS):
+            raise AppError(
+                "MAPPING_NO_IDENTITY",
+                "Mappez au moins une colonne d'identite : SIN, OLD P/N ou NEW P/N (ou CATPart).",
+                status_code=400,
+            )
         return header_idx, colmap
 
     header_idx, colmap = _detect_header(rows)
-    if header_idx < 0 or "catpart" not in colmap:
+    if header_idx < 0 or not any(f in colmap for f in _IDENTITY_FIELDS):
         raise AppError(
             "NOMENCLATURE_NO_HEADER",
-            "En-tete introuvable (aucune colonne CATPart detectee). "
+            "En-tete introuvable (aucune colonne d'identite SIN / PN / CATPart detectee). "
             "Configurez le mapping (ligne d'en-tete + colonnes) ou ajustez les mots-cles.",
             status_code=400,
             detail={"detected_columns": list(colmap.keys())},
@@ -197,20 +216,52 @@ def _build_items(rows: list[list], header_idx: int, colmap: dict[str, int]) -> l
             return None
         return row[idx]
 
+    def _text(v: object) -> str:
+        return "" if v is None else str(v).strip()
+
     items: list[dict] = []
     for ridx in range(header_idx + 1, len(rows)):
         row = rows[ridx]
-        catpart = _cell(row, "catpart")
-        if catpart is None or not str(catpart).strip():
-            continue
+        catpart = _text(_cell(row, "catpart"))[:500]
+        sin = _text(_cell(row, "sin"))[:200]
+        designation = _text(_cell(row, "designation"))
+        version = _text(_cell(row, "version"))[:60]
+        old_pn = _text(_cell(row, "old_pn"))[:500]
+        new_pn = _text(_cell(row, "new_pn"))[:500]
+        old_rev = _text(_cell(row, "old_rev"))[:60]
+        new_rev = _text(_cell(row, "new_rev"))[:60]
+        color_ref = _text(_cell(row, "color_ref"))[:200]
+        materials = _text(_cell(row, "materials"))[:200]
+        to_treat_raw = _text(_cell(row, "to_treat"))
         color = parse_color(_cell(row, "color"))
+        # On prend TOUTES les lignes des colonnes mappees : on n'ignore qu'une
+        # ligne entierement vide (aucune cellule mappee renseignee).
+        if not any(
+            [catpart, sin, designation, version, old_pn, new_pn, old_rev, new_rev,
+             color_ref, materials, to_treat_raw, color]
+        ):
+            continue
+        # "A traiter" = cellule "A TRAITER" NON VIDE (seul filtre attendu), quel
+        # que soit son contenu -- pas de liste de valeurs "vraies".
+        to_treat = ("to_treat" in colmap) and bool(to_treat_raw)
+        # "Piece remplacee" : colonne dediee non vide OU ancien/nouveau PN differents.
+        replaced_flag = ("replaced" in colmap) and bool(_text(_cell(row, "replaced")))
+        replaced = replaced_flag or bool(old_pn and new_pn and old_pn != new_pn)
         items.append(
             {
-                "catpart": str(catpart).strip()[:500],
-                "designation": str(_cell(row, "designation") or "").strip(),
-                "sin": str(_cell(row, "sin") or "").strip()[:200],
-                "version": str(_cell(row, "version") or "").strip()[:60],
-                "to_treat": _is_true(_cell(row, "to_treat")) if "to_treat" in colmap else False,
+                "catpart": catpart,
+                "designation": designation,
+                "sin": sin,
+                "version": version,
+                "to_treat": to_treat,
+                "to_treat_value": to_treat_raw,
+                "replaced": replaced,
+                "old_pn": old_pn,
+                "new_pn": new_pn,
+                "old_rev": old_rev,
+                "new_rev": new_rev,
+                "color_ref": color_ref,
+                "materials": materials,
                 "mono_color": color is not None,
                 "color_r": color[0] if color else 0,
                 "color_g": color[1] if color else 0,
@@ -246,6 +297,7 @@ def parse_nomenclature(path: str, sheet: Optional[str] = None, mapping: Optional
     summary = {
         "rows": len(items),
         "to_treat": sum(1 for it in items if it["to_treat"]),
+        "replaced": sum(1 for it in items if it["replaced"]),
         "mono_color": sum(1 for it in items if it["mono_color"]),
         "detected_columns": sorted(colmap.keys()),
         "header_row": header_idx + 1,

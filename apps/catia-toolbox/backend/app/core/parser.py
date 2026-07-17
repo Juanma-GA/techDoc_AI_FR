@@ -295,6 +295,27 @@ def parse_listing(raw: bytes, ext: str, *, root_label: str = "listing", max_node
     return _build_from_entries(entries, root_label=root_label, max_nodes=max_nodes)
 
 
+def build_tree_from_zip_entries(
+    zip_entries: list[dict], *, root_label: str = "zip", max_nodes: int = 20000
+) -> ParsedTree:
+    """Arborescence (metadonnees seules) depuis les entrees d'un .zip.
+
+    `zip_entries` : liste {name, size, is_dir} (cf. nomenclature.list_zip). Rien
+    n'est extrait ; on ne construit que la structure de fichiers.
+    """
+    entries = [
+        {
+            "path": e["name"],
+            "size": e.get("size", ""),
+            "date": "",
+            "kind": "folder" if e.get("is_dir") else "file",
+        }
+        for e in zip_entries
+        if e.get("name")
+    ]
+    return _build_from_entries(entries, root_label=root_label, max_nodes=max_nodes)
+
+
 def _entries_from_csv(raw: bytes) -> list[dict]:
     text = raw.decode("utf-8-sig", errors="replace")
     # Detection simple du delimiteur (`,` ou `;`).

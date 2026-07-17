@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core import nomenclature as nomen
 from app.core import onedrive
 from app.core.errors import AppError
 from app.core import parser as parser_mod
@@ -24,7 +25,14 @@ from app.core.security import read_and_validate, safe_under_root
 from app.core.tree_metrics import compute_metrics
 from app.db.models import StructureImport, TreeNode
 from app.db.session import get_db
-from app.schemas import ImportOut, ScanIn, SelectImportIn
+from app.schemas import (
+    ImportOut,
+    ScanIn,
+    SelectImportIn,
+    ZipEntryOut,
+    ZipImportIn,
+    ZipImportOut,
+)
 
 
 log = logging.getLogger("catia_toolbox.imports")
@@ -123,6 +131,33 @@ def select_import(payload: SelectImportIn, db: Session = Depends(get_db)) -> Imp
     imp = _persist_tree(db, tree, source_mode="selection", source_ref=source_ref)
     log.info("select import %s : %d noeuds (%d selectionnes)", imp.id, imp.node_count, n)
     return _to_out(imp)
+
+
+@router.post("/zip", response_model=ZipImportOut)
+def zip_import(payload: ZipImportIn, db: Session = Depends(get_db)) -> ZipImportOut:
+    """Import unifie d'un .zip : cree l'import (arbo metadonnees) ET renvoie le
+    listing du contenu. Sert a la fois a inspecter un DE (Etape 1) et a fournir
+    une source a convertir (Etape 2). Rien n'est extrait ; confine sous la racine.
+    """
+    if payload.scope not in ("input", "output"):
+        raise AppError("SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
+    root = onedrive.root_for_scope(db, payload.scope)
+    target = safe_under_root(root, payload.path)
+    if not target.is_file():
+        raise AppError("ZIP_NOT_FOUND", "Fichier .zip introuvable.", status_code=404, detail={"path": str(target)})
+    entries = nomen.list_zip(str(target), max_entries=payload.max_nodes)
+    label = target.stem or target.name
+    tree = parser_mod.build_tree_from_zip_entries(entries, root_label=label, max_nodes=payload.max_nodes)
+    if tree.node_count == 0:
+        raise AppError("ZIP_EMPTY", "Archive .zip vide ou illisible.", status_code=400)
+    imp = _persist_tree(db, tree, source_mode="zip", source_ref=str(target))
+    log.info("zip import %s : %d noeuds", imp.id, imp.node_count)
+    out = _to_out(imp)
+    return ZipImportOut(
+        **out.model_dump(),
+        count=len(entries),
+        entries=[ZipEntryOut(**e) for e in entries],
+    )
 
 
 @router.post("/upload", response_model=ImportOut)

@@ -382,8 +382,20 @@ class NomenclatureItem(Base):
     designation: Mapped[str] = mapped_column(Text, default="", server_default="")
     sin: Mapped[str] = mapped_column(String(200), default="", server_default="", index=True)
     version: Mapped[str] = mapped_column(String(60), default="", server_default="")  # Uxxx n
-    # Identifie comme "a traiter" (mis a jour) dans la nomenclature.
+    # Identifie comme "a traiter" (colonne A TRAITER non vide).
     to_treat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    # Contenu brut de la cellule "A TRAITER" (pour affichage / controle du filtre).
+    to_treat_value: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    # Piece remplacee : ancien / nouveau PN et indice sur la meme ligne.
+    replaced: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    old_pn: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    new_pn: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    old_rev: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    new_rev: Mapped[str] = mapped_column(String(60), default="", server_default="")
+    # Reference couleur (nom de style / couleur) portee par la nomenclature (etape 3).
+    color_ref: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    # Matiere / materiaux : vide => piece simple (mono-corps) ciblee par la colorisation.
+    materials: Mapped[str] = mapped_column(String(200), default="", server_default="")
     # Pieces portant une seule couleur (etape 3).
     mono_color: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     color_r: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

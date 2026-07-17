@@ -1,11 +1,13 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
   ApiClientError,
+  colorRefApi,
   identificationApi,
   smgxmlApi,
+  type ColorRefEntry,
   type NomenclatureRunDto,
   type SmgxmlChangeDto,
   type SmgxmlRunDto,
@@ -24,6 +26,113 @@ function monoCount(run: NomenclatureRunDto): number {
   return typeof v === "number" ? v : 0;
 }
 
+/** Editeur du referentiel Ref Couleur -> RGB (ex. "Visserie" = RGB). */
+function ColorReferentialCard() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const refQuery = useQuery({ queryKey: ["colorref"], queryFn: colorRefApi.read });
+  const [rows, setRows] = useState<ColorRefEntry[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Initialise l'edition depuis le serveur (une fois charge).
+  const entries = rows ?? refQuery.data?.entries ?? [];
+
+  const saveMutation = useMutation({
+    mutationFn: (list: ColorRefEntry[]) => colorRefApi.write(list),
+    onSuccess: (data) => {
+      setRows(data.entries);
+      setNotice(t("smgxmlRecolor.refSaved", { count: data.entries.length }));
+      void qc.invalidateQueries({ queryKey: ["colorref"] });
+    },
+  });
+
+  const update = (i: number, patch: Partial<ColorRefEntry>) =>
+    setRows(entries.map((e, j) => (j === i ? { ...e, ...patch } : e)));
+  const addRow = () => setRows([...entries, { name: "", r: 0, g: 0, b: 0 }]);
+  const removeRow = (i: number) => setRows(entries.filter((_e, j) => j !== i));
+  const clamp = (v: number) => Math.max(0, Math.min(255, Number.isFinite(v) ? v : 0));
+
+  return (
+    <article className="card">
+      <h2 className="card-title">{t("smgxmlRecolor.refTitle")}</h2>
+      <p className="banner info">{t("smgxmlRecolor.refBanner")}</p>
+      <div style={{ overflow: "auto" }}>
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>{t("smgxmlRecolor.refName")}</th>
+              <th style={{ textAlign: "center" }}>R</th>
+              <th style={{ textAlign: "center" }}>G</th>
+              <th style={{ textAlign: "center" }}>B</th>
+              <th style={{ textAlign: "center" }}>{t("smgxmlRecolor.refSwatch")}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map((e, i) => (
+              <tr key={i}>
+                <td>
+                  <input
+                    className="input"
+                    value={e.name}
+                    placeholder="Visserie"
+                    onChange={(ev) => update(i, { name: ev.target.value })}
+                  />
+                </td>
+                {(["r", "g", "b"] as const).map((k) => (
+                  <td key={k} style={{ textAlign: "center" }}>
+                    <input
+                      className="input"
+                      type="number"
+                      min={0}
+                      max={255}
+                      style={{ width: "4.5rem" }}
+                      value={e[k]}
+                      onChange={(ev) => update(i, { [k]: clamp(parseInt(ev.target.value, 10)) })}
+                    />
+                  </td>
+                ))}
+                <td style={{ textAlign: "center" }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 16,
+                      height: 16,
+                      borderRadius: 3,
+                      border: "1px solid var(--border)",
+                      backgroundColor: `rgb(${e.r},${e.g},${e.b})`,
+                    }}
+                  />
+                </td>
+                <td>
+                  <button type="button" className="btn ghost small" onClick={() => removeRow(i)}>
+                    {t("common.delete")}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <button type="button" className="btn secondary small" onClick={addRow}>
+          {t("smgxmlRecolor.refAdd")}
+        </button>
+        <button
+          type="button"
+          className="btn primary small"
+          onClick={() => saveMutation.mutate(entries.filter((e) => e.name.trim()))}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? <span className="spinner" /> : null}
+          <span>{t("common.save")}</span>
+        </button>
+        {notice ? <span className="success">{notice}</span> : null}
+      </div>
+    </article>
+  );
+}
+
 export function SmgxmlRecolor() {
   const { t } = useTranslation();
 
@@ -32,7 +141,11 @@ export function SmgxmlRecolor() {
   const setSource = useWorkspace((s) => s.setSource);
   const setPath = (p: string) => setSource("smgxml", p);
   const [nomenId, setNomenId] = useState("");
-  const [matchBy, setMatchBy] = useState<"sin" | "catpart">("sin");
+  // Colorisation par PN + RGB direct (Actor.Color via referentiel Ref Couleur).
+  const [matchBy, setMatchBy] = useState<"sin" | "catpart" | "pn">("pn");
+  const [setStyle, setSetStyle] = useState(false);
+  const [setColor, setSetColor] = useState(true);
+  const [simpleOnly, setSimpleOnly] = useState(true);
   const [apply, setApply] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -66,6 +179,9 @@ export function SmgxmlRecolor() {
         path: path.trim(),
         nomenclature_run_id: nomenId,
         match_by: matchBy,
+        simple_only: simpleOnly,
+        set_style: setStyle,
+        set_color: setColor,
         apply,
       }),
     onSuccess: (run) => {
@@ -96,6 +212,10 @@ export function SmgxmlRecolor() {
       setError(t("smgxmlRecolor.nomenRequired"));
       return;
     }
+    if (!setStyle && !setColor) {
+      setError(t("smgxmlRecolor.targetRequired"));
+      return;
+    }
     setError(null);
     // Ecriture = action a confirmer (double-clic).
     if (apply && !armed) {
@@ -114,6 +234,7 @@ export function SmgxmlRecolor() {
 
   return (
     <div className="form" style={{ maxWidth: "48rem" }}>
+      <ColorReferentialCard />
       <article className="card">
         <h2 className="card-title">{t("smgxmlRecolor.title")}</h2>
         <p className="banner warn">{t("smgxmlRecolor.banner")}</p>
@@ -163,6 +284,7 @@ export function SmgxmlRecolor() {
                 {[
                   { value: "sin", label: t("smgxmlRecolor.matchBySin") },
                   { value: "catpart", label: t("smgxmlRecolor.matchByCatpart") },
+                  { value: "pn", label: t("smgxmlRecolor.matchByPn") },
                 ].map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
@@ -170,6 +292,42 @@ export function SmgxmlRecolor() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="row">
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={setStyle}
+                onChange={(e) => {
+                  setSetStyle(e.target.checked);
+                  disarm();
+                }}
+              />
+              <span>{t("smgxmlRecolor.setStyle")}</span>
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={setColor}
+                onChange={(e) => {
+                  setSetColor(e.target.checked);
+                  disarm();
+                }}
+              />
+              <span>{t("smgxmlRecolor.setColor")}</span>
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={simpleOnly}
+                onChange={(e) => {
+                  setSimpleOnly(e.target.checked);
+                  disarm();
+                }}
+              />
+              <span>{t("smgxmlRecolor.simpleOnly")}</span>
+            </label>
           </div>
 
           <label className="checkbox">

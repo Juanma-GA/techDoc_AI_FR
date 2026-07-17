@@ -1,8 +1,9 @@
-"""Tests Etape 1 - nomenclature .xlsx + DE .zip (fixtures synthetiques)."""
+"""Tests Etape 1 - nomenclature .xlsx (fixtures synthetiques).
+
+Le listing d'un DE .zip est desormais unifie sous /imports/zip (cf. test_imports).
+"""
 
 from __future__ import annotations
-
-import zipfile
 
 from openpyxl import Workbook
 
@@ -68,14 +69,21 @@ def test_parse_with_manual_mapping(client, tmp_path):
     assert {i["catpart"] for i in items} == {"PIECE_001.CATPart", "PIECE_002.CATPart", "PIECE_003.CATPart"}
 
 
-def test_parse_mapping_requires_catpart(client, tmp_path):
+def test_parse_mapping_requires_identity(client, tmp_path):
     _set_input_root(client, str(tmp_path))
     xlsx = _make_xlsx(tmp_path)
-    # Pydantic exige catpart -> 422 si absent.
-    r = client.post("/api/v1/identification/nomenclature", json={
+    # CATPart n'est plus obligatoire : une identite SIN suffit -> 200.
+    ok = client.post("/api/v1/identification/nomenclature", json={
         "scope": "input", "path": str(xlsx), "mapping": {"header_row": 2, "sin": 2},
     })
-    assert r.status_code == 422
+    assert ok.status_code == 200, ok.text
+
+    # Aucune colonne d'identite (ni CATPart, ni SIN, ni PN) -> 400.
+    ko = client.post("/api/v1/identification/nomenclature", json={
+        "scope": "input", "path": str(xlsx), "mapping": {"header_row": 2, "designation": 1},
+    })
+    assert ko.status_code == 400
+    assert ko.json()["code"] == "MAPPING_NO_IDENTITY"
 
 
 def test_preview_exposes_columns_map(client, tmp_path):
@@ -139,13 +147,114 @@ def test_preview_sheets_and_rows(client, tmp_path):
     assert run["summary"]["rows"] == 1
 
 
-def test_list_zip(client, tmp_path):
+def test_all_rows_and_to_treat_non_empty(client, tmp_path):
+    """Prend toutes les lignes mappees ; 'a traiter' = colonne A TRAITER non vide."""
     _set_input_root(client, str(tmp_path))
-    z = tmp_path / "DE.zip"
-    with zipfile.ZipFile(z, "w") as zf:
-        zf.writestr("LEAP-1B/PIECE_001.CATPart", "x")
-        zf.writestr("LEAP-1B/PIECE_002.CATPart", "y")
-    r = client.post("/api/v1/identification/zip", json={"scope": "input", "path": str(z)})
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["CATPart", "SIN", "A traiter", "NEW P/N"])
+    ws.append(["P1.CATPart", "SIN-1", "MODIF", "AA"])   # A traiter renseigne (valeur libre)
+    ws.append(["", "SIN-2", "DEPLACE", "BB"])            # pas de CATPart -> quand meme pris
+    ws.append(["P3.CATPart", "SIN-3", "", "CC"])          # A traiter vide -> pas a traiter
+    ws.append(["", "", "", ""])                           # ligne vide -> ignoree
+    p = tmp_path / "libre.xlsx"
+    wb.save(p)
+
+    body = client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()
+    run_id = body["id"]
+    assert body["summary"]["rows"] == 3          # la ligne vide est la seule ecartee
+    assert body["summary"]["to_treat"] == 2      # MODIF + DEPLACE (non vides), pas la 3e
+
+    allrows = client.get(f"/api/v1/identification/{run_id}/items").json()
+    by_sin = {i["sin"]: i for i in allrows}
+    assert set(by_sin) == {"SIN-1", "SIN-2", "SIN-3"}   # la ligne sans CATPart (SIN-2) est bien la
+    # La valeur brute de la cellule A TRAITER est conservee (affichage / controle).
+    assert by_sin["SIN-1"]["to_treat_value"] == "MODIF"
+    assert by_sin["SIN-2"]["to_treat_value"] == "DEPLACE"
+    assert by_sin["SIN-3"]["to_treat_value"] == ""
+
+    to_treat = client.get(f"/api/v1/identification/{run_id}/items", params={"to_treat": True}).json()
+    assert {i["sin"] for i in to_treat} == {"SIN-1", "SIN-2"}
+
+
+def _make_xlsx_full(tmp_path, name="nomen_full.xlsx"):
+    """Nomenclature avec les colonnes remplacement + ref couleur + materiaux."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Nomenclature"
+    ws.append([
+        "CATPart", "Designation", "SIN", "A traiter",
+        "OLD P/N", "NEW P/N", "OLD REV", "NEW REV", "Ref Couleur", "Couleur", "Materiaux",
+    ])
+    # Piece remplacee (old != new) + ref couleur "Visserie", pas de RGB, materiaux vide -> simple.
+    ws.append(["P1.CATPart", "Vis", "SIN-001", "x", "AA-100", "AA-200", "A", "B", "Visserie", "", ""])
+    # Non remplacee, RGB renseigne, materiaux renseigne (piece complexe multi-corps).
+    ws.append(["P2.CATPart", "Carter", "SIN-002", "x", "", "", "", "", "", "255,0,0", "Aluminium"])
+    p = tmp_path / name
+    wb.save(p)
+    return p
+
+
+def test_replacement_and_refcolor_columns(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    xlsx = _make_xlsx_full(tmp_path)
+    body = client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(xlsx)}).json()
+    assert body["summary"]["replaced"] == 1
+    run_id = body["id"]
+
+    items = {i["catpart"]: i for i in client.get(f"/api/v1/identification/{run_id}/items").json()}
+    p1 = items["P1.CATPart"]
+    assert p1["replaced"] is True
+    assert p1["old_pn"] == "AA-100" and p1["new_pn"] == "AA-200"
+    assert p1["old_rev"] == "A" and p1["new_rev"] == "B"
+    assert p1["color_ref"] == "Visserie"
+    assert p1["materials"] == ""
+
+    # Filtre pieces remplacees.
+    only_replaced = client.get(f"/api/v1/identification/{run_id}/items", params={"replaced": True}).json()
+    assert {i["catpart"] for i in only_replaced} == {"P1.CATPart"}
+
+    # Filtre par couleur (P2 a un RGB non nul).
+    colored = client.get(f"/api/v1/identification/{run_id}/items", params={"has_color": True}).json()
+    assert {i["catpart"] for i in colored} == {"P2.CATPart"}
+
+    # Export CSV : nouvel en-tete.
+    csv = client.get(f"/api/v1/identification/{run_id}/export.csv")
+    header = csv.text.splitlines()[0]
+    for col in ("replaced", "old_pn", "new_pn", "color_ref", "materials"):
+        assert col in header
+
+
+def test_compare_nomenclatures(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+
+    def _make(name, rows):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["CATPart", "SIN", "NEW P/N", "Version"])
+        for r in rows:
+            ws.append(r)
+        p = tmp_path / name
+        wb.save(p)
+        return client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]
+
+    # A : SIN-001 (PN AA), SIN-002 (PN BB). B : SIN-001 (PN AA2, evolue), SIN-003 (ajoute).
+    run_a = _make("a.xlsx", [["P1.CATPart", "SIN-001", "AA", "1"], ["P2.CATPart", "SIN-002", "BB", "1"]])
+    run_b = _make("b.xlsx", [["P1.CATPart", "SIN-001", "AA2", "2"], ["P3.CATPart", "SIN-003", "CC", "1"]])
+
+    r = client.post("/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_b})
     assert r.status_code == 200, r.text
-    names = {e["name"] for e in r.json()["entries"]}
-    assert "LEAP-1B/PIECE_001.CATPart" in names
+    body = r.json()
+    assert {e["sin"] for e in body["added_sin"]} == {"SIN-003"}
+    assert {e["sin"] for e in body["removed_sin"]} == {"SIN-002"}
+    changed = {e["sin"]: e for e in body["changed_pn"]}
+    assert set(changed) == {"SIN-001"}
+    assert changed["SIN-001"]["old_pn"] == "AA" and changed["SIN-001"]["new_pn"] == "AA2"
+
+    csv = client.get(
+        "/api/v1/identification/compare/export.csv",
+        params={"base_run_id": run_a, "other_run_id": run_b},
+    )
+    assert csv.status_code == 200
+    assert csv.text.splitlines()[0].startswith("section;")
+    assert "SIN-003" in csv.text and "SIN-002" in csv.text
