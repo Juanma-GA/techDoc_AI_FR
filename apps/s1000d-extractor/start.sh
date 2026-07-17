@@ -46,6 +46,34 @@ if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/de
     exit 1
 fi
 
+# Front React : rebuild auto si dist absent OU sources front plus recentes que le
+# dernier build (comparaison find -newer). Build via node+vite local (pas besoin
+# de pnpm) ; repli pnpm pour un setup neuf ; sinon on sert le dist existant.
+FRONTEND_DIR="${APP_DIR}/frontend"
+dist_index="${FRONTEND_DIR}/dist/index.html"
+need_build=0
+if [[ ! -f "$dist_index" ]]; then
+    need_build=1
+else
+    newer="$(find "${FRONTEND_DIR}/src" "${FRONTEND_DIR}/index.html" \
+        "${FRONTEND_DIR}/package.json" "${FRONTEND_DIR}/vite.config.ts" \
+        -newer "$dist_index" -print -quit 2>/dev/null || true)"
+    [[ -n "$newer" ]] && need_build=1
+fi
+if [[ "$need_build" == "1" ]]; then
+    if [[ -f "${FRONTEND_DIR}/node_modules/vite/bin/vite.js" ]] && command -v node >/dev/null 2>&1; then
+        echo "[setup] Build du front React via node - dist absent ou sources modifiees..."
+        ( cd "${FRONTEND_DIR}" && node node_modules/vite/bin/vite.js build ) \
+            || echo "[warn] Build front echoue : on sert le dist existant."
+    elif command -v pnpm >/dev/null 2>&1; then
+        echo "[setup] Build du front React via pnpm..."
+        ( cd "${FRONTEND_DIR}" && pnpm install && pnpm build ) \
+            || echo "[warn] Build front echoue : on sert le dist existant."
+    else
+        echo "[warn] Ni node+vite ni pnpm : on sert le dist existant tel quel."
+    fi
+fi
+
 echo
 echo "[run] Backend sur http://127.0.0.1:${PORT}/"
 echo "      OpenAPI docs : http://127.0.0.1:${PORT}/api/v1/docs"

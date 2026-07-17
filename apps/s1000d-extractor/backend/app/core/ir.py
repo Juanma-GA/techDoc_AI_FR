@@ -26,6 +26,11 @@ Form = Literal["bullet", "ordered", "subheading", "prose", "plain", "table", "ca
 # Contexte semantique S1000D (signal *fort*, decide par la classification IA).
 Context = Literal["descriptive", "procedural", "unknown"]
 
+# Zone de mise en page detectee (localisation du contenu dans la page source).
+# `chapter` = titre de section ; `header`/`footer` = entete/pied recurrent (bruit
+# a exclure) ; `body` = corps. Sert a hierarchiser et a filtrer le bruit.
+Zone = Literal["header", "footer", "chapter", "body"]
+
 # Nature logique du noeud (independante de la balise S1000D finale).
 NodeKind = Literal[
     "section",         # un chapitre / une section avec un titre + des enfants
@@ -60,6 +65,15 @@ class RawBlock:
     list_level: int = 0
     is_table: bool = False
     table_rows: list[list[str]] | None = None
+    table_header: list[str] | None = None      # ligne d'entete du tableau si connue
+    # Geometrie (PDF uniquement) : coin haut/bas du bloc + hauteur de page, pour
+    # detecter entetes/pieds. `None` cote DOCX/OCR (degradation gracieuse -> body).
+    y0: float | None = None
+    y1: float | None = None
+    page_height: float | None = None
+    zone: Zone = "body"
+    image_xref: int | None = None              # xref PyMuPDF si le bloc est une image
+    refs: list[dict] | None = None             # renvois/hyperliens detectes
 
 
 @dataclass
@@ -95,10 +109,14 @@ class IRNode:
     admonition: Admonition | None = None
     level: int | None = None
     page: int | None = None
+    zone: Zone = "body"
     confidence: float = 1.0
     candidates: list[Candidate] = field(default_factory=_empty_candidates)
     children: list[IRNode] = field(default_factory=_empty_children)
     table_rows: list[list[str]] | None = None
+    table_header: list[str] | None = None      # ligne d'entete (-> thead CALS)
+    icn: str | None = None                     # nom de fichier illustration associee
+    refs: list[dict] | None = None             # renvois/hyperliens (-> internalRef...)
 
     def walk(self) -> list[IRNode]:
         """Parcours prefixe (self puis enfants) - pratique pour stats/tests."""
@@ -123,6 +141,7 @@ def from_dict(data: dict) -> IRNode:
         admonition=data.get("admonition"),
         level=data.get("level"),
         page=data.get("page"),
+        zone=data.get("zone", "body"),
         confidence=data.get("confidence", 1.0),
         candidates=[
             Candidate(c["element"], c.get("score", 0.0), c.get("rationale", ""))
@@ -130,6 +149,9 @@ def from_dict(data: dict) -> IRNode:
         ],
         children=[from_dict(c) for c in data.get("children", [])],
         table_rows=data.get("table_rows"),
+        table_header=data.get("table_header"),
+        icn=data.get("icn"),
+        refs=data.get("refs"),
     )
 
 
@@ -151,11 +173,15 @@ def to_dict(node: IRNode) -> dict:
         "admonition": node.admonition,
         "level": node.level,
         "page": node.page,
+        "zone": node.zone,
         "confidence": round(node.confidence, 3),
         "candidates": [
             {"element": c.element, "score": round(c.score, 3), "rationale": c.rationale}
             for c in node.candidates
         ],
         "table_rows": node.table_rows,
+        "table_header": node.table_header,
+        "icn": node.icn,
+        "refs": node.refs,
         "children": [to_dict(c) for c in node.children],
     }

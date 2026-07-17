@@ -52,6 +52,10 @@ def reset_documents(db: Session = Depends(get_db)) -> AdminResetOut:
 
 def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
     """Purge documents + fichiers (PDF/DOCX/XML). Preserve app_config + BREX."""
+    import shutil
+
+    from app.core.wizard import images_dir
+
     docs = db.scalars(select(Document)).all()
     for d in docs:
         for p in (d.storage_path, d.xml_path):
@@ -60,6 +64,10 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
                     Path(p).unlink(missing_ok=True)
                 except OSError:
                     pass
+        try:
+            shutil.rmtree(images_dir(d.id), ignore_errors=True)  # illustrations extraites
+        except OSError:
+            pass
     count = len(docs)
     db.query(Document).delete()
     db.commit()

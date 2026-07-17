@@ -13,6 +13,7 @@ ce module ne fait que l'assemblage de l'arbre.
 from __future__ import annotations
 
 from app.core import structure_heuristics as heur
+from app.core import zone_classifier
 from app.core.ir import IRNode, RawBlock
 
 
@@ -31,6 +32,7 @@ class _Ids:
 def build_ir(blocks: list[RawBlock]) -> IRNode:
     """Transforme une liste de blocs bruts en un arbre IR a racine unique."""
     ids = _Ids()
+    zone_classifier.classify_zones(blocks)   # tague entetes/pieds (PDF)
     body_size = heur.body_font_size(blocks)
     root = IRNode(id=ids.next(), kind="section", text="", level=0)
 
@@ -50,13 +52,25 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         if not text and not block.is_table:
             continue
 
+        # 0) Entete / pied recurrent : court-circuite toute la cascade pour ne
+        # PAS promouvoir un entete repete en titre (via infer_heading_level).
+        # Garde comme paragraphe TAGGE : visible, hierarchisable, excluable.
+        if block.zone in ("header", "footer"):
+            close_list()
+            current().children.append(
+                IRNode(id=ids.next(), kind="paragraph", form="plain",
+                       text=text, page=block.page, zone=block.zone, confidence=0.5)
+            )
+            continue
+
         # 1) Tableau -------------------------------------------------------
         rows = heur.to_table_rows(block)
         if rows is not None:
             close_list()
             current().children.append(
                 IRNode(id=ids.next(), kind="table", form="table",
-                       page=block.page, table_rows=rows, confidence=0.6)
+                       page=block.page, zone=block.zone, table_rows=rows,
+                       table_header=block.table_header, confidence=0.6)
             )
             continue
 
@@ -65,7 +79,8 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
             close_list()
             current().children.append(
                 IRNode(id=ids.next(), kind="figure", form="caption",
-                       text=text, page=block.page, confidence=0.7)
+                       text=text, page=block.page, zone=block.zone,
+                       refs=heur.detect_refs(text) or None, confidence=0.7)
             )
             continue
 
@@ -75,7 +90,8 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
             close_list()
             current().children.append(
                 IRNode(id=ids.next(), kind="admonition", admonition=adm,
-                       form="plain", text=text, page=block.page, confidence=0.85)
+                       form="plain", text=text, page=block.page, zone=block.zone,
+                       refs=heur.detect_refs(text) or None, confidence=0.85)
             )
             continue
 
@@ -87,7 +103,7 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
             while len(stack) > 1 and stack[-1][0] >= level:
                 stack.pop()
             section = IRNode(id=ids.next(), kind="section", form="subheading",
-                             text=text, level=level, page=block.page)
+                             text=text, level=level, page=block.page, zone="chapter")
             current().children.append(section)
             stack.append((level, section))
             continue
@@ -98,19 +114,22 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
             item_text = heur.strip_list_marker(text) if block.list_kind is None else text
             if pending_list is None or pending_list.form != list_kind:
                 pending_list = IRNode(id=ids.next(), kind="item-sequence",
-                                      form=list_kind, page=block.page, confidence=0.8)
+                                      form=list_kind, page=block.page,
+                                      zone=block.zone, confidence=0.8)
                 current().children.append(pending_list)
             pending_list.children.append(
-                IRNode(id=ids.next(), kind="item", form=list_kind,
-                       text=item_text, page=block.page)
+                IRNode(id=ids.next(), kind="item", form=list_kind, text=item_text,
+                       page=block.page, zone=block.zone,
+                       refs=heur.detect_refs(item_text) or None)
             )
             continue
 
         # 6) Paragraphe ----------------------------------------------------
         close_list()
         current().children.append(
-            IRNode(id=ids.next(), kind="paragraph", form="prose",
-                   text=text, page=block.page)
+            IRNode(id=ids.next(), kind="paragraph", form="prose", text=text,
+                   page=block.page, zone=block.zone,
+                   refs=heur.detect_refs(text) or None)
         )
 
     return root

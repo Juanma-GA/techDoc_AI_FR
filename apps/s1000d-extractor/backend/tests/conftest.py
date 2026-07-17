@@ -92,6 +92,70 @@ def pdf_bytes() -> bytes:
 
 
 @pytest.fixture
+def pdf_bytes_headers() -> bytes:
+    """PDF 3 pages avec un entete recurrent (haut) et un numero de page (bas),
+    plus 2 titres de section pour que le decoupage produise des DMs."""
+    import fitz
+
+    doc = fitz.open()
+    for i in range(1, 4):
+        page = doc.new_page()
+        h = page.rect.height
+        page.insert_text((72, 24), "ACME MAINTENANCE MANUAL REF-4521", fontsize=9)
+        page.insert_text((72, h - 24), f"Page {i}", fontsize=9)
+        if i == 1:
+            page.insert_text((72, 120), "1 Description", fontsize=18, fontname="hebo")
+            page.insert_text((72, 150), "The pump supplies pressure.", fontsize=11)
+        elif i == 2:
+            page.insert_text((72, 120), "2 Removal Procedure", fontsize=18, fontname="hebo")
+            page.insert_text((72, 150), "1. Disconnect the connector.", fontsize=11)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+@pytest.fixture
+def pdf_bytes_table() -> bytes:
+    """PDF 1 page avec un tableau reglé (lignes + texte) pour `find_tables`."""
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 60), "1 Torque values", fontsize=18, fontname="hebo")
+    # Grille 3x2 (entete + 2 lignes) tracee + texte dans les cellules.
+    x0, y0, cw, rh, cols, rows = 72, 90, 120, 24, 3, 3
+    for r in range(rows + 1):
+        page.draw_line((x0, y0 + r * rh), (x0 + cols * cw, y0 + r * rh))
+    for c in range(cols + 1):
+        page.draw_line((x0 + c * cw, y0), (x0 + c * cw, y0 + rows * rh))
+    cells = [["Bolt", "Torque", "Unit"], ["M6", "12", "Nm"], ["M8", "25", "Nm"]]
+    for r, row in enumerate(cells):
+        for c, val in enumerate(row):
+            page.insert_text((x0 + c * cw + 6, y0 + r * rh + 16), val, fontsize=10)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+@pytest.fixture
+def pdf_bytes_image() -> bytes:
+    """PDF 1 page avec une image embarquee + une legende 'Figure 1 ...'."""
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 60), "1 Description", fontsize=18, fontname="hebo")
+    # Petite image RGB rouge 24x24 inseree dans la page.
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+    pix.set_rect(pix.irect, (255, 0, 0))
+    page.insert_image(fitz.Rect(72, 90, 168, 186), pixmap=pix)
+    page.insert_text((72, 210), "Figure 1 Hydraulic pump location", fontsize=11)
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+@pytest.fixture
 def docx_bytes() -> bytes:
     import io
 

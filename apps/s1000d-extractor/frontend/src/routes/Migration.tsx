@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 
+import { DmPreview } from "../components/DmPreview";
+import { PageFlag, RefFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
   brexApi,
   documentsApi,
@@ -54,6 +56,13 @@ function WizNode({
       <div className={`tnode${low}`}>
         <span className="el">{el}</span>
         {ctx ? <span className="ctx">{ctx}</span> : null}
+        {node.kind === "section" && node.level != null ? (
+          <span className="badge info">niv. {node.level}</span>
+        ) : null}
+        <PageFlag page={node.page} />
+        <ZoneFlag zone={node.zone} />
+        <TableFlag kind={node.kind} />
+        <RefFlag refs={node.refs} />
         {txt ? <span className="txt"> {txt}</span> : null}
         {alts.map((c) => {
           const key = `${dmId}|${node.id}`;
@@ -207,8 +216,29 @@ export function Migration() {
     }
   };
 
+  // Valide le decoupage SANS renvoyer split_level : l'avancement ne doit pas
+  // re-decouper (sinon il ecrase les editions manuelles). Le niveau ne change
+  // que via « Re-analyser ».
+  const validateSplit = () => void wizAction("advance", {});
+
+  // Valide la structure : applique les overrides accumules puis avance.
+  const validateStructure = () => {
+    const ov = Object.entries(overrides).map(([k, element]) => {
+      const [dm_id, node_id] = k.split("|");
+      return { dm_id, node_id, element };
+    });
+    void wizAction("advance", { overrides: ov });
+  };
+
+  const imagesQuery = useQuery({
+    queryKey: ["s1000d-images", docId],
+    queryFn: () => wizardApi.images(docId as string),
+    enabled: !!docId && wiz?.step === "generate",
+  });
+
   const brex = brexQuery.data ?? [];
   const docs = docsQuery.data ?? [];
+  const images = imagesQuery.data ?? [];
 
   return (
     <>
@@ -378,7 +408,34 @@ export function Migration() {
                   >
                     Fusionner la sélection
                   </button>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      void wizAction("update", { op: "hide_zones", zones: ["header", "footer"] })
+                    }
+                  >
+                    Masquer entêtes/pieds
+                  </button>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={busy || !wiz.can_undo}
+                    onClick={() => void wizAction("update", { op: "undo" })}
+                  >
+                    Annuler
+                  </button>
                   {splitMsg ? <span className="error grow">{splitMsg}</span> : null}
+                  <button
+                    type="button"
+                    className="btn primary"
+                    style={{ marginLeft: "auto" }}
+                    disabled={busy}
+                    onClick={validateSplit}
+                  >
+                    Valider le découpage →
+                  </button>
                 </div>
                 <p className="label">
                   Coche plusieurs DMs puis « Fusionner » ; édite un titre puis
@@ -388,9 +445,9 @@ export function Migration() {
                   {wiz.dms.map((d) => (
                     <div
                       key={d.dm_id}
-                      className="row"
-                      style={{ borderBottom: "1px solid var(--border)", padding: "6px 0", gap: 8 }}
+                      style={{ borderBottom: "1px solid var(--border)", padding: "6px 0" }}
                     >
+                    <div className="row" style={{ gap: 8 }}>
                       <input
                         type="checkbox"
                         checked={selected.has(d.dm_id)}
@@ -443,6 +500,8 @@ export function Migration() {
                         Exclure
                       </button>
                     </div>
+                    <DmPreview preview={d.preview} />
+                    </div>
                   ))}
                 </div>
                 <div className="row" style={{ marginTop: 12 }}>
@@ -450,7 +509,7 @@ export function Migration() {
                     type="button"
                     className="btn primary"
                     disabled={busy}
-                    onClick={() => void wizAction("advance", { split_level: splitLevel })}
+                    onClick={validateSplit}
                   >
                     Valider le découpage →
                   </button>
@@ -514,6 +573,27 @@ export function Migration() {
 
             {wiz.step === "structure" ? (
               <>
+                <div className="card">
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      disabled={busy}
+                      onClick={() => void wizAction("back")}
+                    >
+                      ← Retour
+                    </button>
+                    <button
+                      type="button"
+                      className="btn primary"
+                      style={{ marginLeft: "auto" }}
+                      disabled={busy}
+                      onClick={validateStructure}
+                    >
+                      Valider la structure →
+                    </button>
+                  </div>
+                </div>
                 {wiz.dms.map((d) => (
                   <div className="card" key={d.dm_id}>
                     <h2 className="card-title">
@@ -550,13 +630,7 @@ export function Migration() {
                       type="button"
                       className="btn primary"
                       disabled={busy}
-                      onClick={() => {
-                        const ov = Object.entries(overrides).map(([k, element]) => {
-                          const [dm_id, node_id] = k.split("|");
-                          return { dm_id, node_id, element };
-                        });
-                        void wizAction("advance", { overrides: ov });
-                      }}
+                      onClick={validateStructure}
                     >
                       Valider la structure →
                     </button>
@@ -592,6 +666,38 @@ export function Migration() {
                     </div>
                   ))}
                 </div>
+                {images.length ? (
+                  <div style={{ marginTop: 16 }}>
+                    <h3 className="label">Illustrations extraites ({images.length})</h3>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
+                      {images.map((name) => (
+                        <a
+                          key={name}
+                          href={docId ? wizardApi.imageUrl(docId, name) : "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="label"
+                          style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}
+                        >
+                          <img
+                            src={docId ? wizardApi.imageUrl(docId, name) : undefined}
+                            alt={name}
+                            style={{
+                              width: 96,
+                              height: 72,
+                              objectFit: "cover",
+                              border: "1px solid var(--border)",
+                              borderRadius: 4,
+                            }}
+                          />
+                          <span style={{ maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {name}
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="row" style={{ marginTop: 12 }}>
                   <button
                     type="button"

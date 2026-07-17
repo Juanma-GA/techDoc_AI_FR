@@ -130,6 +130,48 @@ exit /b 1
 if not "%PORT_TRY%"=="%PORT%" echo [info] Port %PORT% occupe -- bascule auto sur le port %PORT_TRY%.
 set "PORT=%PORT_TRY%"
 
+REM ---- Front React : on sert le build (dist) sur le meme port que le backend.
+REM  Rebuild AUTO si le dist est absent OU si une source front est plus recente
+REM  que le dernier build (helper _needs_rebuild.ps1). Node portable prefixe au
+REM  PATH si present. Build via node+vite local (pas besoin de pnpm) ; repli pnpm
+REM  pour un setup neuf ; sinon on sert le dist existant.
+set "FRONTEND_DIR=%APP_DIR%frontend"
+set "NODE_DIR="
+for /d %%D in ("%LOCALAPPDATA%\node-portable\node-v*-win-x64") do set "NODE_DIR=%%D"
+if defined NODE_DIR set "PATH=%NODE_DIR%;%PATH%"
+
+set "NEED_BUILD=0"
+if not exist "%FRONTEND_DIR%\dist\index.html" set "NEED_BUILD=1"
+if "%NEED_BUILD%"=="0" if exist "%APP_DIR%_needs_rebuild.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%"
+    if errorlevel 1 set "NEED_BUILD=1"
+)
+if "%NEED_BUILD%"=="0" goto :front_ready
+
+where node >nul 2>nul
+if errorlevel 1 goto :front_try_pnpm
+if not exist "%FRONTEND_DIR%\node_modules\vite\bin\vite.js" goto :front_try_pnpm
+echo [setup] Build du front React via Node - 5 a 30 s...
+pushd "%FRONTEND_DIR%"
+node "node_modules\vite\bin\vite.js" build
+popd
+goto :front_ready
+
+:front_try_pnpm
+where pnpm >nul 2>nul
+if errorlevel 1 goto :front_no_tool
+echo [setup] Build du front React via pnpm - install + build...
+pushd "%FRONTEND_DIR%"
+call pnpm install
+call pnpm build
+popd
+goto :front_ready
+
+:front_no_tool
+echo [warn] Ni Node+vite ni pnpm : on sert le dist existant tel quel.
+
+:front_ready
+
 echo.
 echo [run] Backend sur http://127.0.0.1:%PORT%/
 echo       OpenAPI docs : http://127.0.0.1:%PORT%/api/v1/docs

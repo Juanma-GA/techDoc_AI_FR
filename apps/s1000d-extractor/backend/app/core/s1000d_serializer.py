@@ -39,30 +39,74 @@ def _alt_comment(node: IRNode) -> str | None:
     return None
 
 
+def _emit_refs(parent: etree._Element, node: IRNode) -> None:
+    """Emet les renvois detectes (best-effort) : `internalRef` pour un renvoi
+    interne (figure/table/section), `externalPubRef` sinon, commentaire pour une
+    URL. La cible S1000D (DMC/xref) reste a completer (marquee TODO)."""
+    for ref in node.refs or []:
+        kind = ref.get("kind")
+        if kind == "internal":
+            el = etree.SubElement(
+                parent, "internalRef", internalRefTargetType=ref.get("target_kind", "section")
+            )
+            el.set("internalRefId", f"TODO-{ref.get('target', '')}")
+            el.append(etree.Comment(f" renvoi detecte : {ref.get('text', '')} "))
+        elif kind == "uri":
+            parent.append(etree.Comment(f" lien externe (a mapper) : {ref.get('target', '')} "))
+        else:
+            etree.SubElement(parent, "externalPubRef").append(
+                etree.Comment(f" TODO: publication externe : {ref.get('text', '')} ")
+            )
+
+
 def _para(parent: etree._Element, text: str) -> None:
     el = etree.SubElement(parent, "para")
     el.text = text or ""
 
 
+def _emit_row(parent: etree._Element, cells: list[str]) -> None:
+    row_el = etree.SubElement(parent, "row")
+    for cell in cells:
+        entry = etree.SubElement(row_el, "entry")
+        _para(entry, cell)
+
+
 def _emit_table(parent: etree._Element, node: IRNode) -> None:
+    """Modele CALS S1000D : table > (title?) > tgroup > colspec* > thead? > tbody.
+
+    Une ligne d'entete detectee (`table_header`) devient un vrai `<thead>` ; les
+    colonnes sont declarees en `<colspec>` (structure attendue par les outils
+    S1000D), le reste va dans `<tbody>`."""
     rows = node.table_rows or []
-    ncols = max((len(r) for r in rows), default=1)
+    header = node.table_header
+    body_rows = rows
+    if header and rows and rows[0] == header:
+        body_rows = rows[1:]          # evite de repeter l'entete dans le corps
+    ncols = max([len(r) for r in rows] + ([len(header)] if header else []), default=1)
     table = etree.SubElement(parent, "table")
+    if node.text:
+        etree.SubElement(table, "title").text = node.text
     tgroup = etree.SubElement(table, "tgroup", cols=str(ncols))
+    for c in range(1, ncols + 1):
+        etree.SubElement(tgroup, "colspec", colname=f"c{c}")
+    if header:
+        thead = etree.SubElement(tgroup, "thead")
+        _emit_row(thead, header)
     tbody = etree.SubElement(tgroup, "tbody")
-    for row in rows:
-        row_el = etree.SubElement(tbody, "row")
-        for cell in row:
-            entry = etree.SubElement(row_el, "entry")
-            _para(entry, cell)
+    for row in body_rows:
+        _emit_row(tbody, row)
 
 
 def _emit_figure(parent: etree._Element, node: IRNode) -> None:
     fig = etree.SubElement(parent, "figure")
     title = etree.SubElement(fig, "title")
     title.text = node.text or "Figure"
-    fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
-    etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")
+    if node.icn:
+        # ICN reelle : illustration extraite et enregistree (nom de fichier).
+        etree.SubElement(fig, "graphic", infoEntityIdent=node.icn)
+    else:
+        fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
+        etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")
 
 
 def _emit_admonition(parent: etree._Element, node: IRNode) -> None:
@@ -84,6 +128,7 @@ def _emit_list(parent: etree._Element, node: IRNode) -> None:
     for item in node.children:
         li = etree.SubElement(list_el, "listItem")
         _para(li, item.text)
+        _emit_refs(li, item)
 
 
 def _emit_node(parent: etree._Element, node: IRNode) -> None:
@@ -93,8 +138,10 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
 
     if node.kind == "admonition":
         _emit_admonition(parent, node)
+        _emit_refs(parent, node)
     elif node.kind == "figure":
         _emit_figure(parent, node)
+        _emit_refs(parent, node)
     elif node.kind == "table":
         _emit_table(parent, node)
     elif node.kind == "item-sequence":
@@ -104,8 +151,10 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
         if top == "proceduralStep":
             step = etree.SubElement(parent, "proceduralStep")
             _para(step, node.text)
+            _emit_refs(step, node)
         else:
             _para(parent, node.text)
+            _emit_refs(parent, node)
     elif node.kind == "section":
         top = _top_element(node, "levelledPara")
         sect = etree.SubElement(parent, top)

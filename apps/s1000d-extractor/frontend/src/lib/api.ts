@@ -80,6 +80,8 @@ export type BrexProfile = {
 
 export type Candidate = { element: string; score?: number; rationale?: string };
 
+export type NodeRef = { kind: string; target?: string; target_kind?: string; text?: string };
+
 export type TreeNode = {
   id: string;
   kind: string;
@@ -88,6 +90,12 @@ export type TreeNode = {
   confidence: number | null;
   candidates: Candidate[];
   children: TreeNode[];
+  level?: number | null;
+  page?: number | null;
+  zone?: string;
+  table_header?: string[] | null;
+  icn?: string | null;
+  refs?: NodeRef[] | null;
 };
 
 export type DocumentOut = {
@@ -101,6 +109,15 @@ export type DocumentOut = {
 
 export type WizardStep = "split" | "type" | "structure" | "generate";
 
+export type PreviewSnippet = {
+  text: string;
+  page: number | null;
+  kind: string;
+  zone?: string;
+};
+
+export type DmPreview = { head: PreviewSnippet[]; tail: PreviewSnippet[]; total: number };
+
 export type WizardDm = {
   dm_id: string;
   title: string;
@@ -108,12 +125,14 @@ export type WizardDm = {
   node_count: number;
   tree: TreeNode;
   violation_count: number;
+  preview?: DmPreview;
 };
 
 export type WizardState = {
   step: WizardStep;
   split_level: string;
   dms: WizardDm[];
+  can_undo?: boolean;
 };
 
 export type Override = { dm_id: string; node_id: string; element: string };
@@ -155,6 +174,9 @@ export const wizardApi = {
   dmXmlUrl: (docId: string, dmId: string) =>
     `${API_BASE}/documents/${docId}/wizard/dm/${dmId}/xml`,
   zipUrl: (docId: string) => `${API_BASE}/documents/${docId}/wizard/zip`,
+  images: (docId: string) => api<string[]>(`/documents/${docId}/wizard/images`),
+  imageUrl: (docId: string, name: string) =>
+    `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}`,
 };
 
 /**

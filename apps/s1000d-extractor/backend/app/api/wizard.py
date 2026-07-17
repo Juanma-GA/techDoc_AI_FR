@@ -115,6 +115,27 @@ def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Res
     )
 
 
+@router.get("/{doc_id}/wizard/images")
+def wizard_images(doc_id: str, db: Session = Depends(get_db)) -> list[str]:
+    """Liste les illustrations extraites du document (noms de fichiers JPG)."""
+    _require(db, doc_id)
+    d = wizard.images_dir(doc_id)
+    return sorted(p.name for p in d.glob("*.jpg")) if d.exists() else []
+
+
+@router.get("/{doc_id}/wizard/images/{name}")
+def wizard_image(doc_id: str, name: str, db: Session = Depends(get_db)) -> Response:
+    from pathlib import Path
+
+    _require(db, doc_id)
+    # Empeche toute traversee de repertoire : on ne sert que le basename.
+    safe = Path(name).name
+    path = wizard.images_dir(doc_id) / safe
+    if safe != name or not path.exists():
+        raise AppError("IMAGE_NOT_FOUND", "Illustration inconnue.", 404)
+    return Response(content=path.read_bytes(), media_type="image/jpeg")
+
+
 @router.get("/{doc_id}/wizard/zip")
 def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     import json as _json
@@ -128,6 +149,10 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
             zf.writestr(f"{d['dm_id']}.xml", d["xml"])
+        img_dir = wizard.images_dir(doc_id)
+        if img_dir.exists():
+            for img in sorted(img_dir.glob("*.jpg")):
+                zf.write(img, f"illustrations/{img.name}")
     return Response(
         content=buf.getvalue(), media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{doc.id}_dms.zip"'},

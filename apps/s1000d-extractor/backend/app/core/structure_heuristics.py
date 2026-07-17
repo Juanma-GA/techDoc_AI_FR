@@ -32,6 +32,51 @@ _ADMONITION_RES: list[tuple[str, re.Pattern[str]]] = [
 
 _CAPTION_RE = re.compile(r"^\s*(?:figure|fig\.?|illustration)\s*\d+", re.IGNORECASE)
 
+# --- Renvois / hyperliens (-> internalRef / externalPubRef / uri) ------------
+# Renvoi interne AVEC marqueur obligatoire (voir/see/cf/refer to) pour ne pas
+# confondre une legende "Figure 1 ..." avec un renvoi "voir figure 1".
+_INTERNAL_REF_RE = re.compile(
+    r"\b(?:voir|see|cf\.?|refer to)\s+"
+    r"(figure|fig\.?|table|tableau|section|chapitre|chapter|para(?:graph)?)\s*"
+    r"([0-9]+(?:[.\-][0-9]+)*)",
+    re.IGNORECASE,
+)
+# Renvoi paragraphe symbolique : "§ 5.2".
+_PARA_REF_RE = re.compile(r"§\s*([0-9]+(?:[.\-][0-9]+)*)")
+# URL explicite.
+_URI_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
+
+_INTERNAL_KIND = {
+    "figure": "figure", "fig": "figure",
+    "table": "table", "tableau": "table",
+    "section": "section", "chapitre": "section", "chapter": "section",
+    "para": "section", "paragraph": "section",
+}
+
+
+def detect_refs(text: str) -> list[dict]:
+    """Detecte les renvois/hyperliens d'un texte -> liste de dicts.
+
+    Chaque ref : {kind: "internal"|"uri", target_kind?, target, text}. Best-effort
+    (coherent avec l'ecart "squelette") : la cible S1000D (DMC/xref) reste a
+    completer, on capture juste l'intention de renvoi."""
+    refs: list[dict] = []
+    for m in _INTERNAL_REF_RE.finditer(text):
+        label = m.group(1).lower().rstrip(".")
+        refs.append({
+            "kind": "internal",
+            "target_kind": _INTERNAL_KIND.get(label, "section"),
+            "target": m.group(2),
+            "text": m.group(0).strip(),
+        })
+    for m in _PARA_REF_RE.finditer(text):
+        refs.append({"kind": "internal", "target_kind": "section",
+                     "target": m.group(1), "text": m.group(0).strip()})
+    for m in _URI_RE.finditer(text):
+        refs.append({"kind": "uri", "target": m.group(0), "text": m.group(0)})
+    return refs
+
+
 # --- Titre numerote MULTI-niveau (1.2, 1.2.3 ...) ----------------------------
 # Volontairement multi-niveau : un nombre seul suivi de "." (ex. "1. Deposer")
 # est un item de liste ordonnee, pas un titre. Les titres de niveau 1 ("1

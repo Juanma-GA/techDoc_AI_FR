@@ -67,4 +67,7 @@ class Document(Base):
     wizard_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
     split_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
     dms_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Pile d'annulation (undo) des editions de decoupage : liste JSON
+    # d'instantanes `dms_json` successifs (bornee cote code).
+    dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
