@@ -30,6 +30,7 @@ export {
   type MultiSelectItem,
   type MultiSelectProps,
 } from "./components/MultiSelect";
+export { Slicer, type SlicerItem, type SlicerProps } from "./components/Slicer";
 
 // Overlays (replace alert / confirm)
 export {

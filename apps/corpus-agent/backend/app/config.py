@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,7 +43,12 @@ class Settings(BaseSettings):
     storage_dir: str = str(BASE_DIR / "data" / "storage")
 
     # === HTTP / CORS / uploads ===
-    cors_origins: list[str] = [
+    # NoDecode : pydantic-settings tente sinon un json.loads() sur la valeur du
+    # .env pour les champs "complexes" (list/dict) AVANT les validators. Une
+    # liste CSV (ex. "https://host,https://host2") n'est pas du JSON -> crash au
+    # demarrage. NoDecode desactive ce decode et laisse le validator ci-dessous
+    # parser le CSV.
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8000",
@@ -64,8 +70,8 @@ class Settings(BaseSettings):
     rate_limit_llm: str = "10/minute"
 
     # Cle de chiffrement des secrets stockes en base (cle Mistral). Vide = off
-    # (plaintext, dev). En prod l'IT la fournit via .env. Generer avec :
-    #   python -c "from app.core.encryption import generate_key; print(generate_key())"
+    # (plaintext, dev). En prod l'IT la fournit via .env. Generer via la fonction
+    # generate_key() de app.core.encryption (commande dans .env.example).
     encryption_key: str = ""
 
     @field_validator("cors_origins", mode="before")

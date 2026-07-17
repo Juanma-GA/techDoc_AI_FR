@@ -41,9 +41,9 @@ function DeltaRow({ delta }: { delta: KpiDelta }) {
 
 export function KpiCard({ label, value, delta, className }: KpiCardProps) {
   return (
-    <div className={cn("rounded-lg border bg-card p-4 shadow-card", className)}>
+    <div className={cn("rounded-lg border border-border bg-bg-2 px-3.5 py-3", className)}>
       <div className="text-label font-mono uppercase text-fg-dim">{label}</div>
-      <div className="mt-2 font-mono text-2xl font-bold text-fg">{value}</div>
+      <div className="mt-1 font-mono text-[1.4rem] font-bold text-fg">{value}</div>
       {delta ? <DeltaRow delta={delta} /> : null}
     </div>
   );

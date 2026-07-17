@@ -19,6 +19,7 @@ from app.core.mistral_client import (
     set_llm_enabled,
     set_llm_tested,
 )
+from app.core.prompt_sanitizer import sanitize_document
 from app.core.rules import (
     DEFAULT_RULES,
     is_overridden,
@@ -222,7 +223,9 @@ def extract_rules_from_spec(
         + 'Réponds STRICTEMENT en JSON : {"regles": [{"label": "...", '
         '"consigne": "...", "severity": "low|medium|high"}]}.'
     )
-    user = "DOCUMENT DE SPÉCIFICATION :\n\n" + text[:15000]
+    # Document de specification non fiable -> sanitise contre l'injection de
+    # prompt avant envoi au LLM (extraction de regles).
+    user = "DOCUMENT DE SPÉCIFICATION :\n\n" + sanitize_document(text)[:15000]
     try:
         result = client.chat_json([
             {"role": "system", "content": system},
