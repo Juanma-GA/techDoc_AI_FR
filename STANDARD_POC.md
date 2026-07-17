@@ -558,6 +558,7 @@ Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat`
 3. Le script `scripts/package_<poc>.py` est créé par `cp scripts/package_TEMPLATE.py scripts/package_<poc>.py` et l'adaptation de `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête de fichier.
 
 **Règles non négociables** :
+- **Le ZIP sort TOUJOURS dans `apps/<poc>/dist/`**, jamais à la racine du repo. Le `--out` par défaut de `scripts/package_<poc>.py` pointe sur `apps/<poc>/dist` **et** `_package.bat` le passe explicitement. Ne jamais lancer le script à la main sans ce `--out` (sinon le ZIP atterrit dans `./dist` racine).
 - `--host 127.0.0.1` toujours. Jamais `0.0.0.0` (palier 1 strict).
 - `.bat` en ASCII pur. Les accents dans un `.bat` non-CP1252 peuvent provoquer une fermeture immédiate de cmd.exe — préférer "echec" à "échec".
 - La fenêtre cmd doit **toujours rester ouverte** en cas d'erreur (wrapper `cmd /k`).
@@ -644,6 +645,10 @@ Le POC ajoute ses onglets métier.
   - `JetBrains Mono` (400/500/700) — `.label`, `code`, `.kpi-value`
   - `Orbitron` (500/700) — `.brand`, `.page-header h1`, `.card-title`
 - **Layout** : `html { font-size: 13.5px; }`, sidebar `var(--sidebar-w)` (252px), topbar 52px, main padding `24px 32px`.
+- **Description brève de l'app (obligatoire)** : le nom / logo (`.brand`) porte une
+  **infobulle** décrivant l'app en une phrase — attribut `title={t("app.description")}`
+  (clé i18n `app.description` FR + EN) + `cursor: help`. Chaque POC personnalise cette
+  clé lors du bootstrap.
 - **Classes CSS standardisées** :
 
 | Classe | Variants | Usage |

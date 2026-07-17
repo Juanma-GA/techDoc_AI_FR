@@ -18,9 +18,9 @@ Layout of the produced archive (with `--embed-python`, default ON):
     ├── design-tokens/          # design-token assets used by the React build
     └── python-embed/           # bundled Python 3.11 (Windows embeddable + bootstrapped pip)
 
-Usage:
+Usage (le --out defaut = apps/<poc>/dist, ne PAS le changer sans raison) :
     python scripts/package_catia-toolbox.py
-    python scripts/package_catia-toolbox.py --version 0.2.0 --out dist
+    python scripts/package_catia-toolbox.py --version 0.2.0
     python scripts/package_catia-toolbox.py --no-embed-python
 """
 
@@ -203,7 +203,8 @@ def main(argv: list[str] | None = None) -> int:
         epilog=__doc__,
     )
     parser.add_argument("--version", default="0.1.0")
-    parser.add_argument("--out", type=Path, default=Path("dist"))
+    # Standard : le package sort TOUJOURS dans apps/<poc>/dist/ (pas la racine).
+    parser.add_argument("--out", type=Path, default=Path(f"apps/{APP_SLUG}/dist"))
     parser.add_argument(
         "--embed-python",
         dest="embed_python",

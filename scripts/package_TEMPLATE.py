@@ -203,7 +203,8 @@ def main(argv: list[str] | None = None) -> int:
         epilog=__doc__,
     )
     parser.add_argument("--version", default="0.1.0")
-    parser.add_argument("--out", type=Path, default=Path("dist"))
+    # Standard : le package sort TOUJOURS dans apps/<poc>/dist/ (pas la racine).
+    parser.add_argument("--out", type=Path, default=Path(f"apps/{APP_SLUG}/dist"))
     parser.add_argument(
         "--embed-python",
         dest="embed_python",

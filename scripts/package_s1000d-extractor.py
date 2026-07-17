@@ -81,23 +81,56 @@ call start.bat
 """
 
 
+def _find_node() -> str | None:
+    """Localise node : PATH, puis Node portable (%LOCALAPPDATA%\\node-portable)."""
+    found = shutil.which("node")
+    if found:
+        return found
+    import os
+
+    base = Path(os.environ.get("LOCALAPPDATA", "")) / "node-portable"
+    if base.is_dir():
+        for d in sorted(base.glob("node-v*-win-x64"), reverse=True):
+            exe = d / "node.exe"
+            if exe.is_file():
+                return str(exe)
+    return None
+
+
 def _build_frontend(frontend_dir: Path) -> bool:
-    if shutil.which("pnpm") is None or shutil.which("node") is None:
-        print("[frontend] pnpm/node not found — skipping build")
-        return False
-    print(f"[frontend] pnpm install ({frontend_dir})")
+    """Reconstruit frontend/dist avant packaging.
+
+    Deux voies, dans l'ordre :
+    1. node + vite local (marche avec un Node portable, sans pnpm) si
+       node_modules est deja installe -> `node node_modules/vite/bin/vite.js build` ;
+    2. repli pnpm (install + build) pour un setup neuf.
+    Si aucun outil n'est dispo, on continue avec le dist deja present sur disque.
+    """
+    frontend_dir = frontend_dir.resolve()
+    vite_bin = frontend_dir / "node_modules" / "vite" / "bin" / "vite.js"
+    node_exe = _find_node()
+    built = False
     try:
-        subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
-        print("[frontend] pnpm build")
-        subprocess.run("pnpm build", cwd=frontend_dir, check=True, shell=True)
+        if node_exe is not None and vite_bin.is_file():
+            print(f"[frontend] node vite build ({frontend_dir})")
+            subprocess.run([node_exe, str(vite_bin), "build"], cwd=str(frontend_dir), check=True)
+            built = True
+        elif shutil.which("pnpm") is not None:
+            print(f"[frontend] pnpm install + build ({frontend_dir})")
+            subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
+            subprocess.run("pnpm build", cwd=frontend_dir, check=True, shell=True)
+            built = True
+        else:
+            print("[frontend] ni node+vite ni pnpm — dist existant conserve tel quel")
     except subprocess.CalledProcessError as exc:
-        print(f"[frontend] build failed ({exc}) — continuing without dist/")
-        return False
+        print(f"[frontend] build failed ({exc}) — dist existant conserve")
+
     dist = frontend_dir / "dist"
     if not dist.is_dir():
+        print("[frontend] AUCUN dist/ — le package servira '503 frontend non builde'")
         return False
     n = sum(1 for _ in dist.rglob("*") if _.is_file())
-    print(f"[frontend] OK — {n} files in dist/")
+    print(f"[frontend] {'rebuild' if built else 'dist existant'} — {n} fichiers dans dist/")
     return True
 
 
