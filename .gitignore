@@ -31,6 +31,9 @@ yarn-error.log*
 **/dist/
 **/build/
 
+# Cache incremental TypeScript (regenere par tsc/vite a chaque build)
+*.tsbuildinfo
+
 # Tests
 playwright-report/
 test-results/
