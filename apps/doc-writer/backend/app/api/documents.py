@@ -24,6 +24,9 @@ from app.parsers import SUPPORTED_EXTS, parse_any
 from app.schemas import (
     DocumentContentOut,
     DocumentOut,
+    FlowBlock,
+    FlowCell,
+    FlowOut,
     StructureBbox,
     StructureOut,
     StructureShape,
@@ -696,6 +699,63 @@ def get_structure(
         slide_height_emu=int(struct.get("slide_height_emu", 0)),
         slides=slides_out,
     )
+
+
+@router.get("/{document_id}/flow", response_model=FlowOut)
+def get_flow(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> FlowOut:
+    """Apercu 'flux document' Word/PDF : le document dans l'ordre de lecture
+    (paragraphes + tableaux), marqueurs inclus. Pendant du /structure (SVG)
+    reserve au PPTX positionne. 400 pour un template PPTX (utiliser /structure)."""
+    doc = _require_template(db.get(Document, document_id), document_id)
+
+    from app.core import docx_template
+    from app.core.template_format import resolve
+
+    working, engine = resolve(doc.storage_path)
+    if engine.kind != "docx":
+        raise AppError(
+            "FLOW_UNSUPPORTED",
+            "L'apercu 'flux' ne concerne que les templates Word/PDF. "
+            "Pour un .pptx, utilise /structure (apercu positionne).",
+            status_code=400,
+            detail={"kind": engine.kind},
+        )
+    try:
+        flow = docx_template.build_flow(working)
+    except AppError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise AppError(
+            "PARSE_FAILED",
+            f"Lecture du template echouee : {type(e).__name__}: {e}",
+            status_code=500,
+        ) from e
+
+    blocks_out: list[FlowBlock] = []
+    for b in flow.get("blocks", []):
+        rows_out = [
+            [
+                FlowCell(
+                    id=c.get("id", ""),
+                    text=c.get("text", "") or "",
+                    has_marker=bool(c.get("has_marker", False)),
+                )
+                for c in row
+            ]
+            for row in b.get("rows", [])
+        ]
+        blocks_out.append(FlowBlock(
+            type=b.get("type", "paragraph"),
+            id=b.get("id", ""),
+            location=b.get("location", "") or "",
+            text=b.get("text", "") or "",
+            has_marker=bool(b.get("has_marker", False)),
+            rows=rows_out,
+        ))
+    return FlowOut(blocks=blocks_out)
 
 
 @router.post("/{document_id}/zones/bulk-delete", response_model=ZonesOut)

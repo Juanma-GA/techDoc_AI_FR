@@ -225,6 +225,13 @@
     "confirmAgain": "Cliquer encore pour confirmer",
     "resetOk": "Reset OK ({{items}})."
   },
+  "template": {
+    "fill": {
+      "title": "Aperçu du rendu (Word/PDF)",
+      "legend": "Contenu réellement écrit par zone. Édite, ignore ou relance une zone, puis télécharge : le fichier correspond à cet aperçu.",
+      "loading": "Préparation de l'aperçu…"
+    }
+  },
   "zones": {
     "close": "Fermer",
     "edit": "Éditer",
@@ -238,6 +245,9 @@
     "droppedHint": "Zones proposées par Mistral écartées pour conflit.",
     "previewTitle": "Aperçu de la structure",
     "previewLegend": "Jaune = marqueur (XXX/{{cle}}), bleu = zone LLM, gris = libellé, pointillé = vide.",
+    "previewFlow": "Aperçu flux document (Word/PDF) : zones surlignées, cliquez l'une d'elles pour l'éditer.",
+    "flowEmpty": "(zone vide)",
+    "flowLoading": "Chargement de l'aperçu...",
     "listTitle": "Liste des zones",
     "filterLabel": "Filtrer par type",
     "filterAll": "Tous les types",

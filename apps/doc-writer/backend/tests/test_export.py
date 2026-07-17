@@ -42,6 +42,55 @@ def _new_session(client, **overrides):
     return client.post("/api/v1/sessions", json=payload)
 
 
+def _docx_template_bytes() -> bytes:
+    import io
+
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("Titre : {{titre}}")
+    doc.add_paragraph("Paragraphe de prose fixe.")
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def test_preview_pptx_returns_active_flag(client) -> None:
+    """La reponse preview inclut `active` par zone (le front s'en sert pour
+    pre-cocher les zones a ignorer). LLM off -> mapping vide, pas d'appel Mistral."""
+    import io
+
+    _DOCX_MIME = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    up = client.post(
+        "/api/v1/documents",
+        files={"files": ("tpl.docx", io.BytesIO(_docx_template_bytes()), _DOCX_MIME)},
+        data={"kind": "template"},
+    )
+    assert up.status_code == 200, up.text
+    doc_id = up.json()["uploaded"][0]["document_id"]
+    # Peuple le cache des zones.
+    assert client.get(f"/api/v1/documents/{doc_id}/zones").status_code == 200
+
+    sess = _new_session(client, template_doc_id=doc_id)
+    assert sess.status_code == 200, sess.text
+    session_id = sess.json()["id"]
+    _seed_assistant_message(session_id, "Contenu genere.")
+
+    # LLM OFF -> _build_mapping_for_zones renvoie un mapping vide sans appeler
+    # Mistral (llm_enabled defaut True, independant de la cle).
+    assert client.post(
+        "/api/v1/settings", json={"llm_enabled": False}
+    ).status_code == 200
+
+    r = client.post(f"/api/v1/sessions/{session_id}/preview-pptx")
+    assert r.status_code == 200, r.text
+    zones = r.json()["zones"]
+    assert zones
+    assert all("active" in z and isinstance(z["active"], bool) for z in zones)
+
+
 def test_export_md_returns_assistant_content(client) -> None:
     sess = _new_session(client)
     assert sess.status_code == 200, sess.text

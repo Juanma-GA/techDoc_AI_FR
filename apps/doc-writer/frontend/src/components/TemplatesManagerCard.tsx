@@ -104,14 +104,20 @@ export function TemplatesManagerCard() {
           </thead>
           <tbody>
             {templates.map((doc) => {
-              const isPptx = doc.filename.toLowerCase().endsWith(".pptx");
+              // Reanalyser + Gerer les zones : tous les formats de template
+              // exposent des zones (.pptx natif, .docx, .pdf converti -> .docx).
+              const name = doc.filename.toLowerCase();
+              const canManageZones =
+                name.endsWith(".pptx") ||
+                name.endsWith(".docx") ||
+                name.endsWith(".pdf");
               return (
                 <tr key={doc.id}>
                   <td className="file-name">{doc.filename}</td>
                   <td className="file-meta">{formatSize(doc.size)}</td>
                   <td className="file-meta">{formatDate(doc.uploaded_at)}</td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    {isPptx ? (
+                    {canManageZones ? (
                       <>
                         <button
                           type="button"

@@ -6,8 +6,9 @@ Meme abstraction `Zone` que le PPTX, memes deux mecaniques :
 - **xxx** : marqueur libre `XXX` (au moins 1 X isole) ; le label est devine par
   le contexte (texte avant XXX dans le meme paragraphe, sinon paragraphe
   precedent, sinon header de ligne/colonne pour une cellule de table).
-- **frame** : enumeration exhaustive des cadres a remplir (cellules de tables +
-  paragraphes vides / placeholders) ; remplissage par `target`.
+- **frame** : enumeration exhaustive des cadres (cellules de tables + tout
+  paragraphe corps/en-tete/pied, vide comme prose), comme le PPTX ;
+  l'utilisateur elague. Remplissage par `target`.
 
 API publique alignee sur `pptx_template` / `pptx_llm_analysis` :
 
@@ -100,8 +101,13 @@ def _iter_paragraph_units(doc) -> Iterator[tuple[object, dict]]:  # type: ignore
       - prev_label : dernier paragraphe non vide du meme conteneur
       - table_label : header ligne/colonne pour une cellule de table
       - target : id stable "dp<N>"
+      - table_id / row / col : identite + coordonnees logiques quand le
+        paragraphe est dans une cellule de tableau ("" / -1 / -1 sinon). Sert a
+        regrouper les cellules en tableaux pour l'apercu 'flux' (`build_flow`)
+        sans rejouer la numerotation `dp<N>` (source unique de verite).
     """
     counter = 0
+    table_counter = 0
 
     def walk_container(container, location):  # type: ignore[no-untyped-def]
         nonlocal counter
@@ -114,6 +120,9 @@ def _iter_paragraph_units(doc) -> Iterator[tuple[object, dict]]:  # type: ignore
                     "prev_label": prev_label,
                     "table_label": "",
                     "target": f"dp{counter}",
+                    "table_id": "",
+                    "row": -1,
+                    "col": -1,
                 }
                 text = _para_text(block).strip()
                 if text:
@@ -122,7 +131,9 @@ def _iter_paragraph_units(doc) -> Iterator[tuple[object, dict]]:  # type: ignore
                 yield from walk_table(block, location)
 
     def walk_table(table, base_location):  # type: ignore[no-untyped-def]
-        nonlocal counter
+        nonlocal counter, table_counter
+        table_counter += 1
+        tid = f"tbl{table_counter}"
         loc = f"{base_location} / Tableau"
         # On itere les <w:tc> PHYSIQUES (tr.tc_lst) : chaque cellule reelle est
         # visitee exactement une fois (une fusion horizontale = un seul tc avec
@@ -163,6 +174,9 @@ def _iter_paragraph_units(doc) -> Iterator[tuple[object, dict]]:  # type: ignore
                             "prev_label": "",
                             "table_label": table_label,
                             "target": f"dp{counter}",
+                            "table_id": tid,
+                            "row": r_idx,
+                            "col": col,
                         }
                     elif isinstance(block, Table):
                         yield from walk_table(block, loc)
@@ -240,14 +254,15 @@ def _is_regex_tainted(text: str) -> bool:
 
 
 def _frame_units(doc) -> Iterator[dict]:  # type: ignore[no-untyped-def]
-    """Cadres a remplir cote Word, dans l'ordre de parcours. Contrairement au
-    PPTX (qui enumere tous les cadres), on cible les emplacements PLAUSIBLES de
-    remplissage pour ne pas noyer l'utilisateur sous la prose :
+    """Cadres a remplir cote Word, dans l'ordre de parcours. ALIGNE sur le PPTX
+    (`pptx_llm_analysis.extract_all_frames`) : on enumere TOUS les cadres par
+    defaut (l'utilisateur elague ensuite), plutot que de ne lister que le
+    sous-ensemble juge "a remplir" :
       - toute cellule de table (label = texte propre, sinon header ligne/col),
-      - tout paragraphe VIDE du corps/en-tete/pied (label = paragraphe au-dessus).
-    Les paragraphes de prose non vides sont ignores (ce sont du contenu ou des
-    libelles, pas des zones). Les marqueurs regex restent geres par
-    `extract_zones`.
+      - tout paragraphe du corps/en-tete/pied, VIDE comme prose (label = texte
+        propre du paragraphe, sinon paragraphe non vide au-dessus).
+    Exclus : les paragraphes porteurs d'un marqueur regex (`xxx` / `{{cle}}`),
+    geres par `extract_zones` (une zone cadre les ecraserait).
     """
     for para, ctx in _iter_paragraph_units(doc):
         text = _para_text(para).strip()
@@ -257,10 +272,7 @@ def _frame_units(doc) -> Iterator[dict]:  # type: ignore[no-untyped-def]
         if is_table:
             label = text or ctx.get("table_label", "") or ctx.get("prev_label", "")
         else:
-            # Hors table : seuls les paragraphes vides sont des cadres a remplir.
-            if text:
-                continue
-            label = ctx.get("prev_label", "")
+            label = text or ctx.get("prev_label", "")
         yield {
             "target": ctx["target"],
             "location": ctx["location"],
@@ -270,13 +282,23 @@ def _frame_units(doc) -> Iterator[dict]:  # type: ignore[no-untyped-def]
 
 
 def extract_all_frames(path: str) -> list[Zone]:
-    """Enumere les cadres a remplir en zones `kind="frame"`, actives par defaut.
-    Coherent avec `build_structure` (memes cibles) pour le picker d'ajout."""
+    """Enumere TOUS les cadres en zones `kind="frame"`. Listing exhaustif
+    (l'utilisateur elague), coherent avec `build_structure` (memes cibles).
+
+    Defaut d'activation : les emplacements PLAUSIBLES de remplissage sont actifs
+    (cellules de tableau + paragraphes VIDES) ; un paragraphe de PROSE non vide
+    hors tableau est **inactif par defaut** (`active=False`) pour ne pas
+    reecrire le texte fixe du template. L'utilisateur peut l'activer pour le
+    faire remplir. Un `.docx` est majoritairement du boilerplate, contrairement
+    au `.pptx` (placeholders) qui reste tout actif.
+    """
     doc = Document(path)
     zones: list[Zone] = []
     counter = 0
     for fr in _frame_units(doc):
         counter += 1
+        is_table = "Tableau" in fr["location"]
+        is_prose = bool(fr["text"]) and not is_table
         zones.append(
             Zone(
                 id=f"z_frame_{counter}",
@@ -286,6 +308,7 @@ def extract_all_frames(path: str) -> list[Zone]:
                 label=fr["label"][:200],
                 location=fr["location"],
                 target=fr["target"],
+                active=not is_prose,
             )
         )
     return zones
@@ -316,6 +339,89 @@ def build_structure(path: str) -> dict:
         "slide_height_emu": 0,
         "slides": [{"index": 1, "title": "", "shapes": shapes_out}],
     }
+
+
+# Borne de securite sur le texte d'un bloc d'apercu (un template reste court ;
+# evite un payload demesure sur un document atypique).
+_MAX_FLOW_TEXT = 3000
+
+
+def build_flow(path: str) -> dict:
+    """Apercu 'flux document' pour Word/PDF : le document dans l'ordre de lecture
+    (paragraphes + tableaux groupes), marqueurs regex INCLUS (contrairement a
+    `build_structure`, qui ne liste que les cadres). Chaque bloc/cellule porte
+    son `id` = `target` `dp<N>` (partage avec les zones), donc le front surligne
+    les blocs-zones par simple jointure `zoneByTarget[id]`, comme le SVG PPTX.
+
+    Forme :
+      { "blocks": [
+          {"type": "paragraph"|"empty", "id": "dp3", "location": "Corps",
+           "text": "...", "has_marker": bool},
+          {"type": "table", "id": "tbl1", "location": "Corps / Tableau",
+           "rows": [[{"id": "dp7", "text": "...", "has_marker": bool}, ...], ...]},
+        ] }
+    Les cellules consecutives d'un meme `table_id` sont regroupees (une table
+    est parcourue d'un bloc avant de revenir au flux). Cellule multi-paragraphes :
+    textes concatenes, `id` du 1er paragraphe, `has_marker` = OU logique.
+    """
+    doc = Document(path)
+    blocks: list[dict] = []
+    cur_tid: str | None = None
+    cur_table: dict | None = None
+
+    def flush() -> None:
+        nonlocal cur_tid, cur_table
+        if cur_table is not None:
+            rows_map = cur_table["rows"]
+            rows = [
+                [rows_map[r][c] for c in sorted(rows_map[r])]
+                for r in sorted(rows_map)
+            ]
+            blocks.append({
+                "type": "table",
+                "id": cur_tid,
+                "location": cur_table["location"],
+                "rows": rows,
+            })
+        cur_tid = None
+        cur_table = None
+
+    for para, ctx in _iter_paragraph_units(doc):
+        raw = _para_text(para)
+        text = raw.strip()[:_MAX_FLOW_TEXT]
+        has_marker = bool(_matches_in_paragraph(raw))
+        tid = ctx.get("table_id", "")
+        if tid:
+            if tid != cur_tid:
+                flush()
+                cur_tid = tid
+                cur_table = {"location": ctx["location"], "rows": {}}
+            r = int(ctx.get("row", 0))
+            c = int(ctx.get("col", 0))
+            row_cells = cur_table["rows"].setdefault(r, {})
+            existing = row_cells.get(c)
+            if existing is None:
+                row_cells[c] = {
+                    "id": ctx["target"],
+                    "text": text,
+                    "has_marker": has_marker,
+                }
+            else:
+                # Cellule multi-paragraphes : on agrege (id du 1er paragraphe).
+                merged = (existing["text"] + "\n" + text).strip()
+                existing["text"] = merged[:_MAX_FLOW_TEXT]
+                existing["has_marker"] = existing["has_marker"] or has_marker
+        else:
+            flush()
+            blocks.append({
+                "type": "empty" if not text else "paragraph",
+                "id": ctx["target"],
+                "location": ctx["location"],
+                "text": text,
+                "has_marker": has_marker,
+            })
+    flush()
+    return {"blocks": blocks}
 
 
 # ---------------------------------------------------------------------------
@@ -523,10 +629,14 @@ def fill_zones(
         for zone in llm_zones:
             if zone.id not in mapping:
                 continue
-            # Contenu vide : zone ACTIVE -> on ecrit '' pour VIDER la cible
-            # (ne pas garder une zone sans contenu trouve). Zone inactive ->
-            # on preserve le contenu d'origine du template (contrat existant).
-            if not mapping[zone.id] and not getattr(zone, "active", True):
+            # Contenu vide -> on PRESERVE le contenu d'origine du template (prose,
+            # libelle, placeholder) au lieu de l'effacer. Avec les frames
+            # exhaustifs (tout paragraphe est une zone active par defaut), effacer
+            # sur valeur vide detruisait la prose non remplie par le LLM, rendant
+            # le fichier final incoherent avec le template et le contenu genere.
+            # On n'ecrit donc QUE du contenu non vide (une zone non remplie laisse
+            # le template intact).
+            if not mapping[zone.id]:
                 continue
             para = _resolve_target(doc, zone.target)
             if para is None:

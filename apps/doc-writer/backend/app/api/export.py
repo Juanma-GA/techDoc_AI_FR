@@ -794,8 +794,11 @@ def _fill_template_from_session(
     choisi selon le format du template (pptx ou docx ; pdf converti en docx).
     Respecte l'etat `active` des zones :
     - zone active remplie -> contenu Mistral ecrit
-    - zone active SANS contenu trouve -> cible VIDEE ('') : on ne garde pas
-      une zone sans contenu dans le resultat final
+    - zone active SANS contenu trouve -> cible PRESERVEE (contenu d'origine du
+      template conserve). On n'efface jamais sur valeur vide : avec les frames
+      exhaustifs (toute prose est une zone active), effacer detruirait la mise
+      en page et rendrait l'export incoherent avec le template / le contenu
+      genere.
     - zone inactive regex (xxx/{{cle}}) -> marqueur efface ('')
     - zone inactive cible (llm/frame) -> non touchee (contenu template conserve)
     """
@@ -890,6 +893,7 @@ def preview_pptx(
                 label=z.label,
                 location=z.location,
                 target=z.target,
+                active=getattr(z, "active", True),
                 instruction=getattr(z, "instruction", ""),
             )
             for z in zones

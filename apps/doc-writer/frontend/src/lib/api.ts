@@ -139,6 +139,26 @@ export type PptxStructureDto = {
   slide_height_emu: number;
 };
 
+// Apercu 'flux document' Word/PDF (pendant lineaire du SVG positionne PPTX).
+export type FlowCellDto = {
+  id: string;
+  text: string;
+  has_marker: boolean;
+};
+
+export type FlowBlockDto = {
+  type: "paragraph" | "empty" | "table";
+  id: string;
+  location: string;
+  text: string;
+  has_marker: boolean;
+  rows: FlowCellDto[][];
+};
+
+export type FlowDto = {
+  blocks: FlowBlockDto[];
+};
+
 // Apercu du remplissage : zones (avec etat actif) + mapping zone_id -> contenu.
 export type PreviewPptxDto = {
   zones: ZoneDto[];
@@ -276,6 +296,8 @@ export const documentsApi = {
   // l'apercu PPTX.
   structure: (id: string) =>
     request<PptxStructureDto>(`/documents/${id}/structure`),
+  // Apercu 'flux document' Word/PDF (paragraphes + tableaux dans l'ordre).
+  flow: (id: string) => request<FlowDto>(`/documents/${id}/flow`),
   validateZones: (id: string, validated: boolean) =>
     request<ZonesDto>(`/documents/${id}/zones/validate`, {
       method: "POST",

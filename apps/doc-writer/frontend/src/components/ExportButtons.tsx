@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ApiClientError, sessionsApi, type ExportFormat } from "../lib/api";
 import { PptxPreviewModal } from "./PptxPreviewModal";
+import { TemplateFillPreviewModal } from "./TemplateFillPreviewModal";
 
 type Props = {
   sessionId: string;
@@ -31,10 +32,21 @@ export function ExportButtons({
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPptxModal, setShowPptxModal] = useState(false);
+  const [showFillModal, setShowFillModal] = useState(false);
 
   const download = async (fmt: ExportFormat) => {
     if (fmt === "pptx") {
       if (templateFormat === "pptx" && templateDocId) setShowPptxModal(true);
+      return;
+    }
+    // Template Word/PDF : DOCX/PDF passent par l'apercu de rendu (ce que tu vois
+    // = ce que tu telecharges) au lieu d'un export aveugle. MD reste direct.
+    if (
+      templateFormat === "docx" &&
+      (fmt === "docx" || fmt === "pdf") &&
+      templateDocId
+    ) {
+      setShowFillModal(true);
       return;
     }
     setBusy(fmt);
@@ -90,6 +102,15 @@ export function ExportButtons({
           templateDocId={templateDocId}
           defaultFilename={filename}
           onClose={() => setShowPptxModal(false)}
+        />
+      ) : null}
+
+      {showFillModal && templateDocId ? (
+        <TemplateFillPreviewModal
+          sessionId={sessionId}
+          templateDocId={templateDocId}
+          defaultFilename={filename}
+          onClose={() => setShowFillModal(false)}
         />
       ) : null}
     </div>

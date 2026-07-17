@@ -31,6 +31,7 @@ def _build_template(path: str) -> None:
     run.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
     doc.add_heading("Synthese", level=2)
     doc.add_paragraph("")  # cadre vide sous le titre "Synthese"
+    doc.add_paragraph("Paragraphe de prose libre.")  # prose : cadre a part entiere
     table = doc.add_table(rows=2, cols=2)
     table.cell(0, 0).text = "Champ"
     table.cell(0, 1).text = "Valeur"
@@ -74,6 +75,75 @@ def test_extract_all_frames_covers_empty_para_and_table_cells(template_path) -> 
     # La cellule vide (1,1) est listee, labellisee par ses voisins de table.
     assert any("Date" in lbl or "Valeur" in lbl for lbl in labels)
     assert all(f.kind == "frame" for f in frames)
+
+
+def test_extract_all_frames_is_exhaustive_includes_prose(template_path) -> None:
+    """Aligne sur le PPTX : tout paragraphe (prose comprise) est un cadre, sauf
+    ceux porteurs d'un marqueur regex (geres par extract_zones)."""
+    from app.core.docx_template import extract_all_frames
+
+    labels = [f.label for f in extract_all_frames(template_path)]
+    # La prose libre est desormais listee comme cadre (label = son propre texte).
+    assert "Paragraphe de prose libre." in labels
+    # Les paragraphes a marqueur regex restent exclus (pas de double remplissage).
+    assert not any("{{" in lbl or "XXX" in lbl for lbl in labels)
+
+
+def test_extract_all_frames_prose_inactive_by_default(template_path) -> None:
+    """Listing exhaustif mais defaut d'activation : prose non vide hors tableau
+    = inactive ; paragraphes vides + cellules de tableau = actifs."""
+    from app.core.docx_template import extract_all_frames
+
+    frames = extract_all_frames(template_path)
+
+    # Prose libre (paragraphe de texte non vide hors tableau) : listee mais
+    # INACTIVE par defaut (ne pas reecrire le fixe).
+    prose = next(f for f in frames if f.label == "Paragraphe de prose libre.")
+    assert prose.active is False
+
+    # Cellules de tableau : actives par defaut (emplacement plausible).
+    table_cells = [f for f in frames if "Tableau" in f.location]
+    assert table_cells and all(f.active for f in table_cells)
+
+    # Le paragraphe VIDE sous "Synthese" (label herite = "Synthese", texte vide)
+    # est actif ; le titre "Synthese" lui-meme (prose non vide) est inactif.
+    synthese = [f for f in frames if f.label == "Synthese"]
+    assert any(f.active for f in synthese)       # le paragraphe vide
+    assert any(not f.active for f in synthese)   # le titre (prose)
+
+
+def test_build_flow_orders_blocks_and_includes_markers(template_path) -> None:
+    from app.core.docx_template import build_flow, extract_all_frames, extract_zones
+
+    flow = build_flow(template_path)
+    blocks = flow["blocks"]
+    types = [b["type"] for b in blocks]
+    # Paragraphes ET tableau presents, dans l'ordre de lecture (table apres prose).
+    assert "paragraph" in types
+    assert "table" in types
+    assert types.index("paragraph") < types.index("table")
+
+    # Le paragraphe a marqueur ({{client}} / XXX) est inclus (contrairement aux
+    # frames) et signale has_marker=True.
+    marker_blocks = [b for b in blocks if b["type"] != "table" and b["has_marker"]]
+    assert marker_blocks
+    assert any("{{" in b["text"] or "XXX" in b["text"] for b in marker_blocks)
+
+    # La prose libre figure comme bloc paragraphe.
+    assert any(b.get("text") == "Paragraphe de prose libre." for b in blocks)
+
+    # Le tableau expose des lignes de cellules avec des ids dp<N>.
+    table = next(b for b in blocks if b["type"] == "table")
+    assert table["rows"] and table["rows"][0]
+    assert all(cell["id"].startswith("dp") for row in table["rows"] for cell in row)
+
+    # Les ids des blocs couvrent les cibles des zones (jointure front possible).
+    flow_ids = {b["id"] for b in blocks}
+    flow_ids |= {c["id"] for b in blocks for row in b.get("rows", []) for c in row}
+    zone_targets = {
+        z.target for z in (*extract_zones(template_path), *extract_all_frames(template_path))
+    }
+    assert zone_targets and zone_targets <= flow_ids
 
 
 def test_build_structure_has_no_bbox(template_path) -> None:
@@ -123,6 +193,24 @@ def test_fill_zones_fills_frames_and_table_cells(template_path) -> None:
     assert last_cell.startswith("<<")
     # Le paragraphe vide sous "Synthese" est rempli.
     assert any(p.text.startswith("<<") for p in out.paragraphs)
+
+
+def test_fill_zones_empty_value_preserves_prose(template_path) -> None:
+    """Une zone frame active dont le LLM ne renvoie RIEN (valeur vide) doit
+    PRESERVER le texte d'origine du template (prose non detruite), pas l'effacer."""
+    from app.core.docx_template import extract_all_frames, fill_zones
+
+    frames = extract_all_frames(template_path)
+    prose = next(f for f in frames if f.label == "Paragraphe de prose libre.")
+    # Mapping : toutes les zones a "" (le LLM n'a rien trouve).
+    mapping = {f.id: "" for f in frames}
+    blob = fill_zones(template_path, mapping, llm_zones=frames)
+
+    out = Document(io.BytesIO(blob))
+    texts = [p.text for p in out.paragraphs]
+    # La prose d'origine est intacte (non effacee par un remplissage vide).
+    assert "Paragraphe de prose libre." in texts
+    assert prose  # la zone existait bien
 
 
 def test_fill_zones_multiline_uses_line_breaks(template_path) -> None:

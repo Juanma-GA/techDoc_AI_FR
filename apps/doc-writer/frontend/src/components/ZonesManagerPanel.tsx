@@ -5,11 +5,13 @@ import { useTranslation } from "react-i18next";
 import {
   ApiClientError,
   documentsApi,
+  type FlowDto,
   type PptxShape,
   type PptxStructureDto,
   type ZoneDto,
   type ZonesDto,
 } from "../lib/api";
+import { DocFlowPreview } from "./DocFlowPreview";
 import { ZonePopover } from "./ZonePopover";
 
 type Props = { docId: string; filename: string; onClose: () => void };
@@ -27,6 +29,14 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
   const structureQuery = useQuery<PptxStructureDto, ApiClientError>({
     queryKey: ["documents", docId, "structure"],
     queryFn: () => documentsApi.structure(docId),
+  });
+  // Apercu 'flux document' (Word/PDF) : charge seulement quand la structure n'a
+  // pas de geometrie (sinon c'est un PPTX -> apercu SVG positionne).
+  const hasGeometry = (structureQuery.data?.slide_width_emu ?? 0) > 0;
+  const flowQuery = useQuery<FlowDto, ApiClientError>({
+    queryKey: ["documents", docId, "flow"],
+    queryFn: () => documentsApi.flow(docId),
+    enabled: structureQuery.isSuccess && !hasGeometry,
   });
 
   const [edits, setEdits] = useState<
@@ -258,13 +268,27 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
         ) : null}
       </div>
 
-      {/* Apercu structure */}
+      {/* Apercu structure : SVG positionne pour PPTX, note + liste pour Word/PDF. */}
       <h3 style={{ fontFamily: "'Orbitron',sans-serif", fontSize: "0.95rem" }}>
         {t("zones.previewTitle")}
       </h3>
       <small style={{ display: "block", color: "var(--fg-dim)", fontSize: "0.78rem", marginBottom: 6 }}>
-        {t("zones.previewLegend")}
+        {hasGeometry ? t("zones.previewLegend") : t("zones.previewFlow")}
       </small>
+      {!hasGeometry ? (
+        <DocFlowPreview
+          flow={flowQuery.data}
+          loading={flowQuery.isPending}
+          error={flowQuery.error?.message ?? null}
+          zoneByTarget={zoneByTarget}
+          emptyHint={t("zones.flowEmpty")}
+          loadingHint={t("zones.flowLoading")}
+          onPick={(zid, e) => {
+            setPopDelArmed(false);
+            setPopover({ x: e.clientX, y: e.clientY, zid });
+          }}
+        />
+      ) : (
       <div className="slides-preview">
         {(structure?.slides ?? []).map((slide) => {
           const shapes = (slide.shapes ?? []).filter((sh) => sh.bbox);
@@ -338,6 +362,7 @@ export function ZonesManagerPanel({ docId, filename, onClose }: Props) {
           );
         })}
       </div>
+      )}
 
       {/* Liste */}
       <h3 style={{ marginTop: 18, fontFamily: "'Orbitron',sans-serif", fontSize: "0.95rem" }}>

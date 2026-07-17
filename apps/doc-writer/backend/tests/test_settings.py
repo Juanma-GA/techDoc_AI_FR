@@ -112,6 +112,18 @@ def test_read_prompts_defaults(client) -> None:
     assert body["pptx_analysis"]["value"]
 
 
+def test_default_fill_prompt_has_content_adaptation_clause(client) -> None:
+    """Le prompt de remplissage par defaut porte la clause d'adaptation au
+    contenu pour les zones a `instruction` (assouplissement de la pertinence)."""
+    r = client.get("/api/v1/settings/prompts")
+    assert r.status_code == 200, r.text
+    fill = r.json()["pptx_fill"]
+    assert fill["is_default"] is True
+    val = fill["value"]
+    assert "instruction" in val
+    assert "ADAPTE-TOI au contenu" in val
+
+
 def test_write_then_reset_prompt(client) -> None:
     # Ecrit une valeur custom pour pptx_fill.
     r = client.post(

@@ -225,6 +225,13 @@
     "confirmAgain": "Haz clic de nuevo para confirmar",
     "resetOk": "Reinicio OK ({{items}})."
   },
+  "template": {
+    "fill": {
+      "title": "Vista previa del resultado (Word/PDF)",
+      "legend": "El contenido real por zona que se escribirá. Edita, omite o regenera una zona y descarga: el archivo coincide con esta vista previa.",
+      "loading": "Preparando la vista previa…"
+    }
+  },
   "zones": {
     "close": "Cerrar",
     "edit": "Editar",
@@ -238,6 +245,9 @@
     "droppedHint": "Zonas propuestas por Mistral descartadas por conflicto.",
     "previewTitle": "Vista previa de la estructura",
     "previewLegend": "Amarillo = marcador (XXX/{{clave}}), azul = zona LLM, gris = etiqueta, punteado = vacío.",
+    "previewFlow": "Vista previa de flujo (Word/PDF): zonas resaltadas, haz clic en una para editarla.",
+    "flowEmpty": "(zona vacía)",
+    "flowLoading": "Cargando vista previa...",
     "listTitle": "Lista de zonas",
     "filterLabel": "Filtrar por tipo",
     "filterAll": "Todos los tipos",

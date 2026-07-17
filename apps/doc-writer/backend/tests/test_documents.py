@@ -270,6 +270,32 @@ def test_docx_template_exposes_zones(client) -> None:
     assert "xxx" in kinds
 
 
+def test_flow_returns_blocks_for_docx(client) -> None:
+    """L'apercu 'flux' Word liste les blocs (paragraphes a marqueur inclus)."""
+    up = client.post(
+        "/api/v1/documents",
+        files={"files": ("template.docx", io.BytesIO(_docx_with_marker_zones()), _DOCX_MIME)},
+        data={"kind": "template"},
+    )
+    doc_id = up.json()["uploaded"][0]["document_id"]
+
+    r = client.get(f"/api/v1/documents/{doc_id}/flow")
+    assert r.status_code == 200, r.text
+    blocks = r.json()["blocks"]
+    assert blocks
+    assert any(b["has_marker"] for b in blocks)
+    assert all(b["id"] for b in blocks)
+
+
+def test_flow_refused_for_pptx(client) -> None:
+    """L'apercu 'flux' ne concerne que Word/PDF : 400 pour un .pptx."""
+    up = _upload_template(client, _pptx_with_two_xxx_zones())
+    doc_id = up.json()["uploaded"][0]["document_id"]
+    r = client.get(f"/api/v1/documents/{doc_id}/flow")
+    assert r.status_code == 400
+    assert r.json()["code"] == "FLOW_UNSUPPORTED"
+
+
 def test_restore_unknown_zone_returns_404(client) -> None:
     up = _upload_template(client, _pptx_with_two_xxx_zones())
     doc_id = up.json()["uploaded"][0]["document_id"]

@@ -146,6 +146,30 @@ class StructureOut(BaseModel):
     slides: list[StructureSlide]
 
 
+class FlowCell(BaseModel):
+    """Cellule d'un tableau dans l'apercu 'flux' Word/PDF."""
+    id: str                        # target dp<N> (jointure zone)
+    text: str = ""
+    has_marker: bool = False       # contient un marqueur regex (XXX/{{cle}})
+
+
+class FlowBlock(BaseModel):
+    """Bloc de l'apercu 'flux' : paragraphe, paragraphe vide, ou tableau.
+    `text`/`has_marker` pour paragraphe|empty ; `rows` pour table."""
+    type: str                      # "paragraph" | "empty" | "table"
+    id: str                        # target dp<N> (paragraphe) ou tbl<N> (table)
+    location: str = ""
+    text: str = ""
+    has_marker: bool = False
+    rows: list[list[FlowCell]] = Field(default_factory=list)
+
+
+class FlowOut(BaseModel):
+    """Apercu 'flux document' Word/PDF : blocs dans l'ordre de lecture.
+    Pendant lineaire du StructureOut (SVG) reserve au PPTX positionne."""
+    blocks: list[FlowBlock] = Field(default_factory=list)
+
+
 class ZonesBulkDeleteIn(BaseModel):
     """Body pour POST /documents/<id>/zones/bulk-delete."""
     ids: list[str] = Field(default_factory=list)

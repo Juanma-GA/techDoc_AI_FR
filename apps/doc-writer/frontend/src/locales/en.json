@@ -225,6 +225,13 @@
     "confirmAgain": "Click again to confirm",
     "resetOk": "Reset OK ({{items}})."
   },
+  "template": {
+    "fill": {
+      "title": "Render preview (Word/PDF)",
+      "legend": "The actual per-zone content that will be written. Edit, skip or re-run a zone, then download: the file matches this preview.",
+      "loading": "Preparing preview…"
+    }
+  },
   "zones": {
     "close": "Close",
     "edit": "Edit",
@@ -238,6 +245,9 @@
     "droppedHint": "Zones proposed by Mistral dropped due to conflict.",
     "previewTitle": "Structure preview",
     "previewLegend": "Yellow = marker (XXX/{{key}}), blue = LLM zone, grey = label, dotted = empty.",
+    "previewFlow": "Document-flow preview (Word/PDF): zones highlighted, click one to edit it.",
+    "flowEmpty": "(empty zone)",
+    "flowLoading": "Loading preview...",
     "listTitle": "Zone list",
     "filterLabel": "Filter by type",
     "filterAll": "All types",
