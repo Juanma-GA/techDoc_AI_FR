@@ -52,6 +52,7 @@ class Block:
     row: Optional[int] = None  # index de ligne dans le tableau
     col: Optional[int] = None  # index de colonne logique
     semantic_zone: Optional[str] = None  # rempli par docx_zones
+    page: int = 1  # numero de page (corps) deduit des sauts de page Word
 
 
 @dataclass
@@ -114,6 +115,14 @@ def _xpath(elem: object, expr: str) -> list:
         return list(elem.xpath(expr))  # type: ignore[attr-defined]
     except Exception:  # noqa: BLE001
         return []
+
+
+def _has_page_break(paragraph: Paragraph) -> bool:
+    """Le paragraphe contient-il un saut de page (rendu par Word ou manuel) ?"""
+    p = paragraph._p  # noqa: SLF001 — acces a l'OXML, intentionnel
+    if _xpath(p, ".//w:lastRenderedPageBreak"):
+        return True
+    return bool(_xpath(p, './/w:br[@w:type="page"]'))
 
 
 def _revision_info(paragraph: Paragraph) -> tuple[Optional[str], str, str]:
@@ -257,8 +266,16 @@ def parse_docx(path: str | Path) -> ParsedDocx:
     header_parts: list[str] = []
     footer_parts: list[str] = []
 
+    page = 1
+    page_has_content = False
     for index, zone, kind_hint, ctx, paragraph in iter_doc_paragraphs(doc):
         block, rev = _make_block(index, zone, kind_hint, ctx, paragraph)
+        if zone == "body":
+            # Un saut de page bascule ce bloc (et les suivants) sur la page d'apres.
+            if page_has_content and _has_page_break(paragraph):
+                page += 1
+            block.page = page
+            page_has_content = True
         blocks.append(block)
         if rev is not None:
             revisions.append(rev)

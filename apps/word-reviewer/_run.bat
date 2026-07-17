@@ -14,6 +14,13 @@ REM ===========================================================================
 REM ---- Port unique - a ajuster par POC : 8001, 8002, ...  -----------------
 set "PORT=8006"
 
+REM ---- Conversion .doc -> .docx (optionnel) -------------------------------
+REM Sur ce poste, Word bloque l'enregistrement en .docx (strategie Office) : on
+REM passe par LibreOffice (extrait sans admin dans %LOCALAPPDATA%\LibreOffice).
+REM Laisse vide si tu n'as pas de .doc a traiter. Le backend detecte aussi
+REM LibreOffice automatiquement, mais ce chemin explicite est le plus fiable.
+set "WR_SOFFICE_PATH=%LOCALAPPDATA%\LibreOffice\program\soffice.exe"
+
 set "APP_DIR=%~dp0"
 set "BACKEND_DIR=%APP_DIR%backend"
 set "REPO_ROOT=%APP_DIR%..\.."

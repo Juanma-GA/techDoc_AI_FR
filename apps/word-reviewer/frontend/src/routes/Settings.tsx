@@ -9,6 +9,7 @@ export function Settings() {
   const [baseUrl, setBaseUrl] = useState("");
   const [chatModel, setChatModel] = useState("");
   const [embedModel, setEmbedModel] = useState("");
+  const [threshold, setThreshold] = useState(0.7);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(
     null,
   );
@@ -24,6 +25,7 @@ export function Settings() {
     setBaseUrl(d.base_url);
     setChatModel(d.chat_model);
     setEmbedModel(d.embed_model);
+    setThreshold(d.llm_confidence_threshold);
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
@@ -33,6 +35,7 @@ export function Settings() {
         base_url: baseUrl || undefined,
         chat_model: chatModel,
         embed_model: embedModel,
+        llm_confidence_threshold: threshold,
       }),
     onSuccess: () => {
       setApiKey("");
@@ -152,6 +155,22 @@ export function Settings() {
               />
             </label>
           </div>
+          <label>
+            <div className="label">Seuil de confiance LLM ({threshold.toFixed(2)})</div>
+            <input
+              className="input"
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={threshold}
+              onChange={(e) => setThreshold(Number(e.target.value))}
+            />
+            <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+              Plus haut = moins de faux positifs (les findings sous le seuil passent en « à
+              vérifier » au lieu d'anomalies fermes). Défaut 0,70.
+            </small>
+          </label>
           <div className="row">
             <button
               type="button"

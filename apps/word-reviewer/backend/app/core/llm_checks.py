@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from itertools import groupby
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -27,13 +28,18 @@ from sqlalchemy.orm import Session
 from app.checks.raw import RawSuggestion
 from app.core import verifier
 from app.core.llm_budget import LlmBudget
-from app.core.mistral_client import MistralClient, MistralError, _read_config, get_llm_enabled
+from app.core.mistral_client import (
+    MistralClient,
+    MistralError,
+    _read_config,
+    get_confidence_threshold,
+    get_llm_enabled,
+)
 from app.parsers.docx_parser import Block, ParsedDocx
 
 log = logging.getLogger("word_reviewer.llm_checks")
 
 _CHUNK = 12  # blocs evalues par appel
-_DEFAULT_THRESHOLD = 0.6
 _DEFAULT_MAX_CALLS = 400
 _DEFAULT_CONCURRENCY = 4
 _MAX_FIX_LEN = 600  # au-dela, on signale sans proposer (re-ecriture peu fiable)
@@ -49,14 +55,6 @@ _SYSTEM = (
     "Reponds uniquement en JSON : {\"violations\": [{\"r\": <int>, \"b\": <int>, "
     "\"confidence\": 0.0-1.0, \"reason\": \"...\", \"proposed\": \"...\"}]}."
 )
-
-
-def _cfg_float(db: Session, key: str, default: float) -> float:
-    try:
-        raw = _read_config(db, key, "")
-        return float(raw) if raw else default
-    except (ValueError, TypeError):
-        return default
 
 
 def _cfg_int(db: Session, key: str, default: int) -> int:
@@ -144,6 +142,20 @@ async def _eval_chunk(
     return findings
 
 
+def _page_chunks(blocks: list[Block], size: int) -> list[list[Block]]:
+    """Decoupe les blocs par PAGE (un morceau ne chevauche jamais deux pages),
+    chaque page etant sous-decoupee en paquets de `size` max. Contexte plus
+    coherent pour le LLM. Si le document n'a pas de saut de page detectable (tout
+    en page 1), se comporte comme un simple decoupage par paquets de `size`.
+    """
+    out: list[list[Block]] = []
+    for _, grp in groupby(blocks, key=lambda b: getattr(b, "page", 1)):
+        page_blocks = list(grp)
+        for i in range(0, len(page_blocks), size):
+            out.append(page_blocks[i:i + size])
+    return out
+
+
 async def _post_process(
     client: MistralClient,
     findings: list[tuple[RawSuggestion, str, str]],
@@ -160,10 +172,13 @@ async def _post_process(
             raw.char_start = raw.char_end = 0
             survivors.append(raw)
             continue
-        # Couche 1 : verification adversariale reservee aux findings `error`
-        # (haut risque). Les warning/info au-dessus du seuil sont conserves :
-        # la confiance a deja fait le tri ; sur-filtrer viderait l'analyse.
-        if raw.severity == "error":
+        # Couche 1 : verification adversariale. Les `error` sont toujours verifies.
+        # Les `warning` ne le sont que s'ils sont BORDERLINE (confiance proche du
+        # seuil) : un warning tres confiant est conserve tel quel -> preserve le
+        # rappel (sinon le refuteur vide l'analyse sur les gros documents).
+        conf = raw.confidence if raw.confidence is not None else 1.0
+        borderline = conf < threshold + 0.15
+        if raw.severity == "error" or (raw.severity == "warning" and borderline):
             try:
                 keep = await verifier.survives(client, raw, rule_text, excerpt, budget)
             except Exception as exc:  # noqa: BLE001
@@ -207,12 +222,12 @@ async def run_llm_iter(db: Session, parsed: ParsedDocx, rules: list[dict[str, An
         tz = (r.get("target_zone") or "").strip()
         r["_zone_eff"] = tz if tz in zones_present else ""
 
-    threshold = _cfg_float(db, "LLM_CONFIDENCE_THRESHOLD", _DEFAULT_THRESHOLD)
+    threshold = get_confidence_threshold(db)  # configurable en Parametres (defaut 0.7)
     max_calls = _cfg_int(db, "LLM_MAX_CALLS", _DEFAULT_MAX_CALLS)
     concurrency = _cfg_int(db, "LLM_CONCURRENCY", _DEFAULT_CONCURRENCY)
     budget = LlmBudget(max_calls, concurrency)
 
-    chunks = [blocks[i:i + _CHUNK] for i in range(0, len(blocks), _CHUNK)]
+    chunks = _page_chunks(blocks, _CHUNK)
     total = len(chunks)
     yield {"type": "start", "total": total}
 

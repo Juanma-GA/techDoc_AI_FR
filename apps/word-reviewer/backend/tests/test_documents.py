@@ -35,6 +35,20 @@ def test_upload_single_and_analyze(client, make_docx):
     assert "ATA_NO_AMBIGUOUS_QUANT" in codes
 
 
+def test_ata_ref_ignores_phone_flags_real_ref(client, make_docx):
+    # Un numero de telephone ne doit PAS declencher ATA_CHAPTER_REF ; une vraie
+    # reference pointee, si.
+    data = make_docx(["Tel : +33 (0)5 24 44 77 40", "Voir 34.10.42 pour le detail."])
+    doc_id = client.post(
+        "/api/v1/documents", files={"files": ("t.docx", data, DOCX_MIME)}
+    ).json()["documents"][0]["id"]
+    client.post(f"/api/v1/documents/{doc_id}/analyze", json={})
+    sugs = client.get(f"/api/v1/documents/{doc_id}/suggestions").json()
+    refs = [s for s in sugs if s["rule_code"] == "ATA_CHAPTER_REF"]
+    assert all(s["original_text"] != "24 44 77" for s in refs)  # pas le telephone
+    assert any(s["original_text"] == "34.10.42" for s in refs)  # la vraie ref
+
+
 def test_analyze_streams_progress(client, make_docx, monkeypatch):
     # Avec une regle llm_nl active, l'analyse doit diffuser des events `progress`
     # (avancement en direct) avant les findings.
@@ -114,6 +128,10 @@ def test_undo_restores_previous_version(client, make_docx):
     brand = [s for s in sug if s["original_text"] == "SEXTANT"][0]
     client.post(f"/api/v1/suggestions/{brand['id']}/apply")
     assert client.get(f"/api/v1/documents/{doc_id}").json()["current_version"] == 1
+    # Contrat front : applied_version expose et aligne sur la version courante
+    # (le bouton "Annuler" n'est actif que sur la correction de cette version).
+    applied = [s for s in client.get(f"/api/v1/documents/{doc_id}/suggestions").json() if s["id"] == brand["id"]][0]
+    assert applied["status"] == "applied" and applied["applied_version"] == 1
 
     res = client.post(f"/api/v1/suggestions/{brand['id']}/undo")
     assert res.status_code == 200

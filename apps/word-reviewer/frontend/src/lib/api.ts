@@ -36,6 +36,7 @@ export type SettingsDto = {
   chat_model: string;
   embed_model: string;
   llm_enabled: boolean;
+  llm_confidence_threshold: number;
 };
 export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
 
@@ -49,6 +50,7 @@ export const settingsApi = {
     chat_model?: string;
     embed_model?: string;
     llm_enabled?: boolean;
+    llm_confidence_threshold?: number;
   }) => api<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(body) }),
   test: () => api<TestConnectionDto>("/settings/test", { method: "POST" }),
 };
@@ -102,17 +104,34 @@ export type WordDoc = {
 export type DocBlock = {
   target_id: string;
   kind: string;
+  zone?: string;
+  semantic_zone?: string;
   text: string;
   heading_level?: number;
   table_id?: number | null;
   row?: number;
   col?: number;
+  page?: number;
 };
 export type DocView = {
   original_filename: string;
   current_version: number;
   blocks: DocBlock[];
 };
+
+export type PdfBox = { left: number; top: number; width: number; height: number };
+export type PdfHighlight = { id: string; page: number; boxes: PdfBox[] };
+export type PdfView = { available: boolean; page_count: number; highlights: PdfHighlight[] };
+
+export type LayoutFinding = {
+  id: string;
+  rule_code: string;
+  severity: string;
+  message: string;
+  page: number;
+  boxes: PdfBox[];
+};
+export type LayoutChecks = { available: boolean; findings: LayoutFinding[] };
 
 export type Suggestion = {
   id: string;
@@ -125,6 +144,7 @@ export type Suggestion = {
   proposed_text: string;
   char_start: number;
   char_end: number;
+  applied_version?: number | null;
 };
 
 export const documentsApi = {
@@ -132,6 +152,10 @@ export const documentsApi = {
   get: (id: string) => api<WordDoc>(`/documents/${id}`),
   remove: (id: string) => api<void>(`/documents/${id}`, { method: "DELETE" }),
   view: (id: string) => api<DocView>(`/documents/${id}/view`),
+  pdfView: (id: string) => api<PdfView>(`/documents/${id}/pdf-view`),
+  layoutChecks: (id: string) => api<LayoutChecks>(`/documents/${id}/layout-checks`),
+  pageImageUrl: (id: string, page: number, dpi = 130) =>
+    `${API_BASE}/documents/${id}/pages/${page}.png?dpi=${dpi}`,
   suggestions: (id: string) => api<Suggestion[]>(`/documents/${id}/suggestions`),
   exportUrl: (id: string) => `${API_BASE}/documents/${id}/export`,
   upload: async (
@@ -244,6 +268,18 @@ export type CustomRule = {
   validated: boolean;
 };
 
+export type ImportMode = "replace" | "add" | "update" | "overwrite";
+export type RuleImportResultDto = {
+  mode: ImportMode;
+  imported: number;
+  created: number;
+  updated: number;
+  replaced_count: number;
+  by_kind: Record<string, number>;
+  skipped: string[];
+  llm_used: boolean;
+};
+
 export const standardsApi = {
   list: () => api<Standard[]>("/standards"),
   detail: (sid: string, vid: string) =>
@@ -291,8 +327,15 @@ export const rulesApi = {
   },
   importChecklist: async (
     file: File,
-    opts: { sheet?: string; header_row: number; topic_col?: string; check_col?: string; context_cols: number[] },
-  ): Promise<{ imported: number; replaced_count: number; llm_used: boolean; by_kind: Record<string, number> }> => {
+    opts: {
+      sheet?: string;
+      header_row: number;
+      topic_col?: string;
+      check_col?: string;
+      context_cols: number[];
+      mode: ImportMode;
+    },
+  ): Promise<RuleImportResultDto> => {
     const fd = new FormData();
     fd.append("file", file);
     if (opts.sheet) fd.append("sheet", opts.sheet);
@@ -300,16 +343,12 @@ export const rulesApi = {
     if (opts.topic_col != null && opts.topic_col !== "") fd.append("topic_col", opts.topic_col);
     if (opts.check_col != null) fd.append("check_col", opts.check_col);
     fd.append("context_cols", JSON.stringify(opts.context_cols));
+    fd.append("mode", opts.mode);
     const res = await fetch(`${API_BASE}/rules/import`, { method: "POST", body: fd });
     if (!res.ok) {
       const e = (await res.json().catch(() => null)) as ApiError | null;
       throw new Error(e?.message || res.statusText);
     }
-    return (await res.json()) as {
-      imported: number;
-      replaced_count: number;
-      llm_used: boolean;
-      by_kind: Record<string, number>;
-    };
+    return (await res.json()) as RuleImportResultDto;
   },
 };

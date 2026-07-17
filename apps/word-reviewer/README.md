@@ -53,6 +53,12 @@ répartit en trois tiers :
   (`soffice`) si présent, sinon MS Word (automation COM, Windows). Si aucun des
   deux n'est disponible, l'upload renvoie une erreur invitant à enregistrer en
   `.docx`.
+  - **Poste où Word bloque l'enregistrement `.docx`** (stratégie Office / Trust
+    Center « File Block », fréquent en entreprise) : Word ne peut pas produire le
+    `.docx` requis. Utiliser **LibreOffice** (même portable, sans admin) et pointer
+    la variable d'env **`WR_SOFFICE_PATH`** vers `soffice.exe` — renseignable dans
+    `_run.bat` / `start.sh`. La détection couvre aussi un LibreOffice portable posé
+    dans `%LOCALAPPDATA%`, `%USERPROFILE%`, ou `…\Desktop|Downloads\LibreOfficePortable\`.
 - **Export** : un `.docx` corrigé, ou un `.zip` quand plusieurs documents sont
   sélectionnés.
 

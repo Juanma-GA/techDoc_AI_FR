@@ -7,6 +7,11 @@ set -euo pipefail
 # Port unique (à ajuster par POC : 8001, 8002, ...)
 PORT="${PORT:-8006}"
 
+# Conversion .doc -> .docx (optionnel) : chemin vers soffice.exe/soffice d'un
+# LibreOffice (utile si Word bloque le .docx, ou hors Windows). Vide = ignoré.
+# Exemple : export WR_SOFFICE_PATH="/opt/libreoffice/program/soffice"
+export WR_SOFFICE_PATH="${WR_SOFFICE_PATH:-}"
+
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="${APP_DIR}/backend"
 

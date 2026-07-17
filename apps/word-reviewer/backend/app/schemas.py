@@ -25,6 +25,7 @@ class SettingsIn(BaseModel):
     chat_model: Optional[str] = None
     embed_model: Optional[str] = None
     llm_enabled: Optional[bool] = None
+    llm_confidence_threshold: Optional[float] = None
 
 
 class SettingsOut(BaseModel):
@@ -34,6 +35,7 @@ class SettingsOut(BaseModel):
     embed_model: str
     llm_enabled: bool
     llm_tested: bool = False
+    llm_confidence_threshold: float = 0.7
 
 
 class TestConnectionOut(BaseModel):
@@ -103,8 +105,11 @@ class RuleOut(RuleIn):
 
 
 class RuleImportResult(BaseModel):
+    mode: str = "replace"
     imported: int
-    replaced_count: int
+    created: int = 0
+    updated: int = 0
+    replaced_count: int = 0
     by_kind: dict[str, int] = Field(default_factory=dict)
     skipped: list[str] = Field(default_factory=list)
     llm_used: bool = False
@@ -238,6 +243,8 @@ class SuggestionOut(BaseModel):
     span_index: int
     confidence: Optional[float] = None
     status: str
+    applied_at: Optional[datetime] = None
+    applied_version: Optional[int] = None
     created_at: datetime
 
 
@@ -264,6 +271,7 @@ class ViewBlock(BaseModel):
     table_id: Optional[int] = None
     row: Optional[int] = None
     col: Optional[int] = None
+    page: int = 1
 
 
 class DocumentViewOut(BaseModel):
@@ -271,6 +279,39 @@ class DocumentViewOut(BaseModel):
     original_filename: str
     current_version: int
     blocks: list[ViewBlock] = Field(default_factory=list)
+
+
+class HighlightBox(BaseModel):
+    left: float
+    top: float
+    width: float
+    height: float
+
+
+class SuggestionHighlight(BaseModel):
+    id: str
+    page: int
+    boxes: list[HighlightBox] = Field(default_factory=list)
+
+
+class PdfViewOut(BaseModel):
+    available: bool = True  # False si LibreOffice absent -> le front retombe sur le HTML
+    page_count: int = 0
+    highlights: list[SuggestionHighlight] = Field(default_factory=list)
+
+
+class LayoutFindingOut(BaseModel):
+    id: str
+    rule_code: str
+    severity: str
+    message: str
+    page: int
+    boxes: list[HighlightBox] = Field(default_factory=list)
+
+
+class LayoutChecksOut(BaseModel):
+    available: bool = True
+    findings: list[LayoutFindingOut] = Field(default_factory=list)
 
 
 # ----- Dashboard ------------------------------------------------------------

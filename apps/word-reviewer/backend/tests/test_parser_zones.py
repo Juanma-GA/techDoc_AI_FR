@@ -35,6 +35,17 @@ def test_zone_recognition_and_footer():
     assert parsed.footers and "ATA" in parsed.footers[0]
 
 
+def test_page_break_splits_pages():
+    d = Document()
+    d.add_paragraph("Avant le saut.")
+    d.add_page_break()
+    d.add_paragraph("Apres le saut.")
+    parsed = parse_docx(_save(d))
+    by_text = {b.text: b.page for b in parsed.blocks if b.text.strip()}
+    assert by_text["Avant le saut."] == 1
+    assert by_text["Apres le saut."] == 2
+
+
 def test_alignment_detected():
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 

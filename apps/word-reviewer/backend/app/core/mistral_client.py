@@ -111,6 +111,26 @@ def set_llm_tested(db: Session, ok: bool) -> None:
     db.commit()
 
 
+# Seuil de confiance LLM (partage avec core.llm_checks). Sous ce seuil, un finding
+# devient "a verifier" (info) plutot qu'une anomalie ferme. Defaut : 0.7.
+CONFIDENCE_KEY = "LLM_CONFIDENCE_THRESHOLD"
+DEFAULT_CONFIDENCE = 0.7
+
+
+def get_confidence_threshold(db: Session) -> float:
+    raw = _read_config(db, CONFIDENCE_KEY, "")
+    try:
+        return float(raw) if raw else DEFAULT_CONFIDENCE
+    except (ValueError, TypeError):
+        return DEFAULT_CONFIDENCE
+
+
+def set_confidence_threshold(db: Session, value: float) -> None:
+    v = max(0.0, min(1.0, value))
+    _write_config(db, CONFIDENCE_KEY, str(round(v, 2)))
+    db.commit()
+
+
 class MistralClient:
     def __init__(
         self,
@@ -119,10 +139,13 @@ class MistralClient:
         chat_model: str,
         embed_model: str,
     ) -> None:
+        # strip() : un espace / retour-ligne colle avec la cle casse le header
+        # Authorization (Bearer "cle\n") -> 401. Defense contre le copier-coller.
+        api_key = (api_key or "").strip()
         if not api_key:
             raise MistralError("MISTRAL_API_KEY non configuree. Renseigne-la dans Parametres.")
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        self.base_url = base_url.strip().rstrip("/")
         self.chat_model = chat_model
         self.embed_model = embed_model
 

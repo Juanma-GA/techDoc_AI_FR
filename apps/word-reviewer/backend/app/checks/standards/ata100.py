@@ -24,7 +24,10 @@ _RULES_REV38 = [
         ),
         kind="regex_replace",
         severity="warning",
-        pattern=r"\b(\d{2})[ ._/](\d{2})[ ._/](\d{2})\b",
+        # Triplet ISOLE de type chapitre-section-sujet. Les lookarounds excluent
+        # les fragments d'une suite de nombres plus longue (ex. numero de telephone
+        # "+33 (0)5 24 44 77 40") pour eviter les faux positifs.
+        pattern=r"(?<!\d[ ._/])\b(\d{2})[ ._/](\d{2})[ ._/](\d{2})\b(?![ ._/]\d)",
         replacement=r"\1-\2-\3",
         message="Reference ATA : utiliser des tirets (CH-SE-SU).",
         example_invalid="34.10.42",

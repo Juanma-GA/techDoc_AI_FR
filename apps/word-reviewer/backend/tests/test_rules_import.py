@@ -5,11 +5,13 @@ from __future__ import annotations
 from tests.conftest import XLSX_MIME
 
 
-def _import(client, data):
-    return client.post("/api/v1/rules/import", files={"file": ("c.xlsx", data, XLSX_MIME)})
+def _import(client, data, mode=None):
+    payload = {"file": ("c.xlsx", data, XLSX_MIME)}
+    form = {"mode": mode} if mode else None
+    return client.post("/api/v1/rules/import", files=payload, data=form)
 
 
-def test_import_classifies_tiers(client, make_checklist):
+def test_import_sets_all_rules_to_llm(client, make_checklist):
     data = make_checklist(
         [
             ("General", "Header (logo, PNR)"),
@@ -20,12 +22,12 @@ def test_import_classifies_tiers(client, make_checklist):
     )
     r = _import(client, data)
     assert r.status_code == 200
-    # Sans cle Mistral (tests), repli heuristique : llm_used False.
-    assert r.json()["llm_used"] is False
+    # Toutes les regles importees sont confiees au LLM (evaluation semantique).
     by_kind = r.json()["by_kind"]
-    assert by_kind.get("manual", 0) == 2  # logo + illustration
-    assert by_kind.get("style_check", 0) == 1  # justified
-    assert by_kind.get("llm_nl", 0) == 1  # ATA100 model sentence
+    assert by_kind == {"llm_nl": 4}
+    rules = client.get("/api/v1/rules").json()
+    assert all(rule["kind"] == "llm_nl" for rule in rules)
+    assert all(rule["pattern"] == "" for rule in rules)
 
 
 def test_import_replaces_previous(client, make_checklist):
@@ -35,6 +37,39 @@ def test_import_replaces_previous(client, make_checklist):
     rules = client.get("/api/v1/rules").json()
     assert len(rules) == 1
     assert rules[0]["name"] == "Only one check"
+
+
+def _names(client):
+    return sorted(r["name"] for r in client.get("/api/v1/rules").json())
+
+
+def test_import_mode_add_skips_duplicates(client, make_checklist):
+    _import(client, make_checklist([("A", "Check one")]))
+    r = _import(client, make_checklist([("A", "Check one"), ("B", "Check two")]), mode="add")
+    body = r.json()
+    assert body["created"] == 1 and body["updated"] == 0 and body["skipped"] == ["Check one"]
+    assert _names(client) == ["Check one", "Check two"]
+
+
+def test_import_mode_update_only_existing(client, make_checklist):
+    _import(client, make_checklist([("A", "Check one")]))
+    r = _import(client, make_checklist([("A", "Check one"), ("B", "Check two")]), mode="update")
+    body = r.json()
+    assert body["created"] == 0 and body["updated"] == 1 and body["skipped"] == ["Check two"]
+    assert _names(client) == ["Check one"]  # rien de cree
+
+
+def test_import_mode_overwrite_upserts(client, make_checklist):
+    _import(client, make_checklist([("A", "Check one")]))
+    r = _import(client, make_checklist([("A", "Check one"), ("B", "Check two")]), mode="overwrite")
+    body = r.json()
+    assert body["created"] == 1 and body["updated"] == 1 and body["skipped"] == []
+    assert _names(client) == ["Check one", "Check two"]
+
+
+def test_import_bad_mode_rejected(client, make_checklist):
+    r = _import(client, make_checklist([("A", "Check one")]), mode="bogus")
+    assert r.status_code == 400
 
 
 def test_classifier_generates_pattern(monkeypatch):
@@ -113,8 +148,17 @@ def test_import_with_explicit_mapping(client):
     assert rules[0]["name"].startswith("Header logo present")
 
 
-def test_imported_rules_pending_until_validated(client, make_checklist, make_docx):
+def test_imported_rules_pending_until_validated(client, make_checklist, make_docx, monkeypatch):
     from tests.conftest import DOCX_MIME
+
+    # Les regles importees sont des llm_nl : on simule Mistral pour qu'elles surfacent.
+    from app.core import llm_checks as lc
+
+    class _Fake:
+        async def chat(self, messages, **kw):
+            return '{"violations":[{"r":0,"b":0,"confidence":0.9,"reason":"non conforme","proposed":"Corrige."}]}'
+
+    monkeypatch.setattr(lc.MistralClient, "from_db", staticmethod(lambda db: _Fake()))
 
     _import(client, make_checklist([("General", "Logo positioning is correct")]))
     # Importee = en attente de validation (validated=False) : ne participe pas encore.
@@ -126,7 +170,7 @@ def test_imported_rules_pending_until_validated(client, make_checklist, make_doc
     sug = client.get(f"/api/v1/documents/{doc_id}/suggestions").json()
     assert not any(s["rule_kind"] == "custom" for s in sug)
 
-    # Apres validation en bloc, la regle surface.
+    # Apres validation en bloc, la regle (llm_nl) surface via le LLM.
     n = client.post("/api/v1/rules/validate-all").json()["validated"]
     assert n >= 1
     client.post(f"/api/v1/documents/{doc_id}/analyze", json={})

@@ -15,12 +15,14 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, UploadFile
+from fastapi import APIRouter, Depends, Query, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import docx_versioning as ver
+from app.core import layout_checks
+from app.core import pdf_render
 from app.core.doc_convert import doc_to_docx_bytes
 from app.core.docx_zones import recognize_zones
 from app.core.errors import AppError
@@ -32,6 +34,9 @@ from app.schemas import (
     DocumentOut,
     DocumentViewOut,
     ExportZipRequest,
+    LayoutChecksOut,
+    LayoutFindingOut,
+    PdfViewOut,
     SuggestionOut,
     UploadResult,
     ViewBlock,
@@ -86,13 +91,19 @@ async def upload(files: list[UploadFile], db: Session = Depends(get_db)) -> Uplo
 
     created: list[Document] = []
     for name, data in docx_files:
-        # .doc legacy -> conversion en .docx (LibreOffice / Word COM).
+        # .doc legacy -> conversion en .docx (pour l'analyse python-docx). L'original
+        # est conserve pour un rendu PDF fidele (Word direct, une seule conversion).
+        # On garde le nom d'origine (.doc) pour l'affichage ; seul le contenu stocke
+        # est converti en .docx (transparent pour l'utilisateur).
+        original_doc: bytes | None = None
         if name.lower().endswith(".doc"):
+            original_doc = data
             data = doc_to_docx_bytes(data)
-            name = name[:-4] + ".docx"
         doc_id = uuid.uuid4()
         storage_dir = ver.doc_dir_name(doc_id.hex)
         ver.write_version(storage_dir, 0, data)
+        if original_doc is not None:
+            pdf_render.original_doc_path(storage_dir).write_bytes(original_doc)
         try:
             parsed = parse_docx(ver.version_path(storage_dir, 0))
             block_count = parsed.block_count
@@ -181,6 +192,7 @@ def document_view(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Docu
             table_id=b.table_id,
             row=b.row,
             col=b.col,
+            page=b.page,
         )
         for b in parsed.blocks
     ]
@@ -189,6 +201,73 @@ def document_view(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Docu
         original_filename=doc.original_filename,
         current_version=doc.current_version,
         blocks=blocks,
+    )
+
+
+@router.get("/{document_id}/pages/{page_number}.png")
+def document_page_png(
+    document_id: uuid.UUID,
+    page_number: int,
+    dpi: int = Query(default=130, ge=72, le=300),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Rasterise une page du rendu PDF fidele (docx -> PDF LibreOffice) en PNG."""
+    doc = _get_doc(db, document_id)
+    pdf = pdf_render.ensure_pdf(doc.storage_dir, doc.current_version)
+    if pdf is None:
+        raise AppError("PDF_UNAVAILABLE", "Rendu PDF indisponible (LibreOffice requis).", 503)
+    try:
+        png = pdf_render.render_page_png(pdf, page_number, dpi)
+    except Exception as exc:  # noqa: BLE001
+        raise AppError("PDF_PAGE", "Page introuvable pour ce document.", 400) from exc
+    etag = f'"{doc.id.hex}:{doc.current_version}:{page_number}:{dpi}"'
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=60", "ETag": etag},
+    )
+
+
+@router.get("/{document_id}/pdf-view", response_model=PdfViewOut)
+def document_pdf_view(document_id: uuid.UUID, db: Session = Depends(get_db)) -> PdfViewOut:
+    """Nombre de pages + bbox (en %) de chaque anomalie sur le PDF fidele.
+
+    Le texte cherche est `original_text` (anomalie localisee) ou, a defaut, le
+    texte du bloc cible (signalement structurel / manuel).
+    """
+    doc = _get_doc(db, document_id)
+    pdf = pdf_render.ensure_pdf(doc.storage_dir, doc.current_version)
+    if pdf is None:
+        return PdfViewOut(available=False)
+    try:
+        parsed = recognize_zones(parse_docx(ver.version_path(doc.storage_dir, doc.current_version)))
+    except Exception:  # noqa: BLE001
+        parsed = None
+    block_text = {b.target_id: b.text for b in parsed.blocks} if parsed else {}
+    sugs = db.scalars(select(Suggestion).where(Suggestion.document_id == doc.id))
+    needles = [
+        (str(s.id), (s.original_text or "").strip() or block_text.get(s.target_id, ""))
+        for s in sugs
+    ]
+    result = pdf_render.compute_highlights(pdf, needles)
+    return PdfViewOut(available=True, page_count=result["page_count"], highlights=result["highlights"])
+
+
+@router.get("/{document_id}/layout-checks", response_model=LayoutChecksOut)
+def document_layout_checks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> LayoutChecksOut:
+    """Controles GEOMETRIQUES (titre centre, pied de page) sur le PDF fidele.
+
+    Prototype : exploite les coordonnees reelles du rendu (PyMuPDF), complementaire
+    des regles semantiques du .docx. Vide si aucun PDF (LibreOffice/Word absents).
+    """
+    doc = _get_doc(db, document_id)
+    pdf = pdf_render.ensure_pdf(doc.storage_dir, doc.current_version)
+    if pdf is None:
+        return LayoutChecksOut(available=False)
+    findings = layout_checks.analyze_layout(pdf)
+    return LayoutChecksOut(
+        available=True,
+        findings=[LayoutFindingOut(**f.__dict__) for f in findings],
     )
 
 
@@ -213,11 +292,17 @@ def _current_bytes(doc: Document) -> bytes:
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
+def _download_name(original_filename: str) -> str:
+    """Nom de telechargement : le contenu exporte est toujours du .docx, meme si
+    l'original etait un .doc (affiche tel quel ailleurs)."""
+    return Path(original_filename).stem + ".docx"
+
+
 @router.get("/{document_id}/export")
 def export_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> StreamingResponse:
     doc = _get_doc(db, document_id)
     data = _current_bytes(doc)
-    headers = {"Content-Disposition": f'attachment; filename="{Path(doc.original_filename).name}"'}
+    headers = {"Content-Disposition": f'attachment; filename="{_download_name(doc.original_filename)}"'}
     return StreamingResponse(io.BytesIO(data), media_type=_DOCX_MIME, headers=headers)
 
 
@@ -232,7 +317,7 @@ def export_zip(payload: ExportZipRequest, db: Session = Depends(get_db)) -> Stre
             doc = db.get(Document, doc_id)
             if doc is None:
                 continue
-            name = Path(doc.original_filename).name
+            name = _download_name(doc.original_filename)
             count = used.get(name, 0)
             used[name] = count + 1
             arc = name if count == 0 else f"{Path(name).stem}_{count}{Path(name).suffix}"

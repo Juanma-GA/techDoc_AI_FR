@@ -2,12 +2,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import { PdfDocView } from "../components/PdfDocView";
 import {
   analyzeStream,
   documentsApi,
   suggestionsApi,
   type DocBlock,
   type DocView,
+  type LayoutChecks,
+  type PdfHighlight,
+  type PdfView,
   type Suggestion,
 } from "../lib/api";
 
@@ -21,6 +25,47 @@ function escapeHtml(s: string): string {
 
 const hlClass = (sev: string) =>
   sev === "error" ? "error" : sev === "warning" ? "warn" : "info";
+
+// Pagination de secours quand le .docx ne porte aucun saut de page detectable.
+const PAGE_SIZE = 40;
+
+// Decoupe les blocs en pages : en-tetes/pieds (rendus sur chaque page) + pages du
+// corps (par saut de page Word si dispo, sinon par paquets de PAGE_SIZE blocs).
+function paginate(blocks: DocBlock[]): {
+  header: DocBlock[];
+  footer: DocBlock[];
+  pages: DocBlock[][];
+  pageOf: Record<string, number>;
+} {
+  const header = blocks.filter((b) => b.zone === "header");
+  const footer = blocks.filter((b) => b.zone === "footer");
+  const body = blocks.filter((b) => b.zone !== "header" && b.zone !== "footer");
+  const distinct = new Set(body.map((b) => b.page ?? 1));
+
+  let pages: DocBlock[][];
+  if (distinct.size > 1) {
+    const byPage = new Map<number, DocBlock[]>();
+    for (const b of body) {
+      const p = b.page ?? 1;
+      let arr = byPage.get(p);
+      if (!arr) {
+        arr = [];
+        byPage.set(p, arr);
+      }
+      arr.push(b);
+    }
+    pages = [...byPage.keys()].sort((a, b) => a - b).map((k) => byPage.get(k) ?? []);
+  } else if (body.length > PAGE_SIZE) {
+    pages = [];
+    for (let i = 0; i < body.length; i += PAGE_SIZE) pages.push(body.slice(i, i + PAGE_SIZE));
+  } else {
+    pages = [body];
+  }
+
+  const pageOf: Record<string, number> = {};
+  pages.forEach((pg, idx) => pg.forEach((b) => (pageOf[b.target_id] = idx)));
+  return { header, footer, pages, pageOf };
+}
 
 type Span = { start: number; end: number; id: string; severity: string; status: string };
 
@@ -64,46 +109,62 @@ function renderDocHtml(blocks: DocBlock[], sugs: Suggestion[]): string {
     return first ? ` blockflag" data-sug="${first.id}"` : '"';
   };
 
-  let html = "";
-  let i = 0;
-  while (i < blocks.length) {
-    const b = blocks[i];
-    if (!b) {
-      i++;
-      continue;
-    }
-    if (b.kind === "cell" && b.table_id != null) {
-      const tid = b.table_id;
-      const cells: DocBlock[] = [];
-      for (let c = blocks[i]; c && c.kind === "cell" && c.table_id === tid; c = blocks[i]) {
-        cells.push(c);
+  const renderBlocks = (list: DocBlock[]): string => {
+    let html = "";
+    let i = 0;
+    while (i < list.length) {
+      const b = list[i];
+      if (!b) {
         i++;
+        continue;
       }
-      const rows: Record<number, DocBlock[]> = {};
-      cells.forEach((c) => {
-        (rows[c.row ?? 0] = rows[c.row ?? 0] || []).push(c);
-      });
-      html += '<table class="docx"><tbody>';
-      Object.keys(rows)
-        .map(Number)
-        .sort((a, b2) => a - b2)
-        .forEach((r) => {
-          html += "<tr>";
-          (rows[r] ?? [])
-            .sort((a, b2) => (a.col ?? 0) - (b2.col ?? 0))
-            .forEach((c) => {
-              html += `<td class="blk${flagAttrs(c)} id="blk-${c.target_id}">${cellInner(c)}</td>`;
-            });
-          html += "</tr>";
+      if (b.kind === "cell" && b.table_id != null) {
+        const tid = b.table_id;
+        const cells: DocBlock[] = [];
+        for (let c = list[i]; c && c.kind === "cell" && c.table_id === tid; c = list[i]) {
+          cells.push(c);
+          i++;
+        }
+        const rows: Record<number, DocBlock[]> = {};
+        cells.forEach((c) => {
+          (rows[c.row ?? 0] = rows[c.row ?? 0] || []).push(c);
         });
-      html += "</tbody></table>";
-      continue;
+        html += '<table class="docx"><tbody>';
+        Object.keys(rows)
+          .map(Number)
+          .sort((a, b2) => a - b2)
+          .forEach((r) => {
+            html += "<tr>";
+            (rows[r] ?? [])
+              .sort((a, b2) => (a.col ?? 0) - (b2.col ?? 0))
+              .forEach((c) => {
+                html += `<td class="blk${flagAttrs(c)} id="blk-${c.target_id}">${cellInner(c)}</td>`;
+              });
+            html += "</tr>";
+          });
+        html += "</tbody></table>";
+        continue;
+      }
+      const tag = b.kind === "heading" ? ((b.heading_level || 1) >= 2 ? "h4" : "h3") : "p";
+      html += `<${tag} class="blk${flagAttrs(b)} id="blk-${b.target_id}">${cellInner(b)}</${tag}>`;
+      i++;
     }
-    const tag = b.kind === "heading" ? ((b.heading_level || 1) >= 2 ? "h4" : "h3") : "p";
-    html += `<${tag} class="blk${flagAttrs(b)} id="blk-${b.target_id}">${cellInner(b)}</${tag}>`;
-    i++;
-  }
-  return html || '<div class="empty-state">Aucune anomalie.</div>';
+    return html;
+  };
+
+  // En-tetes et pieds de page sont sortis dans des sections dediees et etiquetees
+  // (sinon ils se fondent en fin de flux et "disparaissent" visuellement).
+  const header = blocks.filter((b) => b.zone === "header");
+  const footer = blocks.filter((b) => b.zone === "footer");
+  const body = blocks.filter((b) => b.zone !== "header" && b.zone !== "footer");
+
+  let out = "";
+  if (header.length)
+    out += `<section class="doc-zone header"><div class="doc-zone-label">En-tête</div>${renderBlocks(header)}</section>`;
+  out += renderBlocks(body);
+  if (footer.length)
+    out += `<section class="doc-zone footer"><div class="doc-zone-label">Pied de page</div>${renderBlocks(footer)}</section>`;
+  return out || '<div class="empty-state">Document vide.</div>';
 }
 
 export function Review() {
@@ -111,9 +172,13 @@ export function Review() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const docRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [proposed, setProposed] = useState<Record<string, string>>({});
   const [reanalyzing, setReanalyzing] = useState(false);
+  const [analyzeProg, setAnalyzeProg] = useState<{ done: number; total: number } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pageIdx, setPageIdx] = useState(0);
 
   const viewQuery = useQuery<DocView | null>({
     queryKey: ["wr-view", docId],
@@ -123,9 +188,51 @@ export function Review() {
     queryKey: ["wr-sugs", docId],
     queryFn: () => documentsApi.suggestions(docId),
   });
+  const pdfQuery = useQuery<PdfView>({
+    queryKey: ["wr-pdf", docId],
+    queryFn: () => documentsApi.pdfView(docId),
+  });
+  const layoutQuery = useQuery<LayoutChecks>({
+    queryKey: ["wr-layout", docId],
+    queryFn: () => documentsApi.layoutChecks(docId),
+  });
 
   const view = viewQuery.data ?? null;
   const sugs = useMemo(() => sugsQuery.data ?? [], [sugsQuery.data]);
+  const pdf = pdfQuery.data ?? null;
+  const pdfAvailable = pdf?.available === true;
+  const [preferHtml, setPreferHtml] = useState(false);
+  const usePdf = pdfAvailable && !preferHtml; // vue effective (toggle PDF <-> HTML)
+  const layout = useMemo(
+    () => (usePdf ? layoutQuery.data?.findings ?? [] : []),
+    [usePdf, layoutQuery.data],
+  );
+
+  // Severite par id (anomalies + controles de mise en page).
+  const sevMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    sugs.forEach((s) => (m[s.id] = s.severity));
+    layout.forEach((f) => (m[f.id] = f.severity));
+    return m;
+  }, [sugs, layout]);
+  const severityOf = (id: string) => sevMap[id] ?? "info";
+
+  // Surlignages PDF = anomalies localisees + boites des controles geometriques.
+  const pdfHighlights = useMemo<PdfHighlight[]>(
+    () => [
+      ...(pdf?.highlights ?? []),
+      ...layout.filter((f) => f.boxes.length).map((f) => ({ id: f.id, page: f.page, boxes: f.boxes })),
+    ],
+    [pdf, layout],
+  );
+
+  // id (anomalie ou controle) -> page (0-indexed) pour le clic-vers-page.
+  const pdfPageOf = useMemo(() => {
+    const m: Record<string, number> = {};
+    (pdf?.highlights ?? []).forEach((h) => (m[h.id] = h.page - 1));
+    layout.forEach((f) => (m[f.id] = f.page - 1));
+    return m;
+  }, [pdf, layout]);
 
   const isCorrective = (s: Suggestion) =>
     s.char_end > s.char_start &&
@@ -138,25 +245,59 @@ export function Review() {
     ["applied", "edited", "rejected", "checked"].includes(s.status),
   ).length;
 
+  const { header, footer, pages, pageOf } = useMemo(
+    () => paginate(view?.blocks ?? []),
+    [view],
+  );
+  // Nombre de pages : reel (PDF) si dispo, sinon pagination logique du HTML.
+  const pageCount = usePdf ? Math.max(1, pdf?.page_count ?? 1) : Math.max(1, pages.length);
+  const curPage = Math.min(pageIdx, pageCount - 1);
   const docHtml = useMemo(
-    () => (view ? renderDocHtml(view.blocks, sugs) : ""),
-    [view, sugs],
+    () => (usePdf ? "" : renderDocHtml([...header, ...(pages[curPage] ?? []), ...footer], sugs)),
+    [usePdf, header, footer, pages, curPage, sugs],
   );
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["wr-view", docId] });
     void qc.invalidateQueries({ queryKey: ["wr-sugs", docId] });
+    void qc.invalidateQueries({ queryKey: ["wr-pdf", docId] });
+    void qc.invalidateQueries({ queryKey: ["wr-layout", docId] });
   };
 
-  // Surbrillance de la sélection dans la vue document (innerHTML) + scroll.
+  // Clic sur une suggestion -> bascule sur la page qui la contient.
   useEffect(() => {
+    if (!selectedId) return;
+    let pg: number | undefined;
+    if (usePdf) {
+      pg = pdfPageOf[selectedId];
+    } else {
+      const sug = sugs.find((s) => s.id === selectedId);
+      pg = sug ? pageOf[sug.target_id] : undefined;
+    }
+    if (pg != null && pg !== curPage) setPageIdx(pg);
+  }, [selectedId, usePdf, pdfPageOf, sugs, pageOf, curPage]);
+
+  // Mode HTML : surbrillance + scroll dans la vue innerHTML (sans objet en mode PDF).
+  useEffect(() => {
+    if (usePdf) return;
     const root = docRef.current;
     if (!root) return;
     root.querySelectorAll(".selected").forEach((e) => e.classList.remove("selected"));
     if (!selectedId) return;
     const marks = root.querySelectorAll(`[data-sug="${selectedId}"]`);
     marks.forEach((m) => m.classList.add("selected"));
-  }, [selectedId, docHtml]);
+    const first = marks[0] as HTMLElement | undefined;
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [usePdf, selectedId, docHtml]);
+
+  // Defile le panneau de suggestions jusqu'a la carte selectionnee.
+  useEffect(() => {
+    const root = panelRef.current;
+    if (!root || !selectedId) return;
+    // `~=` : matche un id parmi la liste d'ids portee par la carte (groupes manuels).
+    const card = root.querySelector<HTMLElement>(`[data-sugcard~="${selectedId}"]`);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedId, sugs]);
 
   const selectFromDoc = (e: React.MouseEvent) => {
     const m = (e.target as HTMLElement).closest("[data-sug]");
@@ -169,7 +310,11 @@ export function Review() {
       if (v.group) await suggestionsApi.applyGroup(v.id);
       else await suggestionsApi.apply(v.id);
     },
-    onSuccess: refresh,
+    onSuccess: () => {
+      setActionError(null);
+      refresh();
+    },
+    onError: (e) => setActionError(e instanceof Error ? e.message : String(e)),
   });
   const rejectMut = useMutation({
     mutationFn: (id: string) => suggestionsApi.patch(id, { status: "rejected" }),
@@ -177,7 +322,11 @@ export function Review() {
   });
   const undoMut = useMutation({
     mutationFn: (id: string) => suggestionsApi.undo(id),
-    onSuccess: refresh,
+    onSuccess: () => {
+      setActionError(null);
+      refresh();
+    },
+    onError: (e) => setActionError(e instanceof Error ? e.message : String(e)),
   });
   const checkMut = useMutation({
     mutationFn: (v: { ids: string[]; status: string }) =>
@@ -187,11 +336,16 @@ export function Review() {
 
   const reanalyze = async () => {
     setReanalyzing(true);
+    setAnalyzeProg({ done: 0, total: 0 });
     try {
-      await analyzeStream(docId, () => {});
+      await analyzeStream(docId, (ev, data) => {
+        if (ev === "progress")
+          setAnalyzeProg({ done: Number(data.done ?? 0), total: Number(data.total ?? 0) });
+      });
       refresh();
     } finally {
       setReanalyzing(false);
+      setAnalyzeProg(null);
     }
   };
 
@@ -230,9 +384,35 @@ export function Review() {
           ← Retour
         </button>
         <strong className="grow">{view.original_filename}</strong>
+        {pdfAvailable ? (
+          <div className="seg-toggle" role="group" aria-label="Mode d'affichage">
+            <button
+              type="button"
+              className={`seg-btn${!preferHtml ? " active" : ""}`}
+              onClick={() => setPreferHtml(false)}
+            >
+              PDF fidèle
+            </button>
+            <button
+              type="button"
+              className={`seg-btn${preferHtml ? " active" : ""}`}
+              onClick={() => setPreferHtml(true)}
+            >
+              HTML
+            </button>
+          </div>
+        ) : null}
         <span className="zone-tag">
           v{view.current_version} · {handled}/{sugs.length} traitées
         </span>
+        {analyzeProg ? (
+          <span className="analyze-row">
+            <span className="spinner" aria-hidden="true" />
+            <span className="analyze-label">
+              {analyzeProg.total > 0 ? `Analyse ${analyzeProg.done}/${analyzeProg.total}` : "Analyse…"}
+            </span>
+          </span>
+        ) : null}
         <button className="btn secondary small" type="button" disabled={reanalyzing} onClick={() => void reanalyze()}>
           {reanalyzing ? "Analyse…" : "Réanalyser"}
         </button>
@@ -241,15 +421,78 @@ export function Review() {
         </a>
       </div>
 
-      <div className="review-grid">
-        <div
-          className="doc-view"
-          ref={docRef}
-          onClick={selectFromDoc}
-          dangerouslySetInnerHTML={{ __html: docHtml }}
-        />
+      {actionError ? (
+        <div className="banner warn" role="alert" onClick={() => setActionError(null)}>
+          {actionError}
+        </div>
+      ) : null}
 
-        <div className="sug-panel">
+      <div className="review-grid">
+        <div className="doc-pane">
+          {pageCount > 1 ? (
+            <div className="doc-pager">
+              <button
+                className="btn ghost small"
+                type="button"
+                disabled={curPage <= 0}
+                onClick={() => setPageIdx(curPage - 1)}
+              >
+                ← Page préc.
+              </button>
+              <span className="analyze-label">
+                Page {curPage + 1} / {pageCount}
+              </span>
+              <button
+                className="btn ghost small"
+                type="button"
+                disabled={curPage >= pageCount - 1}
+                onClick={() => setPageIdx(curPage + 1)}
+              >
+                Page suiv. →
+              </button>
+            </div>
+          ) : null}
+          {usePdf ? (
+            <PdfDocView
+              docId={docId}
+              page={curPage + 1}
+              version={view.current_version}
+              highlights={pdfHighlights}
+              selectedId={selectedId}
+              severityOf={severityOf}
+              onSelect={setSelectedId}
+            />
+          ) : (
+            <div
+              className="doc-view"
+              ref={docRef}
+              onClick={selectFromDoc}
+              dangerouslySetInnerHTML={{ __html: docHtml }}
+            />
+          )}
+        </div>
+
+        <div className="sug-panel" ref={panelRef}>
+          {usePdf && layout.length > 0 ? (
+            <div className="card">
+              <h2 className="card-title">Mise en page ({layout.length})</h2>
+              <div className="banner">Contrôles géométriques (titres, pieds de page) sur le rendu PDF fidèle.</div>
+              <div>
+                {layout.map((f) => (
+                  <label
+                    className={`checkline${selectedId === f.id ? " selected" : ""}`}
+                    key={f.id}
+                    data-sugcard={f.id}
+                  >
+                    <span onClick={() => setSelectedId(f.id)}>
+                      <span className={`badge ${hlClass(f.severity)}`}>{f.severity}</span> {f.message}{" "}
+                      <span className="zone-tag">{f.rule_code}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="card">
             <div className="banner">Corrections proposées : appliquer remplace le texte (versionné, annulable).</div>
             <h2 className="card-title">À corriger ({auto.length})</h2>
@@ -264,6 +507,7 @@ export function Review() {
                     <div
                       className={`sug${applied ? " applied" : ""}${selectedId === s.id ? " selected" : ""}`}
                       key={s.id}
+                      data-sugcard={s.id}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest("button, input")) return;
                         setSelectedId(s.id);
@@ -287,9 +531,26 @@ export function Review() {
                       </div>
                       <div className="sug-actions">
                         {s.status === "applied" ? (
-                          <button className="btn secondary small" type="button" onClick={() => undoMut.mutate(s.id)}>
-                            Annuler
-                          </button>
+                          (() => {
+                            // Annulation LIFO : seule la correction de la version
+                            // courante du document est annulable directement.
+                            const undoable = s.applied_version === view.current_version;
+                            return (
+                              <button
+                                className="btn secondary small"
+                                type="button"
+                                disabled={!undoable}
+                                title={
+                                  undoable
+                                    ? "Annuler cette correction"
+                                    : "Annule d'abord la correction la plus récente."
+                                }
+                                onClick={() => undoMut.mutate(s.id)}
+                              >
+                                Annuler
+                              </button>
+                            );
+                          })()
                         ) : (
                           <>
                             <button
@@ -332,8 +593,13 @@ export function Review() {
                   const s = items[0];
                   if (!s) return null;
                   const allChecked = items.every((x) => x.status === "checked");
+                  const groupSelected = items.some((x) => x.id === selectedId);
                   return (
-                    <label className="checkline" key={s.id}>
+                    <label
+                      className={`checkline${groupSelected ? " selected" : ""}`}
+                      key={s.id}
+                      data-sugcard={items.map((x) => x.id).join(" ")}
+                    >
                       <input
                         type="checkbox"
                         checked={allChecked}

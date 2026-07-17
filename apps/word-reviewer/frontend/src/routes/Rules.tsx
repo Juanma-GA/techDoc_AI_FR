@@ -5,9 +5,18 @@ import {
   rulesApi,
   standardsApi,
   type CustomRule,
+  type ImportMode,
   type Standard,
   type StandardDetail,
 } from "../lib/api";
+
+// Modes d'import de checklist (cf. backend /rules/import).
+const IMPORT_MODES: { value: ImportMode; label: string; hint: string }[] = [
+  { value: "replace", label: "Remplacer", hint: "Purge toutes les règles importées puis recharge tout." },
+  { value: "add", label: "Ajouter", hint: "Ajoute les nouvelles règles ; ignore les noms déjà présents." },
+  { value: "update", label: "Mettre à jour", hint: "Met à jour les règles existantes ; n'en crée aucune." },
+  { value: "overwrite", label: "Écraser", hint: "Met à jour les existantes et ajoute les nouvelles." },
+];
 
 const KINDS = [
   "regex_flag", "regex_replace", "term_replace", "case_capitalize", "accent_fix",
@@ -100,7 +109,9 @@ export function Rules() {
   const [topicCol, setTopicCol] = useState<string>("");
   const [checkCol, setCheckCol] = useState<string>("0");
   const [ctxCols, setCtxCols] = useState<Set<number>>(new Set());
+  const [importMode, setImportMode] = useState<ImportMode>("replace");
   const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const onInspect = async (file: File) => {
     setXlsxFile(file);
@@ -120,8 +131,9 @@ export function Rules() {
   };
 
   const doImport = async () => {
-    if (!xlsxFile) return;
+    if (!xlsxFile || importing) return;
     setImportMsg(null);
+    setImporting(true);
     try {
       const r = await rulesApi.importChecklist(xlsxFile, {
         sheet: sheets[sheetIdx]?.name,
@@ -129,15 +141,20 @@ export function Rules() {
         topic_col: topicCol,
         check_col: checkCol,
         context_cols: [...ctxCols],
+        mode: importMode,
       });
-      const dist = Object.entries(r.by_kind).map(([k, val]) => `${k}: ${val}`).join(", ");
+      const parts = [`${r.created} créées`, `${r.updated} mises à jour`];
+      if (r.skipped.length) parts.push(`${r.skipped.length} ignorées`);
+      if (r.mode === "replace") parts.push(`remplace ${r.replaced_count}`);
       setImportMsg({
         kind: "ok",
-        text: `${r.imported} règles (${r.llm_used ? "via LLM" : "heuristique"}, remplace ${r.replaced_count}). ${dist}`,
+        text: `${parts.join(", ")} — toutes évaluées par le LLM (llm_nl).`,
       });
       refresh();
     } catch (e) {
       setImportMsg({ kind: "error", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -275,11 +292,27 @@ export function Rules() {
       {/* Import checklist */}
       <div className="card">
         <h2 className="card-title">Import de checklist</h2>
-        <div className="banner warn">Remplace les règles importées existantes.</div>
+        <Field label="Mode d'import">
+          <select
+            className="input"
+            value={importMode}
+            onChange={(e) => setImportMode(e.target.value as ImportMode)}
+          >
+            {IMPORT_MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <div className={`banner${importMode === "replace" ? " warn" : ""}`} style={{ marginTop: 6 }}>
+          {IMPORT_MODES.find((m) => m.value === importMode)?.hint}
+        </div>
         <input
           className="input"
           type="file"
           accept=".xlsx,.xlsm"
+          style={{ marginTop: 10 }}
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void onInspect(f);
@@ -358,8 +391,15 @@ export function Rules() {
                 ))}
               </div>
             </Field>
-            <button className="btn primary" type="button" style={{ marginTop: 8 }} onClick={() => void doImport()}>
-              Importer
+            <button
+              className="btn primary"
+              type="button"
+              style={{ marginTop: 8, display: "inline-flex", alignItems: "center", gap: 8 }}
+              disabled={importing}
+              onClick={() => void doImport()}
+            >
+              {importing ? <span className="spinner" aria-hidden="true" /> : null}
+              {importing ? "Import en cours…" : `Importer (${IMPORT_MODES.find((m) => m.value === importMode)?.label})`}
             </button>
           </div>
         ) : null}

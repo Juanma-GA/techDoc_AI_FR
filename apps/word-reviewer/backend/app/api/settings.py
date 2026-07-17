@@ -10,10 +10,12 @@ from sqlalchemy.orm import Session
 from app.core.mistral_client import (
     MistralClient,
     MistralError,
+    get_confidence_threshold,
     get_effective_settings,
     get_llm_enabled,
     get_llm_tested,
     save_settings,
+    set_confidence_threshold,
     set_llm_enabled,
     set_llm_tested,
 )
@@ -35,6 +37,7 @@ def _settings_out(db: Session) -> SettingsOut:
         embed_model=s["embed_model"],
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
+        llm_confidence_threshold=get_confidence_threshold(db),
     )
 
 
@@ -48,6 +51,8 @@ def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> Settin
     save_settings(db, payload.model_dump(exclude_unset=True))
     if payload.llm_enabled is not None:
         set_llm_enabled(db, payload.llm_enabled)
+    if payload.llm_confidence_threshold is not None:
+        set_confidence_threshold(db, payload.llm_confidence_threshold)
     return _settings_out(db)
 
 

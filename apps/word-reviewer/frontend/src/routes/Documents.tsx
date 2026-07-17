@@ -35,6 +35,21 @@ function DocStatus({ d }: { d: WordDoc }) {
   );
 }
 
+function AnalyzeProgress({ p }: { p: { done: number; total: number; label: string; error?: boolean } }) {
+  if (p.error)
+    return (
+      <span className="grow analyze-label" style={{ color: "var(--danger)" }}>
+        {p.label}
+      </span>
+    );
+  return (
+    <span className="grow analyze-row">
+      <span className="spinner" aria-hidden="true" />
+      <span className="analyze-label">{p.label}</span>
+    </span>
+  );
+}
+
 export function Documents() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -42,7 +57,10 @@ export function Documents() {
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(
     null,
   );
-  const [analyzing, setAnalyzing] = useState<Record<string, string>>({});
+  type Prog = { done: number; total: number; label: string; error?: boolean };
+  const [analyzing, setAnalyzing] = useState<Record<string, Prog | undefined>>({});
+  // Lignes optimistes affichees des le clic (le temps de l'upload + conversion .doc).
+  const [pending, setPending] = useState<string[]>([]);
 
   const docsQuery = useQuery<WordDoc[]>({
     queryKey: ["word-docs"],
@@ -51,24 +69,27 @@ export function Documents() {
   const docs = docsQuery.data ?? [];
   const refresh = () => void qc.invalidateQueries({ queryKey: ["word-docs"] });
 
-  const setStatus = (id: string, txt: string) =>
-    setAnalyzing((p) => ({ ...p, [id]: txt }));
+  const setProg = (id: string, prog: Prog | undefined) =>
+    setAnalyzing((p) => ({ ...p, [id]: prog }));
 
   const analyzeDoc = async (id: string) => {
-    setStatus(id, "Analyse…");
+    setProg(id, { done: 0, total: 0, label: "Analyse…" });
     let count = 0;
     try {
       await analyzeStream(id, (ev, data) => {
-        if (ev === "progress") setStatus(id, `Analyse ${data.done ?? 0}/${data.total ?? 0}`);
-        else if (ev === "suggestion") {
+        if (ev === "progress") {
+          const done = Number(data.done ?? 0);
+          const total = Number(data.total ?? 0);
+          setProg(id, { done, total, label: `Analyse ${done}/${total}` });
+        } else if (ev === "suggestion") {
           count++;
-          setStatus(id, `${count} anomalies`);
+          setProg(id, { done: 1, total: 1, label: `${count} anomalies` });
         } else if (ev === "error") throw new Error((data.message as string) || "erreur");
       });
-      setStatus(id, "");
+      setProg(id, undefined);
       refresh();
     } catch (e) {
-      setStatus(id, e instanceof Error ? e.message : String(e));
+      setProg(id, { done: 0, total: 0, label: e instanceof Error ? e.message : String(e), error: true });
     }
   };
 
@@ -78,16 +99,21 @@ export function Documents() {
       setFeedback({ kind: "error", text: "Sélectionne au moins un fichier." });
       return;
     }
+    // Feedback immediat : les fichiers apparaissent en tete de liste (Import en cours).
+    setPending(Array.from(files).map((f) => f.name));
+    setFeedback(null);
     try {
       const r = await documentsApi.upload(Array.from(files));
       let msg = `${r.documents.length} document(s) importé(s).`;
       if (r.ignored?.length) msg += ` Ignorés : ${r.ignored.join(", ")}`;
       setFeedback({ kind: "ok", text: msg });
+      setPending([]);
       refresh();
       // Analyse automatique (concurrence bornée).
       await runPool(r.documents.map((d) => d.id), (id) => analyzeDoc(id), 3);
       refresh();
     } catch (e) {
+      setPending([]);
       setFeedback({ kind: "error", text: e instanceof Error ? e.message : String(e) });
     }
   };
@@ -126,7 +152,19 @@ export function Documents() {
           </button>
         </div>
         <div style={{ marginTop: 12 }}>
-          {docs.length === 0 ? (
+          {pending.map((name, i) => (
+            <div className="sug" key={`pending-${i}`}>
+              <div className="sug-head">
+                <strong className="grow">{name}</strong>
+                <span className="badge warn">Uploadé</span>
+                <span className="analyze-row">
+                  <span className="spinner" aria-hidden="true" />
+                  <span className="analyze-label">Import en cours…</span>
+                </span>
+              </div>
+            </div>
+          ))}
+          {docs.length === 0 && pending.length === 0 ? (
             <div className="empty-state">Aucun document.</div>
           ) : (
             docs.map((d) => (
@@ -163,9 +201,11 @@ export function Documents() {
                   >
                     Export
                   </a>
-                  <span className="grow" style={{ fontSize: "0.8rem", color: "var(--fg-dim)" }}>
-                    {analyzing[d.id] ?? ""}
-                  </span>
+                  {analyzing[d.id] ? (
+                    <AnalyzeProgress p={analyzing[d.id]!} />
+                  ) : (
+                    <span className="grow" />
+                  )}
                 </div>
               </div>
             ))

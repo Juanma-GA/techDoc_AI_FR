@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, Form, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.core.checklist_classifier import classify_rules
 from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.rules_engine import validate_rule_pattern
@@ -80,6 +79,22 @@ async def inspect_checklist(file: UploadFile) -> SheetInspectOut:
     return SheetInspectOut(sheets=sheets)
 
 
+# Modes d'import : voir RuleImportResult.mode.
+#   replace   : purge toutes les regles custom puis charge la checklist.
+#   add       : ajoute les regles dont le nom est absent ; ignore les doublons.
+#   update    : met a jour les regles existantes (meme nom) ; ne cree rien.
+#   overwrite : upsert : met a jour les existantes + cree les nouvelles.
+_IMPORT_MODES = {"replace", "add", "update", "overwrite"}
+
+# Champs de definition d'une regle ecrases lors d'un update/overwrite (on ne
+# touche ni a `enabled`, ni a `validated` : l'etat de revue du relecteur reste).
+_RULE_DEF_FIELDS = ("category", "kind", "pattern", "replacement", "target_zone", "severity", "message")
+
+
+def _name_key(name: str) -> str:
+    return (name or "").strip().lower()
+
+
 @router.post("/import", response_model=RuleImportResult)
 async def import_checklist(
     file: UploadFile,
@@ -88,11 +103,14 @@ async def import_checklist(
     topic_col: int | None = Form(default=None),
     check_col: int | None = Form(default=None),
     context_cols: str = Form(default=""),
+    mode: str = Form(default="replace"),
     db: Session = Depends(get_db),
 ) -> RuleImportResult:
     name = (file.filename or "").lower()
     if not name.endswith((".xlsx", ".xlsm")):
         raise AppError("BAD_FORMAT", "Fichier Excel (.xlsx) attendu.", 400)
+    if mode not in _IMPORT_MODES:
+        raise AppError("BAD_MODE", f"Mode d'import inconnu : {mode}.", 400)
     data = await file.read()
     mapping = None
     if check_col is not None:
@@ -109,36 +127,73 @@ async def import_checklist(
     if not parsed:
         raise AppError("EMPTY_CHECKLIST", "Aucune regle detectee dans la checklist.", 400)
 
-    # Affinage LLM de la classification (repli heuristique si Mistral absent/erreur).
-    try:
-        parsed, llm_used = await classify_rules(db, parsed)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("classification LLM echouee, repli heuristique: %s", exc)
-        llm_used = False
+    # Toutes les regles importees sont confiees au LLM (kind `llm_nl`) : c'est
+    # Mistral qui evalue chaque check semantiquement a l'analyse. Pas de
+    # classification deterministe a l'import. On garde nom / categorie / message
+    # / zone / severite issus du parse ; pattern et replacement sont inutiles.
+    for pr in parsed:
+        pr.kind = "llm_nl"
+        pr.pattern = ""
+        pr.replacement = ""
+    llm_used = False
 
-    replaced = db.scalar(select(func.count(Rule.id))) or 0
-    db.execute(delete(Rule))  # mode remplacement : repartir de 0
+    replaced = 0
+    if mode == "replace":
+        replaced = db.scalar(select(func.count(Rule.id))) or 0
+        db.execute(delete(Rule))  # repartir de 0
+
+    # Index des regles custom existantes par nom (apres une eventuelle purge).
+    existing: dict[str, Rule] = {}
+    for r in db.scalars(select(Rule)):
+        existing.setdefault(_name_key(r.name), r)
+
+    def _new_rule(pr) -> Rule:
+        return Rule(
+            name=pr.name,
+            category=pr.category,
+            kind=pr.kind,
+            pattern=pr.pattern,
+            replacement=pr.replacement,
+            target_zone=pr.target_zone,
+            severity=pr.severity,
+            message=pr.message,
+            enabled=True,
+            validated=False,  # file de validation : le relecteur valide ensuite
+        )
 
     by_kind: dict[str, int] = {}
+    created = updated = 0
+    skipped: list[str] = []
     for pr in parsed:
-        db.add(
-            Rule(
-                name=pr.name,
-                category=pr.category,
-                kind=pr.kind,
-                pattern=pr.pattern,
-                replacement=pr.replacement,
-                target_zone=pr.target_zone,
-                severity=pr.severity,
-                message=pr.message,
-                enabled=True,
-                validated=False,  # file de validation : le relecteur valide ensuite
-            )
-        )
+        match = existing.get(_name_key(pr.name))
+        if match is None:
+            # Pas de regle de meme nom : creer (sauf en mode "update" pur).
+            if mode == "update":
+                skipped.append(pr.name)
+                continue
+            rule = _new_rule(pr)
+            db.add(rule)
+            existing[_name_key(pr.name)] = rule
+            created += 1
+        else:
+            # Regle existante : mettre a jour (sauf en mode "add" pur).
+            if mode == "add":
+                skipped.append(pr.name)
+                continue
+            for fld in _RULE_DEF_FIELDS:
+                setattr(match, fld, getattr(pr, fld))
+            updated += 1
         by_kind[pr.kind] = by_kind.get(pr.kind, 0) + 1
     db.commit()
     return RuleImportResult(
-        imported=len(parsed), replaced_count=replaced, by_kind=by_kind, skipped=[], llm_used=llm_used
+        mode=mode,
+        imported=created + updated,
+        created=created,
+        updated=updated,
+        replaced_count=replaced,
+        by_kind=by_kind,
+        skipped=skipped,
+        llm_used=llm_used,
     )
 
 
