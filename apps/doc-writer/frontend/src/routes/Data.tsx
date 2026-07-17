@@ -15,7 +15,7 @@ function formatSize(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-// Bouton a double-clic (pas de confirm() natif) : 1er clic arme, 2e dans les 3 s
+// Bouton a double-clic, sans confirmation native : 1er clic arme, 2e dans les 3 s
 // execute. Classes .btn du preview.
 function ConfirmButton({
   label,
