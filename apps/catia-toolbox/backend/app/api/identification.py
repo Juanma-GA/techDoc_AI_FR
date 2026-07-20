@@ -193,6 +193,7 @@ def list_items(
 def export_csv(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
+    replaced: bool | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     if db.get(NomenclatureRun, run_id) is None:
@@ -200,6 +201,8 @@ def export_csv(
     stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)
     if to_treat is not None:
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
+    if replaced is not None:
+        stmt = stmt.where(NomenclatureItem.replaced == replaced)
     rows = list(db.scalars(stmt.order_by(NomenclatureItem.source_row)))
 
     buf = io.StringIO()

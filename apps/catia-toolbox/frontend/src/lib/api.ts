@@ -709,8 +709,13 @@ export const exportUrl = {
   colorizationMacro: (runId: string) => `${API_BASE}/colorizations/${runId}/export.macro`,
   colorizationComposer: (runId: string) => `${API_BASE}/colorizations/${runId}/export.composer.py`,
   colorizationSvg: (runId: string) => `${API_BASE}/colorizations/${runId}/simulation.svg`,
-  identificationCsv: (runId: string, toTreat = true) =>
-    `${API_BASE}/identification/${runId}/export.csv?to_treat=${toTreat}`,
+  identificationCsv: (runId: string, filters?: { toTreat?: boolean; replaced?: boolean }) => {
+    const qs = new URLSearchParams();
+    if (filters?.toTreat !== undefined) qs.set("to_treat", String(filters.toTreat));
+    if (filters?.replaced !== undefined) qs.set("replaced", String(filters.replaced));
+    const s = qs.toString();
+    return `${API_BASE}/identification/${runId}/export.csv${s ? `?${s}` : ""}`;
+  },
   nomenclatureCompareCsv: (baseRunId: string, otherRunId: string) =>
     `${API_BASE}/identification/compare/export.csv?base_run_id=${baseRunId}&other_run_id=${otherRunId}`,
   qcCsv: (checklistId: string) => `${API_BASE}/qc/checklists/${checklistId}/export.csv`,

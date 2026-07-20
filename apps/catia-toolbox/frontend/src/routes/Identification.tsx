@@ -22,7 +22,6 @@ const NOMEN_EXTS = [".xlsm", ".xlsx"];
 const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; required: boolean }[] = [
   { field: "sin", labelKey: "identification.fieldSin", required: false },
   { field: "designation", labelKey: "identification.fieldDesignation", required: false },
-  { field: "to_treat", labelKey: "identification.fieldToTreat", required: false },
   { field: "replaced", labelKey: "identification.fieldReplaced", required: false },
   { field: "old_pn", labelKey: "identification.fieldOldPn", required: false },
   { field: "new_pn", labelKey: "identification.fieldNewPn", required: false },
@@ -47,13 +46,6 @@ const COLUMN_DEFS: ColDef[] = [
   { key: "catpart", labelKey: "identification.colCatpart", render: (it) => it.catpart },
   { key: "designation", labelKey: "identification.colDesignation", render: (it) => it.designation },
   { key: "sin", labelKey: "identification.colSin", render: (it) => it.sin },
-  {
-    key: "to_treat",
-    labelKey: "identification.colToTreat",
-    center: true,
-    // Affiche le contenu brut de la cellule A TRAITER (ex. "MODIF"), pas un oui/non.
-    render: (it) => (it.to_treat_value ? <span className="badge ok">{it.to_treat_value}</span> : null),
-  },
   { key: "version", labelKey: "identification.colVersion", render: (it) => it.version },
   {
     key: "replaced",
@@ -82,6 +74,12 @@ function summaryNum(summary: Record<string, number | string[] | string>, key: st
 function detectedColumns(summary: Record<string, number | string[] | string>): string[] {
   const v = summary.detected_columns;
   return Array.isArray(v) ? v : [];
+}
+
+// Filtre par defaut selon les colonnes mappees : "Pieces remplacees" si dispo,
+// sinon toutes les lignes.
+function defaultFilter(columns: string[]): "all" | "replaced" | "color" {
+  return columns.includes("replaced") ? "replaced" : "all";
 }
 
 // Lettre de colonne tableur : 0 -> A, 1 -> B, 26 -> AA ...
@@ -144,9 +142,10 @@ export function Identification() {
   // Colonnes reellement mappees pour ce resultat : le tableau n'affiche QUE
   // celles-ci (strictement le contenu du mapping).
   const [resultColumns, setResultColumns] = useState<string[]>([]);
-  // Filtres d'affichage : "a traiter" par defaut, + remplacees / avec couleur.
-  type ItemFilter = "all" | "to_treat" | "replaced" | "color";
-  const [filter, setFilter] = useState<ItemFilter>("to_treat");
+  // Filtres d'affichage : "Pieces remplacees" par defaut (champ de filtre choisi
+  // via une liste deroulante), + avec couleur / toutes.
+  type ItemFilter = "all" | "replaced" | "color";
+  const [filter, setFilter] = useState<ItemFilter>("replaced");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
     queryKey: ["identification"],
@@ -158,7 +157,6 @@ export function Identification() {
     queryKey: ["identification", resultRunId, "items", filter],
     queryFn: () =>
       identificationApi.items(resultRunId!, {
-        toTreat: filter === "to_treat" ? true : undefined,
         replaced: filter === "replaced" ? true : undefined,
         hasColor: filter === "color" ? true : undefined,
       }),
@@ -198,15 +196,16 @@ export function Identification() {
       setNomenNotice(
         t("identification.analyzedShort", {
           rows: summaryNum(run.summary, "rows"),
-          toTreat: summaryNum(run.summary, "to_treat"),
+          replaced: summaryNum(run.summary, "replaced"),
           mono: summaryNum(run.summary, "mono_color"),
         }),
       );
       setResultRunId(run.id);
-      setResultColumns(detectedColumns(run.summary));
-      // Mapping manuel : on affiche toutes les lignes mappees (l'utilisateur
-      // filtre ensuite via les boutons Remplacees / Avec couleur / A traiter).
-      setFilter("all");
+      const cols = detectedColumns(run.summary);
+      setResultColumns(cols);
+      // Filtre par defaut sur "Pieces remplacees" quand la colonne est mappee,
+      // sinon toutes les lignes.
+      setFilter(defaultFilter(cols));
       void qc.invalidateQueries({ queryKey: ["identification"] });
     },
     onError: onMutationError(setNomenError),
@@ -410,43 +409,33 @@ export function Identification() {
           {/* ---- Resultat : items de la nomenclature (colonnes = mapping) ---- */}
           {resultRunId ? (
             <div style={{ marginTop: 16 }}>
-              <div className="row" style={{ marginBottom: 8 }}>
-                <button
-                  type="button"
-                  className={`btn small ${filter === "all" ? "secondary" : "ghost"}`}
-                  onClick={() => setFilter("all")}
+              <div className="row" style={{ marginBottom: 8, alignItems: "flex-end" }}>
+                <div className="field">
+                  <label htmlFor="nomen-filter" className="field-label">
+                    {t("identification.filterLabel")}
+                  </label>
+                  <select
+                    id="nomen-filter"
+                    className="input"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value as ItemFilter)}
+                  >
+                    <option value="all">{t("identification.all")}</option>
+                    {resultColumns.includes("replaced") ? (
+                      <option value="replaced">{t("identification.replacedOnly")}</option>
+                    ) : null}
+                    {resultColumns.includes("color") ? (
+                      <option value="color">{t("identification.withColor")}</option>
+                    ) : null}
+                  </select>
+                </div>
+                <a
+                  href={exportUrl.identificationCsv(
+                    resultRunId,
+                    filter === "replaced" ? { replaced: true } : undefined,
+                  )}
                 >
-                  {t("identification.all")}
-                </button>
-                {resultColumns.includes("to_treat") ? (
-                  <button
-                    type="button"
-                    className={`btn small ${filter === "to_treat" ? "secondary" : "ghost"}`}
-                    onClick={() => setFilter("to_treat")}
-                  >
-                    {t("identification.toTreat")}
-                  </button>
-                ) : null}
-                {resultColumns.includes("replaced") ? (
-                  <button
-                    type="button"
-                    className={`btn small ${filter === "replaced" ? "secondary" : "ghost"}`}
-                    onClick={() => setFilter("replaced")}
-                  >
-                    {t("identification.replacedOnly")}
-                  </button>
-                ) : null}
-                {resultColumns.includes("color") ? (
-                  <button
-                    type="button"
-                    className={`btn small ${filter === "color" ? "secondary" : "ghost"}`}
-                    onClick={() => setFilter("color")}
-                  >
-                    {t("identification.withColor")}
-                  </button>
-                ) : null}
-                <a href={exportUrl.identificationCsv(resultRunId, filter === "to_treat")}>
-                  {t("identification.exportToTreat")}
+                  {t("common.exportCsv")}
                 </a>
                 <span className="hint" style={{ marginLeft: "auto" }}>
                   {t("identification.lines", { count: items.length })}
@@ -519,8 +508,8 @@ export function Identification() {
                   <span className="badge info">
                     {t("identification.badgeLines", { count: summaryNum(r.summary, "rows") })}
                   </span>{" "}
-                  <span className="badge ok">
-                    {t("identification.badgeToTreat", { count: summaryNum(r.summary, "to_treat") })}
+                  <span className="badge warn">
+                    {t("identification.badgeReplaced", { count: summaryNum(r.summary, "replaced") })}
                   </span>{" "}
                   <span className="badge default">
                     {t("identification.badgeMono", { count: summaryNum(r.summary, "mono_color") })}
@@ -532,8 +521,9 @@ export function Identification() {
                     className="btn secondary small"
                     onClick={() => {
                       setResultRunId(r.id);
-                      setResultColumns(detectedColumns(r.summary));
-                      setFilter("all");
+                      const cols = detectedColumns(r.summary);
+                      setResultColumns(cols);
+                      setFilter(defaultFilter(cols));
                     }}
                   >
                     {t("common.view")}
