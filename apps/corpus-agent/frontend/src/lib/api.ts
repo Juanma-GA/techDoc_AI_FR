@@ -16,6 +16,9 @@ import type {
   AnomalyStatus,
   ChatMessageOut,
   ChatSessionOut,
+  ChecklistImportMode,
+  ChecklistImportResult,
+  CustomRule,
   FileOut,
   HealthResponse,
   I18nLangOut,
@@ -31,6 +34,7 @@ import type {
   RulesCatalogOut,
   RulesLegacyOut,
   SheetColumnOut,
+  SheetInspectOut,
   SheetPreviewOut,
   TestConnectionOut,
   UploadResult,
@@ -220,6 +224,41 @@ export const settingsApi = {
   test: () => api.post<TestConnectionOut>("/settings/mistral/test"),
   rulesCatalog: () => api.get<RulesCatalogOut>("/settings/rules/catalog"),
   rulesLegacy: () => api.get<RulesLegacyOut>("/settings/rules"),
+  // Ecrit la liste complete des regles personnalisees (edition / suppression /
+  // validation) via l'endpoint sparse : `rules:{}` = aucun override de catalogue,
+  // seules les regles custom sont remplacees. Le backend preserve le reste.
+  saveCustomRules: (rules: CustomRule[]) =>
+    api.put<RulesLegacyOut>("/settings/rules/sparse", { rules: {}, regles_personnalisees: rules }),
+  checklistTemplateUrl: () => `${BASE_URL}/settings/rules/checklist/template`,
+  rulesInspect: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return uploadForm<SheetInspectOut>("/settings/rules/checklist/inspect", form);
+  },
+  importChecklist: (
+    file: File,
+    opts: {
+      sheet?: string;
+      header_row?: number;
+      topic_col?: number | null;
+      check_col?: number | null;
+      context_cols?: number[];
+      severity_col?: number | null;
+      mode: ChecklistImportMode;
+    },
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (opts.sheet) form.append("sheet", opts.sheet);
+    form.append("header_row", String(opts.header_row ?? 0));
+    if (opts.topic_col != null) form.append("topic_col", String(opts.topic_col));
+    if (opts.check_col != null) form.append("check_col", String(opts.check_col));
+    if (opts.severity_col != null) form.append("severity_col", String(opts.severity_col));
+    form.append("context_cols", JSON.stringify(opts.context_cols ?? []));
+    form.append("mode", opts.mode);
+    return uploadForm<ChecklistImportResult>("/settings/rules/checklist/import", form);
+  },
+  validateAllRules: () => api.post<{ validated: number }>("/settings/rules/validate-all"),
 };
 
 export const chatApi = {

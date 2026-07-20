@@ -229,7 +229,29 @@ export type RulesCatalogOut = {
   resolved: RuleResolved[];
 };
 
-export type CustomRule = { id?: string; label: string; consigne: string; severity?: string };
+export type CustomRule = {
+  id?: string;
+  label: string;
+  consigne: string;
+  severity?: string;
+  // File de validation : false = importee en attente, true/absent = active.
+  validated?: boolean;
+};
+
+export type ChecklistImportMode = "replace" | "add" | "update" | "overwrite";
+
+export type SheetInfo = { name: string; header_row: number; rows: string[][] };
+export type SheetInspectOut = { sheets: SheetInfo[] };
+
+export type ChecklistImportResult = {
+  mode: string;
+  imported: number;
+  created: number;
+  updated: number;
+  replaced_count: number;
+  skipped: string[];
+  pending: number;
+};
 
 export type RulesLegacyOut = {
   rules: {

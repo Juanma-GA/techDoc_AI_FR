@@ -52,10 +52,18 @@ def _is_extract_grounded(extrait: str, text: str) -> bool:
 
 
 def _load_custom_rules() -> list[dict]:
-    """Règles personnalisées valides (consigne non vide), normalisées."""
+    """Règles personnalisées valides (consigne non vide, validées), normalisées.
+
+    File de validation : une règle importée par checklist reste en attente
+    (`validated=False`) tant qu'un humain ne l'a pas validée — elle ne participe
+    donc pas à l'analyse. Les règles sans le champ `validated` (saisies à la main
+    ou créées avant la file) sont considérées validées → compat ascendante.
+    """
     out: list[dict] = []
     for r in (load_rules().get("regles_personnalisees") or []):
         if not isinstance(r, dict):
+            continue
+        if r.get("validated") is False:
             continue
         consigne = str(r.get("consigne") or "").strip()
         if not consigne:

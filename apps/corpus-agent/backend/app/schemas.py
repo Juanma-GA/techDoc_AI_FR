@@ -272,3 +272,33 @@ class KpiOut(BaseModel):
     avg_resolution_days: float
     files_total: int
     files_with_anomalies: int
+
+
+# =============================================================================
+# Import checklist (regles personnalisees en masse)
+# =============================================================================
+
+
+class SheetInfo(BaseModel):
+    """Apercu d'un onglet Excel : ligne d'en-tete detectee + grille rectangulaire."""
+
+    name: str
+    header_row: int = 0
+    rows: list[list[str]]
+
+
+class SheetInspectOut(BaseModel):
+    sheets: list[SheetInfo]
+
+
+class ChecklistImportResult(BaseModel):
+    """Bilan d'un import de checklist dans les regles personnalisees."""
+
+    mode: str = "replace"
+    imported: int = 0
+    created: int = 0
+    updated: int = 0
+    replaced_count: int = 0
+    skipped: list[str] = Field(default_factory=list)
+    # Total de regles en attente de validation apres l'import (file de validation).
+    pending: int = 0

@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, UploadFile
+import json
+import re
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -38,7 +44,14 @@ from app.core.rules_registry import (
 )
 from app.db.models import Project
 from app.db.session import get_db
-from app.schemas import MistralSettingsIn, MistralSettingsOut, TestConnectionOut
+from app.schemas import (
+    ChecklistImportResult,
+    MistralSettingsIn,
+    MistralSettingsOut,
+    SheetInfo,
+    SheetInspectOut,
+    TestConnectionOut,
+)
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -388,3 +401,163 @@ def put_rules_sparse(payload: dict[str, Any]) -> dict[str, Any]:
     new_legacy = sparse_to_legacy(sparse, base)
     save_rules(new_legacy)
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
+
+
+# =============================================================================
+# Import de checklist Excel -> regles personnalisees (en masse)
+# =============================================================================
+
+# Modes d'import (memes semantiques que word-reviewer) :
+#   replace   : purge toutes les regles custom puis charge la checklist ;
+#   add       : n'ajoute que les regles absentes (par consigne) ;
+#   update    : ne met a jour que les regles existantes, ne cree rien ;
+#   overwrite : upsert (met a jour l'existant + cree le nouveau).
+_CHECKLIST_MODES = {"replace", "add", "update", "overwrite"}
+
+
+def _consigne_key(consigne: str) -> str:
+    """Cle de dedup d'une regle = sa consigne normalisee (casse + espaces)."""
+    return re.sub(r"\s+", " ", str(consigne or "").lower()).strip()
+
+
+def _read_xlsx_or_400(file: UploadFile) -> bytes:
+    name = (file.filename or "").lower()
+    if not name.endswith((".xlsx", ".xlsm")):
+        raise AppError("BAD_FORMAT", "Fichier Excel (.xlsx/.xlsm) attendu.", status_code=400)
+    raw = file.file.read()
+    if not raw:
+        raise AppError("CHECKLIST_EMPTY", "Fichier vide.", status_code=400)
+    return raw
+
+
+_CHECKLIST_TEMPLATE = Path(__file__).resolve().parent.parent / "static" / "checklist_template.xlsx"
+
+
+@router.get("/rules/checklist/template")
+def download_checklist_template() -> FileResponse:
+    """Modele de checklist Excel (colonnes Sujet | Verification | Criticite) avec
+    5 regles d'exemple — point de depart a editer avant l'import."""
+    if not _CHECKLIST_TEMPLATE.is_file():
+        raise AppError("TEMPLATE_MISSING", "Modele de checklist absent.", status_code=404)
+    return FileResponse(
+        _CHECKLIST_TEMPLATE,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="checklist_template.xlsx",
+    )
+
+
+@router.post("/rules/checklist/inspect", response_model=SheetInspectOut)
+def inspect_checklist(file: UploadFile = File(...)) -> SheetInspectOut:
+    """Retourne un apercu des onglets (grille + ligne d'en-tete detectee) pour
+    que l'UI pilote le mapping de colonnes. Aucune ecriture."""
+    from app.core.checklist_excel import list_sheets
+
+    raw = _read_xlsx_or_400(file)
+    try:
+        sheets = list_sheets(raw)
+    except Exception as exc:  # noqa: BLE001 — openpyxl leve des erreurs variees
+        raise AppError("CHECKLIST_UNREADABLE", f"Excel illisible : {exc}", status_code=400) from exc
+    return SheetInspectOut(sheets=[SheetInfo(**s) for s in sheets])
+
+
+@router.post("/rules/checklist/import", response_model=ChecklistImportResult)
+def import_checklist(
+    file: UploadFile = File(...),
+    sheet: str | None = Form(default=None),
+    header_row: int = Form(default=0),
+    topic_col: int | None = Form(default=None),
+    check_col: int | None = Form(default=None),
+    context_cols: str = Form(default=""),
+    severity_col: int | None = Form(default=None),
+    mode: str = Form(default="replace"),
+) -> ChecklistImportResult:
+    """Parse la checklist Excel et l'injecte dans `regles_personnalisees`.
+
+    Chaque ligne devient une regle `{id, label, consigne, severity,
+    validated:false}` : importee, elle attend dans la file de validation
+    jusqu'a une validation humaine (elle ne participe pas a l'analyse avant).
+    """
+    from app.core.checklist_excel import parse_checklist
+
+    if mode not in _CHECKLIST_MODES:
+        raise AppError(
+            "BAD_MODE",
+            f"Mode d'import inconnu « {mode} ». Attendu : {', '.join(sorted(_CHECKLIST_MODES))}.",
+            status_code=400,
+        )
+    raw = _read_xlsx_or_400(file)
+    try:
+        context = json.loads(context_cols) if context_cols.strip() else []
+    except json.JSONDecodeError:
+        context = []
+    mapping: dict[str, Any] | None = None
+    if check_col is not None:
+        mapping = {
+            "header_row": header_row,
+            "topic": topic_col,
+            "check": check_col,
+            "context": context if isinstance(context, list) else [],
+            "severity": severity_col,
+        }
+    try:
+        parsed = parse_checklist(raw, sheet=sheet, mapping=mapping)
+    except Exception as exc:  # noqa: BLE001
+        raise AppError("CHECKLIST_UNREADABLE", f"Excel illisible : {exc}", status_code=400) from exc
+
+    base = load_rules()
+    existing = [r for r in (base.get("regles_personnalisees") or []) if isinstance(r, dict)]
+    by_key = {_consigne_key(r.get("consigne", "")): r for r in existing}
+
+    result = ChecklistImportResult(mode=mode)
+    if mode == "replace":
+        result.replaced_count = len(existing)
+        existing = []
+        by_key = {}
+
+    kept: list[dict[str, Any]] = list(existing)
+    for pr in parsed:
+        key = _consigne_key(pr.consigne)
+        if not key:
+            continue
+        current = by_key.get(key)
+        if current is not None and mode in ("update", "overwrite"):
+            # Met a jour libelle + severite ; preserve id + etat de validation.
+            current["label"] = pr.label
+            current["severity"] = pr.severity
+            result.updated += 1
+        elif current is None and mode in ("add", "overwrite", "replace"):
+            new_rule = {
+                "id": uuid.uuid4().hex[:8],
+                "label": pr.label,
+                "consigne": pr.consigne,
+                "severity": pr.severity,
+                "validated": False,
+            }
+            kept.append(new_rule)
+            by_key[key] = new_rule
+            result.created += 1
+        else:
+            # add sur doublon, ou update sur regle absente -> ignore.
+            result.skipped.append(pr.label or pr.consigne[:60])
+
+    result.imported = result.created + result.updated
+    base["regles_personnalisees"] = kept
+    save_rules(base)
+    result.pending = sum(1 for r in kept if r.get("validated") is False)
+    return result
+
+
+@router.post("/rules/validate-all")
+def validate_all_rules() -> dict[str, int]:
+    """Valide en masse toutes les regles personnalisees en attente (sortie de
+    file de validation) : elles participent alors a l'analyse."""
+    base = load_rules()
+    rules = [r for r in (base.get("regles_personnalisees") or []) if isinstance(r, dict)]
+    count = 0
+    for r in rules:
+        if r.get("validated") is False:
+            r["validated"] = True
+            count += 1
+    base["regles_personnalisees"] = rules
+    save_rules(base)
+    return {"validated": count}

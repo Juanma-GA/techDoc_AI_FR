@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { settingsApi } from "../../lib/api";
 import { exportRulesMarkdown } from "../../lib/rulesMarkdown";
 import { severityClass } from "../../lib/format";
-import type { CustomRule, RuleCatalogEntry, RuleParamSchema, RulesCatalogOut, RulesLegacyOut } from "../../lib/types";
+import type { RuleCatalogEntry, RuleParamSchema, RulesCatalogOut, RulesLegacyOut } from "../../lib/types";
 
 function ParamField({ name, schema, value }: { name: string; schema: RuleParamSchema; value: unknown }) {
   const v = value ?? schema.default;
@@ -113,7 +113,6 @@ export function RulesCatalogCard() {
   ];
 
   const legacy = legacyQuery.data?.rules;
-  const customRules: CustomRule[] = legacy?.regles_personnalisees ?? legacy?.custom_rules ?? [];
   const instructions = legacy?.instructions_libres ?? "";
 
   return (
@@ -145,32 +144,6 @@ export function RulesCatalogCard() {
             ))}
           </div>
         ))
-      )}
-
-      <div className="rules-section-title">Règles personnalisées (IA)</div>
-      <div className="label">{t("settings.customRulesIntro")}</div>
-      <div className="label">{t("settings.refColumnPlaceholder")}</div>
-      {customRules.length === 0 ? (
-        <div className="empty-state" style={{ fontStyle: "italic" }}>(aucune règle personnalisée)</div>
-      ) : (
-        <table className="rules-table">
-          <thead>
-            <tr>
-              <th>{t("rules.vcLabel")}</th>
-              <th>{t("rules.aiGuidelines")}</th>
-              <th>{t("redacteur.filterSeverity")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {customRules.map((r, i) => (
-              <tr key={r.id ?? i}>
-                <td><input className="input" readOnly value={r.label} /></td>
-                <td><textarea readOnly value={r.consigne} /></td>
-                <td><input className="input" readOnly value={r.severity ?? ""} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       )}
 
       <div className="rules-section-title">{t("rules.aiGuidelines")}</div>

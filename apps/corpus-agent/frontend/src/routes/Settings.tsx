@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 
+import { ChecklistImportCard } from "../components/settings/ChecklistImportCard";
+import { CustomRulesCard } from "../components/settings/CustomRulesCard";
 import { MistralForm } from "../components/settings/MistralForm";
 import { RulesCatalogCard } from "../components/settings/RulesCatalogCard";
 
@@ -12,6 +14,8 @@ export function Settings() {
         <p>{t("page.settings")}</p>
       </div>
       <MistralForm />
+      <ChecklistImportCard />
+      <CustomRulesCard />
       <RulesCatalogCard />
     </>
   );
