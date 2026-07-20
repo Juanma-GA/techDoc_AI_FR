@@ -44,6 +44,7 @@ def read_settings(db: Session = Depends(get_db)) -> SettingsOut:
         embed_model=s["embed_model"],
         vision_model=s["vision_model"],
         ocr_model=s["ocr_model"],
+        transcribe_model=s["transcribe_model"],
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
     )
@@ -62,6 +63,7 @@ def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> Settin
         embed_model=s["embed_model"],
         vision_model=s["vision_model"],
         ocr_model=s["ocr_model"],
+        transcribe_model=s["transcribe_model"],
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
     )

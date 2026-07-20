@@ -21,6 +21,10 @@ export function Settings() {
   const [baseUrl, setBaseUrl] = useState("");
   const [chatModel, setChatModel] = useState("");
   const [embedModel, setEmbedModel] = useState("");
+  const [transcribeModel, setTranscribeModel] = useState("");
+  // Modeles disponibles decouverts au test de connexion (/v1/models), pour
+  // proposer le bon id de transcription sans le deviner.
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<
     { kind: "ok" | "error"; text: string } | null
   >(null);
@@ -37,6 +41,7 @@ export function Settings() {
     setBaseUrl(d.base_url);
     setChatModel(d.chat_model);
     setEmbedModel(d.embed_model);
+    setTranscribeModel(d.transcribe_model);
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
@@ -46,6 +51,7 @@ export function Settings() {
         base_url: baseUrl || undefined,
         chat_model: chatModel,
         embed_model: embedModel,
+        transcribe_model: transcribeModel || undefined,
       }),
     onSuccess: () => {
       setApiKey("");
@@ -60,6 +66,7 @@ export function Settings() {
   const testMutation = useMutation({
     mutationFn: () => settingsApi.test(),
     onSuccess: (r: TestConnectionDto) => {
+      if (r.ok) setAvailableModels(r.models);
       setFeedback(
         r.ok
           ? { kind: "ok", text: t("settings.testOk", { count: r.models.length }) }
@@ -167,6 +174,38 @@ export function Settings() {
               />
             </label>
           </div>
+          <label>
+            <div className="label">{t("settings.transcribeModelLabel")}</div>
+            {availableModels.length > 0 && (
+              <select
+                className="input"
+                value={availableModels.includes(transcribeModel) ? transcribeModel : ""}
+                onChange={(e) => setTranscribeModel(e.target.value)}
+                style={{ marginBottom: 6 }}
+              >
+                <option value="">{t("settings.transcribeModelPick")}</option>
+                {[...availableModels]
+                  .sort((a, b) => Number(b.includes("voxtral")) - Number(a.includes("voxtral")))
+                  .map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+              </select>
+            )}
+            <input
+              className="input"
+              type="text"
+              placeholder="voxtral-..."
+              value={transcribeModel}
+              onChange={(e) => setTranscribeModel(e.target.value)}
+            />
+            <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+              {availableModels.length > 0
+                ? t("settings.transcribeModelHintTested", { count: availableModels.length })
+                : t("settings.transcribeModelHint")}
+            </small>
+          </label>
           <div className="row">
             <button
               type="button"

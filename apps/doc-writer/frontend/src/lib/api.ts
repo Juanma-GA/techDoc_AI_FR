@@ -213,6 +213,8 @@ export type SettingsDto = {
   vision_model: string;
   // Modele OCR document Mistral (/v1/ocr), repli de la vision.
   ocr_model: string;
+  // Modele de transcription audio (Voxtral) pour la dictee vocale.
+  transcribe_model: string;
   // Interrupteur LLM global (false = les taches IA sont sautees).
   llm_enabled: boolean;
 };
@@ -336,6 +338,29 @@ export type ExportFormat = "md" | "docx" | "pdf" | "pptx";
 
 export const sessionsApi = {
   list: () => request<SessionDto[]>("/sessions"),
+  // Dictee vocale -> texte (Voxtral). Multipart : fetch direct (le helper
+  // `request` force un Content-Type JSON incompatible avec FormData).
+  transcribe: async (
+    audio: Blob,
+    filename = "dictation.webm",
+  ): Promise<{ text: string; llm_used: boolean }> => {
+    const form = new FormData();
+    form.append("file", audio, filename);
+    const response = await fetch(`${API_BASE}/sessions/transcribe`, {
+      method: "POST",
+      body: form,
+    });
+    if (!response.ok) {
+      let payload: ApiError;
+      try {
+        payload = (await response.json()) as ApiError;
+      } catch {
+        payload = { code: "UNKNOWN", message: response.statusText, detail: null, request_id: "" };
+      }
+      throw new ApiClientError(payload, response.status);
+    }
+    return (await response.json()) as { text: string; llm_used: boolean };
+  },
   create: (body: {
     title?: string;
     scope_doc_ids: string[];
@@ -494,6 +519,7 @@ export const settingsApi = {
     embed_model?: string;
     vision_model?: string;
     ocr_model?: string;
+    transcribe_model?: string;
     llm_enabled?: boolean;
   }) =>
     request<SettingsDto>("/settings", {

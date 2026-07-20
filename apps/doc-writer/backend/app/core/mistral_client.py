@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.db.models import AppConfig
 
-
 try:
     import truststore
 
@@ -32,6 +31,7 @@ CONFIG_KEYS = {
     "embed_model": "MISTRAL_EMBED_MODEL",
     "vision_model": "MISTRAL_VISION_MODEL",
     "ocr_model": "MISTRAL_OCR_MODEL",
+    "transcribe_model": "MISTRAL_TRANSCRIBE_MODEL",
 }
 
 # Interrupteur global LLM (standard). Cle bare dans `app_config`, defaut "true".
@@ -94,6 +94,9 @@ def get_effective_settings(db: Session) -> dict[str, str]:
             db, CONFIG_KEYS["vision_model"], defaults.mistral_vision_model
         ),
         "ocr_model": _read_config(db, CONFIG_KEYS["ocr_model"], defaults.mistral_ocr_model),
+        "transcribe_model": _read_config(
+            db, CONFIG_KEYS["transcribe_model"], defaults.mistral_transcribe_model
+        ),
     }
 
 
@@ -147,6 +150,7 @@ class MistralClient:
         embed_model: str,
         vision_model: str = "mistral-small-latest",
         ocr_model: str = "mistral-ocr-latest",
+        transcribe_model: str = "voxtral-mini-transcribe-26-02",
     ) -> None:
         if not api_key:
             raise MistralError("MISTRAL_API_KEY non configurée. Renseigne-la dans Paramètres.")
@@ -156,6 +160,7 @@ class MistralClient:
         self.embed_model = embed_model
         self.vision_model = vision_model
         self.ocr_model = ocr_model
+        self.transcribe_model = transcribe_model
 
     @classmethod
     def from_db(cls, db: Session) -> "MistralClient":
@@ -167,7 +172,35 @@ class MistralClient:
             embed_model=s["embed_model"],
             vision_model=s.get("vision_model") or "mistral-small-latest",
             ocr_model=s.get("ocr_model") or "mistral-ocr-latest",
+            transcribe_model=s.get("transcribe_model") or "voxtral-mini-transcribe-26-02",
         )
+
+    def transcribe_audio(
+        self,
+        audio: bytes,
+        filename: str = "dictation.webm",
+        *,
+        language: Optional[str] = None,
+        timeout: float = 120.0,
+    ) -> str:
+        """Transcrit un audio dicte via Voxtral (POST /v1/audio/transcriptions).
+
+        Multipart : le header Content-Type JSON de `_headers()` ne convient pas —
+        httpx pose le boundary multipart lui-meme. Renvoie le texte transcrit.
+        """
+        files = {"file": (filename, audio, "application/octet-stream")}
+        data: dict[str, str] = {"model": self.transcribe_model}
+        if language:
+            data["language"] = language
+        with httpx.Client(timeout=timeout) as client:
+            r = client.post(
+                f"{self.base_url}/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                files=files,
+                data=data,
+            )
+            r.raise_for_status()
+            return (r.json().get("text") or "").strip()
 
     def _headers(self) -> dict[str, str]:
         return {

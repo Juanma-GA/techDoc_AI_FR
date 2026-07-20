@@ -7,7 +7,6 @@ from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -48,6 +47,10 @@ class Settings(BaseSettings):
     #   3. Extraction LOCALE (couche texte PyMuPDF + Tesseract).
     mistral_vision_model: str = "mistral-small-latest"
     mistral_ocr_model: str = "mistral-ocr-latest"
+    # Transcription audio (dictee vocale) via Voxtral — endpoint /v1/audio/transcriptions.
+    # Id de modele exact (pas d'alias "-latest" pour Voxtral) ; surchargeable via .env
+    # si Mistral fait evoluer la version.
+    mistral_transcribe_model: str = "voxtral-mini-transcribe-26-02"
 
     # Repli LOCAL (quand Mistral indisponible) : couche texte PyMuPDF + OCR
     # Tesseract page par page sur les pages sans texte. Tesseract est un binaire

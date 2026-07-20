@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ExportButtons } from "../components/ExportButtons";
+import { useDictation } from "../hooks/useDictation";
 import {
   ApiClientError,
   documentsApi,
@@ -31,6 +32,11 @@ export function Generate() {
   const tokenCountRef = useRef<number>(0);
   const firstTokenRef = useRef<boolean>(false);
   const [prompt, setPrompt] = useState("");
+  // Dictee vocale (Voxtral) : le texte transcrit est ajoute au brief, que le
+  // flux de generation repartira ensuite dans les zones du template.
+  const dictation = useDictation((text) =>
+    setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text)),
+  );
   const [feedback, setFeedback] = useState<
     { kind: "ok" | "error"; text: string } | null
   >(null);
@@ -360,7 +366,22 @@ export function Generate() {
             </div>
 
             <label>
-              <div className="label">{t("generate.promptLabel")}</div>
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <div className="label">{t("generate.promptLabel")}</div>
+                <button
+                  type="button"
+                  className={`btn small ${dictation.state === "recording" ? "danger" : "ghost"}`}
+                  onClick={dictation.toggle}
+                  disabled={isStreaming || dictation.state === "transcribing"}
+                  title={t("generate.dictateHint")}
+                >
+                  {dictation.state === "recording"
+                    ? t("generate.dictateStop")
+                    : dictation.state === "transcribing"
+                      ? t("generate.dictateTranscribing")
+                      : t("generate.dictate")}
+                </button>
+              </div>
               <textarea
                 rows={6}
                 value={prompt}
@@ -369,6 +390,7 @@ export function Generate() {
                 onChange={(e) => setPrompt(e.target.value)}
               />
             </label>
+            {dictation.error && <div className="error">{dictation.error}</div>}
 
             <div className="row">
               {isStreaming ? (

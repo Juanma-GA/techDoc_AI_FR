@@ -9,7 +9,6 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 # ----- Health ----------------------------------------------------------------
 
 
@@ -304,6 +303,7 @@ class SettingsIn(BaseModel):
     embed_model: Optional[str] = None
     vision_model: Optional[str] = None
     ocr_model: Optional[str] = None
+    transcribe_model: Optional[str] = None
     llm_enabled: Optional[bool] = None
 
 
@@ -314,6 +314,7 @@ class SettingsOut(BaseModel):
     embed_model: str
     vision_model: str
     ocr_model: str
+    transcribe_model: str
     llm_enabled: bool
     llm_tested: bool = False
 
@@ -357,3 +358,11 @@ class AdminStatsOut(BaseModel):
 class AdminResetOut(BaseModel):
     scope: str
     deleted: dict[str, int]
+
+
+class TranscriptionOut(BaseModel):
+    """Resultat d'une dictee vocale (Voxtral). `llm_used=False` = LLM desactive
+    (fallback gracieux, texte vide)."""
+
+    text: str
+    llm_used: bool
