@@ -11,6 +11,37 @@ def _import(client, data, mode=None):
     return client.post("/api/v1/rules/import", files=payload, data=form)
 
 
+def test_checklist_template_downloadable_and_reimportable(client):
+    """Le modele fourni se telecharge et se reimporte : les regles « manuel »
+    restent `manual` (verif humaine), les autres partent en `llm_nl`."""
+    resp = client.get("/api/v1/rules/template")
+    assert resp.status_code == 200, resp.text
+    assert "spreadsheetml" in resp.headers["content-type"]
+    r = _import(client, resp.content, mode="replace")
+    assert r.status_code == 200
+    by_kind = r.json()["by_kind"]
+    assert by_kind.get("manual", 0) == 3  # bloc « verif manuel »
+    assert by_kind.get("llm_nl", 0) == 3  # regles evaluees par l'IA
+
+
+def test_import_manual_handling_column(client, make_checklist):
+    """Une colonne « prise en compte » = manuel garde la regle en `manual`."""
+    from openpyxl import Workbook
+    import io
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Topic", "Regles", "Type"])
+    ws.append(["A", "Verifier a la main les notes", "manuel"])
+    ws.append(["A", "Le titre doit etre en majuscules", "auto"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    r = _import(client, buf.getvalue(), mode="replace")
+    assert r.status_code == 200
+    kinds = {rule["kind"] for rule in client.get("/api/v1/rules").json()}
+    assert "manual" in kinds and "llm_nl" in kinds
+
+
 def test_import_sets_all_rules_to_llm(client, make_checklist):
     data = make_checklist(
         [

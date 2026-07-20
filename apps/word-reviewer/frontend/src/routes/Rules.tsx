@@ -292,6 +292,9 @@ export function Rules() {
       {/* Import checklist */}
       <div className="card">
         <h2 className="card-title">Import de checklist</h2>
+        <a className="btn ghost small" href={rulesApi.templateUrl()} style={{ alignSelf: "flex-start" }}>
+          Télécharger un modèle (5 règles d'exemple)
+        </a>
         <Field label="Mode d'import">
           <select
             className="input"

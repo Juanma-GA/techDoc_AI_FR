@@ -24,12 +24,23 @@ from dataclasses import dataclass
 
 from openpyxl import load_workbook  # type: ignore[import-untyped]
 
-
 # Alias d'en-tetes (minuscules) -> colonne logique. Parametrable.
 COLUMN_ALIASES: dict[str, list[str]] = {
     "topic": ["topic", "sujet", "categorie", "catégorie", "theme", "thème", "section"],
-    "check": ["check", "check (tools used)", "verification", "vérification", "description", "controle", "contrôle"],
-    "severity": ["severity", "severite", "sévérité", "criticite", "criticité"],
+    "check": [
+        "check", "check (tools used)", "verification", "vérification", "description",
+        "controle", "contrôle", "regle", "règle", "regles", "règles", "exigence",
+        "point de controle", "point de contrôle",
+    ],
+    "severity": ["severity", "severite", "sévérité", "criticite", "criticité", "gravite", "gravité"],
+    # Colonne « mode de prise en compte » : manuel = verification humaine (kind
+    # `manual`, pas d'evaluation IA) ; auto/ia = evaluation LLM.
+    "handling": [
+        "prise en compte", "type", "traitement", "mode", "handling",
+        "type de controle", "type de contrôle",
+    ],
+    "zone": ["zone", "cible", "emplacement", "section cible"],
+    "context": ["contexte", "context", "commentaire", "note", "precision", "précision"],
 }
 
 _MANUAL_KW = [
@@ -38,6 +49,8 @@ _MANUAL_KW = [
     "visuel", "font", "police", "underline", "souligne", "tab", "align character",
     "alignment of characters", "scan", "watermark", "filigrane",
 ]
+# Valeurs de la colonne « prise en compte » signalant une verification humaine.
+_MANUAL_HANDLING = {"manuel", "manual", "humain", "human", "a la main", "à la main"}
 _STYLE_JUSTIFY_KW = ["justif"]
 _ZONE_KW: dict[str, list[str]] = {
     "footer": ["footer", "pied de page", "copyright"],
@@ -62,6 +75,13 @@ class ParsedRule:
 
 def _norm(value: object) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def _cell(cells: list[object], idx: object) -> str:
+    """Valeur normalisee de la cellule `idx` (ou "" si None / hors bornes)."""
+    if idx is None or not isinstance(idx, int) or not 0 <= idx < len(cells):
+        return ""
+    return _norm(cells[idx])
 
 
 def _resolve_columns(header: list[object]) -> dict[str, int]:
@@ -143,7 +163,11 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
 
     if mapping and mapping.get("check") is not None:
         header_idx = int(mapping.get("header_row", 0))
-        columns = {"topic": mapping.get("topic"), "check": int(mapping["check"])}
+        columns = {
+            "topic": mapping.get("topic"),
+            "check": int(mapping["check"]),
+            "handling": mapping.get("handling"),
+        }
         context_cols = [int(c) for c in (mapping.get("context") or [])]
     else:
         header_idx = 0
@@ -156,26 +180,33 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
                 break
         if "check" not in columns:
             columns = {"topic": 0, "check": 1}
-        context_cols = []
+        # Colonne « contexte » nommee -> concatenee au message comme un context_col.
+        context_cols = [columns["context"]] if columns.get("context") is not None else []
 
     out: list[ParsedRule] = []
     last_topic = ""
     for row in rows[header_idx + 1:]:
         cells = list(row)
-
-        def at(idx) -> str:
-            return _norm(cells[idx]) if idx is not None and 0 <= idx < len(cells) else ""
-
-        topic = at(columns.get("topic")) or last_topic
-        if at(columns.get("topic")):
-            last_topic = at(columns.get("topic"))
-        check = at(columns.get("check"))
+        raw_topic = _cell(cells, columns.get("topic"))
+        topic = raw_topic or last_topic
+        if raw_topic:
+            last_topic = raw_topic
+        check = _cell(cells, columns.get("check"))
         if not check:
             continue
-        context = " | ".join(p for p in (at(c) for c in context_cols) if p)
+        context = " | ".join(p for p in (_cell(cells, c) for c in context_cols) if p)
         full = f"{check} | {context}" if context else check
-        kind, zone, severity = _classify(check)
-        sev_col = at(columns.get("severity")).lower()
+        # _classify sert a deduire zone + severite par mots-cles. Le `kind` final
+        # ne depend QUE de la colonne explicite « prise en compte » : manuel ->
+        # verif humaine (`manual`), sinon `llm_nl` (comportement historique de
+        # l'import : tout est confie a l'IA). Pas de colonne -> tout llm_nl.
+        _, zone, severity = _classify(check)
+        zone_col = _cell(cells, columns.get("zone"))
+        if zone_col:
+            zone = zone_col
+        handling = _cell(cells, columns.get("handling")).lower()
+        kind = "manual" if handling in _MANUAL_HANDLING else "llm_nl"
+        sev_col = _cell(cells, columns.get("severity")).lower()
         if sev_col in {"error", "erreur", "warning", "info"}:
             severity = {"erreur": "error"}.get(sev_col, sev_col)
         out.append(

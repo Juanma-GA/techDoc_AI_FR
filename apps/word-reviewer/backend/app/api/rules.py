@@ -10,8 +10,10 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -21,7 +23,6 @@ from app.core.rules_engine import validate_rule_pattern
 from app.db.models import Rule
 from app.db.session import get_db
 from app.schemas import RuleImportResult, RuleIn, RuleOut, SheetInspectOut
-
 
 log = logging.getLogger("word_reviewer.rules")
 
@@ -63,6 +64,22 @@ def delete_rule(rule_id: uuid.UUID, db: Session = Depends(get_db)) -> dict[str, 
     db.delete(rule)
     db.commit()
     return {"deleted": True}
+
+
+_CHECKLIST_TEMPLATE = Path(__file__).resolve().parent.parent / "static" / "checklist_template.xlsx"
+
+
+@router.get("/template")
+def download_checklist_template() -> FileResponse:
+    """Modele de checklist Excel (colonnes Topic | Check | Severity) avec 5 regles
+    d'exemple — point de depart a editer avant l'import."""
+    if not _CHECKLIST_TEMPLATE.is_file():
+        raise AppError("TEMPLATE_MISSING", "Modele de checklist absent.", 404)
+    return FileResponse(
+        _CHECKLIST_TEMPLATE,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="checklist_template.xlsx",
+    )
 
 
 @router.post("/inspect", response_model=SheetInspectOut)
@@ -127,11 +144,14 @@ async def import_checklist(
     if not parsed:
         raise AppError("EMPTY_CHECKLIST", "Aucune regle detectee dans la checklist.", 400)
 
-    # Toutes les regles importees sont confiees au LLM (kind `llm_nl`) : c'est
-    # Mistral qui evalue chaque check semantiquement a l'analyse. Pas de
-    # classification deterministe a l'import. On garde nom / categorie / message
-    # / zone / severite issus du parse ; pattern et replacement sont inutiles.
+    # Regles confiees au LLM (kind `llm_nl`) : Mistral evalue chaque check
+    # semantiquement a l'analyse. EXCEPTION : les regles marquees `manual`
+    # (colonne « prise en compte » = manuel) restent des verifications humaines
+    # (item de checklist coche a la main, cf. checks/runner) et ne partent PAS a
+    # l'IA. On garde nom / categorie / message / zone / severite issus du parse.
     for pr in parsed:
+        if pr.kind == "manual":
+            continue
         pr.kind = "llm_nl"
         pr.pattern = ""
         pr.replacement = ""
