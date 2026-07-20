@@ -352,14 +352,17 @@ export type ZipListDto = { path: string; count: number; entries: ZipEntryDto[] }
 // Import unifie depuis un .zip : l'import cree + l'apercu du contenu.
 export type ZipImportDto = ImportDto & { count: number; entries: ZipEntryDto[] };
 
-// Comparaison de deux nomenclatures (versions A vs B) par SIN.
-export type SinEntryDto = { sin: string; pn: string; designation: string };
+// Comparaison de deux nomenclatures (versions V0 vs V1) par SIN.
+export type SinEntryDto = { sin: string; pn: string; rev: string; designation: string };
 export type PnChangeDto = {
   sin: string;
+  // "pn_evolue" (PN change -> piece remplacee) | "rev_evolue" (meme PN, indice change).
+  kind: string;
   old_pn: string;
   new_pn: string;
   old_rev: string;
   new_rev: string;
+  designation: string;
 };
 export type NomenclatureCompareDto = {
   base_run_id: string;

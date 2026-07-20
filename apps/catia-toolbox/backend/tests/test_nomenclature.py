@@ -229,18 +229,26 @@ def test_compare_nomenclatures(client, tmp_path):
     _set_input_root(client, str(tmp_path))
 
     def _make(name, rows):
+        # BOM a plat : le PN d'une version est son CATPart, la revision est l'indice.
         wb = Workbook()
         ws = wb.active
-        ws.append(["CATPart", "SIN", "NEW P/N", "Version"])
+        ws.append(["CATPart", "SIN", "Version"])
         for r in rows:
             ws.append(r)
         p = tmp_path / name
         wb.save(p)
         return client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]
 
-    # A : SIN-001 (PN AA), SIN-002 (PN BB). B : SIN-001 (PN AA2, evolue), SIN-003 (ajoute).
-    run_a = _make("a.xlsx", [["P1.CATPart", "SIN-001", "AA", "1"], ["P2.CATPart", "SIN-002", "BB", "1"]])
-    run_b = _make("b.xlsx", [["P1.CATPart", "SIN-001", "AA2", "2"], ["P3.CATPart", "SIN-003", "CC", "1"]])
+    # V0 : SIN-001 (P1, A), SIN-002 (P2, A, supprime), SIN-004 (P4, A).
+    # V1 : SIN-001 (P1B, B -> PN change), SIN-003 (P3, ajoute), SIN-004 (P4, B -> indice change).
+    run_a = _make(
+        "v0.xlsx",
+        [["P1.CATPart", "SIN-001", "A"], ["P2.CATPart", "SIN-002", "A"], ["P4.CATPart", "SIN-004", "A"]],
+    )
+    run_b = _make(
+        "v1.xlsx",
+        [["P1B.CATPart", "SIN-001", "B"], ["P3.CATPart", "SIN-003", "A"], ["P4.CATPart", "SIN-004", "B"]],
+    )
 
     r = client.post("/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_b})
     assert r.status_code == 200, r.text
@@ -248,13 +256,21 @@ def test_compare_nomenclatures(client, tmp_path):
     assert {e["sin"] for e in body["added_sin"]} == {"SIN-003"}
     assert {e["sin"] for e in body["removed_sin"]} == {"SIN-002"}
     changed = {e["sin"]: e for e in body["changed_pn"]}
-    assert set(changed) == {"SIN-001"}
-    assert changed["SIN-001"]["old_pn"] == "AA" and changed["SIN-001"]["new_pn"] == "AA2"
+    assert set(changed) == {"SIN-001", "SIN-004"}
+    # PN evolue : nouveau PN + nouvelle revision renseignes.
+    assert changed["SIN-001"]["kind"] == "pn_evolue"
+    assert changed["SIN-001"]["old_pn"] == "P1.CATPart" and changed["SIN-001"]["new_pn"] == "P1B.CATPart"
+    assert changed["SIN-001"]["old_rev"] == "A" and changed["SIN-001"]["new_rev"] == "B"
+    # Indice evolue : meme PN, revision mise a jour.
+    assert changed["SIN-004"]["kind"] == "rev_evolue"
+    assert changed["SIN-004"]["old_pn"] == changed["SIN-004"]["new_pn"] == "P4.CATPart"
+    assert changed["SIN-004"]["old_rev"] == "A" and changed["SIN-004"]["new_rev"] == "B"
 
     csv = client.get(
         "/api/v1/identification/compare/export.csv",
         params={"base_run_id": run_a, "other_run_id": run_b},
     )
     assert csv.status_code == 200
-    assert csv.text.splitlines()[0].startswith("section;")
+    assert csv.text.splitlines()[0].startswith("type;")
     assert "SIN-003" in csv.text and "SIN-002" in csv.text
+    assert "pn_evolue" in csv.text and "rev_evolue" in csv.text
