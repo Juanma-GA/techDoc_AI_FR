@@ -7,7 +7,10 @@ import { defineConfig } from "vite";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Sous-chemin IIS : `VITE_BASE=/pdf-reviewer/` au build injecte le prefixe
+  // dans les URLs d'assets. En dev on reste a la racine.
+  base: command === "build" ? (process.env.VITE_BASE ?? "/") : "/",
   plugins: [react()],
   resolve: {
     alias: {
@@ -29,4 +32,4 @@ export default defineConfig({
     globals: true,
     css: false,
   },
-});
+}));

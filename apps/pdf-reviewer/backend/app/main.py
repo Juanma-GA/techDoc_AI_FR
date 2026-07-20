@@ -32,8 +32,50 @@ from app.db.session import SessionLocal
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 
+# Hotes consideres « locaux » (palier 1, regle #8). Tant que le bind reste l'un
+# d'eux, la posture local-first s'applique : chiffrement et origines CORS prod
+# restent optionnels. Des que l'IT bascule sur un bind expose (deploiement
+# palier 2/3 via .env), les protections deviennent OBLIGATOIRES (fail-fast).
+_LOCAL_BIND_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_local_bind() -> bool:
+    return settings.bind_host.strip().lower() in _LOCAL_BIND_HOSTS
+
+
+def _is_local_origin(origin: str) -> bool:
+    o = origin.lower()
+    return "localhost" in o or "127.0.0.1" in o or "[::1]" in o
+
+
+def _validate_security_posture() -> None:
+    """Refuse de demarrer en posture deploiement (bind expose) si les protections
+    sensibles ne sont pas configurees. Inerte en local (bind 127.0.0.1)."""
+    if _is_local_bind():
+        return
+
+    problems: list[str] = []
+    if not settings.encryption_configured:
+        problems.append(
+            "ENCRYPTION_KEY manquante ou trop courte : la cle Mistral serait "
+            "stockee en clair. Generer une cle via app.core.encryption.generate_key()."
+        )
+    leftover = [o for o in settings.cors_origins if _is_local_origin(o)]
+    if leftover:
+        problems.append(
+            "CORS_ORIGINS contient des origines locales de dev "
+            f"({', '.join(leftover)}). Definir uniquement les origines de prod."
+        )
+    if problems:
+        raise RuntimeError(
+            "Posture de securite invalide pour un bind expose ("
+            f"BIND_HOST={settings.bind_host}) :\n  - " + "\n  - ".join(problems)
+        )
+
+
 def create_app() -> FastAPI:
     configure_logging(settings.log_level)
+    _validate_security_posture()
 
     app = FastAPI(
         title=settings.app_name,

@@ -26,12 +26,22 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'cati.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")
 
+    # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
+    # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les
+    # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).
+    bind_host: str = "127.0.0.1"
+
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8007",
     ]
     max_upload_size_mb: int = 50
+
+    # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
+    # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit
+    # via .env — la generer avec app.core.encryption.generate_key() (cf. .env.example).
+    encryption_key: str = ""
 
     # --- CATI : template Excel de sortie (nomenclature "Catalogue") ---
     # Le template est fixe : feuille `Catalogue`, en-tete technique en ligne 1,
@@ -61,6 +71,11 @@ class Settings(BaseSettings):
     @property
     def llm_configured(self) -> bool:
         return bool(self.mistral_api_key)
+
+    @property
+    def encryption_configured(self) -> bool:
+        """Cle de chiffrement presente et assez longue pour Fernet."""
+        return bool(self.encryption_key and len(self.encryption_key) >= 32)
 
 
 settings = Settings()

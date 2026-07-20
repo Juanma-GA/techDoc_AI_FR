@@ -3,7 +3,9 @@
  * once the backend OpenAPI is stable.
  */
 
-const API_BASE = "/api/v1";
+// Surchargeable au build (VITE_API_BASE_URL) pour un deploiement en sous-chemin
+// IIS (ex. /app/s1000d-extractor/api/v1). Defaut relatif '/api/v1' en local.
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export type ApiError = {
   code: string;

@@ -8,6 +8,8 @@ analysis pipeline still runs.
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -16,16 +18,44 @@ from app.config import settings
 from app.db.models import AppConfig
 
 
+logger = logging.getLogger(__name__)
+
 _KEYS = ("api_key", "base_url", "chat_model", "vision_model")
 _PREFIX = "mistral."
+
+# Cles (bare, sans prefixe) dont la valeur est chiffree au repos dans AppConfig
+# (cf. encryption.py). Seul le secret Mistral est sensible ; base_url et modeles
+# restent en clair.
+ENCRYPTED_KEYS = {"api_key"}
+
+
+def _get_secret_manager():  # type: ignore[no-untyped-def]
+    """SecretManager configure depuis settings. Cle absente => chiffrement off
+    (valeurs lues/ecrites en clair, mode dev/local)."""
+    from app.core.encryption import SecretManager
+
+    if not settings.encryption_key:
+        logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
+        return SecretManager(None)
+    return SecretManager(settings.encryption_key)
 
 
 def _get(db: Session, key: str) -> str | None:
     row = db.get(AppConfig, _PREFIX + key)
-    return row.value if row else None
+    if row is None or not row.value:
+        return None
+    if key in ENCRYPTED_KEYS:
+        try:
+            return _get_secret_manager().decrypt(row.value)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to decrypt %s: %s", key, e)
+            return None
+    return row.value
 
 
 def _set(db: Session, key: str, value: str) -> None:
+    if key in ENCRYPTED_KEYS and value:
+        value = _get_secret_manager().encrypt(value)
     row = db.get(AppConfig, _PREFIX + key)
     if row is None:
         db.add(AppConfig(key=_PREFIX + key, value=value))

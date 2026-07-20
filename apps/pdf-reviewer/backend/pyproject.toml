@@ -20,6 +20,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "PyMuPDF>=1.24",
     "slowapi>=0.1.9",
+    "cryptography>=44.0",
 ]
 
 [project.optional-dependencies]

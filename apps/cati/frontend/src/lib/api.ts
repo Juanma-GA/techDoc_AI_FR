@@ -2,7 +2,7 @@
  * Client API typé pour CATI (documents + items + export + settings + admin).
  */
 
-const API_BASE = "/api/v1";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export type ApiError = {
   code: string;
