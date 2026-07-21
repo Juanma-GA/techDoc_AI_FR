@@ -195,40 +195,6 @@ export type AdminStatsOut = {
 export type AdminResetScope = "analyses" | "chat" | "all";
 export type AdminResetOut = { scope: string; deleted: Record<string, number> };
 
-export type RuleParamSchema = {
-  type: "bool" | "int" | "float" | "string" | "regex" | "enum" | "list" | "map" | string;
-  name_key?: string;
-  default?: unknown;
-};
-
-export type RuleExample = { text: string; valid: boolean; note_key?: string };
-
-export type RuleCatalogEntry = {
-  id: string;
-  family: string;
-  severity: string;
-  name_key: string;
-  description_key: string;
-  enabled_default: boolean;
-  anomaly_types: string[];
-  requires: string[];
-  params: Record<string, RuleParamSchema>;
-  examples: RuleExample[];
-};
-
-export type RuleResolved = {
-  id: string;
-  enabled: boolean;
-  params: Record<string, unknown>;
-  runnable: boolean;
-};
-
-export type RulesCatalogOut = {
-  rules: RuleCatalogEntry[];
-  capabilities: string[];
-  resolved: RuleResolved[];
-};
-
 export type CustomRule = {
   id?: string;
   label: string;
@@ -236,9 +202,16 @@ export type CustomRule = {
   severity?: string;
   // File de validation : false = importee en attente, true/absent = active.
   validated?: boolean;
+  // Interrupteur d'activation en direct : false = desactivee (ne participe pas
+  // a l'analyse mais reste editable/reactivable), true/absent = active.
+  enabled?: boolean;
 };
 
 export type ChecklistImportMode = "replace" | "add" | "update" | "overwrite";
+
+// Regle proposee par l'IA a partir d'un document de reference (from-spec).
+export type SpecRule = { label: string; consigne: string; severity: string };
+export type SpecExtractOut = { regles: SpecRule[]; count: number };
 
 export type SheetInfo = { name: string; header_row: number; rows: string[][] };
 export type SheetInspectOut = { sheets: SheetInfo[] };

@@ -161,6 +161,14 @@ class AnomalyBulkStatusOut(BaseModel):
 # =============================================================================
 
 
+class AnalysisRunIn(BaseModel):
+    """Corps optionnel du déclenchement d'analyse. `file_ids` restreint
+    l'analyse à un échantillon de fichiers du projet (réanalyse ciblée pour
+    itérer sur la checklist). Vide / absent = tout le projet."""
+
+    file_ids: Optional[list[uuid.UUID]] = None
+
+
 class AnalysisRunOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

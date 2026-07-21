@@ -28,19 +28,12 @@ from app.core.mistral_client import (
 from app.core.prompt_sanitizer import sanitize_document
 from app.core.rules import (
     DEFAULT_RULES,
+    basl_columns_for,
     is_overridden,
     load_rules,
     reference_columns_for,
     reset_rules,
     save_rules,
-)
-# Force le chargement des modules de checks pour peupler le registry au boot.
-# (Chaque `checks/*.py` enregistre ses règles via `register(Rule(...))`.)
-import app.core.rules_catalog  # noqa: F401 — side-effect: registry population
-from app.core.rules_registry import (
-    RuleValidationError, _validate_value, all_rules, detect_capabilities,
-    resolve_rules, rule_is_runnable, sparse_to_legacy, to_catalog,
-    validate_sparse_overrides,
 )
 from app.db.models import Project
 from app.db.session import get_db
@@ -114,40 +107,6 @@ def get_rules() -> dict[str, Any]:
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
 
 
-@router.get("/rules/catalog")
-def get_rules_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Catalogue déclaratif de toutes les règles enregistrées dans le registry.
-
-    Retourne :
-    - `rules` : liste des règles avec leurs métadonnées (id, family,
-      severity, params, examples, requires…) — sérialisables tels quels,
-      destinés à alimenter l'UI Paramètres auto-générée.
-    - `capabilities` : capacités runtime détectées (mistral_chat, vision…).
-    - `resolved` : état effectif de chaque règle après application du
-      `rules.json` actuel — toggle final + paramètres résolus + flag
-      `runnable` (false si une capability requise manque).
-
-    Endpoint additif : `GET /rules` (legacy) continue de servir le JSON
-    legacy pour l'UI Paramètres actuelle. Phase 6 fera la transition.
-    """
-    mistral_settings = get_effective_settings(db)
-    caps = detect_capabilities(mistral_settings)
-    resolved = resolve_rules()
-    return {
-        "rules": to_catalog(),
-        "capabilities": sorted(caps),
-        "resolved": [
-            {
-                "id": rid,
-                "enabled": rr.enabled,
-                "params": rr.params,
-                "runnable": rule_is_runnable(rr.rule, caps),
-            }
-            for rid, rr in resolved.items()
-        ],
-    }
-
-
 @router.post("/rules/from-spec")
 def extract_rules_from_spec(
     file: UploadFile = File(...),
@@ -208,7 +167,7 @@ def extract_rules_from_spec(
     column_names: list[str] = []
     seen_cols: set[str] = set()
     for proj in db.scalars(select(Project)):
-        for col in reference_columns_for(proj):
+        for col in (*reference_columns_for(proj), *basl_columns_for(proj)):
             if col["name"] not in seen_cols:
                 seen_cols.add(col["name"])
                 column_names.append(col["name"])
@@ -267,52 +226,6 @@ def extract_rules_from_spec(
     return {"regles": proposed, "count": len(proposed)}
 
 
-def _validate_legacy_for_registry(rules: dict[str, Any]) -> None:
-    """Validation stricte des clés legacy qui sont consommées par le registry.
-
-    Le but est d'empêcher un PUT silencieux où une valeur de mauvais type
-    (ex: `largeur_min_px: "abc"`) serait acceptée puis silencieusement
-    retombée sur le défaut par le legacy_resolver. Lève `AppError` sur la
-    première violation.
-
-    Le mapping ci-dessous reflète les `legacy_resolver` de
-    `checks/illustration.py` — à étendre quand d'autres checks migrent.
-    """
-    il = rules.get("illustrations")
-    if not isinstance(il, dict):
-        return  # erreur déjà détectée au top-level
-
-    import re as _re
-
-    def _fail(field: str, msg: str) -> None:
-        raise AppError(
-            "RULES_INVALID",
-            f"illustrations.{field} : {msg}",
-            status_code=400,
-            detail={"field": f"illustrations.{field}"},
-        )
-
-    if "regex_reperage" in il:
-        v = il["regex_reperage"]
-        if not isinstance(v, str):
-            _fail("regex_reperage", "attendu string")
-        try:
-            _re.compile(v)
-        except _re.error as e:
-            _fail("regex_reperage", f"regex invalide ({e})")
-    for k in ("largeur_min_px", "largeur_max_px", "taille_totale_max_ko"):
-        if k in il:
-            v = il[k]
-            if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
-                _fail(k, "attendu entier strictement positif")
-    if "coherence_reperes" in il and not isinstance(il["coherence_reperes"], bool):
-        _fail("coherence_reperes", "attendu booléen")
-    if "conformite_visuelle" in il:
-        v = il["conformite_visuelle"]
-        if not isinstance(v, list) or any(not isinstance(x, str) for x in v):
-            _fail("conformite_visuelle", "attendu liste de chaînes")
-
-
 @router.put("/rules")
 def put_rules(payload: dict[str, Any]) -> dict[str, Any]:
     rules = payload.get("rules") if isinstance(payload, dict) else None
@@ -322,9 +235,9 @@ def put_rules(payload: dict[str, Any]) -> dict[str, Any]:
             "Format invalide : attendu un objet JSON {rules: {...}}",
             status_code=400,
         )
-    # Validation v4 : chaque clé connue doit avoir le même type que son défaut
-    # (objet pour les familles de checks, liste pour `regles_personnalisees`,
-    # chaîne pour `instructions_libres`). Les clés inconnues sont tolérées.
+    # Chaque clé connue doit avoir le même type que son défaut (liste pour
+    # `regles_personnalisees`, chaîne pour `instructions_libres`). Les clés
+    # inconnues sont tolérées.
     for key, val in rules.items():
         if key not in DEFAULT_RULES:
             continue
@@ -337,10 +250,6 @@ def put_rules(payload: dict[str, Any]) -> dict[str, Any]:
                 status_code=400,
                 detail={"field": key, "got": type(val).__name__},
             )
-    # Validation v5 : pour les règles migrées vers le registry, on contrôle
-    # strictement les types des paramètres legacy afin d'éviter les retombées
-    # silencieuses sur défaut (cf. _validate_legacy_for_registry).
-    _validate_legacy_for_registry(rules)
     save_rules(rules)
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
 
@@ -354,40 +263,21 @@ def delete_rules() -> dict[str, Any]:
 
 @router.put("/rules/sparse")
 def put_rules_sparse(payload: dict[str, Any]) -> dict[str, Any]:
-    """Save depuis l'UI auto-générée — format sparse `{rules: {id: {enabled, params}}}`.
+    """Save du store checklist depuis l'UI Paramètres.
 
-    Pipeline :
-    1. Validation stricte via `validate_sparse_overrides` (types + contraintes
-       + regex compile). Erreurs claires par rule_id en cas de pépin.
-    2. Conversion sparse → legacy via les `legacy_keys` / `legacy_enabled_key`
-       de chaque règle (point de départ : `rules.json` actuel, pour préserver
-       les `regles_personnalisees` et `instructions_libres` qui ne sont pas
-       gérés par le registry).
-    3. `save_rules()` legacy.
-
-    Phase 4 remplacera cette conversion par un stockage sparse natif.
+    Corpus-agent n'évaluant plus que via la checklist, ce endpoint ne gère que
+    les deux clés utiles — `regles_personnalisees` (liste éditable des règles)
+    et `instructions_libres` (contexte de jugement). Le champ `rules` (ancien
+    format sparse du catalogue de règles codées) est accepté mais ignoré, pour
+    compat. ascendante avec le client existant qui envoie `rules: {}`.
     """
     if not isinstance(payload, dict):
         raise AppError(
             "RULES_INVALID",
-            "Format invalide : attendu {rules: {...}, regles_personnalisees?: [...], instructions_libres?: \"...\"}",
+            "Format invalide : attendu {regles_personnalisees?: [...], instructions_libres?: \"...\"}",
             status_code=400,
         )
-    sparse = payload.get("rules") or {}
-    if not isinstance(sparse, dict):
-        raise AppError("RULES_INVALID", "Le champ `rules` doit être un objet", status_code=400)
-    try:
-        validate_sparse_overrides(sparse)
-    except RuleValidationError as e:
-        raise AppError(
-            "RULES_INVALID",
-            f"Validation refusée : {len(e.errors)} règle(s) en erreur",
-            status_code=400,
-            detail=e.errors,
-        ) from e
     base = load_rules()
-    # Extras hors registry : custom rules + consignes libres. Si absents du
-    # payload, on conserve les valeurs actuelles (= preserved by sparse_to_legacy).
     if "regles_personnalisees" in payload:
         rp = payload["regles_personnalisees"]
         if not isinstance(rp, list):
@@ -398,8 +288,7 @@ def put_rules_sparse(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(il, str):
             raise AppError("RULES_INVALID", "`instructions_libres` doit être une chaîne", status_code=400)
         base["instructions_libres"] = il
-    new_legacy = sparse_to_legacy(sparse, base)
-    save_rules(new_legacy)
+    save_rules(base)
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
 
 

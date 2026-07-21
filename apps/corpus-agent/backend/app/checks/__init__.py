@@ -1,5 +1,6 @@
-"""Contrôles métier Corpus Agent v4.
+"""Contrôles métier Corpus Agent.
 
-Modules : script, granule, text_rules, operations, referentiel_items,
-illustration. Socle commun : ftm_doc.
+corpus-agent n'évalue plus que via la checklist : seul `custom_rules` (règles
+personnalisées importées / saisies, jugées par l'IA) produit des anomalies.
+Socle commun partagé : `ftm_doc`.
 """

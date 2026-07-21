@@ -31,11 +31,11 @@ import type {
   ProjectUpdate,
   ReferenceMappingIn,
   ReferenceOut,
-  RulesCatalogOut,
   RulesLegacyOut,
   SheetColumnOut,
   SheetInspectOut,
   SheetPreviewOut,
+  SpecExtractOut,
   TestConnectionOut,
   UploadResult,
 } from "./types";
@@ -192,7 +192,13 @@ export const referenceApi = {
 };
 
 export const analysisApi = {
-  run: (pid: string) => api.post<AnalysisRunOut>(`/projects/${pid}/analysis/run`),
+  // `fileIds` optionnel : restreint l'analyse a un echantillon de fichiers
+  // (reanalyse ciblee). Vide / absent = tout le projet.
+  run: (pid: string, fileIds?: string[]) =>
+    api.post<AnalysisRunOut>(
+      `/projects/${pid}/analysis/run`,
+      fileIds && fileIds.length ? { file_ids: fileIds } : undefined,
+    ),
   reset: (pid: string) => api.delete<void>(`/projects/${pid}/analysis/reset`),
 };
 
@@ -222,7 +228,6 @@ export const settingsApi = {
   read: () => api.get<MistralSettingsOut>("/settings/mistral"),
   write: (body: MistralSettingsIn) => api.post<MistralSettingsOut>("/settings/mistral", body),
   test: () => api.post<TestConnectionOut>("/settings/mistral/test"),
-  rulesCatalog: () => api.get<RulesCatalogOut>("/settings/rules/catalog"),
   rulesLegacy: () => api.get<RulesLegacyOut>("/settings/rules"),
   // Ecrit la liste complete des regles personnalisees (edition / suppression /
   // validation) via l'endpoint sparse : `rules:{}` = aucun override de catalogue,
@@ -234,6 +239,12 @@ export const settingsApi = {
     const form = new FormData();
     form.append("file", file);
     return uploadForm<SheetInspectOut>("/settings/rules/checklist/inspect", form);
+  },
+  // Genere des regles proposees par l'IA a partir d'un document de reference.
+  rulesFromSpec: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return uploadForm<SpecExtractOut>("/settings/rules/from-spec", form);
   },
   importChecklist: (
     file: File,

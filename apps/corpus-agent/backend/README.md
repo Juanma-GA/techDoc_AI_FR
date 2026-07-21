@@ -3,8 +3,8 @@
 FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog.
 
 Contrôle de conformité documentaire d'un corpus multi-fichiers : ingestion de
-documents, analyse contre un catalogue de règles métier configurables + des
-règles personnalisées importables, détection d'anomalies, KPIs, et chat RAG
+documents, analyse contre une **checklist** de règles personnalisées
+importables (jugées par IA), détection d'anomalies, KPIs, et chat RAG
 assisté par Mistral (désactivable).
 
 ## Démarrage local (dev)
@@ -47,11 +47,10 @@ app/
 │   ├── mistral_client.py   # httpx async + truststore + interrupteur LLM
 │   ├── indexer.py     # embeddings Mistral + recherche cosinus (RAG)
 │   ├── chat_engine.py # chat RAG multi-scope + résumé d'anomalies
-│   ├── rules.py       # DEFAULT_RULES + load_rules()/save_rules() (override data/rules.json)
-│   ├── rules_catalog.py    # catalogue déclaratif des familles de règles (registry)
+│   ├── rules.py       # store checklist (regles_personnalisees/instructions_libres) + registres colonnes réf./BASL
 │   └── checklist_excel.py  # parsing d'une checklist Excel → règles personnalisées
 ├── parsers/           # .docx, .doc, .pdf, .xlsx/.xlsm, .xml/S1000D (+ repli texte)
-├── checks/            # script, granule, text_rules, operations, referentiel_items, illustration, custom_rules
+├── checks/            # custom_rules (checklist, jugée par IA) + ftm_doc (socle partagé)
 ├── db/                # models.py, session.py
 └── static/i18n/       # traductions FR/EN (source de vérité, servies par GET /api/v1/i18n/{lang})
 alembic/               # migrations (SQLite ⇄ Postgres)
@@ -75,19 +74,17 @@ Détails dans [`docs/adr/0003-error-format.md`](../../../docs/adr/0003-error-for
 
 ## Pipeline d'analyse
 
-`POST /api/v1/projects/{id}/analysis/run` applique **7 contrôles séquentiels** à
-la dernière version de chaque fichier du projet, dans l'ordre :
+`POST /api/v1/projects/{id}/analysis/run` applique un **contrôle unique** à la
+dernière version de chaque fichier du projet :
 
-1. `script` — conformité du code script attendu (colonne de référence `script`).
-2. `granule` — cohérence des granules dépose/pose vs référentiel.
-3. `text_rules` — règles de texte (format des phrases, ordre des tâches,
-   tâches induites, orthographe assistée IA…).
-4. `operations` — rechanges, outillages, infrastructure, mise en sécurité,
-   opérations préliminaires / complémentaires, serrages, verrouillages.
-5. `referentiel_items` — couverture des éléments attendus du référentiel.
-6. `illustration` — format du repérage, dimensions, taille, cohérence visuelle
-   (contrôles vision multimodale optionnels).
-7. `custom_rules` — **règles personnalisées** (voir plus bas), évaluées par IA.
+1. `custom_rules` — **règles personnalisées** (la checklist, voir plus bas),
+   évaluées par IA. Type d'anomalie unique : `personnalisee`.
+
+> **Checklist-only** (2026-07-21, cf. écart règle #6 du README d'app) : les
+> contrôles déterministes codés (script, granule, texte, opérations,
+> référentiel, illustrations) ont été **retirés**. Il n'y a plus de socle
+> déterministe : interrupteur LLM OFF (ou clé Mistral absente) ⇒ analyse en
+> HTTP 200 **sans anomalie**.
 
 Les anomalies sont créées avec le statut `open`, un type, une sévérité et un
 niveau de confiance IA. Après les contrôles, les documents sont indexés
@@ -95,18 +92,20 @@ niveau de confiance IA. Après les contrôles, les documents sont indexés
 
 ## Règles métier
 
-Deux niveaux, tous deux lus via `app.core.rules.load_rules()` :
+Toutes les règles vivent dans le store `data/rules.json` (gitignoré), lu via
+`app.core.rules.load_rules()` :
 
-- **Catalogue par défaut** — familles de règles déclarées dans
-  [`app/core/rules_catalog.py`](app/core/rules_catalog.py) (registry) et leurs
-  défauts dans [`app/core/rules.py`](app/core/rules.py) (`DEFAULT_RULES`). Ce
-  catalogue est la **source de vérité** : ne pas le redocumenter ici (risque de
-  dérive). Il est exposé en lecture seule par `GET /api/v1/settings/rules/catalog`
-  et listé dans l'onglet Paramètres pour transparence.
-- **Override persistant** — `data/rules.json` (gitignoré), écrit par
-  `PUT /api/v1/settings/rules` / `…/rules/sparse` et supprimé par
-  `DELETE /api/v1/settings/rules` (retour aux défauts du code). Merge profond :
-  une famille partiellement sauvegardée est complétée par les défauts.
+- **`regles_personnalisees`** — la checklist : liste éditable de
+  `{id, label, consigne, severity, validated}` (voir ci-dessous).
+- **`instructions_libres`** — contexte de jugement injecté dans le prompt IA.
+
+Écriture via `PUT /api/v1/settings/rules` (store complet) ou
+`PUT /api/v1/settings/rules/sparse` (patch `regles_personnalisees` /
+`instructions_libres` — utilisé par l'onglet Paramètres) ; reset via
+`DELETE /api/v1/settings/rules`. Les défauts (store vide) sont dans
+`DEFAULT_RULES` de [`app/core/rules.py`](app/core/rules.py). Ce module conserve
+aussi les registres de **colonnes de référence / BASL** d'un projet (utilisés
+par les placeholders `{nom}` des consignes et l'onglet mapping référentiel).
 
 ### Règles personnalisées (IA) + import de checklist
 

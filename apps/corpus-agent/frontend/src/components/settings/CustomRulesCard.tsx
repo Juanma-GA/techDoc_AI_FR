@@ -31,8 +31,15 @@ function RuleRow({
   onValidate?: () => void;
 }) {
   const { t } = useTranslation();
+  const enabled = rule.enabled !== false;
   return (
-    <tr>
+    <tr style={enabled ? undefined : { opacity: 0.55 }}>
+      <td>
+        <label className="switch" title={enabled ? t("settings.ruleEnabledOn") : t("settings.ruleEnabledOff")}>
+          <input type="checkbox" checked={enabled} onChange={(e) => onChange({ enabled: e.target.checked })} />
+          <span className="track" />
+        </label>
+      </td>
       <td><input className="input" value={rule.label} onChange={(e) => onChange({ label: e.target.value })} /></td>
       <td><textarea value={rule.consigne} onChange={(e) => onChange({ consigne: e.target.value })} /></td>
       <td>
@@ -94,6 +101,7 @@ export function CustomRulesCard() {
       <table className="rules-table">
         <thead>
           <tr>
+            <th>{t("settings.ruleActive")}</th>
             <th>{t("rules.vcLabel")}</th>
             <th>{t("rules.aiGuidelines")}</th>
             <th>{t("redacteur.filterSeverity")}</th>

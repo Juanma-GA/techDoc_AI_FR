@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChecklistImportCard } from "../components/settings/ChecklistImportCard";
 import { CustomRulesCard } from "../components/settings/CustomRulesCard";
 import { MistralForm } from "../components/settings/MistralForm";
-import { RulesCatalogCard } from "../components/settings/RulesCatalogCard";
+import { SpecGenerateCard } from "../components/settings/SpecGenerateCard";
 
 export function Settings() {
   const { t } = useTranslation();
@@ -15,8 +15,8 @@ export function Settings() {
       </div>
       <MistralForm />
       <ChecklistImportCard />
+      <SpecGenerateCard />
       <CustomRulesCard />
-      <RulesCatalogCard />
     </>
   );
 }
