@@ -53,6 +53,7 @@ class AdminStatsOut(BaseModel):
     templates: int = 0
     tables: int = 0
     rows: int = 0
+    images: int = 0
 
 
 class AdminResetOut(BaseModel):
@@ -93,6 +94,10 @@ class ProjectIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
 
 
+class RenameIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+
+
 class ProjectOut(BaseModel):
     id: str
     name: str
@@ -125,14 +130,26 @@ class RowOut(BaseModel):
 class ExtractOut(BaseModel):
     rows_added: int
     rows: list[RowOut]
+    images_added: int = 0
     warning: str = ""
+
+
+class ImageOut(BaseModel):
+    id: str
+    source_filename: str
+    filename: str
+    page: Optional[int] = None
+    url: str
+    created_at: datetime
 
 
 class ExportIn(BaseModel):
     project_table_id: str
     target_dir: str = Field(..., min_length=1)
+    format: Literal["csv", "xlsx"] = "csv"
 
 
 class ExportOut(BaseModel):
     path: str
     rows: int
+    format: str = "csv"

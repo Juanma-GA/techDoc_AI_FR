@@ -7,18 +7,23 @@
 
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.errors import AppError
-from app.db.models import ExtractedRow, Project, ProjectTable, TableTemplate
+from app.db.models import ExtractedImage, ExtractedRow, Project, ProjectTable, TableTemplate
 from app.db.session import get_db
 from app.schemas import (
     ProjectIn,
     ProjectOut,
     ProjectTableIn,
     ProjectTableOut,
+    RenameIn,
     RowOut,
 )
 
@@ -43,6 +48,19 @@ def create_project(payload: ProjectIn, db: Session = Depends(get_db)) -> Project
     return ProjectOut(id=p.id, name=p.name, created_at=p.created_at)
 
 
+@router.put("/projects/{project_id}", response_model=ProjectOut)
+def rename_project(
+    project_id: str, payload: RenameIn, db: Session = Depends(get_db)
+) -> ProjectOut:
+    p = db.get(Project, project_id)
+    if p is None:
+        raise AppError("PROJECT_NOT_FOUND", "Projet introuvable.", status_code=404)
+    p.name = payload.name.strip()
+    db.commit()
+    db.refresh(p)
+    return ProjectOut(id=p.id, name=p.name, created_at=p.created_at)
+
+
 @router.delete("/projects/{project_id}", status_code=204)
 def delete_project(project_id: str, db: Session = Depends(get_db)) -> None:
     p = db.get(Project, project_id)
@@ -52,12 +70,21 @@ def delete_project(project_id: str, db: Session = Depends(get_db)) -> None:
     tables = db.scalars(select(ProjectTable).where(ProjectTable.project_id == project_id)).all()
     for tbl in tables:
         db.query(ExtractedRow).filter(ExtractedRow.project_table_id == tbl.id).delete()
+        db.query(ExtractedImage).filter(ExtractedImage.project_table_id == tbl.id).delete()
         db.delete(tbl)
+        _purge_table_storage(tbl.id)
     db.delete(p)
     db.commit()
 
 
 # ----- Tables de projet (instances de template) -----------------------------
+
+
+def _purge_table_storage(table_id: str) -> None:
+    """Supprime le dossier des images d'une table (best-effort)."""
+    d = Path(settings.storage_dir) / table_id
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def _row_count(db: Session, project_table_id: str) -> int:
@@ -123,14 +150,29 @@ def get_project_table(table_id: str, db: Session = Depends(get_db)) -> ProjectTa
     return _table_out(db, t)
 
 
+@router.patch("/project-tables/{table_id}", response_model=ProjectTableOut)
+def rename_project_table(
+    table_id: str, payload: RenameIn, db: Session = Depends(get_db)
+) -> ProjectTableOut:
+    t = db.get(ProjectTable, table_id)
+    if t is None:
+        raise AppError("TABLE_NOT_FOUND", "Table introuvable.", status_code=404)
+    t.name = payload.name.strip()
+    db.commit()
+    db.refresh(t)
+    return _table_out(db, t)
+
+
 @router.delete("/project-tables/{table_id}", status_code=204)
 def delete_project_table(table_id: str, db: Session = Depends(get_db)) -> None:
     t = db.get(ProjectTable, table_id)
     if t is None:
         raise AppError("TABLE_NOT_FOUND", "Table introuvable.", status_code=404)
     db.query(ExtractedRow).filter(ExtractedRow.project_table_id == table_id).delete()
+    db.query(ExtractedImage).filter(ExtractedImage.project_table_id == table_id).delete()
     db.delete(t)
     db.commit()
+    _purge_table_storage(table_id)
 
 
 # ----- Lignes extraites -----------------------------------------------------

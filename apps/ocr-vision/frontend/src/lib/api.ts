@@ -50,6 +50,7 @@ export type AdminStatsDto = {
   templates: number;
   tables: number;
   rows: number;
+  images: number;
 };
 export type AdminResetDto = { deleted: Record<string, number> };
 
@@ -81,8 +82,22 @@ export type RowDto = {
   values: Record<string, unknown>;
   created_at: string;
 };
-export type ExtractResultDto = { rows_added: number; rows: RowDto[]; warning: string };
-export type ExportResultDto = { path: string; rows: number };
+export type ExtractResultDto = {
+  rows_added: number;
+  rows: RowDto[];
+  images_added: number;
+  warning: string;
+};
+export type ImageDto = {
+  id: string;
+  source_filename: string;
+  filename: string;
+  page: number | null;
+  url: string;
+  created_at: string;
+};
+export type ExportFormat = "csv" | "xlsx";
+export type ExportResultDto = { path: string; rows: number; format: string };
 
 export type SettingsDto = {
   api_key_set: boolean;
@@ -162,6 +177,8 @@ export const projectsApi = {
   list: () => api<ProjectDto[]>("/projects"),
   create: (name: string) =>
     api<ProjectDto>("/projects", { method: "POST", body: JSON.stringify({ name }) }),
+  rename: (id: string, name: string) =>
+    api<ProjectDto>(`/projects/${id}`, { method: "PUT", body: JSON.stringify({ name }) }),
   remove: (id: string) => api<void>(`/projects/${id}`, { method: "DELETE" }),
 };
 
@@ -172,6 +189,11 @@ export const projectTablesApi = {
     ),
   create: (body: { project_id: string; template_id: string; name?: string }) =>
     api<ProjectTableDto>("/project-tables", { method: "POST", body: JSON.stringify(body) }),
+  rename: (id: string, name: string) =>
+    api<ProjectTableDto>(`/project-tables/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
   get: (id: string) => api<ProjectTableDto>(`/project-tables/${id}`),
   remove: (id: string) => api<void>(`/project-tables/${id}`, { method: "DELETE" }),
   rows: (id: string) => api<RowDto[]>(`/project-tables/${id}/rows`),
@@ -179,6 +201,13 @@ export const projectTablesApi = {
 
 export const rowsApi = {
   remove: (id: string) => api<void>(`/rows/${id}`, { method: "DELETE" }),
+};
+
+export const imagesApi = {
+  list: (tableId: string) => api<ImageDto[]>(`/project-tables/${tableId}/images`),
+  // URL absolue (relative a l'API base) servant le fichier JPG.
+  fileUrl: (image: ImageDto) => `${API_BASE}${image.url.replace(/^\/api\/v1/, "")}`,
+  remove: (id: string) => api<void>(`/images/${id}`, { method: "DELETE" }),
 };
 
 export const extractApi = {
@@ -189,9 +218,13 @@ export const extractApi = {
     form.append("file", file);
     return postForm<ExtractResultDto>("/extract", form);
   },
-  export: (projectTableId: string, targetDir: string) =>
+  export: (projectTableId: string, targetDir: string, format: ExportFormat) =>
     api<ExportResultDto>("/export", {
       method: "POST",
-      body: JSON.stringify({ project_table_id: projectTableId, target_dir: targetDir }),
+      body: JSON.stringify({
+        project_table_id: projectTableId,
+        target_dir: targetDir,
+        format,
+      }),
     }),
 };

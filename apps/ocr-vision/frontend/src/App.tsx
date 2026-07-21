@@ -34,7 +34,9 @@ export function App() {
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-header">
-            <span className="brand">OCR Vision</span>
+            <span className="brand" title={t("app.description")} style={{ cursor: "help" }}>
+              OCR Vision
+            </span>
             <span className="label">v{t("app.version")}</span>
             <ThemeToggleButton />
           </div>

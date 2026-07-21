@@ -13,7 +13,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ExtractedRow, Project, ProjectTable, TableTemplate
+import shutil
+from pathlib import Path
+
+from app.config import settings
+from app.db.models import ExtractedImage, ExtractedRow, Project, ProjectTable, TableTemplate
 from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
 
@@ -34,6 +38,7 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
         templates=_count(db, TableTemplate),
         tables=_count(db, ProjectTable),
         rows=_count(db, ExtractedRow),
+        images=_count(db, ExtractedImage),
     )
 
 
@@ -41,11 +46,19 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
 def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
     """Reset complet sauf `app_config` (preserve la cle Mistral)."""
     deleted = {
+        "images": db.query(ExtractedImage).delete(),
         "rows": db.query(ExtractedRow).delete(),
         "tables": db.query(ProjectTable).delete(),
         "projects": db.query(Project).delete(),
         "templates": db.query(TableTemplate).delete(),
     }
     db.commit()
+    # Purge des fichiers images sur disque (best-effort).
+    storage = Path(settings.storage_dir)
+    if storage.is_dir():
+        try:
+            shutil.rmtree(storage, ignore_errors=True)
+        except OSError:
+            pass
     log.info("admin reset all: %s", deleted)
     return AdminResetOut(scope="all", deleted={k: int(v) for k, v in deleted.items()})

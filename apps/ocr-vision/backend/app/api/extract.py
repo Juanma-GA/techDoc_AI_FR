@@ -12,16 +12,19 @@ from __future__ import annotations
 import csv
 import logging
 import re
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.errors import AppError
 from app.core.extraction import extract_rows
+from app.core.images import extract_images
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
-from app.db.models import ExtractedRow, Project, ProjectTable
+from app.db.models import ExtractedImage, ExtractedRow, Project, ProjectTable
 from app.db.session import get_db
 from app.schemas import ExportIn, ExportOut, ExtractOut, RowOut
 
@@ -98,6 +101,23 @@ def extract(
     for row in created:
         db.refresh(row)
 
+    # Extraction des images/illustrations (PDF uniquement, best-effort).
+    images_added = 0
+    if _mime_for(file) == "application/pdf":
+        out_dir = Path(settings.storage_dir) / table.id
+        for meta in extract_images(data, out_dir, uuid.uuid4().hex):
+            db.add(
+                ExtractedImage(
+                    project_table_id=table.id,
+                    source_filename=file.filename or "",
+                    filename=meta["filename"],
+                    page=meta.get("page"),
+                )
+            )
+            images_added += 1
+        if images_added:
+            db.commit()
+
     warning = "" if parsed else "Aucune ligne extraite du document."
     return ExtractOut(
         rows_added=len(created),
@@ -110,6 +130,7 @@ def extract(
             )
             for r in created
         ],
+        images_added=images_added,
         warning=warning,
     )
 
@@ -122,8 +143,33 @@ def _slug(name: str) -> str:
     return s or "table"
 
 
+def _write_csv(out_path: Path, headers: list[str], keys: list[str], rows: list) -> None:
+    # UTF-8 BOM + separateur ';' : ouverture directe dans Excel FR.
+    with out_path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f, delimiter=";")
+        writer.writerow([*headers, "_source", "_extrait_le"])
+        for r in rows:
+            values = r.values or {}
+            line = [values.get(k, "") for k in keys]
+            writer.writerow([*line, r.source_filename or "", r.created_at.isoformat()])
+
+
+def _write_xlsx(out_path: Path, headers: list[str], keys: list[str], rows: list) -> None:
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Extraction"
+    ws.append([*headers, "_source", "_extrait_le"])
+    for r in rows:
+        values = r.values or {}
+        line = [values.get(k, "") for k in keys]
+        ws.append([*line, r.source_filename or "", r.created_at.isoformat()])
+    wb.save(str(out_path))
+
+
 @router.post("/export", response_model=ExportOut)
-def export_csv(payload: ExportIn, db: Session = Depends(get_db)) -> ExportOut:
+def export_table(payload: ExportIn, db: Session = Depends(get_db)) -> ExportOut:
     table = _load_table(db, payload.project_table_id)
     project = db.get(Project, table.project_id)
 
@@ -146,20 +192,17 @@ def export_csv(payload: ExportIn, db: Session = Depends(get_db)) -> ExportOut:
     ).all()
 
     project_name = project.name if project else "projet"
-    filename = f"{_slug(project_name)}__{_slug(table.name)}.csv"
+    ext = "xlsx" if payload.format == "xlsx" else "csv"
+    filename = f"{_slug(project_name)}__{_slug(table.name)}.{ext}"
     out_path = (target / filename).resolve()
     # Garde-fou anti-traversee : le fichier doit rester dans le dossier cible.
     if target.resolve() not in out_path.parents:
         raise AppError("TARGET_DIR_INVALID", "Chemin de sortie invalide.", status_code=400)
 
-    # UTF-8 BOM + separateur ';' : ouverture directe dans Excel FR.
-    with out_path.open("w", encoding="utf-8-sig", newline="") as f:
-        writer = csv.writer(f, delimiter=";")
-        writer.writerow([*headers, "_source", "_extrait_le"])
-        for r in rows:
-            values = r.values or {}
-            line = [values.get(k, "") for k in keys]
-            writer.writerow([*line, r.source_filename or "", r.created_at.isoformat()])
+    if payload.format == "xlsx":
+        _write_xlsx(out_path, headers, keys, rows)
+    else:
+        _write_csv(out_path, headers, keys, rows)
 
-    log.info("export csv table=%s rows=%d path=%s", table.id, len(rows), out_path)
-    return ExportOut(path=str(out_path), rows=len(rows))
+    log.info("export %s table=%s rows=%d path=%s", ext, table.id, len(rows), out_path)
+    return ExportOut(path=str(out_path), rows=len(rows), format=ext)

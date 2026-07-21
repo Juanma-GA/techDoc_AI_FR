@@ -67,6 +67,10 @@ export function Data() {
               <div className="label">{t("data.rows")}</div>
               <div className="kpi-value info">{stats.rows}</div>
             </div>
+            <div className="kpi">
+              <div className="label">{t("data.images")}</div>
+              <div className="kpi-value info">{stats.images}</div>
+            </div>
           </div>
         ) : (
           <div className="empty-state">{t("data.statsUnavailable")}</div>

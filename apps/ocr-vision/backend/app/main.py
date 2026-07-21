@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, extract, health, projects, templates, vision
+from app.api import admin, extract, health, images, projects, templates, vision
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
@@ -94,6 +94,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(templates.router)
     api_v1.include_router(projects.router)
     api_v1.include_router(extract.router)
+    api_v1.include_router(images.router)
     app.include_router(api_v1)
 
     _mount_frontend(app)

@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "OCR Vision",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "OCR Vision — OCR your PDFs/images via Mistral, then capitalize extracted data into per-project tables, exportable to CSV."
   },
   "nav": {
     "ocr": "OCR / Vision",
@@ -95,6 +96,7 @@
     "templates": "Templates",
     "tables": "Tables",
     "rows": "Extracted rows",
+    "images": "Images",
     "statsUnavailable": "Stats unavailable.",
     "resetTitle": "Reset",
     "resetWarning": "Irreversible operation. The Mistral configuration (app_config table) is preserved.",
@@ -117,6 +119,8 @@
     "colType": "Type",
     "colRule": "Extraction rule",
     "colRulePlaceholder": "What the model should extract for this column.",
+    "colLabelPlaceholder": "E.g.: Part reference",
+    "keyHint": "Key = the column's technical identifier (lowercase, no spaces or accents, e.g. part_number). It is the column name in the CSV/XLSX and the target of the rules. The Label is the human-readable header text. The key is auto-filled from the label — editable.",
     "addColumn": "Add a column",
     "removeColumn": "Remove",
     "save": "Save template",
@@ -139,7 +143,6 @@
     "projectPlaceholder": "Project name",
     "createProject": "Create",
     "noProject": "No project yet. Create one to get started.",
-    "selectProject": "Select a project",
     "tablesTitle": "Project tables",
     "attachTitle": "Add a table (from a template)",
     "chooseTemplate": "Choose a template",
@@ -154,19 +157,26 @@
     "running": "OCR + extraction running…",
     "noFile": "Choose a file first.",
     "extractOk": "{{n}} row(s) added.",
+    "extractImages": "+ {{n}} image(s) extracted.",
     "extractEmpty": "No row extracted from this document.",
     "rowsTitle": "Extracted rows",
     "source": "Source",
     "noRows": "No row yet.",
+    "imagesTitle": "Extracted images / illustrations",
+    "noImages": "No image extracted (PDF without images, or non-PDF file).",
     "deleteRow": "Del.",
-    "exportTitle": "Export to CSV",
+    "exportTitle": "Export table",
+    "format": "Format",
     "targetDir": "Target directory",
     "targetPlaceholder": "E.g.: C:\\Users\\me\\Exports",
     "export": "Export CSV",
     "exportOk": "CSV written: {{path}} ({{n}} rows).",
     "needTarget": "Enter the target directory.",
     "deleteTable": "Delete table",
-    "confirmDelete": "Confirm"
+    "confirmDelete": "Confirm",
+    "rename": "Rename",
+    "save": "Save",
+    "cancel": "Cancel"
   },
   "settings": {
     "llmTitle": "Artificial intelligence",

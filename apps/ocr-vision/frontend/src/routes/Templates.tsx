@@ -21,6 +21,29 @@ function emptyColumn(): ColumnSpec {
   return { key: "", label: "", type: "text", rule: "" };
 }
 
+// Clé technique : minuscules, sans accent ni espace (a-z 0-9 _). Sert de nom de
+// colonne dans le CSV/XLSX/JSON et de cible des règles d'extraction.
+function slugKey(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 60);
+}
+
+// Sanitize « live » pendant la frappe dans le champ Clé : garde les underscores
+// (ne strip pas le trailing) pour qu'on puisse taper part_number sans gêne.
+function sanitizeKey(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .slice(0, 60);
+}
+
 export function Templates() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -161,21 +184,43 @@ export function Templates() {
           </label>
 
           <div className="label">{t("templates.columns")}</div>
+          <div className="banner">{t("templates.keyHint")}</div>
+          <div className="row" style={{ gap: 8 }}>
+            <div className="label" style={{ maxWidth: 140, width: 140 }}>
+              {t("templates.colKey")}
+            </div>
+            <div className="label" style={{ maxWidth: 160, width: 160 }}>
+              {t("templates.colLabel")}
+            </div>
+            <div className="label" style={{ maxWidth: 130, width: 130 }}>
+              {t("templates.colType")}
+            </div>
+            <div className="label grow">{t("templates.colRule")}</div>
+          </div>
           {columns.map((c, i) => (
             <div className="row" key={i} style={{ alignItems: "flex-start" }}>
               <input
                 className="input"
                 style={{ maxWidth: 140 }}
-                placeholder={t("templates.colKey")}
+                placeholder="part_number"
+                title={t("templates.keyHint")}
                 value={c.key}
-                onChange={(e) => setCol(i, { key: e.target.value })}
+                onChange={(e) => setCol(i, { key: sanitizeKey(e.target.value) })}
               />
               <input
                 className="input"
                 style={{ maxWidth: 160 }}
-                placeholder={t("templates.colLabel")}
+                placeholder={t("templates.colLabelPlaceholder")}
                 value={c.label}
-                onChange={(e) => setCol(i, { label: e.target.value })}
+                onChange={(e) =>
+                  setColumns((cols) =>
+                    cols.map((cc, j) =>
+                      j === i
+                        ? { ...cc, label: e.target.value, key: cc.key || slugKey(e.target.value) }
+                        : cc,
+                    ),
+                  )
+                }
               />
               <select
                 className="input"

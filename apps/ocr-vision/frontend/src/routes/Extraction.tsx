@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ExtractionTable } from "./ExtractionTable";
+import { RenameInline } from "./RenameInline";
 import {
   projectTablesApi,
   projectsApi,
@@ -61,6 +62,18 @@ export function Extraction() {
     },
   });
 
+  const renameProject = useMutation({
+    mutationFn: (name: string) => projectsApi.rename(projectId, name),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+
+  const renameTable = useMutation({
+    mutationFn: (name: string) => projectTablesApi.rename(tableId, name),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["project-tables", projectId] }),
+  });
+
+  const projects = projectsQuery.data ?? [];
+  const selectedProject = projects.find((p) => p.id === projectId) ?? null;
   const tables = tablesQuery.data ?? [];
   const selectedTable = tables.find((x) => x.id === tableId) ?? null;
   const templates = templatesQuery.data ?? [];
@@ -74,25 +87,36 @@ export function Extraction() {
 
       <div className="card">
         <h2 className="card-title">{t("extraction.projectsTitle")}</h2>
-        <div className="row" style={{ alignItems: "flex-end" }}>
-          <label className="grow">
-            <div className="label">{t("extraction.selectProject")}</div>
-            <select
-              className="input"
-              value={projectId}
-              onChange={(e) => {
-                setProjectId(e.target.value);
-                setTableId("");
-              }}
-            >
-              <option value="">—</option>
-              {(projectsQuery.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+        {projects.length ? (
+          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+            {projects.map((p) => (
+              <button
+                type="button"
+                key={p.id}
+                className={p.id === projectId ? "btn primary" : "btn ghost"}
+                aria-pressed={p.id === projectId}
+                onClick={() => {
+                  setProjectId(p.id);
+                  setTableId("");
+                }}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state">{t("extraction.noProject")}</div>
+        )}
+        {selectedProject ? (
+          <RenameInline
+            key={selectedProject.name}
+            current={selectedProject.name}
+            pending={renameProject.isPending}
+            error={renameProject.isError ? (renameProject.error as Error).message : ""}
+            onSave={(name) => renameProject.mutate(name)}
+          />
+        ) : null}
+        <div className="row" style={{ alignItems: "flex-end", marginTop: 12 }}>
           <input
             className="input grow"
             value={newProject}
@@ -108,35 +132,38 @@ export function Extraction() {
             {t("extraction.createProject")}
           </button>
         </div>
-        {!projectsQuery.data?.length ? (
-          <div className="empty-state">{t("extraction.noProject")}</div>
-        ) : null}
       </div>
 
       {projectId ? (
         <div className="card">
           <h2 className="card-title">{t("extraction.tablesTitle")}</h2>
           {tables.length ? (
-            <div className="file-list">
+            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
               {tables.map((tbl) => (
                 <button
                   type="button"
                   key={tbl.id}
-                  className={tbl.id === tableId ? "file-row selected" : "file-row"}
+                  className={tbl.id === tableId ? "btn primary" : "btn ghost"}
+                  aria-pressed={tbl.id === tableId}
+                  title={t("extraction.rowsCount", { n: tbl.row_count })}
                   onClick={() => setTableId(tbl.id)}
                 >
-                  <div className="grow">
-                    <div className="file-name">{tbl.name}</div>
-                    <div className="file-meta">
-                      {t("extraction.rowsCount", { n: tbl.row_count })}
-                    </div>
-                  </div>
+                  {tbl.name} ({tbl.row_count})
                 </button>
               ))}
             </div>
           ) : (
             <div className="empty-state">{t("extraction.noTable")}</div>
           )}
+          {selectedTable ? (
+            <RenameInline
+              key={selectedTable.name}
+              current={selectedTable.name}
+              pending={renameTable.isPending}
+              error={renameTable.isError ? (renameTable.error as Error).message : ""}
+              onSave={(name) => renameTable.mutate(name)}
+            />
+          ) : null}
 
           <div className="card-title" style={{ marginTop: 14 }}>
             {t("extraction.attachTitle")}

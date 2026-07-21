@@ -40,8 +40,25 @@ Workflow : **OCRiser un PDF → remplir une table (N lignes) → exporter en CSV
 
 Routes : `POST /api/v1/extract` (upload + `project_table_id` → OCR puis
 extraction structurée LLM → N lignes persistées) et `POST /api/v1/export`
-(`project_table_id` + `target_dir` → écrit `<projet>__<table>.csv`).
-L'extraction respecte l'interrupteur `llm_enabled` (OFF → 200 + 0 ligne).
+(`project_table_id` + `target_dir` + `format` ∈ `csv`|`xlsx` → écrit
+`<projet>__<table>.<ext>`). L'extraction respecte l'interrupteur `llm_enabled`
+(OFF → 200 + 0 ligne).
+
+**Images / illustrations** : lors d'un `/extract` sur un **PDF**, les images du
+document sont aussi extraites (PyMuPDF, façon s1000d-extractor : `page.get_images`
+→ JPG, CMYK/alpha→RGB) et stockées dans `backend/data/storage/<project_table_id>/`
+(gitignoré). Table `ExtractedImage`. Routes `GET /project-tables/{id}/images`
+(liste), `GET /images/{id}/file` (service JPG), `DELETE /images/{id}`. Best-effort :
+image/DOCX/OCR ou PDF sans image → 0 image, jamais d'erreur. Galerie de vignettes
+téléchargeables dans l'onglet Extraction.
+
+**Colonne « Clé »** : identifiant technique de colonne (minuscules, sans espace ni
+accent, ex. `part_number`) — nom de colonne dans le CSV/XLSX et cible des règles.
+Distincte du **Libellé** (en-tête lisible). La clé est auto-suggérée depuis le
+libellé, puis modifiable.
+
+**Sortie XLSX** : en plus du CSV (`;` + UTF-8-sig), export `.xlsx` via `openpyxl`
+(en-têtes = libellés). Sélecteur de format dans l'onglet Extraction.
 
 ### Écart documenté au standard — export CSV sur disque
 

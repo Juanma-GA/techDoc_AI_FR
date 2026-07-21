@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "OCR Vision",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "OCR Vision — OCRise vos PDF/images via Mistral, puis capitalise les données extraites en tables par projet, exportables en CSV."
   },
   "nav": {
     "ocr": "OCR / Vision",
@@ -95,6 +96,7 @@
     "templates": "Modèles",
     "tables": "Tables",
     "rows": "Lignes extraites",
+    "images": "Images",
     "statsUnavailable": "Stats indisponibles.",
     "resetTitle": "Réinitialiser",
     "resetWarning": "Opération irréversible. La configuration Mistral (table app_config) est préservée.",
@@ -117,6 +119,8 @@
     "colType": "Type",
     "colRule": "Règle d'extraction",
     "colRulePlaceholder": "Ce que le modèle doit extraire pour cette colonne.",
+    "colLabelPlaceholder": "Ex : Référence pièce",
+    "keyHint": "Clé = identifiant technique de la colonne (minuscules, sans espace ni accent, ex. part_number). C'est le nom de la colonne dans le CSV/XLSX et la cible des règles. Le Libellé est le texte lisible affiché en en-tête. La clé se remplit automatiquement à partir du libellé — modifiable.",
     "addColumn": "Ajouter une colonne",
     "removeColumn": "Retirer",
     "save": "Enregistrer le modèle",
@@ -139,7 +143,6 @@
     "projectPlaceholder": "Nom du projet",
     "createProject": "Créer",
     "noProject": "Aucun projet. Crée-en un pour commencer.",
-    "selectProject": "Sélectionne un projet",
     "tablesTitle": "Tables du projet",
     "attachTitle": "Ajouter une table (depuis un modèle)",
     "chooseTemplate": "Choisir un modèle",
@@ -154,19 +157,26 @@
     "running": "OCR + extraction en cours…",
     "noFile": "Choisis d'abord un fichier.",
     "extractOk": "{{n}} ligne(s) ajoutée(s).",
+    "extractImages": "+ {{n}} image(s) extraite(s).",
     "extractEmpty": "Aucune ligne extraite de ce document.",
     "rowsTitle": "Lignes extraites",
     "source": "Source",
     "noRows": "Aucune ligne pour l'instant.",
+    "imagesTitle": "Images / illustrations extraites",
+    "noImages": "Aucune image extraite (PDF sans image, ou fichier non-PDF).",
     "deleteRow": "Suppr.",
-    "exportTitle": "Exporter en CSV",
+    "exportTitle": "Exporter la table",
+    "format": "Format",
     "targetDir": "Répertoire cible",
     "targetPlaceholder": "Ex : C:\\Users\\moi\\Exports",
     "export": "Exporter le CSV",
     "exportOk": "CSV écrit : {{path}} ({{n}} lignes).",
     "needTarget": "Indique le répertoire cible.",
     "deleteTable": "Supprimer la table",
-    "confirmDelete": "Confirmer"
+    "confirmDelete": "Confirmer",
+    "rename": "Renommer",
+    "save": "Enregistrer",
+    "cancel": "Annuler"
   },
   "settings": {
     "llmTitle": "Intelligence artificielle",

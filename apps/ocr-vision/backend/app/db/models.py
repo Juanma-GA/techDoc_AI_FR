@@ -82,3 +82,19 @@ class ExtractedRow(Base):
     # Valeurs extraites : {column_key: value}.
     values: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExtractedImage(Base):
+    """Image/illustration extraite d'un PDF (fichier JPG sur disque)."""
+
+    __tablename__ = "extracted_image"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    project_table_id: Mapped[str] = mapped_column(
+        ForeignKey("project_table.id", ondelete="CASCADE"), index=True
+    )
+    source_filename: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    # Nom du fichier stocke sous data/storage/<project_table_id>/.
+    filename: Mapped[str] = mapped_column(String(300))
+    page: Mapped[int | None] = mapped_column(default=None, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
