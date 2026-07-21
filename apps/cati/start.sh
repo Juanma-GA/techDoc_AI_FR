@@ -67,7 +67,7 @@ if command -v pnpm >/dev/null 2>&1; then
     fi
     if [[ "$need_build" == "1" ]]; then
         echo "[setup] Build du front React - dist absent ou sources modifiees..."
-        ( cd "${FRONTEND_DIR}" && pnpm install && pnpm build ) \
+        ( cd "${FRONTEND_DIR}" && { [ -d node_modules ] || pnpm install; } && pnpm build ) \
             || echo "[warn] Build front echoue : on sert le dist existant."
     fi
 fi

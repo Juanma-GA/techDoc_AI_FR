@@ -74,9 +74,7 @@ if command -v pnpm >/dev/null 2>&1; then
         # pnpm install UNIQUEMENT si node_modules absent : en reseau avec
         # interception TLS, un install "a jour" retente chaque paquet pendant des
         # minutes et bloque le lancement. Le build seul tourne hors-ligne.
-        ( cd "${FRONTEND_DIR}" \
-            && { [[ -d node_modules ]] || pnpm install; } \
-            && pnpm build ) \
+        ( cd "${FRONTEND_DIR}" && { [ -d node_modules ] || pnpm install; } && pnpm build ) \
             || echo "[warn] Build front echoue : on sert le dist existant."
     fi
 fi

@@ -162,7 +162,8 @@ where pnpm >nul 2>nul
 if errorlevel 1 goto :front_no_tool
 echo [setup] Build du front React via pnpm - install + build...
 pushd "%FRONTEND_DIR%"
-call pnpm install
+REM pnpm install UNIQUEMENT si node_modules absent (evite le hang TLS corporate)
+if not exist node_modules call pnpm install
 call pnpm build
 popd
 goto :front_ready

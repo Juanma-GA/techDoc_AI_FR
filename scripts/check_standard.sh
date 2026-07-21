@@ -25,7 +25,7 @@ for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
 done
 
-step()  { printf "[%d/15] %-38s" "$1" "$2"; }
+step()  { printf "[%d/16] %-38s" "$1" "$2"; }
 pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
@@ -234,9 +234,33 @@ if [[ -z "$missing" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 15. Summary
+# 15. pnpm install garde par node_modules dans les lanceurs (rule #12).
+#     En reseau a TLS intercepte, un 'pnpm install' non garde retente
+#     chaque paquet "in 1 minute" et fige le lancement plusieurs minutes.
 # ------------------------------------------------------------------
-step 15 "Summary"
+step 15 "pnpm install garde par node_modules"
+missing=""
+for runbat in apps/*/_run.bat; do
+  [[ -f "$runbat" ]] || continue
+  # Ne verifie que les .bat qui appellent effectivement pnpm install.
+  if grep -q 'pnpm install' "$runbat" && ! grep -q 'if not exist node_modules call pnpm install' "$runbat"; then
+    missing+="$runbat — 'call pnpm install' doit etre garde par 'if not exist node_modules'\n"
+  fi
+done
+for sh in apps/*/start.sh; do
+  [[ -f "$sh" ]] || continue
+  if grep -q 'pnpm install' "$sh" && ! grep -q 'node_modules \] || pnpm install' "$sh"; then
+    missing+="$sh — 'pnpm install' doit etre garde par '[ -d node_modules ] ||'\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else
+  fail "Lanceurs : 'pnpm install' interdit sur le chemin critique, garder par node_modules absent (STANDARD §lanceurs, rule #12) :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 16. Summary
+# ------------------------------------------------------------------
+step 16 "Summary"
 if [[ $violations -gt 0 ]]; then
   printf " \033[31m%d violation(s)\033[0m\n" "$violations"
   exit 1

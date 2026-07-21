@@ -67,7 +67,7 @@ if [[ "$need_build" == "1" ]]; then
             || echo "[warn] Build front echoue : on sert le dist existant."
     elif command -v pnpm >/dev/null 2>&1; then
         echo "[setup] Build du front React via pnpm..."
-        ( cd "${FRONTEND_DIR}" && pnpm install && pnpm build ) \
+        ( cd "${FRONTEND_DIR}" && { [ -d node_modules ] || pnpm install; } && pnpm build ) \
             || echo "[warn] Build front echoue : on sert le dist existant."
     else
         echo "[warn] Ni node+vite ni pnpm : on sert le dist existant tel quel."
