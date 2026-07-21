@@ -103,6 +103,8 @@ export type AnomalyOut = {
   project_id: string;
   file_version_id: string | null;
   type: string;
+  // Categorie metier (Sujet de la regle checklist) — dimension de regroupement.
+  category?: string;
   severity: AnomalySeverity | string;
   confidence: AnomalyConfidence | string;
   message: string;
@@ -145,6 +147,8 @@ export type KpiOut = {
   open_anomalies: number;
   anomalies_by_severity: Record<string, number>;
   anomalies_by_type: Record<string, number>;
+  // Repartition par categorie metier (Sujet des regles checklist).
+  anomalies_by_category: Record<string, number>;
   anomalies_by_status: Record<string, number>;
   anomalies_by_confidence: Record<string, number>;
   resolution_rate: number;

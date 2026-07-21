@@ -47,11 +47,14 @@ export function Manager() {
         .filter((s) => (k.anomalies_by_severity[s] ?? 0) > 0)
         .map((s) => ({ label: t(`redacteur.sev${s === "high" ? "High" : s === "medium" ? "Medium" : "Low"}`), value: k.anomalies_by_severity[s] ?? 0, color: SEVERITY_COLOR[s] }))
     : [];
-  const typeItems: BarItem[] = k
-    ? Object.entries(k.anomalies_by_type)
+  // Regroupement par « Sujet » de la checklist (categorie metier) : c'est la
+  // dimension utile en mode checklist-only. Le libelle est le Sujet saisi par
+  // l'utilisateur -> rendu tel quel (pas de cle i18n).
+  const categoryItems: BarItem[] = k
+    ? Object.entries(k.anomalies_by_category)
         .filter(([, v]) => v > 0)
         .sort((a, b) => b[1] - a[1])
-        .map(([type, v]) => ({ label: t(`projects.kpi.type.${type}`), value: v }))
+        .map(([category, v]) => ({ label: category, value: v }))
     : [];
 
   const canGotoProject = scope.length === 1;
@@ -113,8 +116,8 @@ export function Manager() {
               <BarList items={sevItems} />
             </div>
             <div className="card">
-              <h2 className="card-title">{t("manager.byType")}</h2>
-              <BarList items={typeItems} />
+              <h2 className="card-title">{t("manager.byCategory")}</h2>
+              <BarList items={categoryItems} />
             </div>
           </div>
 

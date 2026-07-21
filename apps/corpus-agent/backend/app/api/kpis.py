@@ -31,6 +31,7 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
     if not projects:
         return KpiOut(
             open_anomalies=0, anomalies_by_severity={}, anomalies_by_type={},
+            anomalies_by_category={},
             anomalies_by_status={}, resolution_rate=0.0,
             anomalies_by_confidence={},
             anomalies_over_time=[], top_files=[], top_rules=[],
@@ -57,6 +58,10 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
     # by_type : meme population que by_sev (anomalies qualite ouvertes) — les
     # deux graphes a barres somment ainsi au meme total que `open_anomalies`.
     by_type = Counter(a.type for a in open_a)
+    # by_category : regroupement metier par « Sujet » de la regle checklist. En
+    # mode checklist-only, c'est LA dimension utile (le type est toujours
+    # `personnalisee`). Anomalies sans categorie regroupees sous « Sans sujet ».
+    by_category = Counter((a.category or "Sans sujet") for a in open_a)
 
     # Repartition sur le workflow d'etat des tickets — toujours les 4 cles
     # presentes (0 explicite) pour un rendu stable cote dashboard.
@@ -115,6 +120,7 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
         open_anomalies=len(open_a),
         anomalies_by_severity=dict(by_sev),
         anomalies_by_type=dict(by_type),
+        anomalies_by_category=dict(by_category),
         anomalies_by_status=by_status,
         resolution_rate=resolution_rate,
         anomalies_by_confidence=by_conf,

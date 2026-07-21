@@ -125,6 +125,8 @@ class AnomalyOut(BaseModel):
     project_id: uuid.UUID
     file_version_id: Optional[uuid.UUID]
     type: str
+    # Categorie metier (Sujet de la regle checklist) — dimension de regroupement KPI.
+    category: str = ""
     severity: str
     confidence: str = "elevee"
     message: str
@@ -265,6 +267,9 @@ class KpiOut(BaseModel):
     open_anomalies: int
     anomalies_by_severity: dict[str, int]
     anomalies_by_type: dict[str, int]
+    # Repartition par categorie metier (Sujet des regles checklist) — dimension
+    # de regroupement en mode checklist-only.
+    anomalies_by_category: dict[str, int] = Field(default_factory=dict)
     # Repartition des anomalies sur le workflow d'etat (open / acknowledged /
     # fixed / rejected). dmc_missing exclu (couverture referentiel, pas un ticket).
     anomalies_by_status: dict[str, int]

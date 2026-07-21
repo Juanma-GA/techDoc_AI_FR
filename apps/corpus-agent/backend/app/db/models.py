@@ -153,6 +153,9 @@ class Anomaly(Base):
         Uuid, ForeignKey("analysis_runs.id", ondelete="SET NULL"), nullable=True, index=True
     )
     type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # Categorie metier = « Sujet » de la regle checklist a l'origine de l'anomalie.
+    # Dimension de regroupement des KPI (le type est toujours `personnalisee`).
+    category: Mapped[str] = mapped_column(String(120), default="", server_default="", index=True)
     severity: Mapped[str] = mapped_column(String(20), default="medium", server_default="medium")
     # Niveau de confiance dans la recommandation : elevee | moyenne | faible.
     # Déterministe → elevee ; jugement IA → renvoyé par Mistral.

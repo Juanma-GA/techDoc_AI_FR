@@ -175,6 +175,7 @@ def run_custom_rules(
                 (item.get("suggestion") or "").strip(),
                 extrait[:200],
                 confidence=confidence,
+                category=label,
             )
             db.add(a)
             anomalies.append(a)

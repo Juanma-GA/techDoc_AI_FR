@@ -85,10 +85,10 @@ def create_app() -> FastAPI:
         summary="Contrôle de conformité documentaire d'un corpus multi-fichiers.",
         description=(
             "Analyse un corpus de documents (.docx, .doc, .pdf, .xlsx/.xlsm, "
-            ".xml/S1000D) contre un catalogue de règles métier configurables et "
-            "des règles personnalisées importables (checklist Excel, évaluées "
-            "par IA). Détection d'anomalies, KPIs, et chat RAG assisté par "
-            "Mistral. LLM désactivable (fallback déterministe)."
+            ".xml/S1000D) contre une checklist de règles personnalisées "
+            "importables (Excel), jugées par IA sur chaque document. Détection "
+            "d'anomalies, KPIs, et chat RAG assisté par Mistral. LLM désactivable "
+            "(analyse alors sans anomalie)."
         ),
         version=settings.app_version,
         debug=settings.debug,
