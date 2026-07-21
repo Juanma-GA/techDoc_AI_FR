@@ -78,13 +78,24 @@ export function Settings() {
   const [odOutput, setOdOutput] = useState("");
   const [odNotice, setOdNotice] = useState<string | null>(null);
   const [detected, setDetected] = useState<string[]>([]);
+  const [licServer, setLicServer] = useState("");
+  const [licNotice, setLicNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (settingsQuery.data) {
       setOdInput(settingsQuery.data.onedrive_input_root || "");
       setOdOutput(settingsQuery.data.onedrive_output_root || "");
+      setLicServer(settingsQuery.data.composer_license_server || "");
     }
   }, [settingsQuery.data]);
+
+  const licSaveMutation = useMutation({
+    mutationFn: () => settingsApi.write({ composer_license_server: licServer.trim() }),
+    onSuccess: () => {
+      setLicNotice(t("settings.saved"));
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
 
   const odSaveMutation = useMutation({
     mutationFn: () =>
@@ -271,6 +282,41 @@ export function Settings() {
               ))}
             </ul>
           ) : null}
+        </div>
+      </article>
+
+      <article className="card">
+        <h2 className="card-title">{t("settings.composerTitle")}</h2>
+        <p className="banner info">{t("settings.composerNotice")}</p>
+        <div className="form">
+          <div className="field">
+            <label htmlFor="lic_server" className="field-label">
+              {t("settings.composerLicense")}
+            </label>
+            <input
+              className="input mono"
+              id="lic_server"
+              value={licServer}
+              onChange={(e) => setLicServer(e.target.value)}
+              placeholder="4085@serveur-licence"
+            />
+            <p className="hint">{t("settings.composerHint")}</p>
+          </div>
+          <div className="row">
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => {
+                setLicNotice(null);
+                licSaveMutation.mutate();
+              }}
+              disabled={licSaveMutation.isPending}
+            >
+              {licSaveMutation.isPending ? <span className="spinner" /> : null}
+              <span>{t("settings.save")}</span>
+            </button>
+          </div>
+          {licNotice ? <p className="success">{licNotice}</p> : null}
         </div>
       </article>
     </div>

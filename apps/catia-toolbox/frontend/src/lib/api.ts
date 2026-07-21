@@ -129,6 +129,7 @@ export type SettingsDto = {
   llm_tested?: boolean;
   onedrive_input_root: string;
   onedrive_output_root: string;
+  composer_license_server: string;
 };
 
 export type SettingsInput = {
@@ -139,6 +140,7 @@ export type SettingsInput = {
   llm_enabled?: boolean;
   onedrive_input_root?: string;
   onedrive_output_root?: string;
+  composer_license_server?: string;
 };
 
 export type BrowseScope = "input" | "output";

@@ -74,6 +74,20 @@ def test_conversion_execute_dry_run(client, synthetic_tree) -> None:
     assert ko.json()["code"] == "EXEC_CONFIRM_REQUIRED"
 
 
+def test_conversion_license_server_injected(client, synthetic_tree) -> None:
+    """Le serveur de licence Composer configure est embarque dans le script."""
+    r = client.post("/api/v1/settings", json={"composer_license_server": "4085@srv-lic"})
+    assert r.status_code == 200, r.text
+    assert r.json()["composer_license_server"] == "4085@srv-lic"
+
+    imp_id = _scan(client, str(synthetic_tree))
+    run_id = client.post(f"/api/v1/imports/{imp_id}/conversion", json={}).json()["id"]
+    body = client.get(f"/api/v1/conversions/{run_id}/export.script").text
+    assert "COMPOSER_LICENSE_SERVER" in body
+    assert '"4085@srv-lic"' in body
+    assert "apply_license" in body
+
+
 def test_conversion_deselect(client, synthetic_tree) -> None:
     imp_id = _scan(client, str(synthetic_tree))
     run_id = client.post(f"/api/v1/imports/{imp_id}/conversion", json={}).json()["id"]

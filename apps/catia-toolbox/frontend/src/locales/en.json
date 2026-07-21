@@ -340,6 +340,10 @@
     "onedriveDetect": "Auto-detect",
     "onedriveUseInput": "Input",
     "onedriveUseOutput": "Output",
+    "composerTitle": "Composer license (conversion)",
+    "composerNotice": "CATIA → Composer conversion requires an active license. Enter your floating license server (DSLS) here: the generated conversion script sets it in the environment before driving Composer. If empty, your machine's local license is used.",
+    "composerLicense": "License server (port@host)",
+    "composerHint": "Best-effort: the exact variable read by your Composer edition is still to be confirmed (candidates DSLICSRV / DS_LICENSE_SERVER / LSERVRC).",
     "llmTitle": "Artificial intelligence",
     "llmEnabled": "LLM enabled",
     "llmHint": "When disabled, AI-driven tasks are skipped (deterministic result). The key is kept."

@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import load_parsed_nodes
-from app.core import conversion_planner
+from app.core import composer_license, conversion_planner
 from app.core.errors import AppError
 from app.db.models import ConversionItem, ConversionRun, StructureImport
 from app.db.session import get_db
@@ -152,10 +152,13 @@ def execute_conversion(run_id: uuid.UUID, body: ConversionExecIn, db: Session = 
             status_code=400,
         )
 
-    script = conversion_planner.to_pyscript(run.items, dry_run=body.dry_run)
+    license_server = composer_license.get_license_server(db)
+    script = conversion_planner.to_pyscript(run.items, dry_run=body.dry_run, license_server=license_server)
     env = dict(os.environ)
     if base and os.path.isdir(base):
         env["CATIA_CONVERT_BASE"] = base
+    if license_server:
+        env["COMPOSER_LICENSE_SERVER"] = license_server
 
     tmp = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
     try:
@@ -203,7 +206,7 @@ def export_script(run_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     run = db.get(ConversionRun, run_id)
     if run is None:
         raise AppError("CONVERSION_NOT_FOUND", "Conversion introuvable.", status_code=404, detail={"id": str(run_id)})
-    content = conversion_planner.to_pyscript(run.items)
+    content = conversion_planner.to_pyscript(run.items, license_server=composer_license.get_license_server(db))
     return Response(
         content=content,
         media_type="text/x-python; charset=utf-8",

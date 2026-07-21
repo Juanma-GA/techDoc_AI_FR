@@ -38,6 +38,7 @@ class SettingsIn(BaseModel):
     llm_enabled: Optional[bool] = None
     onedrive_input_root: Optional[str] = None
     onedrive_output_root: Optional[str] = None
+    composer_license_server: Optional[str] = None
 
 
 class SettingsOut(BaseModel):
@@ -49,6 +50,7 @@ class SettingsOut(BaseModel):
     llm_tested: bool = False
     onedrive_input_root: str = ""
     onedrive_output_root: str = ""
+    composer_license_server: str = ""
 
 
 # ----- Navigation OneDrive (browse) -----------------------------------------

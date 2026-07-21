@@ -100,12 +100,14 @@ def _clean(p: str) -> str:
     return p.replace('"', "").replace("\n", " ").replace("\r", " ").strip()
 
 
-def to_pyscript(items: Iterable[Any], *, dry_run: bool = True) -> str:
+def to_pyscript(items: Iterable[Any], *, dry_run: bool = True, license_server: str = "") -> str:
     """Script Python win32com pilotant Composer pour la conversion -> SMGXML.
 
     `dry_run=True` (defaut) : le script embarque `DRY_RUN=True` (n'execute rien,
     affiche seulement le plan). L'export manuel reste toujours en dry-run ; seule
     l'execution depuis l'app peut generer un script `DRY_RUN=False`.
+    `license_server` (optionnel, ex. `4085@srv`) est pose dans l'environnement
+    avant de piloter Composer (licence flottante DSLS). Vide => licence locale.
     Les appels API exacts (ProgID, Open / SaveAs) sont a confirmer sur la version
     SDK Composer de l'utilisateur (cf. TODO + `--discover`).
     """
@@ -125,6 +127,7 @@ def to_pyscript(items: Iterable[Any], *, dry_run: bool = True) -> str:
         _CONVERSION_TEMPLATE
         .replace("__PLAN__", plan_body)
         .replace("__KEEP_EXTS__", keep_body)
+        .replace("__LICENSE_SERVER__", json.dumps(license_server or ""))
         .replace("__DRY_RUN__", "True" if dry_run else "False")
     )
 
@@ -186,6 +189,13 @@ COMPOSER_PROGID_CANDIDATES = [
     "ComposerAPI.Application",
     "Composer.Document",
 ]
+# Serveur de licence flottante Composer (DSLS, format "port@hote"). Vide => la
+# licence locale de l'utilisateur est utilisee. Renseigne depuis l'app
+# (Parametres > licence Composer) ou via la variable d'env COMPOSER_LICENSE_SERVER.
+COMPOSER_LICENSE_SERVER = os.environ.get("COMPOSER_LICENSE_SERVER") or __LICENSE_SERVER__
+# TODO : nom exact de la variable lue par VOTRE edition de Composer pour une
+# licence DSLS flottante. Candidats frequents (le 1er non vide est pose) :
+LICENSE_ENV_CANDIDATES = ("DSLICSRV", "DS_LICENSE_SERVER", "LSERVRC")
 # Dossier racine des chemins relatifs du PLAN. Par defaut le dossier du script ;
 # l'app le fournit via CATIA_CONVERT_BASE (= dossier source scanne).
 BASE = os.environ.get("CATIA_CONVERT_BASE") or os.path.dirname(os.path.abspath(__file__))
@@ -222,6 +232,21 @@ def tidy_output_dir(out_dir: str) -> None:
             os.replace(p, os.path.join(others, name))
 
 
+def apply_license() -> None:
+    """Pose le serveur de licence flottante Composer dans l'environnement.
+
+    Best-effort : positionne COMPOSER_LICENSE_SERVER sur les variables candidates
+    (DSLS) si elles ne sont pas deja definies. Sans serveur configure, ne fait
+    rien -> la licence locale de l'utilisateur s'applique (comportement
+    historique). TODO : confirmer la variable exacte pour votre Composer."""
+    if not COMPOSER_LICENSE_SERVER:
+        return
+    for var in LICENSE_ENV_CANDIDATES:
+        os.environ.setdefault(var, COMPOSER_LICENSE_SERVER)
+    _log(f"Licence Composer : serveur '{COMPOSER_LICENSE_SERVER}' pose "
+         f"({', '.join(LICENSE_ENV_CANDIDATES)}).")
+
+
 def connect_composer():
     """Essaie chaque ProgID candidat ; renvoie le 1er serveur Composer qui repond."""
     try:
@@ -229,6 +254,7 @@ def connect_composer():
     except ImportError:
         _log("ERREUR: pywin32 requis (pip install pywin32).", err=True)
         raise
+    apply_license()
     last = None
     for progid in COMPOSER_PROGID_CANDIDATES:
         try:

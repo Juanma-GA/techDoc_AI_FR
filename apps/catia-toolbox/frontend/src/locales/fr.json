@@ -340,6 +340,10 @@
     "onedriveDetect": "Auto-détecter",
     "onedriveUseInput": "Entrée",
     "onedriveUseOutput": "Sortie",
+    "composerTitle": "Licence Composer (conversion)",
+    "composerNotice": "La conversion CATIA → Composer exige une licence active. Renseignez ici votre serveur de licence flottante (DSLS) : le script de conversion généré le posera dans l'environnement avant de piloter Composer. À vide, la licence locale de votre poste est utilisée.",
+    "composerLicense": "Serveur de licence (port@hôte)",
+    "composerHint": "Best-effort : la variable exacte lue par votre édition de Composer reste à confirmer (candidats DSLICSRV / DS_LICENSE_SERVER / LSERVRC).",
     "llmTitle": "Intelligence artificielle",
     "llmEnabled": "LLM activé",
     "llmHint": "Quand désactivé, les tâches confiées à l'IA sont sautées (résultat déterministe). La clé est conservée."
