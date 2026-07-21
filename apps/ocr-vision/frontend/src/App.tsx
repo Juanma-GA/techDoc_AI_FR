@@ -6,12 +6,16 @@ import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { Architecture } from "./routes/Architecture";
 import { Data } from "./routes/Data";
+import { Extraction } from "./routes/Extraction";
 import { Home } from "./routes/Home";
 import { Ocr } from "./routes/Ocr";
 import { Settings } from "./routes/Settings";
+import { Templates } from "./routes/Templates";
 
 const navItems = [
   { to: "/", labelKey: "nav.ocr" },
+  { to: "/extraction", labelKey: "nav.extraction" },
+  { to: "/templates", labelKey: "nav.templates" },
   { to: "/home", labelKey: "nav.home" },
   { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
@@ -69,6 +73,8 @@ export function App() {
         <main>
           <Routes>
             <Route path="/" element={<Ocr />} />
+            <Route path="/extraction" element={<Extraction />} />
+            <Route path="/templates" element={<Templates />} />
             <Route path="/home" element={<Home />} />
             <Route path="/architecture" element={<Architecture />} />
             <Route path="/data" element={<Data />} />

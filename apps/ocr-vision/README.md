@@ -17,10 +17,44 @@ Conforme à [`STANDARD_POC.md`](../../STANDARD_POC.md). Bootstrap depuis
 
 ## État actuel du POC
 
-**Périmètre minimal** : un seul endpoint métier (`POST /api/v1/vision/test`)
-qui valide la chaîne OCR + multimodal Mistral. Pas encore de persistance
-des analyses ni de workflow utilisateur — c'est une brique de validation
-technique, pas une app complète à ce stade.
+Deux briques :
+
+1. **OCR / reconnaissance** (`POST /api/v1/vision/test`) — validation de la
+   chaîne OCR + multimodal Mistral, sans persistance.
+2. **Capitalisation des données extraites** — OCRiser des PDF puis remplir
+   une **table définie** (colonnes + règles d'extraction), capitaliser par
+   **projet**, et **exporter en CSV** dans un répertoire cible. Voir la
+   section [Capitalisation](#capitalisation-des-données-extraites).
+
+## Capitalisation des données extraites
+
+Workflow : **OCRiser un PDF → remplir une table (N lignes) → exporter en CSV**.
+
+- **`TableTemplate`** : définition **réutilisable** d'une table — nom +
+  colonnes `[{key, label, type, rule}]`, `type ∈ text|number|date|bool`,
+  `rule` = consigne d'extraction par colonne.
+- **`Project`** : unité de capitalisation.
+- **`ProjectTable`** : un template appliqué à un projet ; fige un **snapshot**
+  des colonnes et porte les lignes extraites. C'est « la table » exportée.
+- **`ExtractedRow`** : une ligne extraite (`values` = `{key: value}`).
+
+Routes : `POST /api/v1/extract` (upload + `project_table_id` → OCR puis
+extraction structurée LLM → N lignes persistées) et `POST /api/v1/export`
+(`project_table_id` + `target_dir` → écrit `<projet>__<table>.csv`).
+L'extraction respecte l'interrupteur `llm_enabled` (OFF → 200 + 0 ligne).
+
+### Écart documenté au standard — export CSV sur disque
+
+`POST /api/v1/export` écrit un fichier CSV sur un **chemin disque local
+arbitraire** fourni par l'utilisateur. C'est un **écart assumé** au cadre
+« pas d'accès disque hors périmètre app », justifié par la posture
+**local-first strict** (palier 1, bind `127.0.0.1`, un seul utilisateur sur
+son PC). Garde-fous : le dossier cible doit **exister**, le nom de fichier
+est **assaini** (`[^A-Za-z0-9_.-]` → `_`) et un contrôle anti-traversée
+vérifie que la sortie reste dans le dossier cible. CSV en **UTF-8-sig +
+séparateur `;`** (ouverture directe dans Excel FR). En cas de déploiement
+palier 2/3 (bind exposé), cet endpoint devra être revu (répertoire
+whitelisté ou download navigateur).
 
 ## Auth
 

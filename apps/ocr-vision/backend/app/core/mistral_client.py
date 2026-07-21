@@ -293,6 +293,28 @@ class MistralClient:
             if isinstance(p, dict)
         ).strip()
 
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: Optional[str] = None,
+        temperature: float = 0.1,
+    ) -> str:
+        """Chat completion synchrone (non stream). Renvoie le texte de la reponse."""
+        payload = {
+            "model": model or self.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        with httpx.Client(timeout=120.0) as client:
+            r = client.post(
+                f"{self.base_url}/v1/chat/completions",
+                headers=self._headers(),
+                json=payload,
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
+
     async def chat_stream(
         self,
         messages: list[dict[str, Any]],

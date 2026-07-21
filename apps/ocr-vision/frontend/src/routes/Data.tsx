@@ -4,12 +4,6 @@ import { useTranslation } from "react-i18next";
 
 import { adminApi, type AdminStatsDto } from "../lib/api";
 
-function formatSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 export function Data() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -58,24 +52,20 @@ export function Data() {
         {stats ? (
           <div className="kpi-grid">
             <div className="kpi">
-              <div className="label">{t("data.documents")}</div>
-              <div className="kpi-value info">{stats.documents}</div>
+              <div className="label">{t("data.projects")}</div>
+              <div className="kpi-value info">{stats.projects}</div>
             </div>
             <div className="kpi">
-              <div className="label">{t("data.chunks")}</div>
-              <div className="kpi-value info">{stats.chunks}</div>
+              <div className="label">{t("data.templates")}</div>
+              <div className="kpi-value info">{stats.templates}</div>
             </div>
             <div className="kpi">
-              <div className="label">{t("data.sessions")}</div>
-              <div className="kpi-value info">{stats.sessions}</div>
+              <div className="label">{t("data.tables")}</div>
+              <div className="kpi-value info">{stats.tables}</div>
             </div>
             <div className="kpi">
-              <div className="label">{t("data.messages")}</div>
-              <div className="kpi-value info">{stats.messages}</div>
-            </div>
-            <div className="kpi">
-              <div className="label">{t("data.totalSize")}</div>
-              <div className="kpi-value">{formatSize(stats.total_size_bytes)}</div>
+              <div className="label">{t("data.rows")}</div>
+              <div className="kpi-value info">{stats.rows}</div>
             </div>
           </div>
         ) : (
