@@ -235,9 +235,31 @@ def test_extract_and_images(client, monkeypatch, tmp_path) -> None:
     assert served.status_code == 200
     assert served.headers["content-type"].startswith("image/")
 
+    # Export des images vers un autre repertoire.
+    exp_dir = tmp_path / "sortie"
+    exp_dir.mkdir()
+    ex = client.post(
+        "/api/v1/images/export",
+        json={"project_table_id": table_id, "target_dir": str(exp_dir)},
+    )
+    assert ex.status_code == 200, ex.text
+    assert ex.json()["count"] == 1
+    copied = exp_dir / "Projet_A__Nomenclature_A_images" / "img1.jpg"
+    assert copied.exists()
+
     deleted = client.delete(f"/api/v1/images/{image_id}")
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/project-tables/{table_id}/images").json() == []
+
+
+def test_images_export_invalid_dir(client) -> None:
+    table_id = _project_table(client)
+    r = client.post(
+        "/api/v1/images/export",
+        json={"project_table_id": table_id, "target_dir": "/chemin/inexistant/zzz"},
+    )
+    assert r.status_code == 400
+    assert r.json()["code"] == "TARGET_DIR_INVALID"
 
 
 def test_admin_stats_counts(client) -> None:

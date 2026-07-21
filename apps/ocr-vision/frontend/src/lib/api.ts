@@ -98,6 +98,7 @@ export type ImageDto = {
 };
 export type ExportFormat = "csv" | "xlsx";
 export type ExportResultDto = { path: string; rows: number; format: string };
+export type ImagesExportResultDto = { path: string; count: number };
 
 export type SettingsDto = {
   api_key_set: boolean;
@@ -208,6 +209,11 @@ export const imagesApi = {
   // URL absolue (relative a l'API base) servant le fichier JPG.
   fileUrl: (image: ImageDto) => `${API_BASE}${image.url.replace(/^\/api\/v1/, "")}`,
   remove: (id: string) => api<void>(`/images/${id}`, { method: "DELETE" }),
+  export: (projectTableId: string, targetDir: string) =>
+    api<ImagesExportResultDto>("/images/export", {
+      method: "POST",
+      body: JSON.stringify({ project_table_id: projectTableId, target_dir: targetDir }),
+    }),
 };
 
 export const extractApi = {

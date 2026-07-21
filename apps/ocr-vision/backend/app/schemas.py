@@ -143,6 +143,16 @@ class ImageOut(BaseModel):
     created_at: datetime
 
 
+class ImagesExportIn(BaseModel):
+    project_table_id: str
+    target_dir: str = Field(..., min_length=1)
+
+
+class ImagesExportOut(BaseModel):
+    path: str
+    count: int
+
+
 class ExportIn(BaseModel):
     project_table_id: str
     target_dir: str = Field(..., min_length=1)

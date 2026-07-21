@@ -48,9 +48,11 @@ extraction structurée LLM → N lignes persistées) et `POST /api/v1/export`
 document sont aussi extraites (PyMuPDF, façon s1000d-extractor : `page.get_images`
 → JPG, CMYK/alpha→RGB) et stockées dans `backend/data/storage/<project_table_id>/`
 (gitignoré). Table `ExtractedImage`. Routes `GET /project-tables/{id}/images`
-(liste), `GET /images/{id}/file` (service JPG), `DELETE /images/{id}`. Best-effort :
+(liste), `GET /images/{id}/file` (service JPG), `DELETE /images/{id}`, et
+`POST /images/export` (`project_table_id` + `target_dir` → copie les JPG dans un
+sous-dossier `<projet>__<table>_images/` du répertoire cible). Best-effort :
 image/DOCX/OCR ou PDF sans image → 0 image, jamais d'erreur. Galerie de vignettes
-téléchargeables dans l'onglet Extraction.
+téléchargeables dans l'onglet Extraction, avec export vers un répertoire dédié.
 
 **Colonne « Clé »** : identifiant technique de colonne (minuscules, sans espace ni
 accent, ex. `part_number`) — nom de colonne dans le CSV/XLSX et cible des règles.

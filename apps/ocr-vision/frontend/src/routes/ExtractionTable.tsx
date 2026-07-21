@@ -26,6 +26,7 @@ export function ExtractionTable({
   const [file, setFile] = useState<File | null>(null);
   const [targetDir, setTargetDir] = useState("");
   const [format, setFormat] = useState<ExportFormat>("csv");
+  const [imageDir, setImageDir] = useState("");
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const rowsQuery = useQuery<RowDto[]>({
@@ -67,6 +68,13 @@ export function ExtractionTable({
     onSuccess: invalidate,
   });
 
+  const exportImages = useMutation({
+    mutationFn: () => imagesApi.export(tableId, imageDir.trim()),
+    onSuccess: (r) =>
+      setFeedback({ kind: "ok", text: t("extraction.imagesExportOk", { path: r.path, n: r.count }) }),
+    onError: (e: Error) => setFeedback({ kind: "error", text: e.message }),
+  });
+
   const exportMutation = useMutation({
     mutationFn: () => extractApi.export(tableId, targetDir.trim(), format),
     onSuccess: (r) =>
@@ -96,6 +104,17 @@ export function ExtractionTable({
     }
     exportMutation.mutate();
   };
+
+  const runExportImages = () => {
+    setFeedback(null);
+    if (!imageDir.trim()) {
+      setFeedback({ kind: "error", text: t("extraction.needImagesTarget") });
+      return;
+    }
+    exportImages.mutate();
+  };
+
+  const formatLabel = format === "xlsx" ? "Excel (.xlsx)" : "CSV";
 
   const rows = rowsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
@@ -208,6 +227,27 @@ export function ExtractionTable({
         ) : (
           <div className="empty-state">{t("extraction.noImages")}</div>
         )}
+        {images.length ? (
+          <div className="row" style={{ alignItems: "flex-end", marginTop: 12 }}>
+            <label className="grow">
+              <div className="label">{t("extraction.imagesTargetDir")}</div>
+              <input
+                className="input"
+                value={imageDir}
+                placeholder={t("extraction.targetPlaceholder")}
+                onChange={(e) => setImageDir(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn secondary"
+              disabled={exportImages.isPending}
+              onClick={runExportImages}
+            >
+              {t("extraction.imagesExport")}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="card">
@@ -242,7 +282,7 @@ export function ExtractionTable({
             disabled={exportMutation.isPending || !rows.length}
             onClick={runExport}
           >
-            {t("extraction.export")}
+            {t("extraction.export", { format: formatLabel })}
           </button>
         </div>
       </div>
