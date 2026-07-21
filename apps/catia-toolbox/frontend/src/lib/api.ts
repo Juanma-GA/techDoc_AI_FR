@@ -684,6 +684,18 @@ export const colorRefApi = {
     }),
 };
 
+// Config textures : bibliotheque de styles + extension (ex. .SMGStyleSet).
+export type TextureConfig = { library: string; ext: string };
+
+export const textureApi = {
+  read: () => request<TextureConfig>("/colorref/texture"),
+  write: (config: TextureConfig) =>
+    request<TextureConfig>("/colorref/texture", {
+      method: "POST",
+      body: JSON.stringify(config),
+    }),
+};
+
 export const smgxmlApi = {
   list: () => request<SmgxmlRunDto[]>("/smgxml"),
   get: (id: string) => request<SmgxmlRunDto>(`/smgxml/${id}`),

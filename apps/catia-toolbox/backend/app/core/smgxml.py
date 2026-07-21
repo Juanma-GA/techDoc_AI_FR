@@ -32,8 +32,9 @@ from app.core.errors import AppError
 
 # Attributs portant le nom d'un acteur / piece (TODO : confirmer Composer).
 NAME_ATTRS: tuple[str, ...] = ("name", "Name", "actorName", "title", "label", "id", "Id")
-# Balise + attribut portant le nom de style (recherche "<Actor.Style Value=").
-STYLE_TAG: str = "Actor.Style"
+# Balises portant le nom de style de texture (variantes Composer : "Actor.Style"
+# @Value ou "ActorStyle"). TODO : confirmer sur un SMGXML reel.
+STYLE_TAGS: tuple[str, ...] = ("Actor.Style", "ActorStyle")
 STYLE_VALUE_ATTR: str = "Value"
 # Balise couleur (sous SCLIT > Neutral) + attribut portant le triplet RGB.
 COLOR_TAG: str = "Actor.Color"
@@ -124,7 +125,7 @@ def _recolor(
 
     for elem in root.iter():
         tag = _local(elem.tag)
-        if set_style and tag == STYLE_TAG:
+        if set_style and tag in STYLE_TAGS:
             name = _actor_name_for(elem, parent_map)
             if name and style_map.get(name):
                 old = elem.get(STYLE_VALUE_ATTR, "")

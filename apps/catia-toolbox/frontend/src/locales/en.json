@@ -443,7 +443,7 @@
     "matchByPn": "by PN",
     "setStyle": "Set style (Color Ref)",
     "setColor": "Set color (RGB)",
-    "simpleOnly": "Simple parts only (empty Materials)",
+    "simpleOnly": "Mono-body parts only (single slot)",
     "nomenRequired": "Choose a nomenclature.",
     "targetRequired": "Check at least \"style\" or \"color\".",
     "nomenOption": "{{name}} ({{mono}} mono)",
@@ -452,7 +452,12 @@
     "refName": "Color Ref",
     "refSwatch": "Preview",
     "refAdd": "Add a color",
-    "refSaved": "Referential saved ({{count}} color(s))."
+    "refSaved": "Referential saved ({{count}} color(s)).",
+    "textureTitle": "Texture library (.SMGStyleSet)",
+    "textureBanner": "The style name (Color Ref) written into Actor.Style points to a file in the library, suffixed with the extension (.SMGStyleSet). Set the library path so the SMGXML references it directly.",
+    "textureLibrary": "Style library (path)",
+    "textureExt": "Style extension",
+    "textureSaved": "Texture config saved."
   },
   "smgxmlRename": {
     "title": "Rename parts in the SMGXML",

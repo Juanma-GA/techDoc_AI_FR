@@ -133,7 +133,8 @@ def test_recolor_style_and_color_by_pn(client, tmp_path):
     types = {c["change_type"] for c in client.get(f"/api/v1/smgxml/{run_id}/changes").json()}
     assert {"style", "color"} <= types
     written = smg.read_text(encoding="utf-8")
-    assert 'Value="Visserie"' in written
+    # Extension de style .SMGStyleSet appliquee par defaut (config textures).
+    assert "Visserie.SMGStyleSet" in written
     assert "255,0,0" in written
 
 
@@ -195,3 +196,42 @@ def test_recolor_no_mono(client, tmp_path):
     })
     assert r.status_code == 400
     assert r.json()["code"] == "NO_COLOR_TARGET"
+
+
+def _make_smgxml_actorstyle(tmp_path):
+    """Variante Composer : balise <ActorStyle> (sans point)."""
+    content = (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<Document>\n"
+        '  <Actor name="AA-200">\n'
+        '    <ActorStyle Value="Defaut" />\n'
+        "  </Actor>\n"
+        "</Document>\n"
+    )
+    p = tmp_path / "actorstyle.smgxml"
+    p.write_text(content, encoding="utf-8")
+    return p
+
+
+def test_texture_config_library_and_ext(client, tmp_path):
+    """Config textures : le nom de style ecrit dans le SMGXML est prefixe par la
+    bibliotheque et suffixe par l'extension (.SMGStyleSet). Balise ActorStyle."""
+    _set_input_root(client, str(tmp_path))
+
+    # Config textures : bibliotheque + extension personnalisee.
+    cfg = client.post("/api/v1/colorref/texture", json={"library": "C:\\Tex\\Lib", "ext": ".SMGStyleSet"})
+    assert cfg.status_code == 200, cfg.text
+    assert client.get("/api/v1/colorref/texture").json()["library"] == "C:\\Tex\\Lib"
+
+    smg = _make_smgxml_actorstyle(tmp_path)
+    nom_id = _make_nomenclature_full(client, tmp_path)  # Ref Couleur = Visserie, mono-corps
+
+    r = client.post("/api/v1/smgxml/recolor", json={
+        "scope": "input", "path": str(smg), "nomenclature_run_id": nom_id,
+        "match_by": "pn", "simple_only": True,
+        "set_style": True, "set_color": False, "apply": True,
+    })
+    assert r.status_code == 200, r.text
+    written = smg.read_text(encoding="utf-8")
+    # Balise <ActorStyle> reconnue + valeur = <bibliotheque>\<nom>.SMGStyleSet.
+    assert "C:\\Tex\\Lib\\Visserie.SMGStyleSet" in written

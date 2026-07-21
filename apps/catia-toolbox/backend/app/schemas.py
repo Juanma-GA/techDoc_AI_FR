@@ -617,6 +617,18 @@ class ColorRefListOut(BaseModel):
     entries: list[ColorRefEntry] = Field(default_factory=list)
 
 
+class TextureConfigIn(BaseModel):
+    """Config textures : bibliotheque de styles + extension (ex. .SMGStyleSet)."""
+
+    library: str = Field(default="", max_length=500)
+    ext: str = Field(default=".SMGStyleSet", max_length=40)
+
+
+class TextureConfigOut(BaseModel):
+    library: str = ""
+    ext: str = ".SMGStyleSet"
+
+
 class SmgxmlInspectIn(BaseModel):
     scope: str = Field(default="input")
     path: str = Field(..., min_length=1)

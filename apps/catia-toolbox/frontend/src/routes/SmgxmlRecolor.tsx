@@ -7,10 +7,12 @@ import {
   colorRefApi,
   identificationApi,
   smgxmlApi,
+  textureApi,
   type ColorRefEntry,
   type NomenclatureRunDto,
   type SmgxmlChangeDto,
   type SmgxmlRunDto,
+  type TextureConfig,
 } from "../lib/api";
 import { FilePicker } from "../components/FilePicker";
 import { useWorkspace } from "../stores/workspace";
@@ -133,6 +135,70 @@ function ColorReferentialCard() {
   );
 }
 
+/** Config bibliotheque de textures + extension (.SMGStyleSet) ecrite dans Actor.Style. */
+function TextureConfigCard() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const cfgQuery = useQuery({ queryKey: ["texture"], queryFn: textureApi.read });
+  const [draft, setDraft] = useState<TextureConfig | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const cfg = draft ?? cfgQuery.data ?? { library: "", ext: ".SMGStyleSet" };
+
+  const saveMutation = useMutation({
+    mutationFn: (c: TextureConfig) => textureApi.write(c),
+    onSuccess: (data) => {
+      setDraft(data);
+      setNotice(t("smgxmlRecolor.textureSaved"));
+      void qc.invalidateQueries({ queryKey: ["texture"] });
+    },
+  });
+
+  return (
+    <article className="card">
+      <h2 className="card-title">{t("smgxmlRecolor.textureTitle")}</h2>
+      <p className="banner info">{t("smgxmlRecolor.textureBanner")}</p>
+      <div className="row" style={{ alignItems: "flex-end" }}>
+        <div className="grow field">
+          <label htmlFor="tex-library" className="field-label">
+            {t("smgxmlRecolor.textureLibrary")}
+          </label>
+          <input
+            id="tex-library"
+            className="input"
+            value={cfg.library}
+            placeholder="C:\\Textures\\Bibliotheque"
+            onChange={(e) => setDraft({ ...cfg, library: e.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="tex-ext" className="field-label">
+            {t("smgxmlRecolor.textureExt")}
+          </label>
+          <input
+            id="tex-ext"
+            className="input"
+            style={{ width: "10rem" }}
+            value={cfg.ext}
+            placeholder=".SMGStyleSet"
+            onChange={(e) => setDraft({ ...cfg, ext: e.target.value })}
+          />
+        </div>
+        <button
+          type="button"
+          className="btn primary small"
+          onClick={() => saveMutation.mutate({ library: cfg.library.trim(), ext: cfg.ext.trim() })}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? <span className="spinner" /> : null}
+          <span>{t("common.save")}</span>
+        </button>
+        {notice ? <span className="success">{notice}</span> : null}
+      </div>
+    </article>
+  );
+}
+
 export function SmgxmlRecolor() {
   const { t } = useTranslation();
 
@@ -235,6 +301,7 @@ export function SmgxmlRecolor() {
   return (
     <div className="form" style={{ maxWidth: "48rem" }}>
       <ColorReferentialCard />
+      <TextureConfigCard />
       <article className="card">
         <h2 className="card-title">{t("smgxmlRecolor.title")}</h2>
         <p className="banner warn">{t("smgxmlRecolor.banner")}</p>

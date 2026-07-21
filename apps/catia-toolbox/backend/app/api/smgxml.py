@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core import color_ref
 from app.core import onedrive
 from app.core import smgxml as smgxml_engine
+from app.core import texture_ref
 from app.core.errors import AppError
 from app.core.security import safe_under_root
 from app.db.models import NomenclatureItem, NomenclatureRun, SmgxmlChange, SmgxmlRun
@@ -114,6 +115,8 @@ def recolor(payload: SmgxmlRecolorIn, db: Session = Depends(get_db)) -> SmgxmlRu
 
     # Referentiel Ref Couleur -> RGB (ex. "Visserie" -> (r,g,b)) pour Actor.Color.
     ref_rgb = color_ref.resolve_map(db)
+    # Config textures : bibliotheque + extension (.SMGStyleSet) pour le nom de style.
+    tex = texture_ref.get_texture_config(db)
 
     color_map: dict[str, tuple[int, int, int]] = {}
     style_map: dict[str, str] = {}
@@ -129,9 +132,10 @@ def recolor(payload: SmgxmlRecolorIn, db: Session = Depends(get_db)) -> SmgxmlRu
             rgb = (it.color_r, it.color_g, it.color_b)
         if rgb is not None:
             color_map[key] = rgb
-        # Nom de style (mecanisme alternatif : Composer applique la texture C:).
+        # Nom de style (texture) : Ref Couleur formatee vers la bibliotheque
+        # (<bibliotheque>/<nom>.SMGStyleSet) et ecrite dans Actor.Style.
         if it.color_ref:
-            style_map[key] = it.color_ref
+            style_map[key] = texture_ref.format_style_value(it.color_ref, tex["library"], tex["ext"])
 
     # Rien a poser (ni RGB resolu ni ref de style, selon les cases cochees) => 400.
     nothing_to_do = (not payload.set_color or not color_map) and (not payload.set_style or not style_map)

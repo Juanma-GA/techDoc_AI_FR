@@ -443,7 +443,7 @@
     "matchByPn": "par PN",
     "setStyle": "Poser le style (Ref Couleur)",
     "setColor": "Poser la couleur (RGB)",
-    "simpleOnly": "Pièces simples seulement (Matériaux vide)",
+    "simpleOnly": "Pièces mono-corps seulement (un seul slot)",
     "nomenRequired": "Choisissez une nomenclature.",
     "targetRequired": "Cochez au moins « style » ou « couleur ».",
     "nomenOption": "{{name}} ({{mono}} mono)",
@@ -452,7 +452,12 @@
     "refName": "Ref Couleur",
     "refSwatch": "Aperçu",
     "refAdd": "Ajouter une couleur",
-    "refSaved": "Référentiel enregistré ({{count}} couleur(s))."
+    "refSaved": "Référentiel enregistré ({{count}} couleur(s)).",
+    "textureTitle": "Bibliothèque de textures (.SMGStyleSet)",
+    "textureBanner": "Le nom de style (Ref Couleur) écrit dans Actor.Style pointe vers un fichier de la bibliothèque, suffixé par l'extension (.SMGStyleSet). Renseignez le chemin de la bibliothèque pour que le SMGXML y fasse appel directement.",
+    "textureLibrary": "Bibliothèque de styles (chemin)",
+    "textureExt": "Extension de style",
+    "textureSaved": "Config textures enregistrée."
   },
   "smgxmlRename": {
     "title": "Renommer des pièces dans le SMGXML",
