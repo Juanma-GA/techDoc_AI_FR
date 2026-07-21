@@ -558,18 +558,13 @@ class NomenclatureCompareIn(BaseModel):
 class SinEntryOut(BaseModel):
     sin: str
     pn: str = ""
-    rev: str = ""
     designation: str = ""
 
 
 class PnChangeOut(BaseModel):
+    # Comparaison : seul l'OLD PN (PN de V0, a remplacer) est reporte.
     sin: str
-    # "pn_evolue" (PN change -> piece remplacee) | "rev_evolue" (meme PN, indice change).
-    kind: str = ""
     old_pn: str = ""
-    new_pn: str = ""
-    old_rev: str = ""
-    new_rev: str = ""
     designation: str = ""
 
 

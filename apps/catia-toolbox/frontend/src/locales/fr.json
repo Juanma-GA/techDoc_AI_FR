@@ -219,14 +219,11 @@
     "exportCsv": "Export CSV",
     "colSin": "SIN",
     "colPn": "PN",
-    "colKind": "Type",
     "colOldPn": "OLD P/N",
     "colNewPn": "NEW P/N",
     "colOldRev": "OLD REV",
     "colNewRev": "NEW REV",
     "colDesignation": "Désignation",
-    "kind_pn_evolue": "PN remplacé",
-    "kind_rev_evolue": "Indice évolué",
     "nomenSummary": "{{added}} ajouté(s), {{removed}} supprimé(s), {{changed}} évolué(s)."
   },
   "checks": {

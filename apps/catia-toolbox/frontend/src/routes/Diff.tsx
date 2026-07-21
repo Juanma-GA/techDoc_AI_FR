@@ -261,11 +261,7 @@ function NomenclatureDiff() {
             <thead>
               <tr>
                 <th>{t("diff.colSin")}</th>
-                <th>{t("diff.colKind")}</th>
                 <th>{t("diff.colOldPn")}</th>
-                <th>{t("diff.colNewPn")}</th>
-                <th>{t("diff.colOldRev")}</th>
-                <th>{t("diff.colNewRev")}</th>
                 <th>{t("diff.colDesignation")}</th>
               </tr>
             </thead>
@@ -273,15 +269,7 @@ function NomenclatureDiff() {
               {result.changed_pn.map((e) => (
                 <tr key={`c-${e.sin}`}>
                   <td>{e.sin}</td>
-                  <td>
-                    <span className={`badge ${e.kind === "pn_evolue" ? "danger" : "warn"}`}>
-                      {t(`diff.kind_${e.kind}`)}
-                    </span>
-                  </td>
                   <td>{e.old_pn}</td>
-                  <td>{e.new_pn}</td>
-                  <td>{e.old_rev}</td>
-                  <td>{e.new_rev}</td>
                   <td>{e.designation}</td>
                 </tr>
               ))}

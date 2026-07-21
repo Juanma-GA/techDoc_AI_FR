@@ -138,19 +138,15 @@ def compare_export_csv(
     diff = _load_compare(db, base_run_id, other_run_id)
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    # Colonnes alignees sur l'affichage : un `type` unique porte l'etat de la
-    # ligne (ajoute / supprime / pn_evolue / rev_evolue), puis old/new PN + REV.
-    w.writerow(["type", "sin", "old_pn", "new_pn", "old_rev", "new_rev", "designation"])
+    # Seul l'OLD PN est utile en comparaison (NEW PN / revisions restent dans
+    # l'analyse de nomenclature pour l'etape de remplacement).
+    w.writerow(["type", "sin", "old_pn", "designation"])
     for e in diff["added_sin"]:
-        # Ajout : la piece n'existe qu'en V1 -> renseignee cote "new".
-        w.writerow(["ajoute", e["sin"], "", e["pn"], "", e["rev"], e["designation"]])
+        w.writerow(["ajoute", e["sin"], e["pn"], e["designation"]])
     for e in diff["removed_sin"]:
-        # Suppression : la piece n'existe qu'en V0 -> renseignee cote "old".
-        w.writerow(["supprime", e["sin"], e["pn"], "", e["rev"], "", e["designation"]])
+        w.writerow(["supprime", e["sin"], e["pn"], e["designation"]])
     for e in diff["changed_pn"]:
-        w.writerow(
-            [e["kind"], e["sin"], e["old_pn"], e["new_pn"], e["old_rev"], e["new_rev"], e["designation"]]
-        )
+        w.writerow(["modifie", e["sin"], e["old_pn"], e["designation"]])
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv; charset=utf-8",

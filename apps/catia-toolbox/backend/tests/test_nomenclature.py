@@ -256,24 +256,21 @@ def test_compare_nomenclatures(client, tmp_path):
     assert {e["sin"] for e in body["added_sin"]} == {"SIN-003"}
     assert {e["sin"] for e in body["removed_sin"]} == {"SIN-002"}
     changed = {e["sin"]: e for e in body["changed_pn"]}
-    assert set(changed) == {"SIN-001", "SIN-004"}
-    # PN evolue : nouveau PN + nouvelle revision renseignes.
-    assert changed["SIN-001"]["kind"] == "pn_evolue"
-    assert changed["SIN-001"]["old_pn"] == "P1.CATPart" and changed["SIN-001"]["new_pn"] == "P1B.CATPart"
-    assert changed["SIN-001"]["old_rev"] == "A" and changed["SIN-001"]["new_rev"] == "B"
-    # Indice evolue : meme PN, revision mise a jour.
-    assert changed["SIN-004"]["kind"] == "rev_evolue"
-    assert changed["SIN-004"]["old_pn"] == changed["SIN-004"]["new_pn"] == "P4.CATPart"
-    assert changed["SIN-004"]["old_rev"] == "A" and changed["SIN-004"]["new_rev"] == "B"
+    # Seul un changement de PN est reporte (SIN-001). SIN-004 garde le meme PN
+    # (seule la revision change) -> non reporte par la comparaison.
+    assert set(changed) == {"SIN-001"}
+    # Seul l'OLD PN (PN de V0) est expose ; pas de NEW PN / revisions.
+    assert changed["SIN-001"]["old_pn"] == "P1.CATPart"
+    assert "new_pn" not in changed["SIN-001"] and "old_rev" not in changed["SIN-001"]
 
     csv = client.get(
         "/api/v1/identification/compare/export.csv",
         params={"base_run_id": run_a, "other_run_id": run_b},
     )
     assert csv.status_code == 200
-    assert csv.text.splitlines()[0].startswith("type;")
+    assert csv.text.splitlines()[0] == "type;sin;old_pn;designation"
     assert "SIN-003" in csv.text and "SIN-002" in csv.text
-    assert "pn_evolue" in csv.text and "rev_evolue" in csv.text
+    assert "modifie" in csv.text
 
 
 def test_mono_body_from_slots(client, tmp_path):
