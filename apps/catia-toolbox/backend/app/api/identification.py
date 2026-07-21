@@ -171,6 +171,7 @@ def list_items(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
     mono_color: bool | None = Query(default=None),
+    mono_body: bool | None = Query(default=None),
     replaced: bool | None = Query(default=None),
     has_color: bool | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -182,6 +183,8 @@ def list_items(
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
     if mono_color is not None:
         stmt = stmt.where(NomenclatureItem.mono_color == mono_color)
+    if mono_body is not None:
+        stmt = stmt.where(NomenclatureItem.mono_body == mono_body)
     if replaced is not None:
         stmt = stmt.where(NomenclatureItem.replaced == replaced)
     if has_color is not None:
@@ -200,6 +203,7 @@ def export_csv(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
     replaced: bool | None = Query(default=None),
+    mono_body: bool | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     if db.get(NomenclatureRun, run_id) is None:
@@ -209,6 +213,8 @@ def export_csv(
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
     if replaced is not None:
         stmt = stmt.where(NomenclatureItem.replaced == replaced)
+    if mono_body is not None:
+        stmt = stmt.where(NomenclatureItem.mono_body == mono_body)
     rows = list(db.scalars(stmt.order_by(NomenclatureItem.source_row)))
 
     buf = io.StringIO()
@@ -217,6 +223,7 @@ def export_csv(
         [
             "catpart", "designation", "sin", "version", "a_traiter", "replaced",
             "old_pn", "new_pn", "old_rev", "new_rev", "color_ref", "materials",
+            "slot_1", "slot_2", "slot_3", "mono_body",
             "mono_color", "r", "g", "b",
         ]
     )
@@ -225,6 +232,7 @@ def export_csv(
             [
                 r.catpart, r.designation, r.sin, r.version, r.to_treat_value, int(r.replaced),
                 r.old_pn, r.new_pn, r.old_rev, r.new_rev, r.color_ref, r.materials,
+                r.slot_1, r.slot_2, r.slot_3, int(r.mono_body),
                 int(r.mono_color), r.color_r, r.color_g, r.color_b,
             ]
         )

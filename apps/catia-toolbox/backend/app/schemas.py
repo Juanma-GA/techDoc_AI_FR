@@ -477,6 +477,9 @@ class NomenclatureMapping(BaseModel):
     replaced: Optional[int] = Field(default=None, ge=0)
     color_ref: Optional[int] = Field(default=None, ge=0)
     materials: Optional[int] = Field(default=None, ge=0)
+    slot_1: Optional[int] = Field(default=None, ge=0)
+    slot_2: Optional[int] = Field(default=None, ge=0)
+    slot_3: Optional[int] = Field(default=None, ge=0)
 
 
 class NomenclatureParseIn(BaseModel):
@@ -519,6 +522,10 @@ class NomenclatureItemOut(BaseModel):
     new_rev: str
     color_ref: str
     materials: str
+    slot_1: str
+    slot_2: str
+    slot_3: str
+    mono_body: bool
     mono_color: bool
     color_r: int
     color_g: int

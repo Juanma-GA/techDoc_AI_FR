@@ -28,6 +28,9 @@ const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; requ
   { field: "old_rev", labelKey: "identification.fieldOldRev", required: false },
   { field: "new_rev", labelKey: "identification.fieldNewRev", required: false },
   { field: "color_ref", labelKey: "identification.fieldColorRef", required: false },
+  { field: "slot_1", labelKey: "identification.fieldSlot1", required: false },
+  { field: "slot_2", labelKey: "identification.fieldSlot2", required: false },
+  { field: "slot_3", labelKey: "identification.fieldSlot3", required: false },
 ];
 
 // Colonnes qui suffisent a identifier une piece (au moins une requise).
@@ -59,8 +62,29 @@ const COLUMN_DEFS: ColDef[] = [
   { key: "new_rev", labelKey: "identification.colNewRev", center: true, render: (it) => it.new_rev },
   { key: "color_ref", labelKey: "identification.colColorRef", render: (it) => it.color_ref },
   { key: "materials", labelKey: "identification.colMateriaux", render: (it) => it.materials },
+  { key: "slot_1", labelKey: "identification.colSlot1", center: true, render: (it) => it.slot_1 },
+  { key: "slot_2", labelKey: "identification.colSlot2", center: true, render: (it) => it.slot_2 },
+  { key: "slot_3", labelKey: "identification.colSlot3", center: true, render: (it) => it.slot_3 },
+  {
+    key: "mono_body",
+    labelKey: "identification.colMonoBody",
+    center: true,
+    render: (it, tr) => (it.mono_body ? <span className="badge ok">{tr("common.yes")}</span> : null),
+  },
   { key: "color", labelKey: "identification.colColor", center: true, render: (it) => <ColorDot item={it} /> },
 ];
+
+// Une piece est mono-corps des qu'au moins une colonne Slot est mappee.
+const SLOT_KEYS = ["slot_1", "slot_2", "slot_3"];
+function hasSlots(columns: string[]): boolean {
+  return SLOT_KEYS.some((k) => columns.includes(k));
+}
+
+// Colonnes affichees : les colonnes mappees + la colonne calculee "mono_body"
+// (drapeau derive) quand au moins un slot est mappe.
+function displayColumns(columns: string[]): string[] {
+  return hasSlots(columns) ? [...columns, "mono_body"] : columns;
+}
 
 function fileName(ref: string): string {
   return (ref || "").split(/[\\/]/).pop() ?? "";
@@ -144,7 +168,7 @@ export function Identification() {
   const [resultColumns, setResultColumns] = useState<string[]>([]);
   // Filtres d'affichage : "Pieces remplacees" par defaut (champ de filtre choisi
   // via une liste deroulante), + avec couleur / toutes.
-  type ItemFilter = "all" | "replaced" | "color";
+  type ItemFilter = "all" | "replaced" | "color" | "mono_body";
   const [filter, setFilter] = useState<ItemFilter>("replaced");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -159,6 +183,7 @@ export function Identification() {
       identificationApi.items(resultRunId!, {
         replaced: filter === "replaced" ? true : undefined,
         hasColor: filter === "color" ? true : undefined,
+        monoBody: filter === "mono_body" ? true : undefined,
       }),
     enabled: !!resultRunId,
   });
@@ -424,6 +449,9 @@ export function Identification() {
                     {resultColumns.includes("replaced") ? (
                       <option value="replaced">{t("identification.replacedOnly")}</option>
                     ) : null}
+                    {hasSlots(resultColumns) ? (
+                      <option value="mono_body">{t("identification.monoBodyOnly")}</option>
+                    ) : null}
                     {resultColumns.includes("color") ? (
                       <option value="color">{t("identification.withColor")}</option>
                     ) : null}
@@ -432,7 +460,11 @@ export function Identification() {
                 <a
                   href={exportUrl.identificationCsv(
                     resultRunId,
-                    filter === "replaced" ? { replaced: true } : undefined,
+                    filter === "replaced"
+                      ? { replaced: true }
+                      : filter === "mono_body"
+                        ? { monoBody: true }
+                        : undefined,
                   )}
                 >
                   {t("common.exportCsv")}
@@ -457,7 +489,7 @@ export function Identification() {
                   <table className="tbl" style={{ whiteSpace: "nowrap" }}>
                     <thead>
                       <tr>
-                        {COLUMN_DEFS.filter((c) => resultColumns.includes(c.key)).map((c) => (
+                        {COLUMN_DEFS.filter((c) => displayColumns(resultColumns).includes(c.key)).map((c) => (
                           <th
                             key={c.key}
                             style={{
@@ -475,7 +507,7 @@ export function Identification() {
                     <tbody>
                       {items.map((it) => (
                         <tr key={it.id}>
-                          {COLUMN_DEFS.filter((c) => resultColumns.includes(c.key)).map((c) => (
+                          {COLUMN_DEFS.filter((c) => displayColumns(resultColumns).includes(c.key)).map((c) => (
                             <td key={c.key} style={c.center ? { textAlign: "center" } : undefined}>
                               {c.render(it, t)}
                             </td>
@@ -510,6 +542,9 @@ export function Identification() {
                   </span>{" "}
                   <span className="badge warn">
                     {t("identification.badgeReplaced", { count: summaryNum(r.summary, "replaced") })}
+                  </span>{" "}
+                  <span className="badge ok">
+                    {t("identification.badgeMonoBody", { count: summaryNum(r.summary, "mono_body") })}
                   </span>{" "}
                   <span className="badge default">
                     {t("identification.badgeMono", { count: summaryNum(r.summary, "mono_color") })}

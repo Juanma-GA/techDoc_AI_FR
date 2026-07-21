@@ -32,6 +32,11 @@ HEADER_KEYS: dict[str, tuple[str, ...]] = {
     "new_rev": ("new rev", "nouvel indice", "nouvelle rev", "rev nouveau"),
     "replaced": ("piece remplacee", "remplacee", "remplacement", "replaced"),
     "color_ref": ("ref couleur", "reference couleur", "ref color"),
+    # Slots (onglet Materiaux) : places AVANT "materials" pour ne pas etre
+    # captures par lui, et avant les cles generiques.
+    "slot_1": ("slot 1", "slot1", "slot no1", "slot n1"),
+    "slot_2": ("slot 2", "slot2", "slot no2", "slot n2"),
+    "slot_3": ("slot 3", "slot3", "slot no3", "slot n3"),
     "materials": ("materiaux", "materiau", "matiere", "matiere premiere", "material"),
     "designation": ("designation", "libelle", "description"),
     "sin": ("sin",),
@@ -171,7 +176,15 @@ def preview_sheet(path: str, sheet: Optional[str] = None, rows: int = 15) -> dic
 _FIELDS = (
     "catpart", "designation", "sin", "version", "to_treat", "color",
     "old_pn", "new_pn", "old_rev", "new_rev", "replaced", "color_ref", "materials",
+    "slot_1", "slot_2", "slot_3",
 )
+
+
+def _is_mono_body(slots: list[str]) -> bool:
+    """Piece mono-corps : un seul slot renseigne OU tous les slots renseignes
+    identiques (Slot 1 = Slot 2 = Slot 3). Aucun slot renseigne => pas mono-corps."""
+    filled = [s for s in slots if s]
+    return len(set(filled)) == 1
 
 # Colonnes qui suffisent, seules ou combinees, a identifier une piece.
 _IDENTITY_FIELDS = ("catpart", "sin", "old_pn", "new_pn")
@@ -232,15 +245,19 @@ def _build_items(rows: list[list], header_idx: int, colmap: dict[str, int]) -> l
         new_rev = _text(_cell(row, "new_rev"))[:60]
         color_ref = _text(_cell(row, "color_ref"))[:200]
         materials = _text(_cell(row, "materials"))[:200]
+        slot_1 = _text(_cell(row, "slot_1"))[:200]
+        slot_2 = _text(_cell(row, "slot_2"))[:200]
+        slot_3 = _text(_cell(row, "slot_3"))[:200]
         to_treat_raw = _text(_cell(row, "to_treat"))
         color = parse_color(_cell(row, "color"))
         # On prend TOUTES les lignes des colonnes mappees : on n'ignore qu'une
         # ligne entierement vide (aucune cellule mappee renseignee).
         if not any(
             [catpart, sin, designation, version, old_pn, new_pn, old_rev, new_rev,
-             color_ref, materials, to_treat_raw, color]
+             color_ref, materials, slot_1, slot_2, slot_3, to_treat_raw, color]
         ):
             continue
+        mono_body = _is_mono_body([slot_1, slot_2, slot_3])
         # "A traiter" = cellule "A TRAITER" NON VIDE (seul filtre attendu), quel
         # que soit son contenu -- pas de liste de valeurs "vraies".
         to_treat = ("to_treat" in colmap) and bool(to_treat_raw)
@@ -262,6 +279,10 @@ def _build_items(rows: list[list], header_idx: int, colmap: dict[str, int]) -> l
                 "new_rev": new_rev,
                 "color_ref": color_ref,
                 "materials": materials,
+                "slot_1": slot_1,
+                "slot_2": slot_2,
+                "slot_3": slot_3,
+                "mono_body": mono_body,
                 "mono_color": color is not None,
                 "color_r": color[0] if color else 0,
                 "color_g": color[1] if color else 0,
@@ -298,6 +319,7 @@ def parse_nomenclature(path: str, sheet: Optional[str] = None, mapping: Optional
         "rows": len(items),
         "to_treat": sum(1 for it in items if it["to_treat"]),
         "replaced": sum(1 for it in items if it["replaced"]),
+        "mono_body": sum(1 for it in items if it["mono_body"]),
         "mono_color": sum(1 for it in items if it["mono_color"]),
         "detected_columns": sorted(colmap.keys()),
         "header_row": header_idx + 1,

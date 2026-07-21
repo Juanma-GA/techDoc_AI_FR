@@ -106,11 +106,12 @@ def _make_smgxml_composer(tmp_path):
 
 
 def _make_nomenclature_full(client, tmp_path):
-    """Nomenclature : NEW P/N = AA-200, Ref Couleur = Visserie, RGB 255,0,0, materiaux vide."""
+    """Nomenclature : NEW P/N = AA-200, Ref Couleur = Visserie, RGB 255,0,0,
+    un seul slot renseigne => piece mono-corps (ciblee par simple_only)."""
     wb = Workbook()
     ws = wb.active
-    ws.append(["CATPart", "SIN", "NEW P/N", "Ref Couleur", "Couleur", "Materiaux"])
-    ws.append(["P.CATPart", "SIN-001", "AA-200", "Visserie", "255,0,0", ""])
+    ws.append(["CATPart", "SIN", "NEW P/N", "Ref Couleur", "Couleur", "Materiaux", "Slot 1"])
+    ws.append(["P.CATPart", "SIN-001", "AA-200", "Visserie", "255,0,0", "", "S1"])
     p = tmp_path / "nomen_full.xlsx"
     wb.save(p)
     return client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]

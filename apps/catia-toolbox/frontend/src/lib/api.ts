@@ -312,6 +312,10 @@ export type NomenclatureItemDto = {
   new_rev: string;
   color_ref: string;
   materials: string;
+  slot_1: string;
+  slot_2: string;
+  slot_3: string;
+  mono_body: boolean;
   mono_color: boolean;
   color_r: number;
   color_g: number;
@@ -343,6 +347,9 @@ export type NomenclatureMapping = {
   replaced?: number;
   color_ref?: number;
   materials?: number;
+  slot_1?: number;
+  slot_2?: number;
+  slot_3?: number;
 };
 
 export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
@@ -640,11 +647,18 @@ export const identificationApi = {
     }),
   items: (
     id: string,
-    filters?: { toTreat?: boolean; monoColor?: boolean; replaced?: boolean; hasColor?: boolean },
+    filters?: {
+      toTreat?: boolean;
+      monoColor?: boolean;
+      monoBody?: boolean;
+      replaced?: boolean;
+      hasColor?: boolean;
+    },
   ) => {
     const qs = new URLSearchParams();
     if (filters?.toTreat !== undefined) qs.set("to_treat", String(filters.toTreat));
     if (filters?.monoColor !== undefined) qs.set("mono_color", String(filters.monoColor));
+    if (filters?.monoBody !== undefined) qs.set("mono_body", String(filters.monoBody));
     if (filters?.replaced !== undefined) qs.set("replaced", String(filters.replaced));
     if (filters?.hasColor !== undefined) qs.set("has_color", String(filters.hasColor));
     const s = qs.toString();
@@ -712,10 +726,14 @@ export const exportUrl = {
   colorizationMacro: (runId: string) => `${API_BASE}/colorizations/${runId}/export.macro`,
   colorizationComposer: (runId: string) => `${API_BASE}/colorizations/${runId}/export.composer.py`,
   colorizationSvg: (runId: string) => `${API_BASE}/colorizations/${runId}/simulation.svg`,
-  identificationCsv: (runId: string, filters?: { toTreat?: boolean; replaced?: boolean }) => {
+  identificationCsv: (
+    runId: string,
+    filters?: { toTreat?: boolean; replaced?: boolean; monoBody?: boolean },
+  ) => {
     const qs = new URLSearchParams();
     if (filters?.toTreat !== undefined) qs.set("to_treat", String(filters.toTreat));
     if (filters?.replaced !== undefined) qs.set("replaced", String(filters.replaced));
+    if (filters?.monoBody !== undefined) qs.set("mono_body", String(filters.monoBody));
     const s = qs.toString();
     return `${API_BASE}/identification/${runId}/export.csv${s ? `?${s}` : ""}`;
   },

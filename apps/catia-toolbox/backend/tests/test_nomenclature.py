@@ -274,3 +274,32 @@ def test_compare_nomenclatures(client, tmp_path):
     assert csv.text.splitlines()[0].startswith("type;")
     assert "SIN-003" in csv.text and "SIN-002" in csv.text
     assert "pn_evolue" in csv.text and "rev_evolue" in csv.text
+
+
+def test_mono_body_from_slots(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["CATPart", "SIN", "Slot 1", "Slot 2", "Slot 3"])
+    ws.append(["P1.CATPart", "SIN-001", "A", "", ""])   # 1 slot -> mono-corps
+    ws.append(["P2.CATPart", "SIN-002", "A", "A", "A"])  # slots identiques -> mono-corps
+    ws.append(["P3.CATPart", "SIN-003", "A", "B", ""])   # slots distincts -> non
+    ws.append(["P4.CATPart", "SIN-004", "", "", ""])     # aucun slot -> non
+    p = tmp_path / "slots.xlsx"
+    wb.save(p)
+
+    body = client.post(
+        "/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}
+    ).json()
+    assert body["summary"]["mono_body"] == 2
+    run_id = body["id"]
+
+    mono = client.get(f"/api/v1/identification/{run_id}/items", params={"mono_body": True}).json()
+    assert {i["catpart"] for i in mono} == {"P1.CATPart", "P2.CATPart"}
+
+    # Export CSV filtre mono-corps : nouvel en-tete (slots + mono_body).
+    csv = client.get(f"/api/v1/identification/{run_id}/export.csv", params={"mono_body": True})
+    header = csv.text.splitlines()[0]
+    for col in ("slot_1", "slot_2", "slot_3", "mono_body"):
+        assert col in header
+    assert "P1.CATPart" in csv.text and "P3.CATPart" not in csv.text

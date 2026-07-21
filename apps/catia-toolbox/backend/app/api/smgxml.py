@@ -107,8 +107,9 @@ def recolor(payload: SmgxmlRecolorIn, db: Session = Depends(get_db)) -> SmgxmlRu
 
     stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == payload.nomenclature_run_id)
     if payload.simple_only:
-        # Pieces simples (mono-corps) = colonne Materiaux vide.
-        stmt = stmt.where(NomenclatureItem.materials == "")
+        # Pieces mono-corps = un seul slot renseigne (ou slots identiques),
+        # calcule a l'identification (colonnes Slot 1/2/3 de l'onglet Materiaux).
+        stmt = stmt.where(NomenclatureItem.mono_body.is_(True))
     items = list(db.scalars(stmt))
 
     # Referentiel Ref Couleur -> RGB (ex. "Visserie" -> (r,g,b)) pour Actor.Color.

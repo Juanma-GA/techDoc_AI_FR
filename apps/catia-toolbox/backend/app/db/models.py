@@ -396,6 +396,13 @@ class NomenclatureItem(Base):
     color_ref: Mapped[str] = mapped_column(String(200), default="", server_default="")
     # Matiere / materiaux : vide => piece simple (mono-corps) ciblee par la colorisation.
     materials: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    # Slots (onglet Materiaux) : contenu brut des colonnes Slot 1 / 2 / 3.
+    slot_1: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    slot_2: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    slot_3: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    # Piece mono-corps : un seul slot renseigne OU tous les slots identiques
+    # (cible des modifications XML specifiques). Calcule depuis slot_1/2/3.
+    mono_body: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     # Pieces portant une seule couleur (etape 3).
     mono_color: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     color_r: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
