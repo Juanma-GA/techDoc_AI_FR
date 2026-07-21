@@ -75,25 +75,42 @@ call start.bat
 # ---- Frontend build -------------------------------------------------------
 
 def _build_frontend(frontend_dir: Path) -> bool:
-    """Run `pnpm install && pnpm build` so `frontend/dist/` ends up in the zip.
+    """Build `frontend/dist/` so the React UI ends up in the zip.
 
-    Returns True if the build succeeded and dist/ exists. Returns False on any
-    failure (pnpm/node absent, build error) — the recipient then only sees
-    the Swagger UI from the backend.
+    `pnpm install` is run ONLY when `node_modules/` is absent: behind a TLS
+    intercepting proxy an "up-to-date" install retries every package for minutes
+    and then fails, which used to skip the build entirely. `pnpm build` alone
+    works fully offline when node_modules is present.
+
+    Returns True if a fresh build produced dist/. Returns False on any failure
+    (pnpm/node absent, build error) — but a pre-existing `frontend/dist/` is
+    left untouched and still gets bundled by the source walk, so the recipient
+    keeps the last good UI instead of falling back to Swagger.
     """
+    dist = frontend_dir / "dist"
+    has_existing_dist = (dist / "index.html").is_file()
+
     if shutil.which("pnpm") is None or shutil.which("node") is None:
         print("[frontend] pnpm/node not found — skipping build")
-        print("           (recipient sees only Swagger UI; install pnpm+node to bundle React UI)")
+        if has_existing_dist:
+            print("           bundling the existing frontend/dist/ as-is")
+        else:
+            print("           (recipient sees only Swagger UI; install pnpm+node to bundle React UI)")
         return False
-    print(f"[frontend] pnpm install ({frontend_dir})")
     try:
-        subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
+        if (frontend_dir / "node_modules").is_dir():
+            print("[frontend] node_modules present — skipping pnpm install")
+        else:
+            print(f"[frontend] pnpm install ({frontend_dir})")
+            subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
         print("[frontend] pnpm build")
         subprocess.run("pnpm build", cwd=frontend_dir, check=True, shell=True)
     except subprocess.CalledProcessError as exc:
-        print(f"[frontend] build failed ({exc}) — continuing without dist/")
+        if has_existing_dist:
+            print(f"[frontend] build failed ({exc}) — keeping existing frontend/dist/")
+        else:
+            print(f"[frontend] build failed ({exc}) — NO dist/ to bundle, recipient sees only Swagger UI")
         return False
-    dist = frontend_dir / "dist"
     if not dist.is_dir():
         print("[frontend] no dist/ produced — skipping")
         return False

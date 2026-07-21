@@ -155,7 +155,10 @@ if "%NEED_BUILD%"=="0" goto :front_ready
 
 echo [setup] Build du front React - dist absent ou sources modifiees, 5 a 30 s...
 pushd "%FRONTEND_DIR%"
-call pnpm install
+REM pnpm install UNIQUEMENT si node_modules absent : en reseau avec interception
+REM TLS, un install "a jour" retente chaque paquet pendant des minutes et bloque
+REM le lancement. Le build seul tourne hors-ligne quand node_modules est present.
+if not exist node_modules call pnpm install
 call pnpm build
 popd
 :front_ready

@@ -71,7 +71,12 @@ if command -v pnpm >/dev/null 2>&1; then
     fi
     if [[ "$need_build" == "1" ]]; then
         echo "[setup] Build du front React - dist absent ou sources modifiees..."
-        ( cd "${FRONTEND_DIR}" && pnpm install && pnpm build ) \
+        # pnpm install UNIQUEMENT si node_modules absent : en reseau avec
+        # interception TLS, un install "a jour" retente chaque paquet pendant des
+        # minutes et bloque le lancement. Le build seul tourne hors-ligne.
+        ( cd "${FRONTEND_DIR}" \
+            && { [[ -d node_modules ]] || pnpm install; } \
+            && pnpm build ) \
             || echo "[warn] Build front echoue : on sert le dist existant."
     fi
 fi
