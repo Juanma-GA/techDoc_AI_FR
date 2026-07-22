@@ -234,6 +234,7 @@
   "redacteur.statusAck": "Taken into account",
   "redacteur.statusFixed": "Fixed",
   "redacteur.statusRejected": "Rejected",
+  "redacteur.feedbackPlaceholder": "Rejection reason (optional) — e.g. false positive, out of scope…",
   "nav.data": "Data",
   "page.data": "Analyzed-data administration",
   "data.overview": "Overview",

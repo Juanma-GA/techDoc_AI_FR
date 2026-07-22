@@ -131,6 +131,8 @@ class AnomalyOut(BaseModel):
     confidence: str = "elevee"
     message: str
     suggestion: str
+    # Motif de rejet / commentaire du relecteur (vide par défaut).
+    feedback: str = ""
     # i18n : si `message_key` est non-null, le front résout via t(key, params)
     # et utilise `message` (FR) en fallback. `*_params` est sérialisé en JSON
     # string côté DB ; le schema le restitue tel quel.
@@ -146,11 +148,14 @@ class AnomalyOut(BaseModel):
 
 class AnomalyStatusIn(BaseModel):
     status: str  # open | acknowledged | fixed | rejected
+    # Motif libre (facultatif) — surtout au rejet. None = ne pas modifier.
+    feedback: Optional[str] = None
 
 
 class AnomalyBulkStatusIn(BaseModel):
     ids: list[uuid.UUID] = Field(default_factory=list, max_length=1000)
     status: str  # open | acknowledged | fixed | rejected
+    feedback: Optional[str] = None
 
 
 class AnomalyBulkStatusOut(BaseModel):

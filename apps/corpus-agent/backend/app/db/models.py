@@ -162,6 +162,9 @@ class Anomaly(Base):
     confidence: Mapped[str] = mapped_column(String(20), default="elevee", server_default="elevee")
     message: Mapped[str] = mapped_column(Text, nullable=False)
     suggestion: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Motif libre saisi par le relecteur au moment ou il agit sur l'anomalie
+    # (typiquement le motif de rejet : faux positif, hors perimetre...).
+    feedback: Mapped[str] = mapped_column(Text, default="", server_default="")
     # Clés i18n + params JSON pour rendu côté front : si `message_key` est
     # présent, le front résout `t(message_key, params)` et utilise `message`
     # comme fallback. Pareil pour `suggestion_key`. NULL = anomalie pré-i18n

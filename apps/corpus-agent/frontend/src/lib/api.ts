@@ -204,10 +204,13 @@ export const analysisApi = {
 
 export const anomaliesApi = {
   list: (pid: string) => api.get<AnomalyOut[]>(`/projects/${pid}/anomalies`),
-  setStatus: (id: string, status: AnomalyStatus) =>
-    api.patch<AnomalyOut>(`/anomalies/${id}`, { status }),
-  bulkStatus: (ids: string[], status: AnomalyStatus) =>
-    api.post<{ updated: number; status: string }>("/anomalies/bulk-status", { ids, status }),
+  setStatus: (id: string, status: AnomalyStatus, feedback?: string) =>
+    api.patch<AnomalyOut>(`/anomalies/${id}`, feedback === undefined ? { status } : { status, feedback }),
+  bulkStatus: (ids: string[], status: AnomalyStatus, feedback?: string) =>
+    api.post<{ updated: number; status: string }>(
+      "/anomalies/bulk-status",
+      feedback === undefined ? { ids, status } : { ids, status, feedback },
+    ),
   exportCsv: (pid: string) =>
     downloadBlob(`/projects/${pid}/anomalies/export.csv`, `anomalies-${pid}.csv`),
 };

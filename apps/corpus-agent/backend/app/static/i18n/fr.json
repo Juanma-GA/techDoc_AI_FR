@@ -234,6 +234,7 @@
   "redacteur.statusAck": "Prise en compte",
   "redacteur.statusFixed": "Corrigée",
   "redacteur.statusRejected": "Refusée",
+  "redacteur.feedbackPlaceholder": "Motif du rejet (facultatif) — ex. faux positif, hors périmètre…",
   "nav.data": "Données",
   "page.data": "Administration des données analysées",
   "data.overview": "Vue d'ensemble",

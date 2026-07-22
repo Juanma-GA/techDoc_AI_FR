@@ -109,6 +109,8 @@ export type AnomalyOut = {
   confidence: AnomalyConfidence | string;
   message: string;
   suggestion: string;
+  // Motif de rejet / commentaire du relecteur.
+  feedback?: string;
   message_key: string | null;
   message_params_json: string | null;
   suggestion_key: string | null;

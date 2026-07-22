@@ -62,7 +62,8 @@ export function Redacteur() {
   const anomaliesQuery = useQuery<AnomalyOut[]>({ queryKey: ["anomalies", pid], queryFn: () => anomaliesApi.list(pid), enabled: !!pid });
 
   const setStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: AnomalyStatus }) => anomaliesApi.setStatus(id, status),
+    mutationFn: ({ id, status, feedback }: { id: string; status: AnomalyStatus; feedback?: string }) =>
+      anomaliesApi.setStatus(id, status, feedback),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["anomalies", pid] }),
   });
   const bulk = useMutation({
@@ -164,7 +165,11 @@ export function Redacteur() {
               </div>
               <div className="red-anomalies-wrap">
                 {items.map((a) => (
-                  <AnomalyRow key={a.id} a={a} onStatus={(status) => setStatus.mutate({ id: a.id, status })} />
+                  <AnomalyRow
+                    key={a.id}
+                    a={a}
+                    onStatus={(status, feedback) => setStatus.mutate({ id: a.id, status, feedback })}
+                  />
                 ))}
               </div>
             </div>
@@ -189,25 +194,51 @@ function Filter({ value, onChange, label, options, allLabel }: { value: string; 
   );
 }
 
-function AnomalyRow({ a, onStatus }: { a: AnomalyOut; onStatus: (s: AnomalyStatus) => void }) {
+function AnomalyRow({
+  a,
+  onStatus,
+}: {
+  a: AnomalyOut;
+  onStatus: (s: AnomalyStatus, feedback?: string) => void;
+}) {
   const { t } = useTranslation();
   const message = resolveAnomalyText(t, a.message, a.message_key, a.message_params_json);
   const suggestion = resolveAnomalyText(t, a.suggestion, a.suggestion_key, a.suggestion_params_json);
+  const [feedback, setFeedback] = useState(a.feedback ?? "");
+  const rejected = a.status === "rejected";
   return (
     <div className="red-anomaly">
       <div className="red-anomaly-head">
-        <span className="badge">{t(`projects.kpi.type.${a.type}`)}</span>
+        {a.category && <span className="badge">{a.category}</span>}
         <span className={`badge ${severityClass(a.severity)}`}>{a.severity}</span>
         {a.confidence && <span className="badge off">{confLabel(a.confidence)}</span>}
-        <select className="red-status-select" value={a.status} onChange={(e) => onStatus(e.target.value as AnomalyStatus)}>
+        <select
+          className={`red-status-select st-${a.status}`}
+          value={a.status}
+          onChange={(e) => onStatus(e.target.value as AnomalyStatus)}
+        >
           {STATUSES.map((s) => (
             <option key={s} value={s}>{t(STATUS_KEY[s])}</option>
           ))}
         </select>
       </div>
       <div className="red-anomaly-msg">{message}</div>
-      {a.location && <div className="red-anomaly-loc">📍 {a.location}</div>}
+      {a.location && <div className="red-anomaly-loc">{a.location}</div>}
       {suggestion && <div className="red-anomaly-suggestion">→ {suggestion}</div>}
+      {rejected && (
+        <input
+          className="input red-anomaly-feedback"
+          placeholder={t("redacteur.feedbackPlaceholder")}
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          onBlur={() => {
+            if (feedback !== (a.feedback ?? "")) onStatus("rejected", feedback);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+        />
+      )}
     </div>
   );
 }
