@@ -22,7 +22,6 @@ from app.db.session import get_db
 from app.parsers import parse_any
 from app.schemas import AnalysisRunIn, AnalysisRunOut
 
-
 router = APIRouter(tags=["analysis"])
 
 # Pipeline de contrôle : corpus-agent n'évalue plus que via la checklist
@@ -136,14 +135,54 @@ def run_analysis(
                 continue
         db.commit()
 
+        # --- Memoire des rejets + purge anti-accumulation -------------------
+        # Signature d'une anomalie : (sujet, passage verbatim ou message). Deux
+        # analyses du meme ecart produisent la meme signature.
+        def _sig(a: Anomaly) -> tuple[str, str]:
+            return (
+                (a.category or "").strip().lower(),
+                (a.location or a.message or "").strip().lower(),
+            )
+
+        target_version_ids = {v.id for f in target_files for v in f.versions}
+        old_stmt = select(Anomaly).where(Anomaly.project_id == project.id)
+        if target_ids is not None:
+            old_stmt = old_stmt.where(Anomaly.file_version_id.in_(target_version_ids))
+        old_anomalies = list(db.scalars(old_stmt))
+        # Signatures deja REJETEES par le relecteur : a ne pas re-signaler.
+        rejected_sigs = {_sig(a) for a in old_anomalies if a.status == "rejected"}
+        # Purge les anciennes anomalies NON rejetees des fichiers analyses : met
+        # fin a l'accumulation de doublons a chaque re-run. Les rejetees sont
+        # CONSERVEES (decision du relecteur + memoire anti-faux-positif).
+        for a in old_anomalies:
+            if a.status != "rejected":
+                db.delete(a)
+        db.commit()
+
         # Exécution séquentielle des contrôles v4.
         produced: list[Anomaly] = []
         for check in _CHECKS:
             produced.extend(check(db, project, run.id, mistral, only_file_ids=target_ids))
             db.commit()
 
+        # Capitalisation des rejets : on retire les anomalies re-signalees
+        # identiques a un ecart deja rejete (meme sujet + meme passage).
+        suppressed = 0
+        if rejected_sigs:
+            kept: list[Anomaly] = []
+            for a in produced:
+                if _sig(a) in rejected_sigs:
+                    db.delete(a)
+                    suppressed += 1
+                else:
+                    kept.append(a)
+            produced = kept
+            db.commit()
+
         summary: dict[str, object] = {t: 0 for t in ANOMALY_TYPES}
         summary.update(Counter(a.type for a in produced))
+        if suppressed:
+            summary["suppressed_rejected"] = suppressed
 
         # Indexation RAG pour le chatbot (best-effort, ignore les erreurs).
         indexed = 0
