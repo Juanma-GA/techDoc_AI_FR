@@ -55,6 +55,36 @@ def test_status_without_feedback_keeps_existing(client: TestClient) -> None:
     assert resp.json()["feedback"] == "hors perimetre"
 
 
+def test_chat_context_surfaces_rejection_feedback(client: TestClient) -> None:
+    """Le contexte chat expose le motif de rejet + le récap « rejets par sujet »
+    (pour interroger les faux positifs et réviser la checklist)."""
+    from unittest.mock import MagicMock
+
+    from app.core.chat_engine import build_context_messages
+
+    db = SessionLocal()
+    try:
+        p = Project(name=f"P-{_uuid.uuid4().hex[:8]}")
+        db.add(p)
+        db.flush()
+        a = Anomaly(
+            project_id=p.id, type="personnalisee", category="Script",
+            severity="high", message="écart script", suggestion="", location="",
+            status="rejected", feedback="faux positif : script hors référentiel toléré",
+        )
+        db.add(a)
+        db.commit()
+        mistral = MagicMock()
+        mistral.embed.side_effect = Exception("pas d'embeddings en test")
+        messages, _ = build_context_messages(db, [p], "quels sujets rejeter ?", mistral)
+        content = messages[-1]["content"]
+        assert "motif du relecteur : faux positif" in content
+        assert "Rejets par sujet" in content
+        assert "Script=1" in content
+    finally:
+        db.close()
+
+
 def test_bulk_reject_with_feedback(client: TestClient) -> None:
     a1, a2 = _make_anomaly(), _make_anomaly()
     resp = client.post(
