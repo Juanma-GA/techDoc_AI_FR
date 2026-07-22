@@ -63,3 +63,32 @@ def test_kpis_category_fallback_label(db) -> None:
 
     kpi = compute_kpis(db, [project])
     assert kpi.anomalies_by_category == {"Sans sujet": 1}
+
+
+def test_over_time_stacked_by_category(db) -> None:
+    """Le graphe temporel expose, par run, la répartition par catégorie."""
+    from datetime import datetime, timezone
+
+    from app.db.models import AnalysisRun
+
+    project = Project(name="P3")
+    db.add(project)
+    db.flush()
+    run = AnalysisRun(
+        project_id=project.id, status="completed",
+        started_at=datetime.now(timezone.utc), finished_at=datetime.now(timezone.utc),
+        summary="{}",
+    )
+    db.add(run)
+    db.flush()
+    for cat in ("Sécurité", "Sécurité", "Script"):
+        a = _anomaly(project.id, cat)
+        a.run_id = run.id
+        db.add(a)
+    db.commit()
+
+    kpi = compute_kpis(db, [project])
+    assert len(kpi.anomalies_over_time) == 1
+    point = kpi.anomalies_over_time[0]
+    assert point["total"] == 3
+    assert point["categories"] == {"Sécurité": 2, "Script": 1}

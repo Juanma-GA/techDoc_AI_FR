@@ -152,7 +152,13 @@ export type KpiOut = {
   anomalies_by_status: Record<string, number>;
   anomalies_by_confidence: Record<string, number>;
   resolution_rate: number;
-  anomalies_over_time: Array<Record<string, number | string>>;
+  anomalies_over_time: Array<{
+    run_id: string;
+    started_at: string;
+    total: number;
+    // Repartition des anomalies du run par categorie (Sujet de la checklist).
+    categories: Record<string, number>;
+  }>;
   top_files: Array<{ filename: string; count: number }>;
   top_rules: Array<{ rule: string; count: number }>;
   avg_age_days: number;

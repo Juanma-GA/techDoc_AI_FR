@@ -1,27 +1,44 @@
 import { useTranslation } from "react-i18next";
 
-import { OVER_TIME_SERIES } from "../lib/families";
+import { CATEGORY_COLORS } from "../lib/families";
 import { fmtDate } from "../lib/format";
 
-type Run = Record<string, number | string>;
+type Run = {
+  run_id: string;
+  started_at: string;
+  total: number;
+  // Repartition des anomalies du run par categorie (Sujet de la checklist).
+  categories: Record<string, number>;
+};
 
-// Histogramme empilé de l'évolution des anomalies (port SVG de
-// preview.html::renderOverTimeChart). 6 familles, axe Y 3 graduations.
+// Histogramme empile de l'evolution des anomalies par run, empile par
+// CATEGORIE (« Sujet » de la checklist). Les categories sont dynamiques : la
+// legende et les couleurs sont derivees des donnees.
 export function StackedBarChart({ runs }: { runs: Run[] }) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const lang = (i18n.language || "fr").slice(0, 2);
 
   if (!runs.length) return <div className="empty-state">—</div>;
 
+  // Union des categories, triees par volume total decroissant : ordre
+  // d'empilement + couleurs stables d'un run a l'autre.
+  const totals = new Map<string, number>();
+  for (const r of runs) {
+    for (const [c, v] of Object.entries(r.categories ?? {})) {
+      totals.set(c, (totals.get(c) ?? 0) + (typeof v === "number" ? v : 0));
+    }
+  }
+  const cats = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+  const colorOf = (c: string) => CATEGORY_COLORS[Math.max(0, cats.indexOf(c)) % CATEGORY_COLORS.length];
+
+  if (!cats.length) return <div className="empty-state">—</div>;
+
   const W = 640, H = 220, PT = 12, PB = 32, PL = 40, PR = 12;
-  const famSum = (r: Run, keys: string[]) =>
-    keys.reduce((acc, k) => acc + (typeof r[k] === "number" ? (r[k] as number) : 0), 0);
+  const runSum = (r: Run) =>
+    Object.values(r.categories ?? {}).reduce((acc, v) => acc + (typeof v === "number" ? v : 0), 0);
 
   let maxY = 1;
-  for (const r of runs) {
-    const sum = OVER_TIME_SERIES.reduce((acc, s) => acc + famSum(r, s.keys), 0);
-    if (sum > maxY) maxY = sum;
-  }
+  for (const r of runs) maxY = Math.max(maxY, runSum(r));
 
   const n = runs.length;
   const areaW = W - PL - PR;
@@ -48,15 +65,15 @@ export function StackedBarChart({ runs }: { runs: Run[] }) {
         {runs.map((r, i) => {
           const x0 = PL + i * slotW + barOffset;
           let stackBase = 0;
-          const segs = OVER_TIME_SERIES.map((s) => {
-            const v = famSum(r, s.keys);
-            if (v === 0) return null;
+          const segs = cats.map((c) => {
+            const v = r.categories?.[c] ?? 0;
+            if (!v) return null;
             const rectY = y(stackBase + v);
             const rectH = (v / maxY) * areaH;
             stackBase += v;
             return (
-              <rect key={s.labelKey} x={x0} y={rectY} width={barW} height={rectH} fill={s.color}>
-                <title>{`${fmtDate(String(r.started_at), lang)} — ${t(s.labelKey)}: ${v}`}</title>
+              <rect key={c} x={x0} y={rectY} width={barW} height={rectH} fill={colorOf(c)}>
+                <title>{`${fmtDate(String(r.started_at), lang)} — ${c}: ${v}`}</title>
               </rect>
             );
           });
@@ -82,10 +99,10 @@ export function StackedBarChart({ runs }: { runs: Run[] }) {
         })}
       </svg>
       <div className="chart-legend">
-        {OVER_TIME_SERIES.map((s) => (
-          <span className="chart-legend-item" key={s.labelKey}>
-            <span className="chart-legend-swatch" style={{ background: s.color }} />
-            {t(s.labelKey)}
+        {cats.map((c) => (
+          <span className="chart-legend-item" key={c}>
+            <span className="chart-legend-swatch" style={{ background: colorOf(c) }} />
+            {c}
           </span>
         ))}
       </div>
