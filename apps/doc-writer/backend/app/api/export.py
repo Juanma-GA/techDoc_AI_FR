@@ -754,6 +754,13 @@ def _build_mapping_for_zones(
     Mistral a juge non pertinentes au premier passage).
     `lang` : langue de sortie du contenu des zones (cf. _build_zone_mapping).
 
+    Second passage FORCE automatique : toute zone qui porte une CONSIGNE
+    explicite (`instruction`) mais que le 1er passage a laissee vide est
+    re-generee dans un appel cible en mode force. La presence d'une consigne
+    est le signal explicite « cette zone doit etre remplie » : on ne la laisse
+    donc pas retomber a '' (ce qui, cote fill_zones, viderait la cible). Les
+    zones SANS consigne gardent le comportement d'origine (regle 1 stricte).
+
     Interrupteur LLM OFF : on saute l'enrichissement IA et on renvoie un
     mapping vide ({} = chaque zone est laissee/effacee a ''). Sortie
     deterministe, jamais de 5xx, la cle Mistral est conservee.
@@ -771,7 +778,7 @@ def _build_mapping_for_zones(
     # injectee comme valeur imposee dans le prompt de remplissage.
     years_hint = _experience_years_hint(zones, source_text, markdown_text, mistral)
     try:
-        return _build_zone_mapping(
+        mapping = _build_zone_mapping(
             markdown_text, zones, mistral, db,
             extra_instruction=extra, lang=lang, source_text=source_text,
             years_hint=years_hint,
@@ -782,6 +789,31 @@ def _build_mapping_for_zones(
             f"Mistral n'a pas renvoye un mapping JSON exploitable : {e}",
             status_code=502,
         ) from e
+
+    # Rattrapage : zones a consigne restees vides -> re-generation forcee ciblee.
+    # (Inutile si le 1er passage etait deja en mode force : la regle est deja
+    # assouplie pour tout le lot.)
+    if not force:
+        unfilled_with_consigne = [
+            z for z in zones
+            if (getattr(z, "instruction", "") or "").strip()
+            and not (mapping.get(z.id, "") or "").strip()
+        ]
+        if unfilled_with_consigne:
+            try:
+                forced = _build_zone_mapping(
+                    markdown_text, unfilled_with_consigne, mistral, db,
+                    extra_instruction=_FORCE_INSTRUCTION, lang=lang,
+                    source_text=source_text, years_hint=years_hint,
+                )
+            except MistralError:
+                forced = {}
+            for z in unfilled_with_consigne:
+                val = forced.get(z.id, "")
+                if val and val.strip():
+                    mapping[z.id] = val
+
+    return mapping
 
 
 def _fill_template_from_session(
@@ -794,11 +826,13 @@ def _fill_template_from_session(
     choisi selon le format du template (pptx ou docx ; pdf converti en docx).
     Respecte l'etat `active` des zones :
     - zone active remplie -> contenu Mistral ecrit
-    - zone active SANS contenu trouve -> cible PRESERVEE (contenu d'origine du
-      template conserve). On n'efface jamais sur valeur vide : avec les frames
-      exhaustifs (toute prose est une zone active), effacer detruirait la mise
-      en page et rendrait l'export incoherent avec le template / le contenu
-      genere.
+    - zone active SANS contenu trouve -> cible VIDEE ('' ecrit dans la shape/
+      cellule). C'est le contrat de `fill_zones` pass 2 (cf.
+      `test_fill_zones_clears_active_target_when_value_empty`) : une zone active
+      sans contenu ne conserve PAS le texte d'origine du template. Le rattrapage
+      contre les vidages non voulus se fait EN AMONT : les zones a consigne
+      restees vides sont re-generees en mode force par `_build_mapping_for_zones`
+      (une consigne = signal explicite "a remplir").
     - zone inactive regex (xxx/{{cle}}) -> marqueur efface ('')
     - zone inactive cible (llm/frame) -> non touchee (contenu template conserve)
     """

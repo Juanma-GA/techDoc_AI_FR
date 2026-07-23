@@ -212,3 +212,106 @@ def test_dedupe_across_zones_scoped_by_label() -> None:
     _dedupe_across_zones(mapping, zones)
     assert mapping["a"] == "Ingenieur mecanique"
     assert mapping["b"] == "Ingenieur mecanique"
+
+
+# ---------------------------------------------------------------------------
+# Second passage FORCE : une zone a CONSIGNE laissee vide au 1er passage est
+# re-generee en mode force (la consigne = signal explicite "a remplir").
+# ---------------------------------------------------------------------------
+
+
+def _zone_with_instruction(zid: str, label: str, instruction: str):
+    from app.core.pptx_template import Zone
+
+    return Zone(
+        id=zid,
+        kind="frame",
+        slide_index=1,
+        slide_title="",
+        label=label,
+        location="",
+        target=f"s_1_{zid}",
+        instruction=instruction,
+    )
+
+
+def test_consigne_zone_empty_first_pass_is_force_refilled(monkeypatch) -> None:
+    """Zone AVEC consigne vide au 1er passage -> 2e appel force qui la comble.
+    Le 2e appel ne porte QUE sur le sous-ensemble a consigne restee vide."""
+    from unittest.mock import MagicMock
+
+    import app.api.export as export
+    from app.db.session import SessionLocal
+    from app.core.pptx_template import Zone
+
+    monkeypatch.setattr(
+        export.MistralClient, "from_db", classmethod(lambda cls, db: MagicMock())
+    )
+
+    zone_consigne = _zone_with_instruction("a", "Synthese", "3 puces max")
+    zone_plain = Zone(
+        id="b", kind="frame", slide_index=1, slide_title="", label="Contexte",
+        location="", target="s_1_b",
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_build_zone_mapping(md, zones, mistral, db, **kw):
+        ids = [z.id for z in zones]
+        calls.append(ids)
+        if kw.get("extra_instruction") == export._FORCE_INSTRUCTION:
+            # Passage force cible : ne recoit que la zone a consigne vide.
+            return {zid: "Contenu force" for zid in ids}
+        # 1er passage : la zone a consigne revient vide, l'autre est remplie.
+        return {"a": "", "b": "Contexte rempli"}
+
+    monkeypatch.setattr(export, "_build_zone_mapping", fake_build_zone_mapping)
+
+    db = SessionLocal()
+    try:
+        mapping = export._build_mapping_for_zones(
+            db, [zone_consigne, zone_plain], "markdown source",
+        )
+    finally:
+        db.close()
+
+    assert mapping["a"] == "Contenu force"   # comblee par le passage force
+    assert mapping["b"] == "Contexte rempli"  # inchangee
+    # 2 appels : lot complet, puis sous-ensemble = uniquement la zone a consigne.
+    assert calls == [["a", "b"], ["a"]]
+
+
+def test_plain_zone_empty_first_pass_stays_empty(monkeypatch) -> None:
+    """Zone SANS consigne vide au 1er passage -> PAS de passage force, reste
+    vide (regle 1 stricte conservee)."""
+    from unittest.mock import MagicMock
+
+    import app.api.export as export
+    from app.db.session import SessionLocal
+    from app.core.pptx_template import Zone
+
+    monkeypatch.setattr(
+        export.MistralClient, "from_db", classmethod(lambda cls, db: MagicMock())
+    )
+
+    zone_plain = Zone(
+        id="a", kind="frame", slide_index=1, slide_title="", label="Contexte",
+        location="", target="s_1_a",
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_build_zone_mapping(md, zones, mistral, db, **kw):
+        calls.append([z.id for z in zones])
+        return {"a": ""}
+
+    monkeypatch.setattr(export, "_build_zone_mapping", fake_build_zone_mapping)
+
+    db = SessionLocal()
+    try:
+        mapping = export._build_mapping_for_zones(db, [zone_plain], "markdown source")
+    finally:
+        db.close()
+
+    assert mapping["a"] == ""
+    assert calls == [["a"]]  # un seul appel : pas de rattrapage force
