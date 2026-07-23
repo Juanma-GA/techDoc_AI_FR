@@ -113,6 +113,16 @@ def recolor(payload: SmgxmlRecolorIn, db: Session = Depends(get_db)) -> SmgxmlRu
         stmt = stmt.where(NomenclatureItem.mono_body.is_(True))
     items = list(db.scalars(stmt))
 
+    # Cause frequente en test : 'mono-corps seulement' coche mais colonnes Slot
+    # non mappees a l'identification -> mono_body faux partout -> 0 piece.
+    if payload.simple_only and not items:
+        raise AppError(
+            "NO_MONO_BODY",
+            "Aucune piece mono-corps dans cette nomenclature. Mappez les colonnes "
+            "Slot 1/2/3 a l'identification, ou decochez « mono-corps seulement ».",
+            status_code=400,
+        )
+
     # Referentiel Ref Couleur -> RGB (ex. "Visserie" -> (r,g,b)) pour Actor.Color.
     ref_rgb = color_ref.resolve_map(db)
     # Config textures : bibliotheque + extension (.SMGStyleSet) pour le nom de style.

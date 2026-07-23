@@ -198,6 +198,25 @@ def test_recolor_no_mono(client, tmp_path):
     assert r.json()["code"] == "NO_COLOR_TARGET"
 
 
+def test_recolor_simple_only_without_slots(client, tmp_path):
+    """'mono-corps seulement' sans colonnes Slot mappees -> erreur explicite."""
+    _set_input_root(client, str(tmp_path))
+    smg = _make_smgxml_composer(tmp_path)
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["CATPart", "NEW P/N", "Ref Couleur"])  # pas de colonne Slot
+    ws.append(["P.CATPart", "AA-200", "Visserie"])
+    p = tmp_path / "noslots.xlsx"
+    wb.save(p)
+    nom_id = client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]
+    r = client.post("/api/v1/smgxml/recolor", json={
+        "scope": "input", "path": str(smg), "nomenclature_run_id": nom_id,
+        "match_by": "pn", "simple_only": True, "set_style": True, "set_color": False, "apply": False,
+    })
+    assert r.status_code == 400
+    assert r.json()["code"] == "NO_MONO_BODY"
+
+
 def _make_smgxml_actorstyle(tmp_path):
     """Variante Composer : balise <ActorStyle> (sans point)."""
     content = (

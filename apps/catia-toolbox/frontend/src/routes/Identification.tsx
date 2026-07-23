@@ -100,10 +100,20 @@ function detectedColumns(summary: Record<string, number | string[] | string>): s
   return Array.isArray(v) ? v : [];
 }
 
+// La notion "remplacee" est filtrable des qu'une colonne dediee "Piece
+// remplacee" est mappee, OU qu'OLD P/N + NEW P/N le sont (le backend derive
+// alors replaced = old_pn != new_pn). Le cas courant en prod = OLD/NEW P/N.
+function canFilterReplaced(columns: string[]): boolean {
+  return (
+    columns.includes("replaced") ||
+    (columns.includes("old_pn") && columns.includes("new_pn"))
+  );
+}
+
 // Filtre par defaut selon les colonnes mappees : "Pieces remplacees" si dispo,
 // sinon toutes les lignes.
 function defaultFilter(columns: string[]): "all" | "replaced" | "color" {
-  return columns.includes("replaced") ? "replaced" : "all";
+  return canFilterReplaced(columns) ? "replaced" : "all";
 }
 
 // Lettre de colonne tableur : 0 -> A, 1 -> B, 26 -> AA ...
@@ -446,7 +456,7 @@ export function Identification() {
                     onChange={(e) => setFilter(e.target.value as ItemFilter)}
                   >
                     <option value="all">{t("identification.all")}</option>
-                    {resultColumns.includes("replaced") ? (
+                    {canFilterReplaced(resultColumns) ? (
                       <option value="replaced">{t("identification.replacedOnly")}</option>
                     ) : null}
                     {hasSlots(resultColumns) ? (
