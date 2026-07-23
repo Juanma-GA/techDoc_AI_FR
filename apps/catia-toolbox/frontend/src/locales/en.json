@@ -415,7 +415,17 @@
     "badgeToTreat": "{{count}} to process",
     "badgeReplaced": "{{count}} replaced",
     "badgeMonoBody": "{{count}} mono-body",
-    "badgeMono": "{{count}} mono"
+    "badgeMono": "{{count}} mono",
+    "monoTitle": "Mono-body parts (Materials sheet)",
+    "monoBanner": "Pick the Materials sheet, the identity column (to link back to parts), a number of slot columns, then map them. A part is mono-body when its filled slots share a single distinct value.",
+    "monoIdentityField": "Identity (links to parts)",
+    "monoIdentityCol": "Identity column",
+    "monoCount": "Slot count",
+    "monoSlotsTitle": "Slot columns",
+    "monoSlotN": "Slot {{n}}",
+    "monoAnalyze": "Analyze mono-body",
+    "monoRequired": "Map the identity column and at least one slot.",
+    "monoDone": "{{mono}} mono-body part(s) out of {{matched}} matched."
   },
   "smgxml": {
     "fileLabel": "SMGXML file (under the Source root)",

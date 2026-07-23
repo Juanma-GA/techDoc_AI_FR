@@ -28,9 +28,6 @@ const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; requ
   { field: "old_rev", labelKey: "identification.fieldOldRev", required: false },
   { field: "new_rev", labelKey: "identification.fieldNewRev", required: false },
   { field: "color_ref", labelKey: "identification.fieldColorRef", required: false },
-  { field: "slot_1", labelKey: "identification.fieldSlot1", required: false },
-  { field: "slot_2", labelKey: "identification.fieldSlot2", required: false },
-  { field: "slot_3", labelKey: "identification.fieldSlot3", required: false },
 ];
 
 // Colonnes qui suffisent a identifier une piece (au moins une requise).
@@ -62,9 +59,6 @@ const COLUMN_DEFS: ColDef[] = [
   { key: "new_rev", labelKey: "identification.colNewRev", center: true, render: (it) => it.new_rev },
   { key: "color_ref", labelKey: "identification.colColorRef", render: (it) => it.color_ref },
   { key: "materials", labelKey: "identification.colMateriaux", render: (it) => it.materials },
-  { key: "slot_1", labelKey: "identification.colSlot1", center: true, render: (it) => it.slot_1 },
-  { key: "slot_2", labelKey: "identification.colSlot2", center: true, render: (it) => it.slot_2 },
-  { key: "slot_3", labelKey: "identification.colSlot3", center: true, render: (it) => it.slot_3 },
   {
     key: "mono_body",
     labelKey: "identification.colMonoBody",
@@ -74,16 +68,10 @@ const COLUMN_DEFS: ColDef[] = [
   { key: "color", labelKey: "identification.colColor", center: true, render: (it) => <ColorDot item={it} /> },
 ];
 
-// Une piece est mono-corps des qu'au moins une colonne Slot est mappee.
-const SLOT_KEYS = ["slot_1", "slot_2", "slot_3"];
-function hasSlots(columns: string[]): boolean {
-  return SLOT_KEYS.some((k) => columns.includes(k));
-}
-
-// Colonnes affichees : les colonnes mappees + la colonne calculee "mono_body"
-// (drapeau derive) quand au moins un slot est mappe.
+// Colonnes affichees : les colonnes mappees + la colonne "mono_body" (drapeau
+// renseigne par l'etape Mono-Corps, onglet Materiaux) toujours visible.
 function displayColumns(columns: string[]): string[] {
-  return hasSlots(columns) ? [...columns, "mono_body"] : columns;
+  return [...columns, "mono_body"];
 }
 
 function fileName(ref: string): string {
@@ -151,6 +139,236 @@ function ColorDot({ item }: { item: NomenclatureItemDto }) {
         backgroundColor: `rgb(${item.color_r},${item.color_g},${item.color_b})`,
       }}
     />
+  );
+}
+
+// Champs d'identite pour relier une ligne "slots" a une piece.
+const MONO_IDENTITY_FIELDS: { field: "catpart" | "sin" | "old_pn" | "new_pn"; labelKey: string }[] = [
+  { field: "catpart", labelKey: "identification.colCatpart" },
+  { field: "sin", labelKey: "identification.colSin" },
+  { field: "old_pn", labelKey: "identification.colOldPn" },
+  { field: "new_pn", labelKey: "identification.colNewPn" },
+];
+
+/**
+ * Etape Mono-Corps : onglet Materiaux separe. L'utilisateur choisit un onglet,
+ * une colonne d'identite, un nombre `n` de colonnes slots, puis mappe ces n
+ * colonnes. Le backend calcule mono_body (1 valeur distincte parmi les slots)
+ * et l'applique aux pieces du run par la valeur d'identite.
+ */
+function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string; onApplied: () => void }) {
+  const { t } = useTranslation();
+  const [preview, setPreview] = useState<NomenclaturePreviewDto | null>(null);
+  const [sheet, setSheet] = useState("");
+  const [headerRow, setHeaderRow] = useState(1);
+  const [identityField, setIdentityField] =
+    useState<"catpart" | "sin" | "old_pn" | "new_pn">("catpart");
+  const [identityCol, setIdentityCol] = useState<number | undefined>(undefined);
+  const [slotCols, setSlotCols] = useState<(number | undefined)[]>([undefined]);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const previewMutation = useMutation({
+    mutationFn: (s?: string) =>
+      identificationApi.preview({ scope: "input", path: path.trim(), sheet: s, rows: 20 }),
+    onSuccess: (data) => {
+      setError(null);
+      setNotice(null);
+      setPreview(data);
+      setSheet(data.sheet);
+      setHeaderRow(data.header_row_detected > 0 ? data.header_row_detected : 1);
+      if (data.columns_map.catpart !== undefined) setIdentityCol(data.columns_map.catpart);
+    },
+    onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
+  });
+
+  const analyzeMutation = useMutation({
+    mutationFn: () =>
+      identificationApi.monoCorps(runId, {
+        path: path.trim(),
+        sheet: sheet || undefined,
+        header_row: headerRow,
+        identity_field: identityField,
+        identity_col: identityCol as number,
+        slot_cols: slotCols.filter((c): c is number => c !== undefined),
+      }),
+    onSuccess: (run) => {
+      setError(null);
+      setNotice(
+        t("identification.monoDone", {
+          mono: summaryNum(run.summary, "mono_body"),
+          matched: summaryNum(run.summary, "mono_matched"),
+        }),
+      );
+      onApplied();
+    },
+    onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
+  });
+
+  const ncols = preview ? preview.rows.reduce((m, r) => Math.max(m, r.length), 0) : 0;
+  const setSlotCount = (raw: number) => {
+    const count = Math.max(1, Math.min(Number.isFinite(raw) ? raw : 1, Math.max(1, ncols)));
+    setSlotCols((prev) => Array.from({ length: count }, (_v, i) => prev[i]));
+  };
+  const mappedSlots = slotCols.filter((c) => c !== undefined).length;
+  const canAnalyze = identityCol !== undefined && mappedSlots >= 1;
+  const colOptions = Array.from({ length: ncols }, (_v, i) => ({
+    value: String(i),
+    label: preview ? colLabel(preview, i, headerRow) : String(i),
+  }));
+
+  return (
+    <article className="card">
+      <h2 className="card-title">{t("identification.monoTitle")}</h2>
+      <p className="banner info">{t("identification.monoBanner")}</p>
+
+      <div className="row">
+        <button
+          type="button"
+          className="btn secondary"
+          onClick={() => previewMutation.mutate(sheet || undefined)}
+          disabled={previewMutation.isPending || !path.trim()}
+        >
+          {previewMutation.isPending ? <span className="spinner" /> : null}
+          <span>{t("identification.preview")}</span>
+        </button>
+        {notice ? <span className="success">{notice}</span> : null}
+        {error ? <span className="error">{error}</span> : null}
+      </div>
+
+      {preview ? (
+        <div style={{ marginTop: 12 }}>
+          <div className="row" style={{ alignItems: "flex-end" }}>
+            <div className="field">
+              <label htmlFor="mono-sheet" className="field-label">{t("identification.sheet")}</label>
+              <select
+                id="mono-sheet"
+                className="input"
+                value={sheet}
+                onChange={(e) => previewMutation.mutate(e.target.value)}
+              >
+                {preview.sheets.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="mono-header" className="field-label">{t("identification.headerRow")}</label>
+              <select
+                id="mono-header"
+                className="input"
+                value={String(headerRow)}
+                onChange={(e) => setHeaderRow(parseInt(e.target.value, 10))}
+              >
+                {preview.rows.map((_r, i) => (
+                  <option key={i} value={String(i + 1)}>{String(i + 1)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="row" style={{ alignItems: "flex-end", marginTop: 8 }}>
+            <div className="field">
+              <label htmlFor="mono-identity-field" className="field-label">
+                {t("identification.monoIdentityField")}
+              </label>
+              <select
+                id="mono-identity-field"
+                className="input"
+                value={identityField}
+                onChange={(e) =>
+                  setIdentityField(e.target.value as "catpart" | "sin" | "old_pn" | "new_pn")
+                }
+              >
+                {MONO_IDENTITY_FIELDS.map((f) => (
+                  <option key={f.field} value={f.field}>{t(f.labelKey)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="mono-identity-col" className="field-label">
+                {t("identification.monoIdentityCol")}
+              </label>
+              <select
+                id="mono-identity-col"
+                className="input"
+                value={identityCol === undefined ? "" : String(identityCol)}
+                onChange={(e) =>
+                  setIdentityCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10))
+                }
+              >
+                <option value="">{t("identification.none")}</option>
+                {colOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="mono-count" className="field-label">{t("identification.monoCount")}</label>
+              <input
+                id="mono-count"
+                className="input"
+                type="number"
+                min={1}
+                max={Math.max(1, ncols)}
+                style={{ width: "6rem" }}
+                value={slotCols.length}
+                onChange={(e) => setSlotCount(parseInt(e.target.value, 10))}
+              />
+            </div>
+          </div>
+
+          <p className="label" style={{ marginTop: 12, marginBottom: 8 }}>
+            {t("identification.monoSlotsTitle")}
+          </p>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+              gap: 8,
+            }}
+          >
+            {slotCols.map((cur, i) => (
+              <div key={i} className="field">
+                <label htmlFor={`mono-slot-${i}`} className="field-label">
+                  {t("identification.monoSlotN", { n: i + 1 })}
+                </label>
+                <select
+                  id={`mono-slot-${i}`}
+                  className="input"
+                  value={cur === undefined ? "" : String(cur)}
+                  onChange={(e) =>
+                    setSlotCols((prev) =>
+                      prev.map((v, j) =>
+                        j === i ? (e.target.value === "" ? undefined : parseInt(e.target.value, 10)) : v,
+                      ),
+                    )
+                  }
+                >
+                  <option value="">{t("identification.none")}</option>
+                  {colOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+
+          <div className="row" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => analyzeMutation.mutate()}
+              disabled={analyzeMutation.isPending || !canAnalyze}
+            >
+              {analyzeMutation.isPending ? <span className="spinner" /> : null}
+              <span>{t("identification.monoAnalyze")}</span>
+            </button>
+            {!canAnalyze ? <span className="hint">{t("identification.monoRequired")}</span> : null}
+          </div>
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -459,9 +677,7 @@ export function Identification() {
                     {canFilterReplaced(resultColumns) ? (
                       <option value="replaced">{t("identification.replacedOnly")}</option>
                     ) : null}
-                    {hasSlots(resultColumns) ? (
-                      <option value="mono_body">{t("identification.monoBodyOnly")}</option>
-                    ) : null}
+                    <option value="mono_body">{t("identification.monoBodyOnly")}</option>
                     {resultColumns.includes("color") ? (
                       <option value="color">{t("identification.withColor")}</option>
                     ) : null}
@@ -535,6 +751,15 @@ export function Identification() {
             </div>
           ) : null}
       </article>
+
+      {/* ---- Carte Mono-Corps : onglet Materiaux (identite + n slots) ---- */}
+      {resultRunId ? (
+        <MonoCorpsCard
+          runId={resultRunId}
+          path={nomenPath}
+          onApplied={() => void qc.invalidateQueries({ queryKey: ["identification"] })}
+        />
+      ) : null}
 
       {/* ---- Carte 2 : nomenclatures analysees ---------------------------- */}
       <article className="card">

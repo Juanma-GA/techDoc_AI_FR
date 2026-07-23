@@ -314,9 +314,6 @@ export type NomenclatureItemDto = {
   new_rev: string;
   color_ref: string;
   materials: string;
-  slot_1: string;
-  slot_2: string;
-  slot_3: string;
   mono_body: boolean;
   mono_color: boolean;
   color_r: number;
@@ -349,9 +346,17 @@ export type NomenclatureMapping = {
   replaced?: number;
   color_ref?: number;
   materials?: number;
-  slot_1?: number;
-  slot_2?: number;
-  slot_3?: number;
+};
+
+// Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots).
+export type MonoCorpsInput = {
+  scope?: BrowseScope;
+  path: string;
+  sheet?: string;
+  header_row: number;
+  identity_field: string;
+  identity_col: number;
+  slot_cols: number[];
 };
 
 export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
@@ -663,6 +668,12 @@ export const identificationApi = {
     request<NomenclatureCompareDto>("/identification/compare", {
       method: "POST",
       body: JSON.stringify({ base_run_id: baseRunId, other_run_id: otherRunId }),
+    }),
+  /** Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots). */
+  monoCorps: (runId: string, body: MonoCorpsInput) =>
+    request<NomenclatureRunDto>(`/identification/${runId}/mono-corps`, {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", ...body }),
     }),
   remove: (id: string) => request<void>(`/identification/${id}`, { method: "DELETE" }),
 };

@@ -26,6 +26,7 @@ from app.core.security import safe_under_root
 from app.db.models import NomenclatureItem, NomenclatureRun
 from app.db.session import get_db
 from app.schemas import (
+    MonoCorpsIn,
     NomenclatureCompareIn,
     NomenclatureCompareOut,
     NomenclatureItemOut,
@@ -77,6 +78,58 @@ def parse_route(payload: NomenclatureParseIn, db: Session = Depends(get_db)) -> 
     db.commit()
     db.refresh(run)
     log.info("nomenclature %s : %d lignes", run.id, result["summary"]["rows"])
+    return _run_out(run)
+
+
+@router.post("/{run_id}/mono-corps", response_model=NomenclatureRunOut)
+def mono_corps_route(run_id: uuid.UUID, payload: MonoCorpsIn, db: Session = Depends(get_db)) -> NomenclatureRunOut:
+    """Etape Mono-Corps : lit l'onglet Materiaux (identite + n colonnes slots),
+    calcule mono_body par identite et met a jour les pieces du run."""
+    run = db.get(NomenclatureRun, run_id)
+    if run is None:
+        raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
+    if payload.scope not in ("input", "output"):
+        raise AppError("SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
+    if payload.identity_field not in nomen.IDENTITY_FIELDS:
+        raise AppError(
+            "IDENTITY_FIELD_INVALID",
+            "identity_field attendu : catpart, sin, old_pn ou new_pn.",
+            status_code=400,
+        )
+    root = onedrive.root_for_scope(db, payload.scope)
+    target = safe_under_root(root, payload.path)
+    if not target.is_file():
+        raise AppError("NOMENCLATURE_NOT_FOUND", "Fichier introuvable.", status_code=404, detail={"path": str(target)})
+
+    parsed = nomen.parse_mono_corps(
+        str(target),
+        sheet=payload.sheet,
+        header_row=payload.header_row,
+        identity_col=payload.identity_col,
+        slot_cols=payload.slot_cols,
+    )
+    ident_map: dict[str, bool] = parsed["map"]
+
+    # Applique mono_body aux pieces du run par la valeur du champ d'identite.
+    items = list(db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)))
+    matched = 0
+    mono = 0
+    for it in items:
+        key = (getattr(it, payload.identity_field) or "").strip()
+        is_mono = bool(key and ident_map.get(key, False))
+        it.mono_body = is_mono
+        if key and key in ident_map:
+            matched += 1
+        if is_mono:
+            mono += 1
+
+    summary = json.loads(run.summary or "{}")
+    summary["mono_body"] = mono
+    summary["mono_matched"] = matched
+    run.summary = json.dumps(summary, ensure_ascii=False)
+    db.commit()
+    db.refresh(run)
+    log.info("mono-corps %s : %d apparies, %d mono-corps", run_id, matched, mono)
     return _run_out(run)
 
 
@@ -219,8 +272,7 @@ def export_csv(
         [
             "catpart", "designation", "sin", "version", "a_traiter", "replaced",
             "old_pn", "new_pn", "old_rev", "new_rev", "color_ref", "materials",
-            "slot_1", "slot_2", "slot_3", "mono_body",
-            "mono_color", "r", "g", "b",
+            "mono_body", "mono_color", "r", "g", "b",
         ]
     )
     for r in rows:
@@ -228,8 +280,7 @@ def export_csv(
             [
                 r.catpart, r.designation, r.sin, r.version, r.to_treat_value, int(r.replaced),
                 r.old_pn, r.new_pn, r.old_rev, r.new_rev, r.color_ref, r.materials,
-                r.slot_1, r.slot_2, r.slot_3, int(r.mono_body),
-                int(r.mono_color), r.color_r, r.color_g, r.color_b,
+                int(r.mono_body), int(r.mono_color), r.color_r, r.color_g, r.color_b,
             ]
         )
     return StreamingResponse(

@@ -273,30 +273,51 @@ def test_compare_nomenclatures(client, tmp_path):
     assert "modifie" in csv.text
 
 
-def test_mono_body_from_slots(client, tmp_path):
+def test_mono_body_from_materiaux_sheet(client, tmp_path):
+    """Etape Mono-Corps : onglet Materiaux separe (identite + n colonnes slots),
+    n quelconque, apparie aux pieces par CATPart."""
     _set_input_root(client, str(tmp_path))
     wb = Workbook()
+    # Onglet 1 : nomenclature (identite CATPart / SIN).
     ws = wb.active
-    ws.append(["CATPart", "SIN", "Slot 1", "Slot 2", "Slot 3"])
-    ws.append(["P1.CATPart", "SIN-001", "A", "", ""])   # 1 slot -> mono-corps
-    ws.append(["P2.CATPart", "SIN-002", "A", "A", "A"])  # slots identiques -> mono-corps
-    ws.append(["P3.CATPart", "SIN-003", "A", "B", ""])   # slots distincts -> non
-    ws.append(["P4.CATPart", "SIN-004", "", "", ""])     # aucun slot -> non
-    p = tmp_path / "slots.xlsx"
+    ws.title = "Nomenclature"
+    ws.append(["CATPart", "SIN"])
+    for cat, sin in [("P1.CATPart", "SIN-001"), ("P2.CATPart", "SIN-002"),
+                     ("P3.CATPart", "SIN-003"), ("P4.CATPart", "SIN-004")]:
+        ws.append([cat, sin])
+    # Onglet 2 : Materiaux (CATPart + 4 colonnes Slot).
+    mat = wb.create_sheet("Materiaux")
+    mat.append(["CATPart", "Slot 1", "Slot 2", "Slot 3", "Slot 4"])
+    mat.append(["P1.CATPart", "A", "", "", ""])       # 1 slot -> mono
+    mat.append(["P2.CATPart", "A", "A", "A", "A"])    # 4 slots identiques -> mono
+    mat.append(["P3.CATPart", "A", "B", "", ""])      # distincts -> non
+    mat.append(["P4.CATPart", "", "", "", ""])        # aucun slot -> non
+    p = tmp_path / "nomen_mono.xlsx"
     wb.save(p)
 
-    body = client.post(
-        "/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}
-    ).json()
-    assert body["summary"]["mono_body"] == 2
-    run_id = body["id"]
+    run_id = client.post(
+        "/api/v1/identification/nomenclature",
+        json={"scope": "input", "path": str(p), "sheet": "Nomenclature"},
+    ).json()["id"]
+
+    # Avant l'etape mono-corps : aucun mono_body.
+    assert client.get(f"/api/v1/identification/{run_id}").json()["summary"]["mono_body"] == 0
+
+    # Etape mono-corps : onglet Materiaux, identite=catpart (col 0), 4 slots (col 1..4).
+    r = client.post(
+        f"/api/v1/identification/{run_id}/mono-corps",
+        json={
+            "scope": "input", "path": str(p), "sheet": "Materiaux", "header_row": 1,
+            "identity_field": "catpart", "identity_col": 0, "slot_cols": [1, 2, 3, 4],
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["summary"]["mono_body"] == 2
 
     mono = client.get(f"/api/v1/identification/{run_id}/items", params={"mono_body": True}).json()
     assert {i["catpart"] for i in mono} == {"P1.CATPart", "P2.CATPart"}
 
-    # Export CSV filtre mono-corps : nouvel en-tete (slots + mono_body).
+    # Export CSV filtre mono-corps.
     csv = client.get(f"/api/v1/identification/{run_id}/export.csv", params={"mono_body": True})
-    header = csv.text.splitlines()[0]
-    for col in ("slot_1", "slot_2", "slot_3", "mono_body"):
-        assert col in header
+    assert "mono_body" in csv.text.splitlines()[0]
     assert "P1.CATPart" in csv.text and "P3.CATPart" not in csv.text

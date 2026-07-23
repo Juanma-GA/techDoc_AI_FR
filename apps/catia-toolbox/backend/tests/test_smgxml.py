@@ -106,12 +106,11 @@ def _make_smgxml_composer(tmp_path):
 
 
 def _make_nomenclature_full(client, tmp_path):
-    """Nomenclature : NEW P/N = AA-200, Ref Couleur = Visserie, RGB 255,0,0,
-    un seul slot renseigne => piece mono-corps (ciblee par simple_only)."""
+    """Nomenclature : NEW P/N = AA-200, Ref Couleur = Visserie, RGB 255,0,0."""
     wb = Workbook()
     ws = wb.active
-    ws.append(["CATPart", "SIN", "NEW P/N", "Ref Couleur", "Couleur", "Materiaux", "Slot 1"])
-    ws.append(["P.CATPart", "SIN-001", "AA-200", "Visserie", "255,0,0", "", "S1"])
+    ws.append(["CATPart", "SIN", "NEW P/N", "Ref Couleur", "Couleur", "Materiaux"])
+    ws.append(["P.CATPart", "SIN-001", "AA-200", "Visserie", "255,0,0", ""])
     p = tmp_path / "nomen_full.xlsx"
     wb.save(p)
     return client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]
@@ -125,7 +124,7 @@ def test_recolor_style_and_color_by_pn(client, tmp_path):
     # match_by=pn : cible l'acteur AA-200 ; pose le style (Visserie) ET la couleur.
     r = client.post("/api/v1/smgxml/recolor", json={
         "scope": "input", "path": str(smg), "nomenclature_run_id": nom_id,
-        "match_by": "pn", "simple_only": True,
+        "match_by": "pn", "simple_only": False,
         "set_style": True, "set_color": True, "apply": True,
     })
     assert r.status_code == 200, r.text
@@ -247,7 +246,7 @@ def test_texture_config_library_and_ext(client, tmp_path):
 
     r = client.post("/api/v1/smgxml/recolor", json={
         "scope": "input", "path": str(smg), "nomenclature_run_id": nom_id,
-        "match_by": "pn", "simple_only": True,
+        "match_by": "pn", "simple_only": False,
         "set_style": True, "set_color": False, "apply": True,
     })
     assert r.status_code == 200, r.text

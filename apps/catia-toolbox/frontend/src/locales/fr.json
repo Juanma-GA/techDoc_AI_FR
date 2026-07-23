@@ -415,7 +415,17 @@
     "badgeToTreat": "{{count}} à traiter",
     "badgeReplaced": "{{count}} remplacée(s)",
     "badgeMonoBody": "{{count}} mono-corps",
-    "badgeMono": "{{count}} mono"
+    "badgeMono": "{{count}} mono",
+    "monoTitle": "Pièces mono-corps (onglet Matériaux)",
+    "monoBanner": "Choisissez l'onglet Matériaux, la colonne d'identité (pour relier aux pièces), un nombre de colonnes de slots, puis mappez-les. Une pièce est mono-corps si les slots renseignés ont une seule valeur distincte.",
+    "monoIdentityField": "Identité (relie aux pièces)",
+    "monoIdentityCol": "Colonne d'identité",
+    "monoCount": "Nb de slots",
+    "monoSlotsTitle": "Colonnes des slots",
+    "monoSlotN": "Slot {{n}}",
+    "monoAnalyze": "Analyser mono-corps",
+    "monoRequired": "Mappez la colonne d'identité et au moins un slot.",
+    "monoDone": "{{mono}} pièce(s) mono-corps sur {{matched}} appariée(s)."
   },
   "smgxml": {
     "fileLabel": "Fichier SMGXML (sous la racine Source)",

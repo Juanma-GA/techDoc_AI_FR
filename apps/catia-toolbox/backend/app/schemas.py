@@ -479,9 +479,21 @@ class NomenclatureMapping(BaseModel):
     replaced: Optional[int] = Field(default=None, ge=0)
     color_ref: Optional[int] = Field(default=None, ge=0)
     materials: Optional[int] = Field(default=None, ge=0)
-    slot_1: Optional[int] = Field(default=None, ge=0)
-    slot_2: Optional[int] = Field(default=None, ge=0)
-    slot_3: Optional[int] = Field(default=None, ge=0)
+
+
+class MonoCorpsIn(BaseModel):
+    """Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots)."""
+
+    scope: str = Field(default="input")
+    path: str = Field(..., min_length=1)
+    sheet: Optional[str] = None
+    header_row: int = Field(..., ge=1)
+    # Champ d'identite (catpart | sin | old_pn | new_pn) reliant la ligne slots
+    # a une piece, et l'index (0-based) de la colonne d'identite dans l'onglet.
+    identity_field: str = Field(..., min_length=1)
+    identity_col: int = Field(..., ge=0)
+    # Colonnes slots a mapper (0-based), 1 a n.
+    slot_cols: list[int] = Field(..., min_length=1)
 
 
 class NomenclatureParseIn(BaseModel):
@@ -524,9 +536,6 @@ class NomenclatureItemOut(BaseModel):
     new_rev: str
     color_ref: str
     materials: str
-    slot_1: str
-    slot_2: str
-    slot_3: str
     mono_body: bool
     mono_color: bool
     color_r: int
