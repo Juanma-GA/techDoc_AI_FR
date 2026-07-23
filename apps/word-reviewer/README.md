@@ -83,7 +83,7 @@ Backend FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog ;
 - `POST /api/v1/documents` (upload single/multi/zip), `GET /api/v1/documents/{id}/export`
 - `POST /api/v1/documents/{id}/analyze` (SSE), `GET /api/v1/documents/{id}/suggestions`
 - `POST /api/v1/rules/import` (checklist Excel, mode remplacement)
-- `GET /api/v1/standards`, `GET /api/v1/metrics`
+- `GET /api/v1/standards`
 
 ## Tests
 
@@ -100,3 +100,6 @@ Les tests s'appuient sur des fixtures **synthétiques** (`tests/fixtures/`,
 - Réutilisation de modules portés depuis `apps/pdf-reviewer` (moteur de règles,
   schémas, routes) adaptés au format `.docx`. Le squelette reste issu de
   `apps/_template` conformément à la règle d'instanciation.
+- **Onglet Architecture retiré** (écart à la règle #13 « onglets minimum
+  Home/Architecture/Données/Paramètres ») : jugé inutile pour ce POC à la demande
+  de l'utilisateur. Les onglets Home / Données / Paramètres restent présents.

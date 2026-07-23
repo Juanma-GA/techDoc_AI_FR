@@ -26,6 +26,31 @@ function escapeHtml(s: string): string {
 const hlClass = (sev: string) =>
   sev === "error" ? "error" : sev === "warning" ? "warn" : "info";
 
+// Regroupe des items identiques (recurrence) selon une cle -> [{rep, items}].
+// L'ordre de premiere apparition est conserve.
+function collapseBy<T>(items: T[], keyOf: (t: T) => string): { rep: T; items: T[] }[] {
+  const m = new Map<string, T[]>();
+  for (const it of items) {
+    const k = keyOf(it);
+    const g = m.get(k);
+    if (g) g.push(it);
+    else m.set(k, [it]);
+  }
+  return [...m.values()].map((g) => ({ rep: g[0]!, items: g }));
+}
+
+// Regroupe des items par Sujet (Rule.category). "" (règles standard) -> "Sans sujet".
+// Retourne les groupes triés par libellé pour un ordre stable.
+function groupByCategory<T>(items: T[], catOf: (t: T) => string): [string, T[]][] {
+  const g = new Map<string, T[]>();
+  for (const it of items) {
+    const key = (catOf(it) || "").trim() || "Sans sujet";
+    if (!g.has(key)) g.set(key, []);
+    g.get(key)!.push(it);
+  }
+  return [...g.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
 // Pagination de secours quand le .docx ne porte aucun saut de page detectable.
 const PAGE_SIZE = 40;
 
@@ -203,10 +228,10 @@ export function Review() {
   const pdfAvailable = pdf?.available === true;
   const [preferHtml, setPreferHtml] = useState(false);
   const usePdf = pdfAvailable && !preferHtml; // vue effective (toggle PDF <-> HTML)
-  const layout = useMemo(
-    () => (usePdf ? layoutQuery.data?.findings ?? [] : []),
-    [usePdf, layoutQuery.data],
-  );
+  // La structure (mise en page) est une anomalie a part entiere : on l'affiche dans
+  // la liste QUELLE QUE SOIT la vue (PDF ou HTML). Seul le surlignage geometrique
+  // sur la page reste propre au PDF (les findings portent des coordonnees PDF).
+  const layout = useMemo(() => layoutQuery.data?.findings ?? [], [layoutQuery.data]);
 
   // Severite par id (anomalies + controles de mise en page).
   const sevMap = useMemo(() => {
@@ -328,12 +353,6 @@ export function Review() {
     },
     onError: (e) => setActionError(e instanceof Error ? e.message : String(e)),
   });
-  const checkMut = useMutation({
-    mutationFn: (v: { ids: string[]; status: string }) =>
-      Promise.all(v.ids.map((id) => suggestionsApi.patch(id, { status: v.status }))),
-    onSuccess: refresh,
-  });
-
   const reanalyze = async () => {
     setReanalyzing(true);
     setAnalyzeProg({ done: 0, total: 0 });
@@ -359,7 +378,14 @@ export function Review() {
     }
     return [...g.values()];
   }, [manual]);
-  const manualChecked = manual.filter((s) => s.status === "checked").length;
+
+  // Regroupe par Sujet (colonne TOPIC de la checklist) pour un affichage repliable
+  // — évite d'afficher toutes les anomalies à plat. "" (règle standard) -> repli dédié.
+  const autoByCat = useMemo(() => groupByCategory(auto, (s) => s.category), [auto]);
+  const manualByCat = useMemo(
+    () => groupByCategory(manualGroups, (g) => g[0]?.category ?? ""),
+    [manualGroups],
+  );
 
   if (viewQuery.isLoading || sugsQuery.isLoading)
     return (
@@ -473,41 +499,66 @@ export function Review() {
         </div>
 
         <div className="sug-panel" ref={panelRef}>
-          {usePdf && layout.length > 0 ? (
-            <div className="card">
-              <h2 className="card-title">Mise en page ({layout.length})</h2>
-              <div className="banner">Contrôles géométriques (titres, pieds de page) sur le rendu PDF fidèle.</div>
-              <div>
-                {layout.map((f) => (
-                  <label
-                    className={`checkline${selectedId === f.id ? " selected" : ""}`}
-                    key={f.id}
-                    data-sugcard={f.id}
-                  >
-                    <span onClick={() => setSelectedId(f.id)}>
-                      <span className={`badge ${hlClass(f.severity)}`}>{f.severity}</span> {f.message}{" "}
-                      <span className="zone-tag">{f.rule_code}</span>
-                    </span>
-                  </label>
-                ))}
+          {layout.length > 0 ? (
+            <details className="card" open>
+              <summary className="card-title" style={{ cursor: "pointer" }}>
+                Mise en page ({collapseBy(layout, (f) => f.message).length})
+              </summary>
+              <div className="banner">
+                Contrôles géométriques (titres, pieds de page) sur le rendu PDF fidèle.
+                {!usePdf ? " Le surlignage est visible en vue PDF." : ""}
               </div>
-            </div>
+              <div>
+                {collapseBy(layout, (f) => f.message).map(({ rep: f, items: grp }) => {
+                  const ids = grp.map((x) => x.id);
+                  const sel = selectedId != null && ids.includes(selectedId);
+                  return (
+                    <div
+                      className={`checkline${sel ? " selected" : ""}`}
+                      key={f.id}
+                      data-sugcard={ids.join(" ")}
+                      onClick={() => setSelectedId(f.id)}
+                    >
+                      <span>
+                        <span className={`badge ${hlClass(f.severity)}`}>{f.severity}</span> {f.message}
+                        {grp.length > 1 ? (
+                          <span className="badge" title={`${grp.length} occurrences`}> ×{grp.length}</span>
+                        ) : null}{" "}
+                        <span className="zone-tag">{f.rule_code}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
           ) : null}
-          <div className="card">
+          <details className="card" open>
+            <summary className="card-title" style={{ cursor: "pointer" }}>
+              À corriger ({auto.length})
+            </summary>
             <div className="banner">Corrections proposées : appliquer remplace le texte (versionné, annulable).</div>
-            <h2 className="card-title">À corriger ({auto.length})</h2>
             <div>
               {auto.length === 0 ? (
                 <div className="empty-state">-</div>
               ) : (
-                auto.map((s) => {
+                autoByCat.map(([label, items]) => (
+                  <details className="cat-group" key={label} open>
+                    <summary style={{ cursor: "pointer", fontWeight: 600, padding: "6px 0" }}>
+                      {label} <span className="zone-tag">{items.length}</span>
+                    </summary>
+                    {collapseBy(
+                      items,
+                      (s) => `${s.rule_code}${s.original_text}${s.proposed_text}`,
+                    ).map(({ rep: s, items: grp }) => {
+                  const ids = grp.map((x) => x.id);
                   const applied = s.status === "applied" || s.status === "edited";
                   const prop = proposed[s.id] ?? s.proposed_text;
+                  const sel = selectedId != null && ids.includes(selectedId);
                   return (
                     <div
-                      className={`sug${applied ? " applied" : ""}${selectedId === s.id ? " selected" : ""}`}
+                      className={`sug${applied ? " applied" : ""}${sel ? " selected" : ""}`}
                       key={s.id}
-                      data-sugcard={s.id}
+                      data-sugcard={ids.join(" ")}
                       onClick={(e) => {
                         if ((e.target as HTMLElement).closest("button, input")) return;
                         setSelectedId(s.id);
@@ -516,6 +567,9 @@ export function Review() {
                       <div className="sug-head">
                         <span className={`badge ${hlClass(s.severity)}`}>{s.severity}</span>
                         <span className="grow sug-msg">{s.message}</span>
+                        {grp.length > 1 ? (
+                          <span className="badge" title={`${grp.length} occurrences identiques`}>×{grp.length}</span>
+                        ) : null}
                         <span className="zone-tag">{s.rule_code}</span>
                         <span className="badge">{s.status}</span>
                       </div>
@@ -575,52 +629,52 @@ export function Review() {
                       </div>
                     </div>
                   );
-                })
+                    })}
+                  </details>
+                ))
               )}
             </div>
-          </div>
+          </details>
 
-          <div className="card">
-            <h2 className="card-title">
-              À vérifier <span className="zone-tag">{manualChecked}/{manual.length} cochés</span>
-            </h2>
-            <div className="banner">Signalements à revue humaine : coche ceux qui sont traités.</div>
+          <details className="card" open>
+            <summary className="card-title" style={{ cursor: "pointer" }}>
+              À vérifier <span className="zone-tag">{manual.length}</span>
+            </summary>
+            <div className="banner">Signalements à revue humaine.</div>
             <div>
               {manualGroups.length === 0 ? (
                 <div className="empty-state">-</div>
               ) : (
-                manualGroups.map((items) => {
+                manualByCat.map(([label, groups]) => (
+                  <details className="cat-group" key={label} open>
+                    <summary style={{ cursor: "pointer", fontWeight: 600, padding: "6px 0" }}>
+                      {label}{" "}
+                      <span className="zone-tag">{groups.reduce((n, g) => n + g.length, 0)}</span>
+                    </summary>
+                    {groups.map((items) => {
                   const s = items[0];
                   if (!s) return null;
-                  const allChecked = items.every((x) => x.status === "checked");
                   const groupSelected = items.some((x) => x.id === selectedId);
                   return (
-                    <label
+                    <div
                       className={`checkline${groupSelected ? " selected" : ""}`}
                       key={s.id}
                       data-sugcard={items.map((x) => x.id).join(" ")}
+                      onClick={() => setSelectedId(s.id)}
                     >
-                      <input
-                        type="checkbox"
-                        checked={allChecked}
-                        onChange={(e) =>
-                          checkMut.mutate({
-                            ids: items.map((x) => x.id),
-                            status: e.target.checked ? "checked" : "open",
-                          })
-                        }
-                      />
-                      <span onClick={() => setSelectedId(s.id)}>
+                      <span>
                         <span className={`badge ${hlClass(s.severity)}`}>{s.severity}</span> {s.message}
                         {items.length > 1 ? <span className="badge"> x{items.length}</span> : null}{" "}
                         <span className="zone-tag">{s.rule_code}</span>
                       </span>
-                    </label>
+                    </div>
                   );
-                })
+                    })}
+                  </details>
+                ))
               )}
             </div>
-          </div>
+          </details>
         </div>
       </div>
     </>

@@ -27,7 +27,7 @@ from app.core.doc_convert import doc_to_docx_bytes
 from app.core.docx_zones import recognize_zones
 from app.core.errors import AppError
 from app.core.uploads import extract_uploads
-from app.db.models import Batch, Document, StandardVersion, Suggestion
+from app.db.models import Batch, Document, Rule, StandardVersion, Suggestion
 from app.db.session import get_db
 from app.parsers.docx_parser import parse_docx
 from app.schemas import (
@@ -244,7 +244,14 @@ def document_pdf_view(document_id: uuid.UUID, db: Session = Depends(get_db)) -> 
     except Exception:  # noqa: BLE001
         parsed = None
     block_text = {b.target_id: b.text for b in parsed.blocks} if parsed else {}
-    sugs = db.scalars(select(Suggestion).where(Suggestion.document_id == doc.id))
+    # Ordre de lecture : la k-ieme anomalie d'un meme texte doit correspondre a la
+    # k-ieme occurrence sur la page (cf. compute_highlights). Meme ordre que le
+    # panneau de revue (block_index, char_start).
+    sugs = db.scalars(
+        select(Suggestion)
+        .where(Suggestion.document_id == doc.id)
+        .order_by(Suggestion.block_index, Suggestion.char_start)
+    )
     needles = [
         (str(s.id), (s.original_text or "").strip() or block_text.get(s.target_id, ""))
         for s in sugs
@@ -274,12 +281,21 @@ def document_layout_checks(document_id: uuid.UUID, db: Session = Depends(get_db)
 @router.get("/{document_id}/suggestions", response_model=list[SuggestionOut])
 def list_suggestions(document_id: uuid.UUID, db: Session = Depends(get_db)) -> list[SuggestionOut]:
     _get_doc(db, document_id)
+    # Jointure sur la regle pour exposer le Sujet (Rule.category) par anomalie :
+    # sert au regroupement repliable « par sujet » cote revue. Les anomalies des
+    # regles standard (rule_id NULL) n'ont pas de categorie -> "".
     stmt = (
-        select(Suggestion)
+        select(Suggestion, Rule.category)
+        .outerjoin(Rule, Suggestion.rule_id == Rule.id)
         .where(Suggestion.document_id == document_id)
         .order_by(Suggestion.block_index, Suggestion.char_start)
     )
-    return [SuggestionOut.model_validate(s) for s in db.scalars(stmt)]
+    out: list[SuggestionOut] = []
+    for s, category in db.execute(stmt).all():
+        dto = SuggestionOut.model_validate(s)
+        dto.category = (category or "").strip()
+        out.append(dto)
+    return out
 
 
 def _current_bytes(doc: Document) -> bytes:

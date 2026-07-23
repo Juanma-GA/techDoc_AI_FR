@@ -126,3 +126,63 @@ async def classify_rules(db: Session, rules: list[ParsedRule]) -> tuple[list[Par
             rules[i].severity = sev
         applied = True
     return rules, applied
+
+
+_SEV_SYSTEM = (
+    "Tu es un expert qualite documentaire aeronautique (manuels CMM). On te donne "
+    "des items d'une checklist de revue. Pour CHAQUE item, evalue UNIQUEMENT sa "
+    "severite au regard de l'impact qualite d'un non-respect :\n"
+    "- error : non-conformite bloquante (donnee fausse, exigence reglementaire, "
+    "reference/numero errone, incoherence critique).\n"
+    "- warning : ecart a corriger sans blocage (formulation, mise en forme, terme).\n"
+    "- info : recommandation / point d'attention non bloquant.\n"
+    "Ne change RIEN d'autre. Reponds uniquement en JSON : "
+    "{\"rules\": [{\"i\": <index>, \"severity\": \"info|warning|error\"}]}."
+)
+
+
+async def classify_severities(db: Session, rules: list[ParsedRule]) -> tuple[list[ParsedRule], bool]:
+    """Attribue par IA la SEULE severite (info/warning/error) de chaque item, en un
+    unique appel Mistral. Ne touche ni au kind, ni a la zone, ni au pattern.
+
+    A appeler quand la checklist n'a pas de colonne severite : sans elle, l'import
+    retombe sur l'heuristique par mots-cles (jamais `error`). Repli silencieux sur
+    la severite existante si pas de cle, LLM OFF, erreur reseau ou JSON illisible
+    (regle #6). Retourne `(rules, llm_used)`.
+    """
+    if not rules:
+        return rules, False
+    if not get_llm_enabled(db):
+        return rules, False
+    try:
+        client = MistralClient.from_db(db)
+    except MistralError:
+        return rules, False
+
+    numbered = "\n".join(f"[{i}] {r.name}" for i, r in enumerate(rules))
+    user = "Items :\n" + numbered
+    try:
+        out = await client.chat(
+            [{"role": "system", "content": _SEV_SYSTEM}, {"role": "user", "content": user}],
+            temperature=0.0,
+            timeout=90.0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("severite LLM checklist echouee, repli heuristique: %s", exc)
+        return rules, False
+
+    applied = False
+    for v in _parse(out):
+        try:
+            if not isinstance(v, dict):
+                continue
+            i = int(v.get("i"))
+        except (TypeError, ValueError):
+            continue
+        if not (0 <= i < len(rules)):
+            continue
+        sev = v.get("severity")
+        if sev in _SEV:
+            rules[i].severity = sev
+            applied = True
+    return rules, applied

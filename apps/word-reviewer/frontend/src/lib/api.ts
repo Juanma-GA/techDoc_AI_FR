@@ -64,6 +64,7 @@ export type DashboardDto = {
   by_status: Record<string, number>;
   by_severity: Record<string, number>;
   by_kind: Record<string, number>;
+  by_topic: Record<string, number>;
   top_documents: { id: string; original_filename: string; open_count: number }[];
 };
 export type StatsDto = {
@@ -73,20 +74,9 @@ export type StatsDto = {
   rules: number;
   standards: number;
 };
-export type MetricsDto = {
-  rules: {
-    rule_code: string;
-    total: number;
-    accepted: number;
-    rejected: number;
-    acceptance_rate: number;
-  }[];
-};
-
 export const adminApi = {
   dashboard: () => api<DashboardDto>("/admin/dashboard"),
   stats: () => api<StatsDto>("/admin/stats"),
-  metrics: () => api<MetricsDto>("/metrics"),
   reset: (scope: "all" | "rules") =>
     api<{ deleted?: Record<string, number> }>(`/admin/reset/${scope}`, { method: "POST" }),
 };
@@ -139,6 +129,7 @@ export type Suggestion = {
   id: string;
   target_id: string;
   rule_code: string;
+  category: string; // Sujet (colonne TOPIC de la checklist) ; "" si regle standard
   severity: string;
   status: string;
   message: string;
@@ -335,7 +326,9 @@ export const rulesApi = {
       header_row: number;
       topic_col?: string;
       check_col?: string;
-      context_cols: number[];
+      handling_col?: string;
+      severity_col?: string;
+      ai_severity?: boolean;
       mode: ImportMode;
     },
   ): Promise<RuleImportResultDto> => {
@@ -345,7 +338,9 @@ export const rulesApi = {
     fd.append("header_row", String(opts.header_row));
     if (opts.topic_col != null && opts.topic_col !== "") fd.append("topic_col", opts.topic_col);
     if (opts.check_col != null) fd.append("check_col", opts.check_col);
-    fd.append("context_cols", JSON.stringify(opts.context_cols));
+    if (opts.handling_col != null && opts.handling_col !== "") fd.append("handling_col", opts.handling_col);
+    if (opts.severity_col != null && opts.severity_col !== "") fd.append("severity_col", opts.severity_col);
+    if (opts.ai_severity) fd.append("ai_severity", "true");
     fd.append("mode", opts.mode);
     const res = await fetch(`${API_BASE}/rules/import`, { method: "POST", body: fd });
     if (!res.ok) {

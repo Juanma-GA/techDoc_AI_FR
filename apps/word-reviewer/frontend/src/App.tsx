@@ -3,7 +3,6 @@ import { NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
-import { Architecture } from "./routes/Architecture";
 import { Dashboard } from "./routes/Dashboard";
 import { Data } from "./routes/Data";
 import { Documents } from "./routes/Documents";
@@ -15,7 +14,6 @@ const navItems = [
   { to: "/", labelKey: "nav.dashboard" },
   { to: "/documents", labelKey: "nav.documents" },
   { to: "/rules", labelKey: "nav.rules" },
-  { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
@@ -73,7 +71,6 @@ export function App() {
             <Route path="/documents" element={<Documents />} />
             <Route path="/review/:docId" element={<Review />} />
             <Route path="/rules" element={<Rules />} />
-            <Route path="/architecture" element={<Architecture />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

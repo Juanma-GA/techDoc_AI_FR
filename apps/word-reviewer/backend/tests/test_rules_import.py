@@ -103,6 +103,25 @@ def test_import_bad_mode_rejected(client, make_checklist):
     assert r.status_code == 400
 
 
+def test_reset_deletes_custom_rules_keeps_standards(client, make_checklist):
+    """reset/rules ET reset/all suppriment les regles custom ; les standards
+    builtin restent (preserves par conception)."""
+    _import(client, make_checklist([("A", "Check one"), ("B", "Check two")]))
+    assert len(client.get("/api/v1/rules").json()) == 2
+
+    d = client.post("/api/v1/admin/reset/rules").json()
+    assert d["deleted"]["rules"] == 2
+    assert client.get("/api/v1/rules").json() == []
+    assert client.get("/api/v1/standards").json()  # standards builtin preserves
+
+    _import(client, make_checklist([("A", "Encore une")]))
+    assert client.get("/api/v1/rules").json()  # non vide
+    d2 = client.post("/api/v1/admin/reset/all").json()
+    assert d2["deleted"]["rules"] >= 1  # reset/all supprime aussi les regles
+    assert client.get("/api/v1/rules").json() == []
+    assert client.get("/api/v1/standards").json()  # standards toujours la
+
+
 def test_classifier_generates_pattern(monkeypatch):
     # Exerce le chemin "Mistral configure" (skippe en prod sans cle) : verifie que
     # le classifieur produit une regle corrective + repli llm_nl. Garde le bug
@@ -150,6 +169,135 @@ def test_llm_covers_all_chunks(monkeypatch):
     db.close()
     # 25 blocs / chunk 12 = 3 morceaux -> 3 findings (1 par morceau), faible confiance -> info
     assert len(out) == 3 and all(o.severity == "info" for o in out)
+
+
+def test_import_dedups_duplicated_context(client):
+    """Une colonne contexte qui reproduit le texte du check ne doit pas donner
+    un libelle « texte | texte » (bug de concatenation)."""
+    import io
+    from openpyxl import Workbook
+
+    wb = Workbook(); ws = wb.active
+    ws.append(["Topic", "Regles", "Contexte"])
+    ws.append(["A", "Verifier la date de revision", "Verifier la date de revision"])
+    buf = io.BytesIO(); wb.save(buf)
+    r = client.post(
+        "/api/v1/rules/import",
+        files={"file": ("c.xlsx", buf.getvalue(), XLSX_MIME)},
+        data={"topic_col": "0", "check_col": "1", "context_cols": "[2]", "header_row": "0"},
+    )
+    assert r.status_code == 200
+    name = client.get("/api/v1/rules").json()[0]["name"]
+    assert name == "Verifier la date de revision"
+    assert " | " not in name
+
+
+def test_import_context_pointing_at_check_ignored(client):
+    """Un context_col qui pointe sur la colonne check elle-meme est ecarte."""
+    import io
+    from openpyxl import Workbook
+
+    wb = Workbook(); ws = wb.active
+    ws.append(["Topic", "Regles"])
+    ws.append(["A", "Le titre doit etre centre"])
+    buf = io.BytesIO(); wb.save(buf)
+    r = client.post(
+        "/api/v1/rules/import",
+        files={"file": ("c.xlsx", buf.getvalue(), XLSX_MIME)},
+        data={"topic_col": "0", "check_col": "1", "context_cols": "[1]", "header_row": "0"},
+    )
+    assert r.status_code == 200
+    assert client.get("/api/v1/rules").json()[0]["name"] == "Le titre doit etre centre"
+
+
+def test_import_auto_includes_extra_columns(client):
+    """Mapping topic+check seulement : toute colonne EN PLUS est ajoutee au texte
+    de la regle (cellule vide ignoree), la colonne « prise en compte » garde son
+    role (manuel)."""
+    import io
+    from openpyxl import Workbook
+
+    wb = Workbook(); ws = wb.active
+    ws.append(["Topic", "Regles", "Exemple", "Prise en compte"])
+    ws.append(["ATA", "Verifier le numero ATA", "ex. 20-02-00", "auto"])
+    ws.append(["ATA", "Verifier la revision", "", "manuel"])  # Exemple vide -> ignore
+    buf = io.BytesIO(); wb.save(buf)
+    r = client.post(
+        "/api/v1/rules/import",
+        files={"file": ("c.xlsx", buf.getvalue(), XLSX_MIME)},
+        data={"topic_col": "0", "check_col": "1", "header_row": "0"},
+    )
+    assert r.status_code == 200
+    rules = {x["name"]: x for x in client.get("/api/v1/rules").json()}
+    # 1re regle : colonne Exemple non vide -> ajoutee ; "prise en compte"=auto -> llm_nl
+    n1 = next(n for n in rules if n.startswith("Verifier le numero ATA"))
+    assert "ex. 20-02-00" in n1 and rules[n1]["kind"] == "llm_nl"
+    # 2e regle : Exemple vide -> pas de " | " superflu ; "prise en compte"=manuel
+    assert "Verifier la revision" in rules
+    assert rules["Verifier la revision"]["kind"] == "manual"
+
+
+def test_import_explicit_role_mapping(client):
+    """Mapping explicite des colonnes a role : la severite mappee est utilisee
+    telle quelle (pas d'IA) et la prise en compte mappee decide manuel vs IA,
+    quels que soient les intitules d'en-tete."""
+    import io
+    from openpyxl import Workbook
+
+    wb = Workbook(); ws = wb.active
+    ws.append(["Sujet", "Point", "Gravite", "Mode"])  # intitules non standards
+    ws.append(["A", "Regle critique", "error", "auto"])
+    ws.append(["A", "Regle a la main", "info", "manuel"])
+    buf = io.BytesIO(); wb.save(buf)
+    r = client.post(
+        "/api/v1/rules/import",
+        files={"file": ("c.xlsx", buf.getvalue(), XLSX_MIME)},
+        data={"topic_col": "0", "check_col": "1", "severity_col": "2",
+              "handling_col": "3", "header_row": "0"},
+    )
+    assert r.status_code == 200
+    rules = {x["name"]: x for x in client.get("/api/v1/rules").json()}
+    assert rules["Regle critique"]["severity"] == "error"
+    assert rules["Regle critique"]["kind"] == "llm_nl"
+    assert rules["Regle a la main"]["severity"] == "info"
+    assert rules["Regle a la main"]["kind"] == "manual"
+
+
+def test_classify_severities_assigns_severity_only(monkeypatch):
+    """L'IA n'affecte QUE la severite ; le kind (llm_nl) reste inchange."""
+    import asyncio
+
+    from app.core import checklist_classifier as cc
+    from app.core.excel_rules import ParsedRule
+    from app.db.session import SessionLocal
+
+    class _Fake:
+        async def chat(self, messages, **kw):
+            return '{"rules":[{"i":0,"severity":"error"},{"i":1,"severity":"info"}]}'
+
+    monkeypatch.setattr(cc.MistralClient, "from_db", staticmethod(lambda db: _Fake()))
+    mk = lambda n: ParsedRule(name=n, category="G", kind="llm_nl", pattern="", replacement="",
+                              target_zone="", severity="warning", message=n)
+    db = SessionLocal()
+    out, used = asyncio.run(cc.classify_severities(db, [mk("a"), mk("b")]))
+    db.close()
+    assert used is True
+    assert out[0].severity == "error" and out[1].severity == "info"
+    assert all(o.kind == "llm_nl" for o in out)  # kind non touche
+
+
+def test_classify_severities_llm_off_keeps_heuristic(monkeypatch):
+    """LLM OFF -> repli gracieux (regle #6) : severite heuristique conservee."""
+    import asyncio
+
+    from app.core import checklist_classifier as cc
+    from app.core.excel_rules import ParsedRule
+
+    monkeypatch.setattr(cc, "get_llm_enabled", lambda db: False)
+    mk = ParsedRule(name="a", category="G", kind="llm_nl", pattern="", replacement="",
+                    target_zone="", severity="warning", message="a")
+    out, used = asyncio.run(cc.classify_severities(None, [mk]))
+    assert used is False and out[0].severity == "warning"
 
 
 def test_inspect_lists_sheets(client, make_checklist):
@@ -206,4 +354,7 @@ def test_imported_rules_pending_until_validated(client, make_checklist, make_doc
     assert n >= 1
     client.post(f"/api/v1/documents/{doc_id}/analyze", json={})
     sug2 = client.get(f"/api/v1/documents/{doc_id}/suggestions").json()
-    assert any(s["rule_kind"] == "custom" for s in sug2)
+    custom = [s for s in sug2 if s["rule_kind"] == "custom"]
+    assert custom
+    # Le Sujet (Rule.category = colonne TOPIC) est expose par anomalie -> regroupement repliable.
+    assert all(s["category"] == "General" for s in custom)

@@ -162,16 +162,15 @@ async def _post_process(
     threshold: float,
     budget: LlmBudget,
 ) -> list[RawSuggestion]:
-    survivors: list[RawSuggestion] = []
-    for raw, rule_text, excerpt in findings:
+    async def _decide(raw: RawSuggestion, rule_text: str, excerpt: str) -> RawSuggestion | None:
+        """Retourne le finding conserve, ou None s'il est refute / rejete."""
         if raw.confidence is not None and raw.confidence < threshold:
             # Couche 2 : confiance basse -> a verifier (pas d'assertion / d'application).
             raw.severity = "info"
             raw.message = f"[A verifier] {raw.message}"
             raw.proposed = ""
             raw.char_start = raw.char_end = 0
-            survivors.append(raw)
-            continue
+            return raw
         # Couche 1 : verification adversariale. Les `error` sont toujours verifies.
         # Les `warning` ne le sont que s'ils sont BORDERLINE (confiance proche du
         # seuil) : un warning tres confiant est conserve tel quel -> preserve le
@@ -185,9 +184,16 @@ async def _post_process(
                 log.warning("verification failed, keeping finding: %s", exc)
                 keep = True
             if not keep:
-                continue
-        survivors.append(raw)
-    return survivors
+                return None
+        return raw
+
+    # Les verifications adversariales sont lancees CONCURREMMENT (le semaphore du
+    # `LlmBudget` borne la concurrence reelle -> LLM_CONCURRENCY) au lieu d'etre
+    # attendues l'une apres l'autre : sur un document a nombreux findings, le mur
+    # de verification passe de somme-des-appels a ~max sous le plafond de budget.
+    # L'ordre d'origine est preserve (gather conserve l'ordre des taches).
+    decided = await asyncio.gather(*(_decide(*f) for f in findings))
+    return [raw for raw in decided if raw is not None]
 
 
 async def run_llm_iter(db: Session, parsed: ParsedDocx, rules: list[dict[str, Any]]):

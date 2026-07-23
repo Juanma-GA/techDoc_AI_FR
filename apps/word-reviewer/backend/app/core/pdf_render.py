@@ -91,39 +91,63 @@ def _clean_needle(text: str) -> str:
 
 
 def compute_highlights(pdf: Path, needles: list[tuple[str, str]]) -> dict:
-    """`needles` = [(suggestion_id, texte_a_chercher)].
+    """`needles` = [(suggestion_id, texte_a_chercher)], **en ordre de lecture**.
 
     Retourne {page_count, highlights:[{id, page, boxes:[{left,top,width,height}]}]}
     ou les boxes sont en **pourcentage** de la page (origine haut-gauche).
+
+    Chaque anomalie recoit AU PLUS une boite. Quand un meme texte apparait
+    plusieurs fois (faute repetee, ou plusieurs anomalies sur le meme bloc via le
+    repli « texte du bloc »), la k-ieme anomalie portant ce texte est associee a la
+    k-ieme occurrence en ordre de lecture. Sans ca, `search_for` collait TOUTES les
+    occurrences a chaque anomalie -> boites superposees, et le clic tombait sur la
+    derniere rendue (mauvaise anomalie).
     """
     doc = fitz.open(str(pdf))
     try:
-        pages_text = [doc.load_page(i).get_text("text").lower() for i in range(doc.page_count)]
+        page_count = doc.page_count
+        # Occurrences (page, rect) d'un texte, en ordre de lecture, mises en cache.
+        cache: dict[str, list[tuple[int, "fitz.Rect"]]] = {}
+
+        def _occurrences(needle: str) -> list[tuple[int, "fitz.Rect"]]:
+            key = needle.lower()
+            if key not in cache:
+                found: list[tuple[int, "fitz.Rect"]] = []
+                for i in range(page_count):
+                    for r in doc.load_page(i).search_for(needle):
+                        found.append((i, r))
+                found.sort(key=lambda pr: (pr[0], round(pr[1].y0, 1), round(pr[1].x0, 1)))
+                cache[key] = found
+            return cache[key]
+
+        used: dict[str, int] = {}  # combien d'occurrences deja consommees par texte
         highlights: list[dict] = []
         for sid, raw in needles:
             needle = _clean_needle(raw)
             if len(needle) < 2:
                 continue
-            low = needle.lower()
-            for i, ptext in enumerate(pages_text):
-                if low not in ptext:
-                    continue
-                page = doc.load_page(i)
-                rects = page.search_for(needle)
-                if not rects:
-                    continue
-                w, h = page.rect.width or 1, page.rect.height or 1
-                boxes = [
-                    {
-                        "left": round(100 * r.x0 / w, 3),
-                        "top": round(100 * r.y0 / h, 3),
-                        "width": round(100 * (r.x1 - r.x0) / w, 3),
-                        "height": round(100 * (r.y1 - r.y0) / h, 3),
-                    }
-                    for r in rects
-                ]
-                highlights.append({"id": sid, "page": i + 1, "boxes": boxes})
-                break  # 1re page contenant le texte
-        return {"page_count": doc.page_count, "highlights": highlights}
+            occ = _occurrences(needle)
+            k = used.get(needle.lower(), 0)
+            used[needle.lower()] = k + 1
+            if k >= len(occ):
+                continue  # occurrence deja prise -> pas de boite (mieux qu'une fausse)
+            i, r = occ[k]
+            page = doc.load_page(i)
+            w, h = page.rect.width or 1, page.rect.height or 1
+            highlights.append(
+                {
+                    "id": sid,
+                    "page": i + 1,
+                    "boxes": [
+                        {
+                            "left": round(100 * r.x0 / w, 3),
+                            "top": round(100 * r.y0 / h, 3),
+                            "width": round(100 * (r.x1 - r.x0) / w, 3),
+                            "height": round(100 * (r.y1 - r.y0) / h, 3),
+                        }
+                    ],
+                }
+            )
+        return {"page_count": page_count, "highlights": highlights}
     finally:
         doc.close()

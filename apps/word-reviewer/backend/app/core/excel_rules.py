@@ -153,6 +153,11 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
 
     `mapping` (optionnel) : {header_row:int, topic:int|None, check:int,
     context:[int]}. Sans mapping, auto-detection (en-tete Topic|Check devine).
+
+    En mode mapping, seules topic/check sont imposees : les colonnes a role special
+    (prise en compte, severite, zone) sont detectees par nom d'en-tete, et TOUTES
+    les autres colonnes du modele sont ajoutees au texte de la regle (contexte).
+    Les cellules vides sont simplement ignorees.
     """
     wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     ws = wb[sheet] if (sheet and sheet in wb.sheetnames) else wb.active
@@ -163,12 +168,32 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
 
     if mapping and mapping.get("check") is not None:
         header_idx = int(mapping.get("header_row", 0))
+        header_cells = list(rows[header_idx]) if 0 <= header_idx < len(rows) else []
+        # topic/check sont imposes par l'utilisateur ; on detecte EN PLUS, par nom
+        # d'en-tete, les colonnes a role special (prise en compte, severite, zone)
+        # pour qu'elles gardent leur sens meme en mode mapping.
+        named = _resolve_columns(header_cells)
+        # Chaque role : valeur explicite si mappee, sinon detection par nom d'en-tete.
+        def _role(key: str):
+            v = mapping.get(key)
+            return v if v is not None else named.get(key)
+
         columns = {
             "topic": mapping.get("topic"),
             "check": int(mapping["check"]),
-            "handling": mapping.get("handling"),
+            "handling": _role("handling"),
+            "severity": _role("severity"),
+            "zone": _role("zone"),
         }
-        context_cols = [int(c) for c in (mapping.get("context") or [])]
+        # « Prendre en compte toutes les colonnes du modele » : toute colonne SANS
+        # role (ni sujet, ni regle, ni handling/severite/zone) est ajoutee au texte
+        # de la regle. Cellules vides ignorees a la lecture (plus bas).
+        explicit_ctx = [int(c) for c in (mapping.get("context") or [])]
+        if explicit_ctx:
+            context_cols = explicit_ctx
+        else:
+            special = {columns.get(k) for k in ("topic", "check", "handling", "severity", "zone")}
+            context_cols = [c for c in range(len(header_cells)) if c not in special]
     else:
         header_idx = 0
         columns = {}
@@ -183,6 +208,11 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
         # Colonne « contexte » nommee -> concatenee au message comme un context_col.
         context_cols = [columns["context"]] if columns.get("context") is not None else []
 
+    # Anti-doublon : une colonne « contexte » qui pointe sur la colonne check (ou
+    # topic) reproduirait le libelle -> "texte | texte". On ecarte ces index.
+    _excluded_ctx = {columns.get("check"), columns.get("topic")}
+    context_cols = [c for c in context_cols if c not in _excluded_ctx]
+
     out: list[ParsedRule] = []
     last_topic = ""
     for row in rows[header_idx + 1:]:
@@ -194,7 +224,14 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
         check = _cell(cells, columns.get("check"))
         if not check:
             continue
-        context = " | ".join(p for p in (_cell(cells, c) for c in context_cols) if p)
+        # Dedup par contenu : on ne concatene que les parts non vides ET distinctes
+        # du check (une autre colonne peut porter un texte identique -> doublon).
+        check_key = check.strip().lower()
+        parts = [
+            p for p in (_cell(cells, c) for c in context_cols)
+            if p and p.strip().lower() != check_key
+        ]
+        context = " | ".join(parts)
         full = f"{check} | {context}" if context else check
         # _classify sert a deduire zone + severite par mots-cles. Le `kind` final
         # ne depend QUE de la colonne explicite « prise en compte » : manuel ->
@@ -222,3 +259,24 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
             )
         )
     return out
+
+
+def has_severity_column(data: bytes, sheet: str | None = None, mapping: dict | None = None) -> bool:
+    """Vrai si la checklist expose une colonne severite explicite.
+
+    Sert a decider si l'IA doit attribuer la severite a l'import (regle : IA
+    seulement quand la colonne n'existe pas). En mode mapping (UI), la severite
+    n'est pas transmise -> repose sur l'auto-detection de l'en-tete.
+    """
+    if mapping is not None and mapping.get("severity") is not None:
+        return True
+    # Sinon on detecte par nom d'en-tete (vrai dans les deux modes : en mode mapping
+    # la severite n'est pas transmise mais peut exister comme colonne nommee).
+    try:
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        ws = wb[sheet] if (sheet and sheet in wb.sheetnames) else wb.active
+        rows = [list(r) for r in ws.iter_rows(min_row=1, max_row=_HEADER_SCAN, values_only=True)]
+        wb.close()
+    except Exception:  # noqa: BLE001
+        return False
+    return any("severity" in _resolve_columns(row) for row in rows)

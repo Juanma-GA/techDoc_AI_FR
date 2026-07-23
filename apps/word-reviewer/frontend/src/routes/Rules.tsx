@@ -108,7 +108,9 @@ export function Rules() {
   const [headerRow, setHeaderRow] = useState(0);
   const [topicCol, setTopicCol] = useState<string>("");
   const [checkCol, setCheckCol] = useState<string>("0");
-  const [ctxCols, setCtxCols] = useState<Set<number>>(new Set());
+  const [handlingCol, setHandlingCol] = useState<string>("");
+  const [severityCol, setSeverityCol] = useState<string>("");
+  const [aiSeverity, setAiSeverity] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>("replace");
   const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [importing, setImporting] = useState(false);
@@ -124,7 +126,9 @@ export function Rules() {
       setHeaderRow(sh[0]?.header_row ?? 0);
       setTopicCol("");
       setCheckCol("0");
-      setCtxCols(new Set());
+      setHandlingCol("");
+      setSeverityCol("");
+      setAiSeverity(false);
     } catch (e) {
       setImportMsg({ kind: "error", text: e instanceof Error ? e.message : String(e) });
     }
@@ -140,7 +144,9 @@ export function Rules() {
         header_row: headerRow,
         topic_col: topicCol,
         check_col: checkCol,
-        context_cols: [...ctxCols],
+        handling_col: handlingCol,
+        severity_col: severityCol,
+        ai_severity: aiSeverity,
         mode: importMode,
       });
       const parts = [`${r.created} créées`, `${r.updated} mises à jour`];
@@ -345,7 +351,31 @@ export function Rules() {
                   {Array.from({ length: ncols }, (_, c) => <option key={c} value={c}>{colLabel(c)}</option>)}
                 </select>
               </Field>
+              <Field label="Colonne Prise en compte">
+                <select value={handlingCol} onChange={(e) => setHandlingCol(e.target.value)}>
+                  <option value="">auto / -</option>
+                  {Array.from({ length: ncols }, (_, c) => <option key={c} value={c}>{colLabel(c)}</option>)}
+                </select>
+              </Field>
+              <Field label="Colonne Sévérité">
+                <select value={severityCol} onChange={(e) => setSeverityCol(e.target.value)}>
+                  <option value="">auto / -</option>
+                  {Array.from({ length: ncols }, (_, c) => <option key={c} value={c}>{colLabel(c)}</option>)}
+                </select>
+              </Field>
             </div>
+            <div className="label" style={{ margin: "4px 0 0" }}>
+              Topic et Check obligatoires. Les autres sont optionnelles (auto par nom
+              sinon) ; toute colonne non mappée est ajoutée au texte de la règle.
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, margin: "6px 0", fontSize: "0.85rem" }}>
+              <input
+                type="checkbox"
+                checked={aiSeverity}
+                onChange={(e) => setAiSeverity(e.target.checked)}
+              />
+              Évaluer la sévérité par IA (plus lent — seulement sans colonne Sévérité)
+            </label>
             <div className="label" style={{ margin: "6px 0" }}>
               Clique une ligne pour définir l'en-tête{" "}
               <span className="badge ok">Ligne d'en-tête {headerRow + 1}</span>
@@ -373,27 +403,6 @@ export function Rules() {
                 </tbody>
               </table>
             </div>
-            <Field label="Colonnes de contexte">
-              <div>
-                {Array.from({ length: ncols }, (_, c) => (
-                  <label key={c} style={{ marginRight: 10, fontSize: "0.8rem" }}>
-                    <input
-                      type="checkbox"
-                      checked={ctxCols.has(c)}
-                      onChange={(e) =>
-                        setCtxCols((p) => {
-                          const n = new Set(p);
-                          if (e.target.checked) n.add(c);
-                          else n.delete(c);
-                          return n;
-                        })
-                      }
-                    />{" "}
-                    {colLabel(c)}
-                  </label>
-                ))}
-              </div>
-            </Field>
             <button
               className="btn primary"
               type="button"

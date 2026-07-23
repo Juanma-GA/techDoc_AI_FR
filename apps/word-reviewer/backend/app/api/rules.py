@@ -17,8 +17,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.checklist_classifier import classify_severities
 from app.core.errors import AppError
-from app.core.excel_rules import list_sheets, parse_checklist
+from app.core.excel_rules import has_severity_column, list_sheets, parse_checklist
 from app.core.rules_engine import validate_rule_pattern
 from app.db.models import Rule
 from app.db.session import get_db
@@ -119,7 +120,11 @@ async def import_checklist(
     header_row: int = Form(default=0),
     topic_col: int | None = Form(default=None),
     check_col: int | None = Form(default=None),
+    handling_col: int | None = Form(default=None),
+    severity_col: int | None = Form(default=None),
+    zone_col: int | None = Form(default=None),
     context_cols: str = Form(default=""),
+    ai_severity: bool = Form(default=False),
     mode: str = Form(default="replace"),
     db: Session = Depends(get_db),
 ) -> RuleImportResult:
@@ -135,7 +140,17 @@ async def import_checklist(
             ctx = [int(c) for c in json.loads(context_cols)] if context_cols else []
         except (ValueError, TypeError):
             ctx = []
-        mapping = {"header_row": header_row, "topic": topic_col, "check": check_col, "context": ctx}
+        # Colonnes a role : explicites si mappees, sinon detectees par nom d'en-tete
+        # dans parse_checklist ; les colonnes restantes vont au contexte.
+        mapping = {
+            "header_row": header_row,
+            "topic": topic_col,
+            "check": check_col,
+            "handling": handling_col,
+            "severity": severity_col,
+            "zone": zone_col,
+            "context": ctx,
+        }
     try:
         parsed = parse_checklist(data, sheet=sheet, mapping=mapping)
     except Exception as exc:  # noqa: BLE001
@@ -155,7 +170,14 @@ async def import_checklist(
         pr.kind = "llm_nl"
         pr.pattern = ""
         pr.replacement = ""
+
+    # Severite par IA : opt-in (`ai_severity`, defaut OFF) car l'appel Mistral
+    # bloquant ralentit l'import. Declenchee seulement si demandee ET s'il n'y a pas
+    # de colonne severite (sinon on l'utilise). On n'affecte QUE la severite (kind
+    # reste llm_nl). Repli gracieux si LLM OFF (regle #6) -> heuristique conservee.
     llm_used = False
+    if ai_severity and not has_severity_column(data, sheet=sheet, mapping=mapping):
+        parsed, llm_used = await classify_severities(db, parsed)
 
     replaced = 0
     if mode == "replace":

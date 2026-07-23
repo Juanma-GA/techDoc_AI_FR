@@ -230,6 +230,7 @@ class SuggestionOut(BaseModel):
     run_id: Optional[uuid.UUID] = None
     rule_kind: str
     rule_code: str
+    category: str = ""  # Sujet (Rule.category / colonne TOPIC) ; "" si regle standard
     severity: str
     message: str
     original_text: str
@@ -329,19 +330,5 @@ class DashboardOut(BaseModel):
     by_status: dict[str, int] = Field(default_factory=dict)
     by_severity: dict[str, int] = Field(default_factory=dict)
     by_kind: dict[str, int] = Field(default_factory=dict)
+    by_topic: dict[str, int] = Field(default_factory=dict)
     top_documents: list[DashboardTopDoc] = Field(default_factory=list)
-
-
-# ----- Metrics (boucle de feedback) -----------------------------------------
-
-
-class MetricRuleOut(BaseModel):
-    rule_code: str
-    total: int
-    accepted: int
-    rejected: int
-    acceptance_rate: float
-
-
-class MetricsOut(BaseModel):
-    rules: list[MetricRuleOut] = Field(default_factory=list)

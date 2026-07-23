@@ -70,6 +70,21 @@ def _lines_of(page: fitz.Page) -> list[_Line]:
     return out
 
 
+def _looks_like_title(text: str) -> bool:
+    """Distingue un vrai titre d'un fragment a grosse police mais non-titre
+    (numero ATA « 34-20-12 », marqueur « TP 2 », date « APR 22/26 », note « * … »).
+
+    Heuristique : un titre porte du texte alphabetique consistant. On exige au
+    moins 6 lettres et on ecarte les lignes commencant par une puce/asterisque
+    (notes de bas de page). Cela ecarte les codes/nombres/dates courts sans
+    rejeter les titres mono-mot (« GENERAL », « HIGHLIGHTS »)."""
+    t = text.strip()
+    if not t or t[0] in "*•-–—·":
+        return False
+    letters = sum(1 for c in t if c.isalpha())
+    return letters >= 6
+
+
 def _pct_box(x0: float, y0: float, x1: float, y1: float, w: float, h: float) -> dict:
     return {
         "left": round(100 * x0 / w, 3),
@@ -101,6 +116,10 @@ def analyze_layout(pdf: Path) -> list[LayoutFinding]:
                     continue
                 if 100 * (ln.x1 - ln.x0) / w >= _TITLE_MAX_WIDTH:
                     continue  # ligne pleine largeur = pas un titre isole
+                if 100 * ln.y0 / h > _FOOTER_BAND_TOP:
+                    continue  # ligne en bas de page = pied, pas un titre
+                if not _looks_like_title(ln.text):
+                    continue  # numero ATA / date / marqueur / note -> pas un titre
                 center_pct = 100 * ((ln.x0 + ln.x1) / 2) / w
                 offset = abs(center_pct - 50.0)
                 if offset > _CENTER_TOL:

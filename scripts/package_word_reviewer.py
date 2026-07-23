@@ -71,9 +71,8 @@ def _should_skip(rel: Path, include_frontend_dist: bool = False) -> bool:
         return True
     if rel.name.startswith(".") and rel.name not in {".env.example"}:
         return True
-    # Sans --build-frontend, on NE livre PAS frontend/dist : l'UI est le
-    # preview.html complet du backend (aucun Node requis). Un dist (potentiellement
-    # un stub React) ferait servir main.py la SPA au lieu du preview.
+    # Standard React-only : le frontend/dist EST livre (main.py le sert ; sans lui,
+    # `/` renvoie 503). `include_frontend_dist` reste un garde-fou de filtrage.
     parts = set(rel.parts)
     if not include_frontend_dist and "frontend" in parts and "dist" in parts:
         return True
@@ -229,10 +228,11 @@ def main(argv: list[str] | None = None) -> int:
         "--build-frontend",
         dest="build_frontend",
         action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Build et embarque la SPA React. Par defaut OFF : on livre le "
-             "preview.html du backend (aucun Node requis). A activer seulement "
-             "quand le React atteint la parite avec le preview.",
+        default=True,
+        help="Rebuild la SPA React avant packaging (defaut ON). "
+             "--no-build-frontend embarque le frontend/dist existant sans le "
+             "reconstruire ; le dist est TOUJOURS livre (standard React-only, "
+             "plus de preview.html).",
     )
     args = parser.parse_args(argv)
 
@@ -246,16 +246,29 @@ def main(argv: list[str] | None = None) -> int:
     if zip_path.exists():
         zip_path.unlink()
 
-    print(f"[package] building {zip_path.relative_to(repo)}")
+    try:
+        _disp = zip_path.relative_to(repo)
+    except ValueError:
+        _disp = zip_path  # --out hors du repo : afficher le chemin absolu
+    print(f"[package] building {_disp}")
 
     if args.build_frontend:
         _build_frontend(repo / "apps" / APP_SLUG / "frontend")
     else:
-        print("[frontend] ignore - on livre le preview.html du backend (aucun Node "
-              "requis). Passe --build-frontend une fois le React a parite.")
+        print("[frontend] rebuild ignore (--no-build-frontend) - on embarque le "
+              "frontend/dist existant tel quel.")
+
+    # Standard React-only : le frontend/dist est TOUJOURS livre (main.py le sert ;
+    # sans lui, `/` renvoie 503). --build-frontend controle seulement le rebuild.
+    dist_index = repo / "apps" / APP_SLUG / "frontend" / "dist" / "index.html"
+    if not dist_index.is_file():
+        print("[error] frontend/dist/index.html absent : le package servirait un 503. "
+              "Build le front (pnpm build dans apps/{}/frontend) puis relance."
+              .format(APP_SLUG), file=sys.stderr)
+        return 3
 
     sources = [f"apps/{APP_SLUG}", "design-tokens"]
-    files = _walk_sources(repo, sources, include_frontend_dist=args.build_frontend)
+    files = _walk_sources(repo, sources, include_frontend_dist=True)
 
     embed_dir: Path | None = None
     if args.embed_python:

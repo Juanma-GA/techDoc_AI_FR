@@ -72,3 +72,14 @@ def test_dashboard_aggregates(client, make_docx):
     assert sum(dash["by_severity"].values()) >= 1
     # le document figure dans le top (anomalies ouvertes)
     assert any(td["id"] == doc_id and td["open_count"] >= 1 for td in dash["top_documents"])
+
+
+def test_dashboard_by_topic_present(client, make_docx):
+    client.post("/api/v1/admin/reset/all")
+    _upload_analyze(client, make_docx(["Chapter 250 several parts."]))
+    dash = client.get("/api/v1/admin/dashboard").json()
+    assert "by_topic" in dash
+    # somme par topic == somme totale des suggestions (meme population que by_severity).
+    # Les regles standard (rule_id NULL) tombent dans le bucket de repli.
+    assert sum(dash["by_topic"].values()) == sum(dash["by_severity"].values()) >= 1
+    assert "Controles standard" in dash["by_topic"]

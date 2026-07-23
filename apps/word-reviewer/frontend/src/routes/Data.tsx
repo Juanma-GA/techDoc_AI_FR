@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 
-import { adminApi, type MetricsDto, type StatsDto } from "../lib/api";
+import { adminApi, type StatsDto } from "../lib/api";
 
 function ConfirmButton({
   label,
@@ -40,16 +40,17 @@ export function Data() {
     null,
   );
   const statsQuery = useQuery<StatsDto>({ queryKey: ["wr-stats"], queryFn: adminApi.stats });
-  const metricsQuery = useQuery<MetricsDto>({ queryKey: ["wr-metrics"], queryFn: adminApi.metrics });
   const stats = statsQuery.data;
-  const metrics = metricsQuery.data?.rules ?? [];
 
   const reset = async (scope: "all" | "rules") => {
     try {
       await adminApi.reset(scope);
       setFeedback({ kind: "ok", text: scope === "all" ? "Reset OK." : "Règles supprimées." });
-      void qc.invalidateQueries({ queryKey: ["wr-stats"] });
-      void qc.invalidateQueries({ queryKey: ["wr-metrics"] });
+      // Rafraichit les vues impactees : stats, dashboard, et la liste de regles /
+      // standards de l'onglet "Standards & Regles" (sinon cache perime 30s).
+      for (const key of [["wr-stats"], ["dashboard"], ["rules"], ["standards"], ["standard-detail"]]) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
     } catch (e) {
       setFeedback({ kind: "error", text: e instanceof Error ? e.message : String(e) });
     }
@@ -59,7 +60,7 @@ export function Data() {
     <>
       <div className="page-header">
         <h1>Données</h1>
-        <p>Statistiques, métriques par règle et reset.</p>
+        <p>Statistiques et reset.</p>
       </div>
 
       <div className="card">
@@ -72,36 +73,6 @@ export function Data() {
             <div className="kpi"><div className="label">Règles</div><div className="kpi-value">{stats.rules}</div></div>
             <div className="kpi"><div className="label">Standards</div><div className="kpi-value ok">{stats.standards}</div></div>
           </div>
-        ) : (
-          <div className="empty-state">-</div>
-        )}
-      </div>
-
-      <div className="card">
-        <h2 className="card-title">Métriques par règle</h2>
-        {metrics.length ? (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Rule</th>
-                <th>Total</th>
-                <th>Acc.</th>
-                <th>Rej.</th>
-                <th>Taux</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.map((r) => (
-                <tr key={r.rule_code}>
-                  <td className="mono">{r.rule_code}</td>
-                  <td>{r.total}</td>
-                  <td>{r.accepted}</td>
-                  <td>{r.rejected}</td>
-                  <td>{(r.acceptance_rate * 100).toFixed(0)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         ) : (
           <div className="empty-state">-</div>
         )}

@@ -101,8 +101,8 @@ export function Dashboard() {
               <Bars data={data.by_severity} sev />
             </div>
             <div className="card">
-              <h2 className="card-title">Par règle</h2>
-              <Bars data={data.by_kind} />
+              <h2 className="card-title">Par sujet</h2>
+              <Bars data={data.by_topic} />
             </div>
           </div>
           <div className="card">
