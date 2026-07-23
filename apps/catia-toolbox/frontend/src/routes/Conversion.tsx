@@ -1,5 +1,5 @@
 import { Checkbox } from "@internal/ui";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,14 +8,69 @@ import {
   conversionApi,
   exportUrl,
   importsApi,
+  settingsApi,
   type ConversionExecDto,
   type ConversionItemDto,
   type ConversionRunDto,
+  type SettingsDto,
 } from "../lib/api";
 import { FilePicker } from "../components/FilePicker";
 import { useWorkspace } from "../stores/workspace";
 
 const ZIP_EXTS = [".zip"];
+
+/** Config licence flottante Composer (partagee avec l'onglet Parametres). */
+function ComposerLicenseCard() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const settingsQuery = useQuery<SettingsDto>({ queryKey: ["settings"], queryFn: settingsApi.read });
+  const [draft, setDraft] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const value = draft ?? settingsQuery.data?.composer_license_server ?? "";
+
+  const saveMutation = useMutation({
+    mutationFn: () => settingsApi.write({ composer_license_server: value.trim() }),
+    onSuccess: () => {
+      setNotice(t("settings.saved"));
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  return (
+    <article className="card">
+      <h2 className="card-title">{t("settings.composerTitle")}</h2>
+      <p className="banner info">{t("settings.composerNotice")}</p>
+      <div className="row" style={{ alignItems: "flex-end" }}>
+        <div className="grow field">
+          <label htmlFor="conv-lic" className="field-label">
+            {t("settings.composerLicense")}
+          </label>
+          <input
+            id="conv-lic"
+            className="input mono"
+            value={value}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="4085@serveur-licence"
+          />
+          <p className="hint">{t("settings.composerHint")}</p>
+        </div>
+        <button
+          type="button"
+          className="btn primary small"
+          onClick={() => {
+            setNotice(null);
+            saveMutation.mutate();
+          }}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? <span className="spinner" /> : null}
+          <span>{t("settings.save")}</span>
+        </button>
+        {notice ? <span className="success">{notice}</span> : null}
+      </div>
+    </article>
+  );
+}
 
 export function Conversion() {
   const { t } = useTranslation();
@@ -151,6 +206,9 @@ export function Conversion() {
           {t("conversion.workflowScriptNote")}
         </p>
       </article>
+
+      {/* ---- Licence Composer (injectee dans le script genere) ---- */}
+      <ComposerLicenseCard />
 
       {/* ---- 1. Source a convertir : dossier ou zip ---- */}
       <article className="card">
