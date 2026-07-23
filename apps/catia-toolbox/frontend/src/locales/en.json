@@ -425,7 +425,9 @@
     "monoSlotN": "Slot {{n}}",
     "monoAnalyze": "Analyze mono-body",
     "monoRequired": "Map the identity column and at least one slot.",
-    "monoDone": "{{mono}} mono-body part(s) out of {{matched}} matched."
+    "monoDoneApplied": "{{mono}} mono-body part(s) out of {{matched}} matched (applied to parts).",
+    "monoDoneSolo": "{{mono}} mono-body part(s) out of {{rows}} row(s).",
+    "monoResultInfo": "{{mono}} mono-body out of {{rows}} row(s)."
   },
   "smgxml": {
     "fileLabel": "SMGXML file (under the Source root)",

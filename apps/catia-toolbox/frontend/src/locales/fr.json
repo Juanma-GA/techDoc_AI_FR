@@ -425,7 +425,9 @@
     "monoSlotN": "Slot {{n}}",
     "monoAnalyze": "Analyser mono-corps",
     "monoRequired": "Mappez la colonne d'identité et au moins un slot.",
-    "monoDone": "{{mono}} pièce(s) mono-corps sur {{matched}} appariée(s)."
+    "monoDoneApplied": "{{mono}} pièce(s) mono-corps sur {{matched}} appariée(s) (appliqué aux pièces).",
+    "monoDoneSolo": "{{mono}} pièce(s) mono-corps sur {{rows}} ligne(s).",
+    "monoResultInfo": "{{mono}} mono-corps sur {{rows}} ligne(s)."
   },
   "smgxml": {
     "fileLabel": "Fichier SMGXML (sous la racine Source)",

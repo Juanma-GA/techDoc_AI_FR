@@ -303,16 +303,33 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     # Avant l'etape mono-corps : aucun mono_body.
     assert client.get(f"/api/v1/identification/{run_id}").json()["summary"]["mono_body"] == 0
 
-    # Etape mono-corps : onglet Materiaux, identite=catpart (col 0), 4 slots (col 1..4).
-    r = client.post(
-        f"/api/v1/identification/{run_id}/mono-corps",
+    # Analyse autonome SANS run : renvoie le contenu (items + slots + mono_body).
+    solo = client.post(
+        "/api/v1/identification/mono-corps",
         json={
             "scope": "input", "path": str(p), "sheet": "Materiaux", "header_row": 1,
             "identity_field": "catpart", "identity_col": 0, "slot_cols": [1, 2, 3, 4],
         },
     )
+    assert solo.status_code == 200, solo.text
+    sbody = solo.json()
+    assert sbody["summary"]["mono"] == 2 and sbody["summary"]["applied"] is False
+    by_id = {i["identity"]: i for i in sbody["items"]}
+    assert by_id["P1.CATPart"]["mono_body"] is True and by_id["P3.CATPart"]["mono_body"] is False
+    assert by_id["P2.CATPart"]["slots"] == ["A", "A", "A", "A"]
+
+    # Meme etape AVEC run_id : applique mono_body aux pieces.
+    r = client.post(
+        "/api/v1/identification/mono-corps",
+        json={
+            "scope": "input", "path": str(p), "sheet": "Materiaux", "header_row": 1,
+            "identity_field": "catpart", "identity_col": 0, "slot_cols": [1, 2, 3, 4],
+            "run_id": run_id,
+        },
+    )
     assert r.status_code == 200, r.text
-    assert r.json()["summary"]["mono_body"] == 2
+    assert r.json()["summary"]["applied"] is True and r.json()["summary"]["mono"] == 2
+    assert client.get(f"/api/v1/identification/{run_id}").json()["summary"]["mono_body"] == 2
 
     mono = client.get(f"/api/v1/identification/{run_id}/items", params={"mono_body": True}).json()
     assert {i["catpart"] for i in mono} == {"P1.CATPart", "P2.CATPart"}

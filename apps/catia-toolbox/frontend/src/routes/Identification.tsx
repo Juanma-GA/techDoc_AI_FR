@@ -6,6 +6,7 @@ import {
   ApiClientError,
   exportUrl,
   identificationApi,
+  type MonoCorpsResultDto,
   type NomenclatureItemDto,
   type NomenclatureMapping,
   type NomenclaturePreviewDto,
@@ -156,8 +157,11 @@ const MONO_IDENTITY_FIELDS: { field: "catpart" | "sin" | "old_pn" | "new_pn"; la
  * colonnes. Le backend calcule mono_body (1 valeur distincte parmi les slots)
  * et l'applique aux pieces du run par la valeur d'identite.
  */
-function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string; onApplied: () => void }) {
+function MonoCorpsCard({ runId }: { runId: string | null }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
+  // Fichier .xlsm autonome : pre-rempli depuis la source nomenclature, editable.
+  const [path, setPath] = useState(() => useWorkspace.getState().sources.nomenclature || "");
   const [preview, setPreview] = useState<NomenclaturePreviewDto | null>(null);
   const [sheet, setSheet] = useState("");
   const [headerRow, setHeaderRow] = useState(1);
@@ -165,6 +169,7 @@ function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string
     useState<"catpart" | "sin" | "old_pn" | "new_pn">("catpart");
   const [identityCol, setIdentityCol] = useState<number | undefined>(undefined);
   const [slotCols, setSlotCols] = useState<(number | undefined)[]>([undefined]);
+  const [result, setResult] = useState<MonoCorpsResultDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -184,23 +189,25 @@ function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string
 
   const analyzeMutation = useMutation({
     mutationFn: () =>
-      identificationApi.monoCorps(runId, {
+      identificationApi.monoCorps({
         path: path.trim(),
         sheet: sheet || undefined,
         header_row: headerRow,
         identity_field: identityField,
         identity_col: identityCol as number,
         slot_cols: slotCols.filter((c): c is number => c !== undefined),
+        run_id: runId ?? undefined,
       }),
-    onSuccess: (run) => {
+    onSuccess: (res) => {
       setError(null);
+      setResult(res);
+      const mono = Number(res.summary.mono) || 0;
       setNotice(
-        t("identification.monoDone", {
-          mono: summaryNum(run.summary, "mono_body"),
-          matched: summaryNum(run.summary, "mono_matched"),
-        }),
+        res.summary.applied
+          ? t("identification.monoDoneApplied", { mono, matched: Number(res.summary.matched) || 0 })
+          : t("identification.monoDoneSolo", { mono, rows: Number(res.summary.rows) || 0 }),
       );
-      onApplied();
+      if (res.summary.applied) void qc.invalidateQueries({ queryKey: ["identification"] });
     },
     onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
   });
@@ -211,7 +218,8 @@ function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string
     setSlotCols((prev) => Array.from({ length: count }, (_v, i) => prev[i]));
   };
   const mappedSlots = slotCols.filter((c) => c !== undefined).length;
-  const canAnalyze = identityCol !== undefined && mappedSlots >= 1;
+  const canAnalyze = !!path.trim() && identityCol !== undefined && mappedSlots >= 1;
+  const slotCount = result ? result.items.reduce((m, i) => Math.max(m, i.slots.length), 0) : 0;
   const colOptions = Array.from({ length: ncols }, (_v, i) => ({
     value: String(i),
     label: preview ? colLabel(preview, i, headerRow) : String(i),
@@ -222,7 +230,12 @@ function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string
       <h2 className="card-title">{t("identification.monoTitle")}</h2>
       <p className="banner info">{t("identification.monoBanner")}</p>
 
-      <div className="row">
+      <div className="field">
+        <label className="label">{t("identification.nomenFileLabel")}</label>
+        <FilePicker exts={NOMEN_EXTS} value={path} onChange={setPath} sheetPreview={false} />
+      </div>
+
+      <div className="row" style={{ marginTop: 8 }}>
         <button
           type="button"
           className="btn secondary"
@@ -265,6 +278,22 @@ function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Apercu du contenu de l'onglet (comme la nomenclature). */}
+          <div style={{ maxHeight: 240, overflow: "auto", marginTop: 12 }}>
+            <table className="preview-table">
+              <tbody>
+                {preview.rows.map((r, ri) => (
+                  <tr key={ri} className={ri + 1 === headerRow ? "active" : ""}>
+                    <td className="rownum">{ri + 1}</td>
+                    {r.map((c, ci) => (
+                      <td key={ci}>{c}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="row" style={{ alignItems: "flex-end", marginTop: 8 }}>
@@ -366,6 +395,61 @@ function MonoCorpsCard({ runId, path, onApplied }: { runId: string; path: string
             </button>
             {!canAnalyze ? <span className="hint">{t("identification.monoRequired")}</span> : null}
           </div>
+
+          {/* Resultat : pieces analysees (identite + slots + mono-corps). */}
+          {result ? (
+            <div style={{ marginTop: 16 }}>
+              <div className="row" style={{ marginBottom: 8 }}>
+                <span className="hint">
+                  {t("identification.monoResultInfo", {
+                    mono: Number(result.summary.mono) || 0,
+                    rows: Number(result.summary.rows) || 0,
+                  })}
+                </span>
+              </div>
+              {result.items.length ? (
+                <div style={{ maxHeight: "30rem", overflow: "auto" }}>
+                  <table className="tbl" style={{ whiteSpace: "nowrap" }}>
+                    <thead>
+                      <tr>
+                        <th style={{ position: "sticky", top: 0, background: "var(--bg-2)" }}>
+                          {t("identification.monoIdentityCol")}
+                        </th>
+                        {Array.from({ length: slotCount }, (_v, i) => (
+                          <th
+                            key={i}
+                            style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "center" }}
+                          >
+                            {t("identification.monoSlotN", { n: i + 1 })}
+                          </th>
+                        ))}
+                        <th style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "center" }}>
+                          {t("identification.colMonoBody")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.items.map((it, ri) => (
+                        <tr key={ri}>
+                          <td>{it.identity}</td>
+                          {Array.from({ length: slotCount }, (_v, i) => (
+                            <td key={i} style={{ textAlign: "center" }}>{it.slots[i] ?? ""}</td>
+                          ))}
+                          <td style={{ textAlign: "center" }}>
+                            {it.mono_body ? <span className="badge ok">{t("common.yes")}</span> : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <h3 className="card-title">{t("identification.empty")}</h3>
+                </div>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -752,14 +836,8 @@ export function Identification() {
           ) : null}
       </article>
 
-      {/* ---- Carte Mono-Corps : onglet Materiaux (identite + n slots) ---- */}
-      {resultRunId ? (
-        <MonoCorpsCard
-          runId={resultRunId}
-          path={nomenPath}
-          onApplied={() => void qc.invalidateQueries({ queryKey: ["identification"] })}
-        />
-      ) : null}
+      {/* ---- Carte Mono-Corps : autonome (onglet Materiaux + n slots) ---- */}
+      <MonoCorpsCard runId={resultRunId} />
 
       {/* ---- Carte 2 : nomenclatures analysees ---------------------------- */}
       <article className="card">

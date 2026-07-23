@@ -27,6 +27,8 @@ from app.db.models import NomenclatureItem, NomenclatureRun
 from app.db.session import get_db
 from app.schemas import (
     MonoCorpsIn,
+    MonoCorpsItemOut,
+    MonoCorpsResultOut,
     NomenclatureCompareIn,
     NomenclatureCompareOut,
     NomenclatureItemOut,
@@ -81,13 +83,11 @@ def parse_route(payload: NomenclatureParseIn, db: Session = Depends(get_db)) -> 
     return _run_out(run)
 
 
-@router.post("/{run_id}/mono-corps", response_model=NomenclatureRunOut)
-def mono_corps_route(run_id: uuid.UUID, payload: MonoCorpsIn, db: Session = Depends(get_db)) -> NomenclatureRunOut:
+@router.post("/mono-corps", response_model=MonoCorpsResultOut)
+def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> MonoCorpsResultOut:
     """Etape Mono-Corps : lit l'onglet Materiaux (identite + n colonnes slots),
-    calcule mono_body par identite et met a jour les pieces du run."""
-    run = db.get(NomenclatureRun, run_id)
-    if run is None:
-        raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
+    calcule mono_body par ligne et renvoie le contenu. Si `run_id` est fourni,
+    applique aussi mono_body aux pieces de ce run (par la valeur d'identite)."""
     if payload.scope not in ("input", "output"):
         raise AppError("SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
     if payload.identity_field not in nomen.IDENTITY_FIELDS:
@@ -110,27 +110,34 @@ def mono_corps_route(run_id: uuid.UUID, payload: MonoCorpsIn, db: Session = Depe
     )
     ident_map: dict[str, bool] = parsed["map"]
 
-    # Applique mono_body aux pieces du run par la valeur du champ d'identite.
-    items = list(db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)))
-    matched = 0
-    mono = 0
-    for it in items:
-        key = (getattr(it, payload.identity_field) or "").strip()
-        is_mono = bool(key and ident_map.get(key, False))
-        it.mono_body = is_mono
-        if key and key in ident_map:
-            matched += 1
-        if is_mono:
-            mono += 1
+    summary = {"rows": parsed["rows"], "mono": parsed["mono"], "matched": 0, "applied": False}
 
-    summary = json.loads(run.summary or "{}")
-    summary["mono_body"] = mono
-    summary["mono_matched"] = matched
-    run.summary = json.dumps(summary, ensure_ascii=False)
-    db.commit()
-    db.refresh(run)
-    log.info("mono-corps %s : %d apparies, %d mono-corps", run_id, matched, mono)
-    return _run_out(run)
+    # Optionnel : applique mono_body aux pieces du run par le champ d'identite.
+    if payload.run_id is not None:
+        run = db.get(NomenclatureRun, payload.run_id)
+        if run is None:
+            raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
+        run_items = list(db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == payload.run_id)))
+        matched = 0
+        mono = 0
+        for it in run_items:
+            key = (getattr(it, payload.identity_field) or "").strip()
+            is_mono = bool(key and ident_map.get(key, False))
+            it.mono_body = is_mono
+            if key and key in ident_map:
+                matched += 1
+            if is_mono:
+                mono += 1
+        run_summary = json.loads(run.summary or "{}")
+        run_summary["mono_body"] = mono
+        run_summary["mono_matched"] = matched
+        run.summary = json.dumps(run_summary, ensure_ascii=False)
+        db.commit()
+        summary.update({"matched": matched, "mono": mono, "applied": True})
+        log.info("mono-corps run %s : %d apparies, %d mono-corps", payload.run_id, matched, mono)
+
+    items = [MonoCorpsItemOut(**it) for it in parsed["items"][:2000]]
+    return MonoCorpsResultOut(items=items, summary=summary)
 
 
 @router.post("/preview", response_model=NomenclaturePreviewOut)

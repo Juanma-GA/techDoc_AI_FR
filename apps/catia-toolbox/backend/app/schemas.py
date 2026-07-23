@@ -482,7 +482,11 @@ class NomenclatureMapping(BaseModel):
 
 
 class MonoCorpsIn(BaseModel):
-    """Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots)."""
+    """Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots).
+
+    Analyse autonome (le contenu est renvoye pour affichage). Si `run_id` est
+    fourni, le drapeau mono_body est aussi applique aux pieces de ce run.
+    """
 
     scope: str = Field(default="input")
     path: str = Field(..., min_length=1)
@@ -494,6 +498,19 @@ class MonoCorpsIn(BaseModel):
     identity_col: int = Field(..., ge=0)
     # Colonnes slots a mapper (0-based), 1 a n.
     slot_cols: list[int] = Field(..., min_length=1)
+    # Optionnel : run de nomenclature auquel appliquer mono_body.
+    run_id: Optional[uuid.UUID] = None
+
+
+class MonoCorpsItemOut(BaseModel):
+    identity: str = ""
+    slots: list[str] = Field(default_factory=list)
+    mono_body: bool = False
+
+
+class MonoCorpsResultOut(BaseModel):
+    items: list[MonoCorpsItemOut] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
 
 
 class NomenclatureParseIn(BaseModel):

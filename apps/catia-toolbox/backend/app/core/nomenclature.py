@@ -350,17 +350,23 @@ def parse_mono_corps(
         return "" if (col < 0 or col >= len(row) or row[col] is None) else str(row[col]).strip()
 
     result: dict[str, bool] = {}
+    items: list[dict] = []
     for ridx in range(header_row, len(rows)):  # header_row (1-based) = 1re ligne de donnees (0-based)
         row = rows[ridx]
         ident = _at(row, identity_col)[:500]
-        if not ident:
-            continue
-        slots = [_at(row, c) for c in slot_cols]
-        if not any(slots):
-            continue
-        # Derniere ligne gagnante si identite dupliquee.
-        result[ident] = _is_mono_body(slots)
-    return {"map": result, "rows": len(result), "mono": sum(1 for v in result.values() if v)}
+        slots = [_at(row, c)[:200] for c in slot_cols]
+        if not ident and not any(slots):
+            continue  # ligne entierement vide
+        mono = _is_mono_body(slots)
+        items.append({"identity": ident, "slots": slots, "mono_body": mono})
+        if ident:
+            result[ident] = mono  # derniere ligne gagnante si identite dupliquee
+    return {
+        "map": result,
+        "items": items,
+        "rows": len(items),
+        "mono": sum(1 for it in items if it["mono_body"]),
+    }
 
 
 def list_zip(path: str, max_entries: int = 50000) -> list[dict]:

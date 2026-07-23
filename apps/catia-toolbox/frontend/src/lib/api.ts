@@ -357,6 +357,14 @@ export type MonoCorpsInput = {
   identity_field: string;
   identity_col: number;
   slot_cols: number[];
+  // Optionnel : run de nomenclature auquel appliquer mono_body.
+  run_id?: string;
+};
+
+export type MonoCorpsItemDto = { identity: string; slots: string[]; mono_body: boolean };
+export type MonoCorpsResultDto = {
+  items: MonoCorpsItemDto[];
+  summary: Record<string, number | boolean>;
 };
 
 export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
@@ -669,9 +677,10 @@ export const identificationApi = {
       method: "POST",
       body: JSON.stringify({ base_run_id: baseRunId, other_run_id: otherRunId }),
     }),
-  /** Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots). */
-  monoCorps: (runId: string, body: MonoCorpsInput) =>
-    request<NomenclatureRunDto>(`/identification/${runId}/mono-corps`, {
+  /** Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots).
+   * Analyse autonome ; applique mono_body au run si `run_id` est fourni. */
+  monoCorps: (body: MonoCorpsInput) =>
+    request<MonoCorpsResultDto>("/identification/mono-corps", {
       method: "POST",
       body: JSON.stringify({ scope: "input", ...body }),
     }),
