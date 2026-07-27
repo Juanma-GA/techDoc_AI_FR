@@ -19,14 +19,23 @@ from app.core.rules import (
     basl_columns_for,
     reference_columns_for,
 )
-from app.core.security import read_and_validate, safe_storage_join
+from app.core.security import (
+    read_and_validate,
+    safe_filename,
+    safe_storage_join,
+    validate_upload_bytes,
+)
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Anomaly, DocumentChunk, File as DBFile, FileVersion, Project
 from app.db.session import get_db
 from app.parsers import parse_any
 from app.parsers.reference import sheet_columns, sheet_names, sheet_preview
 from app.schemas import (
+    CorpusFolderIn,
+    CorpusPathOut,
     FileOut,
+    FolderFileOut,
+    FolderListOut,
     ReferenceColumnDef,
     ReferenceMappingIn,
     ReferenceOut,
@@ -67,6 +76,74 @@ def list_files(project_id: uuid.UUID, db: Session = Depends(get_db)) -> list[DBF
     return list(_project_or_404(db, project_id).files)
 
 
+def _ingest_file(
+    db: Session, project: Project, raw: bytes, safe_name: str, mime: str,
+) -> dict:
+    """Ingère un fichier déjà lu + validé (bytes) : dédup par nom+hash, stockage
+    sur disque, extraction texte, nouvelle `FileVersion`. Logique partagée entre
+    l'upload manuel HTTP et la synchro d'un dossier connecté. NE COMMIT PAS
+    (l'appelant groupe les commits). Renvoie un dict de résultat par fichier."""
+    digest = sha256_of_bytes(raw)
+
+    existing_file: DBFile | None = None
+    for f in project.files:
+        if f.current_name == safe_name:
+            existing_file = f
+            break
+
+    if existing_file is None:
+        existing_file = DBFile(
+            project_id=project.id,
+            current_name=safe_name,
+            mime_type=mime or "",
+        )
+        db.add(existing_file)
+        db.flush()
+    else:
+        if existing_file.versions:
+            latest = sorted(existing_file.versions, key=lambda v: v.uploaded_at)[-1]
+            if latest.sha256 == digest:
+                return {"filename": safe_name, "ok": True, "skipped": "identique"}
+
+    storage_root = safe_storage_join(
+        Path(settings.storage_dir), f"project_{project.id}", f"file_{existing_file.id}",
+    )
+    storage_root.mkdir(parents=True, exist_ok=True)
+    stored = safe_storage_join(storage_root, f"{digest[:12]}_{safe_name}")
+    stored.write_bytes(raw)
+
+    try:
+        parsed = parse_any(str(stored))
+        extracted_text = parsed.get("text", "")
+    except Exception as e:  # noqa: BLE001
+        extracted_text = f"[Parser error: {e}]"
+
+    # État courant uniquement : on purge anomalies + chunks rattachés aux
+    # versions précédentes de ce fichier. Les AnalysisRun restent (audit
+    # trail), mais l'utilisateur ne verra plus les anomalies périmées
+    # dans la vue Rédacteur ou les KPIs.
+    if existing_file.versions:
+        previous_ids = [v.id for v in existing_file.versions]
+        db.query(Anomaly).filter(
+            Anomaly.file_version_id.in_(previous_ids)
+        ).delete(synchronize_session=False)
+        db.query(DocumentChunk).filter(
+            DocumentChunk.file_version_id.in_(previous_ids)
+        ).delete(synchronize_session=False)
+
+    version = FileVersion(
+        file_id=existing_file.id,
+        filename=safe_name,
+        storage_path=str(stored),
+        sha256=digest,
+        size=len(raw),
+        extracted_text=extracted_text,
+    )
+    db.add(version)
+    existing_file.current_name = safe_name
+    return {"filename": safe_name, "ok": True, "sha256": digest, "size": len(raw)}
+
+
 @router.post("/projects/{project_id}/files", response_model=UploadResultOut)
 def upload_files(
     project_id: uuid.UUID,
@@ -88,66 +165,13 @@ def upload_files(
             created.append({"filename": upload.filename, "ok": False, "error": msg})
             continue
 
-        digest = sha256_of_bytes(raw)
-
-        existing_file: DBFile | None = None
-        for f in project.files:
-            if f.current_name == safe_name:
-                existing_file = f
-                break
-
-        if existing_file is None:
-            existing_file = DBFile(
-                project_id=project.id,
-                current_name=safe_name,
-                mime_type=upload.content_type or "",
-            )
-            db.add(existing_file)
-            db.flush()
-        else:
-            if existing_file.versions:
-                latest = sorted(existing_file.versions, key=lambda v: v.uploaded_at)[-1]
-                if latest.sha256 == digest:
-                    created.append({"filename": safe_name, "ok": True, "skipped": "identique"})
-                    continue
-
-        storage_root = safe_storage_join(
-            Path(settings.storage_dir), f"project_{project.id}", f"file_{existing_file.id}",
-        )
-        storage_root.mkdir(parents=True, exist_ok=True)
-        stored = safe_storage_join(storage_root, f"{digest[:12]}_{safe_name}")
-        stored.write_bytes(raw)
-
         try:
-            parsed = parse_any(str(stored))
-            extracted_text = parsed.get("text", "")
-        except Exception as e:  # noqa: BLE001
-            extracted_text = f"[Parser error: {e}]"
-
-        # État courant uniquement : on purge anomalies + chunks rattachés aux
-        # versions précédentes de ce fichier. Les AnalysisRun restent (audit
-        # trail), mais l'utilisateur ne verra plus les anomalies périmées
-        # dans la vue Rédacteur ou les KPIs.
-        if existing_file.versions:
-            previous_ids = [v.id for v in existing_file.versions]
-            db.query(Anomaly).filter(
-                Anomaly.file_version_id.in_(previous_ids)
-            ).delete(synchronize_session=False)
-            db.query(DocumentChunk).filter(
-                DocumentChunk.file_version_id.in_(previous_ids)
-            ).delete(synchronize_session=False)
-
-        version = FileVersion(
-            file_id=existing_file.id,
-            filename=safe_name,
-            storage_path=str(stored),
-            sha256=digest,
-            size=len(raw),
-            extracted_text=extracted_text,
-        )
-        db.add(version)
-        existing_file.current_name = safe_name
-        created.append({"filename": safe_name, "ok": True, "sha256": digest, "size": len(raw)})
+            created.append(
+                _ingest_file(db, project, raw, safe_name, upload.content_type or "")
+            )
+        except Exception as exc:  # noqa: BLE001 — un fichier KO n'annule pas le lot
+            msg = getattr(exc, "detail", None) or str(exc)
+            created.append({"filename": safe_name, "ok": False, "error": msg})
 
     db.commit()
     return UploadResultOut(uploaded=created)
@@ -161,6 +185,134 @@ def delete_file(project_id: uuid.UUID, file_id: uuid.UUID, db: Session = Depends
                        detail={"id": str(file_id)})
     db.delete(f)
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Corpus par dossier connecté (chemin local, ex. dossier OneDrive synchronisé).
+# Alternative à l'upload manuel : on pointe un dossier déjà synchronisé sur le
+# disque et on ingère ses fichiers via la même logique (`_ingest_file`).
+# ---------------------------------------------------------------------------
+
+# Garde-fou : plafond de fichiers parcourus/ingérés en une passe (évite
+# d'aspirer par erreur un arbre géant). Au-delà, on tronque et on le signale.
+_FOLDER_MAX_FILES = 500
+
+
+def _resolve_folder(raw_path: str) -> Path:
+    """Valide un chemin de dossier fourni par l'utilisateur (guillemets tolérés)."""
+    cleaned = (raw_path or "").strip().strip('"')
+    if not cleaned:
+        raise AppError("CORPUS_PATH_EMPTY", "Chemin de dossier vide.", status_code=400)
+    folder = Path(cleaned)
+    if not folder.exists() or not folder.is_dir():
+        raise AppError(
+            "CORPUS_PATH_INVALID",
+            f"Dossier introuvable ou inaccessible : {cleaned}",
+            status_code=400,
+            detail={"path": cleaned},
+        )
+    return folder
+
+
+def _walk_folder(folder: Path) -> tuple[list[tuple[Path, str]], bool]:
+    """Fichiers du dossier (récursif), plafonnés. Renvoie (liste de (chemin,
+    rel), tronqué?). `rel` = chemin relatif au dossier (identifiant stable pour
+    la sélection côté UI)."""
+    out: list[tuple[Path, str]] = []
+    truncated = False
+    for entry in folder.rglob("*"):
+        if not entry.is_file():
+            continue
+        if len(out) >= _FOLDER_MAX_FILES:
+            truncated = True
+            break
+        rel = entry.relative_to(folder).as_posix()
+        out.append((entry, rel))
+    return out, truncated
+
+
+@router.get("/projects/{project_id}/corpus-folder", response_model=CorpusPathOut)
+def get_corpus_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> CorpusPathOut:
+    return CorpusPathOut(path=_project_or_404(db, project_id).corpus_path or None)
+
+
+@router.delete("/projects/{project_id}/corpus-folder", status_code=204)
+def disconnect_corpus_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+    """Oublie le dossier connecté (n'efface pas les fichiers déjà ingérés)."""
+    project = _project_or_404(db, project_id)
+    project.corpus_path = None
+    db.commit()
+
+
+@router.post("/projects/{project_id}/files/list-folder", response_model=FolderListOut)
+def list_corpus_folder(
+    project_id: uuid.UUID,
+    body: CorpusFolderIn,
+    db: Session = Depends(get_db),
+) -> FolderListOut:
+    """Liste (sans ingérer) les fichiers d'un dossier local pour permettre la
+    sélection avant import. Les extensions bloquées sont incluses mais marquées
+    `blocked=true` (affichées grisées côté UI)."""
+    _project_or_404(db, project_id)
+    folder = _resolve_folder(body.path)
+    walked, truncated = _walk_folder(folder)
+    files = [
+        FolderFileOut(
+            rel=rel,
+            name=entry.name,
+            size=entry.stat().st_size if entry.exists() else 0,
+            ext=entry.suffix.lower(),
+            blocked=entry.suffix.lower() in BLOCKED_DOC_EXTS,
+        )
+        for entry, rel in walked
+    ]
+    return FolderListOut(path=str(folder), files=files, truncated=truncated)
+
+
+@router.post("/projects/{project_id}/files/sync-folder", response_model=UploadResultOut)
+def sync_corpus_folder(
+    project_id: uuid.UUID,
+    body: CorpusFolderIn,
+    db: Session = Depends(get_db),
+) -> UploadResultOut:
+    """Ingère les fichiers d'un dossier local (typiquement un dossier OneDrive
+    synchronisé) via la même logique que l'upload manuel : parcours récursif,
+    extensions bloquées ignorées, dédup par nom+hash. `body.only` (chemins
+    relatifs) restreint à une sélection ; absent = tout le dossier. Mémorise le
+    chemin dans `project.corpus_path`. Un fichier en échec (cloud-only non
+    hydraté, illisible, trop volumineux) n'interrompt pas le lot."""
+    project = _project_or_404(db, project_id)
+    folder = _resolve_folder(body.path)
+    only = {r.strip() for r in body.only if r and r.strip()} if body.only is not None else None
+
+    walked, truncated = _walk_folder(folder)
+    created: list[dict] = []
+    for entry, rel in walked:
+        if only is not None and rel not in only:
+            continue
+        safe_name = safe_filename(entry.name)
+        ext = entry.suffix.lower()
+        if ext in BLOCKED_DOC_EXTS:
+            continue
+        try:
+            raw = entry.read_bytes()
+            validate_upload_bytes(
+                raw, ext, None, settings.max_upload_size_bytes, blocked_exts=BLOCKED_DOC_EXTS,
+            )
+            created.append(_ingest_file(db, project, raw, safe_name, ""))
+        except Exception as exc:  # noqa: BLE001 — un fichier KO n'annule pas le lot
+            msg = getattr(exc, "detail", None) or str(exc)
+            created.append({"filename": safe_name, "ok": False, "error": msg})
+
+    project.corpus_path = str(folder)
+    db.commit()
+
+    if truncated:
+        created.append({
+            "filename": "", "ok": False,
+            "error": f"Limite de {_FOLDER_MAX_FILES} fichiers atteinte — dossier tronque.",
+        })
+    return UploadResultOut(uploaded=created)
 
 
 # ---------------------------------------------------------------------------

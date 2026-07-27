@@ -59,6 +59,22 @@ export type UploadItemResult = {
 
 export type UploadResult = { uploaded: UploadItemResult[] };
 
+export type CorpusPathOut = { path: string | null };
+
+export type FolderFileOut = {
+  rel: string;
+  name: string;
+  size: number;
+  ext: string;
+  blocked: boolean;
+};
+
+export type FolderListOut = {
+  path: string;
+  files: FolderFileOut[];
+  truncated: boolean;
+};
+
 export type ReferenceColumnDef = {
   name: string;
   sheet: string;
@@ -103,10 +119,14 @@ export type AnomalyOut = {
   project_id: string;
   file_version_id: string | null;
   type: string;
+  // Categorie metier (Sujet de la regle checklist) — dimension de regroupement.
+  category?: string;
   severity: AnomalySeverity | string;
   confidence: AnomalyConfidence | string;
   message: string;
   suggestion: string;
+  // Motif de rejet / commentaire du relecteur.
+  feedback?: string;
   message_key: string | null;
   message_params_json: string | null;
   suggestion_key: string | null;
@@ -145,10 +165,18 @@ export type KpiOut = {
   open_anomalies: number;
   anomalies_by_severity: Record<string, number>;
   anomalies_by_type: Record<string, number>;
+  // Repartition par categorie metier (Sujet des regles checklist).
+  anomalies_by_category: Record<string, number>;
   anomalies_by_status: Record<string, number>;
   anomalies_by_confidence: Record<string, number>;
   resolution_rate: number;
-  anomalies_over_time: Array<Record<string, number | string>>;
+  anomalies_over_time: Array<{
+    run_id: string;
+    started_at: string;
+    total: number;
+    // Repartition des anomalies du run par categorie (Sujet de la checklist).
+    categories: Record<string, number>;
+  }>;
   top_files: Array<{ filename: string; count: number }>;
   top_rules: Array<{ rule: string; count: number }>;
   avg_age_days: number;
@@ -195,41 +223,43 @@ export type AdminStatsOut = {
 export type AdminResetScope = "analyses" | "chat" | "all";
 export type AdminResetOut = { scope: string; deleted: Record<string, number> };
 
-export type RuleParamSchema = {
-  type: "bool" | "int" | "float" | "string" | "regex" | "enum" | "list" | "map" | string;
-  name_key?: string;
-  default?: unknown;
+export type CustomRule = {
+  id?: string;
+  label: string;
+  consigne: string;
+  severity?: string;
+  // File de validation : false = importee en attente, true/absent = active.
+  validated?: boolean;
+  // Interrupteur d'activation en direct : false = desactivee (ne participe pas
+  // a l'analyse mais reste editable/reactivable), true/absent = active.
+  enabled?: boolean;
 };
 
-export type RuleExample = { text: string; valid: boolean; note_key?: string };
+export type ChecklistImportMode = "replace" | "add" | "update" | "overwrite";
 
-export type RuleCatalogEntry = {
-  id: string;
-  family: string;
-  severity: string;
-  name_key: string;
-  description_key: string;
-  enabled_default: boolean;
-  anomaly_types: string[];
-  requires: string[];
-  params: Record<string, RuleParamSchema>;
-  examples: RuleExample[];
+// Regle proposee par l'IA a partir d'un document de reference (from-spec).
+export type SpecRule = { label: string; consigne: string; severity: string };
+export type SpecExtractOut = { regles: SpecRule[]; count: number };
+
+/** `roles` : colonnes reconnues par le backend (topic/check/severity/zone/
+ *  context...), ou null si l'onglet ne ressemble pas a une checklist. */
+export type SheetInfo = {
+  name: string;
+  header_row: number;
+  rows: string[][];
+  roles?: Record<string, number> | null;
 };
+export type SheetInspectOut = { sheets: SheetInfo[] };
 
-export type RuleResolved = {
-  id: string;
-  enabled: boolean;
-  params: Record<string, unknown>;
-  runnable: boolean;
+export type ChecklistImportResult = {
+  mode: string;
+  imported: number;
+  created: number;
+  updated: number;
+  replaced_count: number;
+  skipped: string[];
+  pending: number;
 };
-
-export type RulesCatalogOut = {
-  rules: RuleCatalogEntry[];
-  capabilities: string[];
-  resolved: RuleResolved[];
-};
-
-export type CustomRule = { id?: string; label: string; consigne: string; severity?: string };
 
 export type RulesLegacyOut = {
   rules: {

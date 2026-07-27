@@ -1,0 +1,39 @@
+# Contexte de build Docker (racine monorepo). Objectif : upload ACR minimal
+# ET surtout ne JAMAIS embarquer les donnees utilisateur (CLAUDE.md).
+.git
+**/.git
+
+# N'inclure QUE doc-writer parmi les apps : le reste du monorepo (cati,
+# catia-toolbox, corpus-agent, ...) est inutile a l'image doc-writer.
+# NB : design-tokens/ et packages/ (libs UI partagees) ne sont PAS sous apps/,
+# donc restent inclus - le front doc-writer en depend.
+apps/*
+!apps/doc-writer
+
+# Donnees utilisateur - interdites dans toute image (CLAUDE.md).
+# (place APRES la negation ci-dessus : le dernier motif qui matche l'emporte)
+apps/*/backend/data/
+apps/*/backend/.env
+
+# Environnements et caches
+**/node_modules/
+**/.venv/
+**/venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.egg-info/
+
+# Builds front (reconstruits dans l'image)
+apps/*/frontend/dist/
+**/dist/
+**/*.tsbuildinfo
+
+# ZIP de packaging local
+apps/*/dist/
+*.zip
+
+# Divers
+**/.DS_Store
+**/*.log

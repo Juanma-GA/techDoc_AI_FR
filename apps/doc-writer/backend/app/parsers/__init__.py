@@ -17,11 +17,15 @@ from . import docx_parser, pdf_parser, pptx_parser, txt_parser, xlsx_parser
 SUPPORTED_EXTS = {".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".txt", ".md"}
 
 
-def parse_any(path: str) -> dict[str, Any]:
-    """Dispatch par extension. Renvoie `{"text": str}`."""
+def parse_any(path: str, *, mistral=None) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+    """Dispatch par extension. Renvoie `{"text": str}`.
+
+    `mistral` ne concerne que le PDF : si un client est fourni, l'OCR document
+    Mistral est tente (repli local sinon). Les autres formats l'ignorent.
+    """
     ext = Path(path).suffix.lower()
     if ext == ".pdf":
-        return pdf_parser.parse(path)
+        return pdf_parser.parse(path, mistral=mistral)
     if ext == ".docx":
         return docx_parser.parse(path)
     if ext == ".pptx":

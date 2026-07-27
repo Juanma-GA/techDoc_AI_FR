@@ -143,15 +143,23 @@ def build_context_messages(
         stmt_by_sev = stmt_by_sev.where(anomaly_filter)
     by_sev = dict(db.execute(stmt_by_sev.group_by(Anomaly.severity)).all())
 
+    # Rejets par sujet (categorie) : indice de faux positifs par regle de la
+    # checklist -> aide l'utilisateur a decider quelle regle affiner/retirer.
+    stmt_rej = select(Anomaly.category, func.count(Anomaly.id)).where(Anomaly.status == "rejected")
+    if anomaly_filter is not None:
+        stmt_rej = stmt_rej.where(anomaly_filter)
+    rejected_by_cat = dict(db.execute(stmt_rej.group_by(Anomaly.category)).all())
+
     def _file_of(a: Anomaly) -> str:
         if a.file_version and a.file_version.filename:
             return a.file_version.filename
         return "fichier inconnu"
 
     def _open_line(a: Anomaly) -> str:
+        cat = f" | sujet {a.category}" if a.category else ""
         line = (
             f"- [{a.type} | sévérité {a.severity} | statut {a.status} | "
-            f"confiance {a.confidence}] fichier « {_file_of(a)} »"
+            f"confiance {a.confidence}{cat}] fichier « {_file_of(a)} »"
         )
         if a.location:
             line += f", emplacement : {a.location}"
@@ -162,16 +170,26 @@ def build_context_messages(
 
     def _done_line(a: Anomaly) -> str:
         resolved = a.resolved_at.date().isoformat() if a.resolved_at else "date inconnue"
-        return (
-            f"- [{a.type} | sévérité {a.severity} | statut {a.status}] "
+        cat = f" | sujet {a.category}" if a.category else ""
+        line = (
+            f"- [{a.type} | sévérité {a.severity} | statut {a.status}{cat}] "
             f"fichier « {_file_of(a)} » — {a.message} (résolue le {resolved})"
         )
+        # Motif de rejet saisi par le relecteur : signal cle pour reviser la
+        # checklist (faux positif recurrent -> regle a affiner ou retirer).
+        if a.feedback:
+            line += f"\n  motif du relecteur : {a.feedback}"
+        return line
 
     summary_lines = [_open_line(a) for a in open_anomalies] or ["(aucune anomalie a traiter)"]
     done_lines = [_done_line(a) for a in done_anomalies] or ["(aucune)"]
     by_status_str = ", ".join(f"{k}={v}" for k, v in by_status.items()) or "aucune"
     by_type_str = ", ".join(f"{k}={v}" for k, v in by_type.items()) or "aucune"
     by_sev_str = ", ".join(f"{k}={v}" for k, v in by_sev.items()) or "aucune"
+    rej_by_cat_str = ", ".join(
+        f"{k or 'sans sujet'}={v}"
+        for k, v in sorted(rejected_by_cat.items(), key=lambda kv: -kv[1])
+    ) or "aucun"
 
     context_text = (
         f"Périmètre : {_scope_label(projects)}\n"
@@ -180,6 +198,7 @@ def build_context_messages(
         f"Répartition par état (open/acknowledged/fixed/rejected) : {by_status_str}\n"
         f"Répartition par type (ouvertes) : {by_type_str}\n"
         f"Répartition par sévérité (ouvertes) : {by_sev_str}\n"
+        f"Rejets par sujet (indice de faux positifs — pour réviser la checklist) : {rej_by_cat_str}\n"
         f"Anomalies à traiter — ouvertes et acquittées (max 50) :\n" + "\n".join(summary_lines) + "\n\n"
         f"Anomalies déjà traitées — corrigées ou refusées (max 20) :\n" + "\n".join(done_lines) + "\n\n"
         f"Extraits pertinents :\n\n"

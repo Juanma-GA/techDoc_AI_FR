@@ -1,29 +1,17 @@
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  FileDropzone,
-  Spinner,
-} from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { PreviewDropzone } from "../components/PreviewDropzone";
 import { ApiClientError, documentsApi, type DocumentDto } from "../lib/api";
 
 const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.xlsm,.txt,.md";
 
-function formatSize(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} kB`;
-  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+function formatSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} kB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
-
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString();
@@ -32,18 +20,20 @@ function formatDate(iso: string): string {
   }
 }
 
+// Page Documents, pixel-identique au preview (sources uniquement : upload +
+// liste + suppression).
 export function Documents() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
   const docsQuery = useQuery<DocumentDto[], ApiClientError>({
-    queryKey: ["documents"],
-    queryFn: documentsApi.list,
+    queryKey: ["documents", "source"],
+    queryFn: () => documentsApi.list("source"),
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (files: File[]) => documentsApi.upload(files),
+    mutationFn: (files: File[]) => documentsApi.upload(files, "source"),
     onSuccess: () => {
       setError(null);
       void qc.invalidateQueries({ queryKey: ["documents"] });
@@ -59,88 +49,80 @@ export function Documents() {
   const documents = docsQuery.data ?? [];
 
   return (
-    <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("documents.title")}</h1>
-        <p className="text-fg-dim">{t("documents.subtitle")}</p>
-      </header>
+    <>
+      <div className="page-header">
+        <h1>{t("documents.title")}</h1>
+        <p>{t("documents.subtitle")}</p>
+      </div>
 
-      <Card>
-        <CardContent className="pt-4">
-          <FileDropzone
-            accept={ACCEPT}
-            multiple
-            label={t("documents.uploadLabel")}
-            description={t("documents.uploadDescription")}
-            disabled={uploadMutation.isPending}
-            onFiles={(files) => uploadMutation.mutate(files)}
-          />
-          {uploadMutation.isPending ? (
-            <p className="mt-3 flex items-center gap-2 text-sm text-fg-dim">
-              <Spinner size="sm" /> {t("documents.uploading")}
-            </p>
-          ) : null}
-          {error ? (
-            <p className="mt-3 text-sm text-danger">{error}</p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <div className="banner">
+        <strong>{t("documents.sourcesOnly")}</strong> {t("documents.sourcesHint")}
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("documents.title")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {docsQuery.isLoading ? (
-            <Spinner />
-          ) : documents.length === 0 ? (
-            <EmptyState title={t("documents.empty")} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-md text-left text-fg-dim">
-                    <th className="px-2 py-2">{t("documents.columnFilename")}</th>
-                    <th className="px-2 py-2">{t("documents.columnSize")}</th>
-                    <th className="px-2 py-2">{t("documents.columnChunks")}</th>
-                    <th className="px-2 py-2">{t("documents.columnDate")}</th>
-                    <th className="px-2 py-2 text-right">{t("documents.columnActions")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {documents.map((doc) => (
-                    <tr key={doc.id} className="border-b border-md/40">
-                      <td className="px-2 py-2 text-fg">{doc.filename}</td>
-                      <td className="px-2 py-2 text-fg-dim">{formatSize(doc.size)}</td>
-                      <td className="px-2 py-2 text-fg-dim">
-                        {doc.index_error ? (
-                          <Badge variant="warning">{t("documents.indexErrorBadge")}</Badge>
-                        ) : (
-                          <Badge variant="default">{doc.chunk_count}</Badge>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-fg-dim">
-                        {formatDate(doc.uploaded_at)}
-                      </td>
-                      <td className="px-2 py-2 text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={t("documents.delete")}
-                          onClick={() => deleteMutation.mutate(doc.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 size={14} aria-hidden="true" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+      <div className="card">
+        <h2 className="card-title">{t("documents.uploadLabel")}</h2>
+        <PreviewDropzone
+          accept={ACCEPT}
+          multiple
+          disabled={uploadMutation.isPending}
+          title={t("documents.uploadLabel")}
+          hint={t("documents.uploadDescription")}
+          onFiles={(files) => uploadMutation.mutate(files)}
+        />
+        {uploadMutation.isPending ? (
+          <div className="success">{t("documents.uploading")}</div>
+        ) : null}
+        {error ? <div className="error">{error}</div> : null}
+      </div>
+
+      <div className="card">
+        <h2 className="card-title">{t("documents.title")}</h2>
+        {documents.length === 0 ? (
+          <div className="empty-state">{t("documents.empty")}</div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t("documents.columnFilename")}</th>
+                <th>{t("documents.columnSize")}</th>
+                <th>{t("documents.columnChunks")}</th>
+                <th>{t("documents.columnDate")}</th>
+                <th style={{ textAlign: "right" }}>
+                  {t("documents.columnActions")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents.map((doc) => (
+                <tr key={doc.id}>
+                  <td className="file-name">{doc.filename}</td>
+                  <td className="file-meta">{formatSize(doc.size)}</td>
+                  <td>
+                    {doc.index_error ? (
+                      <span className="badge warn">
+                        {t("documents.indexErrorBadge")}
+                      </span>
+                    ) : (
+                      <span className="badge ok">{doc.chunk_count}</span>
+                    )}
+                  </td>
+                  <td className="file-meta">{formatDate(doc.uploaded_at)}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(doc.id)}
+                    >
+                      {t("documents.delete")}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
   );
 }

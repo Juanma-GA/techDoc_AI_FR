@@ -4,13 +4,13 @@ type Props = { children: ReactNode };
 type State = { error: Error | null };
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
+  override state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo): void {
+  override componentDidCatch(error: Error, info: ErrorInfo): void {
     // No browser logging here (check_standard.sh forbids it). The backend
     // structlog stack will already capture the incident via X-Request-Id
     // when the user retries.
@@ -20,7 +20,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   reset = () => this.setState({ error: null });
 
-  render() {
+  override render() {
     if (this.state.error) {
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">

@@ -1,20 +1,10 @@
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Input,
-  Spinner,
-} from "@internal/ui";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { z } from "zod";
 
+import { DocsManagerCard } from "../components/DocsManagerCard";
+import { PromptsCard } from "../components/PromptsCard";
+import { TemplatesManagerCard } from "../components/TemplatesManagerCard";
 import {
   ApiClientError,
   settingsApi,
@@ -22,189 +12,244 @@ import {
   type TestConnectionDto,
 } from "../lib/api";
 
-const schema = z.object({
-  api_key: z.string().optional(),
-  base_url: z.string().url().or(z.literal("")),
-  chat_model: z.string().min(1),
-  embed_model: z.string().min(1),
-});
-type FormValues = z.infer<typeof schema>;
-
+// Page Parametres, pixel-identique au preview (.switch-row / .form / .banner).
+// Mistral = cle / base_url / chat / embed (vision/ocr non exposes, parite preview).
 export function Settings() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [savedNotice, setSavedNotice] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<TestConnectionDto | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [chatModel, setChatModel] = useState("");
+  const [embedModel, setEmbedModel] = useState("");
+  const [transcribeModel, setTranscribeModel] = useState("");
+  // Modeles disponibles decouverts au test de connexion (/v1/models), pour
+  // proposer le bon id de transcription sans le deviner.
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<
+    { kind: "ok" | "error"; text: string } | null
+  >(null);
 
   const settingsQuery = useQuery<SettingsDto, ApiClientError>({
     queryKey: ["settings"],
     queryFn: settingsApi.read,
   });
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    values: settingsQuery.data
-      ? {
-          api_key: "",
-          base_url: settingsQuery.data.base_url,
-          chat_model: settingsQuery.data.chat_model,
-          embed_model: settingsQuery.data.embed_model,
-        }
-      : undefined,
-  });
+  // Initialise le formulaire quand la config arrive.
+  useEffect(() => {
+    const d = settingsQuery.data;
+    if (!d) return;
+    setBaseUrl(d.base_url);
+    setChatModel(d.chat_model);
+    setEmbedModel(d.embed_model);
+    setTranscribeModel(d.transcribe_model);
+  }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
-    mutationFn: (values: FormValues) =>
+    mutationFn: () =>
       settingsApi.write({
-        api_key: values.api_key ? values.api_key : undefined,
-        base_url: values.base_url || undefined,
-        chat_model: values.chat_model,
-        embed_model: values.embed_model,
+        api_key: apiKey || undefined,
+        base_url: baseUrl || undefined,
+        chat_model: chatModel,
+        embed_model: embedModel,
+        transcribe_model: transcribeModel || undefined,
       }),
-    onSuccess: (data) => {
-      setSavedNotice(t("settings.saved"));
-      reset({
-        api_key: "",
-        base_url: data.base_url,
-        chat_model: data.chat_model,
-        embed_model: data.embed_model,
-      });
+    onSuccess: () => {
+      setApiKey("");
+      setFeedback({ kind: "ok", text: t("settings.saved") });
       void qc.invalidateQueries({ queryKey: ["settings"] });
+      // Rafraichit le badge LLM du sidebar (la cle change l'etat /health).
+      void qc.invalidateQueries({ queryKey: ["health"] });
     },
+    onError: (e: ApiClientError) => setFeedback({ kind: "error", text: e.message }),
   });
 
   const testMutation = useMutation({
     mutationFn: () => settingsApi.test(),
-    onSuccess: (data) => setTestResult(data),
+    onSuccess: (r: TestConnectionDto) => {
+      if (r.ok) setAvailableModels(r.models);
+      setFeedback(
+        r.ok
+          ? { kind: "ok", text: t("settings.testOk", { count: r.models.length }) }
+          : { kind: "error", text: t("settings.testFailed", { error: r.error ?? "" }) },
+      );
+      void qc.invalidateQueries({ queryKey: ["health"] });
+    },
+    onError: (e: ApiClientError) => setFeedback({ kind: "error", text: e.message }),
   });
 
-  const onSubmit = handleSubmit((values) => {
-    setSavedNotice(null);
-    saveMutation.mutate(values);
+  const llmToggleMutation = useMutation({
+    mutationFn: (enabled: boolean) => settingsApi.write({ llm_enabled: enabled }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["settings"] });
+      void qc.invalidateQueries({ queryKey: ["health"] });
+    },
   });
 
-  if (settingsQuery.isLoading) return <Spinner />;
-
-  const apiKeySet = settingsQuery.data?.api_key_set ?? false;
+  const cfg = settingsQuery.data;
+  const apiKeySet = cfg?.api_key_set ?? false;
+  const llmEnabled = cfg?.llm_enabled ?? true;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("settings.title")}</h1>
-        <p className="text-fg-dim">{t("settings.subtitle")}</p>
-      </header>
+    <>
+      <div className="page-header">
+        <h1>{t("settings.title")}</h1>
+        <p>{t("settings.subtitle")}</p>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            <span className="flex items-center gap-2">
-              <span>Mistral</span>
-              {apiKeySet ? (
-                <Badge variant="success">configured</Badge>
-              ) : (
-                <Badge variant="warning">not configured</Badge>
-              )}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            <div>
-              <label htmlFor="api_key" className="label">
-                {t("settings.apiKeyLabel")}
-              </label>
-              <Input
-                id="api_key"
-                type="password"
-                placeholder={t("settings.apiKeyPlaceholder")}
-                autoComplete="off"
-                {...register("api_key")}
-              />
-              {apiKeySet ? (
-                <p className="mt-1 text-xs text-fg-dim">
-                  {t("settings.apiKeyStored")}
-                </p>
-              ) : null}
-            </div>
+      <div className="card">
+        <h2 className="card-title">{t("settings.llmSectionTitle")}</h2>
+        <div className="switch-row">
+          <div>
+            <div className="label">{t("settings.llmEnabledLabel")}</div>
+            <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+              {t("settings.llmEnabledHint")}
+            </small>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={llmEnabled}
+              disabled={llmToggleMutation.isPending}
+              onChange={(e) => llmToggleMutation.mutate(e.target.checked)}
+            />
+            <span className="track" />
+          </label>
+        </div>
+      </div>
 
-            <div>
-              <label htmlFor="base_url" className="label">
-                {t("settings.baseUrlLabel")}
-              </label>
-              <Input
-                id="base_url"
-                state={errors.base_url ? "error" : "default"}
-                {...register("base_url")}
-              />
-              {errors.base_url ? (
-                <p className="mt-1 text-sm text-danger">{errors.base_url.message}</p>
-              ) : null}
-            </div>
-
-            <div>
-              <label htmlFor="chat_model" className="label">
-                {t("settings.chatModelLabel")}
-              </label>
-              <Input
-                id="chat_model"
-                state={errors.chat_model ? "error" : "default"}
-                {...register("chat_model")}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="embed_model" className="label">
-                {t("settings.embedModelLabel")}
-              </label>
-              <Input
-                id="embed_model"
-                state={errors.embed_model ? "error" : "default"}
-                {...register("embed_model")}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={saveMutation.isPending}>
-                {saveMutation.isPending ? <Spinner size="sm" /> : null}
-                <span>{t("settings.save")}</span>
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setTestResult(null);
-                  testMutation.mutate();
-                }}
-                disabled={testMutation.isPending}
-              >
-                {testMutation.isPending ? <Spinner size="sm" /> : null}
-                <span>{t("settings.test")}</span>
-              </Button>
-            </div>
-
-            {savedNotice ? (
-              <p className="text-sm text-success">{savedNotice}</p>
+      <div className="card">
+        <h2 className="card-title">
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+            Mistral
+            {apiKeySet ? (
+              <span className="badge ok">CONFIGURED</span>
+            ) : (
+              <span className="badge warn">NOT CONFIGURED</span>
+            )}
+          </span>
+        </h2>
+        <div className="form">
+          <label>
+            <div className="label">{t("settings.apiKeyLabel")}</div>
+            <input
+              className="input"
+              type="password"
+              autoComplete="off"
+              placeholder={t("settings.apiKeyPlaceholder")}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            {apiKeySet ? (
+              <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+                {t("settings.apiKeyStored")}
+              </small>
             ) : null}
-
-            {testResult ? (
-              <p
-                className={
-                  testResult.ok ? "text-sm text-success" : "text-sm text-danger"
-                }
+          </label>
+          <label>
+            <div className="label">{t("settings.baseUrlLabel")}</div>
+            <input
+              className="input"
+              type="url"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+            />
+          </label>
+          <div className="row">
+            <label className="grow">
+              <div className="label">{t("settings.chatModelLabel")}</div>
+              <input
+                className="input"
+                type="text"
+                value={chatModel}
+                onChange={(e) => setChatModel(e.target.value)}
+              />
+            </label>
+            <label className="grow">
+              <div className="label">{t("settings.embedModelLabel")}</div>
+              <input
+                className="input"
+                type="text"
+                value={embedModel}
+                onChange={(e) => setEmbedModel(e.target.value)}
+              />
+            </label>
+          </div>
+          <label>
+            <div className="label">{t("settings.transcribeModelLabel")}</div>
+            {availableModels.length > 0 && (
+              <select
+                className="input"
+                value={availableModels.includes(transcribeModel) ? transcribeModel : ""}
+                onChange={(e) => setTranscribeModel(e.target.value)}
+                style={{ marginBottom: 6 }}
               >
-                {testResult.ok
-                  ? t("settings.testOk", { count: testResult.models.length })
-                  : t("settings.testFailed", { error: testResult.error ?? "" })}
-              </p>
-            ) : null}
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+                <option value="">{t("settings.transcribeModelPick")}</option>
+                {[...availableModels]
+                  .sort((a, b) => Number(b.includes("voxtral")) - Number(a.includes("voxtral")))
+                  .map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+              </select>
+            )}
+            <input
+              className="input"
+              type="text"
+              placeholder="voxtral-..."
+              value={transcribeModel}
+              onChange={(e) => setTranscribeModel(e.target.value)}
+            />
+            <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+              {availableModels.length > 0
+                ? t("settings.transcribeModelHintTested", { count: availableModels.length })
+                : t("settings.transcribeModelHint")}
+            </small>
+          </label>
+          <div className="row">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={saveMutation.isPending}
+              onClick={() => {
+                setFeedback(null);
+                saveMutation.mutate();
+              }}
+            >
+              {t("settings.save")}
+            </button>
+            <button
+              type="button"
+              className="btn secondary"
+              disabled={testMutation.isPending}
+              onClick={() => {
+                setFeedback(null);
+                testMutation.mutate();
+              }}
+            >
+              {t("settings.test")}
+            </button>
+          </div>
+          {feedback ? (
+            <div className={feedback.kind === "ok" ? "success" : "error"}>
+              {feedback.text}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="banner">
+        <strong>{t("settings.refsHintTitle")}</strong> {t("settings.refsHintBody")}
+      </div>
+
+      <TemplatesManagerCard />
+      <DocsManagerCard
+        kind="style"
+        title={t("settings.styleDocsTitle")}
+        hint={t("settings.styleDocsHint")}
+        accept=".pptx,.docx,.pdf,.txt,.md"
+      />
+      <PromptsCard />
+    </>
   );
 }

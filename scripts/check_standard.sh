@@ -208,9 +208,11 @@ fi
 
 # ------------------------------------------------------------------
 # 13. Aucun --host 0.0.0.0 dans les lanceurs (palier 1 strict).
+#     Les artefacts deploy/ (palier 2 : conteneur / IIS) sont exemptes : un
+#     entrypoint de conteneur DOIT binder 0.0.0.0 derriere l'ingress/reverse-proxy.
 # ------------------------------------------------------------------
 step 13 "Bind 127.0.0.1 dans lanceurs"
-hits=$(grep -rnE "${exclude_args[@]}" --include='*.bat' --include='*.sh' \
+hits=$(grep -rnE "${exclude_args[@]}" --exclude-dir=deploy --include='*.bat' --include='*.sh' \
   'host[[:space:]=]+0\.0\.0\.0|--host[[:space:]]+0\.0\.0\.0' apps/ 2>/dev/null || true)
 if [[ -z "$hits" ]]; then pass; else
   fail "Bind 0.0.0.0 interdit (palier 1 - STANDARD §3.5) :\n$hits"

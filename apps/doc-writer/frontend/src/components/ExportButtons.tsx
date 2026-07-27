@@ -1,75 +1,117 @@
-import { Button } from "@internal/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  ApiClientError,
-  sessionsApi,
-  type ExportFormat,
-} from "../lib/api";
+import { ApiClientError, sessionsApi, type ExportFormat } from "../lib/api";
+import { PptxPreviewModal } from "./PptxPreviewModal";
+import { TemplateFillPreviewModal } from "./TemplateFillPreviewModal";
 
 type Props = {
   sessionId: string;
   hasTemplate: boolean;
+  templateFormat?: "pptx" | "docx" | null;
+  templateDocId?: string | null;
   filename?: string;
+  ready?: boolean;
 };
 
 const FORMATS: { value: ExportFormat; labelKey: string }[] = [
-  { value: "md",   labelKey: "generate.exportMd" },
+  { value: "md", labelKey: "generate.exportMd" },
   { value: "docx", labelKey: "generate.exportDocx" },
-  { value: "pdf",  labelKey: "generate.exportPdf" },
+  { value: "pdf", labelKey: "generate.exportPdf" },
   { value: "pptx", labelKey: "generate.exportPptx" },
 ];
 
-
-export function ExportButtons({ sessionId, hasTemplate, filename }: Props) {
+export function ExportButtons({
+  sessionId,
+  templateFormat,
+  templateDocId,
+  filename,
+  ready = true,
+}: Props) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPptxModal, setShowPptxModal] = useState(false);
+  const [showFillModal, setShowFillModal] = useState(false);
 
   const download = async (fmt: ExportFormat) => {
+    if (fmt === "pptx") {
+      if (templateFormat === "pptx" && templateDocId) setShowPptxModal(true);
+      return;
+    }
+    // Template Word/PDF : DOCX/PDF passent par l'apercu de rendu (ce que tu vois
+    // = ce que tu telecharges) au lieu d'un export aveugle. MD reste direct.
+    if (
+      templateFormat === "docx" &&
+      (fmt === "docx" || fmt === "pdf") &&
+      templateDocId
+    ) {
+      setShowFillModal(true);
+      return;
+    }
     setBusy(fmt);
     setError(null);
     try {
       await sessionsApi.download(sessionId, fmt, filename);
     } catch (err) {
-      const msg =
+      setError(
         err instanceof ApiClientError
           ? err.message
           : err instanceof Error
             ? err.message
-            : String(err);
-      setError(msg);
+            : String(err),
+      );
     } finally {
       setBusy(null);
     }
   };
 
+  // Template Word/PDF attache : .docx ET .pdf remplissent le template (sortie
+  // .docx, mise en page conservee). On relabelle ces deux boutons pour le
+  // signaler (le backend route format=pdf vers le remplissage -> .docx).
+  const isDocTemplate = templateFormat === "docx";
+  const labelFor = (f: { value: ExportFormat; labelKey: string }): string => {
+    if (isDocTemplate && f.value === "docx") return t("generate.exportDocxTemplate");
+    if (isDocTemplate && f.value === "pdf") return t("generate.exportPdfTemplate");
+    return t(f.labelKey);
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        {FORMATS.map((f) => {
-          const disabled =
-            busy !== null || (f.value === "pptx" && !hasTemplate);
-          return (
-            <Button
-              key={f.value}
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={disabled}
-              onClick={() => void download(f.value)}
-            >
-              {busy === f.value
-                ? `${t(f.labelKey)}…`
-                : t(f.labelKey)}
-            </Button>
-          );
-        })}
-      </div>
-      {error ? <p className="text-xs text-danger">{error}</p> : null}
-      {!hasTemplate ? (
-        <p className="text-xs text-fg-dim">{t("generate.exportPptxHint")}</p>
+    <div className="row" style={{ gap: 6 }}>
+      {FORMATS.map((f) => {
+        const disabled =
+          !ready || busy !== null || (f.value === "pptx" && templateFormat !== "pptx");
+        const label = labelFor(f);
+        return (
+          <button
+            key={f.value}
+            type="button"
+            className="btn secondary small"
+            disabled={disabled}
+            onClick={() => void download(f.value)}
+          >
+            {busy === f.value ? `${label}…` : label}
+          </button>
+        );
+      })}
+      {error ? <div className="error">{error}</div> : null}
+
+      {showPptxModal && templateDocId ? (
+        <PptxPreviewModal
+          sessionId={sessionId}
+          templateDocId={templateDocId}
+          defaultFilename={filename}
+          onClose={() => setShowPptxModal(false)}
+        />
+      ) : null}
+
+      {showFillModal && templateDocId ? (
+        <TemplateFillPreviewModal
+          sessionId={sessionId}
+          templateDocId={templateDocId}
+          defaultFilename={filename}
+          onClose={() => setShowFillModal(false)}
+        />
       ) : null}
     </div>
   );

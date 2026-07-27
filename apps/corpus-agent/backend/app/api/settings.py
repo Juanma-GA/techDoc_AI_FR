@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, UploadFile
+import json
+import re
+import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,23 +28,23 @@ from app.core.mistral_client import (
 from app.core.prompt_sanitizer import sanitize_document
 from app.core.rules import (
     DEFAULT_RULES,
+    basl_columns_for,
     is_overridden,
     load_rules,
     reference_columns_for,
     reset_rules,
     save_rules,
 )
-# Force le chargement des modules de checks pour peupler le registry au boot.
-# (Chaque `checks/*.py` enregistre ses règles via `register(Rule(...))`.)
-import app.core.rules_catalog  # noqa: F401 — side-effect: registry population
-from app.core.rules_registry import (
-    RuleValidationError, _validate_value, all_rules, detect_capabilities,
-    resolve_rules, rule_is_runnable, sparse_to_legacy, to_catalog,
-    validate_sparse_overrides,
-)
 from app.db.models import Project
 from app.db.session import get_db
-from app.schemas import MistralSettingsIn, MistralSettingsOut, TestConnectionOut
+from app.schemas import (
+    ChecklistImportResult,
+    MistralSettingsIn,
+    MistralSettingsOut,
+    SheetInfo,
+    SheetInspectOut,
+    TestConnectionOut,
+)
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -101,40 +107,6 @@ def get_rules() -> dict[str, Any]:
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
 
 
-@router.get("/rules/catalog")
-def get_rules_catalog(db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Catalogue déclaratif de toutes les règles enregistrées dans le registry.
-
-    Retourne :
-    - `rules` : liste des règles avec leurs métadonnées (id, family,
-      severity, params, examples, requires…) — sérialisables tels quels,
-      destinés à alimenter l'UI Paramètres auto-générée.
-    - `capabilities` : capacités runtime détectées (mistral_chat, vision…).
-    - `resolved` : état effectif de chaque règle après application du
-      `rules.json` actuel — toggle final + paramètres résolus + flag
-      `runnable` (false si une capability requise manque).
-
-    Endpoint additif : `GET /rules` (legacy) continue de servir le JSON
-    legacy pour l'UI Paramètres actuelle. Phase 6 fera la transition.
-    """
-    mistral_settings = get_effective_settings(db)
-    caps = detect_capabilities(mistral_settings)
-    resolved = resolve_rules()
-    return {
-        "rules": to_catalog(),
-        "capabilities": sorted(caps),
-        "resolved": [
-            {
-                "id": rid,
-                "enabled": rr.enabled,
-                "params": rr.params,
-                "runnable": rule_is_runnable(rr.rule, caps),
-            }
-            for rid, rr in resolved.items()
-        ],
-    }
-
-
 @router.post("/rules/from-spec")
 def extract_rules_from_spec(
     file: UploadFile = File(...),
@@ -195,7 +167,7 @@ def extract_rules_from_spec(
     column_names: list[str] = []
     seen_cols: set[str] = set()
     for proj in db.scalars(select(Project)):
-        for col in reference_columns_for(proj):
+        for col in (*reference_columns_for(proj), *basl_columns_for(proj)):
             if col["name"] not in seen_cols:
                 seen_cols.add(col["name"])
                 column_names.append(col["name"])
@@ -254,52 +226,6 @@ def extract_rules_from_spec(
     return {"regles": proposed, "count": len(proposed)}
 
 
-def _validate_legacy_for_registry(rules: dict[str, Any]) -> None:
-    """Validation stricte des clés legacy qui sont consommées par le registry.
-
-    Le but est d'empêcher un PUT silencieux où une valeur de mauvais type
-    (ex: `largeur_min_px: "abc"`) serait acceptée puis silencieusement
-    retombée sur le défaut par le legacy_resolver. Lève `AppError` sur la
-    première violation.
-
-    Le mapping ci-dessous reflète les `legacy_resolver` de
-    `checks/illustration.py` — à étendre quand d'autres checks migrent.
-    """
-    il = rules.get("illustrations")
-    if not isinstance(il, dict):
-        return  # erreur déjà détectée au top-level
-
-    import re as _re
-
-    def _fail(field: str, msg: str) -> None:
-        raise AppError(
-            "RULES_INVALID",
-            f"illustrations.{field} : {msg}",
-            status_code=400,
-            detail={"field": f"illustrations.{field}"},
-        )
-
-    if "regex_reperage" in il:
-        v = il["regex_reperage"]
-        if not isinstance(v, str):
-            _fail("regex_reperage", "attendu string")
-        try:
-            _re.compile(v)
-        except _re.error as e:
-            _fail("regex_reperage", f"regex invalide ({e})")
-    for k in ("largeur_min_px", "largeur_max_px", "taille_totale_max_ko"):
-        if k in il:
-            v = il[k]
-            if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
-                _fail(k, "attendu entier strictement positif")
-    if "coherence_reperes" in il and not isinstance(il["coherence_reperes"], bool):
-        _fail("coherence_reperes", "attendu booléen")
-    if "conformite_visuelle" in il:
-        v = il["conformite_visuelle"]
-        if not isinstance(v, list) or any(not isinstance(x, str) for x in v):
-            _fail("conformite_visuelle", "attendu liste de chaînes")
-
-
 @router.put("/rules")
 def put_rules(payload: dict[str, Any]) -> dict[str, Any]:
     rules = payload.get("rules") if isinstance(payload, dict) else None
@@ -309,9 +235,9 @@ def put_rules(payload: dict[str, Any]) -> dict[str, Any]:
             "Format invalide : attendu un objet JSON {rules: {...}}",
             status_code=400,
         )
-    # Validation v4 : chaque clé connue doit avoir le même type que son défaut
-    # (objet pour les familles de checks, liste pour `regles_personnalisees`,
-    # chaîne pour `instructions_libres`). Les clés inconnues sont tolérées.
+    # Chaque clé connue doit avoir le même type que son défaut (liste pour
+    # `regles_personnalisees`, chaîne pour `instructions_libres`). Les clés
+    # inconnues sont tolérées.
     for key, val in rules.items():
         if key not in DEFAULT_RULES:
             continue
@@ -324,10 +250,6 @@ def put_rules(payload: dict[str, Any]) -> dict[str, Any]:
                 status_code=400,
                 detail={"field": key, "got": type(val).__name__},
             )
-    # Validation v5 : pour les règles migrées vers le registry, on contrôle
-    # strictement les types des paramètres legacy afin d'éviter les retombées
-    # silencieuses sur défaut (cf. _validate_legacy_for_registry).
-    _validate_legacy_for_registry(rules)
     save_rules(rules)
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
 
@@ -341,40 +263,21 @@ def delete_rules() -> dict[str, Any]:
 
 @router.put("/rules/sparse")
 def put_rules_sparse(payload: dict[str, Any]) -> dict[str, Any]:
-    """Save depuis l'UI auto-générée — format sparse `{rules: {id: {enabled, params}}}`.
+    """Save du store checklist depuis l'UI Paramètres.
 
-    Pipeline :
-    1. Validation stricte via `validate_sparse_overrides` (types + contraintes
-       + regex compile). Erreurs claires par rule_id en cas de pépin.
-    2. Conversion sparse → legacy via les `legacy_keys` / `legacy_enabled_key`
-       de chaque règle (point de départ : `rules.json` actuel, pour préserver
-       les `regles_personnalisees` et `instructions_libres` qui ne sont pas
-       gérés par le registry).
-    3. `save_rules()` legacy.
-
-    Phase 4 remplacera cette conversion par un stockage sparse natif.
+    Corpus-agent n'évaluant plus que via la checklist, ce endpoint ne gère que
+    les deux clés utiles — `regles_personnalisees` (liste éditable des règles)
+    et `instructions_libres` (contexte de jugement). Le champ `rules` (ancien
+    format sparse du catalogue de règles codées) est accepté mais ignoré, pour
+    compat. ascendante avec le client existant qui envoie `rules: {}`.
     """
     if not isinstance(payload, dict):
         raise AppError(
             "RULES_INVALID",
-            "Format invalide : attendu {rules: {...}, regles_personnalisees?: [...], instructions_libres?: \"...\"}",
+            "Format invalide : attendu {regles_personnalisees?: [...], instructions_libres?: \"...\"}",
             status_code=400,
         )
-    sparse = payload.get("rules") or {}
-    if not isinstance(sparse, dict):
-        raise AppError("RULES_INVALID", "Le champ `rules` doit être un objet", status_code=400)
-    try:
-        validate_sparse_overrides(sparse)
-    except RuleValidationError as e:
-        raise AppError(
-            "RULES_INVALID",
-            f"Validation refusée : {len(e.errors)} règle(s) en erreur",
-            status_code=400,
-            detail=e.errors,
-        ) from e
     base = load_rules()
-    # Extras hors registry : custom rules + consignes libres. Si absents du
-    # payload, on conserve les valeurs actuelles (= preserved by sparse_to_legacy).
     if "regles_personnalisees" in payload:
         rp = payload["regles_personnalisees"]
         if not isinstance(rp, list):
@@ -385,6 +288,169 @@ def put_rules_sparse(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(il, str):
             raise AppError("RULES_INVALID", "`instructions_libres` doit être une chaîne", status_code=400)
         base["instructions_libres"] = il
-    new_legacy = sparse_to_legacy(sparse, base)
-    save_rules(new_legacy)
+    save_rules(base)
     return {"rules": load_rules(), "overridden": is_overridden(), "editable": True}
+
+
+# =============================================================================
+# Import de checklist Excel -> regles personnalisees (en masse)
+# =============================================================================
+
+# Modes d'import (memes semantiques que word-reviewer) :
+#   replace   : purge toutes les regles custom puis charge la checklist ;
+#   add       : n'ajoute que les regles absentes (par consigne) ;
+#   update    : ne met a jour que les regles existantes, ne cree rien ;
+#   overwrite : upsert (met a jour l'existant + cree le nouveau).
+_CHECKLIST_MODES = {"replace", "add", "update", "overwrite"}
+
+
+def _consigne_key(consigne: str) -> str:
+    """Cle de dedup d'une regle = sa consigne normalisee (casse + espaces)."""
+    return re.sub(r"\s+", " ", str(consigne or "").lower()).strip()
+
+
+def _read_xlsx_or_400(file: UploadFile) -> bytes:
+    name = (file.filename or "").lower()
+    if not name.endswith((".xlsx", ".xlsm")):
+        raise AppError("BAD_FORMAT", "Fichier Excel (.xlsx/.xlsm) attendu.", status_code=400)
+    raw = file.file.read()
+    if not raw:
+        raise AppError("CHECKLIST_EMPTY", "Fichier vide.", status_code=400)
+    return raw
+
+
+_CHECKLIST_TEMPLATE = Path(__file__).resolve().parent.parent / "static" / "checklist_template.xlsx"
+
+
+@router.get("/rules/checklist/template")
+def download_checklist_template() -> FileResponse:
+    """Modele de checklist Excel (colonnes Sujet | Verification | Criticite) avec
+    5 regles d'exemple — point de depart a editer avant l'import."""
+    if not _CHECKLIST_TEMPLATE.is_file():
+        raise AppError("TEMPLATE_MISSING", "Modele de checklist absent.", status_code=404)
+    return FileResponse(
+        _CHECKLIST_TEMPLATE,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename="checklist_template.xlsx",
+    )
+
+
+@router.post("/rules/checklist/inspect", response_model=SheetInspectOut)
+def inspect_checklist(file: UploadFile = File(...)) -> SheetInspectOut:
+    """Retourne un apercu des onglets (grille + ligne d'en-tete detectee) pour
+    que l'UI pilote le mapping de colonnes. Aucune ecriture."""
+    from app.core.checklist_excel import list_sheets
+
+    raw = _read_xlsx_or_400(file)
+    try:
+        sheets = list_sheets(raw)
+    except Exception as exc:  # noqa: BLE001 — openpyxl leve des erreurs variees
+        raise AppError("CHECKLIST_UNREADABLE", f"Excel illisible : {exc}", status_code=400) from exc
+    return SheetInspectOut(sheets=[SheetInfo(**s) for s in sheets])
+
+
+@router.post("/rules/checklist/import", response_model=ChecklistImportResult)
+def import_checklist(
+    file: UploadFile = File(...),
+    sheet: str | None = Form(default=None),
+    header_row: int = Form(default=0),
+    topic_col: int | None = Form(default=None),
+    check_col: int | None = Form(default=None),
+    context_cols: str = Form(default=""),
+    severity_col: int | None = Form(default=None),
+    handling_col: int | None = Form(default=None),
+    zone_col: int | None = Form(default=None),
+    mode: str = Form(default="replace"),
+) -> ChecklistImportResult:
+    """Parse la checklist Excel et l'injecte dans `regles_personnalisees`.
+
+    Chaque ligne devient une regle `{id, label, consigne, severity,
+    validated:false}` : importee, elle attend dans la file de validation
+    jusqu'a une validation humaine (elle ne participe pas a l'analyse avant).
+    """
+    from app.core.checklist_excel import parse_checklist
+
+    if mode not in _CHECKLIST_MODES:
+        raise AppError(
+            "BAD_MODE",
+            f"Mode d'import inconnu « {mode} ». Attendu : {', '.join(sorted(_CHECKLIST_MODES))}.",
+            status_code=400,
+        )
+    raw = _read_xlsx_or_400(file)
+    try:
+        context = json.loads(context_cols) if context_cols.strip() else []
+    except json.JSONDecodeError:
+        context = []
+    mapping: dict[str, Any] | None = None
+    if check_col is not None:
+        mapping = {
+            "header_row": header_row,
+            "topic": topic_col,
+            "check": check_col,
+            "context": context if isinstance(context, list) else [],
+            "severity": severity_col,
+            "handling": handling_col,
+            "zone": zone_col,
+        }
+    try:
+        parsed = parse_checklist(raw, sheet=sheet, mapping=mapping)
+    except Exception as exc:  # noqa: BLE001
+        raise AppError("CHECKLIST_UNREADABLE", f"Excel illisible : {exc}", status_code=400) from exc
+
+    base = load_rules()
+    existing = [r for r in (base.get("regles_personnalisees") or []) if isinstance(r, dict)]
+    by_key = {_consigne_key(r.get("consigne", "")): r for r in existing}
+
+    result = ChecklistImportResult(mode=mode)
+    if mode == "replace":
+        result.replaced_count = len(existing)
+        existing = []
+        by_key = {}
+
+    kept: list[dict[str, Any]] = list(existing)
+    for pr in parsed:
+        key = _consigne_key(pr.consigne)
+        if not key:
+            continue
+        current = by_key.get(key)
+        if current is not None and mode in ("update", "overwrite"):
+            # Met a jour libelle + severite ; preserve id + etat de validation.
+            current["label"] = pr.label
+            current["severity"] = pr.severity
+            result.updated += 1
+        elif current is None and mode in ("add", "overwrite", "replace"):
+            new_rule = {
+                "id": uuid.uuid4().hex[:8],
+                "label": pr.label,
+                "consigne": pr.consigne,
+                "severity": pr.severity,
+                "validated": False,
+            }
+            kept.append(new_rule)
+            by_key[key] = new_rule
+            result.created += 1
+        else:
+            # add sur doublon, ou update sur regle absente -> ignore.
+            result.skipped.append(pr.label or pr.consigne[:60])
+
+    result.imported = result.created + result.updated
+    base["regles_personnalisees"] = kept
+    save_rules(base)
+    result.pending = sum(1 for r in kept if r.get("validated") is False)
+    return result
+
+
+@router.post("/rules/validate-all")
+def validate_all_rules() -> dict[str, int]:
+    """Valide en masse toutes les regles personnalisees en attente (sortie de
+    file de validation) : elles participent alors a l'analyse."""
+    base = load_rules()
+    rules = [r for r in (base.get("regles_personnalisees") or []) if isinstance(r, dict)]
+    count = 0
+    for r in rules:
+        if r.get("validated") is False:
+            r["validated"] = True
+            count += 1
+    base["regles_personnalisees"] = rules
+    save_rules(base)
+    return {"validated": count}

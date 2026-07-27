@@ -1,0 +1,2 @@
+# Manifeste genere : contient des secrets (mot de passe ACR, cle Fernet). Ne pas committer.
+containerapp.generated.yaml

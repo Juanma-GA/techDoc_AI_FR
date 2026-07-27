@@ -2,8 +2,16 @@
 export { Badge, badgeVariants, type BadgeProps } from "./components/Badge";
 export { Button, buttonVariants, type ButtonProps } from "./components/Button";
 export { Card, CardContent, CardHeader, CardTitle } from "./components/Card";
+export { Checkbox, type CheckboxProps } from "./components/Checkbox";
 export { Input, inputVariants, type InputProps } from "./components/Input";
+export {
+  Select,
+  selectVariants,
+  type SelectOption,
+  type SelectProps,
+} from "./components/Select";
 export { Spinner, type SpinnerProps } from "./components/Spinner";
+export { Switch, type SwitchProps } from "./components/Switch";
 export {
   Textarea,
   textareaVariants,

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.checks.ftm_doc import latest_version, make_anomaly
 from app.core.mistral_client import MistralClient
 from app.core.prompt_sanitizer import sanitize_document
-from app.core.rules import load_rules, reference_column
+from app.core.rules import basl_column, load_rules, reference_column
 from app.db.models import Anomaly, Project
 from app.parsers.reference import reference_column_values
 
@@ -52,10 +52,24 @@ def _is_extract_grounded(extrait: str, text: str) -> bool:
 
 
 def _load_custom_rules() -> list[dict]:
-    """Règles personnalisées valides (consigne non vide), normalisées."""
+    """Règles personnalisées valides (consigne non vide, validées, activées).
+
+    Deux filtres indépendants excluent une règle de l'analyse :
+    - `validated=False` : file de validation — une règle importée par checklist
+      attend une validation humaine avant de participer à l'analyse.
+    - `enabled=False` : interrupteur d'activation en direct — l'utilisateur peut
+      désactiver une règle sans la supprimer (elle reste éditable / réactivable).
+
+    Les champs `validated` / `enabled` absents valent « vrai » → compat
+    ascendante (règles saisies à la main ou créées avant ces champs).
+    """
     out: list[dict] = []
     for r in (load_rules().get("regles_personnalisees") or []):
         if not isinstance(r, dict):
+            continue
+        if r.get("validated") is False:
+            continue
+        if r.get("enabled") is False:
             continue
         consigne = str(r.get("consigne") or "").strip()
         if not consigne:
@@ -75,23 +89,36 @@ _MAX_PLACEHOLDER_VALUES = 200
 
 
 def _resolve_placeholders(consigne: str, project: Project) -> str:
-    """Remplace chaque `{nom}` de la consigne par les valeurs de la colonne de
-    reference homonyme du projet. Un `{nom}` sans colonne correspondante est
-    laisse tel quel (l'IA le verra comme du texte)."""
+    """Remplace chaque `{nom}` de la consigne par les valeurs de la colonne
+    homonyme du projet — registre de reference (`reference_columns`) d'abord,
+    registre BASL (`basl_columns`) en repli. Un `{nom}` sans colonne
+    correspondante est laisse tel quel (l'IA le verra comme du texte)."""
+    def _values_for(name: str) -> "tuple[str, list[str]] | None":
+        """(source_label, valeurs) de la colonne `name`, ou None si inconnue."""
+        col = reference_column(project, name)
+        if col is not None:
+            return "reference", reference_column_values(
+                project.reference_path, col.get("sheet", ""), col.get("column", ""),
+            )
+        col = basl_column(project, name)
+        if col is not None:
+            return "BASL", reference_column_values(
+                project.basl_path, col.get("sheet", ""), col.get("column", ""),
+            )
+        return None
+
     def _sub(match: "re.Match[str]") -> str:
         name = match.group(1)
-        col = reference_column(project, name)
-        if col is None:
+        resolved = _values_for(name)
+        if resolved is None:
             return match.group(0)
-        values = reference_column_values(
-            project.reference_path, col.get("sheet", ""), col.get("column", ""),
-        )
+        source, values = resolved
         if not values:
-            return f"[colonne de reference « {name} » : aucune valeur]"
+            return f"[colonne {source} « {name} » : aucune valeur]"
         shown = values[:_MAX_PLACEHOLDER_VALUES]
         extra = len(values) - len(shown)
         suffix = f" (+{extra} autres)" if extra > 0 else ""
-        return f"[colonne de reference « {name} » : {', '.join(shown)}{suffix}]"
+        return f"[colonne {source} « {name} » : {', '.join(shown)}{suffix}]"
 
     return _PLACEHOLDER_RE.sub(_sub, consigne)
 
@@ -101,7 +128,12 @@ def run_custom_rules(
     project: Project,
     run_id: uuid.UUID,
     mistral: Optional[MistralClient] = None,
+    *,
+    only_file_ids: Optional[set[uuid.UUID]] = None,
 ) -> list[Anomaly]:
+    """Évalue les règles personnalisées actives contre chaque fichier du projet.
+    `only_file_ids` (optionnel) restreint l'analyse à un échantillon de fichiers
+    (réanalyse ciblée) ; `None` = tous les fichiers."""
     rules = _load_custom_rules()
     anomalies: list[Anomaly] = []
     if mistral is None or not rules:
@@ -115,6 +147,8 @@ def run_custom_rules(
     by_id = {r["id"]: r for r in rules}
 
     for f in project.files:
+        if only_file_ids is not None and f.id not in only_file_ids:
+            continue
         latest = latest_version(f)
         if latest is None:
             continue
@@ -141,6 +175,7 @@ def run_custom_rules(
                 (item.get("suggestion") or "").strip(),
                 extrait[:200],
                 confidence=confidence,
+                category=label,
             )
             db.add(a)
             anomalies.append(a)

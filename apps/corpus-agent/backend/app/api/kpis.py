@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
@@ -13,11 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.rules import ANOMALY_TYPES
 from app.db.models import AnalysisRun, Anomaly, Project
 from app.db.session import get_db
 from app.schemas import KpiOut
-
 
 router = APIRouter(tags=["kpis"])
 
@@ -31,6 +28,7 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
     if not projects:
         return KpiOut(
             open_anomalies=0, anomalies_by_severity={}, anomalies_by_type={},
+            anomalies_by_category={},
             anomalies_by_status={}, resolution_rate=0.0,
             anomalies_by_confidence={},
             anomalies_over_time=[], top_files=[], top_rules=[],
@@ -57,6 +55,10 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
     # by_type : meme population que by_sev (anomalies qualite ouvertes) — les
     # deux graphes a barres somment ainsi au meme total que `open_anomalies`.
     by_type = Counter(a.type for a in open_a)
+    # by_category : regroupement metier par « Sujet » de la regle checklist. En
+    # mode checklist-only, c'est LA dimension utile (le type est toujours
+    # `personnalisee`). Anomalies sans categorie regroupees sous « Sans sujet ».
+    by_category = Counter((a.category or "Sans sujet") for a in open_a)
 
     # Repartition sur le workflow d'etat des tickets — toujours les 4 cles
     # presentes (0 explicite) pour un rendu stable cote dashboard.
@@ -91,21 +93,23 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
         .where(AnalysisRun.project_id.in_(project_ids), AnalysisRun.status == "completed")
         .order_by(AnalysisRun.started_at.asc())
     ))
+    # Evolution par run, empilee par CATEGORIE (Sujet de la regle checklist).
+    # Le type est toujours `personnalisee` -> le detail utile est la categorie.
+    # On regroupe les anomalies vivantes par run (run_id) : fonctionne pour tous
+    # les runs. Anomalies sans run (run supprime) ignorees.
+    anoms_by_run: dict[uuid.UUID, list[Anomaly]] = {}
+    for a in quality_anomalies:
+        if a.run_id is not None:
+            anoms_by_run.setdefault(a.run_id, []).append(a)
     over_time = []
     for r in runs:
-        try:
-            summary = json.loads(r.summary or "{}")
-        except json.JSONDecodeError:
-            summary = {}
-        total = sum(
-            v for k, v in summary.items()
-            if k in ANOMALY_TYPES and isinstance(v, int)
-        )
+        run_anoms = anoms_by_run.get(r.id, [])
+        cats = Counter((a.category or "Sans sujet") for a in run_anoms)
         over_time.append({
             "run_id": str(r.id),
             "started_at": r.started_at.isoformat() if r.started_at else "",
-            "total": total,
-            **{k: int(summary.get(k, 0) or 0) for k in ANOMALY_TYPES},
+            "total": len(run_anoms),
+            "categories": dict(cats),
         })
 
     files_total = sum(len(p.files) for p in projects)
@@ -115,6 +119,7 @@ def compute_kpis(db: Session, projects: list[Project]) -> KpiOut:
         open_anomalies=len(open_a),
         anomalies_by_severity=dict(by_sev),
         anomalies_by_type=dict(by_type),
+        anomalies_by_category=dict(by_category),
         anomalies_by_status=by_status,
         resolution_rate=resolution_rate,
         anomalies_by_confidence=by_conf,

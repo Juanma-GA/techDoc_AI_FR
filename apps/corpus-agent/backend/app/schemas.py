@@ -67,6 +67,35 @@ class UploadResultOut(BaseModel):
     uploaded: list[dict[str, Any]]
 
 
+class CorpusFolderIn(BaseModel):
+    """Connexion d'un dossier corpus (chemin local, ex. dossier OneDrive
+    synchronisé). `only` (chemins relatifs) restreint l'ingestion à une sélection
+    de fichiers ; None/absent = tout le dossier."""
+    path: str
+    only: list[str] | None = None
+
+
+class FolderFileOut(BaseModel):
+    """Un fichier listé dans un dossier corpus (avant ingestion)."""
+    rel: str          # chemin relatif au dossier (identifiant de sélection)
+    name: str
+    size: int
+    ext: str
+    blocked: bool     # extension bloquée (non ingérable) — affichée grisée
+
+
+class FolderListOut(BaseModel):
+    """Aperçu du contenu d'un dossier pour sélection avant import."""
+    path: str
+    files: list[FolderFileOut] = []
+    truncated: bool = False
+
+
+class CorpusPathOut(BaseModel):
+    """Dossier corpus actuellement connecté au projet (None si aucun)."""
+    path: str | None = None
+
+
 class ReferenceColumnDef(BaseModel):
     """Une colonne du registre de référence d'un projet."""
     name: str
@@ -125,10 +154,14 @@ class AnomalyOut(BaseModel):
     project_id: uuid.UUID
     file_version_id: Optional[uuid.UUID]
     type: str
+    # Categorie metier (Sujet de la regle checklist) — dimension de regroupement KPI.
+    category: str = ""
     severity: str
     confidence: str = "elevee"
     message: str
     suggestion: str
+    # Motif de rejet / commentaire du relecteur (vide par défaut).
+    feedback: str = ""
     # i18n : si `message_key` est non-null, le front résout via t(key, params)
     # et utilise `message` (FR) en fallback. `*_params` est sérialisé en JSON
     # string côté DB ; le schema le restitue tel quel.
@@ -144,11 +177,14 @@ class AnomalyOut(BaseModel):
 
 class AnomalyStatusIn(BaseModel):
     status: str  # open | acknowledged | fixed | rejected
+    # Motif libre (facultatif) — surtout au rejet. None = ne pas modifier.
+    feedback: Optional[str] = None
 
 
 class AnomalyBulkStatusIn(BaseModel):
     ids: list[uuid.UUID] = Field(default_factory=list, max_length=1000)
     status: str  # open | acknowledged | fixed | rejected
+    feedback: Optional[str] = None
 
 
 class AnomalyBulkStatusOut(BaseModel):
@@ -159,6 +195,14 @@ class AnomalyBulkStatusOut(BaseModel):
 # =============================================================================
 # Analysis runs
 # =============================================================================
+
+
+class AnalysisRunIn(BaseModel):
+    """Corps optionnel du déclenchement d'analyse. `file_ids` restreint
+    l'analyse à un échantillon de fichiers du projet (réanalyse ciblée pour
+    itérer sur la checklist). Vide / absent = tout le projet."""
+
+    file_ids: Optional[list[uuid.UUID]] = None
 
 
 class AnalysisRunOut(BaseModel):
@@ -257,6 +301,9 @@ class KpiOut(BaseModel):
     open_anomalies: int
     anomalies_by_severity: dict[str, int]
     anomalies_by_type: dict[str, int]
+    # Repartition par categorie metier (Sujet des regles checklist) — dimension
+    # de regroupement en mode checklist-only.
+    anomalies_by_category: dict[str, int] = Field(default_factory=dict)
     # Repartition des anomalies sur le workflow d'etat (open / acknowledged /
     # fixed / rejected). dmc_missing exclu (couverture referentiel, pas un ticket).
     anomalies_by_status: dict[str, int]
@@ -272,3 +319,39 @@ class KpiOut(BaseModel):
     avg_resolution_days: float
     files_total: int
     files_with_anomalies: int
+
+
+# =============================================================================
+# Import checklist (regles personnalisees en masse)
+# =============================================================================
+
+
+class SheetInfo(BaseModel):
+    """Apercu d'un onglet Excel : ligne d'en-tete detectee + grille rectangulaire.
+
+    `roles` = colonnes reconnues par nom d'en-tete (topic/check/severity/zone/
+    context...), ou None si l'onglet ne ressemble pas a une checklist. L'UI s'en
+    sert pour ouvrir le bon onglet avec le bon mapping.
+    """
+
+    name: str
+    header_row: int = 0
+    rows: list[list[str]]
+    roles: dict[str, int] | None = None
+
+
+class SheetInspectOut(BaseModel):
+    sheets: list[SheetInfo]
+
+
+class ChecklistImportResult(BaseModel):
+    """Bilan d'un import de checklist dans les regles personnalisees."""
+
+    mode: str = "replace"
+    imported: int = 0
+    created: int = 0
+    updated: int = 0
+    replaced_count: int = 0
+    skipped: list[str] = Field(default_factory=list)
+    # Total de regles en attente de validation apres l'import (file de validation).
+    pending: int = 0

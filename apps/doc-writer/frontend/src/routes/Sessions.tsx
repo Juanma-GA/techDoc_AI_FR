@@ -1,16 +1,4 @@
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  MarkdownView,
-  Spinner,
-} from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -29,6 +17,7 @@ function formatDate(iso: string): string {
   }
 }
 
+// Page Sessions, pixel-identique au preview (liste .session-row + detail .msg).
 export function Sessions() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -38,7 +27,6 @@ export function Sessions() {
     queryKey: ["sessions"],
     queryFn: sessionsApi.list,
   });
-
   const messagesQuery = useQuery<MessageDto[], ApiClientError>({
     queryKey: ["sessions", openId, "messages"],
     queryFn: () => sessionsApi.messages(openId as string),
@@ -54,113 +42,79 @@ export function Sessions() {
   });
 
   const sessions = sessionsQuery.data ?? [];
+  const openSession = sessions.find((s) => s.id === openId);
+  const messages = messagesQuery.data ?? [];
 
   return (
-    <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("sessions.title")}</h1>
-        <p className="text-fg-dim">{t("sessions.subtitle")}</p>
-      </header>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("sessions.title")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {sessionsQuery.isLoading ? (
-              <Spinner />
-            ) : sessions.length === 0 ? (
-              <EmptyState title={t("sessions.empty")} />
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {sessions.map((s) => (
-                  <li
-                    key={s.id}
-                    className="flex items-center justify-between gap-2 rounded-sm border border-md bg-card p-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-fg">{s.title || s.id}</p>
-                      <p className="text-xs text-fg-dim">
-                        {t("sessions.createdAt")} {formatDate(s.created_at)}
-                        {" · "}
-                        {t("sessions.scope")}:{" "}
-                        {s.scope_doc_ids.length === 0
-                          ? "*"
-                          : s.scope_doc_ids.length}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Badge>{s.lang}</Badge>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setOpenId(s.id)}
-                      >
-                        {t("sessions.open")}
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        aria-label={t("sessions.delete")}
-                        onClick={() => deleteMutation.mutate(s.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        <Trash2 size={14} aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {openId
-                ? sessions.find((s) => s.id === openId)?.title || openId
-                : t("sessions.empty")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!openId ? (
-              <p className="text-fg-dim">{t("sessions.empty")}</p>
-            ) : messagesQuery.isLoading ? (
-              <Spinner />
-            ) : (
-              <div className="flex flex-col gap-3">
-                {(messagesQuery.data ?? []).map((m) => (
-                  <div
-                    key={m.id}
-                    className={
-                      m.role === "user"
-                        ? "rounded-sm border border-md bg-bg-2 p-3 text-fg"
-                        : "rounded-sm border border-md bg-card p-3 text-fg"
-                    }
-                  >
-                    <p className="label mb-1">{m.role}</p>
-                    {m.role === "assistant" ? (
-                      <MarkdownView content={m.content} />
-                    ) : (
-                      <p className="whitespace-pre-wrap">{m.content}</p>
-                    )}
-                    {m.citations.length > 0 ? (
-                      <p className="mt-2 text-xs text-fg-dim">
-                        {t("generate.citations")}:{" "}
-                        {m.citations
-                          .map((c) => `[${c.filename}]`)
-                          .join(" ")}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+    <>
+      <div className="page-header">
+        <h1>{t("sessions.title")}</h1>
+        <p>{t("sessions.subtitle")}</p>
       </div>
-    </div>
+
+      <div className="grid-2">
+        <div className="card">
+          <h2 className="card-title">{t("sessions.title")}</h2>
+          {sessions.length === 0 ? (
+            <div className="empty-state">{t("sessions.empty")}</div>
+          ) : (
+            <div className="session-list">
+              {sessions.map((s) => (
+                <div
+                  key={s.id}
+                  className={`session-row${s.id === openId ? " active" : ""}`}
+                  onClick={() => setOpenId(s.id)}
+                >
+                  <div>
+                    <div className="session-name">{s.title || s.id}</div>
+                    <div className="session-meta">{formatDate(s.created_at)}</div>
+                  </div>
+                  <div className="row">
+                    <span className="badge">{s.lang}</span>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={deleteMutation.isPending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteMutation.mutate(s.id);
+                      }}
+                    >
+                      {t("sessions.delete")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <h2 className="card-title">
+            {openSession
+              ? openSession.title || openSession.id
+              : t("sessions.selectOne")}
+          </h2>
+          {!openId ? (
+            <div className="empty-state">{t("sessions.none")}</div>
+          ) : messages.length === 0 ? (
+            <div className="empty-state">{t("sessions.noMessages")}</div>
+          ) : (
+            messages.map((m) => (
+              <div key={m.id} className={`msg ${m.role}`}>
+                <div className="msg-role">{m.role}</div>
+                <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
+                {m.citations.length > 0 ? (
+                  <div className="msg-citations">
+                    {t("sessions.sources")} :{" "}
+                    {m.citations.map((c) => `[${c.filename}]`).join(" ")}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </>
   );
 }
