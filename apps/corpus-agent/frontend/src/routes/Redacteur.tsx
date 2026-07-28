@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { anomaliesApi, filesApi, projectsApi } from "../lib/api";
+import { categoryOptions, matchesCategory } from "../lib/anomalyCategory";
 import { resolveAnomalyText } from "../lib/anomalyText";
 import { severityClass } from "../lib/format";
 import { useScopeStore } from "../stores/useScopeStore";
@@ -17,27 +18,6 @@ const STATUS_KEY: Record<AnomalyStatus, string> = {
 };
 const SEV_KEY: Record<string, string> = { high: "redacteur.sevHigh", medium: "redacteur.sevMedium", low: "redacteur.sevLow" };
 
-// Liste fixe des catégories d'anomalie (parité preview), affichées même sans occurrence.
-const TYPE_OPTIONS: string[] = [
-  "script",
-  "granule",
-  "texte",
-  "ordre_taches",
-  "tache_induite",
-  "orthographe",
-  "rechange",
-  "outillage",
-  "infrastructure",
-  "entete",
-  "securite",
-  "preliminaire",
-  "valeur_numerique",
-  "serrage",
-  "complementaire",
-  "illustration",
-  "personnalisee",
-];
-
 // Niveau de confiance IA porté par l'anomalie → libellé humain (parité preview `_confLabel`).
 function confLabel(c: string | null | undefined): string {
   if (c === "elevee") return "confiance élevée";
@@ -47,11 +27,11 @@ function confLabel(c: string | null | undefined): string {
 }
 
 export function Redacteur() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const presel = useScopeStore((s) => s.redacteurProjectId);
   const [pid, setPid] = useState<string>(presel ?? "");
-  const [fType, setFType] = useState("");
+  const [fCategory, setFCategory] = useState("");
   const [fSev, setFSev] = useState("");
   const [fConf, setFConf] = useState("");
   const [fStatus, setFStatus] = useState("");
@@ -62,7 +42,8 @@ export function Redacteur() {
   const anomaliesQuery = useQuery<AnomalyOut[]>({ queryKey: ["anomalies", pid], queryFn: () => anomaliesApi.list(pid), enabled: !!pid });
 
   const setStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: AnomalyStatus }) => anomaliesApi.setStatus(id, status),
+    mutationFn: ({ id, status, feedback }: { id: string; status: AnomalyStatus; feedback?: string }) =>
+      anomaliesApi.setStatus(id, status, feedback),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["anomalies", pid] }),
   });
   const bulk = useMutation({
@@ -76,10 +57,22 @@ export function Redacteur() {
     return m;
   }, [filesQuery.data]);
 
-  const anomalies = (anomaliesQuery.data ?? []).filter((a) => a.type !== "dmc_missing");
+  const anomalies = useMemo(
+    () => (anomaliesQuery.data ?? []).filter((a) => a.type !== "dmc_missing"),
+    [anomaliesQuery.data],
+  );
+
+  // Options du filtre « Catégorie » = Sujets réellement présents dans le projet
+  // (cf. `lib/anomalyCategory`). Calculées sur les anomalies NON filtrées pour
+  // que le menu ne rétrécisse pas au fil des sélections.
+  const catOptions = useMemo(
+    () => categoryOptions(anomalies, i18n.language, t("redacteur.filterNoCategory")),
+    [anomalies, i18n.language, t],
+  );
+
   const filtered = anomalies.filter(
     (a) =>
-      (!fType || a.type === fType) &&
+      matchesCategory(a, fCategory) &&
       (!fSev || a.severity === fSev) &&
       (!fConf || a.confidence === fConf) &&
       (!fStatus || a.status === fStatus),
@@ -129,7 +122,7 @@ export function Redacteur() {
       {pid && (
         <div className="card">
           <div className="row">
-            <Filter value={fType} onChange={setFType} label={t("redacteur.filterCategory")} options={TYPE_OPTIONS.map((ty) => [ty, t(`projects.kpi.type.${ty}`)])} allLabel={t("redacteur.filterAll")} />
+            <Filter value={fCategory} onChange={setFCategory} label={t("redacteur.filterCategory")} options={catOptions} allLabel={t("redacteur.filterAll")} />
             <Filter value={fSev} onChange={setFSev} label={t("redacteur.filterSeverity")} options={["high", "medium", "low"].map((s) => [s, t(SEV_KEY[s] ?? s)])} allLabel={t("redacteur.filterAll")} />
             <Filter value={fConf} onChange={setFConf} label={t("redacteur.filterConfidence")} options={[["elevee", t("redacteur.confHigh")], ["moyenne", t("redacteur.confMedium")], ["faible", t("redacteur.confLow")]]} allLabel={t("redacteur.filterAll")} />
             <Filter value={fStatus} onChange={setFStatus} label={t("redacteur.filterStatus")} options={STATUSES.map((s) => [s, t(STATUS_KEY[s])])} allLabel={t("redacteur.filterAll")} />
@@ -164,7 +157,11 @@ export function Redacteur() {
               </div>
               <div className="red-anomalies-wrap">
                 {items.map((a) => (
-                  <AnomalyRow key={a.id} a={a} onStatus={(status) => setStatus.mutate({ id: a.id, status })} />
+                  <AnomalyRow
+                    key={a.id}
+                    a={a}
+                    onStatus={(status, feedback) => setStatus.mutate({ id: a.id, status, feedback })}
+                  />
                 ))}
               </div>
             </div>
@@ -189,25 +186,51 @@ function Filter({ value, onChange, label, options, allLabel }: { value: string; 
   );
 }
 
-function AnomalyRow({ a, onStatus }: { a: AnomalyOut; onStatus: (s: AnomalyStatus) => void }) {
+function AnomalyRow({
+  a,
+  onStatus,
+}: {
+  a: AnomalyOut;
+  onStatus: (s: AnomalyStatus, feedback?: string) => void;
+}) {
   const { t } = useTranslation();
   const message = resolveAnomalyText(t, a.message, a.message_key, a.message_params_json);
   const suggestion = resolveAnomalyText(t, a.suggestion, a.suggestion_key, a.suggestion_params_json);
+  const [feedback, setFeedback] = useState(a.feedback ?? "");
+  const rejected = a.status === "rejected";
   return (
     <div className="red-anomaly">
       <div className="red-anomaly-head">
-        <span className="badge">{t(`projects.kpi.type.${a.type}`)}</span>
+        {a.category && <span className="badge">{a.category}</span>}
         <span className={`badge ${severityClass(a.severity)}`}>{a.severity}</span>
         {a.confidence && <span className="badge off">{confLabel(a.confidence)}</span>}
-        <select className="red-status-select" value={a.status} onChange={(e) => onStatus(e.target.value as AnomalyStatus)}>
+        <select
+          className={`red-status-select st-${a.status}`}
+          value={a.status}
+          onChange={(e) => onStatus(e.target.value as AnomalyStatus)}
+        >
           {STATUSES.map((s) => (
             <option key={s} value={s}>{t(STATUS_KEY[s])}</option>
           ))}
         </select>
       </div>
       <div className="red-anomaly-msg">{message}</div>
-      {a.location && <div className="red-anomaly-loc">📍 {a.location}</div>}
+      {a.location && <div className="red-anomaly-loc">{a.location}</div>}
       {suggestion && <div className="red-anomaly-suggestion">→ {suggestion}</div>}
+      {rejected && (
+        <input
+          className="input red-anomaly-feedback"
+          placeholder={t("redacteur.feedbackPlaceholder")}
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          onBlur={() => {
+            if (feedback !== (a.feedback ?? "")) onStatus("rejected", feedback);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+        />
+      )}
     </div>
   );
 }

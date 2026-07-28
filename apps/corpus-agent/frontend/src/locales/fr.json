@@ -1,7 +1,7 @@
 {
   "app.title": "Corpus Agent",
   "app.version": "v4",
-  "app.titleTooltip": "Permet de piloter la conformité du contenu d'un corpus documentaire à partir de règles prédéfinies et de règles custom. L'opérationnel garde la main sur les modifications de fichier pour assurer une intervention humaine et un contrôle métier.",
+  "app.titleTooltip": "Permet de piloter la conformité du contenu d'un corpus documentaire à partir d'une checklist de règles personnalisées jugées par IA. L'opérationnel garde la main sur les modifications de fichier pour assurer une intervention humaine et un contrôle métier.",
   "nav.manager": "Tableau de bord",
   "nav.projects": "Projets",
   "nav.redacteur": "Vue Rédacteur",

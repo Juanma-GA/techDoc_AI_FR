@@ -19,7 +19,6 @@ from app.db.models import Anomaly, Project
 from app.db.session import get_db
 from app.schemas import AnomalyBulkStatusIn, AnomalyBulkStatusOut, AnomalyOut, AnomalyStatusIn
 
-
 router = APIRouter(tags=["anomalies"])
 
 
@@ -74,6 +73,8 @@ def bulk_update_status(
     for a in rows:
         a.status = body.status
         a.resolved_at = now
+        if body.feedback is not None:
+            a.feedback = body.feedback
     db.commit()
     return AnomalyBulkStatusOut(updated=len(rows), status=body.status)
 
@@ -97,6 +98,8 @@ def update_anomaly_status(
         )
     a.status = body.status
     a.resolved_at = datetime.now(timezone.utc) if body.status in ("fixed", "rejected") else None
+    if body.feedback is not None:
+        a.feedback = body.feedback
     db.commit()
     db.refresh(a)
     return a
@@ -112,17 +115,19 @@ def export_anomalies_csv(project_id: uuid.UUID, db: Session = Depends(get_db)) -
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";")
     writer.writerow([
-        "id", "type", "severity", "status", "message", "suggestion",
-        "location", "created_at", "resolved_at",
+        "id", "type", "category", "severity", "status", "message", "suggestion",
+        "feedback", "location", "created_at", "resolved_at",
     ])
     for a in project.anomalies:
         writer.writerow([
             str(a.id),
             a.type,
+            a.category or "",
             a.severity,
             a.status,
             (a.message or "").replace("\n", " "),
             (a.suggestion or "").replace("\n", " "),
+            (a.feedback or "").replace("\n", " "),
             a.location or "",
             a.created_at.isoformat() if a.created_at else "",
             a.resolved_at.isoformat() if a.resolved_at else "",

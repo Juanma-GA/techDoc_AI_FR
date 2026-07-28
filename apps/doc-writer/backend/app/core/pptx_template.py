@@ -32,15 +32,29 @@ from typing import Iterator
 from lxml import etree  # type: ignore[import-untyped]
 from pptx import Presentation  # type: ignore[import-untyped]
 from pptx.enum.shapes import MSO_SHAPE_TYPE  # type: ignore[import-untyped]
+from pptx.enum.text import PP_ALIGN  # type: ignore[import-untyped]
 
 
 PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z0-9_\-\.]+)\s*\}\}")
-# 3 X ou plus consecutifs (majuscule OU minuscule), isole par des limites de
-# mot (ainsi "EXXON" ou "OXXXY" ne matchent pas). Case-insensitive intentionnel
-# pour accepter les conventions "XXX", "xxx", "Xxx" couramment utilisees.
-XXX_RE = re.compile(r"(?<![A-Za-z0-9])[Xx]{3,}(?![A-Za-z0-9])")
+# 1 X ou plus (majuscule OU minuscule), isole par des limites de mot (ainsi
+# "EXXON" ou "OXXXY" ne matchent pas car le X est colle a une lettre). Couvre
+# les conventions "X", "XX", "XXX" (et plus), majuscule ou minuscule. Le seuil
+# bas privilegie l'exhaustivite (lister tout, l'utilisateur elague via la
+# corbeille) ; un "x" isole de multiplication peut etre un faux positif assume.
+XXX_RE = re.compile(r"(?<![A-Za-z0-9])[Xx]+(?![A-Za-z0-9])")
 
 _A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+# Mapping consigne d'alignement (valeur string de l'API) -> enum python-pptx.
+# "" (ou cle absente) = auto : on PRESERVE l'alignement d'origine du template
+# au lieu d'en forcer un. Valeurs acceptees cote API : voir ALIGN_VALUES.
+_ALIGN_TO_PP = {
+    "left": PP_ALIGN.LEFT,
+    "center": PP_ALIGN.CENTER,
+    "right": PP_ALIGN.RIGHT,
+    "justify": PP_ALIGN.JUSTIFY,
+}
+ALIGN_VALUES = frozenset({"", "left", "center", "right", "justify"})
 
 
 @dataclass
@@ -53,6 +67,18 @@ class Zone:
     location: str       # libelle humain pour l'UI ("Slide 1 / Notes")
     target: str = ""    # Pour kind="llm" : path encode "s_<slide>_<shape_id>"
                         # ou "s_<slide>_<shape_id>_r<row>_c<col>" pour cellule.
+    active: bool = True  # False = zone exclue du remplissage a l'export
+                         # (persistee dans le cache du Document). Detection
+                         # != activation : l'utilisateur peut desactiver une
+                         # zone sans la supprimer.
+    instruction: str = ""  # Consignes libres de l'utilisateur pour cette zone,
+                           # transmises au LLM de remplissage en plus du label
+                           # (ex. "3 puces max", "ton commercial", "en anglais").
+    align: str = ""        # Alignement horizontal FORCE du texte ecrit dans la
+                           # zone : "left"|"center"|"right"|"justify". "" = auto
+                           # (preserve l'alignement d'origine du template). Ne
+                           # s'applique qu'aux zones target-based (llm/frame),
+                           # pas aux marqueurs regex remplaces inline.
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +212,11 @@ def _iter_paragraphs(prs) -> Iterator[tuple[object, dict]]:  # type: ignore[no-u
             geo_label = (
                 _nearest_label(shape_bbox, label_candidates) if shape_bbox else ""
             )
+            # Id de shape au MEME format que build_structure (pptx_llm_analysis)
+            # pour ancrer les zones regex a leur cadre (dedup avec le picker
+            # d'ajout manuel + surlignage SVG). "" si la shape n'a pas d'id.
+            shape_id = getattr(shape, "shape_id", None)
+            base_target = f"s_{slide_idx}_{shape_id}" if shape_id is not None else ""
 
             if shape.has_text_frame:
                 prev_label = ""
@@ -197,6 +228,7 @@ def _iter_paragraphs(prs) -> Iterator[tuple[object, dict]]:  # type: ignore[no-u
                         "prev_label": prev_label,
                         "table_label": "",
                         "geo_label": geo_label,
+                        "shape_target": base_target,
                     }
                     text = _para_text(para).strip()
                     if text:
@@ -229,6 +261,11 @@ def _iter_paragraphs(prs) -> Iterator[tuple[object, dict]]:  # type: ignore[no-u
                             if p and p != own
                         ]
                         table_lbl = " / ".join(parts)
+                        cell_target = (
+                            f"{base_target}_r{row_idx}_c{col_idx}"
+                            if base_target
+                            else ""
+                        )
                         for para in cell.text_frame.paragraphs:
                             yield para, {
                                 "slide_index": slide_idx,
@@ -237,6 +274,7 @@ def _iter_paragraphs(prs) -> Iterator[tuple[object, dict]]:  # type: ignore[no-u
                                 "prev_label": "",
                                 "table_label": table_lbl,
                                 "geo_label": geo_label,
+                                "shape_target": cell_target,
                             }
 
         if slide.has_notes_slide:
@@ -333,6 +371,7 @@ def extract_zones(path: str) -> list[Zone]:
                         slide_title=ctx["slide_title"],
                         label=label,
                         location=ctx["location"],
+                        target=ctx.get("shape_target", ""),
                     )
                 )
             else:
@@ -345,6 +384,7 @@ def extract_zones(path: str) -> list[Zone]:
                         slide_title=ctx["slide_title"],
                         label=f"{{{{ {key} }}}}",
                         location=ctx["location"],
+                        target=ctx.get("shape_target", ""),
                     )
                 )
     return zones
@@ -450,23 +490,170 @@ def _resolve_target(prs, target: str):  # type: ignore[no-untyped-def]
     return target_shape
 
 
-def _write_text(obj, text: str) -> None:  # type: ignore[no-untyped-def]
-    """Ecrit `text` dans le text_frame d'un Shape ou d'une Cell. Les sauts de
-    ligne deviennent des paragraphes (limitation python-pptx pour ce chemin).
-    Le style precedent est perdu (acceptable pour cellules vides / boites
-    de texte placeholder)."""
+def _qn(tag: str) -> str:
+    """Nom qualifie Clark `{ns}tag` du namespace DrawingML (a:)."""
+    return f"{{{_A_NS}}}{tag}"
+
+
+def _as_rpr_xml(node) -> bytes:  # type: ignore[no-untyped-def]
+    """Clone un node de proprietes de run (a:defRPr / a:endParaRPr) en le
+    RENOMMANT en a:rPr : meme schema d'attributs (police/taille/couleur/bold),
+    mais seul a:rPr est valide comme proprietes d'un run."""
+    clone = etree.fromstring(etree.tostring(node))
+    clone.tag = _qn("rPr")
+    return etree.tostring(clone)
+
+
+def _capture_style_rpr(tf, obj) -> bytes | None:  # type: ignore[no-untyped-def]
+    """Style typographique (police/taille/couleur/bold) a cloner sur le contenu
+    ecrit, EN CASCADE pour FORCER le respect du style du template meme quand la
+    cible est VIDE (sinon retombee sur la police par defaut du master ->
+    'polices/tailles non homogenes') :
+
+      1. a:rPr du 1er run existant (cas nominal : cible deja stylee) ;
+      2. a:pPr/a:defRPr du 1er paragraphe (proprietes de run par defaut) ;
+      3. a:endParaRPr du 1er paragraphe (PowerPoint y stocke la police/taille
+         voulue d'un paragraphe VIDE -> cas critique des cellules cibles vides) ;
+      4. cellule de table : 1er a:rPr trouve dans la table parente (herite du
+         style des cellules soeurs du tableau).
+
+    Renvoie le XML (bytes) d'un node a:rPr clonable, ou None si rien trouve
+    (on laisse alors le rendu hardcode au master, comportement historique).
+    """
+    rpr_path = f"{_qn('r')}/{_qn('rPr')}"
+    for para in tf.paragraphs:
+        p = para._p
+        run_rpr = p.find(rpr_path)
+        if run_rpr is not None:
+            return etree.tostring(run_rpr)
+        def_rpr = p.find(f"{_qn('pPr')}/{_qn('defRPr')}")
+        if def_rpr is not None:
+            return _as_rpr_xml(def_rpr)
+        end_rpr = p.find(_qn("endParaRPr"))
+        if end_rpr is not None:
+            return _as_rpr_xml(end_rpr)
+        break
+    # Fallback cellule de table : style d'une cellule soeur du meme tableau.
+    tc = getattr(obj, "_tc", None)
+    if tc is not None:
+        node = tc.getparent()
+        tbl_tag = _qn("tbl")
+        while node is not None and node.tag != tbl_tag:
+            node = node.getparent()
+        if node is not None:
+            sib = node.find(f".//{rpr_path}")
+            if sib is not None:
+                return etree.tostring(sib)
+    return None
+
+
+def _write_text(obj, text: str, align: str = "") -> None:  # type: ignore[no-untyped-def]
+    """Ecrit `text` dans le text_frame d'un Shape ou d'une Cell en FORCANT le
+    style typographique du template (police, taille, couleur, bold) ET
+    l'alignement horizontal du 1er paragraphe.
+
+    Sans la restitution du rPr, `text_frame.text = ...` rebatit des runs sans
+    rPr et le rendu retombe sur la police par defaut du master -> mosaique
+    de polices/tailles d'une zone a l'autre ('police non homogene'). Le style
+    est capture en cascade par `_capture_style_rpr` (run -> defRPr -> endParaRPr
+    -> cellule soeur) pour couvrir les cibles VIDES qui n'ont aucun run.
+
+    `tf.text = ...` reconstruit aussi les paragraphes et PERD leur `pPr` (donc
+    l'alignement defini directement sur le paragraphe du template). On capture
+    l'alignement d'origine avant reset pour le restituer.
+
+    `align` (optionnel : "left"|"center"|"right"|"justify") FORCE un alignement
+    et prime sur l'alignement d'origine. "" = auto (preserve l'origine).
+    """
     if not hasattr(obj, "text_frame"):
         return
+    tf = obj.text_frame
+
+    # Alignement d'origine du 1er paragraphe (perdu par tf.text = ...).
+    orig_align = None
+    for para in tf.paragraphs:
+        try:
+            orig_align = para.alignment
+        except (KeyError, ValueError):  # algn inconnu/non mappe -> auto
+            orig_align = None
+        break
+
+    # Style a restituer (cascade anti-retombee master), clone XML pour
+    # reappliquer apres reset (sinon le node serait deplace au lieu d'etre copie).
+    first_rpr_xml = _capture_style_rpr(tf, obj)
+
     try:
-        obj.text_frame.text = text
+        tf.text = text or ""
     except (AttributeError, ValueError):
-        pass
+        return
+
+    # Alignement : la consigne explicite prime ; sinon on restitue l'origine
+    # (None = on ne touche pas -> herite du placeholder/master comme avant).
+    target_align = _ALIGN_TO_PP.get(align) if align else orig_align
+    if target_align is not None:
+        for para in tf.paragraphs:
+            para.alignment = target_align
+
+    if first_rpr_xml is None:
+        return
+
+    # Re-applique le style preserve sur tous les runs des paragraphes
+    # nouvellement crees par tf.text = ... (un par ligne).
+    for para in tf.paragraphs:
+        for run in para.runs:
+            existing_rpr = run._r.find(f"{{{_A_NS}}}rPr")
+            if existing_rpr is not None:
+                run._r.remove(existing_rpr)
+            cloned_rpr = etree.fromstring(first_rpr_xml)
+            run._r.insert(0, cloned_rpr)
+
+
+def _is_static_label(text: str) -> bool:
+    """Texte fixe traduisible : non vide, contient au moins une lettre, et SANS
+    marqueur regex ({{cle}} / XXX) -> sinon c'est une zone geree par le fill."""
+    if not text or not text.strip():
+        return False
+    if PLACEHOLDER_RE.search(text) or XXX_RE.search(text):
+        return False
+    return any(ch.isalpha() for ch in text)
+
+
+def _collect_static_labels(prs, target_ids: set[str]):  # type: ignore[no-untyped-def]
+    """Liste des (objet text_frame, texte) des libelles FIXES du template : tout
+    text_box / cellule qui n'est PAS une cible de zone et ne porte pas de
+    marqueur. Sert a la traduction des en-tetes/etiquettes vers la langue de
+    sortie."""
+    items: list = []
+    for slide_idx, slide in enumerate(prs.slides, start=1):
+        for shape in _iter_shapes_recursive(slide.shapes):
+            sid = getattr(shape, "shape_id", None)
+            if sid is None:
+                continue
+            base = f"s_{slide_idx}_{sid}"
+            if shape.has_table:
+                for r_idx, row in enumerate(shape.table.rows):
+                    for c_idx, cell in enumerate(row.cells):
+                        if f"{base}_r{r_idx}_c{c_idx}" in target_ids:
+                            continue
+                        txt = cell.text_frame.text
+                        if _is_static_label(txt):
+                            items.append((cell, txt))
+            elif shape.has_text_frame:
+                if base in target_ids:
+                    continue
+                txt = shape.text_frame.text
+                if _is_static_label(txt):
+                    items.append((shape, txt))
+    return items
 
 
 def fill_zones(
     path: str,
     mapping: dict[str, str],
     llm_zones: list[Zone] | None = None,
+    *,
+    erase_unmapped_regex: bool = False,
+    translate=None,  # type: ignore[no-untyped-def]
 ) -> bytes:
     """Remplit le template :
 
@@ -474,10 +661,27 @@ def fill_zones(
       Compteur sequentiel partage avec `extract_zones` -> les ids `z_N` matchent.
     - Pass 2 (si `llm_zones` fourni) : zones LLM-detected, ecriture directe
       dans le shape ou la cellule pointee par `Zone.target`.
+    - Pass 3 (si `translate` fourni) : traduit les libelles FIXES du template
+      (en-tetes, etiquettes hors zones) vers la langue de sortie, pour un output
+      100% dans la langue choisie. `translate(list[str]) -> list[str]`.
 
-    Zone ids absents du mapping : laisses tels quels.
+    Zone ids absents du mapping :
+    - `erase_unmapped_regex=False` (defaut) : marqueurs laisses tels quels
+      dans le pptx final.
+    - `erase_unmapped_regex=True` : marqueurs remplaces par chaine vide. A
+      utiliser quand l'appelant garantit que toutes les zones a conserver
+      sont dans `mapping` (sinon on efface aussi les zones supprimees du
+      cache par l'utilisateur -> coherent avec son intention).
     """
     prs = Presentation(path)
+
+    # Pass 3 (collecte AVANT modifications) : on capture les libelles fixes
+    # avant que les passes 1/2 ne touchent le document, puis on les traduit a la
+    # fin. Les cibles de zones sont exclues (elles sont remplies, pas traduites).
+    static_items = []
+    if translate is not None:
+        target_ids = {z.target for z in (llm_zones or []) if getattr(z, "target", "")}
+        static_items = _collect_static_labels(prs, target_ids)
 
     # Pass 1 : regex zones.
     counter = 0
@@ -494,18 +698,48 @@ def fill_zones(
             zid = f"z_{counter}"
             if zid in mapping:
                 replacements[i] = mapping[zid]
+            elif erase_unmapped_regex:
+                replacements[i] = ""
         if replacements:
             _apply_replacements_to_paragraph(para, full, matches, replacements)
 
-    # Pass 2 : LLM zones (target-based).
+    # Pass 2 : LLM zones (target-based). On loggue les targets non resolus
+    # plutot que de skipper en silence (utile pour diagnostiquer un cache de
+    # zones stale apres modif du template ou un id de target malforme).
     if llm_zones:
+        import logging as _logging
+        _log = _logging.getLogger("doc_writer.pptx_fill")
         for zone in llm_zones:
-            if zone.id not in mapping or not mapping[zone.id]:
+            if zone.id not in mapping:
+                continue
+            # Contenu vide : si la zone est ACTIVE, on l'ecrit quand meme ('')
+            # pour VIDER la cible (l'utilisateur ne veut pas garder une zone
+            # sans contenu trouve dans le resultat). Si la zone est inactive,
+            # on preserve le contenu d'origine du template (contrat existant).
+            if not mapping[zone.id] and not getattr(zone, "active", True):
                 continue
             obj = _resolve_target(prs, zone.target)
             if obj is None:
+                _log.warning(
+                    "Zone LLM non ecrite : target %r introuvable dans le pptx "
+                    "(label=%r). Cache stale ou template modifie ?",
+                    zone.target, zone.label[:80],
+                )
                 continue
-            _write_text(obj, mapping[zone.id])
+            _write_text(obj, mapping[zone.id], align=getattr(zone, "align", ""))
+
+    # Pass 3 : traduction des libelles fixes (collectes avant les passes 1/2,
+    # donc intacts). On preserve style + alignement (_write_text, align="").
+    if translate is not None and static_items:
+        originals = [txt for _obj, txt in static_items]
+        try:
+            translated = translate(originals)
+        except Exception:  # noqa: BLE001
+            translated = originals
+        if isinstance(translated, list) and len(translated) == len(static_items):
+            for (obj, orig), tr in zip(static_items, translated):
+                if isinstance(tr, str) and tr.strip() and tr.strip() != orig.strip():
+                    _write_text(obj, tr)
 
     buf = io.BytesIO()
     prs.save(buf)

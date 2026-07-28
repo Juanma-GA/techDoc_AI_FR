@@ -1,6 +1,6 @@
 """Routes /api/v1/admin — stats globales + operations de reset.
 
-Conforme au pattern partage par ftm et pdf-reviewer : un onglet "Donnees"
+Conforme au pattern partage par corpus-agent et pdf-reviewer : un onglet "Donnees"
 dans l'UI consomme ces routes pour afficher les compteurs et offrir des
 boutons de reinitialisation. Mistral settings et fichiers du venv ne sont
 pas touches.

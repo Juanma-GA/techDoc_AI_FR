@@ -81,7 +81,15 @@ def create_app() -> FastAPI:
     _validate_security_posture()
 
     app = FastAPI(
-        title=settings.app_name,
+        title="Corpus Agent",
+        summary="Contrôle de conformité documentaire d'un corpus multi-fichiers.",
+        description=(
+            "Analyse un corpus de documents (.docx, .doc, .pdf, .xlsx/.xlsm, "
+            ".xml/S1000D) contre une checklist de règles personnalisées "
+            "importables (Excel), jugées par IA sur chaque document. Détection "
+            "d'anomalies, KPIs, et chat RAG assisté par Mistral. LLM désactivable "
+            "(analyse alors sans anomalie)."
+        ),
         version=settings.app_version,
         debug=settings.debug,
         docs_url="/api/v1/docs",

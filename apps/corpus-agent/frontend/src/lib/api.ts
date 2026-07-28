@@ -16,7 +16,12 @@ import type {
   AnomalyStatus,
   ChatMessageOut,
   ChatSessionOut,
+  ChecklistImportMode,
+  ChecklistImportResult,
+  CorpusPathOut,
+  CustomRule,
   FileOut,
+  FolderListOut,
   HealthResponse,
   I18nLangOut,
   I18nListOut,
@@ -28,10 +33,11 @@ import type {
   ProjectUpdate,
   ReferenceMappingIn,
   ReferenceOut,
-  RulesCatalogOut,
   RulesLegacyOut,
   SheetColumnOut,
+  SheetInspectOut,
   SheetPreviewOut,
+  SpecExtractOut,
   TestConnectionOut,
   UploadResult,
 } from "./types";
@@ -151,6 +157,14 @@ export const filesApi = {
   },
   remove: (pid: string, fileId: string) =>
     api.delete<void>(`/projects/${pid}/files/${fileId}`),
+  // Corpus par dossier connecte (chemin local, ex. OneDrive synchronise).
+  getFolder: (pid: string) => api.get<CorpusPathOut>(`/projects/${pid}/corpus-folder`),
+  listFolder: (pid: string, path: string) =>
+    api.post<FolderListOut>(`/projects/${pid}/files/list-folder`, { path }),
+  // `only` (chemins relatifs) restreint l'import a une selection ; absent = tout.
+  syncFolder: (pid: string, path: string, only?: string[]) =>
+    api.post<UploadResult>(`/projects/${pid}/files/sync-folder`, only ? { path, only } : { path }),
+  disconnectFolder: (pid: string) => api.delete<void>(`/projects/${pid}/corpus-folder`),
 };
 
 export const referenceApi = {
@@ -188,16 +202,25 @@ export const referenceApi = {
 };
 
 export const analysisApi = {
-  run: (pid: string) => api.post<AnalysisRunOut>(`/projects/${pid}/analysis/run`),
+  // `fileIds` optionnel : restreint l'analyse a un echantillon de fichiers
+  // (reanalyse ciblee). Vide / absent = tout le projet.
+  run: (pid: string, fileIds?: string[]) =>
+    api.post<AnalysisRunOut>(
+      `/projects/${pid}/analysis/run`,
+      fileIds && fileIds.length ? { file_ids: fileIds } : undefined,
+    ),
   reset: (pid: string) => api.delete<void>(`/projects/${pid}/analysis/reset`),
 };
 
 export const anomaliesApi = {
   list: (pid: string) => api.get<AnomalyOut[]>(`/projects/${pid}/anomalies`),
-  setStatus: (id: string, status: AnomalyStatus) =>
-    api.patch<AnomalyOut>(`/anomalies/${id}`, { status }),
-  bulkStatus: (ids: string[], status: AnomalyStatus) =>
-    api.post<{ updated: number; status: string }>("/anomalies/bulk-status", { ids, status }),
+  setStatus: (id: string, status: AnomalyStatus, feedback?: string) =>
+    api.patch<AnomalyOut>(`/anomalies/${id}`, feedback === undefined ? { status } : { status, feedback }),
+  bulkStatus: (ids: string[], status: AnomalyStatus, feedback?: string) =>
+    api.post<{ updated: number; status: string }>(
+      "/anomalies/bulk-status",
+      feedback === undefined ? { ids, status } : { ids, status, feedback },
+    ),
   exportCsv: (pid: string) =>
     downloadBlob(`/projects/${pid}/anomalies/export.csv`, `anomalies-${pid}.csv`),
 };
@@ -218,8 +241,52 @@ export const settingsApi = {
   read: () => api.get<MistralSettingsOut>("/settings/mistral"),
   write: (body: MistralSettingsIn) => api.post<MistralSettingsOut>("/settings/mistral", body),
   test: () => api.post<TestConnectionOut>("/settings/mistral/test"),
-  rulesCatalog: () => api.get<RulesCatalogOut>("/settings/rules/catalog"),
   rulesLegacy: () => api.get<RulesLegacyOut>("/settings/rules"),
+  // Ecrit la liste complete des regles personnalisees (edition / suppression /
+  // validation) via l'endpoint sparse : `rules:{}` = aucun override de catalogue,
+  // seules les regles custom sont remplacees. Le backend preserve le reste.
+  saveCustomRules: (rules: CustomRule[]) =>
+    api.put<RulesLegacyOut>("/settings/rules/sparse", { rules: {}, regles_personnalisees: rules }),
+  checklistTemplateUrl: () => `${BASE_URL}/settings/rules/checklist/template`,
+  rulesInspect: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return uploadForm<SheetInspectOut>("/settings/rules/checklist/inspect", form);
+  },
+  // Genere des regles proposees par l'IA a partir d'un document de reference.
+  rulesFromSpec: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return uploadForm<SpecExtractOut>("/settings/rules/from-spec", form);
+  },
+  importChecklist: (
+    file: File,
+    opts: {
+      sheet?: string;
+      header_row?: number;
+      topic_col?: number | null;
+      check_col?: number | null;
+      context_cols?: number[];
+      severity_col?: number | null;
+      handling_col?: number | null;
+      zone_col?: number | null;
+      mode: ChecklistImportMode;
+    },
+  ) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (opts.sheet) form.append("sheet", opts.sheet);
+    form.append("header_row", String(opts.header_row ?? 0));
+    if (opts.topic_col != null) form.append("topic_col", String(opts.topic_col));
+    if (opts.check_col != null) form.append("check_col", String(opts.check_col));
+    if (opts.severity_col != null) form.append("severity_col", String(opts.severity_col));
+    if (opts.handling_col != null) form.append("handling_col", String(opts.handling_col));
+    if (opts.zone_col != null) form.append("zone_col", String(opts.zone_col));
+    form.append("context_cols", JSON.stringify(opts.context_cols ?? []));
+    form.append("mode", opts.mode);
+    return uploadForm<ChecklistImportResult>("/settings/rules/checklist/import", form);
+  },
+  validateAllRules: () => api.post<{ validated: number }>("/settings/rules/validate-all"),
 };
 
 export const chatApi = {
@@ -234,7 +301,11 @@ export type ChatStreamHandlers = {
   onSession?: (info: { session_id: string; title?: string }) => void;
   onToken?: (delta: string) => void;
   onDone?: () => void;
-  onError?: (message: string) => void;
+  // `code` (ex. MISTRAL_NOT_CONFIGURED, LLM_DISABLED) permet a l'appelant de
+  // traduire via i18n plutot que d'afficher le `message` brut du backend
+  // (souvent en dur, non traduit) ; absent pour les erreurs de transport
+  // (timeout, reseau) qui n'ont pas de code stable.
+  onError?: (message: string, code?: string) => void;
 };
 
 /**
@@ -280,7 +351,11 @@ export function streamAsk(
     } catch (err) {
       clearIdleTimeout();
       if (timedOut) {
-        handlers.onError?.("Le flux a expire (aucune reponse du serveur).");
+        // Message de repli neutre (anglais) : la traduction reelle se fait
+        // cote appelant via `code` (cf. useSseChat) — cette lib reste un
+        // client de transport pur, sans dependance a i18n (qui importe deja
+        // `i18nApi` depuis ce module : un import croise creerait un cycle).
+        handlers.onError?.("Stream timed out (no response from server).", "CLIENT_STREAM_TIMEOUT_CONNECT");
         return;
       }
       if (controller.signal.aborted) return;
@@ -289,18 +364,20 @@ export function streamAsk(
     }
     if (!response.ok) {
       let detail = response.statusText;
+      let code: string | undefined;
       try {
         const payload = (await response.json()) as ApiErrorPayload;
         detail = payload.message || detail;
+        code = payload.code;
       } catch {
         /* noop */
       }
-      handlers.onError?.(detail);
+      handlers.onError?.(detail, code);
       return;
     }
     const reader = response.body?.getReader();
     if (!reader) {
-      handlers.onError?.("Aucun flux disponible");
+      handlers.onError?.("No stream available.", "CLIENT_NO_STREAM");
       return;
     }
     const decoder = new TextDecoder("utf-8");
@@ -320,7 +397,7 @@ export function streamAsk(
       }
     } catch (err) {
       if (timedOut) {
-        handlers.onError?.("Le flux a expire (aucune donnee recue).");
+        handlers.onError?.("Stream timed out (no data received).", "CLIENT_STREAM_TIMEOUT_READ");
       } else if (!controller.signal.aborted) {
         handlers.onError?.(err instanceof Error ? err.message : String(err));
       }

@@ -92,6 +92,8 @@ def test_analyse_template_skips_unknown_targets():
     tb.text_frame.text = ""
     path = _save(prs)
 
+    from app.db.session import SessionLocal
+
     fake_mistral = MagicMock()
     real_dump = dump_template(path)
     real_target = real_dump["slides"][0]["shapes"][0]["id"]
@@ -103,8 +105,15 @@ def test_analyse_template_skips_unknown_targets():
         ]
     }
 
-    zones = analyse_template(path, fake_mistral)
+    # `db` sert uniquement a lire le prompt systeme (get_prompt) : DB de test
+    # vide -> fallback sur prompts.DEFAULTS['pptx_analysis'].
+    db = SessionLocal()
+    try:
+        zones, dropped = analyse_template(path, fake_mistral, db)
+    finally:
+        db.close()
     assert len(zones) == 1
+    assert dropped == 0
     assert zones[0].kind == "llm"
     assert zones[0].target == real_target
 

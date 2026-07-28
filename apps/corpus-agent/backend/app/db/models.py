@@ -76,6 +76,11 @@ class Project(Base):
     # Ligne d'en-tête choisie par onglet de la BASL — JSON {onglet: ligne(1-based)}.
     # NULL = détection auto. Aligne les libellés de colonnes dans l'éditeur de mapping.
     basl_header_rows: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Dossier corpus connecté — chemin local (typiquement un dossier OneDrive
+    # synchronisé). Alternative à l'upload manuel : `POST /files/sync-folder`
+    # ingère tous les fichiers de ce dossier via la même logique que l'upload.
+    # NULL = aucun dossier connecté.
+    corpus_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     files: Mapped[list["File"]] = relationship(
@@ -100,6 +105,13 @@ class File(Base):
         Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     current_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Chemin relatif au dossier connecte (POSIX, ex. "sous-dossier/doc.txt"),
+    # identifiant stable pour un fichier ingere via sync-folder. NULL pour un
+    # upload manuel (pas de notion de dossier). Cle d'identite/dedup dans
+    # `_ingest_file` -> deux fichiers de meme nom dans des sous-dossiers
+    # differents ne se confondent plus (cf. ecart corrige : collision par nom
+    # seul dans le mode dossier connecte).
+    rel_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
@@ -153,12 +165,18 @@ class Anomaly(Base):
         Uuid, ForeignKey("analysis_runs.id", ondelete="SET NULL"), nullable=True, index=True
     )
     type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # Categorie metier = « Sujet » de la regle checklist a l'origine de l'anomalie.
+    # Dimension de regroupement des KPI (le type est toujours `personnalisee`).
+    category: Mapped[str] = mapped_column(String(120), default="", server_default="", index=True)
     severity: Mapped[str] = mapped_column(String(20), default="medium", server_default="medium")
     # Niveau de confiance dans la recommandation : elevee | moyenne | faible.
     # Déterministe → elevee ; jugement IA → renvoyé par Mistral.
     confidence: Mapped[str] = mapped_column(String(20), default="elevee", server_default="elevee")
     message: Mapped[str] = mapped_column(Text, nullable=False)
     suggestion: Mapped[str] = mapped_column(Text, default="", server_default="")
+    # Motif libre saisi par le relecteur au moment ou il agit sur l'anomalie
+    # (typiquement le motif de rejet : faux positif, hors perimetre...).
+    feedback: Mapped[str] = mapped_column(Text, default="", server_default="")
     # Clés i18n + params JSON pour rendu côté front : si `message_key` est
     # présent, le front résout `t(message_key, params)` et utilise `message`
     # comme fallback. Pareil pour `suggestion_key`. NULL = anomalie pré-i18n

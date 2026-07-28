@@ -108,6 +108,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- Pre-fetch Inter TTF (best-effort, ignore les erreurs reseau) --------
+echo [setup] Verification de la police Inter pour les exports PDF...
+"%PYTHON%" -c "from app.core.fonts import ensure_inter; ensure_inter()" 2>nul
+if errorlevel 1 echo [info] Police Inter non telechargee, exports PDF en Helvetica.
+
 REM ---- Recherche d'un port libre (defaut %PORT%, sinon les suivants) -------
 set /a PORT_TRY=%PORT%
 set /a PORT_MAX=%PORT% + 20
@@ -128,8 +133,39 @@ exit /b 1
 if not "%PORT_TRY%"=="%PORT%" echo [info] Port %PORT% occupe -- bascule auto sur le port %PORT_TRY%.
 set "PORT=%PORT_TRY%"
 
+REM ---- Front React : on sert le build (dist) sur le meme port que le backend.
+REM  Rebuild AUTO si le dist est absent OU si une source front est plus recente
+REM  que le dernier build (helper _needs_rebuild.ps1). Restart instantane si
+REM  rien n'a change. Node portable (sans install admin) prefixe au PATH si present.
+set "FRONTEND_DIR=%APP_DIR%frontend"
+set "NODE_DIR="
+for /d %%D in ("%LOCALAPPDATA%\node-portable\node-v*-win-x64") do set "NODE_DIR=%%D"
+if defined NODE_DIR set "PATH=%NODE_DIR%;%PATH%"
+
+where pnpm >nul 2>nul
+if errorlevel 1 goto :front_ready
+
+set "NEED_BUILD=0"
+if not exist "%FRONTEND_DIR%\dist\index.html" set "NEED_BUILD=1"
+if "%NEED_BUILD%"=="0" if exist "%APP_DIR%_needs_rebuild.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%"
+    if errorlevel 1 set "NEED_BUILD=1"
+)
+if "%NEED_BUILD%"=="0" goto :front_ready
+
+echo [setup] Build du front React - dist absent ou sources modifiees, 5 a 30 s...
+pushd "%FRONTEND_DIR%"
+REM pnpm install UNIQUEMENT si node_modules absent : en reseau avec interception
+REM TLS, un install "a jour" retente chaque paquet pendant des minutes et bloque
+REM le lancement. Le build seul tourne hors-ligne quand node_modules est present.
+if not exist node_modules call pnpm install
+call pnpm build
+popd
+:front_ready
+
 echo.
-echo [run] UI : http://127.0.0.1:%PORT%/
+echo [run] React   : http://127.0.0.1:%PORT%/
+echo       Preview : http://127.0.0.1:%PORT%/preview  (acces manuel si besoin)
 echo       OpenAPI : http://127.0.0.1:%PORT%/api/v1/docs
 echo       Ctrl+C ici pour arreter.
 echo.

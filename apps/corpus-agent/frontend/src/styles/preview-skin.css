@@ -239,7 +239,13 @@ table.anomalies tr:hover td { background: var(--bg-2); }
 .red-anomaly-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
 .red-anomaly-msg { margin-bottom: 4px; }
 .red-anomaly-suggestion { color: var(--fg-dim); font-size: 0.85rem; margin-top: 4px; padding: 6px 8px; border-left: 2px solid var(--brand-light); background: rgba(37,99,235,0.05); border-radius: 4px; }
-.red-status-select { width: auto; min-width: 130px; padding: 4px 8px; font-size: 0.8rem; }
+.red-status-select { width: auto; min-width: 130px; padding: 4px 8px; font-size: 0.8rem; border-width: 1px; border-style: solid; font-weight: 600; }
+/* Couleur de la cellule d'etat du ticket, par statut (tokens, pas d'hex). */
+.red-status-select.st-open { border-color: var(--warning); color: var(--warning); }
+.red-status-select.st-acknowledged { border-color: var(--info); color: var(--info); }
+.red-status-select.st-fixed { border-color: var(--success); color: var(--success); }
+.red-status-select.st-rejected { border-color: var(--fg-dim); color: var(--fg-dim); font-weight: 400; }
+.red-anomaly-feedback { margin-top: 6px; width: 100%; font-size: 0.82rem; }
 
 /* Reference mapping (header-row picker + columns) */
 .ref-row { display: grid; grid-template-columns: 1fr 1fr 1fr 36px; gap: 8px; align-items: center; margin-bottom: 6px; }

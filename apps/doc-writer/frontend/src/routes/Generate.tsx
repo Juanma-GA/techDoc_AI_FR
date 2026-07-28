@@ -1,52 +1,64 @@
-import {
-  Button,
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  EmptyState,
-  MarkdownView,
-  MultiSelect,
-  Spinner,
-  Textarea,
-} from "@internal/ui";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { z } from "zod";
 
 import { ExportButtons } from "../components/ExportButtons";
-import { TemplatePanel } from "../components/TemplatePanel";
+import { useDictation } from "../hooks/useDictation";
 import {
   ApiClientError,
   documentsApi,
   sessionsApi,
+  settingsApi,
   streamAsk,
   type DocumentDto,
+  type SettingsDto,
 } from "../lib/api";
 import { useGenerateStore } from "../stores/useGenerateStore";
 
-const schema = z.object({
-  prompt: z.string().min(10, "min 10 caractères"),
-});
-type FormValues = z.infer<typeof schema>;
+const STATUS = {
+  idle: "",
+  streaming: "info",
+  done: "ok",
+  error: "danger",
+} as const;
 
+// Page Generation, pixel-identique au preview (renderGenerate).
 export function Generate() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const cancelRef = useRef<(() => void) | null>(null);
+  // Suivi du run en cours pour le recap "done" et le message stream vide.
+  const startedAtRef = useRef<number>(0);
+  const tokenCountRef = useRef<number>(0);
+  const firstTokenRef = useRef<boolean>(false);
+  const [prompt, setPrompt] = useState("");
+  // Dictee vocale (Voxtral) : le texte transcrit est ajoute au brief, que le
+  // flux de generation repartira ensuite dans les zones du template.
+  const dictation = useDictation((text) =>
+    setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text)),
+  );
+  const [feedback, setFeedback] = useState<
+    { kind: "ok" | "error"; text: string } | null
+  >(null);
 
   const {
     scopeDocIds,
     templateDocId,
+    styleDocId,
+    outputLang,
+    outputFormat,
+    length,
+    outputFilename,
     output,
     status,
-    errorMessage,
     currentSessionId,
     setScopeDocIds,
     setTemplateDocId,
+    setStyleDocId,
+    setOutputLang,
+    setOutputFormat,
+    setLength,
+    setOutputFilename,
     beginStream,
     appendToken,
     finishStream,
@@ -55,18 +67,36 @@ export function Generate() {
   } = useGenerateStore();
 
   const docsQuery = useQuery<DocumentDto[], ApiClientError>({
-    queryKey: ["documents"],
-    queryFn: documentsApi.list,
+    queryKey: ["documents", "source"],
+    queryFn: () => documentsApi.list("source"),
+  });
+  const templatesQuery = useQuery<DocumentDto[], ApiClientError>({
+    queryKey: ["documents", "template"],
+    queryFn: () => documentsApi.list("template"),
+  });
+  const stylesQuery = useQuery<DocumentDto[], ApiClientError>({
+    queryKey: ["documents", "style"],
+    queryFn: () => documentsApi.list("style"),
+  });
+  const settingsQuery = useQuery<SettingsDto, ApiClientError>({
+    queryKey: ["settings"],
+    queryFn: settingsApi.read,
   });
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { prompt: "" },
-  });
+  const docs = docsQuery.data ?? [];
+  const templates = templatesQuery.data ?? [];
+  const styles = stylesQuery.data ?? [];
+  const mistralReady = settingsQuery.data?.api_key_set ?? false;
+  const isStreaming = status === "streaming";
+
+  const templateDoc = templateDocId
+    ? templates.find((d) => d.id === templateDocId)
+    : undefined;
+  const templateFormat: "pptx" | "docx" | null = templateDoc
+    ? templateDoc.filename.toLowerCase().endsWith(".pptx")
+      ? "pptx"
+      : "docx"
+    : null;
 
   useEffect(
     () => () => {
@@ -75,139 +105,341 @@ export function Generate() {
     [],
   );
 
-  const onSubmit = handleSubmit(async (values) => {
-    try {
-      const session = await sessionsApi.create({
-        scope_doc_ids: scopeDocIds,
-        lang: i18n.language?.startsWith("en") ? "en" : "fr",
-        template_doc_id: templateDocId,
-      });
-      beginStream(session.id);
+  const toggleScope = (id: string) =>
+    setScopeDocIds(
+      scopeDocIds.includes(id)
+        ? scopeDocIds.filter((x) => x !== id)
+        : [...scopeDocIds, id],
+    );
 
-      const cancel = streamAsk(session.id, values.prompt, {
-        onToken: appendToken,
-        onDone: () => {
-          finishStream();
-          void qc.invalidateQueries({ queryKey: ["sessions"] });
-        },
-        onError: (message) => failStream(message),
-      });
-      cancelRef.current = cancel;
-    } catch (err) {
-      if (err instanceof ApiClientError) failStream(err.message);
-      else failStream(err instanceof Error ? err.message : String(err));
+  const onGenerate = async () => {
+    setFeedback(null);
+    if (prompt.trim().length < 10) {
+      setFeedback({ kind: "error", text: t("generate.tooShort") });
+      return;
     }
-  });
+    if (outputFormat === "template" && !templateDocId) {
+      setFeedback({ kind: "error", text: t("generate.templateRequired") });
+      return;
+    }
+    // Etape 1/4 : creation de la session.
+    setFeedback({ kind: "ok", text: t("generate.stepCreateSession") });
+    let session;
+    try {
+      session = await sessionsApi.create({
+        scope_doc_ids: scopeDocIds,
+        lang: outputLang,
+        output_format: outputFormat,
+        length,
+        template_doc_id: templateDocId,
+        style_doc_id: styleDocId,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof ApiClientError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      failStream(msg);
+      setFeedback({ kind: "error", text: msg });
+      return;
+    }
+    beginStream(session.id);
+    startedAtRef.current = Date.now();
+    tokenCountRef.current = 0;
+    firstTokenRef.current = false;
+    // Etape 2/4 : contact API Mistral (premier round-trip RAG).
+    setFeedback({ kind: "ok", text: t("generate.stepContactingMistral") });
+    const cancel = streamAsk(session.id, prompt, {
+      onSession: () => {
+        // Etape 3/4 : connexion etablie, on attend le premier token.
+        setFeedback({
+          kind: "ok",
+          text: t("generate.stepWaitingFirstToken"),
+        });
+      },
+      onToken: (delta) => {
+        if (!firstTokenRef.current) {
+          firstTokenRef.current = true;
+          // Etape 4/4 : streaming en cours.
+          setFeedback({ kind: "ok", text: t("generate.stepStreaming") });
+        }
+        tokenCountRef.current += 1;
+        appendToken(delta);
+      },
+      onDone: () => {
+        finishStream();
+        cancelRef.current = null;
+        if (tokenCountRef.current === 0) {
+          // Stream ferme sans aucun token (rare).
+          setFeedback({ kind: "error", text: t("generate.streamEmpty") });
+        } else {
+          const elapsed = ((Date.now() - startedAtRef.current) / 1000).toFixed(
+            1,
+          );
+          setFeedback({
+            kind: "ok",
+            text: `${t("generate.done")} (${tokenCountRef.current} deltas, ${elapsed}s)`,
+          });
+        }
+        void qc.invalidateQueries({ queryKey: ["sessions"] });
+      },
+      onError: (message) => {
+        failStream(message);
+        cancelRef.current = null;
+        setFeedback({ kind: "error", text: message });
+      },
+    });
+    cancelRef.current = cancel;
+  };
 
+  // streamAsk avale les aborts silencieusement (pas de onError) : on pose donc
+  // le message "annule" ici, dans le handler du clic, et non depuis onError.
   const stop = () => {
     cancelRef.current?.();
     cancelRef.current = null;
     finishStream();
+    setFeedback({ kind: "error", text: t("generate.aborted") });
   };
 
-  const documents = docsQuery.data ?? [];
-  const items = documents.map((d) => ({ id: d.id, label: d.filename }));
-  const hasDocs = documents.length > 0;
-  const isStreaming = status === "streaming";
-
   return (
-    <div className="flex flex-col gap-4">
-      <header>
-        <h1 className="font-display text-xl text-fg">{t("generate.title")}</h1>
-        <p className="text-fg-dim">{t("generate.subtitle")}</p>
-      </header>
+    <>
+      <div className="page-header">
+        <h1>{t("generate.title")}</h1>
+        <p>{t("generate.subtitle")}</p>
+      </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("generate.promptLabel")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onSubmit} className="flex flex-col gap-3">
-              <label className="label">{t("generate.scopeLabel")}</label>
-              <MultiSelect
-                items={items}
-                value={scopeDocIds}
-                onChange={setScopeDocIds}
-                allLabel={t("generate.scopeAll")}
-                emptyLabel={t("generate.noDocuments")}
-                disabled={!hasDocs}
-              />
+      {!mistralReady ? (
+        <div className="banner warn">
+          <strong>{t("generate.mistralRequired")}</strong> {t("generate.mistralHint")}
+        </div>
+      ) : null}
 
-              <TemplatePanel
-                templateDocId={templateDocId}
-                onChange={setTemplateDocId}
-                disabled={isStreaming}
-              />
+      {/* Barre d'export */}
+      <div className="card">
+        <div className="row" style={{ gap: 14 }}>
+          <span style={{ minWidth: 160, display: "inline-flex", gap: 8 }}>
+            {isStreaming ? <span className="spinner" /> : null}
+            <span className={`badge ${STATUS[status]}`}>
+              {t(`generate.status.${status}`)}
+            </span>
+          </span>
+          <label className="grow" style={{ minWidth: 220 }}>
+            <div className="label">{t("generate.filename")}</div>
+            <input
+              className="input"
+              type="text"
+              value={outputFilename}
+              placeholder={t("generate.filenamePlaceholder")}
+              onChange={(e) => setOutputFilename(e.target.value)}
+            />
+          </label>
+          <ExportButtons
+            sessionId={currentSessionId ?? ""}
+            hasTemplate={!!templateDocId}
+            templateFormat={templateFormat}
+            templateDocId={templateDocId}
+            filename={outputFilename || undefined}
+            ready={status === "done" && !!currentSessionId}
+          />
+        </div>
+        <small
+          style={{
+            display: "block",
+            marginTop: 6,
+            color: "var(--fg-dim)",
+            fontSize: "0.78rem",
+          }}
+        >
+          {templateFormat === "docx"
+            ? t("generate.exportTemplateDocxHint")
+            : t("generate.exportPptxHint")}
+        </small>
+      </div>
 
-              <label className="label" htmlFor="prompt">
-                {t("generate.promptLabel")}
-              </label>
-              <Textarea
-                id="prompt"
-                rows={8}
-                placeholder={t("generate.promptPlaceholder")}
-                state={errors.prompt ? "error" : "default"}
-                disabled={isStreaming}
-                {...register("prompt")}
-              />
-              {errors.prompt ? (
-                <p className="text-sm text-danger">{errors.prompt.message}</p>
-              ) : null}
-
-              <div className="flex items-center gap-2">
-                {isStreaming ? (
-                  <Button type="button" variant="secondary" onClick={stop}>
-                    {t("generate.stop")}
-                  </Button>
+      <div className="grid-2">
+        <div className="card">
+          <h2 className="card-title">{t("generate.promptLabel")}</h2>
+          <div className="form">
+            <label>
+              <div className="label">{t("generate.scopeLabel")}</div>
+              <div className="doc-checklist">
+                {docs.length === 0 ? (
+                  <div className="empty-state">{t("generate.noDocuments")}</div>
                 ) : (
-                  <Button type="submit" disabled={!hasDocs}>
-                    {t("generate.submit")}
-                  </Button>
+                  docs.map((d) => (
+                    <label key={d.id}>
+                      <input
+                        type="checkbox"
+                        checked={scopeDocIds.includes(d.id)}
+                        onChange={() => toggleScope(d.id)}
+                      />
+                      <span>{d.filename}</span>
+                    </label>
+                  ))
                 )}
-                {status === "done" && output ? (
-                  <Button type="button" variant="ghost" onClick={reset}>
-                    {t("generate.outputEmpty")}
-                  </Button>
-                ) : null}
               </div>
-            </form>
-          </CardContent>
-        </Card>
+            </label>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              <span className="flex items-center gap-2">
-                {isStreaming ? <Spinner size="sm" /> : null}
-                <span>
-                  {isStreaming ? t("generate.submitting") : t("generate.title")}
-                </span>
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {status === "error" && errorMessage ? (
-              <div className="rounded-sm border border-danger/40 bg-danger/15 p-3 text-sm text-danger">
-                <strong>{t("generate.errorTitle")} :</strong> {errorMessage}
+            <div className="row">
+              <label className="grow">
+                <div className="label">{t("generate.format")}</div>
+                <select
+                  className="input"
+                  value={outputFormat}
+                  disabled={isStreaming}
+                  onChange={(e) =>
+                    setOutputFormat(e.target.value as typeof outputFormat)
+                  }
+                >
+                  <option value="markdown">{t("generate.formatMarkdown")}</option>
+                  <option value="faq">{t("generate.formatFaq")}</option>
+                  <option value="structured">{t("generate.formatStructured")}</option>
+                  <option value="table">{t("generate.formatTable")}</option>
+                  <option value="template">{t("generate.formatTemplate")}</option>
+                </select>
+              </label>
+              <label className="grow">
+                <div className="label">{t("generate.length")}</div>
+                <select
+                  className="input"
+                  value={length}
+                  disabled={isStreaming}
+                  onChange={(e) => setLength(e.target.value as typeof length)}
+                >
+                  <option value="short">{t("generate.lengthShort")}</option>
+                  <option value="medium">{t("generate.lengthMedium")}</option>
+                  <option value="long">{t("generate.lengthLong")}</option>
+                </select>
+              </label>
+              <label className="grow">
+                <div className="label">{t("generate.outputLang")}</div>
+                <select
+                  className="input"
+                  value={outputLang}
+                  disabled={isStreaming}
+                  onChange={(e) =>
+                    setOutputLang(e.target.value as "fr" | "en" | "es")
+                  }
+                >
+                  <option value="fr">{t("generate.outputLangFr")}</option>
+                  <option value="en">{t("generate.outputLangEn")}</option>
+                  <option value="es">{t("generate.outputLangEs")}</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="row">
+              <label className="grow">
+                <div className="label">{t("generate.templateLabel")}</div>
+                <select
+                  className="input"
+                  value={templateDocId ?? ""}
+                  disabled={isStreaming}
+                  onChange={(e) => setTemplateDocId(e.target.value || null)}
+                >
+                  <option value="">{t("generate.templateNone")}</option>
+                  {templates.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.filename}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grow">
+                <div className="label">{t("generate.style")}</div>
+                <select
+                  className="input"
+                  value={styleDocId ?? ""}
+                  disabled={isStreaming}
+                  onChange={(e) => setStyleDocId(e.target.value || null)}
+                >
+                  <option value="">{t("generate.styleNone")}</option>
+                  {styles.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.filename}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <label>
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                <div className="label">{t("generate.promptLabel")}</div>
+                <button
+                  type="button"
+                  className={`btn small ${dictation.state === "recording" ? "danger" : "ghost"}`}
+                  onClick={dictation.toggle}
+                  disabled={isStreaming || dictation.state === "transcribing"}
+                  title={t("generate.dictateHint")}
+                >
+                  {dictation.state === "recording"
+                    ? t("generate.dictateStop")
+                    : dictation.state === "transcribing"
+                      ? t("generate.dictateTranscribing")
+                      : t("generate.dictate")}
+                </button>
+              </div>
+              <textarea
+                rows={6}
+                value={prompt}
+                placeholder={t("generate.promptPlaceholder")}
+                disabled={isStreaming}
+                onChange={(e) => setPrompt(e.target.value)}
+              />
+            </label>
+            {dictation.error && <div className="error">{dictation.error}</div>}
+
+            <div className="row">
+              {isStreaming ? (
+                <button className="btn danger" type="button" onClick={stop}>
+                  {t("generate.cancel")}
+                </button>
+              ) : (
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={!mistralReady}
+                  onClick={() => void onGenerate()}
+                >
+                  {t("generate.submit")}
+                </button>
+              )}
+              <button
+                className="btn ghost"
+                type="button"
+                onClick={() => {
+                  reset();
+                  setPrompt("");
+                  setFeedback(null);
+                }}
+              >
+                {t("generate.reset")}
+              </button>
+            </div>
+            {feedback ? (
+              <div className={feedback.kind === "ok" ? "success" : "error"}>
+                {feedback.text}
               </div>
             ) : null}
-            {!output && status !== "error" ? (
-              <EmptyState title={t("generate.outputEmpty")} />
+          </div>
+        </div>
+
+        <div className="card">
+          <h2 className="card-title">{t("generate.output")}</h2>
+          <div className="output">
+            {output ? (
+              output
             ) : (
-              <div className="flex flex-col gap-3">
-                <MarkdownView content={output} />
-                {status === "done" && currentSessionId ? (
-                  <ExportButtons
-                    sessionId={currentSessionId}
-                    hasTemplate={!!templateDocId}
-                  />
-                ) : null}
-              </div>
+              <span style={{ color: "var(--fg-muted)" }}>
+                {t("generate.outputEmpty")}
+              </span>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

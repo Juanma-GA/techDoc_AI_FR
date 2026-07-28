@@ -7,22 +7,83 @@ import logging
 import traceback
 import uuid
 
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.errors import AppError
-from app.core.mistral_client import MistralClient, MistralError
+from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
 from app.core.writer_engine import ensure_session_title, stream_answer
-from app.db.models import Message, Session as SessionRow
+from app.db.models import Message
+from app.db.models import Session as SessionRow
 from app.db.session import SessionLocal, get_db
-from app.schemas import AskIn, MessageOut, SessionCreateIn, SessionOut
+from app.schemas import AskIn, MessageOut, SessionCreateIn, SessionOut, TranscriptionOut
+
+# Formats audio acceptes pour la dictee (MediaRecorder produit surtout du webm/ogg).
+_AUDIO_EXTS = (".webm", ".ogg", ".oga", ".mp3", ".m4a", ".wav", ".mp4", ".flac")
+_MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 Mo (~20 min de dictee)
 
 
 log = logging.getLogger("doc_writer.sessions")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+@router.post("/transcribe", response_model=TranscriptionOut)
+async def transcribe(
+    file: UploadFile = File(...), db: Session = Depends(get_db)
+) -> TranscriptionOut:
+    """Transcrit une dictee vocale (Voxtral) → texte a injecter dans le brief.
+
+    L'insertion intelligente dans le template est ensuite assuree par le flux de
+    generation/remplissage existant (le texte devient/augmente le brief)."""
+    # LLM OFF → fallback gracieux : 200 + texte vide (jamais 5xx, regle #6).
+    if not get_llm_enabled(db):
+        return TranscriptionOut(text="", llm_used=False)
+
+    name = (file.filename or "audio.webm").lower()
+    if not name.endswith(_AUDIO_EXTS):
+        raise AppError("BAD_AUDIO", f"Format audio non supporte ({name}).", 400)
+    audio = await file.read()
+    if not audio:
+        raise AppError("EMPTY_AUDIO", "Audio vide.", 400)
+    if len(audio) > _MAX_AUDIO_BYTES:
+        raise AppError("AUDIO_TOO_LARGE", "Audio trop volumineux (max 25 Mo).", 413)
+
+    try:
+        client = MistralClient.from_db(db)
+    except MistralError as exc:
+        raise AppError("MISTRAL_NOT_CONFIGURED", str(exc), 400) from exc
+    try:
+        text = client.transcribe_audio(audio, filename=name)
+    except httpx.HTTPStatusError as exc:
+        # L'API a repondu 4xx/5xx. Cas courant : le modele Voxtral n'est pas
+        # active sur la cle -> message explicite (l'utilisateur en choisit un
+        # autre en Parametres). Sinon on remonte code + corps pour diagnostiquer.
+        status = exc.response.status_code
+        body = (exc.response.text or "")[:300]
+        log.warning("Voxtral transcription HTTP %s: %s", status, body)
+        low = body.lower()
+        if "invalid_model" in low or "invalid model" in low or status in (403, 404):
+            msg = (
+                f"Le modele de transcription « {client.transcribe_model} » n'est pas "
+                "active sur cette cle Mistral (Voxtral indisponible). Choisis-en un "
+                "autre dans Parametres > Mistral (« Tester la connexion » liste les "
+                "modeles disponibles)."
+            )
+        else:
+            msg = f"Transcription refusee par Mistral (HTTP {status}). {body}"
+        raise AppError(
+            "TRANSCRIBE_FAILED", msg, 502,
+            detail={"status": status, "model": client.transcribe_model},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise AppError(
+            "TRANSCRIBE_FAILED", f"Transcription echouee : {type(exc).__name__}", 502
+        ) from exc
+    return TranscriptionOut(text=text, llm_used=True)
 
 
 @router.get("", response_model=list[SessionOut])
@@ -80,6 +141,17 @@ async def ask(session_id: uuid.UUID, body: AskIn, db: Session = Depends(get_db))
             "SESSION_NOT_FOUND", "Session introuvable.", status_code=404,
             detail={"id": str(session_id)},
         )
+
+    # Interrupteur LLM OFF : on ne lance pas la generation. SSE 200 avec un
+    # event `error` gracieux (jamais de 5xx), la cle Mistral est conservee.
+    if not get_llm_enabled(db):
+        async def disabled_gen():
+            yield {
+                "event": "error",
+                "data": json.dumps({"message": "LLM desactive."}),
+            }
+
+        return EventSourceResponse(disabled_gen())
 
     try:
         mistral = MistralClient.from_db(db)

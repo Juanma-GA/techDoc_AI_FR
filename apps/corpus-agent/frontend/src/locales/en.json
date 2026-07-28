@@ -1,7 +1,7 @@
 {
   "app.title": "Corpus Agent",
   "app.version": "v4",
-  "app.titleTooltip": "Drives content compliance across a document corpus using both predefined and custom rules. The operator keeps full control over file edits, ensuring human review and business oversight.",
+  "app.titleTooltip": "Drives content compliance across a document corpus using an AI-judged checklist of custom rules. The operator keeps full control over file edits, ensuring human review and business oversight.",
   "nav.manager": "Dashboard",
   "nav.projects": "Projects",
   "nav.redacteur": "Editor view",

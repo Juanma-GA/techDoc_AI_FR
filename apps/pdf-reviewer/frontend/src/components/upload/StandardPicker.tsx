@@ -26,8 +26,9 @@ export function StandardPicker({ standardId, versionId, onChange }: Props): JSX.
   // Auto-select the only version when there is exactly one.
   useEffect(() => {
     if (!current) return;
-    if (versions.length === 1 && versions[0].id !== versionId) {
-      onChange(current.id, versions[0].id);
+    const onlyVersion = versions.length === 1 ? versions[0] : undefined;
+    if (onlyVersion && onlyVersion.id !== versionId) {
+      onChange(current.id, onlyVersion.id);
     }
     if (versionId && !versions.some((v) => v.id === versionId)) {
       onChange(current.id, versions[0]?.id ?? null);

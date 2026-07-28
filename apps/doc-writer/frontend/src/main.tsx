@@ -1,4 +1,5 @@
 import "./index.css";
+import "./styles/preview-skin.css";
 import "./i18n";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -26,7 +27,7 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>

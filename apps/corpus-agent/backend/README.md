@@ -1,6 +1,11 @@
-# Corpus Agent v3 — backend
+# Corpus Agent v4 — backend
 
 FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog.
+
+Contrôle de conformité documentaire d'un corpus multi-fichiers : ingestion de
+documents, analyse contre une **checklist** de règles personnalisées
+importables (jugées par IA), détection d'anomalies, KPIs, et chat RAG
+assisté par Mistral (désactivable).
 
 ## Démarrage local (dev)
 
@@ -10,8 +15,8 @@ python -m venv .venv
 . .venv/Scripts/activate            # Windows : .venv\Scripts\activate.bat
 pip install -e ".[dev]"
 cp .env.example .env                # remplir MISTRAL_API_KEY si besoin
-alembic upgrade head                # crée alembic_version (vide en J3)
-pytest                              # 3 tests verts attendus
+alembic upgrade head
+pytest                              # la suite doit passer au vert
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -19,7 +24,7 @@ Test :
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
-# → {"status":"ok","version":"0.1.0","db":"ok","llm":"not_configured"}
+# → {"status":"ok","version":"4.0.0","db":"ok","llm":"not_configured"}
 ```
 
 OpenAPI : `http://127.0.0.1:8000/api/v1/docs`.
@@ -32,22 +37,24 @@ Double-clic sur `start.bat`.
 
 ```
 app/
-├── main.py            # create_app() — middlewares + error handlers + routers
+├── main.py            # create_app() — middlewares + error handlers + routers + serving React
 ├── config.py          # Settings (pydantic-settings, CORS CSV→list)
-├── api/
-│   └── health.py      # GET /api/v1/health
+├── api/               # health, projects, files, analysis, anomalies, kpis, chat, settings, i18n, admin
 ├── core/
 │   ├── logging.py     # structlog JSON
 │   ├── request_id.py  # uuid4 + structlog contextvars
-│   ├── errors.py      # AppError + 4 handlers → {code,message,detail,request_id}
-│   └── mistral_client.py  # httpx async + truststore
-├── db/
-│   └── session.py     # engine, Base(DeclarativeBase), get_db()
-├── parsers/           # remplis en S1
-└── checks/            # remplis en S2
-alembic/               # migrations (env.py + script.py.mako)
-tests/                 # pytest (conftest force sqlite in-memory)
-Dockerfile             # multi-stage, user 1001, healthcheck Python pur
+│   ├── errors.py      # AppError + handlers → {code,message,detail,request_id}
+│   ├── mistral_client.py   # httpx async + truststore + interrupteur LLM
+│   ├── indexer.py     # embeddings Mistral + recherche cosinus (RAG)
+│   ├── chat_engine.py # chat RAG multi-scope + résumé d'anomalies
+│   ├── rules.py       # store checklist (regles_personnalisees/instructions_libres) + registres colonnes réf./BASL
+│   └── checklist_excel.py  # parsing d'une checklist Excel → règles personnalisées
+├── parsers/           # .docx, .doc, .pdf, .xlsx/.xlsm, .xml/S1000D (+ repli texte)
+├── checks/            # custom_rules (checklist, jugée par IA) + ftm_doc (socle partagé)
+├── db/                # models.py, session.py
+└── static/i18n/       # traductions FR/EN (source de vérité, servies par GET /api/v1/i18n/{lang})
+alembic/               # migrations (SQLite ⇄ Postgres)
+tests/                 # pytest (conftest force un SQLite temporaire + storage temp)
 ```
 
 ## Format d'erreur
@@ -65,153 +72,70 @@ Toutes les erreurs renvoient :
 
 Détails dans [`docs/adr/0003-error-format.md`](../../../docs/adr/0003-error-format.md).
 
-## Règles métier (validation)
+## Pipeline d'analyse
 
-Les règles métier déterminent ce que les contrôles d'analyse vont remonter
-comme anomalie. Elles vivent à deux endroits :
+`POST /api/v1/projects/{id}/analysis/run` applique un **contrôle unique** à la
+dernière version de chaque fichier du projet :
 
-- **Défauts en dur** : [`app/core/rules.py`](app/core/rules.py) — dictionnaire
-  `DEFAULT_RULES`, jamais effacé. Chargé si aucun override n'existe.
-- **Override persistant** : `data/rules.json` — créé / mis à jour par l'UI
-  Paramètres (`PUT /api/v1/settings/rules`) et supprimé par « Réinitialiser »
-  (`DELETE /api/v1/settings/rules`).
+1. `custom_rules` — **règles personnalisées** (la checklist, voir plus bas),
+   évaluées par IA. Type d'anomalie unique : `personnalisee`.
 
-Le code lit toujours via `app.core.rules.load_rules()` ; les contrôles
-fusionnent silencieusement les listes vides → aucune anomalie pour cette
-catégorie (désactivation par configuration).
+> **Checklist-only** (2026-07-21, cf. écart règle #6 du README d'app) : les
+> contrôles déterministes codés (script, granule, texte, opérations,
+> référentiel, illustrations) ont été **retirés**. Il n'y a plus de socle
+> déterministe : interrupteur LLM OFF (ou clé Mistral absente) ⇒ analyse en
+> HTTP 200 **sans anomalie**.
 
-### Catégories disponibles
+Les anomalies sont créées avec le statut `open`, un type, une sévérité et un
+niveau de confiance IA. Après les contrôles, les documents sont indexés
+(embeddings) pour le chat RAG.
 
-| Clé JSON | Type d'anomalie | Sévérité défaut | Cible | Filtre LLM |
-|---|---|---|---|---|
-| `termes_interdits` | `consistency` | medium | Tout terme du document | non |
-| `sections_obligatoires` | `consistency` | medium / low | Document ou onglet | non |
-| `motifs_references` | `consistency` | low | Comptage > 10 | non |
-| `paires_ambigues` | `consistency` | (LLM) | Confusion contextuelle de termes | oui (`_llm_consistency`) |
-| `paires_logiques` | **`logical_pair`** | (LLM) | Action sans contre-action | **oui** (cf. ci-dessous) |
-| `types_fichiers_attendus` | `naming` | high | Extension de fichier | non |
-| `nomenclature_fichiers` | `naming` | medium | Pattern du nom de fichier | non |
-| `regex_code_dmc` | (mode legacy) | — | Extraction codes DMC dans le texte | non |
-| `instructions_libres` | (prompt) | — | Texte injecté en haut du prompt LLM | — |
+## Règles métier
 
-`dmc_missing` (couverture du référentiel) est généré par le contrôle DMC
-indépendamment de ces règles, à partir du fichier référentiel uploadé sur le
-projet et de la colonne sélectionnée. Il n'est pas affiché dans les
-catégories ci-dessus du dashboard (cf. carte « Couverture du référentiel »).
+Toutes les règles vivent dans le store `data/rules.json` (gitignoré), lu via
+`app.core.rules.load_rules()` :
 
-### `termes_interdits`
+- **`regles_personnalisees`** — la checklist : liste éditable de
+  `{id, label, consigne, severity, validated}` (voir ci-dessous).
+- **`instructions_libres`** — contexte de jugement injecté dans le prompt IA.
 
-```json
-[{ "terme": "enclencher", "a_utiliser": "déclencher", "raison": "Terminologie client imposée" }]
-```
+Écriture via `PUT /api/v1/settings/rules` (store complet) ou
+`PUT /api/v1/settings/rules/sparse` (patch `regles_personnalisees` /
+`instructions_libres` — utilisé par l'onglet Paramètres) ; reset via
+`DELETE /api/v1/settings/rules`. Les défauts (store vide) sont dans
+`DEFAULT_RULES` de [`app/core/rules.py`](app/core/rules.py). Ce module conserve
+aussi les registres de **colonnes de référence / BASL** d'un projet (utilisés
+par les placeholders `{nom}` des consignes et l'onglet mapping référentiel).
 
-Une anomalie par terme et par fichier (anti-bruit : on signale la première
-occurrence). Match insensible à la casse, mots entiers (`\b<terme>\b`).
+### Règles personnalisées (IA) + import de checklist
 
-### `sections_obligatoires`
+Sous la clé `regles_personnalisees` de `rules.json` : une liste de
+`{id, label, consigne, severity, validated}`. La `consigne` est une règle en
+langage naturel ; à chaque analyse, le check `custom_rules` la soumet au Mistral
+embarqué contre le contenu de chaque document et remonte les écarts (type
+d'anomalie `personnalisee`). Skippé si Mistral est désactivé/non configuré.
 
-```json
-["Préparation", "Opérations", "Vérifications finales"]
-```
+Trois façons de les alimenter :
 
-Stratégie de détection :
+- **Saisie / édition** dans l'onglet Paramètres (éditable : libellé, consigne,
+  sévérité, suppression).
+- **Extraction depuis une spec** : `POST /api/v1/settings/rules/from-spec`
+  (upload d'un document, l'IA propose des règles à relire).
+- **Import de checklist Excel** : `POST /api/v1/settings/rules/checklist/inspect`
+  (aperçu des onglets + mapping colonnes) puis
+  `POST /api/v1/settings/rules/checklist/import` (`.xlsx`/`.xlsm`, colonnes
+  sujet/vérification/criticité, modes `replace`/`add`/`update`/`overwrite`).
+  Structure idéale + 5 règles d'exemple : `GET /api/v1/settings/rules/checklist/template`
+  (bouton « Télécharger un modèle » dans l'UI), régénérable via
+  `scripts/make_checklist_template.py`.
 
-- Documents avec marqueurs `[ONGLET: …]` / `[PAGE: …]` (xlsm, PDF) → check
-  par feuille / page. Si la section est absente de TOUTES → 1 anomalie
-  globale ; si présente partiellement → 1 anomalie low par feuille
-  manquante.
-- Documents simples (`.docx`, `.txt`) → check global sur le texte.
-
-### `paires_ambigues`
-
-```json
-[["déclencher", "enclencher"], ["monter", "installer"]]
-```
-
-Couples de termes souvent confondus. Détectés par la passe sémantique
-Mistral (`_llm_consistency`) — appel LLM unique pour toutes les paires
-configurées, qui retourne une liste d'anomalies avec gravité.
-
-### `paires_logiques`
-
-```json
-[{
-  "action": "connecter",
-  "contre_action": "déconnecter",
-  "raison": "Toute connexion doit être suivie d'une déconnexion en fin de procédure.",
-  "scope": "file"
-}]
-```
-
-Détecte les cycles d'opération **incomplets** (action présente sans sa
-contre-action). Différent de `paires_ambigues` qui détecte des confusions
-de termes ; ici on contrôle la complétude.
-
-- `scope = "file"` : la paire est validée si les deux termes apparaissent
-  n'importe où dans le fichier.
-- `scope = "sheet"` : validée feuille par feuille (réutilise `[ONGLET: …]`).
-  Sur les `.docx` sans marqueurs, retombe sur le scope file.
-
-**Pipeline en deux passes :**
-
-1. Regex `\b<action>\b` / `\b<contre_action>\b` → liste de candidats
-   `(found, missing, label, content)`.
-2. Pour chaque candidat, appel `_llm_logical_pair_check` → JSON
-   `{plausible, gravite, confiance, explication}` :
-   - `plausible: true` (FTM de pose seule, handoff vers une autre FTM…)
-     → **aucune anomalie émise**.
-   - `plausible: false` → anomalie `logical_pair` avec sévérité mappée
-     depuis `gravite` et confiance + explication injectées dans la
-     `suggestion`.
-
-**Indicateur de confiance** : ajouté à la `suggestion` de chaque ticket
-(« Confiance IA : haute / moyenne / faible. »). Filtrable dans la Vue
-Rédacteur.
-
-**Mode strict** : si Mistral n'est pas configuré (pas de clé API), la
-passe 2 est court-circuitée, l'anomalie est émise en `severity="medium"`
-et la suggestion porte « Confiance IA : non évaluée (Mistral non
-configuré) ».
-
-### `nomenclature_fichiers`
-
-```json
-[{ "label": "DMC-TG", "regex": "^DMC-TG", "description": "Le nom de fichier doit commencer par DMC-TG" }]
-```
-
-Chaque fichier doit matcher au MOINS un des patterns. Liste vide =
-contrôle désactivé.
-
-### `types_fichiers_attendus`
-
-```json
-[".xlsm", ".docx"]
-```
-
-Extensions autorisées. Liste vide = contrôle désactivé.
+**File de validation** : une règle importée arrive `validated=false` et
+**n'entre pas** dans l'analyse tant qu'un humain ne l'a pas validée
+(`POST /api/v1/settings/rules/validate-all`, ou validation individuelle depuis
+l'UI). Les règles sans le champ `validated` (saisies à la main) sont considérées
+validées — compat ascendante.
 
 ### `instructions_libres`
 
-Texte libre injecté en haut du prompt sémantique Mistral pour les
-contrôles de cohérence. Sert aux consignes spécifiques client / projet
-qui ne rentrent pas dans les catégories structurées.
-
-### Édition
-
-- **UI Paramètres** (page `Paramètres` du frontend) : tableaux et zones
-  de texte pour chaque catégorie. Le bouton « Sauvegarder » écrit
-  `data/rules.json`. Le bouton « Réinitialiser » supprime le fichier et
-  ré-active les défauts du code.
-- **Suggérer depuis les fichiers** : `POST /api/v1/settings/rules/suggest`
-  envoie un échantillon des FTM uploadées à Mistral et propose des
-  ajouts pour `termes_interdits`, `sections_obligatoires` et
-  `paires_ambigues`. L'utilisateur sélectionne ce qu'il garde avant
-  fusion. Mistral non configuré → 400 `MISTRAL_NOT_CONFIGURED`.
-
-### Validation côté API
-
-`PUT /api/v1/settings/rules` accepte `{rules: {...}}`. Validation rapide :
-les clés `termes_interdits`, `sections_obligatoires`, `paires_ambigues`,
-`paires_logiques`, `motifs_references` doivent être des listes (sinon
-400 `RULES_INVALID`). Les autres clés sont conservées telles quelles —
-les contrôles ignorent silencieusement les structures malformées.
+Texte libre injecté en tête du prompt des contrôles IA — consignes générales
+transverses qui ne rentrent pas dans une règle structurée.
