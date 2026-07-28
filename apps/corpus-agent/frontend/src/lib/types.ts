@@ -43,6 +43,8 @@ export type FileVersionOut = {
 export type FileOut = {
   id: string;
   current_name: string;
+  // Chemin relatif au dossier connecte (POSIX), ou null pour un upload manuel.
+  rel_path: string | null;
   mime_type: string;
   created_at: string;
   versions: FileVersionOut[];

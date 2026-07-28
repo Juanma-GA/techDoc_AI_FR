@@ -20,7 +20,7 @@ const navItems = [
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
-const LANGS = ["fr", "en"] as const;
+const LANGS = ["fr", "en", "es"] as const;
 
 export function App() {
   const { t, i18n } = useTranslation();

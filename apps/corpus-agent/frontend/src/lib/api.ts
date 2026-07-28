@@ -301,7 +301,11 @@ export type ChatStreamHandlers = {
   onSession?: (info: { session_id: string; title?: string }) => void;
   onToken?: (delta: string) => void;
   onDone?: () => void;
-  onError?: (message: string) => void;
+  // `code` (ex. MISTRAL_NOT_CONFIGURED, LLM_DISABLED) permet a l'appelant de
+  // traduire via i18n plutot que d'afficher le `message` brut du backend
+  // (souvent en dur, non traduit) ; absent pour les erreurs de transport
+  // (timeout, reseau) qui n'ont pas de code stable.
+  onError?: (message: string, code?: string) => void;
 };
 
 /**
@@ -347,7 +351,11 @@ export function streamAsk(
     } catch (err) {
       clearIdleTimeout();
       if (timedOut) {
-        handlers.onError?.("Le flux a expire (aucune reponse du serveur).");
+        // Message de repli neutre (anglais) : la traduction reelle se fait
+        // cote appelant via `code` (cf. useSseChat) — cette lib reste un
+        // client de transport pur, sans dependance a i18n (qui importe deja
+        // `i18nApi` depuis ce module : un import croise creerait un cycle).
+        handlers.onError?.("Stream timed out (no response from server).", "CLIENT_STREAM_TIMEOUT_CONNECT");
         return;
       }
       if (controller.signal.aborted) return;
@@ -356,18 +364,20 @@ export function streamAsk(
     }
     if (!response.ok) {
       let detail = response.statusText;
+      let code: string | undefined;
       try {
         const payload = (await response.json()) as ApiErrorPayload;
         detail = payload.message || detail;
+        code = payload.code;
       } catch {
         /* noop */
       }
-      handlers.onError?.(detail);
+      handlers.onError?.(detail, code);
       return;
     }
     const reader = response.body?.getReader();
     if (!reader) {
-      handlers.onError?.("Aucun flux disponible");
+      handlers.onError?.("No stream available.", "CLIENT_NO_STREAM");
       return;
     }
     const decoder = new TextDecoder("utf-8");
@@ -387,7 +397,7 @@ export function streamAsk(
       }
     } catch (err) {
       if (timedOut) {
-        handlers.onError?.("Le flux a expire (aucune donnee recue).");
+        handlers.onError?.("Stream timed out (no data received).", "CLIENT_STREAM_TIMEOUT_READ");
       } else if (!controller.signal.aborted) {
         handlers.onError?.(err instanceof Error ? err.message : String(err));
       }

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.checks.custom_rules import run_custom_rules
+from app.checks.custom_rules import active_custom_rule_count, run_custom_rules
 from app.core.errors import AppError
 from app.core.indexer import index_file_version
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
@@ -183,6 +183,13 @@ def run_analysis(
         summary.update(Counter(a.type for a in produced))
         if suppressed:
             summary["suppressed_rejected"] = suppressed
+        # Signal explicite : ce run a-t-il reellement eu de quoi verifier ?
+        # Sans ca, "0 anomalie car LLM indisponible / 0 regle active" et "0
+        # anomalie car tout est conforme" sont indiscernables cote UI, qui
+        # affichait a tort un livrable "conforme" (ecart README 2026-07-21:
+        # plus de fallback deterministe, tout passe par le LLM + la checklist).
+        summary["llm_used"] = mistral is not None
+        summary["active_rules"] = active_custom_rule_count()
 
         # Indexation RAG pour le chatbot (best-effort, ignore les erreurs).
         indexed = 0

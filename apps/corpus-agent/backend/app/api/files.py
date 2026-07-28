@@ -78,16 +78,31 @@ def list_files(project_id: uuid.UUID, db: Session = Depends(get_db)) -> list[DBF
 
 def _ingest_file(
     db: Session, project: Project, raw: bytes, safe_name: str, mime: str,
+    rel_path: str | None = None,
 ) -> dict:
     """Ingère un fichier déjà lu + validé (bytes) : dédup par nom+hash, stockage
     sur disque, extraction texte, nouvelle `FileVersion`. Logique partagée entre
     l'upload manuel HTTP et la synchro d'un dossier connecté. NE COMMIT PAS
-    (l'appelant groupe les commits). Renvoie un dict de résultat par fichier."""
+    (l'appelant groupe les commits). Renvoie un dict de résultat par fichier.
+
+    `rel_path` (chemin relatif au dossier connecté, fourni uniquement par
+    `sync_corpus_folder`) est la clé d'identité quand il est présent : deux
+    fichiers de même nom dans des sous-dossiers différents (ex.
+    `a/doc.txt` et `b/doc.txt`) restent alors des `File` distincts, plutôt que
+    de collisionner sur `current_name` seul (bug corrigé : une re-synchro
+    mélangeait silencieusement leurs historiques de versions). Un upload
+    manuel (`rel_path=None`) garde l'ancienne identité par nom, au sein des
+    seuls fichiers eux-mêmes sans `rel_path` (jamais confondu avec un fichier
+    de dossier connecté)."""
     digest = sha256_of_bytes(raw)
 
     existing_file: DBFile | None = None
     for f in project.files:
-        if f.current_name == safe_name:
+        if rel_path is not None:
+            if f.rel_path == rel_path:
+                existing_file = f
+                break
+        elif f.rel_path is None and f.current_name == safe_name:
             existing_file = f
             break
 
@@ -95,6 +110,7 @@ def _ingest_file(
         existing_file = DBFile(
             project_id=project.id,
             current_name=safe_name,
+            rel_path=rel_path,
             mime_type=mime or "",
         )
         db.add(existing_file)
@@ -103,7 +119,9 @@ def _ingest_file(
         if existing_file.versions:
             latest = sorted(existing_file.versions, key=lambda v: v.uploaded_at)[-1]
             if latest.sha256 == digest:
-                return {"filename": safe_name, "ok": True, "skipped": "identique"}
+                # Code stable (pas de prose FR en dur) : le frontend le
+                # traduit via i18n (`files.skippedUnchanged`).
+                return {"filename": safe_name, "ok": True, "skipped": "unchanged"}
 
     storage_root = safe_storage_join(
         Path(settings.storage_dir), f"project_{project.id}", f"file_{existing_file.id}",
@@ -299,7 +317,7 @@ def sync_corpus_folder(
             validate_upload_bytes(
                 raw, ext, None, settings.max_upload_size_bytes, blocked_exts=BLOCKED_DOC_EXTS,
             )
-            created.append(_ingest_file(db, project, raw, safe_name, ""))
+            created.append(_ingest_file(db, project, raw, safe_name, "", rel_path=rel))
         except Exception as exc:  # noqa: BLE001 — un fichier KO n'annule pas le lot
             msg = getattr(exc, "detail", None) or str(exc)
             created.append({"filename": safe_name, "ok": False, "error": msg})

@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { anomaliesApi, filesApi, projectsApi } from "../lib/api";
+import { categoryOptions, matchesCategory } from "../lib/anomalyCategory";
 import { resolveAnomalyText } from "../lib/anomalyText";
 import { severityClass } from "../lib/format";
 import { useScopeStore } from "../stores/useScopeStore";
@@ -17,27 +18,6 @@ const STATUS_KEY: Record<AnomalyStatus, string> = {
 };
 const SEV_KEY: Record<string, string> = { high: "redacteur.sevHigh", medium: "redacteur.sevMedium", low: "redacteur.sevLow" };
 
-// Liste fixe des catégories d'anomalie (parité preview), affichées même sans occurrence.
-const TYPE_OPTIONS: string[] = [
-  "script",
-  "granule",
-  "texte",
-  "ordre_taches",
-  "tache_induite",
-  "orthographe",
-  "rechange",
-  "outillage",
-  "infrastructure",
-  "entete",
-  "securite",
-  "preliminaire",
-  "valeur_numerique",
-  "serrage",
-  "complementaire",
-  "illustration",
-  "personnalisee",
-];
-
 // Niveau de confiance IA porté par l'anomalie → libellé humain (parité preview `_confLabel`).
 function confLabel(c: string | null | undefined): string {
   if (c === "elevee") return "confiance élevée";
@@ -47,11 +27,11 @@ function confLabel(c: string | null | undefined): string {
 }
 
 export function Redacteur() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const presel = useScopeStore((s) => s.redacteurProjectId);
   const [pid, setPid] = useState<string>(presel ?? "");
-  const [fType, setFType] = useState("");
+  const [fCategory, setFCategory] = useState("");
   const [fSev, setFSev] = useState("");
   const [fConf, setFConf] = useState("");
   const [fStatus, setFStatus] = useState("");
@@ -77,10 +57,22 @@ export function Redacteur() {
     return m;
   }, [filesQuery.data]);
 
-  const anomalies = (anomaliesQuery.data ?? []).filter((a) => a.type !== "dmc_missing");
+  const anomalies = useMemo(
+    () => (anomaliesQuery.data ?? []).filter((a) => a.type !== "dmc_missing"),
+    [anomaliesQuery.data],
+  );
+
+  // Options du filtre « Catégorie » = Sujets réellement présents dans le projet
+  // (cf. `lib/anomalyCategory`). Calculées sur les anomalies NON filtrées pour
+  // que le menu ne rétrécisse pas au fil des sélections.
+  const catOptions = useMemo(
+    () => categoryOptions(anomalies, i18n.language, t("redacteur.filterNoCategory")),
+    [anomalies, i18n.language, t],
+  );
+
   const filtered = anomalies.filter(
     (a) =>
-      (!fType || a.type === fType) &&
+      matchesCategory(a, fCategory) &&
       (!fSev || a.severity === fSev) &&
       (!fConf || a.confidence === fConf) &&
       (!fStatus || a.status === fStatus),
@@ -130,7 +122,7 @@ export function Redacteur() {
       {pid && (
         <div className="card">
           <div className="row">
-            <Filter value={fType} onChange={setFType} label={t("redacteur.filterCategory")} options={TYPE_OPTIONS.map((ty) => [ty, t(`projects.kpi.type.${ty}`)])} allLabel={t("redacteur.filterAll")} />
+            <Filter value={fCategory} onChange={setFCategory} label={t("redacteur.filterCategory")} options={catOptions} allLabel={t("redacteur.filterAll")} />
             <Filter value={fSev} onChange={setFSev} label={t("redacteur.filterSeverity")} options={["high", "medium", "low"].map((s) => [s, t(SEV_KEY[s] ?? s)])} allLabel={t("redacteur.filterAll")} />
             <Filter value={fConf} onChange={setFConf} label={t("redacteur.filterConfidence")} options={[["elevee", t("redacteur.confHigh")], ["moyenne", t("redacteur.confMedium")], ["faible", t("redacteur.confLow")]]} allLabel={t("redacteur.filterAll")} />
             <Filter value={fStatus} onChange={setFStatus} label={t("redacteur.filterStatus")} options={STATUSES.map((s) => [s, t(STATUS_KEY[s])])} allLabel={t("redacteur.filterAll")} />

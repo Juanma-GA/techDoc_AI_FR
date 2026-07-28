@@ -58,6 +58,10 @@ class FileOut(BaseModel):
 
     id: uuid.UUID
     current_name: str
+    # Chemin relatif au dossier connecte (POSIX), ou None pour un upload
+    # manuel. Identite/dedup dans _ingest_file ; affiche en UI pour
+    # distinguer deux fichiers homonymes dans des sous-dossiers differents.
+    rel_path: str | None = None
     mime_type: str
     created_at: datetime
     versions: list[FileVersionOut] = []

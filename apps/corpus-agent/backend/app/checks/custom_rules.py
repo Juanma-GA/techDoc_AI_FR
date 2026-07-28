@@ -123,6 +123,14 @@ def _resolve_placeholders(consigne: str, project: Project) -> str:
     return _PLACEHOLDER_RE.sub(_sub, consigne)
 
 
+def active_custom_rule_count() -> int:
+    """Nombre de regles qui seraient reellement evaluees (validees + activees +
+    consigne non vide), independamment de la disponibilite du LLM. Utilise par
+    `analysis.py` pour signaler qu'une analyse « 0 regle » n'a RIEN verifie,
+    plutot que de laisser 0 anomalie ressembler a un livrable conforme."""
+    return len(_load_custom_rules())
+
+
 def run_custom_rules(
     db: Session,
     project: Project,

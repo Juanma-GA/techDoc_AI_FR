@@ -100,11 +100,11 @@ export function Data() {
           {feedback && <span className="success">{feedback}</span>}
         </div>
         <div className="mt-2 font-mono text-xs text-fg-dim">
-          <span>{t("data.scopeAnalyses")}</span> = anomalies + runs + chunks indexés (les fichiers + projets restent)
+          <span>{t("data.scopeAnalyses")}</span> {t("data.scopeAnalysesDetail")}
           <br />
-          <span>{t("data.scopeChat")}</span> = sessions + messages
+          <span>{t("data.scopeChat")}</span> {t("data.scopeChatDetail")}
           <br />
-          <span>{t("data.scopeAll")}</span> = projets, fichiers, anomalies, sessions, fichiers du disque
+          <span>{t("data.scopeAll")}</span> {t("data.scopeAllDetail")}
         </div>
       </div>
     </>

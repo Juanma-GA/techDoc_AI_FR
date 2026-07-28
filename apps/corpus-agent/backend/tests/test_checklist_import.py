@@ -116,6 +116,28 @@ def test_import_mode_overwrite_upserts(client: TestClient) -> None:
     assert len(_custom_rules()) == 2
 
 
+def test_import_default_mode_is_non_destructive_upsert(client: TestClient) -> None:
+    """Un appel qui OMET `mode` (Swagger, script direct, ancien client) ne doit
+    jamais purger la checklist existante par defaut : le defaut cote API est
+    "overwrite" (upsert), jamais "replace"."""
+    _import(client, make_checklist([("A", "regle un")]))
+
+    resp = client.post(
+        "/api/v1/settings/rules/checklist/import",
+        files={"file": ("c.xlsx", make_checklist([("A2", "regle un"), ("B", "regle deux")]),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        # `mode` volontairement absent du payload.
+    )
+    assert resp.status_code == 200, resp.text
+    result = resp.json()
+    assert result["mode"] == "overwrite"
+    assert result["created"] == 1
+    assert result["updated"] == 1
+    # Si le defaut avait glisse vers "replace", la regle "A" initiale aurait
+    # disparu : la checklist doit au contraire s'etre enrichie, pas purgee.
+    assert len(_custom_rules()) == 2
+
+
 def test_import_bad_mode_rejected(client: TestClient) -> None:
     resp = client.post(
         "/api/v1/settings/rules/checklist/import",

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +13,12 @@ function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+/** `skipped` du backend = code stable (jamais de prose) ; on le traduit ici
+ * — un code inconnu (future valeur) retombe sur lui-meme plutot que planter. */
+function skippedLabel(t: TFunction, code: string): string {
+  return code === "unchanged" ? t("files.skippedUnchanged") : code;
 }
 
 export function FilesCard({ pid }: { pid: string }) {
@@ -222,7 +229,7 @@ export function FilesCard({ pid }: { pid: string }) {
           {results.map((r, i) => (
             <div key={i} className={r.ok ? "success" : "error"}>
               {r.ok ? "✓" : "✗"} {r.filename}
-              {r.skipped ? ` — ${r.skipped}` : ""}
+              {r.skipped ? ` — ${skippedLabel(t, r.skipped)}` : ""}
               {r.error ? ` — ${r.error}` : ""}
             </div>
           ))}
@@ -240,8 +247,8 @@ export function FilesCard({ pid }: { pid: string }) {
             return (
             <div className="file-row" key={f.id}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="file-name">
-                  {f.current_name}
+                <div className="file-name" title={f.rel_path ?? undefined}>
+                  {f.rel_path ?? f.current_name}
                   {others && (
                     <span className="badge danger" style={{ marginLeft: 8 }} title={`${t("files.duplicateOf")} : ${others.join(", ")}`}>
                       {t("files.duplicate")}

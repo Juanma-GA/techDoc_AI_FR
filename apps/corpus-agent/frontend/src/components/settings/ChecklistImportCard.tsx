@@ -36,7 +36,10 @@ export function ChecklistImportCard() {
   const [handlingCol, setHandlingCol] = useState<number | null>(null);
   const [zoneCol, setZoneCol] = useState<number | null>(null);
   const [contextCol, setContextCol] = useState<number | null>(null);
-  const [mode, setMode] = useState<ChecklistImportMode>("replace");
+  // "overwrite" (Fusionner) par defaut : upsert non destructif (met a jour
+  // l'existant + cree le nouveau). "replace" purge toute la checklist -> ne
+  // doit jamais etre la valeur preselectionnee au chargement de la page.
+  const [mode, setMode] = useState<ChecklistImportMode>("overwrite");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [directBusy, setDirectBusy] = useState(false);
@@ -75,15 +78,19 @@ export function ChecklistImportCard() {
     try {
       const out = await settingsApi.rulesInspect(f);
       const sh = out?.sheets ?? [];
-      setDiag(`inspect OK — ${sh.length} onglet(s) : ${sh.map((s) => s.name).join(", ") || "aucun"}`);
+      const names = sh.map((s) => s.name).join(", ") || t("settings.importNoSheets");
+      setDiag(t("settings.importInspectOk", { count: sh.length, names }));
       setSheets(sh);
       // Ouvre le 1er onglet ou le backend a reconnu une colonne « check » : la
       // checklist n'est pas toujours le 1er onglet (page de garde, annexes).
       const best = sh.findIndex((s) => s.roles?.check != null);
       applySheet(sh, best >= 0 ? best : 0);
     } catch (e) {
+      // Le message d'exception brut (souvent une lib Python) reste en
+      // anglais quel que soit la langue de l'UI : limitation acceptee, seul
+      // le texte autour (« inspect ECHEC ») est traduit.
       const m = e instanceof Error ? e.message : String(e);
-      setDiag(`inspect ÉCHEC — ${m}`);
+      setDiag(t("settings.importInspectFailed", { message: m }));
       setMsg(m);
     } finally {
       setBusy(false);
