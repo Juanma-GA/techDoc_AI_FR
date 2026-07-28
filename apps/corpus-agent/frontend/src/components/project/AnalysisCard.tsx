@@ -7,13 +7,18 @@ import { fmtDate } from "../../lib/format";
 import type { AnalysisRunOut, FileOut } from "../../lib/types";
 
 // Champs du résumé d'analyse qui ne sont pas des compteurs d'anomalies.
-const NON_TYPE_KEYS = new Set(["indexed_chunks", "chunks", "total", "files", "duration_s"]);
+const NON_TYPE_KEYS = new Set([
+  "indexed_chunks", "chunks", "total", "files", "duration_s",
+  // Signaux de "ce run a-t-il vraiment eu de quoi verifier" (cf. plus bas),
+  // pas des types d'anomalie : jamais additionnes dans `total`.
+  "llm_used", "active_rules",
+]);
 
 export function AnalysisCard({ pid }: { pid: string }) {
   const { t, i18n } = useTranslation();
   const lang = (i18n.language || "fr").slice(0, 2);
   const qc = useQueryClient();
-  const [summary, setSummary] = useState<Record<string, number> | null>(null);
+  const [summary, setSummary] = useState<Record<string, number | boolean> | null>(null);
   const [finishedAt, setFinishedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Echantillon : set d'ids selectionnes. Vide = tout le projet.
@@ -28,7 +33,7 @@ export function AnalysisCard({ pid }: { pid: string }) {
       setError(null);
       setFinishedAt(res.finished_at);
       try {
-        setSummary(JSON.parse(res.summary || "{}") as Record<string, number>);
+        setSummary(JSON.parse(res.summary || "{}") as Record<string, number | boolean>);
       } catch {
         setSummary({});
       }
@@ -47,10 +52,17 @@ export function AnalysisCard({ pid }: { pid: string }) {
     },
   });
 
-  const typeEntries = summary
-    ? Object.entries(summary).filter(([k, v]) => !NON_TYPE_KEYS.has(k) && v > 0)
+  const typeEntries: Array<[string, number]> = summary
+    ? Object.entries(summary).filter(
+        (entry): entry is [string, number] =>
+          !NON_TYPE_KEYS.has(entry[0]) && typeof entry[1] === "number" && entry[1] > 0,
+      )
     : [];
   const total = typeEntries.reduce((a, [, v]) => a + v, 0);
+  // `undefined` (run avant ce fix) -> ne pas afficher un faux avertissement :
+  // seul un `false` explicite du backend signale que le LLM n'a pas tourne.
+  const llmUsed = summary ? summary.llm_used !== false : true;
+  const activeRules = summary && typeof summary.active_rules === "number" ? summary.active_rules : null;
 
   const toggleFile = (id: string) =>
     setSample((prev) => {
@@ -120,7 +132,17 @@ export function AnalysisCard({ pid }: { pid: string }) {
                 <div className="kpi-value">{v}</div>
               </div>
             ))}
-            {total === 0 && (
+            {total === 0 && !llmUsed && (
+              <div className="banner warn" style={{ gridColumn: "1 / -1" }}>
+                {t("projects.kpi.notVerifiedNoLlm")}
+              </div>
+            )}
+            {total === 0 && llmUsed && activeRules === 0 && (
+              <div className="banner warn" style={{ gridColumn: "1 / -1" }}>
+                {t("projects.kpi.notVerifiedNoRules")}
+              </div>
+            )}
+            {total === 0 && llmUsed && activeRules !== 0 && (
               <div className="kpi" style={{ gridColumn: "1 / -1" }}>
                 <div className="label">{t("projects.kpi.noAnomaliesDetected")}</div>
               </div>

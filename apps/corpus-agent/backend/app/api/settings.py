@@ -345,7 +345,10 @@ def inspect_checklist(file: UploadFile = File(...)) -> SheetInspectOut:
     try:
         sheets = list_sheets(raw)
     except Exception as exc:  # noqa: BLE001 — openpyxl leve des erreurs variees
-        raise AppError("CHECKLIST_UNREADABLE", f"Excel illisible : {exc}", status_code=400) from exc
+        # Message = l'exception brute seule (pas de prefixe FR en dur) : le
+        # frontend l'entoure de son propre libelle traduit (i18n
+        # settings.importInspectFailed).
+        raise AppError("CHECKLIST_UNREADABLE", str(exc), status_code=400) from exc
     return SheetInspectOut(sheets=[SheetInfo(**s) for s in sheets])
 
 
@@ -358,7 +361,12 @@ def import_checklist(
     check_col: int | None = Form(default=None),
     context_cols: str = Form(default=""),
     severity_col: int | None = Form(default=None),
-    mode: str = Form(default="replace"),
+    handling_col: int | None = Form(default=None),
+    zone_col: int | None = Form(default=None),
+    # "overwrite" (upsert non destructif) par defaut : un appel direct a l'API
+    # (Swagger, script) qui omettrait `mode` ne doit jamais purger la
+    # checklist existante par defaut -> "replace" reste un choix explicite.
+    mode: str = Form(default="overwrite"),
 ) -> ChecklistImportResult:
     """Parse la checklist Excel et l'injecte dans `regles_personnalisees`.
 
@@ -387,11 +395,13 @@ def import_checklist(
             "check": check_col,
             "context": context if isinstance(context, list) else [],
             "severity": severity_col,
+            "handling": handling_col,
+            "zone": zone_col,
         }
     try:
         parsed = parse_checklist(raw, sheet=sheet, mapping=mapping)
     except Exception as exc:  # noqa: BLE001
-        raise AppError("CHECKLIST_UNREADABLE", f"Excel illisible : {exc}", status_code=400) from exc
+        raise AppError("CHECKLIST_UNREADABLE", str(exc), status_code=400) from exc
 
     base = load_rules()
     existing = [r for r in (base.get("regles_personnalisees") or []) if isinstance(r, dict)]

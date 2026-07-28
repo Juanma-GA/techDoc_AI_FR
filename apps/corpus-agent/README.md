@@ -52,6 +52,14 @@ Le **front React** (`frontend/`) est l'**UI unique** (7 onglets, chat SSE). Plus
 - **Packaging** : `scripts/package_corpus_agent.py` embarque `frontend/dist/` (build local, ou `--build-frontend` pour le (re)builder). Le dist devient donc **requis** dans le ZIP (sans lui, le recipient obtient un 503).
 - **Dev** : `pnpm dev:corpus-agent` (Vite :5173, proxy `/api`→:8000). `apps/corpus-agent/start.bat` lance le backend (:8000) et, si pnpm est dispo, une fenêtre Vite (:5173).
 
+## Corpus par dossier connecté (OneDrive / local)
+
+En plus de l'upload manuel, un projet peut **connecter un dossier local** (typiquement un dossier OneDrive **déjà synchronisé** sur le poste) depuis la carte *Documents*. Le parcours reste **local-first** (règle #8) : aucune auth ni API cloud, on lit les fichiers déjà présents sur le disque.
+
+- `POST /projects/{id}/files/list-folder {path}` — liste (récursif, sans ingérer) pour **sélectionner** les fichiers ; les extensions bloquées sont marquées `blocked`.
+- `POST /projects/{id}/files/sync-folder {path, only?}` — ingère la sélection (`only` = chemins relatifs) ou tout le dossier, via la **même** logique que l'upload (`_ingest_file` : dédup nom+hash, parsing, versionning). Un fichier KO (cloud-only non hydraté, illisible) n'interrompt pas le lot. Plafond `_FOLDER_MAX_FILES` = 500.
+- `GET`/`DELETE /projects/{id}/corpus-folder` — chemin mémorisé dans `project.corpus_path` (migration `b9c0d1e2f3a4`). La déconnexion oublie le chemin sans supprimer les fichiers déjà ingérés.
+
 ## Documents de travail métier
 
 `regles-metier-pour-validation.docx` à la racine de l'app est un document de travail synchronisé avec les experts métier. Il sert de base pour construire la **checklist** de contrôle (import Excel dans Paramètres). Depuis le passage en **checklist-only** (voir écart 2026-07-21), l'app n'embarque plus de règles codées : toutes les règles vivent dans `backend/data/rules.json` (`regles_personnalisees`), alimentées par l'import de checklist ou l'édition Paramètres, et jugées par l'IA (`app/checks/custom_rules.py`).

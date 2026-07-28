@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDoubleClickConfirm } from "../../hooks/useDoubleClickConfirm";
 import { settingsApi } from "../../lib/api";
+import { useUnsavedGuardStore } from "../../stores/useUnsavedGuardStore";
 import type { CustomRule, RulesLegacyOut } from "../../lib/types";
 
 const SEVERITIES = ["low", "medium", "high"];
@@ -70,6 +71,17 @@ export function CustomRulesCard() {
   const stored: CustomRule[] = query.data?.rules.regles_personnalisees ?? query.data?.rules.custom_rules ?? [];
   const rules = draft ?? stored;
   const dirty = draft !== null;
+
+  // Garde de navigation (cf. useUnsavedGuardStore) : les editions de regles ne
+  // touchent que l'etat local (`draft`) tant que "Save" n'est pas clique --
+  // quitter la page sans sauvegarder perd tout, silencieusement. On enregistre
+  // donc la garde tant que `dirty`, et on la retire en quittant la page meme
+  // sans sauvegarder (l'utilisateur a alors deja confirme vouloir partir).
+  const setGuard = useUnsavedGuardStore((s) => s.setGuard);
+  useEffect(() => {
+    setGuard(dirty ? t("settings.unsavedRulesWarning") : null);
+    return () => setGuard(null);
+  }, [dirty, setGuard, t]);
 
   const save = useMutation({
     mutationFn: (next: CustomRule[]) => settingsApi.saveCustomRules(next),

@@ -58,6 +58,10 @@ class FileOut(BaseModel):
 
     id: uuid.UUID
     current_name: str
+    # Chemin relatif au dossier connecte (POSIX), ou None pour un upload
+    # manuel. Identite/dedup dans _ingest_file ; affiche en UI pour
+    # distinguer deux fichiers homonymes dans des sous-dossiers differents.
+    rel_path: str | None = None
     mime_type: str
     created_at: datetime
     versions: list[FileVersionOut] = []
@@ -65,6 +69,35 @@ class FileOut(BaseModel):
 
 class UploadResultOut(BaseModel):
     uploaded: list[dict[str, Any]]
+
+
+class CorpusFolderIn(BaseModel):
+    """Connexion d'un dossier corpus (chemin local, ex. dossier OneDrive
+    synchronisé). `only` (chemins relatifs) restreint l'ingestion à une sélection
+    de fichiers ; None/absent = tout le dossier."""
+    path: str
+    only: list[str] | None = None
+
+
+class FolderFileOut(BaseModel):
+    """Un fichier listé dans un dossier corpus (avant ingestion)."""
+    rel: str          # chemin relatif au dossier (identifiant de sélection)
+    name: str
+    size: int
+    ext: str
+    blocked: bool     # extension bloquée (non ingérable) — affichée grisée
+
+
+class FolderListOut(BaseModel):
+    """Aperçu du contenu d'un dossier pour sélection avant import."""
+    path: str
+    files: list[FolderFileOut] = []
+    truncated: bool = False
+
+
+class CorpusPathOut(BaseModel):
+    """Dossier corpus actuellement connecté au projet (None si aucun)."""
+    path: str | None = None
 
 
 class ReferenceColumnDef(BaseModel):
@@ -298,11 +331,17 @@ class KpiOut(BaseModel):
 
 
 class SheetInfo(BaseModel):
-    """Apercu d'un onglet Excel : ligne d'en-tete detectee + grille rectangulaire."""
+    """Apercu d'un onglet Excel : ligne d'en-tete detectee + grille rectangulaire.
+
+    `roles` = colonnes reconnues par nom d'en-tete (topic/check/severity/zone/
+    context...), ou None si l'onglet ne ressemble pas a une checklist. L'UI s'en
+    sert pour ouvrir le bon onglet avec le bon mapping.
+    """
 
     name: str
     header_row: int = 0
     rows: list[list[str]]
+    roles: dict[str, int] | None = None
 
 
 class SheetInspectOut(BaseModel):

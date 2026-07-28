@@ -4,7 +4,6 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
-import { Architecture } from "./routes/Architecture";
 import { Data } from "./routes/Data";
 import { Documents } from "./routes/Documents";
 import { Generate } from "./routes/Generate";
@@ -17,12 +16,11 @@ const navItems = [
   { to: "/", labelKey: "nav.generate" },
   { to: "/documents", labelKey: "nav.documents" },
   { to: "/sessions", labelKey: "nav.sessions" },
-  { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
-const LANGS = ["fr", "en"] as const;
+const LANGS = ["fr", "en", "es"] as const;
 
 export function App() {
   const { t, i18n } = useTranslation();
@@ -75,7 +73,6 @@ export function App() {
               <Route path="/" element={<Generate />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/sessions" element={<Sessions />} />
-              <Route path="/architecture" element={<Architecture />} />
               <Route path="/data" element={<Data />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

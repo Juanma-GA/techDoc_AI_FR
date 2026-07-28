@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from pathlib import Path
 
@@ -385,22 +386,21 @@ def _compute_zones(
 @router.get("/{document_id}/zones", response_model=ZonesOut)
 def get_zones(
     document_id: uuid.UUID,
-    refresh: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> ZonesOut:
-    """Liste des zones a remplir detectees dans un template `.pptx`.
+    """Liste des zones a remplir detectees dans un template `.pptx`/`.docx`/`.pdf`.
 
     Trois types de zones :
       - `placeholder` : marqueur explicite `{{cle}}` (deterministe)
       - `xxx` : marqueur libre `XXX` (deterministe ; label devine par contexte)
-      - `llm` : zone identifiee par Mistral via analyse semantique du template
-        (utile pour les cellules de tables vides, boites de texte placeholder
-        sans marqueur, layouts complexes)
+      - `llm`/`frame` : cadre identifie par enumeration structurelle
 
-    Resultat cache dans `Document.extracted_text` apres la 1re analyse.
-    `?refresh=true` force une nouvelle passe LLM (bust le cache).
+    Lecture PURE : renvoie le cache s'il existe, ne le recalcule que s'il est
+    absent (1re analyse). Ne fait donc jamais perdre de configuration
+    utilisateur. Pour forcer une redetection (fichier modifie) en preservant
+    les edits deja faits, voir `POST .../zones/reanalyse`.
 
-    400 si le document n'est pas un `.pptx` ; 404 si introuvable.
+    400 si le document n'est pas un template supporte ; 404 si introuvable.
     """
     doc = db.get(Document, document_id)
     if doc is None:
@@ -418,20 +418,131 @@ def get_zones(
             detail={"filename": doc.filename},
         )
 
-    if not refresh:
-        cached, llm_used_cached, dropped_cached, validated_cached = _read_zones_cache(doc)
-        if cached is not None:
-            return _zones_out(
-                cached, _read_removed(doc),
-                llm_used_cached, dropped_cached, validated_cached,
-            )
+    cached, llm_used_cached, dropped_cached, validated_cached = _read_zones_cache(doc)
+    if cached is not None:
+        return _zones_out(
+            cached, _read_removed(doc),
+            llm_used_cached, dropped_cached, validated_cached,
+        )
 
     zones, llm_used, dropped = _compute_zones(doc, db)
-    # `validated=None` -> auto-validation. Une (re)analyse complete repart d'une
-    # corbeille vide (les zones eventuellement supprimees avant sont recalculees).
+    # `validated=None` -> auto-validation. La toute premiere analyse d'un
+    # template n'a par definition aucune corbeille a preserver.
     _write_zones_cache(doc, zones, llm_used, dropped, db, removed=[])
     cached, llm_used_c, dropped_c, validated_c = _read_zones_cache(doc)
     return _zones_out(cached or [], [], llm_used_c, dropped_c, validated_c)
+
+
+# Champs d'une zone que seul l'utilisateur edite (label, consigne, activation,
+# alignement) : c'est TOUT ce que `reanalyse_zones` doit preserver. Les champs
+# structurels (kind, position, titre de slide, libelle d'emplacement) sont eux
+# rafraichis a chaque passe, puisqu'ils decrivent l'etat reel du fichier.
+_USER_EDITED_ZONE_FIELDS = ("label", "instruction", "active", "align")
+
+
+def _zone_id_sort_key(zone_id: str) -> int:
+    """Suffixe numerique d'un id de zone (`z_12` -> 12, `z_frame_3` -> 3).
+    Utilise UNIQUEMENT pour departager des zones qui partagent un `target`
+    (cf. `_target_occurrence_map`) : `counter` est incremente en continu
+    pendant tout le parcours d'une shape (`extract_zones`/`extract_all_frames`),
+    donc les ids des marqueurs d'une MEME shape restent des entiers consecutifs
+    dans l'ordre de ses propres paragraphes — meme si la numerotation globale
+    bouge ailleurs dans le fichier suite a l'ajout/suppression d'une AUTRE shape.
+    """
+    m = re.search(r"(\d+)$", zone_id)
+    return int(m.group(1)) if m else 0
+
+
+def _target_occurrence_map(zones: list[dict]) -> dict[tuple[str, int], dict]:  # type: ignore[type-arg]
+    """{(target, ordinal): zone} pour les zones ayant un `target` non vide.
+
+    `target` n'identifie PAS un marqueur unique : un meme cadre PPTX/Word peut
+    porter plusieurs marqueurs `XXX`/`{{cle}}` (plusieurs paragraphes dans une
+    seule shape), qui partagent alors le MEME `target` de niveau shape (cf.
+    `Zone.target`). `ordinal` (0-based, tri par id au sein d'un meme target)
+    distingue ces marqueurs entre eux, de facon stable d'une passe a l'autre
+    tant que l'ORDRE INTERNE de la shape ne change pas — ce qui est le cas
+    normal d'une simple reanalyse (le fichier n'a pas restructure CETTE shape).
+    """
+    by_target: dict[str, list[dict]] = {}
+    for z in zones:
+        target = z.get("target", "")
+        if target:
+            by_target.setdefault(target, []).append(z)
+    out: dict[tuple[str, int], dict] = {}
+    for target, group in by_target.items():
+        ordered = sorted(group, key=lambda z: _zone_id_sort_key(z["id"]))
+        for ordinal, z in enumerate(ordered):
+            out[(target, ordinal)] = z
+    return out
+
+
+def _merge_reanalysed_zones(
+    new_zones: list,  # type: ignore[type-arg]  # list[Zone]
+    old_zones: list[dict],  # type: ignore[type-arg]
+    old_removed: list[dict],  # type: ignore[type-arg]
+) -> list[dict]:  # type: ignore[type-arg]
+    """Fusionne une redetection complete avec l'etat deja persiste.
+
+    Une zone redetectee dont la cle `(target, ordinal)` (cf.
+    `_target_occurrence_map`) correspond a une zone deja connue HERITE de son
+    label/consigne/activation/alignement — c'est la seule maniere de distinguer
+    « configure par l'utilisateur » de « valeur par defaut de la detection » ;
+    la redetection ne doit rafraichir que l'ENSEMBLE des zones (cadres
+    ajoutes/supprimes dans le template), jamais la configuration d'une zone qui
+    existe encore. Une zone dont la cle est deja a la corbeille est exclue du
+    resultat : elle ne doit pas resurgir active simplement parce que la
+    redetection la revoit dans le fichier (`reanalyse_zones` preserve la
+    corbeille telle quelle a cote de ce resultat).
+    """
+    new_dicts = _zones_to_dicts(new_zones)
+
+    old_map = _target_occurrence_map(old_zones + old_removed)
+    removed_ids = {z["id"] for z in old_removed}
+    removed_keys = {key for key, z in old_map.items() if z["id"] in removed_ids}
+    key_by_new_id = {z["id"]: key for key, z in _target_occurrence_map(new_dicts).items()}
+
+    merged: list[dict] = []
+    for z in new_dicts:
+        key = key_by_new_id.get(z["id"])
+        if key is not None and key in removed_keys:
+            continue
+        old = old_map.get(key) if key is not None else None
+        if old is not None:
+            for field in _USER_EDITED_ZONE_FIELDS:
+                z[field] = old[field]
+        merged.append(z)
+    return merged
+
+
+@router.post("/{document_id}/zones/reanalyse", response_model=ZonesOut)
+def reanalyse_zones(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> ZonesOut:
+    """Redetecte les zones d'un template apres une modification du fichier
+    (cadres ajoutes/supprimes), en PRESERVANT le label/consigne/activation/
+    alignement des zones deja configurees par l'utilisateur (fusion par
+    `target`, cf. `_merge_reanalysed_zones`) et la corbeille telle quelle.
+
+    Endpoint dedie en POST (et non un GET `?refresh=true`) : l'operation
+    modifie l'etat persiste, et un GET ne doit jamais avoir d'effet de bord —
+    un simple prefetch ou retry cote client ne doit jamais pouvoir ecraser une
+    configuration existante.
+
+    400 si le document n'est pas un template supporte ; 404 si introuvable.
+    """
+    doc = _require_template(db.get(Document, document_id), document_id)
+
+    old_zones, _, _, _ = _read_zones_cache(doc)
+    old_removed = _read_removed(doc)
+
+    zones, llm_used, dropped = _compute_zones(doc, db)
+    merged = _merge_reanalysed_zones(zones, old_zones or [], old_removed)
+
+    _write_zones_cache(doc, merged, llm_used, dropped, db, removed=old_removed)
+    cached, llm_used_c, dropped_c, validated_c = _read_zones_cache(doc)
+    return _zones_out(cached or [], _read_removed(doc), llm_used_c, dropped_c, validated_c)
 
 
 # ---------------------------------------------------------------------------

@@ -56,13 +56,18 @@ export function TemplatesManagerCard() {
     },
   });
   const reanalyseMutation = useMutation({
-    mutationFn: (id: string) => documentsApi.zones(id, true),
+    mutationFn: (id: string) => documentsApi.reanalyseZones(id),
     onSuccess: (data, id) => {
       setNotice(t("settings.reanalyseDone", { n: data.zones.length }));
       qc.setQueryData(["documents", id, "zones"], data);
     },
     onError: (err: ApiClientError) => setError(err.message),
   });
+  // Confirmation double-clic (regle #13 : jamais de popup natif) : la
+  // reanalyse touche un template deja configure (labels/consignes/corbeille),
+  // meme si le backend les preserve desormais par zone inchangee — un clic
+  // seul reste une action a confirmer.
+  const [reanalyseArmed, setReanalyseArmed] = useState<string | null>(null);
 
   const templates = templatesQuery.data ?? [];
 
@@ -121,16 +126,25 @@ export function TemplatesManagerCard() {
                       <>
                         <button
                           type="button"
-                          className="btn secondary small"
+                          className={`btn small ${reanalyseArmed === doc.id ? "danger" : "secondary"}`}
                           style={{ marginRight: 4 }}
                           disabled={reanalyseMutation.isPending}
                           onClick={() => {
+                            if (reanalyseArmed !== doc.id) {
+                              setReanalyseArmed(doc.id);
+                              setTimeout(
+                                () => setReanalyseArmed((c) => (c === doc.id ? null : c)),
+                                3000,
+                              );
+                              return;
+                            }
+                            setReanalyseArmed(null);
                             setNotice(null);
                             setError(null);
                             reanalyseMutation.mutate(doc.id);
                           }}
                         >
-                          {t("settings.reanalyse")}
+                          {reanalyseArmed === doc.id ? t("data.confirmAgain") : t("settings.reanalyse")}
                         </button>
                         <button
                           type="button"

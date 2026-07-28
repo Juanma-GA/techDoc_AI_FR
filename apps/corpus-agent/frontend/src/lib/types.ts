@@ -43,6 +43,8 @@ export type FileVersionOut = {
 export type FileOut = {
   id: string;
   current_name: string;
+  // Chemin relatif au dossier connecte (POSIX), ou null pour un upload manuel.
+  rel_path: string | null;
   mime_type: string;
   created_at: string;
   versions: FileVersionOut[];
@@ -58,6 +60,22 @@ export type UploadItemResult = {
 };
 
 export type UploadResult = { uploaded: UploadItemResult[] };
+
+export type CorpusPathOut = { path: string | null };
+
+export type FolderFileOut = {
+  rel: string;
+  name: string;
+  size: number;
+  ext: string;
+  blocked: boolean;
+};
+
+export type FolderListOut = {
+  path: string;
+  files: FolderFileOut[];
+  truncated: boolean;
+};
 
 export type ReferenceColumnDef = {
   name: string;
@@ -225,7 +243,14 @@ export type ChecklistImportMode = "replace" | "add" | "update" | "overwrite";
 export type SpecRule = { label: string; consigne: string; severity: string };
 export type SpecExtractOut = { regles: SpecRule[]; count: number };
 
-export type SheetInfo = { name: string; header_row: number; rows: string[][] };
+/** `roles` : colonnes reconnues par le backend (topic/check/severity/zone/
+ *  context...), ou null si l'onglet ne ressemble pas a une checklist. */
+export type SheetInfo = {
+  name: string;
+  header_row: number;
+  rows: string[][];
+  roles?: Record<string, number> | null;
+};
 export type SheetInspectOut = { sheets: SheetInfo[] };
 
 export type ChecklistImportResult = {

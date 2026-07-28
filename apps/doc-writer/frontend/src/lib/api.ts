@@ -240,10 +240,14 @@ export const documentsApi = {
     request<DocumentDto>(`/documents/${id}/reparse`, { method: "POST" }),
   content: (id: string) =>
     request<DocumentContentDto>(`/documents/${id}/content`),
-  zones: (id: string, refresh = false) =>
-    request<ZonesDto>(
-      `/documents/${id}/zones${refresh ? "?refresh=true" : ""}`,
-    ),
+  zones: (id: string) => request<ZonesDto>(`/documents/${id}/zones`),
+  // Redetection des zones APRES modification du template (cadres
+  // ajoutes/supprimes) : POST dedie (jamais un GET) car l'operation modifie
+  // l'etat persiste — un GET ne doit jamais avoir d'effet de bord. Le backend
+  // preserve label/consigne/activation/alignement des zones deja configurees
+  // (fusion par `target`) et la corbeille telle quelle.
+  reanalyseZones: (id: string) =>
+    request<ZonesDto>(`/documents/${id}/zones/reanalyse`, { method: "POST" }),
   setZoneActive: (id: string, zoneId: string, active: boolean) =>
     request<ZonesDto>(`/documents/${id}/zones/${zoneId}`, {
       method: "PATCH",

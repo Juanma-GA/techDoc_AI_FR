@@ -76,6 +76,11 @@ class Project(Base):
     # Ligne d'en-tête choisie par onglet de la BASL — JSON {onglet: ligne(1-based)}.
     # NULL = détection auto. Aligne les libellés de colonnes dans l'éditeur de mapping.
     basl_header_rows: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Dossier corpus connecté — chemin local (typiquement un dossier OneDrive
+    # synchronisé). Alternative à l'upload manuel : `POST /files/sync-folder`
+    # ingère tous les fichiers de ce dossier via la même logique que l'upload.
+    # NULL = aucun dossier connecté.
+    corpus_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     files: Mapped[list["File"]] = relationship(
@@ -100,6 +105,13 @@ class File(Base):
         Uuid, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     current_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Chemin relatif au dossier connecte (POSIX, ex. "sous-dossier/doc.txt"),
+    # identifiant stable pour un fichier ingere via sync-folder. NULL pour un
+    # upload manuel (pas de notion de dossier). Cle d'identite/dedup dans
+    # `_ingest_file` -> deux fichiers de meme nom dans des sous-dossiers
+    # differents ne se confondent plus (cf. ecart corrige : collision par nom
+    # seul dans le mode dossier connecte).
+    rel_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(100), default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 

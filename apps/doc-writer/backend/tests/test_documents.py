@@ -234,6 +234,138 @@ def test_zone_soft_delete_then_restore(client) -> None:
     assert target not in {z["id"] for z in rb["removed"]}
 
 
+# ---------------------------------------------------------------------------
+# Reanalyse (POST /zones/reanalyse) : redetection qui preserve les edits.
+# ---------------------------------------------------------------------------
+
+
+def _storage_path(doc_id: str):  # type: ignore[no-untyped-def]
+    """Chemin disque du fichier stocke pour ce document (acces direct DB, cf.
+    conventions des autres tests de cette suite, ex. test_writer_engine_scope)."""
+    import uuid as uuid_mod
+
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        doc = db.get(Document, uuid_mod.UUID(doc_id))
+        return doc.storage_path
+    finally:
+        db.close()
+
+
+def test_reanalyse_preserves_edited_label_and_instruction(client) -> None:
+    # Fixture a 2 marqueurs XXX dans la MEME shape (donc meme `target` au
+    # niveau shape) : verifie que la fusion distingue bien les deux zones
+    # entre elles (cf. `_target_occurrence_map`), pas seulement par `target`.
+    up = _upload_template(client, _pptx_with_two_xxx_zones())
+    doc_id = up.json()["uploaded"][0]["document_id"]
+
+    zones = client.get(f"/api/v1/documents/{doc_id}/zones").json()["zones"]
+    edited, untouched = zones[0], zones[1]
+    assert edited["target"]  # sinon le test ne prouve rien (pas de cle de fusion)
+    assert edited["target"] == untouched["target"]  # meme shape, cas le plus dur
+
+    patch = client.patch(
+        f"/api/v1/documents/{doc_id}/zones/{edited['id']}",
+        json={"label": "Libelle edite a la main", "instruction": "Ton commercial"},
+    )
+    assert patch.status_code == 200, patch.text
+
+    # Reanalyse : le FICHIER n'a pas change, mais le endpoint redetecte quand
+    # meme tout depuis zero puis fusionne -> l'edit doit survivre, SANS
+    # deteindre sur l'autre zone qui partage le meme target.
+    r = client.post(f"/api/v1/documents/{doc_id}/zones/reanalyse")
+    assert r.status_code == 200, r.text
+    by_id = {z["id"]: z for z in r.json()["zones"]}
+    assert by_id[edited["id"]]["label"] == "Libelle edite a la main"
+    assert by_id[edited["id"]]["instruction"] == "Ton commercial"
+    assert by_id[untouched["id"]]["label"] == untouched["label"]
+    assert by_id[untouched["id"]]["instruction"] == ""
+
+    # Persiste sur un GET ulterieur (pas juste dans la reponse du POST).
+    g = client.get(f"/api/v1/documents/{doc_id}/zones").json()
+    got = {z["id"]: z for z in g["zones"]}
+    assert got[edited["id"]]["label"] == "Libelle edite a la main"
+    assert got[untouched["id"]]["label"] == untouched["label"]
+
+
+def test_reanalyse_keeps_removed_zone_trashed(client) -> None:
+    up = _upload_template(client, _pptx_with_two_xxx_zones())
+    doc_id = up.json()["uploaded"][0]["document_id"]
+
+    zones = client.get(f"/api/v1/documents/{doc_id}/zones").json()["zones"]
+    removed_zone, sibling = zones[0], zones[1]
+    assert removed_zone["target"] == sibling["target"]  # meme shape
+
+    d = client.delete(f"/api/v1/documents/{doc_id}/zones/{removed_zone['id']}")
+    assert d.status_code == 200, d.text
+
+    r = client.post(f"/api/v1/documents/{doc_id}/zones/reanalyse")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    zone_ids = {z["id"] for z in body["zones"]}
+    removed_ids = {z["id"] for z in body["removed"]}
+    # La redetection revoit bien la shape dans le fichier (son voisin de meme
+    # target est toujours actif), mais la zone supprimee reste a la corbeille
+    # -> ne doit pas resurgir active.
+    assert removed_zone["id"] not in zone_ids
+    assert removed_zone["id"] in removed_ids
+    assert sibling["id"] in zone_ids
+
+
+def test_reanalyse_detects_new_shape_added_to_template(client) -> None:
+    from pptx import Presentation  # type: ignore[import-untyped]
+    from pptx.util import Inches  # type: ignore[import-untyped]
+
+    up = _upload_template(client, _pptx_with_two_xxx_zones())
+    doc_id = up.json()["uploaded"][0]["document_id"]
+
+    zones_before = client.get(f"/api/v1/documents/{doc_id}/zones").json()["zones"]
+    targets_before = {z["target"] for z in zones_before}
+
+    # Edite le fichier stocke : ajoute un 3e cadre XXX sur la meme slide.
+    # Les shapes existantes gardent leur shape_id (python-pptx les assigne a
+    # la creation, jamais renumerotees par un ajout), donc leurs `target`
+    # restent stables.
+    path = _storage_path(doc_id)
+    prs = Presentation(path)
+    tb = prs.slides[0].shapes.add_textbox(Inches(1), Inches(5), Inches(6), Inches(1))
+    tb.text_frame.text = "Nouveau : XXX"
+    prs.save(path)
+
+    r = client.post(f"/api/v1/documents/{doc_id}/zones/reanalyse")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    targets_after = {z["target"] for z in body["zones"]}
+
+    # Les zones deja connues sont toujours la (memes targets).
+    assert targets_before <= targets_after
+    # La nouvelle shape est detectee en plus, pas a la place des anciennes.
+    assert len(targets_after) > len(targets_before)
+
+
+def test_get_zones_ignores_legacy_refresh_query_param(client) -> None:
+    """`GET .../zones` est une lecture pure : un `?refresh=true` residuel (ancien
+    client, favori navigateur) ne doit jamais ecraser une configuration
+    existante — seul `POST .../zones/reanalyse` redetecte."""
+    up = _upload_template(client, _pptx_with_two_xxx_zones())
+    doc_id = up.json()["uploaded"][0]["document_id"]
+
+    zones = client.get(f"/api/v1/documents/{doc_id}/zones").json()["zones"]
+    zone_id = zones[0]["id"]
+    client.patch(
+        f"/api/v1/documents/{doc_id}/zones/{zone_id}",
+        json={"label": "Ne doit jamais disparaitre"},
+    )
+
+    g = client.get(f"/api/v1/documents/{doc_id}/zones?refresh=true")
+    assert g.status_code == 200, g.text
+    by_id = {z["id"]: z for z in g.json()["zones"]}
+    assert by_id[zone_id]["label"] == "Ne doit jamais disparaitre"
+
+
 _DOCX_MIME = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 )
