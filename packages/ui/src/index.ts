@@ -25,6 +25,7 @@ export { FileDropzone, type FileDropzoneProps } from "./components/FileDropzone"
 export { KpiCard, type KpiCardProps, type KpiDelta } from "./components/KpiCard";
 export { LoadingOverlay, type LoadingOverlayProps } from "./components/LoadingOverlay";
 export { MarkdownView, type MarkdownViewProps } from "./components/MarkdownView";
+export { PortalLink, portalHref, type PortalLinkProps } from "./components/PortalLink";
 export {
   MultiSelect,
   type MultiSelectItem,
