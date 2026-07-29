@@ -6,18 +6,28 @@ import { useFiltersStore } from "../stores/filtersStore";
 
 type AnalyzeStatus = "idle" | "running" | "done" | "error";
 
+export type QualityState = "analyzable" | "degraded" | "unusable";
+
+export type AnalyzeQuality = {
+  state: QualityState;
+  coverage: number;
+  engine: string;
+};
+
 export function useAnalyze(documentId: string | undefined) {
   const qc = useQueryClient();
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [quality, setQuality] = useState<AnalyzeQuality | null>(null);
 
   const start = useCallback(async (vision?: boolean) => {
     if (!documentId) return;
     setStatus("running");
     setProgress(0);
     setError(null);
+    setQuality(null);
 
     try {
       // Cible « checklist » (toggle Documents) transmise a chaque run ; `vision`
@@ -56,6 +66,19 @@ export function useAnalyze(documentId: string | undefined) {
                 } catch {
                   /* ignore */
                 }
+              } else if (currentEvent === "quality") {
+                try {
+                  const parsed = JSON.parse(data) as Partial<AnalyzeQuality>;
+                  if (parsed.state) {
+                    setQuality({
+                      state: parsed.state as QualityState,
+                      coverage: typeof parsed.coverage === "number" ? parsed.coverage : 0,
+                      engine: parsed.engine ?? "pdf",
+                    });
+                  }
+                } catch {
+                  /* ignore */
+                }
               } else if (currentEvent === "done") {
                 setStatus("done");
                 setProgress(100);
@@ -82,5 +105,5 @@ export function useAnalyze(documentId: string | undefined) {
     }
   }, [documentId, qc, status, checklistActive]);
 
-  return { status, progress, error, start };
+  return { status, progress, error, quality, start };
 }

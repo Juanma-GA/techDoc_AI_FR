@@ -169,28 +169,95 @@ def set_llm_tested(db: Session, ok: bool) -> None:
     db.commit()
 
 
-# ---- S1000D toggle ---------------------------------------------------------
-# Stored as a CSV string under `s1000d.disabled_codes` in `app_config`.
+# ---- Fiabilisation LLM (verification adversariale + feedback global) -------
+# Config runtime de la pile de fiabilisation portee de word-reviewer. Stockee
+# en clair dans app_config. Defauts calques sur word-reviewer.
 
-_S1000D_KEY = "s1000d.disabled_codes"
+_VERIFY_ENABLED_KEY = "llm.verify_enabled"
+_VERIFY_PASSES_KEY = "llm.verify_passes"
+_MAX_CALLS_KEY = "llm.max_calls"
+_FEEDBACK_ENABLED_KEY = "llm.feedback_enabled"
+
+_VERIFY_PASSES_DEFAULT = 3
+_MAX_CALLS_DEFAULT = 400
 
 
-def get_disabled_s1000d(db: Session) -> list[str]:
-    row = db.get(AppConfig, _S1000D_KEY)
+def _get_bool(db: Session, key: str, default: bool) -> bool:
+    try:
+        row = db.get(AppConfig, key)
+    except SQLAlchemyError:
+        db.rollback()
+        return default
     if row is None or not row.value:
-        return []
-    return [c.strip().upper() for c in row.value.split(",") if c.strip()]
+        return default
+    return row.value.strip().lower() in {"1", "true", "yes"}
 
 
-def set_disabled_s1000d(db: Session, codes: list[str]) -> None:
-    cleaned = sorted({c.strip().upper() for c in codes if c.strip()})
-    csv = ",".join(cleaned)
-    row = db.get(AppConfig, _S1000D_KEY)
+def _set_bool(db: Session, key: str, value: bool) -> None:
+    text = "true" if value else "false"
+    row = db.get(AppConfig, key)
     if row is None:
-        db.add(AppConfig(key=_S1000D_KEY, value=csv))
+        db.add(AppConfig(key=key, value=text))
     else:
-        row.value = csv
+        row.value = text
     db.commit()
+
+
+def _get_int(db: Session, key: str, default: int, *, lo: int, hi: int) -> int:
+    try:
+        row = db.get(AppConfig, key)
+    except SQLAlchemyError:
+        db.rollback()
+        return default
+    if row is None or not row.value:
+        return default
+    try:
+        value = int(row.value.strip())
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
+
+
+def _set_int(db: Session, key: str, value: int, *, lo: int, hi: int) -> None:
+    clamped = max(lo, min(hi, int(value)))
+    row = db.get(AppConfig, key)
+    if row is None:
+        db.add(AppConfig(key=key, value=str(clamped)))
+    else:
+        row.value = str(clamped)
+    db.commit()
+
+
+def get_verify_enabled(db: Session) -> bool:
+    return _get_bool(db, _VERIFY_ENABLED_KEY, True)
+
+
+def set_verify_enabled(db: Session, enabled: bool) -> None:
+    _set_bool(db, _VERIFY_ENABLED_KEY, enabled)
+
+
+def get_verify_passes(db: Session) -> int:
+    return _get_int(db, _VERIFY_PASSES_KEY, _VERIFY_PASSES_DEFAULT, lo=1, hi=5)
+
+
+def set_verify_passes(db: Session, passes: int) -> None:
+    _set_int(db, _VERIFY_PASSES_KEY, passes, lo=1, hi=5)
+
+
+def get_llm_max_calls(db: Session) -> int:
+    return _get_int(db, _MAX_CALLS_KEY, _MAX_CALLS_DEFAULT, lo=0, hi=5000)
+
+
+def set_llm_max_calls(db: Session, max_calls: int) -> None:
+    _set_int(db, _MAX_CALLS_KEY, max_calls, lo=0, hi=5000)
+
+
+def get_feedback_enabled(db: Session) -> bool:
+    return _get_bool(db, _FEEDBACK_ENABLED_KEY, True)
+
+
+def set_feedback_enabled(db: Session, enabled: bool) -> None:
+    _set_bool(db, _FEEDBACK_ENABLED_KEY, enabled)
 
 
 # ---- Free-text AI guidelines ----------------------------------------------

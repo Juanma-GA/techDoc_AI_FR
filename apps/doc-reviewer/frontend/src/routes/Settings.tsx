@@ -5,10 +5,12 @@ import { PageHeader } from "../components/PageHeader";
 import {
   useAiPrompt,
   useMistralSettings,
+  useReliability,
   useTestMistralConnection,
   useToggleLlm,
   useUpdateAiPrompt,
   useUpdateMistralSettings,
+  useUpdateReliability,
 } from "../hooks/useMistralSettings";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
@@ -38,6 +40,8 @@ export function Settings() {
   const toggleLlm = useToggleLlm();
   const aiPrompt = useAiPrompt();
   const updateAiPrompt = useUpdateAiPrompt();
+  const reliability = useReliability();
+  const updateReliability = useUpdateReliability();
 
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
@@ -214,6 +218,83 @@ export function Settings() {
                       {t("common.cancel")}
                     </button>
                   ) : null}
+                </div>
+              </div>
+            )}
+          </Card>
+
+          <Card
+            title={t("settings.reliability.title")}
+            description={t("settings.reliability.description")}
+          >
+            {reliability.isLoading || !reliability.data ? (
+              <p className="hint">{t("common.loading")}</p>
+            ) : (
+              <div className="form">
+                <div className="switch-row">
+                  <div>
+                    <div>{t("settings.reliability.verifyEnabled")}</div>
+                    <div className="label">{t("settings.reliability.verifyEnabledHint")}</div>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={reliability.data.verify_enabled}
+                      onChange={(e) =>
+                        updateReliability.mutate({ verify_enabled: e.target.checked })
+                      }
+                    />
+                    <span className="track" />
+                  </label>
+                </div>
+
+                <Field label={t("settings.reliability.passes")}>
+                  <input
+                    type="number"
+                    min={1}
+                    max={5}
+                    value={reliability.data.verify_passes}
+                    disabled={!reliability.data.verify_enabled}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) updateReliability.mutate({ verify_passes: v });
+                    }}
+                    className="input mono"
+                  />
+                </Field>
+                <p className="hint">{t("settings.reliability.passesHint")}</p>
+
+                <Field label={t("settings.reliability.maxCalls")}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5000}
+                    step={50}
+                    value={reliability.data.max_calls}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      if (Number.isFinite(v)) updateReliability.mutate({ max_calls: v });
+                    }}
+                    className="input mono"
+                  />
+                </Field>
+                <p className="hint">{t("settings.reliability.maxCallsHint")}</p>
+
+                <div className="switch-row">
+                  <div>
+                    <div>{t("settings.reliability.feedbackEnabled")}</div>
+                    <div className="label">{t("settings.reliability.feedbackEnabledHint")}</div>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={reliability.data.feedback_enabled}
+                      onChange={(e) =>
+                        updateReliability.mutate({ feedback_enabled: e.target.checked })
+                      }
+                    />
+                    <span className="track" />
+                  </label>
                 </div>
               </div>
             )}

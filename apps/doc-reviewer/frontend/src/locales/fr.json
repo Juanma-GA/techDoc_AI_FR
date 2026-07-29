@@ -163,7 +163,6 @@
     "suggestion.severity.error": "Critique",
     "suggestion.severity.warning": "Attention",
     "suggestion.severity.info": "Info",
-    "suggestion.type.s1000d": "S1000D",
     "suggestion.type.standard": "Norme",
     "suggestion.type.custom": "Règle custom",
     "suggestion.type.units": "Conversion d'unité",
@@ -306,7 +305,29 @@
     "mistral.test": "Tester la connexion",
     "aiPrompt.title": "Prompt IA custom",
     "aiPrompt.description": "Instructions libres ajoutées au prompt système Mistral pour l'analyse de chaque page (par-dessus les règles built-in et custom).",
-    "aiPrompt.placeholder": "Ex : « Signaler toute valeur de pression > 200 bar non encadrée par un avertissement WARNING. »"
+    "aiPrompt.placeholder": "Ex : « Signaler toute valeur de pression > 200 bar non encadrée par un avertissement WARNING. »",
+    "reliability.title": "Fiabilisation IA",
+    "reliability.description": "Réduit les faux positifs des anomalies détectées par l'IA, de manière homogène quel que soit le format d'origine (PDF, Word). N'affecte jamais la détection déterministe (regex, unités, mise en page).",
+    "reliability.verifyEnabled": "Vérification adversariale",
+    "reliability.verifyEnabledHint": "Chaque anomalie détectée par l'IA est soumise à un vérificateur indépendant chargé de la réfuter ; seules les anomalies non réfutées sont conservées.",
+    "reliability.passes": "Nombre de passes de vérification",
+    "reliability.passesHint": "Votes indépendants par anomalie (1 à 5). Une anomalie est écartée si la majorité la réfute. Plus de passes = plus fiable mais plus d'appels Mistral.",
+    "reliability.maxCalls": "Budget d'appels Mistral par analyse",
+    "reliability.maxCallsHint": "Plafond d'appels supplémentaires dépensés par la vérification sur une analyse (0 à 5000). Au-delà, les anomalies restantes sont conservées telles quelles.",
+    "reliability.feedbackEnabled": "Mémoire globale des rejets",
+    "reliability.feedbackEnabledHint": "Une anomalie IA rejetée par le relecteur (avec son motif) n'est plus re-signalée sur AUCUN document, pas seulement celui d'origine."
+  },
+  "quality": {
+    "analyzable.label": "Analysable",
+    "analyzable.hint": "Couche texte suffisante : la revue est fiable.",
+    "degraded.label": "Dégradé",
+    "degraded.hint": "Texte partiel : certaines pages sans couche texte extractible n'ont pas pu être analysées.",
+    "unusable.label": "Non exploitable",
+    "unusable.hint": "Aucune couche texte (document scanné / image) : la revue n'est pas fiable. Fournir un PDF avec texte ou ré-exporter le Word.",
+    "coverage": "Couverture texte : {{pct}}%",
+    "engine": "Normalisé via {{engine}}",
+    "bannerDegraded": "Document dégradé ({{pct}}% de couverture texte) : certaines pages n'ont pas pu être analysées.",
+    "bannerUnusable": "Document non exploitable : aucune couche texte détectée. La revue est vide non pas parce que le document est conforme, mais parce qu'il n'a pas pu être analysé (scanné ?)."
   },
   "errors": {
     "generic": "Une erreur inattendue s'est produite",

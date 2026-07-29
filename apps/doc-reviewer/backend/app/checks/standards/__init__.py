@@ -20,8 +20,9 @@ from app.checks.standards._base import StandardRule
 # XML/SGML source et n'ont pas de sens sur un PDF. Seules restent les normes
 # dont les règles portent sur le texte/rendu : ASD-STE100 (style), MAT10000
 # (description de tâche) et ATA 100 (chapitrage). Les règles de style
-# rédactionnel S1000D/STE conservées vivent dans `app.checks.s1000d_checks`
-# (moteur transverse toujours actif).
+# rédactionnel STE (voix passive, gérondif, longueur de phrase…) vivent dans
+# le catalogue ASD-STE100 et sont exécutées par `catalog_runner`
+# (+ `style_checks` pour la longueur de phrase).
 BUILTIN_STANDARDS: list[dict[str, object]] = [
     {
         "code": "ASD-STE100",

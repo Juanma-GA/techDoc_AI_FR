@@ -19,7 +19,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.checks import catalog_runner, custom_rules, layout_checks, units_check, vision_checks
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 from app.core.errors import AppError
 from app.core.llm_suggester import rephrase_batch, scan_with_prompt
 from app.core.mistral_settings import get_ai_custom_prompt, get_vision_enabled
@@ -123,7 +123,53 @@ def run_all(
         except Exception as exc:  # noqa: BLE001
             _logger.warning("vision_run_skipped", error=type(exc).__name__, message=str(exc))
     out = _enrich_with_ai(out, db)
+    out = _apply_reliability(out, db)
     return _dedupe(out)
+
+
+def _apply_reliability(raws: list[RawSuggestion], db: Session) -> list[RawSuggestion]:
+    """Couche de fiabilisation (portee de word-reviewer) appliquee UNIQUEMENT
+    aux findings detectes par l'IA (`AI_SCAN`) :
+
+    1. **Feedback global** : retire les signatures `(AI_SCAN, texte)` deja
+       rejetees par le relecteur sur n'importe quel document (homogene).
+    2. **Verification adversariale** : chaque finding IA restant est soumis a un
+       refuteur independant (vote majoritaire sur N passes), borne par un budget
+       d'appels. Le deterministe (regex/structural/units/layout) ne passe jamais
+       par la — il est certain par construction.
+
+    Degradation gracieuse : si le LLM est OFF, on renvoie les findings tels quels.
+    """
+    from app.core import feedback, verifier
+    from app.core.llm_budget import LlmBudget
+    from app.core.mistral_settings import (
+        get_feedback_enabled,
+        get_llm_enabled,
+        get_llm_max_calls,
+        get_verify_enabled,
+        get_verify_passes,
+    )
+
+    if not get_llm_enabled(db):
+        return raws
+
+    if get_feedback_enabled(db):
+        raws = feedback.filter_excluded(raws, feedback.load_exclusions(db))
+
+    if not get_verify_enabled(db):
+        return raws
+    llm_findings = [r for r in raws if r.rule_code in feedback.LLM_CODES]
+    if not llm_findings:
+        return raws
+    others = [r for r in raws if r.rule_code not in feedback.LLM_CODES]
+    budget = LlmBudget(get_llm_max_calls(db))
+    passes = get_verify_passes(db)
+    try:
+        kept = verifier.verify_batch(db, llm_findings, budget, passes=passes)
+    except Exception as exc:  # noqa: BLE001 — la fiabilisation ne doit jamais casser l'analyse
+        _logger.warning("reliability_skipped", error=type(exc).__name__, message=str(exc))
+        return others + llm_findings
+    return others + kept
 
 
 def _load_catalog(standard_version: Optional[StandardVersion]) -> list[dict]:

@@ -21,7 +21,7 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 

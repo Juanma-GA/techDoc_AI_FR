@@ -84,13 +84,18 @@ def _persist_pdf(
     db: Session,
     standard_version_id: Optional[uuid.UUID] = None,
     standard_version_ids: Optional[list[uuid.UUID]] = None,
+    convert_engine: str = "pdf",
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
-    The stored artifact is always the faithful PDF — page count and signature
-    check run on it. `display_name` keeps the original upload name (incl. a
-    `.doc/.docx` extension) for traceability.
+    The stored artifact is always the faithful PDF — page count, signature
+    check and the **quality gate** (text-layer coverage → reviewability state)
+    run on it. `display_name` keeps the original upload name (incl. a
+    `.doc/.docx` extension) for traceability. `convert_engine` traces the
+    normalisation engine ("pdf" native, "libreoffice", "word").
     """
+    from app.core import quality_gate
+
     sha = sha256_of_bytes(pdf_bytes)
     doc_id = uuid.uuid4()
     storage_dir_value = f"document_{doc_id.hex}"
@@ -108,6 +113,10 @@ def _persist_pdf(
                 status_code=400,
             )
         page_count = opened.page_count
+        # Portail qualite : mesure la couverture texte AVANT fermeture. Un doc
+        # sans couche texte (scan) est marque "unusable" -> l'analyse le signale
+        # au lieu de rendre zero anomalie silencieusement.
+        report = quality_gate.assess(opened)
     finally:
         opened.close()
 
@@ -124,6 +133,9 @@ def _persist_pdf(
         standard_version_ids=_json.dumps([str(v) for v in (standard_version_ids or [])]),
         status="uploaded",
         current_version=0,
+        convert_engine=convert_engine,
+        text_coverage=report.coverage,
+        quality=report.state,
     )
     db.add(document)
     db.commit()
@@ -141,14 +153,15 @@ def _ingest_and_persist(
 ) -> Document:
     """Normalize one supported file (.pdf/.doc/.docx) to a faithful PDF, persist it.
 
-    `.doc/.docx` go through Word COM / LibreOffice conversion (may be slow) —
+    `.doc/.docx` go through LibreOffice / Word COM conversion (may be slow) —
     this runs inside FastAPI's sync threadpool, off the async loop.
     """
-    pdf_bytes, display_name = ingest.to_pdf_bytes(name, data)
+    pdf_bytes, display_name, engine = ingest.to_pdf_bytes(name, data)
     return _persist_pdf(
         pdf_bytes, display_name, target, db,
         standard_version_id=standard_version_id,
         standard_version_ids=standard_version_ids,
+        convert_engine=engine,
     )
 
 

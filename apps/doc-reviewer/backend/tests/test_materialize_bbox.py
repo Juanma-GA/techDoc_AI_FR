@@ -15,7 +15,7 @@ import uuid
 
 import fitz
 
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 from app.core.rules_engine import materialize
 from app.parsers.pdf_parser import parse_pdf
 

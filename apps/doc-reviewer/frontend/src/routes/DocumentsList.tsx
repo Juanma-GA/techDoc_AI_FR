@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
+import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
@@ -180,6 +181,15 @@ function DocRow({
         <p className="item-meta">
           {doc.page_count} pages · v{doc.current_version} · {doc.target_unit_system}
         </p>
+        {doc.quality && doc.quality !== "analyzable" ? (
+          <div style={{ marginTop: 6 }}>
+            <QualityBadge
+              state={doc.quality}
+              coverage={doc.text_coverage}
+              engine={doc.convert_engine}
+            />
+          </div>
+        ) : null}
         {analyze.status === "running" ? (
           <div className="progress" style={{ marginTop: 6 }}>
             <div className="progress-bar" style={{ width: `${analyze.progress}%` }} />

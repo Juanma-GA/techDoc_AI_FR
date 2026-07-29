@@ -23,9 +23,9 @@ _RULES_ISSUE7 = [
             "par phrase descriptive. Au-delà, la phrase devient ambiguë et "
             "difficile à traduire."
         ),
-        kind="regex_flag",
+        kind="sentence_length",
         severity="warning",
-        pattern=r"STE100_LONG_SENTENCE",
+        pattern=r"20",
         message="Phrase trop longue — STE100 §6.4 limite à 20-25 mots.",
         example_invalid=(
             "When the operator wants to remove the panel he must first ensure "

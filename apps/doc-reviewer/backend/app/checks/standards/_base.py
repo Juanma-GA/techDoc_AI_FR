@@ -7,10 +7,11 @@ Python-side imports — the DB is the source of truth and the user can
 clone/override individual entries through the API.
 
 Supported `kind` values mix textual (regex_replace, regex_flag,
-term_replace, case_capitalize, accent_fix) and structural checks
+term_replace, case_capitalize, accent_fix), structural checks
 (field_required, section_required, field_consistency, step_pattern,
-enum_value). See `app.checks.structural_checks` for the structural
-runtime.
+enum_value) and style checks (sentence_length — longueur de phrase,
+seuil de mots porté par `pattern`). See `app.checks.structural_checks`
+and `app.checks.style_checks` for the runtimes.
 """
 
 from __future__ import annotations

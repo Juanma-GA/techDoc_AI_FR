@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 from app.core.units_detector import detect
 from app.parsers.pdf_parser import ParsedPage
 

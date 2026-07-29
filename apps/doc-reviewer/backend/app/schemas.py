@@ -27,6 +27,10 @@ class DocumentOut(BaseModel):
     standard_version_ids: list[uuid.UUID] = Field(default_factory=list)
     status: str
     current_version: int
+    # Portail qualite (revuabilite homogene tous formats).
+    convert_engine: str = "pdf"
+    text_coverage: int = 100
+    quality: str = "analyzable"
     created_at: datetime
 
     @field_validator("standard_version_ids", mode="before")

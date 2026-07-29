@@ -2,12 +2,12 @@
 
 Textual entries (regex_flag, regex_replace, term_replace,
 case_capitalize, accent_fix) are dispatched to small in-module helpers.
-Structural entries are delegated to `structural_checks.run()`.
+The `sentence_length` kind (longueur de phrase, non exprimable en regex) est
+délégué à `style_checks.run()`. Les entrées structurelles vont à
+`structural_checks.run()`.
 
-This module replaces the legacy `s1000d_checks.run()` for catalog-driven
-analysis. The historic module stays around for backward compatibility
-(its `RawSuggestion` dataclass is the shared transport type) but is no
-longer the source of S1000D rules.
+Ce module est la source unique des règles catalogue (l'ancien
+`s1000d_checks.run()` a été retiré).
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.checks import structural_checks
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks import structural_checks, style_checks
+from app.checks.raw import RawSuggestion
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 
@@ -27,6 +27,9 @@ def run(parsed: ParsedPdf, catalog: list[dict[str, Any]]) -> list[RawSuggestion]
     out: list[RawSuggestion] = []
     out.extend(structural_checks.run(parsed, catalog))
     out.extend(_run_text(parsed.pages, catalog))
+    for rule in catalog:
+        if (rule.get("kind") or "").lower() == "sentence_length":
+            out.extend(style_checks.run(parsed.pages, rule))
     return out
 
 

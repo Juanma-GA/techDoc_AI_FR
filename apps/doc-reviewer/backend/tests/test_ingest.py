@@ -12,9 +12,10 @@ from app.core.errors import AppError
 
 
 def test_to_pdf_bytes_pdf_passthrough(sample_pdf_bytes: bytes) -> None:
-    out, name = ingest.to_pdf_bytes("manual.pdf", sample_pdf_bytes)
+    out, name, engine = ingest.to_pdf_bytes("manual.pdf", sample_pdf_bytes)
     assert out == sample_pdf_bytes  # zero conversion pour un PDF natif
     assert name == "manual.pdf"
+    assert engine == "pdf"  # PDF natif = aucune conversion
 
 
 def test_to_pdf_bytes_rejects_unsupported() -> None:

@@ -79,6 +79,33 @@ export function useAiPrompt() {
   });
 }
 
+// ----- Fiabilisation IA (verification adversariale + feedback global) --------
+
+export type Reliability = {
+  verify_enabled: boolean;
+  verify_passes: number;
+  max_calls: number;
+  feedback_enabled: boolean;
+};
+
+export type ReliabilityInput = Partial<Reliability>;
+
+export function useReliability() {
+  return useQuery({
+    queryKey: ["settings", "reliability"],
+    queryFn: () => api.get<Reliability>("/settings/reliability"),
+  });
+}
+
+export function useUpdateReliability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ReliabilityInput) =>
+      api.post<Reliability>("/settings/reliability", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings", "reliability"] }),
+  });
+}
+
 export function useUpdateAiPrompt() {
   const qc = useQueryClient();
   return useMutation({

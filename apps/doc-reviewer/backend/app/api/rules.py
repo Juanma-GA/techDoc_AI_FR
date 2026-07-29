@@ -397,7 +397,7 @@ async def suggest_rules_from_files(
     for f in files[:_SUGGEST_MAX_DOCS]:
         data = await f.read()
         try:
-            pdf_bytes, name = ingest.to_pdf_bytes(f.filename or "upload", data)
+            pdf_bytes, name, _engine = ingest.to_pdf_bytes(f.filename or "upload", data)
         except AppError:
             continue  # format non supporte / conversion indisponible -> on saute
         try:

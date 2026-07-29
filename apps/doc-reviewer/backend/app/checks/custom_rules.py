@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 from app.db.models import Rule
 from app.parsers.pdf_parser import ParsedPage
 

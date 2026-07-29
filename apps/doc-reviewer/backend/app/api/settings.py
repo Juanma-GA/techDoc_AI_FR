@@ -9,19 +9,24 @@ from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 
-from app.checks.s1000d_checks import S1000D_BUILTIN_RULES
 from app.core.mistral_settings import (
     get_ai_custom_prompt,
-    get_disabled_s1000d,
     get_effective,
+    get_feedback_enabled,
     get_llm_enabled,
+    get_llm_max_calls,
     get_llm_tested,
+    get_verify_enabled,
+    get_verify_passes,
     get_vision_enabled,
     save,
     set_ai_custom_prompt,
-    set_disabled_s1000d,
+    set_feedback_enabled,
     set_llm_enabled,
+    set_llm_max_calls,
     set_llm_tested,
+    set_verify_enabled,
+    set_verify_passes,
     set_vision_enabled,
 )
 from app.db.session import get_db
@@ -141,45 +146,6 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         )
 
 
-# ---- S1000D built-in rules ----------------------------------------------
-
-
-class S1000DToggleIn(BaseModel):
-    code: str
-    enabled: bool
-
-
-@router.get("/s1000d")
-def get_s1000d_settings(db: Session = Depends(get_db)) -> dict:
-    return {
-        "rules": S1000D_BUILTIN_RULES,
-        "disabled_codes": get_disabled_s1000d(db),
-    }
-
-
-@router.post("/s1000d/toggle")
-def toggle_s1000d_rule(body: S1000DToggleIn, db: Session = Depends(get_db)) -> dict:
-    valid_codes = {r["code"] for r in S1000D_BUILTIN_RULES}
-    if body.code not in valid_codes:
-        from app.core.errors import AppError
-
-        raise AppError(
-            "S1000D_CODE_UNKNOWN",
-            f"Code S1000D inconnu : {body.code}",
-            status_code=400,
-        )
-    disabled = set(get_disabled_s1000d(db))
-    if body.enabled:
-        disabled.discard(body.code)
-    else:
-        disabled.add(body.code)
-    set_disabled_s1000d(db, list(disabled))
-    return {
-        "rules": S1000D_BUILTIN_RULES,
-        "disabled_codes": sorted(disabled),
-    }
-
-
 # ---- AI free-text guidelines ---------------------------------------------
 
 
@@ -196,3 +162,50 @@ def get_ai_prompt(db: Session = Depends(get_db)) -> dict:
 def update_ai_prompt(body: AiPromptIn, db: Session = Depends(get_db)) -> dict:
     set_ai_custom_prompt(db, body.prompt)
     return {"prompt": get_ai_custom_prompt(db)}
+
+
+# ---- Fiabilisation LLM ----------------------------------------------------
+# Pilote la verification adversariale (refuteur, vote majoritaire) + le
+# feedback global des rejets + le budget d'appels. cf. core/verifier.py,
+# core/feedback.py, core/llm_budget.py.
+
+
+class ReliabilityOut(BaseModel):
+    verify_enabled: bool
+    verify_passes: int
+    max_calls: int
+    feedback_enabled: bool
+
+
+class ReliabilityIn(BaseModel):
+    verify_enabled: bool | None = None
+    verify_passes: int | None = None
+    max_calls: int | None = None
+    feedback_enabled: bool | None = None
+
+
+def _reliability_out(db: Session) -> ReliabilityOut:
+    return ReliabilityOut(
+        verify_enabled=get_verify_enabled(db),
+        verify_passes=get_verify_passes(db),
+        max_calls=get_llm_max_calls(db),
+        feedback_enabled=get_feedback_enabled(db),
+    )
+
+
+@router.get("/reliability", response_model=ReliabilityOut)
+def get_reliability(db: Session = Depends(get_db)) -> ReliabilityOut:
+    return _reliability_out(db)
+
+
+@router.post("/reliability", response_model=ReliabilityOut)
+def update_reliability(body: ReliabilityIn, db: Session = Depends(get_db)) -> ReliabilityOut:
+    if body.verify_enabled is not None:
+        set_verify_enabled(db, body.verify_enabled)
+    if body.verify_passes is not None:
+        set_verify_passes(db, body.verify_passes)
+    if body.max_calls is not None:
+        set_llm_max_calls(db, body.max_calls)
+    if body.feedback_enabled is not None:
+        set_feedback_enabled(db, body.feedback_enabled)
+    return _reliability_out(db)

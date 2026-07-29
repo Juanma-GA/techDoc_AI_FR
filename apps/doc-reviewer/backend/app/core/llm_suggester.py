@@ -98,7 +98,18 @@ def _extract_first_json_object(text: str) -> str | None:
     return None
 
 
-def _call_mistral(db: Session, system: str, user: str) -> str:
+def call_chat(db: Session, system: str, user: str, *, temperature: float = 0.2) -> str:
+    """Appel Mistral chat (JSON strict) réutilisable — primitive publique.
+
+    Utilisé par le batch rewriter, le scan libre ET la couche de vérification
+    adversariale (`core.verifier`). Lève `AppError` (LLM_DISABLED /
+    MISTRAL_NOT_CONFIGURED / LLM_REPHRASE_FAILED) que l'appelant décide de
+    propager ou d'absorber (le vérificateur absorbe : un appel raté = finding
+    conservé)."""
+    return _call_mistral(db, system, user, temperature=temperature)
+
+
+def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0.2) -> str:
     if not get_llm_enabled(db):
         raise AppError(
             "LLM_DISABLED",
@@ -118,7 +129,7 @@ def _call_mistral(db: Session, system: str, user: str) -> str:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
-        "temperature": 0.2,
+        "temperature": temperature,
         "response_format": {"type": "json_object"},
     }
     try:

@@ -97,6 +97,15 @@ class Document(Base):
         String(30), default="uploaded", server_default="uploaded", index=True
     )
     current_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Portail qualite (homogeneite tous formats) : moteur de normalisation
+    # ("pdf" natif, "libreoffice", "word"), % de pages porteuses de texte, et
+    # etat de revuabilite ("analyzable" | "degraded" | "unusable"). Renseignes
+    # a l'upload par `quality_gate.assess`. cf. core/quality_gate.py.
+    convert_engine: Mapped[str] = mapped_column(String(20), default="pdf", server_default="pdf")
+    text_coverage: Mapped[int] = mapped_column(Integer, default=100, server_default="100")
+    quality: Mapped[str] = mapped_column(
+        String(20), default="analyzable", server_default="analyzable", index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     suggestions: Mapped[list["Suggestion"]] = relationship(

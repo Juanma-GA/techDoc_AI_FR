@@ -104,6 +104,12 @@ def analyze_stream(
     run_id_value = run.id
     src_path = str(src)
     target_unit = doc.target_unit_system
+    # Portail qualite : etat de revuabilite (homogene tous formats), signale en
+    # tete de flux pour qu'un document non exploitable (scan sans couche texte)
+    # ne rende pas une revue vide silencieuse.
+    quality_value = doc.quality
+    coverage_value = doc.text_coverage
+    convert_engine_value = doc.convert_engine
     sv_ids_value = sv_ids_list
     vision_override_value = vision  # captured for the worker thread
     checklist_enabled_value = checklist  # captured for the worker thread
@@ -113,6 +119,14 @@ def analyze_stream(
         yield {
             "event": "run_started",
             "data": json.dumps({"run_id": str(run_id_value), "document_id": str(document_id_value)}),
+        }
+        yield {
+            "event": "quality",
+            "data": json.dumps({
+                "state": quality_value,
+                "coverage": coverage_value,
+                "engine": convert_engine_value,
+            }),
         }
 
         try:

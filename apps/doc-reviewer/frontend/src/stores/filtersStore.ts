@@ -34,7 +34,7 @@ export const useFiltersStore = create<FiltersState>()(
   persist(
     (set, get) => ({
       severities: ["info", "warning", "error"],
-      kinds: ["s1000d", "standard", "custom", "units", "layout"],
+      kinds: ["standard", "custom", "units", "layout"],
       hideAccepted: false,
       showUnitConversions: true,
       targetUnits: [],

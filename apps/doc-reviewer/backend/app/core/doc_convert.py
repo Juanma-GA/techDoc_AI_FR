@@ -1,11 +1,17 @@
 """Conversion .doc / .docx -> PDF **fidele**.
 
-Doc Reviewer revise un **PDF** pour tout format d'entree. Le PDF le plus fidele
-disponible sur ce poste est celui produit par **Word COM** (`ExportAsFixedFormat`,
-rendu Word exact) qui, contrairement au SaveAs `.docx`, n'est PAS bloque par la
-strategie Office (Trust Center / GPO). Repli **LibreOffice** `--convert-to pdf`
-si Word n'est pas disponible. On ne produit jamais de `.docx` ici : la voie
-`.doc -> .docx` (lossy) est justement ce que l'app evite.
+Doc Reviewer revise un **PDF** pour tout format d'entree. Pour une qualite de
+revue **homogene d'un poste a l'autre**, on privilegie **LibreOffice**
+(`--convert-to pdf`, headless) : le rendu est reproductible et independant du
+Word installe localement, et LibreOffice tourne en portable sans droits admin.
+Repli **Word COM** (`ExportAsFixedFormat`, rendu Word exact mais dependant de la
+version/config Word du poste, donc moins reproductible) quand LibreOffice est
+absent. On ne produit jamais de `.docx` ici : la voie `.doc -> .docx` (lossy)
+est justement ce que l'app evite.
+
+Le convertisseur reellement utilise est **remonte a l'appelant** (`libreoffice`
+ou `word`) et trace sur le document, car les checks geometriques (layout)
+dependent du moteur de rendu.
 
 Override du chemin soffice : variable d'environnement `DR_SOFFICE_PATH`.
 """
@@ -144,23 +150,28 @@ def _word_export_pdf(src: Path, out: Path) -> tuple[Path | None, str | None]:
     return (out, None) if out.exists() else (None, "Word n'a produit aucun PDF.")
 
 
-def convert_to_pdf(src: Path, outdir: Path) -> Path | None:
-    """Produit un PDF fidele de `src` (.doc ou .docx). Priorite a **Word** (rendu
-    exact, non bloque par la GPO), repli **LibreOffice**. None si aucun convertisseur.
+def convert_to_pdf(src: Path, outdir: Path) -> tuple[Path | None, str | None]:
+    """Produit un PDF fidele de `src` (.doc ou .docx). Priorite **LibreOffice**
+    (rendu reproductible, portable), repli **Word COM** (rendu Word exact mais
+    dependant du poste). Retourne `(pdf, engine)` avec `engine` in
+    {"libreoffice", "word"}, ou `(None, None)` si aucun convertisseur.
     """
+    soffice = _find_soffice()
+    if soffice:
+        produced = _convert_libreoffice(soffice, src, outdir)
+        if produced is not None and produced.exists():
+            return produced, "libreoffice"
     out = outdir / (src.stem + ".pdf")
     produced, _ = _word_export_pdf(src, out)
     if produced is not None and produced.exists():
-        return produced
-    soffice = _find_soffice()
-    if soffice:
-        return _convert_libreoffice(soffice, src, outdir)
-    log.warning("convert_to_pdf: ni Word ni LibreOffice disponibles.")
-    return None
+        return produced, "word"
+    log.warning("convert_to_pdf: ni LibreOffice ni Word disponibles.")
+    return None, None
 
 
-def doc_to_pdf_bytes(data: bytes, suffix: str) -> bytes:
-    """Convertit des octets .doc/.docx en octets **PDF fidele**. Leve AppError si
+def doc_to_pdf_bytes(data: bytes, suffix: str) -> tuple[bytes, str]:
+    """Convertit des octets .doc/.docx en octets **PDF fidele**. Retourne
+    `(pdf_bytes, engine)` (engine in {"libreoffice", "word"}). Leve AppError si
     indisponible.
 
     Le fichier de travail vit dans `%TEMP%` (dossier local hors OneDrive) :
@@ -172,16 +183,17 @@ def doc_to_pdf_bytes(data: bytes, suffix: str) -> bytes:
     src = tmp / f"input{suffix}"
     src.write_bytes(data)
     try:
-        produced = convert_to_pdf(src, tmp)
+        produced, engine = convert_to_pdf(src, tmp)
         if produced is None or not produced.exists():
             raise AppError(
                 "DOC_CONVERT_UNAVAILABLE",
-                "Conversion Word -> PDF impossible sur ce poste : ni Word (automation COM) "
-                "ni LibreOffice ne sont disponibles. Solutions : ouvrir le fichier dans Word "
-                "et l'exporter en PDF, ou installer LibreOffice (meme portable, sans admin) et "
-                "definir la variable d'environnement DR_SOFFICE_PATH vers soffice.exe.",
+                "Conversion Word -> PDF impossible sur ce poste : ni LibreOffice "
+                "ni Word (automation COM) ne sont disponibles. Solutions : installer "
+                "LibreOffice (meme portable, sans admin) et definir la variable "
+                "d'environnement DR_SOFFICE_PATH vers soffice.exe, ou ouvrir le "
+                "fichier dans Word et l'exporter en PDF.",
                 status_code=400,
             )
-        return produced.read_bytes()
+        return produced.read_bytes(), engine or "unknown"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

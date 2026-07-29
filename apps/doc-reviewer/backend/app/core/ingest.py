@@ -3,8 +3,9 @@
 Doc Reviewer accepte `.pdf`, `.doc`, `.docx` (et des `.zip` en contenant). Quel
 que soit le format, la detection tourne sur un **PDF** :
 - `.pdf`  -> utilise tel quel (zero conversion) ;
-- `.doc/.docx` -> **PDF fidele** via `doc_convert.convert_to_pdf` (Word COM exact,
-  repli LibreOffice) -> plus d'artefacts de conversion `.doc -> .docx` lossy.
+- `.doc/.docx` -> **PDF fidele** via `doc_convert.convert_to_pdf` (LibreOffice
+  prioritaire pour un rendu reproductible, repli Word COM) -> plus d'artefacts
+  de conversion `.doc -> .docx` lossy.
 
 Garde-fous anti zip-bomb : taille par fichier, taille decompressee totale et
 nombre de fichiers bornes (repris de word-reviewer).
@@ -96,27 +97,29 @@ def _extract_zip(data: bytes) -> tuple[list[tuple[str, bytes]], list[str]]:
     return out, ignored
 
 
-def to_pdf_bytes(name: str, data: bytes) -> tuple[bytes, str]:
+def to_pdf_bytes(name: str, data: bytes) -> tuple[bytes, str, str]:
     """Normalise un fichier supporte en octets **PDF**.
 
     - `.pdf`  : valide (magic bytes + taille) et renvoie tel quel.
-    - `.doc/.docx` : convertit en PDF fidele (Word COM / LibreOffice).
+    - `.doc/.docx` : convertit en PDF fidele (LibreOffice prioritaire, repli Word).
 
-    Retourne `(pdf_bytes, display_name)`. Le `display_name` conserve le nom
-    d'origine (le rendu PDF garde l'extension source pour la tracabilite).
+    Retourne `(pdf_bytes, display_name, engine)`. `engine` trace le moteur de
+    normalisation : `"pdf"` (natif, aucune conversion), `"libreoffice"` ou
+    `"word"`. Le `display_name` conserve le nom d'origine (le rendu PDF garde
+    l'extension source pour la tracabilite).
     """
     safe = safe_filename(name)
     ext = Path(safe).suffix.lower()
     if ext == ".pdf":
         validate_pdf_bytes(data, _max_single())
-        return data, safe
+        return data, safe, "pdf"
     if ext in (".doc", ".docx"):
         if len(data) == 0:
             raise AppError("UPLOAD_EMPTY", "Fichier vide", status_code=400)
         if len(data) > _max_single():
             raise AppError("FILE_TOO_LARGE", f"{safe} depasse la taille max.", status_code=413)
-        pdf_bytes = doc_convert.doc_to_pdf_bytes(data, ext)
-        return pdf_bytes, safe
+        pdf_bytes, engine = doc_convert.doc_to_pdf_bytes(data, ext)
+        return pdf_bytes, safe, engine
     raise AppError(
         "UNSUPPORTED_FORMAT",
         f"Format non supporte : {ext or '?'} (attendu .pdf / .doc / .docx)",

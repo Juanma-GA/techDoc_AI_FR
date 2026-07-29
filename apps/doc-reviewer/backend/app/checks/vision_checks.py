@@ -25,7 +25,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 from app.core.errors import AppError
 from app.core.mistral_vision import check_figure_compliance, describe_image
 from app.parsers.pdf_parser import extract_images

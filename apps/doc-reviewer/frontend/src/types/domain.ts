@@ -1,6 +1,6 @@
 export type Severity = "info" | "warning" | "error";
 
-export type RuleKind = "s1000d" | "standard" | "custom" | "units" | "layout";
+export type RuleKind = "standard" | "custom" | "units" | "layout";
 
 export type RuleKindStored =
   | "regex_replace"
@@ -13,6 +13,8 @@ export type RuleKindStored =
   | "field_consistency"
   | "step_pattern"
   | "enum_value"
+  // Style : longueur de phrase (seuil de mots), non exprimable en regex.
+  | "sentence_length"
   // Import checklist : consigne NL jugee par le LLM / verification humaine.
   | "llm_nl"
   | "manual";
@@ -50,6 +52,8 @@ export type Suggestion = {
   created_at: string;
 };
 
+export type QualityState = "analyzable" | "degraded" | "unusable";
+
 export type Document = {
   id: string;
   original_filename: string;
@@ -59,6 +63,10 @@ export type Document = {
   standard_version_id: string | null;
   status: "uploaded" | "analyzing" | "analyzed" | "edited" | "analysis_failed";
   current_version: number;
+  // Portail qualite : revuabilite homogene tous formats.
+  convert_engine: string;
+  text_coverage: number;
+  quality: QualityState;
   created_at: string;
 };
 

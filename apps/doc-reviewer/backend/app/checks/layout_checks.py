@@ -22,7 +22,7 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
-from app.checks.s1000d_checks import RawSuggestion
+from app.checks.raw import RawSuggestion
 
 log = logging.getLogger("doc_reviewer.layout_checks")
 
