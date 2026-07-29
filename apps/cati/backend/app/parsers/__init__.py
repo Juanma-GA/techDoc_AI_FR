@@ -1,1 +1,0 @@
-"""Parsers CATI (extraction PDF)."""

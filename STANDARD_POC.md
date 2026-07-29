@@ -726,7 +726,7 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 
 **Après le script**, il reste à la charge du dev :
 
-1. **Réécrire `apps/<slug>/README.md`** — titre + description métier + endpoints exposés (cf. `apps/doc-writer/README.md` ou `apps/pdf-reviewer/README.md` comme références).
+1. **Réécrire `apps/<slug>/README.md`** — titre + description métier + endpoints exposés (cf. `apps/doc-writer/README.md` ou `apps/doc-reviewer/README.md` comme références).
 2. **Ajouter la logique métier** dans `backend/app/api/<feature>.py` (+ register dans `main.py`) et `backend/app/db/models.py` (au-delà d'`AppConfig`).
 3. **Générer la migration métier** : `alembic revision -m "0002 <feature>"`. La migration `0001_initial` (table `AppConfig`) est déjà fournie par le template.
 4. **Adapter l'UI React** : `frontend/src/App.tsx` (brand + onglets) et la page `frontend/src/routes/Home.tsx`.

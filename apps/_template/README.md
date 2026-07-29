@@ -11,7 +11,7 @@
 > Le script copie ce template, fait les substitutions, et écrase
 > `apps/<slug>/README.md` par un stub propre que vous remplirez avec la
 > description métier de votre POC (cf. `apps/doc-writer/README.md` ou
-> `apps/pdf-reviewer/README.md` comme références).
+> `apps/doc-reviewer/README.md` comme références).
 
 Squelette canonique pour démarrer un nouveau POC. Conforme à [`STANDARD_POC.md`](../../STANDARD_POC.md).
 

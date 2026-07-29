@@ -53,7 +53,7 @@ fi
 if ! [[ "$SLUG" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
     echo "[erreur] '$SLUG' n'est pas en kebab-case."
     echo "         Format attendu : lettres minuscules + chiffres + tirets,"
-    echo "         demarre par une lettre. Ex. 'mon-poc', 'pdf-reviewer'."
+    echo "         demarre par une lettre. Ex. 'mon-poc', 'doc-reviewer'."
     exit 1
 fi
 
@@ -269,7 +269,7 @@ cat > "$APP_DIR/README.md" <<EOF
 
 > **A REECRIRE.** Ce README a ete genere automatiquement par
 > \`scripts/new_poc.sh\`. Remplacez ce contenu par la description metier
-> du POC (cf. \`apps/doc-writer/README.md\` ou \`apps/pdf-reviewer/README.md\`
+> du POC (cf. \`apps/doc-writer/README.md\` ou \`apps/doc-reviewer/README.md\`
 > comme references).
 
 Conforme a [\`STANDARD_POC.md\`](../../STANDARD_POC.md). Bootstrap depuis
