@@ -3,7 +3,13 @@ import { persist } from "zustand/middleware";
 
 /** Types de fichiers source memorises entre onglets (evite de re-piocher).
  *  Chaque etape memorise son propre chemin sous la racine commune. */
-export type SourceKind = "smgxml" | "nomenclature" | "mapping";
+export type SourceKind =
+  | "smgxml"
+  | "nomenclature"
+  | "mapping"
+  | "composerRoot"
+  | "convertedRoot"
+  | "smgxmlFolder";
 
 /** Etat de travail partage entre onglets : import courant, run courant, et les
  *  chemins de fichiers source deja choisis (pre-remplissage des selecteurs). */
@@ -24,7 +30,14 @@ type WorkspaceState = {
   setNomenMapping: (mapping: NomenMapping) => void;
 };
 
-const EMPTY_SOURCES: Record<SourceKind, string> = { smgxml: "", nomenclature: "", mapping: "" };
+const EMPTY_SOURCES: Record<SourceKind, string> = {
+  smgxml: "",
+  nomenclature: "",
+  mapping: "",
+  composerRoot: "",
+  convertedRoot: "",
+  smgxmlFolder: "",
+};
 
 export const useWorkspace = create<WorkspaceState>()(
   persist(

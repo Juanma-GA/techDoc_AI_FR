@@ -64,20 +64,132 @@ type MultiProps = CommonProps & {
   allowRecursive?: boolean;
 };
 
-export type FilePickerProps = SingleProps | MultiProps;
+type FolderProps = CommonProps & {
+  mode: "folder";
+  value: string;
+  onChange: (path: string) => void;
+  /** Libelle du bouton toggle (defaut : "Parcourir"). */
+  label?: string;
+};
+
+export type FilePickerProps = SingleProps | MultiProps | FolderProps;
 
 /**
- * Selecteur de fichier unique de l'app, decline en deux modes :
+ * Selecteur de fichier unique de l'app, decline en trois modes :
  *  - `single` : un champ + bouton qui ouvre un panneau pliable ; choisir un
  *    fichier renvoie son chemin. Apercu onglet/lignes pour les classeurs Excel.
  *  - `multi`  : panneau inline avec cases a cocher, vue niveau ou recursive,
  *    Tout cocher / Vider ; renvoie la liste des chemins coches.
- * Les deux partagent la meme navigation (fil d'Ariane, Remonter, filtre par
- * extension) et le meme rendu de lignes -> coherence entre tous les onglets.
+ *  - `folder` : navigation dans les dossiers + bouton "Choisir ce dossier" qui
+ *    renvoie le chemin du dossier courant (traitement de masse).
+ * Tous partagent la meme navigation (fil d'Ariane, Remonter) -> coherence.
  */
 export function FilePicker(props: FilePickerProps) {
   if (props.mode === "multi") return <MultiFilePicker {...props} />;
+  if (props.mode === "folder") return <FolderPicker {...props} />;
   return <SingleFilePicker {...props} />;
+}
+
+// --- Mode folder ------------------------------------------------------------
+
+function FolderPicker({ scope = "input", value, onChange, label }: FolderProps) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [path, setPath] = useState("");
+
+  const listQuery = useQuery({
+    queryKey: ["browse", scope, path],
+    queryFn: () => browseApi.list(path, scope),
+    enabled: open,
+  });
+
+  const data = listQuery.data;
+  const atRoot = !!data && data.path === data.root;
+  const folders = (data?.entries ?? []).filter((e) => e.kind === "folder");
+
+  return (
+    <div className="form">
+      <div className="row">
+        <input
+          type="text"
+          className="input grow"
+          placeholder={t("picker.folderPlaceholder")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <button
+          type="button"
+          className="btn secondary"
+          onClick={() => {
+            if (!open) setPath("");
+            setOpen((v) => !v);
+          }}
+        >
+          {label ?? t("picker.browse")}
+        </button>
+      </div>
+
+      {open ? (
+        <div className="card" style={{ padding: "0.5rem" }}>
+          {listQuery.isLoading ? (
+            <span className="spinner" />
+          ) : listQuery.isError ? (
+            <p className="hint" style={{ textAlign: "center" }}>
+              {(listQuery.error instanceof Error ? listQuery.error.message : String(listQuery.error)) +
+                " " +
+                t("picker.configureRoot")}
+            </p>
+          ) : data ? (
+            <>
+              <div className="row" style={{ marginBottom: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={atRoot}
+                  onClick={() => setPath(parentPath(data.path, data.root))}
+                >
+                  {t("picker.up")}
+                </button>
+                <code className="hint grow" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {data.path}
+                </code>
+                <button
+                  type="button"
+                  className="btn primary small"
+                  onClick={() => {
+                    onChange(data.path);
+                    setOpen(false);
+                  }}
+                >
+                  {t("picker.chooseFolder")}
+                </button>
+              </div>
+              <div className="item-list" style={{ maxHeight: "15rem", overflow: "auto" }}>
+                {folders.length ? (
+                  folders.map((e) => (
+                    <div key={e.path} className="item-row">
+                      <div className="item-actions">
+                        <button type="button" className="btn ghost small" onClick={() => setPath(e.path)}>
+                          {t("picker.open")}
+                        </button>
+                      </div>
+                      <div className="item-main">
+                        <span className="item-name">{e.name}/</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="hint" style={{ textAlign: "center" }}>
+                    {t("picker.noSubfolder")}
+                  </p>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 // --- Mode single ------------------------------------------------------------

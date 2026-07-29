@@ -105,6 +105,35 @@ export type SmgxmlTreeDto = {
   nodes: TreeNodeDto[];
 };
 
+/** Renommage en masse SMGXML (etape 4) : entree + rapport par piece remplacee. */
+export type SmgxmlBatchRenameInput = {
+  scope?: BrowseScope;
+  composer_root: string;
+  converted_root: string;
+  nomenclature_run_id: string;
+  apply?: boolean;
+};
+
+export type SmgxmlBatchItemDto = {
+  sin: string;
+  old_pn: string;
+  new_pn: string;
+  old_stem: string;
+  new_stem: string;
+  assembly: string;
+  replacements: number;
+  archived: string[];
+  copied: string[];
+  status: string;
+  message: string;
+  applied: boolean;
+};
+
+export type SmgxmlBatchDto = {
+  items: SmgxmlBatchItemDto[];
+  summary: Record<string, number>;
+};
+
 export type RunDto = {
   id: string;
   import_id: string;
@@ -739,6 +768,12 @@ export const smgxmlApi = {
     request<SmgxmlTreeDto>("/smgxml/tree", {
       method: "POST",
       body: JSON.stringify({ scope: "input", ...body }),
+    }),
+  /** Renommage en masse (etape 4) des pieces remplacees d'une nomenclature. */
+  batchRename: (body: SmgxmlBatchRenameInput) =>
+    request<SmgxmlBatchDto>("/smgxml/batch-rename", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", apply: false, ...body }),
     }),
 };
 

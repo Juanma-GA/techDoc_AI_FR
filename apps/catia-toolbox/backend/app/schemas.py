@@ -692,6 +692,37 @@ class SmgxmlTreeOut(BaseModel):
     nodes: list[SmgxmlTreeNodeOut] = Field(default_factory=list)
 
 
+class SmgxmlBatchRenameIn(BaseModel):
+    """Renommage en masse : racine COMPOSER (sous-dossiers COMP PROD / COMP PART)
+    + dossier des pieces NEW converties + run de nomenclature source des paires."""
+
+    scope: str = Field(default="input")
+    composer_root: str = Field(..., min_length=1)
+    converted_root: str = Field(..., min_length=1)
+    nomenclature_run_id: uuid.UUID
+    apply: bool = False
+
+
+class SmgxmlBatchItemOut(BaseModel):
+    sin: str = ""
+    old_pn: str = ""
+    new_pn: str = ""
+    old_stem: str = ""
+    new_stem: str = ""
+    assembly: str = ""
+    replacements: int = 0
+    archived: list[str] = Field(default_factory=list)
+    copied: list[str] = Field(default_factory=list)
+    status: str = "ok"
+    message: str = ""
+    applied: bool = False
+
+
+class SmgxmlBatchOut(BaseModel):
+    items: list[SmgxmlBatchItemOut] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+
+
 class SmgxmlRecolorIn(BaseModel):
     scope: str = Field(default="input")
     path: str = Field(..., min_length=1)

@@ -5,7 +5,6 @@
     "description": "Boîte à outils d'automatisations CATIA sur données exportées (pas de CATIA live) : identification de nomenclature, conversion vers Composer, colorisation SMGXML et comparaison de versions."
   },
   "nav": {
-    "home": "Home",
     "identification": "Nomenclature / DE",
     "import": "Source (scan / sélection)",
     "diff": "Comparaison",
@@ -31,7 +30,6 @@
     }
   },
   "page": {
-    "home": { "title": "Home", "sub": "Optimisation d'arborescence CATIA à partir de données exportées." },
     "identification": { "title": "1 - Identification", "sub": "Lire la nomenclature (.xlsm) et les données d'entrée (.zip) pour identifier les CATPart à traiter." },
     "import": { "title": "Import", "sub": "Scanner un dossier local ou importer un listing CSV / JSON." },
     "diff": { "title": "Comparaison", "sub": "Détecter les pièces ajoutées / supprimées / modifiées entre deux imports." },
@@ -62,6 +60,9 @@
     "up": "Remonter",
     "open": "Ouvrir",
     "choose": "Choisir",
+    "chooseFolder": "Choisir ce dossier",
+    "folderPlaceholder": "Parcourir ou coller un chemin de dossier",
+    "noSubfolder": "Aucun sous-dossier ici.",
     "empty": "Aucun élément ({{exts}}) ici.",
     "configureRoot": "(configurez la racine Source dans Paramètres)",
     "sheet": "Onglet",
@@ -77,16 +78,6 @@
     "folder": "dossier",
     "recursiveEmpty": "Aucun fichier (essayez un autre filtre).",
     "countSelected": "{{count}} fichier(s) — {{sel}} coché(s)"
-  },
-  "home": {
-    "title": "Optimiser une arborescence CATIA",
-    "subtitle": "Réorganisation d'une structure de fichiers à partir de données exportées — aucun CATIA requis, aucun fichier déplacé.",
-    "workflowTitle": "Déroulé",
-    "step1": "Import : scanner un dossier local (métadonnées seules) ou importer un listing CSV / JSON.",
-    "step2": "Arborescence : consulter les métriques (profondeur, fan-out, doublons, nommage).",
-    "step3": "Suggestions : générer le plan (heuristiques + Mistral), puis accepter / rejeter.",
-    "step4": "Export : télécharger le plan CSV et le script .bat / .sh, à exécuter vous-même.",
-    "backendStatus": "Statut backend"
   },
   "import": {
     "title": "Import",
@@ -124,6 +115,13 @@
     "notFoundDesc": "L'import a peut-être été supprimé. Réimportez.",
     "metricsTitle": "Métriques",
     "structureTitle": "Structure ({{count}} nœuds)",
+    "folderTitle": "Arborescence SMGXML (dossier)",
+    "folderBanner": "Choisissez un dossier : ses fichiers SMGXML sont listés. Cliquez « Voir » pour afficher l'arbre XML brut d'un fichier (lecture seule).",
+    "folderLabel": "Dossier des SMGXML",
+    "folderHint": "Choisissez un dossier pour lister ses fichiers SMGXML.",
+    "folderCount": "{{count}} fichier(s) SMGXML.",
+    "folderEmpty": "Aucun fichier SMGXML dans ce dossier.",
+    "view": "Voir",
     "smgxmlTitle": "Arborescence d'un SMGXML",
     "smgxmlBanner": "Choisissez un fichier SMGXML pour afficher son arbre XML brut (lecture seule).",
     "smgxmlLoad": "Charger l'arborescence",
@@ -477,7 +475,30 @@
     "title": "Renommer des pièces dans le SMGXML",
     "banner": "Étape 4. Remplace le nom de l'ancienne pièce par la nouvelle (attributs + références). Dry-run par défaut ; appliquer écrit le fichier en conservant un .bak.",
     "mappingLabel": "Correspondances (une par ligne : ancien=nouveau)",
-    "mappingRequired": "Ajoutez au moins une correspondance ancien=nouveau."
+    "mappingRequired": "Ajoutez au moins une correspondance ancien=nouveau.",
+    "batchTitle": "Renommage en masse (pièces remplacées)",
+    "batchBanner": "À partir d'une nomenclature analysée, traite toutes les pièces remplacées : archive les fichiers OLD, copie les NEW dans COMP PART, et remplace les références OLD→NEW dans l'assemblage COMP PROD. Dry-run par défaut ; appliquer écrit (avec .bak / archive).",
+    "composerRoot": "Racine COMPOSER (contient COMP PROD et COMP PART)",
+    "convertedRoot": "Dossier des pièces converties (NEW)",
+    "batchLaunch": "Analyser (dry-run)",
+    "batchRequired": "Choisissez les deux dossiers et une nomenclature.",
+    "batchSummary": "{{total}} pièce(s) remplacée(s) : {{ok}} traitable(s), {{skipped}} ignorée(s).",
+    "colOld": "Ancien (OLD)",
+    "colNew": "Nouveau (NEW)",
+    "colReplacements": "Réf. remplacées",
+    "colStatus": "Statut",
+    "doneBadge": "appliqué",
+    "status": {
+      "ok": "OK",
+      "old_not_found": "OLD introuvable (COMP PART)",
+      "old_ambiguous": "OLD ambigu (plusieurs)",
+      "new_not_found": "NEW introuvable (converties)",
+      "new_ambiguous": "NEW ambigu (plusieurs)",
+      "assembly_not_found": "Assemblage introuvable (COMP PROD)",
+      "assembly_ambiguous": "Assemblage ambigu (plusieurs)",
+      "skipped_no_pn": "P/N manquant",
+      "error": "Erreur"
+    }
   },
   "qc": {
     "title": "Checklist Contrôle Qualité",

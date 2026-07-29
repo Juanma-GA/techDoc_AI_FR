@@ -1,110 +1,121 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { FolderTree } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { FilePicker } from "../components/FilePicker";
-import { MetricsPanel } from "../components/business/MetricsPanel";
 import { TreeView } from "../components/business/TreeView";
-import { ApiClientError, importsApi, smgxmlApi, type SmgxmlTreeDto, type TreeDto } from "../lib/api";
+import { browseApi, smgxmlApi, type SmgxmlTreeDto } from "../lib/api";
 import { useWorkspace } from "../stores/workspace";
 
 const SMGXML_EXTS = [".smgxml", ".smg", ".xml"];
 
-/** Arbre XML brut d'un fichier SMGXML (lecture seule), independant de l'import. */
-function SmgxmlTreeCard() {
-  const { t } = useTranslation();
-  const path = useWorkspace((s) => s.sources.smgxml);
-  const setPath = (p: string) => useWorkspace.getState().setSource("smgxml", p);
-  const [result, setResult] = useState<SmgxmlTreeDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadMutation = useMutation({
-    mutationFn: () => smgxmlApi.tree({ path: path.trim() }),
-    onSuccess: (data) => {
-      setError(null);
-      setResult(data);
-    },
-    onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
-  });
-
-  return (
-    <article className="card">
-      <h2 className="card-title">{t("tree.smgxmlTitle")}</h2>
-      <p className="banner info">{t("tree.smgxmlBanner")}</p>
-      <div className="field">
-        <label className="label">{t("smgxml.fileLabel")}</label>
-        <FilePicker exts={SMGXML_EXTS} value={path} onChange={setPath} />
-      </div>
-      <div className="row" style={{ marginTop: 8 }}>
-        <button
-          type="button"
-          className="btn primary"
-          onClick={() => loadMutation.mutate()}
-          disabled={loadMutation.isPending || !path.trim()}
-        >
-          {loadMutation.isPending ? <span className="spinner" /> : null}
-          <span>{t("tree.smgxmlLoad")}</span>
-        </button>
-        {error ? <span className="error">{error}</span> : null}
-      </div>
-
-      {result ? (
-        <div style={{ marginTop: 12 }}>
-          <p className="hint">
-            {t("tree.structureTitle", { count: result.node_count })} - {result.root_label}
-          </p>
-          <TreeView nodes={result.nodes} />
-        </div>
-      ) : null}
-    </article>
-  );
+function isSmgxml(name: string): boolean {
+  const n = name.toLowerCase();
+  return SMGXML_EXTS.some((x) => n.endsWith(x));
 }
 
+/**
+ * Onglet Arborescence : tout part du DOSSIER choisi. On liste ses fichiers
+ * SMGXML ; un clic affiche l'arbre XML brut du fichier (lecture seule). Aucune
+ * autre source (import, fichier isole) n'intervient.
+ */
 export function Tree() {
   const { t } = useTranslation();
-  const { importId } = useWorkspace();
+  const folder = useWorkspace((s) => s.sources.smgxmlFolder);
+  const setFolder = (p: string) => useWorkspace.getState().setSource("smgxmlFolder", p);
+  const [selected, setSelected] = useState<string | null>(null);
 
-  const treeQuery = useQuery<TreeDto>({
-    queryKey: ["tree", importId],
-    queryFn: () => importsApi.tree(importId as string),
-    enabled: !!importId,
+  // Contenu du dossier choisi (confine sous la racine Source).
+  const listQuery = useQuery({
+    queryKey: ["browse", "input", folder],
+    queryFn: () => browseApi.list(folder, "input"),
+    enabled: !!folder.trim(),
+  });
+  const files = (listQuery.data?.entries ?? []).filter((e) => e.kind === "file" && isSmgxml(e.name));
+
+  // Arbre XML du fichier selectionne.
+  const treeQuery = useQuery<SmgxmlTreeDto>({
+    queryKey: ["smgxml-tree", selected],
+    queryFn: () => smgxmlApi.tree({ path: selected! }),
+    enabled: !!selected,
   });
 
-  const data = treeQuery.data;
   return (
     <div className="flex max-w-4xl flex-col gap-4">
-      <SmgxmlTreeCard />
+      <article className="card">
+        <h2 className="card-title">{t("tree.folderTitle")}</h2>
+        <p className="banner info">{t("tree.folderBanner")}</p>
 
-      {!importId ? (
-        <div className="empty-state">
-          <FolderTree size={28} aria-hidden="true" />
-          <h3 className="card-title">{t("tree.noImport")}</h3>
-          <p className="hint">{t("tree.noImportDesc")}</p>
+        <div className="field">
+          <label className="label">{t("tree.folderLabel")}</label>
+          <FilePicker
+            mode="folder"
+            exts={[]}
+            value={folder}
+            onChange={(p) => {
+              setFolder(p);
+              setSelected(null);
+            }}
+          />
         </div>
-      ) : treeQuery.isLoading ? (
-        <span className="spinner" />
-      ) : !data ? (
-        <div className="empty-state">
-          <FolderTree size={28} aria-hidden="true" />
-          <h3 className="card-title">{t("tree.notFound")}</h3>
-          <p className="hint">{t("tree.notFoundDesc")}</p>
-        </div>
-      ) : (
-        <>
-          <article className="card">
-            <h2 className="card-title">
-              {t("tree.metricsTitle")} - {data.root_label}
-            </h2>
-            <MetricsPanel metrics={data.metrics} />
-          </article>
 
-          <article className="card">
-            <h2 className="card-title">{t("tree.structureTitle", { count: data.node_count })}</h2>
-            <TreeView nodes={data.nodes} />
-          </article>
-        </>
-      )}
+        {!folder.trim() ? (
+          <p className="hint" style={{ marginTop: 8 }}>{t("tree.folderHint")}</p>
+        ) : listQuery.isLoading ? (
+          <span className="spinner" style={{ marginTop: 8 }} />
+        ) : listQuery.isError ? (
+          <p className="error" style={{ marginTop: 8 }}>
+            {listQuery.error instanceof Error ? listQuery.error.message : String(listQuery.error)}
+          </p>
+        ) : files.length ? (
+          <>
+            <p className="hint" style={{ marginTop: 8 }}>{t("tree.folderCount", { count: files.length })}</p>
+            <ul className="item-list" style={{ maxHeight: "18rem", overflow: "auto" }}>
+              {files.map((f) => (
+                <li key={f.path} className={selected === f.path ? "item-row clickable" : "item-row"}>
+                  <div className="item-actions">
+                    <button
+                      type="button"
+                      className={selected === f.path ? "btn primary small" : "btn secondary small"}
+                      onClick={() => setSelected(f.path)}
+                    >
+                      {t("tree.view")}
+                    </button>
+                  </div>
+                  <div className="item-main">
+                    <span className="item-name">{f.name}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <div className="empty-state">
+            <FolderTree size={28} aria-hidden="true" />
+            <h3 className="card-title">{t("tree.folderEmpty")}</h3>
+          </div>
+        )}
+      </article>
+
+      {selected ? (
+        <article className="card">
+          {treeQuery.isLoading ? (
+            <span className="spinner" />
+          ) : treeQuery.isError ? (
+            <p className="error">
+              {treeQuery.error instanceof Error ? treeQuery.error.message : String(treeQuery.error)}
+            </p>
+          ) : treeQuery.data ? (
+            <>
+              <h2 className="card-title">
+                {t("tree.structureTitle", { count: treeQuery.data.node_count })} - {treeQuery.data.root_label}
+              </h2>
+              <TreeView nodes={treeQuery.data.nodes} />
+            </>
+          ) : null}
+        </article>
+      ) : null}
     </div>
   );
 }

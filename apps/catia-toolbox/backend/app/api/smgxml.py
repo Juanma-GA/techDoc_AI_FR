@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -18,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.core import color_ref
 from app.core import onedrive
 from app.core import smgxml as smgxml_engine
+from app.core import smgxml_batch
 from app.core import texture_ref
 from app.core.errors import AppError
 from app.core.security import safe_under_root
@@ -25,6 +27,8 @@ from app.db.models import NomenclatureItem, NomenclatureRun, SmgxmlChange, Smgxm
 from app.db.session import get_db
 from app.schemas import (
     SmgxmlActorOut,
+    SmgxmlBatchOut,
+    SmgxmlBatchRenameIn,
     SmgxmlChangeOut,
     SmgxmlInspectIn,
     SmgxmlRecolorIn,
@@ -95,6 +99,49 @@ def tree(payload: SmgxmlTreeIn, db: Session = Depends(get_db)) -> SmgxmlTreeOut:
     """Arbre XML brut d'un SMGXML (lecture seule) pour l'onglet Arborescence."""
     target = _resolve(db, payload.scope, payload.path)
     return SmgxmlTreeOut(**smgxml_engine.parse_tree(str(target), max_nodes=payload.max_nodes))
+
+
+def _resolve_dir(db: Session, scope: str, path: str, code: str):
+    if scope not in ("input", "output"):
+        raise AppError("SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
+    root = onedrive.root_for_scope(db, scope)
+    target = safe_under_root(root, path)
+    if not target.is_dir():
+        raise AppError(code, "Dossier introuvable.", status_code=404, detail={"path": str(target)})
+    return target
+
+
+@router.post("/batch-rename", response_model=SmgxmlBatchOut)
+def batch_rename(payload: SmgxmlBatchRenameIn, db: Session = Depends(get_db)) -> SmgxmlBatchOut:
+    """Renommage en masse des pieces remplacees d'une nomenclature (etape 4).
+
+    Dry-run par defaut ; `apply=true` archive les OLD, copie les NEW et edite les
+    assemblages (+ .bak). Voir core/smgxml_batch.py pour le detail du process."""
+    composer = _resolve_dir(db, payload.scope, payload.composer_root, "COMPOSER_ROOT_NOT_FOUND")
+    converted = _resolve_dir(db, payload.scope, payload.converted_root, "CONVERTED_ROOT_NOT_FOUND")
+
+    run = db.get(NomenclatureRun, payload.nomenclature_run_id)
+    if run is None:
+        raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
+    run_items = db.scalars(
+        select(NomenclatureItem).where(NomenclatureItem.run_id == payload.nomenclature_run_id)
+    )
+    items = [
+        {"sin": it.sin, "old_pn": it.old_pn, "new_pn": it.new_pn, "designation": it.designation}
+        for it in run_items
+        if (it.old_pn or "").strip() and (it.new_pn or "").strip()
+        and (it.old_pn or "").strip() != (it.new_pn or "").strip()
+    ]
+
+    archive_ts = "ARCHIVE_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+    result = smgxml_batch.plan_batch_rename(
+        str(composer), str(converted), items, apply=payload.apply, archive_ts=archive_ts
+    )
+    log.info(
+        "batch-rename run %s : %d items, %d ok, applied=%s",
+        payload.nomenclature_run_id, result["summary"]["total"], result["summary"]["ok"], payload.apply,
+    )
+    return SmgxmlBatchOut(**result)
 
 
 def _match_key(item: NomenclatureItem, match_by: str) -> str:

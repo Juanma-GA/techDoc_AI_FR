@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LlmBadge } from "./components/LlmBadge";
@@ -11,7 +11,6 @@ import { Conversion } from "./routes/Conversion";
 import { Data } from "./routes/Data";
 import { Diff } from "./routes/Diff";
 import { Export } from "./routes/Export";
-import { Home } from "./routes/Home";
 import { Identification } from "./routes/Identification";
 import { Qc } from "./routes/Qc";
 import { Replacement } from "./routes/Replacement";
@@ -29,7 +28,6 @@ const isGroup = (e: NavEntry): e is NavGroup => "groupKey" in e;
 
 /** Navigation groupee, ordre et libelles fideles au preview (lignes 176-206). */
 const NAV: NavEntry[] = [
-  { to: "/", labelKey: "nav.home", end: true },
   {
     groupKey: "nav.groups.identification",
     items: [
@@ -76,7 +74,6 @@ const NAV: NavEntry[] = [
 
 /** Titre + sous-titre par route (entete centralise du main). */
 export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = {
-  "/": { titleKey: "page.home.title", subKey: "page.home.sub" },
   "/identification": { titleKey: "page.identification.title", subKey: "page.identification.sub" },
   "/diff": { titleKey: "page.diff.title", subKey: "page.diff.sub" },
   "/conversion": { titleKey: "page.conversion.title", subKey: "page.conversion.sub" },
@@ -99,7 +96,7 @@ const navItemClass = ({ isActive }: { isActive: boolean }) =>
 export function App() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
-  const meta = ROUTE_META[pathname] ?? ROUTE_META["/"]!;
+  const meta = ROUTE_META[pathname] ?? ROUTE_META["/identification"]!;
   const lang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
 
   return (
@@ -156,7 +153,7 @@ export function App() {
           </div>
           <ErrorBoundary>
             <Routes>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<Navigate to="/identification" replace />} />
               <Route path="/identification" element={<Identification />} />
               <Route path="/diff" element={<Diff />} />
               <Route path="/conversion" element={<Conversion />} />

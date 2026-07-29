@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from openpyxl import Workbook
 
 
@@ -271,3 +273,105 @@ def test_texture_config_library_and_ext(client, tmp_path):
     written = smg.read_text(encoding="utf-8")
     # Balise <ActorStyle> reconnue + valeur = <bibliotheque>\<nom>.SMGStyleSet.
     assert "C:\\Tex\\Lib\\Visserie.SMGStyleSet" in written
+
+
+def _make_batch_nomen(client, tmp_path):
+    """Nomenclature avec 1 piece remplacee : SIN 030A5, OLD 2469M86P01 -> NEW 2568M87P02."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["SIN", "OLD P/N", "NEW P/N"])
+    ws.append(["030A5", "2469M86P01", "2568M87P02"])
+    p = tmp_path / "nomen_batch.xlsx"
+    wb.save(p)
+    return client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]
+
+
+def _make_batch_tree(tmp_path):
+    """Arborescence COMPOSER (COMP PROD / COMP PART) + dossier converties."""
+    composer = tmp_path / "COMPOSER u495"
+    prod = composer / "COMP PROD"
+    part = composer / "COMP PART"
+    conv = tmp_path / "U600 CONVERTIES"
+    for d in (prod, part, conv):
+        d.mkdir(parents=True)
+    # Assemblage du SIN referencant le nom de base OLD.
+    (prod / "030A5_SPACER-ANTI-MIGRATION.smgXml").write_text(
+        '<Document><Ref name="GE_030A5_2469M86P01_P_01" />'
+        '<Geom src="GE_030A5_2469M86P01_P_01.smgGeom" /></Document>',
+        encoding="utf-8",
+    )
+    # Fichiers pieces OLD (COMP PART).
+    (part / "GE_030A5_2469M86P01_P_01.smgXml").write_text("<old/>", encoding="utf-8")
+    (part / "GE_030A5_2469M86P01_P_01.smgGeom").write_text("geom", encoding="utf-8")
+    # Fichiers pieces NEW (converties).
+    (conv / "GE_030A5_2568M87P02_X000_001.smgXml").write_text("<new/>", encoding="utf-8")
+    (conv / "GE_030A5_2568M87P02_X000_001.smgGeom").write_text("geomnew", encoding="utf-8")
+    return composer, conv, prod, part
+
+
+def test_batch_rename_dryrun_then_apply(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    run_id = _make_batch_nomen(client, tmp_path)
+    composer, conv, prod, part = _make_batch_tree(tmp_path)
+
+    body = {
+        "scope": "input",
+        "composer_root": str(composer),
+        "converted_root": str(conv),
+        "nomenclature_run_id": run_id,
+    }
+
+    # 1. Dry-run : rien ecrit, statut ok, references comptees.
+    dry = client.post("/api/v1/smgxml/batch-rename", json=body)
+    assert dry.status_code == 200, dry.text
+    d = dry.json()
+    assert d["summary"]["total"] == 1 and d["summary"]["ok"] == 1 and d["summary"]["applied"] == 0
+    it = d["items"][0]
+    assert it["status"] == "ok"
+    assert it["old_stem"] == "GE_030A5_2469M86P01_P_01"
+    assert it["new_stem"] == "GE_030A5_2568M87P02_X000_001"
+    assert it["replacements"] == 2  # <Ref name> + <Geom src>
+    # OLD toujours en place apres dry-run.
+    assert (part / "GE_030A5_2469M86P01_P_01.smgXml").exists()
+
+    # 2. Apply : archive OLD, copie NEW, Ctrl+H dans l'assemblage (+ .bak).
+    body["apply"] = True
+    applied = client.post("/api/v1/smgxml/batch-rename", json=body)
+    assert applied.status_code == 200, applied.text
+    a = applied.json()["items"][0]
+    assert a["applied"] is True
+
+    # OLD archives (plus a la racine COMP PART), NEW copies.
+    assert not (part / "GE_030A5_2469M86P01_P_01.smgXml").exists()
+    archive = next(part.glob("ARCHIVE_*"))
+    assert (archive / "GE_030A5_2469M86P01_P_01.smgXml").exists()
+    assert (archive / "GE_030A5_2469M86P01_P_01.smgGeom").exists()
+    assert (part / "GE_030A5_2568M87P02_X000_001.smgXml").exists()
+    assert (part / "GE_030A5_2568M87P02_X000_001.smgGeom").exists()
+
+    # Assemblage : references remplacees + .bak conserve.
+    asm = prod / "030A5_SPACER-ANTI-MIGRATION.smgXml"
+    txt = asm.read_text(encoding="utf-8")
+    assert "GE_030A5_2469M86P01_P_01" not in txt
+    assert txt.count("GE_030A5_2568M87P02_X000_001") == 2
+    assert (prod / "030A5_SPACER-ANTI-MIGRATION.smgXml.bak").exists()
+
+
+def test_batch_rename_missing_new(client, tmp_path):
+    """NEW introuvable dans le dossier converties -> statut new_not_found, ignore."""
+    _set_input_root(client, str(tmp_path))
+    run_id = _make_batch_nomen(client, tmp_path)
+    composer, conv, _prod, part = _make_batch_tree(tmp_path)
+    # Supprime les fichiers NEW.
+    for f in conv.glob("*"):
+        f.unlink()
+
+    r = client.post("/api/v1/smgxml/batch-rename", json={
+        "scope": "input", "composer_root": str(composer),
+        "converted_root": str(conv), "nomenclature_run_id": run_id, "apply": True,
+    })
+    assert r.status_code == 200, r.text
+    it = r.json()["items"][0]
+    assert it["status"] == "new_not_found" and it["applied"] is False
+    # OLD non touche (aucune ecriture sur item non ok).
+    assert (part / "GE_030A5_2469M86P01_P_01.smgXml").exists()

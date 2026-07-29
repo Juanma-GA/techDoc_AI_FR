@@ -5,7 +5,6 @@
     "description": "CATIA automation toolbox on exported data (no live CATIA): nomenclature identification, conversion to Composer, SMGXML colorization and version comparison."
   },
   "nav": {
-    "home": "Home",
     "identification": "Nomenclature / DE",
     "import": "Source (scan / select)",
     "diff": "Compare",
@@ -31,7 +30,6 @@
     }
   },
   "page": {
-    "home": { "title": "Home", "sub": "CATIA tree optimization from exported data." },
     "identification": { "title": "1 - Identification", "sub": "Read the nomenclature (.xlsm) and input data (.zip) to identify the CATParts to process." },
     "import": { "title": "Import", "sub": "Scan a local folder or import a CSV / JSON listing." },
     "diff": { "title": "Compare", "sub": "Detect parts added / removed / modified between two imports." },
@@ -62,6 +60,9 @@
     "up": "Up",
     "open": "Open",
     "choose": "Choose",
+    "chooseFolder": "Choose this folder",
+    "folderPlaceholder": "Browse or paste a folder path",
+    "noSubfolder": "No subfolder here.",
     "empty": "No item ({{exts}}) here.",
     "configureRoot": "(set the Source root in Settings)",
     "sheet": "Sheet",
@@ -77,16 +78,6 @@
     "folder": "folder",
     "recursiveEmpty": "No file (try another filter).",
     "countSelected": "{{count}} file(s) — {{sel}} checked"
-  },
-  "home": {
-    "title": "Optimize a CATIA tree",
-    "subtitle": "Reorganize a file structure from exported data — no CATIA required, no file moved.",
-    "workflowTitle": "Workflow",
-    "step1": "Import: scan a local folder (metadata only) or import a CSV / JSON listing.",
-    "step2": "Tree: review metrics (depth, fan-out, duplicates, naming).",
-    "step3": "Suggestions: generate the plan (heuristics + Mistral), then accept / reject.",
-    "step4": "Export: download the CSV plan and the .bat / .sh script, to run yourself.",
-    "backendStatus": "Backend status"
   },
   "import": {
     "title": "Import",
@@ -124,6 +115,13 @@
     "notFoundDesc": "The import may have been deleted. Re-import.",
     "metricsTitle": "Metrics",
     "structureTitle": "Structure ({{count}} nodes)",
+    "folderTitle": "SMGXML tree (folder)",
+    "folderBanner": "Pick a folder: its SMGXML files are listed. Click \"View\" to display a file's raw XML tree (read-only).",
+    "folderLabel": "SMGXML folder",
+    "folderHint": "Pick a folder to list its SMGXML files.",
+    "folderCount": "{{count}} SMGXML file(s).",
+    "folderEmpty": "No SMGXML file in this folder.",
+    "view": "View",
     "smgxmlTitle": "SMGXML tree",
     "smgxmlBanner": "Pick an SMGXML file to display its raw XML tree (read-only).",
     "smgxmlLoad": "Load tree",
@@ -477,7 +475,30 @@
     "title": "Rename parts in the SMGXML",
     "banner": "Step 4. Replaces the old part name with the new one (attributes + references). Dry-run by default; applying writes the file keeping a .bak.",
     "mappingLabel": "Mappings (one per line: old=new)",
-    "mappingRequired": "Add at least one old=new mapping."
+    "mappingRequired": "Add at least one old=new mapping.",
+    "batchTitle": "Batch rename (replaced parts)",
+    "batchBanner": "From an analyzed nomenclature, processes every replaced part: archives the OLD files, copies the NEW ones into COMP PART, and replaces OLD→NEW references in the COMP PROD assembly. Dry-run by default; applying writes (with .bak / archive).",
+    "composerRoot": "COMPOSER root (contains COMP PROD and COMP PART)",
+    "convertedRoot": "Converted parts folder (NEW)",
+    "batchLaunch": "Analyze (dry-run)",
+    "batchRequired": "Pick both folders and a nomenclature.",
+    "batchSummary": "{{total}} replaced part(s): {{ok}} processable, {{skipped}} skipped.",
+    "colOld": "Old (OLD)",
+    "colNew": "New (NEW)",
+    "colReplacements": "Refs replaced",
+    "colStatus": "Status",
+    "doneBadge": "applied",
+    "status": {
+      "ok": "OK",
+      "old_not_found": "OLD not found (COMP PART)",
+      "old_ambiguous": "OLD ambiguous (several)",
+      "new_not_found": "NEW not found (converted)",
+      "new_ambiguous": "NEW ambiguous (several)",
+      "assembly_not_found": "Assembly not found (COMP PROD)",
+      "assembly_ambiguous": "Assembly ambiguous (several)",
+      "skipped_no_pn": "Missing P/N",
+      "error": "Error"
+    }
   },
   "qc": {
     "title": "Quality Control checklist",
