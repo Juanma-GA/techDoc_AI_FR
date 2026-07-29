@@ -1,4 +1,5 @@
-import { Folder, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, FileText } from "lucide-react";
+import { useState } from "react";
 
 import type { TreeNodeDto } from "../../lib/api";
 
@@ -10,18 +11,44 @@ function formatBytes(n: number): string {
 
 function Node({ node }: { node: TreeNodeDto }) {
   const isFolder = node.kind === "folder";
+  const hasChildren = node.children.length > 0;
+  // Dossiers deplies par defaut ; l'utilisateur peut les replier/deplier.
+  const [open, setOpen] = useState(true);
+
+  const label = (
+    <span className={isFolder ? "tree-node folder" : "tree-node file"}>
+      {isFolder && hasChildren ? (
+        open ? (
+          <ChevronDown size={13} className="shrink-0" aria-hidden="true" />
+        ) : (
+          <ChevronRight size={13} className="shrink-0" aria-hidden="true" />
+        )
+      ) : null}
+      {isFolder ? (
+        <Folder size={13} className="shrink-0" aria-hidden="true" />
+      ) : (
+        <FileText size={13} className="shrink-0" aria-hidden="true" />
+      )}
+      <span>{node.name}</span>
+      {!isFolder ? <span className="tree-size">{formatBytes(node.size)}</span> : null}
+    </span>
+  );
+
   return (
     <li>
-      <span className={isFolder ? "tree-node folder" : "tree-node file"}>
-        {isFolder ? (
-          <Folder size={13} className="shrink-0" aria-hidden="true" />
-        ) : (
-          <FileText size={13} className="shrink-0" aria-hidden="true" />
-        )}
-        <span>{node.name}</span>
-        {!isFolder ? <span className="tree-size">{formatBytes(node.size)}</span> : null}
-      </span>
-      {node.children.length ? (
+      {isFolder && hasChildren ? (
+        <button
+          type="button"
+          className="tree-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {label}
+        </button>
+      ) : (
+        label
+      )}
+      {hasChildren && open ? (
         <ul>
           {node.children.map((c) => (
             <Node key={c.id} node={c} />

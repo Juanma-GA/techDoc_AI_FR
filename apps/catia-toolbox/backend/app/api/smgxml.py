@@ -30,6 +30,8 @@ from app.schemas import (
     SmgxmlRecolorIn,
     SmgxmlRenameIn,
     SmgxmlRunOut,
+    SmgxmlTreeIn,
+    SmgxmlTreeOut,
 )
 
 
@@ -86,6 +88,13 @@ def _persist(db: Session, *, source_ref: str, operation: str, result: dict) -> S
 def inspect(payload: SmgxmlInspectIn, db: Session = Depends(get_db)) -> list[SmgxmlActorOut]:
     target = _resolve(db, payload.scope, payload.path)
     return [SmgxmlActorOut(**a) for a in smgxml_engine.parse_actors(str(target))]
+
+
+@router.post("/tree", response_model=SmgxmlTreeOut)
+def tree(payload: SmgxmlTreeIn, db: Session = Depends(get_db)) -> SmgxmlTreeOut:
+    """Arbre XML brut d'un SMGXML (lecture seule) pour l'onglet Arborescence."""
+    target = _resolve(db, payload.scope, payload.path)
+    return SmgxmlTreeOut(**smgxml_engine.parse_tree(str(target), max_nodes=payload.max_nodes))
 
 
 def _match_key(item: NomenclatureItem, match_by: str) -> str:

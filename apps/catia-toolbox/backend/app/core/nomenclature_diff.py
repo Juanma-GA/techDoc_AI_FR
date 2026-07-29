@@ -6,13 +6,15 @@ par **SIN** (le « signe ») et renvoie :
   - les SIN **supprimes** (presents en V0, absents en V1) ;
   - les SIN **modifies** pour un meme signe : le PN change entre V0 et V1.
 
-Seule l'information **OLD PN** (le PN de la piece dans V0, a rechercher /
-remplacer) est produite par la comparaison. Les colonnes NEW PN / OLD REV /
-NEW REV de la nomenclature ne servent PAS ici (elles sont conservees dans
-l'analyse de nomenclature pour l'etape de remplacement Composer).
+Detection du changement de PN : on compare les colonnes **OLD P/N entre elles**
+et **NEW P/N entre elles** d'une version a l'autre. Un SIN est « modifie » des
+que l'OLD *ou* le NEW change. Quand la nomenclature n'a pas de colonne P/N
+dediee, le **CATPart** de la ligne fait office de P/N (fallback).
 
-Deterministe, sans DB : opere sur des dicts {sin, catpart, ...}. Le PN d'une
-ligne est le **CATPart** de sa version (numero de piece present dans la BOM).
+Seule l'information **OLD PN** (le PN de la piece dans V0, a rechercher /
+remplacer) est reportee par la comparaison.
+
+Deterministe, sans DB : opere sur des dicts {sin, catpart, old_pn, new_pn, ...}.
 """
 
 from __future__ import annotations
@@ -25,6 +27,16 @@ def _pn_of(item: dict) -> str:
     return str(
         item.get("catpart") or item.get("new_pn") or item.get("old_pn") or ""
     ).strip()
+
+
+def _old_pn_of(item: dict) -> str:
+    """OLD P/N effectif : colonne OLD P/N, sinon le CATPart de la version."""
+    return str(item.get("old_pn") or item.get("catpart") or "").strip()
+
+
+def _new_pn_of(item: dict) -> str:
+    """NEW P/N effectif : colonne NEW P/N, sinon le CATPart de la version."""
+    return str(item.get("new_pn") or item.get("catpart") or "").strip()
 
 
 def _designation_of(item: dict) -> str:
@@ -64,12 +76,14 @@ def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
     for sin in a:
         if sin not in b:
             continue
-        # OLD PN = PN de V0 ; le changement se detecte en comparant au PN de V1,
-        # mais seul l'OLD PN est reporte (a rechercher / remplacer).
-        old_pn = _pn_of(a[sin])
-        if old_pn != _pn_of(b[sin]):
+        # Changement de PN = OLD(V0) != OLD(V1) *ou* NEW(V0) != NEW(V1) (colonnes
+        # OLD comparees entre elles, NEW entre elles). Seul l'OLD PN de V0 est
+        # reporte (a rechercher / remplacer).
+        old_changed = _old_pn_of(a[sin]) != _old_pn_of(b[sin])
+        new_changed = _new_pn_of(a[sin]) != _new_pn_of(b[sin])
+        if old_changed or new_changed:
             changed_pn.append(
-                {"sin": sin, "old_pn": old_pn, "designation": _designation_of(a[sin])}
+                {"sin": sin, "old_pn": _old_pn_of(a[sin]), "designation": _designation_of(a[sin])}
             )
 
     added_sin.sort(key=lambda e: e["sin"])

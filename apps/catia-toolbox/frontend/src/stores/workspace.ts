@@ -7,14 +7,21 @@ export type SourceKind = "smgxml" | "nomenclature" | "mapping";
 
 /** Etat de travail partage entre onglets : import courant, run courant, et les
  *  chemins de fichiers source deja choisis (pre-remplissage des selecteurs). */
+/** Dernier mapping de nomenclature utilise (champ -> index colonne 0-based) +
+ *  ligne d'en-tete, persiste pour pre-remplir le mapping au prochain preview. */
+export type NomenMapping = { headerRow: number; cols: Record<string, number> };
+
 type WorkspaceState = {
   importId: string | null;
   runId: string | null;
   /** Dernier chemin choisi par type de source (persiste). */
   sources: Record<SourceKind, string>;
+  /** Dernier mapping nomenclature valide (null tant qu'aucune analyse). */
+  nomenMapping: NomenMapping | null;
   setImport: (id: string | null) => void;
   setRun: (id: string | null) => void;
   setSource: (kind: SourceKind, path: string) => void;
+  setNomenMapping: (mapping: NomenMapping) => void;
 };
 
 const EMPTY_SOURCES: Record<SourceKind, string> = { smgxml: "", nomenclature: "", mapping: "" };
@@ -25,14 +32,16 @@ export const useWorkspace = create<WorkspaceState>()(
       importId: null,
       runId: null,
       sources: { ...EMPTY_SOURCES },
+      nomenMapping: null,
       // Changer d'import invalide le run courant.
       setImport: (id) => set({ importId: id, runId: null }),
       setRun: (id) => set({ runId: id }),
       setSource: (kind, path) => set((s) => ({ sources: { ...s.sources, [kind]: path } })),
+      setNomenMapping: (mapping) => set({ nomenMapping: mapping }),
     }),
     {
       name: "cto-workspace",
-      // Tolere les versions persistees anterieures sans `sources`.
+      // Tolere les versions persistees anterieures sans `sources` / `nomenMapping`.
       merge: (persisted, current) => ({
         ...current,
         ...(persisted as Partial<WorkspaceState>),

@@ -44,6 +44,24 @@ def test_inspect(client, tmp_path):
     assert {"SIN-001", "SIN-002", "OLD_PIECE"} <= names
 
 
+def test_tree(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    smg = _make_smgxml(tmp_path)
+    r = client.post("/api/v1/smgxml/tree", json={"scope": "input", "path": str(smg)})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["root_label"] == "engine.smgxml"
+    # 1 racine <Document> + 4 enfants = 5 noeuds.
+    assert body["node_count"] == 5
+    root = body["nodes"][0]
+    assert root["name"] == "Document" and root["kind"] == "folder"
+    child_names = [c["name"] for c in root["children"]]
+    # Le nom d'un acteur (attribut) est ajoute entre parentheses au tag.
+    assert "Actor (SIN-001)" in child_names
+    # Feuille (sans enfant) -> kind "file".
+    assert all(c["kind"] == "file" for c in root["children"])
+
+
 def test_recolor_dryrun_then_apply(client, tmp_path):
     _set_input_root(client, str(tmp_path))
     smg = _make_smgxml(tmp_path)

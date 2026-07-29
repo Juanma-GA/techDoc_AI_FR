@@ -496,8 +496,10 @@ class MonoCorpsIn(BaseModel):
     # a une piece, et l'index (0-based) de la colonne d'identite dans l'onglet.
     identity_field: str = Field(..., min_length=1)
     identity_col: int = Field(..., ge=0)
-    # Colonnes slots a mapper (0-based), 1 a n.
-    slot_cols: list[int] = Field(..., min_length=1)
+    # Colonnes slots (0-based). Vide/omis => de `first_slot_col` a la fin.
+    slot_cols: list[int] = Field(default_factory=list)
+    # 1re colonne Slot (0-based) : comparee a toutes les colonnes suivantes.
+    first_slot_col: Optional[int] = Field(default=None, ge=0)
     # Optionnel : run de nomenclature auquel appliquer mono_body.
     run_id: Optional[uuid.UUID] = None
 
@@ -661,6 +663,33 @@ class SmgxmlActorOut(BaseModel):
     name: str
     tag: str = ""
     color: str = ""
+
+
+class SmgxmlTreeIn(BaseModel):
+    scope: str = Field(default="input")
+    path: str = Field(..., min_length=1)
+    max_nodes: int = Field(default=20000, ge=1, le=200000)
+
+
+class SmgxmlTreeNodeOut(BaseModel):
+    """Noeud de l'arbre XML brut d'un SMGXML (meme forme que TreeNodeOut cote
+    front, mais `id` est un chemin d'index, pas un UUID persiste)."""
+
+    id: str
+    rel_path: str = ""
+    name: str
+    ext: str = ""
+    kind: str
+    depth: int = 0
+    size: int = 0
+    mtime: Optional[datetime] = None
+    children: list["SmgxmlTreeNodeOut"] = Field(default_factory=list)
+
+
+class SmgxmlTreeOut(BaseModel):
+    root_label: str
+    node_count: int = 0
+    nodes: list[SmgxmlTreeNodeOut] = Field(default_factory=list)
 
 
 class SmgxmlRecolorIn(BaseModel):

@@ -324,16 +324,23 @@ def parse_mono_corps(
     sheet: Optional[str],
     header_row: int,
     identity_col: int,
-    slot_cols: list[int],
+    slot_cols: Optional[list[int]] = None,
+    first_slot_col: Optional[int] = None,
 ) -> dict:
     """Parse l'onglet Materiaux : mono_body par valeur d'identite.
 
     Pour chaque ligne (a partir de `header_row`, 1-based), lit la colonne
-    d'identite (`identity_col`, 0-based) et les `slot_cols` (0-based) ; calcule
-    mono_body = une seule valeur distincte parmi les slots renseignes. L'appariement
-    avec les pieces se fait cote appelant (via le champ d'identite choisi).
+    d'identite (`identity_col`, 0-based). Les colonnes slots sont determinees,
+    par ordre de priorite :
+      1. `slot_cols` (0-based) si fourni explicitement ;
+      2. sinon, a partir de `first_slot_col` (0-based) jusqu'a la derniere
+         colonne de l'onglet (la 1re colonne Slot comparee a toutes les
+         suivantes), l'identite exclue ;
+      3. sinon, TOUTES les colonnes sauf l'identite.
+    mono_body = une seule valeur distincte parmi les slots renseignes.
+    L'appariement avec les pieces se fait cote appelant (via l'identite choisie).
 
-    Retour : {map: {identity_value: mono_body}, rows, mono}.
+    Retour : {map: {identity_value: mono_body}, items, rows, mono, slot_cols}.
     """
     wb = _load(path)
     try:
@@ -346,6 +353,15 @@ def parse_mono_corps(
     finally:
         wb.close()
 
+    # Colonnes slots : explicites, sinon depuis `first_slot_col` jusqu'a la fin,
+    # sinon toutes les colonnes sauf l'identite.
+    if slot_cols:
+        cols = list(slot_cols)
+    else:
+        max_cols = max((len(r) for r in rows), default=0)
+        start = first_slot_col if first_slot_col is not None else 0
+        cols = [c for c in range(start, max_cols) if c != identity_col]
+
     def _at(row: list, col: int) -> str:
         return "" if (col < 0 or col >= len(row) or row[col] is None) else str(row[col]).strip()
 
@@ -354,7 +370,7 @@ def parse_mono_corps(
     for ridx in range(header_row, len(rows)):  # header_row (1-based) = 1re ligne de donnees (0-based)
         row = rows[ridx]
         ident = _at(row, identity_col)[:500]
-        slots = [_at(row, c)[:200] for c in slot_cols]
+        slots = [_at(row, c)[:200] for c in cols]
         if not ident and not any(slots):
             continue  # ligne entierement vide
         mono = _is_mono_body(slots)
@@ -366,6 +382,7 @@ def parse_mono_corps(
         "items": items,
         "rows": len(items),
         "mono": sum(1 for it in items if it["mono_body"]),
+        "slot_cols": cols,
     }
 
 

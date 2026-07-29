@@ -5,7 +5,6 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import i18n from "./i18n";
-import { Architecture } from "./routes/Architecture";
 import { Checks } from "./routes/Checks";
 import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
@@ -69,7 +68,6 @@ const NAV: NavEntry[] = [
   {
     groupKey: "nav.groups.outils",
     items: [
-      { to: "/architecture", labelKey: "nav.architecture" },
       { to: "/data", labelKey: "nav.data" },
       { to: "/settings", labelKey: "nav.settings" },
     ],
@@ -91,7 +89,6 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
   "/replacement": { titleKey: "page.replacement.title", subKey: "page.replacement.sub" },
   "/qc": { titleKey: "page.qc.title", subKey: "page.qc.sub" },
   "/checks": { titleKey: "page.checks.title", subKey: "page.checks.sub" },
-  "/architecture": { titleKey: "page.architecture.title", subKey: "page.architecture.sub" },
   "/data": { titleKey: "page.data.title", subKey: "page.data.sub" },
   "/settings": { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };
@@ -172,7 +169,6 @@ export function App() {
               <Route path="/replacement" element={<Replacement />} />
               <Route path="/qc" element={<Qc />} />
               <Route path="/checks" element={<Checks />} />
-              <Route path="/architecture" element={<Architecture />} />
               <Route path="/data" element={<Data />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>

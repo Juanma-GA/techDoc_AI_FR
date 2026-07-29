@@ -83,6 +83,52 @@ def _parse(path: str) -> ET.Element:
         raise AppError("SMGXML_NOT_FOUND", "SMGXML introuvable ou illisible.", status_code=400) from e
 
 
+def parse_tree(path: str, max_nodes: int = 20000) -> dict:
+    """Arbre XML brut du SMGXML : chaque balise devient un noeud (tag + attribut
+    de nom quand present), imbrique selon la hierarchie du fichier.
+
+    Retour compatible avec le composant Arborescence : {root_label, node_count,
+    nodes} ou chaque noeud porte {id, rel_path, name, ext, kind, depth, size,
+    mtime, children}. `max_nodes` borne le parcours (fichiers volumineux).
+    """
+    root = _parse(path)
+    count = 0
+
+    def build(elem: ET.Element, depth: int, idpath: str, rel: str) -> Optional[dict]:
+        nonlocal count
+        if count >= max_nodes:
+            return None
+        count += 1
+        tag = _local(elem.tag)
+        name_attr = _name_of(elem)
+        name = f"{tag} ({name_attr})" if name_attr else tag
+        rel_path = f"{rel}/{tag}" if rel else tag
+        children: list[dict] = []
+        for i, child in enumerate(list(elem)):
+            node = build(child, depth + 1, f"{idpath}.{i}", rel_path)
+            if node is None:
+                break  # plafond atteint
+            children.append(node)
+        return {
+            "id": idpath,
+            "rel_path": rel_path,
+            "name": name,
+            "ext": "",
+            "kind": "folder" if children else "file",
+            "depth": depth,
+            "size": 0,
+            "mtime": None,
+            "children": children,
+        }
+
+    tree = build(root, 0, "0", "")
+    return {
+        "root_label": path.replace("\\", "/").rsplit("/", 1)[-1],
+        "node_count": count,
+        "nodes": [tree] if tree else [],
+    }
+
+
 def _build_parent_map(root: ET.Element) -> dict[ET.Element, ET.Element]:
     """Map enfant -> parent (ElementTree n'expose pas le parent nativement)."""
     return {child: parent for parent in root.iter() for child in parent}

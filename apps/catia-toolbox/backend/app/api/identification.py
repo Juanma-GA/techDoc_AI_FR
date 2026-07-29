@@ -107,10 +107,17 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
         header_row=payload.header_row,
         identity_col=payload.identity_col,
         slot_cols=payload.slot_cols,
+        first_slot_col=payload.first_slot_col,
     )
     ident_map: dict[str, bool] = parsed["map"]
 
-    summary = {"rows": parsed["rows"], "mono": parsed["mono"], "matched": 0, "applied": False}
+    summary = {
+        "rows": parsed["rows"],
+        "mono": parsed["mono"],
+        "matched": 0,
+        "applied": False,
+        "slot_cols": parsed["slot_cols"],
+    }
 
     # Optionnel : applique mono_body aux pieces du run par le champ d'identite.
     if payload.run_id is not None:
@@ -164,6 +171,7 @@ def _item_dict(it: NomenclatureItem) -> dict:
         "designation": it.designation,
         "sin": it.sin,
         "version": it.version,
+        "old_pn": it.old_pn,
         "new_pn": it.new_pn,
         "new_rev": it.new_rev,
     }

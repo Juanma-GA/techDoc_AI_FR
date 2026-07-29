@@ -19,7 +19,6 @@
     "replacement": "Remplacement (plan)",
     "qc": "Checklist QC",
     "checks": "Vérifications auto",
-    "architecture": "Architecture",
     "data": "Données",
     "settings": "Paramètres",
     "groups": {
@@ -46,7 +45,6 @@
     "replacement": { "title": "Remplacement", "sub": "Plan de remplacement de pièces à partir d'un mapping." },
     "qc": { "title": "5 - Contrôle Qualité", "sub": "Checklist de vérification des pièces dans l'assemblage." },
     "checks": { "title": "Vérifications", "sub": "Lancer des vérifications configurables sur l'import courant." },
-    "architecture": { "title": "Architecture", "sub": "Backend, frontend et workflow utilisateur." },
     "data": { "title": "Données", "sub": "Vue d'ensemble et opérations de reset." },
     "settings": { "title": "Paramètres", "sub": "Clé API Mistral et modèles utilisés." }
   },
@@ -126,6 +124,9 @@
     "notFoundDesc": "L'import a peut-être été supprimé. Réimportez.",
     "metricsTitle": "Métriques",
     "structureTitle": "Structure ({{count}} nœuds)",
+    "smgxmlTitle": "Arborescence d'un SMGXML",
+    "smgxmlBanner": "Choisissez un fichier SMGXML pour afficher son arbre XML brut (lecture seule).",
+    "smgxmlLoad": "Charger l'arborescence",
     "metrics": {
       "files": "Fichiers",
       "folders": "Dossiers",
@@ -417,14 +418,14 @@
     "badgeMonoBody": "{{count}} mono-corps",
     "badgeMono": "{{count}} mono",
     "monoTitle": "Pièces mono-corps (onglet Matériaux)",
-    "monoBanner": "Choisissez l'onglet Matériaux, la colonne d'identité (pour relier aux pièces), un nombre de colonnes de slots, puis mappez-les. Une pièce est mono-corps si les slots renseignés ont une seule valeur distincte.",
+    "monoBanner": "Choisissez l'onglet Matériaux, l'identité (clé de ligne, détectée dans l'onglet pour relier aux pièces) et la première colonne Slot. Une pièce est mono-corps si les slots renseignés ont une seule valeur distincte.",
     "monoIdentityField": "Identité (relie aux pièces)",
-    "monoIdentityCol": "Colonne d'identité",
-    "monoCount": "Nb de slots",
-    "monoSlotsTitle": "Colonnes des slots",
+    "monoIdentityCol": "Identité",
+    "monoFirstSlotCol": "Première colonne Slot",
+    "monoSlotsFromHint": "Toutes les colonnes de la première colonne Slot jusqu'à la fin sont comparées entre elles.",
     "monoSlotN": "Slot {{n}}",
     "monoAnalyze": "Analyser mono-corps",
-    "monoRequired": "Mappez la colonne d'identité et au moins un slot.",
+    "monoRequired": "Choisissez une identité détectée dans l'onglet et la première colonne Slot.",
     "monoDoneApplied": "{{mono}} pièce(s) mono-corps sur {{matched}} appariée(s) (appliqué aux pièces).",
     "monoDoneSolo": "{{mono}} pièce(s) mono-corps sur {{rows}} ligne(s).",
     "monoResultInfo": "{{mono}} mono-corps sur {{rows}} ligne(s)."
@@ -516,17 +517,5 @@
     "resetAll": "Tout supprimer",
     "resetOk": "Reset OK ({{items}}).",
     "resetEmpty": "(rien à supprimer)"
-  },
-  "architecture": {
-    "title": "Backend ↔ Frontend en 30 secondes",
-    "backend": "BACKEND",
-    "backendDesc": "Python 3.11+ · FastAPI sous /api/v1/ · Pydantic v2 · SQLAlchemy 2 + SQLite + Alembic · structlog JSON + X-Request-Id. Mistral via httpx async (chat streaming SSE) + sync (embeddings). Pas de SDK Mistral.",
-    "frontend": "FRONTEND",
-    "frontendDesc": "Application React + Vite (TS strict, Tailwind, RHF + Zod, i18next, Zustand, TanStack Query) avec @internal/ui et @internal/design-tokens, servie par le backend. Consomme l'API REST directement.",
-    "workflowTitle": "Workflow utilisateur (à adapter par POC)",
-    "step1": "Onglet Paramètres → renseigner la clé Mistral (stockée en SQLite, table app_config).",
-    "step2": "Tester la connexion - liste les modèles Mistral disponibles.",
-    "step3": "Onglet Données → voir les compteurs et reset les tables si besoin.",
-    "step4": "Suivre le pipeline en 5 étapes : Identification → Préparation → Traitement → Intégration → Contrôle."
   }
 }

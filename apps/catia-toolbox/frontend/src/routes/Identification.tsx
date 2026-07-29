@@ -34,6 +34,10 @@ const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; requ
 // Colonnes qui suffisent a identifier une piece (au moins une requise).
 const IDENTITY_FIELDS: (keyof NomenclatureMapping)[] = ["sin", "old_pn", "new_pn"];
 
+// Mapping par defaut du gabarit, applique tant qu'aucun mapping n'a ete
+// memorise : SIN en colonne B (index 1), Designation en colonne D (index 3).
+const DEFAULT_MAPPING: Record<string, number> = { sin: 1, designation: 3 };
+
 // Registre des colonnes affichables (cle = cle backend du mapping). Le tableau
 // n'affiche QUE les colonnes reellement mappees (summary.detected_columns).
 // L'ordre ci-dessous est l'ordre d'affichage.
@@ -167,8 +171,8 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   const [headerRow, setHeaderRow] = useState(1);
   const [identityField, setIdentityField] =
     useState<"catpart" | "sin" | "old_pn" | "new_pn">("catpart");
-  const [identityCol, setIdentityCol] = useState<number | undefined>(undefined);
-  const [slotCols, setSlotCols] = useState<(number | undefined)[]>([undefined]);
+  // 1re colonne Slot : comparee a toutes les colonnes suivantes.
+  const [firstSlotCol, setFirstSlotCol] = useState<number | undefined>(undefined);
   const [result, setResult] = useState<MonoCorpsResultDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -182,7 +186,6 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
       setPreview(data);
       setSheet(data.sheet);
       setHeaderRow(data.header_row_detected > 0 ? data.header_row_detected : 1);
-      if (data.columns_map.catpart !== undefined) setIdentityCol(data.columns_map.catpart);
     },
     onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
   });
@@ -195,7 +198,8 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
         header_row: headerRow,
         identity_field: identityField,
         identity_col: identityCol as number,
-        slot_cols: slotCols.filter((c): c is number => c !== undefined),
+        // 1re colonne Slot : le backend compare de cette colonne a la derniere.
+        first_slot_col: firstSlotCol as number,
         run_id: runId ?? undefined,
       }),
     onSuccess: (res) => {
@@ -213,13 +217,16 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   });
 
   const ncols = preview ? preview.rows.reduce((m, r) => Math.max(m, r.length), 0) : 0;
-  const setSlotCount = (raw: number) => {
-    const count = Math.max(1, Math.min(Number.isFinite(raw) ? raw : 1, Math.max(1, ncols)));
-    setSlotCols((prev) => Array.from({ length: count }, (_v, i) => prev[i]));
-  };
-  const mappedSlots = slotCols.filter((c) => c !== undefined).length;
-  const canAnalyze = !!path.trim() && identityCol !== undefined && mappedSlots >= 1;
+  // Colonne d'identite deduite du champ choisi via la detection d'en-tete de
+  // l'onglet (plus de selecteur de colonne dedie).
+  const identityCol = preview?.columns_map?.[identityField];
+  const canAnalyze = !!path.trim() && identityCol !== undefined && firstSlotCol !== undefined;
   const slotCount = result ? result.items.reduce((m, i) => Math.max(m, i.slots.length), 0) : 0;
+  // Indices des colonnes slots reellement comparees (renseignes par le backend),
+  // pour libeller les entetes du tableau resultat.
+  const resultSlotCols = Array.isArray(result?.summary.slot_cols)
+    ? (result.summary.slot_cols as number[])
+    : [];
   const colOptions = Array.from({ length: ncols }, (_v, i) => ({
     value: String(i),
     label: preview ? colLabel(preview, i, headerRow) : String(i),
@@ -315,15 +322,15 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="mono-identity-col" className="field-label">
-                {t("identification.monoIdentityCol")}
+              <label htmlFor="mono-first-slot" className="field-label">
+                {t("identification.monoFirstSlotCol")}
               </label>
               <select
-                id="mono-identity-col"
+                id="mono-first-slot"
                 className="input"
-                value={identityCol === undefined ? "" : String(identityCol)}
+                value={firstSlotCol === undefined ? "" : String(firstSlotCol)}
                 onChange={(e) =>
-                  setIdentityCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10))
+                  setFirstSlotCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10))
                 }
               >
                 <option value="">{t("identification.none")}</option>
@@ -332,56 +339,11 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                 ))}
               </select>
             </div>
-            <div className="field">
-              <label htmlFor="mono-count" className="field-label">{t("identification.monoCount")}</label>
-              <input
-                id="mono-count"
-                className="input"
-                type="number"
-                min={1}
-                max={Math.max(1, ncols)}
-                style={{ width: "6rem" }}
-                value={slotCols.length}
-                onChange={(e) => setSlotCount(parseInt(e.target.value, 10))}
-              />
-            </div>
           </div>
 
-          <p className="label" style={{ marginTop: 12, marginBottom: 8 }}>
-            {t("identification.monoSlotsTitle")}
+          <p className="banner info" style={{ marginTop: 12 }}>
+            {t("identification.monoSlotsFromHint")}
           </p>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              gap: 8,
-            }}
-          >
-            {slotCols.map((cur, i) => (
-              <div key={i} className="field">
-                <label htmlFor={`mono-slot-${i}`} className="field-label">
-                  {t("identification.monoSlotN", { n: i + 1 })}
-                </label>
-                <select
-                  id={`mono-slot-${i}`}
-                  className="input"
-                  value={cur === undefined ? "" : String(cur)}
-                  onChange={(e) =>
-                    setSlotCols((prev) =>
-                      prev.map((v, j) =>
-                        j === i ? (e.target.value === "" ? undefined : parseInt(e.target.value, 10)) : v,
-                      ),
-                    )
-                  }
-                >
-                  <option value="">{t("identification.none")}</option>
-                  {colOptions.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
 
           <div className="row" style={{ marginTop: 12 }}>
             <button
@@ -420,7 +382,9 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                             key={i}
                             style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "center" }}
                           >
-                            {t("identification.monoSlotN", { n: i + 1 })}
+                            {preview && resultSlotCols[i] !== undefined
+                              ? colLabel(preview, resultSlotCols[i]!, headerRow)
+                              : t("identification.monoSlotN", { n: i + 1 })}
                           </th>
                         ))}
                         <th style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "center" }}>
@@ -480,7 +444,7 @@ export function Identification() {
   const [resultColumns, setResultColumns] = useState<string[]>([]);
   // Filtres d'affichage : "Pieces remplacees" par defaut (champ de filtre choisi
   // via une liste deroulante), + avec couleur / toutes.
-  type ItemFilter = "all" | "replaced" | "color" | "mono_body";
+  type ItemFilter = "all" | "replaced" | "color";
   const [filter, setFilter] = useState<ItemFilter>("replaced");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -495,7 +459,6 @@ export function Identification() {
       identificationApi.items(resultRunId!, {
         replaced: filter === "replaced" ? true : undefined,
         hasColor: filter === "color" ? true : undefined,
-        monoBody: filter === "mono_body" ? true : undefined,
       }),
     enabled: !!resultRunId,
   });
@@ -512,9 +475,14 @@ export function Identification() {
       setNomenError(null);
       setPreview(data);
       setSheet(data.sheet);
-      const hr = data.header_row_detected > 0 ? data.header_row_detected : 1;
+      // Pre-remplit avec le dernier mapping memorise si present, sinon la
+      // detection automatique par mots-cles d'en-tete.
+      const saved = useWorkspace.getState().nomenMapping;
+      const hr = saved?.headerRow ?? (data.header_row_detected > 0 ? data.header_row_detected : 1);
       setHeaderRow(hr);
-      setMapping({ ...data.columns_map });
+      // Priorite : mapping memorise > detection auto completee par le defaut
+      // du gabarit (SIN=B, Designation=D).
+      setMapping(saved ? { ...saved.cols } : { ...data.columns_map, ...DEFAULT_MAPPING });
     },
     onError: onMutationError(setNomenError),
   });
@@ -578,10 +546,16 @@ export function Identification() {
       return;
     }
     const body: NomenclatureMapping = { header_row: headerRow };
+    const cols: Record<string, number> = {};
     for (const { field } of MAPPING_FIELDS) {
       const v = mapping[field];
-      if (v !== undefined) body[field] = v;
+      if (v !== undefined) {
+        body[field] = v;
+        cols[field] = v;
+      }
     }
+    // Memorise ce mapping pour le pre-remplir au prochain preview.
+    useWorkspace.getState().setNomenMapping({ headerRow, cols });
     analyzeMappingMutation.mutate(body);
   };
 
@@ -761,7 +735,6 @@ export function Identification() {
                     {canFilterReplaced(resultColumns) ? (
                       <option value="replaced">{t("identification.replacedOnly")}</option>
                     ) : null}
-                    <option value="mono_body">{t("identification.monoBodyOnly")}</option>
                     {resultColumns.includes("color") ? (
                       <option value="color">{t("identification.withColor")}</option>
                     ) : null}
@@ -770,11 +743,7 @@ export function Identification() {
                 <a
                   href={exportUrl.identificationCsv(
                     resultRunId,
-                    filter === "replaced"
-                      ? { replaced: true }
-                      : filter === "mono_body"
-                        ? { monoBody: true }
-                        : undefined,
+                    filter === "replaced" ? { replaced: true } : undefined,
                   )}
                 >
                   {t("common.exportCsv")}

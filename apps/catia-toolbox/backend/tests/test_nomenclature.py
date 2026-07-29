@@ -273,6 +273,39 @@ def test_compare_nomenclatures(client, tmp_path):
     assert "modifie" in csv.text
 
 
+def test_compare_old_new_pn_columns(client, tmp_path):
+    """Comparaison via colonnes OLD/NEW P/N dediees : un SIN est modifie des que
+    l'OLD *ou* le NEW P/N change d'une version a l'autre (colonnes OLD comparees
+    entre elles, NEW entre elles). Le nom de fichier CATPart peut ne pas bouger."""
+    _set_input_root(client, str(tmp_path))
+
+    def _make(name, rows):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["SIN", "OLD P/N", "NEW P/N"])
+        for r in rows:
+            ws.append(r)
+        p = tmp_path / name
+        wb.save(p)
+        return client.post("/api/v1/identification/nomenclature", json={"scope": "input", "path": str(p)}).json()["id"]
+
+    # V0 -> V1 :
+    #  SIN-001 : OLD A1->A2 (OLD change)         => modifie
+    #  SIN-002 : NEW B1->B2 (NEW change)         => modifie
+    #  SIN-003 : inchange                        => non
+    run_a = _make("v0.xlsx", [["SIN-001", "A1", "A1"], ["SIN-002", "B1", "B1"], ["SIN-003", "C1", "C1"]])
+    run_b = _make("v1.xlsx", [["SIN-001", "A2", "A2"], ["SIN-002", "B1", "B2"], ["SIN-003", "C1", "C1"]])
+
+    body = client.post(
+        "/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_b}
+    ).json()
+    changed = {e["sin"]: e for e in body["changed_pn"]}
+    assert set(changed) == {"SIN-001", "SIN-002"}
+    # OLD PN de V0 reporte (a rechercher / remplacer).
+    assert changed["SIN-001"]["old_pn"] == "A1"
+    assert changed["SIN-002"]["old_pn"] == "B1"
+
+
 def test_mono_body_from_materiaux_sheet(client, tmp_path):
     """Etape Mono-Corps : onglet Materiaux separe (identite + n colonnes slots),
     n quelconque, apparie aux pieces par CATPart."""
@@ -338,3 +371,33 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     csv = client.get(f"/api/v1/identification/{run_id}/export.csv", params={"mono_body": True})
     assert "mono_body" in csv.text.splitlines()[0]
     assert "P1.CATPart" in csv.text and "P3.CATPart" not in csv.text
+
+    # slot_cols OMIS : toutes les colonnes sauf l'identite sont comparees.
+    auto = client.post(
+        "/api/v1/identification/mono-corps",
+        json={
+            "scope": "input", "path": str(p), "sheet": "Materiaux", "header_row": 1,
+            "identity_field": "catpart", "identity_col": 0,
+        },
+    )
+    assert auto.status_code == 200, auto.text
+    abody = auto.json()
+    # Colonnes 1..4 (toutes sauf l'identite en 0) => meme resultat que le mapping explicite.
+    assert abody["summary"]["slot_cols"] == [1, 2, 3, 4]
+    assert abody["summary"]["mono"] == 2
+    auto_by_id = {i["identity"]: i for i in abody["items"]}
+    assert auto_by_id["P2.CATPart"]["slots"] == ["A", "A", "A", "A"]
+    assert auto_by_id["P3.CATPart"]["mono_body"] is False
+
+    # first_slot_col : 1re colonne Slot = 2 -> slots des colonnes 2..fin (col 1 ignoree).
+    fs = client.post(
+        "/api/v1/identification/mono-corps",
+        json={
+            "scope": "input", "path": str(p), "sheet": "Materiaux", "header_row": 1,
+            "identity_field": "catpart", "identity_col": 0, "first_slot_col": 2,
+        },
+    )
+    assert fs.status_code == 200, fs.text
+    assert fs.json()["summary"]["slot_cols"] == [2, 3, 4]
+    fs_by_id = {i["identity"]: i for i in fs.json()["items"]}
+    assert fs_by_id["P2.CATPart"]["slots"] == ["A", "A", "A"]

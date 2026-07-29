@@ -98,6 +98,13 @@ export type TreeDto = {
   nodes: TreeNodeDto[];
 };
 
+/** Arbre XML brut d'un SMGXML (meme forme de noeud que TreeNodeDto). */
+export type SmgxmlTreeDto = {
+  root_label: string;
+  node_count: number;
+  nodes: TreeNodeDto[];
+};
+
 export type RunDto = {
   id: string;
   import_id: string;
@@ -348,7 +355,7 @@ export type NomenclatureMapping = {
   materials?: number;
 };
 
-// Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots).
+// Etape Mono-Corps : onglet Materiaux (identite seule ; tous les slots compares).
 export type MonoCorpsInput = {
   scope?: BrowseScope;
   path: string;
@@ -356,7 +363,10 @@ export type MonoCorpsInput = {
   header_row: number;
   identity_field: string;
   identity_col: number;
-  slot_cols: number[];
+  // Optionnel : colonnes slots explicites. Prioritaire sur first_slot_col.
+  slot_cols?: number[];
+  // 1re colonne Slot (0-based) : comparee a toutes les colonnes suivantes.
+  first_slot_col?: number;
   // Optionnel : run de nomenclature auquel appliquer mono_body.
   run_id?: string;
 };
@@ -364,7 +374,7 @@ export type MonoCorpsInput = {
 export type MonoCorpsItemDto = { identity: string; slots: string[]; mono_body: boolean };
 export type MonoCorpsResultDto = {
   items: MonoCorpsItemDto[];
-  summary: Record<string, number | boolean>;
+  summary: Record<string, number | boolean | number[]>;
 };
 
 export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
@@ -724,6 +734,12 @@ export const smgxmlApi = {
       body: JSON.stringify({ scope: "input", apply: false, ...body }),
     }),
   changes: (id: string) => request<SmgxmlChangeDto[]>(`/smgxml/${id}/changes`),
+  /** Arbre XML brut d'un SMGXML (lecture seule) pour l'onglet Arborescence. */
+  tree: (body: { scope?: BrowseScope; path: string; max_nodes?: number }) =>
+    request<SmgxmlTreeDto>("/smgxml/tree", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", ...body }),
+    }),
 };
 
 export const qcApi = {

@@ -95,7 +95,10 @@ function SingleFilePicker({ exts, scope = "input", value, onChange, label, sheet
 
   const data = listQuery.data;
   const atRoot = !!data && data.path === data.root;
-  const entries = (data?.entries ?? []).filter((e) => e.kind === "folder" || matchesExts(e.name, exts));
+  // On affiche TOUS les dossiers et fichiers du dossier courant ; seuls les
+  // fichiers dont l'extension correspond a `exts` sont selectionnables (les
+  // autres sont grises), pour toujours voir le contenu reel du dossier.
+  const entries = data?.entries ?? [];
 
   return (
     <div className="form">
@@ -146,24 +149,30 @@ function SingleFilePicker({ exts, scope = "input", value, onChange, label, sheet
               </div>
               <div className="item-list" style={{ maxHeight: "15rem", overflow: "auto" }}>
                 {entries.length ? (
-                  entries.map((e) =>
-                    e.kind === "folder" ? (
-                      <div key={e.path} className="item-row">
-                        <div className="item-actions">
-                          <button type="button" className="btn ghost small" onClick={() => setPath(e.path)}>
-                            {t("picker.open")}
-                          </button>
+                  entries.map((e) => {
+                    if (e.kind === "folder") {
+                      return (
+                        <div key={e.path} className="item-row">
+                          <div className="item-actions">
+                            <button type="button" className="btn ghost small" onClick={() => setPath(e.path)}>
+                              {t("picker.open")}
+                            </button>
+                          </div>
+                          <div className="item-main">
+                            <span className="item-name">{e.name}/</span>
+                          </div>
                         </div>
-                        <div className="item-main">
-                          <span className="item-name">{e.name}/</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div key={e.path} className="item-row">
+                      );
+                    }
+                    // Fichier : selectionnable seulement si l'extension correspond.
+                    const selectable = matchesExts(e.name, exts);
+                    return (
+                      <div key={e.path} className="item-row" style={selectable ? undefined : { opacity: 0.5 }}>
                         <div className="item-actions">
                           <button
                             type="button"
                             className="btn secondary small"
+                            disabled={!selectable}
                             onClick={() => {
                               onChange(e.path);
                               setOpen(false);
@@ -177,8 +186,8 @@ function SingleFilePicker({ exts, scope = "input", value, onChange, label, sheet
                           <span className="item-meta">{fmtBytes(e.size)}</span>
                         </div>
                       </div>
-                    ),
-                  )
+                    );
+                  })
                 ) : (
                   <p className="hint" style={{ textAlign: "center" }}>
                     {t("picker.empty", { exts: exts.join(", ") })}
