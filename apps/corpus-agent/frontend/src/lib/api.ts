@@ -33,6 +33,7 @@ import type {
   ProjectUpdate,
   ReferenceMappingIn,
   ReferenceOut,
+  RejectionsSummaryOut,
   RulesLegacyOut,
   SheetColumnOut,
   SheetInspectOut,
@@ -223,6 +224,10 @@ export const anomaliesApi = {
     ),
   exportCsv: (pid: string) =>
     downloadBlob(`/projects/${pid}/anomalies/export.csv`, `anomalies-${pid}.csv`),
+  rejectionsSummary: (pid: string, synthesize = true) =>
+    api.get<RejectionsSummaryOut>(
+      `/projects/${pid}/anomalies/rejections-summary?synthesize=${synthesize ? "true" : "false"}`,
+    ),
 };
 
 export const kpisApi = {

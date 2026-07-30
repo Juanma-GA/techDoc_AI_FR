@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { BarList, type BarItem } from "../components/BarList";
 import { ProjectSlicer } from "../components/ProjectSlicer";
+import { RejectionsSummaryCard } from "../components/RejectionsSummaryCard";
 import { StackedBarChart } from "../components/StackedBarChart";
 import { kpisApi, projectsApi } from "../lib/api";
 import { useScopeStore } from "../stores/useScopeStore";
@@ -109,6 +110,17 @@ export function Manager() {
               </div>
             </div>
           </div>
+
+          {/* Synthese des rejets : par-projet -> visible uniquement quand un
+              seul projet est selectionne (meme regle que « Aller au projet »). */}
+          {scope.length === 1 && scope[0] ? (
+            <RejectionsSummaryCard projectId={scope[0]} />
+          ) : (
+            <div className="card">
+              <h2 className="card-title">{t("rejections.title")}</h2>
+              <div className="empty-state">{t("rejections.selectOne")}</div>
+            </div>
+          )}
 
           <div className="grid-2">
             <div className="card">

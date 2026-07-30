@@ -116,6 +116,27 @@ export type AnomalyStatus = "open" | "acknowledged" | "fixed" | "rejected";
 export type AnomalySeverity = "low" | "medium" | "high";
 export type AnomalyConfidence = "elevee" | "moyenne" | "faible";
 
+// Synthese des rejets : agregat des anomalies rejetees par sujet (category) +
+// motifs, avec un paragraphe de synthese IA optionnel (garde par l'interrupteur
+// LLM cote backend).
+export type RejectionCategoryCount = { category: string; count: number };
+export type RejectionItem = {
+  id: string;
+  file: string;
+  category: string;
+  severity: string;
+  message: string;
+  feedback: string;
+  location: string;
+};
+export type RejectionsSummaryOut = {
+  total: number;
+  by_category: RejectionCategoryCount[];
+  items: RejectionItem[];
+  synthese: string;
+  llm_used: boolean;
+};
+
 export type AnomalyOut = {
   id: string;
   project_id: string;
