@@ -19,21 +19,18 @@
     "dev:doc-writer": "concurrently -n back,front -c blue,green \"cd apps/doc-writer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8002\" \"pnpm --filter @apps/doc-writer-frontend dev\"",
     "dev:ocr-vision": "concurrently -n back,front -c blue,green \"cd apps/ocr-vision/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8003\" \"pnpm --filter @apps/ocr-vision-frontend dev\"",
     "dev:s1000d-extractor": "concurrently -n back,front -c blue,green \"cd apps/s1000d-extractor/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8004\" \"pnpm --filter @apps/s1000d-extractor-frontend dev\"",
-    "dev:word-reviewer": "concurrently -n back,front -c blue,green \"cd apps/word-reviewer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8006\" \"pnpm --filter @apps/word-reviewer-frontend dev\"",
     "test:e2e:catia-toolbox": "pnpm --filter @apps/catia-toolbox-frontend --if-present test:e2e",
     "test:e2e:corpus-agent": "pnpm --filter @apps/corpus-agent-frontend --if-present test:e2e",
     "test:e2e:doc-reviewer": "pnpm --filter @apps/doc-reviewer-frontend --if-present test:e2e",
     "test:e2e:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present test:e2e",
     "test:e2e:ocr-vision": "pnpm --filter @apps/ocr-vision-frontend --if-present test:e2e",
     "test:e2e:s1000d-extractor": "pnpm --filter @apps/s1000d-extractor-frontend --if-present test:e2e",
-    "test:e2e:word-reviewer": "pnpm --filter @apps/word-reviewer-frontend --if-present test:e2e",
     "openapi:gen:catia-toolbox": "pnpm --filter @apps/catia-toolbox-frontend --if-present openapi:gen",
     "openapi:gen:corpus-agent": "pnpm --filter @apps/corpus-agent-frontend --if-present openapi:gen",
     "openapi:gen:doc-reviewer": "pnpm --filter @apps/doc-reviewer-frontend --if-present openapi:gen",
     "openapi:gen:doc-writer": "pnpm --filter @apps/doc-writer-frontend --if-present openapi:gen",
     "openapi:gen:ocr-vision": "pnpm --filter @apps/ocr-vision-frontend --if-present openapi:gen",
-    "openapi:gen:s1000d-extractor": "pnpm --filter @apps/s1000d-extractor-frontend --if-present openapi:gen",
-    "openapi:gen:word-reviewer": "pnpm --filter @apps/word-reviewer-frontend --if-present openapi:gen"
+    "openapi:gen:s1000d-extractor": "pnpm --filter @apps/s1000d-extractor-frontend --if-present openapi:gen"
   },
   "devDependencies": {
     "concurrently": "^9.0.1"
