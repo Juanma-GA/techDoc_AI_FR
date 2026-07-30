@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../components/PageHeader";
-import { RejectionsSummary } from "../components/RejectionsSummary";
+import { RejectionsSummaryCard } from "../components/RejectionsSummaryCard";
 import { useDocuments } from "../hooks/useDocuments";
 import { api } from "../lib/api";
 import type { Severity, Suggestion } from "../types/domain";
@@ -83,8 +83,6 @@ export function Dashboard(): JSX.Element {
     .slice(0, 5)
     .map(([id, count]) => ({ label: docName(id), count, fill: "var(--warning)" }));
 
-  const rejectedList = sugList.filter((s) => s.status === "rejected");
-
   return (
     <div>
       <PageHeader title={t("dashboard.title")} subtitle={t("dashboard.subtitle")} />
@@ -128,13 +126,7 @@ export function Dashboard(): JSX.Element {
         )}
       </Card>
 
-      <Card title={t("data.rejects.title")}>
-        {isLoading ? (
-          <p className="hint">{t("common.loading")}</p>
-        ) : (
-          <RejectionsSummary rejected={rejectedList} docName={docName} limit={12} />
-        )}
-      </Card>
+      <RejectionsSummaryCard />
     </div>
   );
 }

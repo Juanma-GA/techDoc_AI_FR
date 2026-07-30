@@ -44,6 +44,8 @@ export type Suggestion = {
   page: number;
   bbox: Bbox;
   span_index: number;
+  /** Pipeline docx natif : bloc cible ("dp<N>"), null pour les suggestions PDF. */
+  target_id: string | null;
   status: SuggestionStatus;
   /** Motif libre de rejet (corpus-agent-style), renseigne au rejet. */
   feedback: string;
@@ -54,6 +56,25 @@ export type Suggestion = {
 
 export type QualityState = "analyzable" | "degraded" | "unusable";
 
+// Synthese IA des rejets : agregat par regle + paragraphe de synthese Mistral
+// (garde par l'interrupteur LLM cote backend).
+export type RejectionRuleCount = { rule_code: string; count: number };
+export type RejectionItem = {
+  id: string;
+  file: string;
+  rule_code: string;
+  severity: string;
+  message: string;
+  feedback: string;
+};
+export type RejectionsSummary = {
+  total: number;
+  by_rule: RejectionRuleCount[];
+  items: RejectionItem[];
+  synthese: string;
+  llm_used: boolean;
+};
+
 export type Document = {
   id: string;
   original_filename: string;
@@ -63,6 +84,8 @@ export type Document = {
   standard_version_id: string | null;
   status: "uploaded" | "analyzing" | "analyzed" | "edited" | "analysis_failed";
   current_version: number;
+  /** Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif). */
+  source_format: "pdf" | "docx";
   // Portail qualite : revuabilite homogene tous formats.
   convert_engine: string;
   text_coverage: number;

@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import { PdfViewer } from "../components/reviewer/PdfViewer";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
+import { DocxReviewer } from "./DocxReviewer";
 import {
   useApplyGroup,
   useApplySuggestion,
@@ -51,6 +52,13 @@ export function DocumentReviewer() {
   }, [documentId, currentPage, pdfVersion]);
 
   if (!documentId) return null;
+
+  // Pipeline Word natif : reviewer dédié (blocs + sortie .docx), le viewer PDF
+  // ne s'applique pas. On attend le chargement du document pour connaître le
+  // format avant de choisir le reviewer.
+  if (document.data?.source_format === "docx") {
+    return <DocxReviewer documentId={documentId} />;
+  }
 
   const handleAccept = (id: string): void => {
     patch.mutate(

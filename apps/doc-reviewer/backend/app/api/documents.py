@@ -12,12 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core import ingest
+from app.core import docx_pipeline, docx_versioning, ingest
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Document, EditHistory, StandardVersion
 from app.db.session import get_db
+from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import DocumentOut, EditHistoryOut, RollbackIn
 
@@ -165,10 +166,88 @@ def _ingest_and_persist(
     )
 
 
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def _persist_docx(
+    name: str,
+    data: bytes,
+    target: str,
+    db: Session,
+    standard_version_id: Optional[uuid.UUID] = None,
+    standard_version_ids: Optional[list[uuid.UUID]] = None,
+) -> Document:
+    """Persiste un `.docx` pour la revue **Word native** (source_format="docx").
+
+    L'original est stocke en v0.docx (versioning docx), parse pour compter les
+    blocs/pages. Aucune conversion : la revue et l'edition se font sur le .docx.
+    Phase 1 : n'accepte que `.docx` (pas `.doc`) — pour un `.doc`, utiliser le
+    mode PDF ou le convertir en `.docx` au prealable.
+    """
+    from app.core.security import safe_filename
+
+    safe = safe_filename(name)
+    if not safe.lower().endswith(".docx"):
+        raise AppError(
+            "DOCX_MODE_REQUIRES_DOCX",
+            "Le mode Word natif n'accepte que des fichiers .docx. Pour un .doc, "
+            "convertis-le en .docx ou utilise le mode PDF.",
+            status_code=400,
+        )
+    if len(data) == 0:
+        raise AppError("UPLOAD_EMPTY", "Fichier vide", status_code=400)
+    if len(data) > settings.max_upload_size_bytes:
+        raise AppError("FILE_TOO_LARGE", f"{safe} depasse la taille max.", status_code=413)
+    if data[:2] != b"PK":
+        raise AppError("DOCX_INVALID", "Fichier .docx illisible (OOXML attendu).", status_code=400)
+
+    sha = sha256_of_bytes(data)
+    doc_id = uuid.uuid4()
+    storage_dir_value = f"document_{doc_id.hex}"
+    docx_versioning.write_version(storage_dir_value, 0, data)
+    try:
+        parsed = parse_docx(docx_versioning.version_path(storage_dir_value, 0))
+    except Exception as exc:  # noqa: BLE001
+        raise AppError("DOCX_INVALID", f"{safe} n'est pas un .docx lisible.", status_code=400) from exc
+
+    page_count = max((b.page for b in parsed.blocks), default=1)
+
+    import json as _json
+
+    document = Document(
+        id=doc_id,
+        original_filename=safe,
+        sha256=sha,
+        storage_dir=storage_dir_value,
+        page_count=page_count,
+        target_unit_system=target,
+        standard_version_id=standard_version_id,
+        standard_version_ids=_json.dumps([str(v) for v in (standard_version_ids or [])]),
+        status="uploaded",
+        current_version=0,
+        source_format="docx",
+        convert_engine="docx-native",
+        text_coverage=100,
+        quality="analyzable",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
 @router.post("/documents", response_model=DocumentOut, status_code=201)
 def upload_document(
     file: UploadFile = File(...),
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
+    word_mode: Literal["pdf", "docx"] = Query(
+        default="pdf",
+        description=(
+            "Pipeline de revue (dual-mode). 'pdf' (defaut) : conversion en PDF "
+            "fidele puis edition PDF. 'docx' : revue Word native (.docx requis), "
+            "sortie .docx corrigee."
+        ),
+    ),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
     standard_version_ids: Optional[str] = Query(
         default=None,
@@ -187,6 +266,12 @@ def upload_document(
             status_code=400,
         )
     data = file.file.read()
+    if word_mode == "docx":
+        return _persist_docx(
+            name, data, target, db,
+            standard_version_id=primary,
+            standard_version_ids=all_ids,
+        )
     return _ingest_and_persist(
         name, data, target, db,
         standard_version_id=primary,
@@ -357,6 +442,17 @@ def export_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> FileRes
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    # Pipeline Word natif : on rend le .docx corrige (version courante).
+    if doc.source_format == "docx":
+        target = docx_versioning.version_path(doc.storage_dir, doc.current_version)
+        if not target.is_file():
+            raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=404)
+        return FileResponse(
+            target,
+            media_type=_DOCX_MIME,
+            filename=doc.original_filename,
+            headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
+        )
     target = current_path(doc.storage_dir, doc.current_version)
     return FileResponse(
         target,
@@ -364,6 +460,26 @@ def export_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> FileRes
         filename=doc.original_filename,
         headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
     )
+
+
+@router.get("/documents/{document_id}/blocks")
+def get_docx_blocks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Vue blocs d'un document Word natif (reviewer Phase 1). 400 si le document
+    n'est pas en pipeline docx."""
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    if doc.source_format != "docx":
+        raise AppError(
+            "NOT_DOCX_DOCUMENT",
+            "Ce document n'est pas en pipeline Word natif.",
+            status_code=400,
+        )
+    src = docx_versioning.version_path(doc.storage_dir, doc.current_version)
+    if not src.is_file():
+        raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=404)
+    parsed = parse_docx(src)
+    return {"blocks": docx_pipeline.block_view(parsed)}
 
 
 @router.get("/documents/{document_id}/commented.pdf")

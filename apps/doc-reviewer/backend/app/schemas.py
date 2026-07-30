@@ -27,6 +27,8 @@ class DocumentOut(BaseModel):
     standard_version_ids: list[uuid.UUID] = Field(default_factory=list)
     status: str
     current_version: int
+    # Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif).
+    source_format: str = "pdf"
     # Portail qualite (revuabilite homogene tous formats).
     convert_engine: str = "pdf"
     text_coverage: int = 100
@@ -69,6 +71,8 @@ class SuggestionOut(BaseModel):
     page: int
     bbox: dict[str, Any]  # may contain page_w/page_h/page_rotation alongside x0..y1
     span_index: int
+    # Pipeline docx natif : bloc cible ("dp<N>"), NULL pour les suggestions PDF.
+    target_id: Optional[str] = None
     status: str
     feedback: str = ""
     applied_at: Optional[datetime]

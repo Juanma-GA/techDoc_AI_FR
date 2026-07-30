@@ -7,11 +7,16 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core import docx_editor, docx_versioning
 from app.core.errors import AppError
+from app.core.llm_suggester import call_chat
+from app.core.mistral_settings import get_llm_enabled
 from app.core.pdf_editor import PatchSpec, apply_patch
 from app.core.pdf_versioning import bump_version, current_path, path_for
 from app.db.models import Document, EditHistory, Suggestion
@@ -27,6 +32,8 @@ from app.schemas import (
 
 
 router = APIRouter(tags=["suggestions"])
+
+logger = structlog.get_logger(__name__)
 
 
 _ALLOWED_STATUSES = {"open", "accepted", "edited", "rejected"}
@@ -159,6 +166,60 @@ def _apply_one(db: Session, s: Suggestion, doc: Document):
     return result
 
 
+def _apply_one_docx(db: Session, s: Suggestion, doc: Document) -> None:
+    """Applique une suggestion dans le `.docx` courant (pipeline Word natif).
+
+    Localise le bloc par `target_id` (`dp<N>`), réécrit l'occurrence via
+    `docx_editor`, écrit une nouvelle version `.docx`, met à jour l'état et
+    consigne l'EditHistory. Ne commite pas (l'appelant possède la transaction).
+    """
+    if not s.target_id:
+        raise AppError(
+            "SUGGESTION_NO_TARGET",
+            "Suggestion docx sans bloc cible (target_id).",
+            status_code=400,
+        )
+    data = docx_versioning.read_version(doc.storage_dir, doc.current_version)
+    new_bytes, changed = docx_editor.apply_to_target(
+        data, s.target_id, s.original_text, s.proposed_text, s.span_index
+    )
+    if not changed:
+        raise AppError(
+            "DOCX_TEXT_NOT_FOUND",
+            "Le texte à corriger est introuvable dans le bloc cible.",
+            status_code=409,
+            detail={"target_id": s.target_id},
+        )
+    previous = doc.current_version
+    new_version = previous + 1
+    docx_versioning.write_version(doc.storage_dir, new_version, new_bytes)
+
+    doc.current_version = new_version
+    doc.status = "edited"
+    now = datetime.now(timezone.utc)
+    s.status = "applied"
+    s.applied_at = now
+    s.applied_version = new_version
+
+    db.add(
+        EditHistory(
+            document_id=doc.id,
+            suggestion_id=s.id,
+            version_before=previous,
+            version_after=new_version,
+            snapshot_path=str(docx_versioning.version_path(doc.storage_dir, new_version)),
+            diff_summary=json.dumps(
+                {
+                    "target_id": s.target_id,
+                    "original": s.original_text,
+                    "proposed": s.proposed_text,
+                    "rule_code": s.rule_code,
+                }
+            ),
+        )
+    )
+
+
 @router.get("/suggestions", response_model=list[SuggestionOut])
 def list_suggestions(
     document_id: Optional[uuid.UUID] = Query(default=None),
@@ -177,6 +238,136 @@ def list_suggestions(
     if rule_kind:
         stmt = stmt.where(Suggestion.rule_kind == rule_kind)
     return list(db.scalars(stmt.order_by(Suggestion.page, Suggestion.created_at)))
+
+
+# ---- Synthèse des rejets --------------------------------------------------
+# Le tableau exploitable des rejets vit déjà côté front (RejectionsSummary).
+# Ici on ajoute un paragraphe de synthèse IA : Mistral dégage les motifs de
+# rejet récurrents et les règles (rule_code) qui génèrent le plus de faux
+# positifs. Gardé par `get_llm_enabled` + fallback gracieux (LLM OFF / pas de
+# clé -> agrégat déterministe seul, `synthese=""`).
+
+
+class RejectionRuleCount(BaseModel):
+    rule_code: str
+    count: int
+
+
+class RejectionItem(BaseModel):
+    id: uuid.UUID
+    file: str
+    rule_code: str
+    severity: str
+    message: str
+    feedback: str
+
+
+class RejectionsSummaryOut(BaseModel):
+    total: int
+    by_rule: list[RejectionRuleCount]
+    items: list[RejectionItem]
+    synthese: str = ""
+    llm_used: bool = False
+
+
+_SYNTHESE_MAX_MOTIFS = 40
+
+
+def _synthesize_rejections(
+    db: Session,
+    by_rule: list[RejectionRuleCount],
+    rejected: list[Suggestion],
+) -> str:
+    rules = ", ".join(f"{r.rule_code}={r.count}" for r in by_rule) or "aucune"
+    motifs: list[str] = []
+    for s in rejected:
+        motif = (s.feedback or "").strip()
+        if motif:
+            motifs.append(f"- [{s.rule_code}] {motif}")
+        if len(motifs) >= _SYNTHESE_MAX_MOTIFS:
+            break
+    motifs_block = "\n".join(motifs) if motifs else "(aucun motif saisi)"
+
+    system = (
+        "Tu es un analyste qualité documentaire. On te fournit les anomalies "
+        "REJETÉES par le relecteur (donc des faux positifs ou hors périmètre), "
+        "agrégées par règle (rule_code) et avec les motifs de rejet. Rédige une "
+        "SYNTHÈSE COURTE (5 à 8 phrases, en français) qui : 1) dégage les motifs "
+        "de rejet récurrents ; 2) identifie les règles qui génèrent le plus de "
+        "faux positifs et mériteraient d'être affinées ou désactivées ; 3) reste "
+        "concrète et actionnable. Un paragraphe, pas de liste à puces. "
+        'Réponds STRICTEMENT en JSON : {"synthese": "…"}.'
+    )
+    user = f"Rejets par règle : {rules}\n\nMotifs de rejet (échantillon) :\n{motifs_block}"
+    content = call_chat(db, system, user, temperature=0.3)
+    # call_chat force un response_format JSON -> on extrait le champ synthese.
+    import json as _json
+
+    try:
+        obj = _json.loads(content)
+        text = obj.get("synthese") if isinstance(obj, dict) else None
+        return (text or "").strip() if isinstance(text, str) else content.strip()
+    except (ValueError, TypeError):
+        return content.strip()
+
+
+@router.get("/suggestions/rejections-summary", response_model=RejectionsSummaryOut)
+def rejections_summary(
+    synthesize: bool = Query(default=True),
+    db: Session = Depends(get_db),
+) -> RejectionsSummaryOut:
+    """Synthèse des rejets, tous documents confondus : agrégat par règle +
+    paragraphe de synthèse IA (optionnel, gardé par l'interrupteur LLM)."""
+    rejected = list(
+        db.scalars(
+            select(Suggestion)
+            .where(Suggestion.status == "rejected")
+            .order_by(Suggestion.rule_code, Suggestion.created_at.desc())
+        )
+    )
+    counts = dict(
+        db.execute(
+            select(Suggestion.rule_code, func.count(Suggestion.id))
+            .where(Suggestion.status == "rejected")
+            .group_by(Suggestion.rule_code)
+        ).all()
+    )
+    by_rule = [
+        RejectionRuleCount(rule_code=code, count=cnt)
+        for code, cnt in sorted(counts.items(), key=lambda kv: -kv[1])
+    ]
+    # Nom de fichier par document (evite un N+1 : une seule passe).
+    doc_names = dict(db.execute(select(Document.id, Document.original_filename)).all())
+    items = [
+        RejectionItem(
+            id=s.id,
+            file=doc_names.get(s.document_id) or "document inconnu",
+            rule_code=s.rule_code,
+            severity=s.severity,
+            message=s.message or "",
+            feedback=s.feedback or "",
+        )
+        for s in rejected
+    ]
+
+    synthese = ""
+    llm_used = False
+    if synthesize and rejected and get_llm_enabled(db):
+        try:
+            synthese = _synthesize_rejections(db, by_rule, rejected)
+            llm_used = bool(synthese)
+        except AppError as exc:
+            logger.warning("rejections_synthese_skipped", code=exc.code)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("rejections_synthese_failed", error=type(exc).__name__, message=str(exc))
+
+    return RejectionsSummaryOut(
+        total=len(rejected),
+        by_rule=by_rule,
+        items=items,
+        synthese=synthese,
+        llm_used=llm_used,
+    )
 
 
 @router.post("/suggestions/bulk-status", response_model=SuggestionBulkStatusOut)
@@ -246,6 +437,20 @@ def apply_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) ->
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
+    # Pipeline Word natif : edition dans le .docx (pas de geometrie PDF).
+    if doc.source_format == "docx":
+        _apply_one_docx(db, s, doc)
+        db.commit()
+        return SuggestionApplyOut(
+            suggestion_id=s.id,
+            document_id=doc.id,
+            new_version=doc.current_version,
+            snapshot_path=str(docx_versioning.version_path(doc.storage_dir, doc.current_version)),
+            font_used="docx",
+            fallback_used=False,
+            length_delta=len(s.proposed_text or "") - len(s.original_text or ""),
+        )
+
     result = _apply_one(db, s, doc)
     db.commit()
 
@@ -306,7 +511,10 @@ def apply_suggestion_group(
             skipped += 1
             continue
         try:
-            _apply_one(db, member, doc)
+            if doc.source_format == "docx":
+                _apply_one_docx(db, member, doc)
+            else:
+                _apply_one(db, member, doc)
         except AppError:
             # PDF-level failure on one page (e.g. text not found): skip
             # it and keep going so the other pages still get fixed.
@@ -348,9 +556,15 @@ def revert_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) -
     if target_version < 0:
         raise AppError("VERSION_INVALID", "Aucune version antérieure", status_code=400)
 
-    target = path_for(doc.storage_dir, target_version)
-    if not target.is_file():
-        raise AppError("PDF_VERSION_MISSING", "Snapshot antérieur absent", status_code=404)
+    # Pipeline Word natif : versions .docx ; sinon versions .pdf.
+    if doc.source_format == "docx":
+        target = docx_versioning.version_path(doc.storage_dir, target_version)
+        if not target.is_file():
+            raise AppError("DOCX_VERSION_MISSING", "Version .docx antérieure absente", status_code=404)
+    else:
+        target = path_for(doc.storage_dir, target_version)
+        if not target.is_file():
+            raise AppError("PDF_VERSION_MISSING", "Snapshot antérieur absent", status_code=404)
 
     previous = doc.current_version
 

@@ -97,6 +97,10 @@ class Document(Base):
         String(30), default="uploaded", server_default="uploaded", index=True
     )
     current_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Format de revue : "pdf" (pipeline PDF : conversion + edition PDF, defaut) ou
+    # "docx" (pipeline Word natif : parse python-docx, edition run-level, sortie
+    # .docx corrigee). Choisi a l'upload (dual-mode). cf. core/docx_pipeline.py.
+    source_format: Mapped[str] = mapped_column(String(10), default="pdf", server_default="pdf")
     # Portail qualite (homogeneite tous formats) : moteur de normalisation
     # ("pdf" natif, "libreoffice", "word"), % de pages porteuses de texte, et
     # etat de revuabilite ("analyzable" | "degraded" | "unusable"). Renseignes
@@ -165,6 +169,10 @@ class Suggestion(Base):
     page: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     bbox: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
     span_index: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Pipeline docx natif : identifiant de bloc cible ("dp<N>", cf. docx_parser).
+    # NULL pour les suggestions PDF (localisees par bbox). `span_index` sert
+    # d'occurrence dans le bloc a l'edition.
+    target_id: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     status: Mapped[str] = mapped_column(
         String(30), default="open", server_default="open", index=True
     )

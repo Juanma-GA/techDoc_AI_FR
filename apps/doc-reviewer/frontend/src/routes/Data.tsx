@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
-import { RejectionsSummary } from "../components/RejectionsSummary";
 import { useDocuments } from "../hooks/useDocuments";
 import { useRules } from "../hooks/useRules";
 import { api } from "../lib/api";
@@ -71,10 +70,9 @@ export function Data(): JSX.Element {
   const loading = docs.isLoading || rules.isLoading || suggestions.isLoading;
   const error = docs.error ?? rules.error ?? suggestions.error;
 
-  // Synthese des rejets (composant partage, table exploitable + CSV).
+  // KPI « rejets » : compte local (la carte de synthese, elle, fetch son propre
+  // agregat via /suggestions/rejections-summary).
   const rejected = (suggestions.data ?? []).filter((s) => s.status === "rejected");
-  const docName = (id: string): string =>
-    docs.data?.find((d) => d.id === id)?.original_filename ?? id;
 
   return (
     <div>
@@ -99,13 +97,6 @@ export function Data(): JSX.Element {
             <Kpi label={t("data.kpi.rules")} value={countRules(rules.data)} />
           </div>
         )}
-      </article>
-
-      {/* Synthese des rejets : table exploitable (document / page / regle / motif) + CSV. */}
-      <article className="card">
-        <h2 className="card-title">{t("data.rejects.title")}</h2>
-        <p className="card-sub">{t("data.rejects.subtitle")}</p>
-        <RejectionsSummary rejected={rejected} docName={docName} />
       </article>
 
       <article className="card">

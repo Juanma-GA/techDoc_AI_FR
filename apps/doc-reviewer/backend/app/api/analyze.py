@@ -47,10 +47,19 @@ def analyze_stream(
 
     # Run on the current version (post-edit) so the user can re-run the
     # analysis after applying suggestions and pick up new issues that the
-    # edit may have introduced (or simply check that fixes hold).
-    src = current_path(doc.storage_dir, doc.current_version)
-    if not src.is_file():
-        raise AppError("PDF_VERSION_MISSING", "PDF courant absent", status_code=500)
+    # edit may have introduced (or simply check that fixes hold). Le chemin
+    # depend du pipeline : .pdf (defaut) ou .docx (pipeline Word natif).
+    is_docx = doc.source_format == "docx"
+    if is_docx:
+        from app.core import docx_versioning
+
+        src = docx_versioning.version_path(doc.storage_dir, doc.current_version)
+        if not src.is_file():
+            raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=500)
+    else:
+        src = current_path(doc.storage_dir, doc.current_version)
+        if not src.is_file():
+            raise AppError("PDF_VERSION_MISSING", "PDF courant absent", status_code=500)
 
     # Rejection memory (corpus-agent-style): capture the signatures of every
     # finding the reviewer previously *rejected* on THIS document, so the same
@@ -114,6 +123,7 @@ def analyze_stream(
     vision_override_value = vision  # captured for the worker thread
     checklist_enabled_value = checklist  # captured for the worker thread
     rejected_sigs_value = rejected_sigs  # captured for the worker thread
+    is_docx_value = is_docx  # pipeline Word natif vs PDF
 
     async def event_gen():
         yield {
@@ -131,7 +141,12 @@ def analyze_stream(
 
         try:
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 5})}
-            parsed = await asyncio.to_thread(parse_pdf, src_path)
+            if is_docx_value:
+                from app.parsers.docx_parser import parse_docx
+
+                parsed = await asyncio.to_thread(parse_docx, src_path)
+            else:
+                parsed = await asyncio.to_thread(parse_pdf, src_path)
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
 
             # Build a lightweight Document-like with target_unit_system (we
@@ -150,16 +165,30 @@ def analyze_stream(
                     sv = scoped_session.get(StandardVersion, vid)
                     if sv is not None:
                         versions.append(sv)
-                raws = await asyncio.to_thread(
-                    lambda: run_all(
-                        parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
-                        src_path=src_path,
-                        vision_enabled_override=vision_override_value,
-                        checklist_enabled=checklist_enabled_value,
+                if is_docx_value:
+                    from app.core import docx_pipeline
+
+                    raws = await asyncio.to_thread(
+                        lambda: docx_pipeline.run_docx(
+                            parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
+                            checklist_enabled=checklist_enabled_value,
+                        )
                     )
-                )
-                yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
-                rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
+                    yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
+                    rows = docx_pipeline.materialize_docx(
+                        raws, parsed, document_id_value, run_id_value
+                    )
+                else:
+                    raws = await asyncio.to_thread(
+                        lambda: run_all(
+                            parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
+                            src_path=src_path,
+                            vision_enabled_override=vision_override_value,
+                            checklist_enabled=checklist_enabled_value,
+                        )
+                    )
+                    yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
+                    rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
                 total = 0
                 suppressed_rejected = 0
                 for sug in rows:

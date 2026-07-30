@@ -1,5 +1,5 @@
 import { Play, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -37,6 +37,8 @@ export function DocumentsList() {
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
+  // Pipeline de revue (dual-mode) : PDF (defaut) ou Word natif (.docx).
+  const [wordNative, setWordNative] = useState(false);
 
   // Bandeau "Normes cibles actives" (preview 289-293) : libelles des versions
   // actives selectionnees dans Parametres. Le choix du standard ne se fait plus
@@ -54,7 +56,12 @@ export function DocumentsList() {
 
   const handleUpload = (file: File): void => {
     upload.mutate(
-      { file, target: effectiveTarget(targetUnits), standardVersionIds: activeStandardVersionIds },
+      {
+        file,
+        target: effectiveTarget(targetUnits),
+        standardVersionIds: activeStandardVersionIds,
+        wordMode: wordNative ? "docx" : "pdf",
+      },
       {
         // Fichier unique -> navigation vers le reviewer ; .zip (batch) -> on
         // reste sur la liste (plusieurs documents crees).
@@ -101,6 +108,22 @@ export function DocumentsList() {
           </label>
         </div>
 
+        {/* Pipeline de revue (dual-mode) : Word natif -> sortie .docx corrigee. */}
+        <div className="switch-row">
+          <div>
+            <div>{t("documents.wordNative")}</div>
+            <div className="label">{t("documents.wordNativeHint")}</div>
+          </div>
+          <label className="switch" title={t("documents.wordNative")}>
+            <input
+              type="checkbox"
+              checked={wordNative}
+              onChange={(e) => setWordNative(e.target.checked)}
+            />
+            <span className="track" />
+          </label>
+        </div>
+
         <div className="form">
           <div className="field">
             <span className="field-label">{t("documents.targetUnit")}</span>
@@ -125,7 +148,28 @@ export function DocumentsList() {
             </div>
           </div>
 
-          <PdfUploadZone onFile={handleUpload} disabled={upload.isPending} />
+          <PdfUploadZone onFile={handleUpload} uploading={upload.isPending} />
+
+          {/* Statut d'import explicite (l'upload est synchrone cote serveur :
+              conversion Word->PDF, portail qualite -> plusieurs secondes). */}
+          {upload.isPending ? (
+            <div
+              className="banner"
+              role="status"
+              aria-live="polite"
+              style={{ display: "flex", alignItems: "center", gap: 10 }}
+            >
+              <span className="spinner" />
+              <strong>{t("documents.upload.uploading")}</strong>
+            </div>
+          ) : null}
+          {upload.isError ? (
+            <p className="error" role="alert">
+              {t("documents.upload.failed", {
+                message: upload.error instanceof Error ? upload.error.message : "",
+              })}
+            </p>
+          ) : null}
         </div>
       </section>
 
