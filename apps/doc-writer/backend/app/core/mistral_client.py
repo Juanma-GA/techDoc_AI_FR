@@ -36,11 +36,15 @@ CONFIG_KEYS = {
     "vision_model": "MISTRAL_VISION_MODEL",
     "ocr_model": "MISTRAL_OCR_MODEL",
     "transcribe_model": "MISTRAL_TRANSCRIBE_MODEL",
+    # Cle/endpoint DEDIES a la transcription Voxtral (optionnel). Vides -> repli
+    # sur la cle/URL Mistral principale (cf. MistralClient.from_db).
+    "voxtral_api_key": "VOXTRAL_API_KEY",
+    "voxtral_base_url": "VOXTRAL_BASE_URL",
 }
 
 # Cles dont la valeur est chiffree au repos dans AppConfig (cf. encryption.py).
-# Seul le secret Mistral est sensible ; flags et modeles restent en clair.
-ENCRYPTED_KEYS = {"MISTRAL_API_KEY"}
+# Secrets sensibles uniquement ; flags, modeles et URLs restent en clair.
+ENCRYPTED_KEYS = {"MISTRAL_API_KEY", "VOXTRAL_API_KEY"}
 
 # Interrupteur global LLM (standard). Cle bare dans `app_config`, defaut "true".
 # OFF = on saute la tache confiee a l'IA (fallback gracieux), la cle Mistral est conservee.
@@ -131,6 +135,12 @@ def get_effective_settings(db: Session) -> dict[str, str]:
         "transcribe_model": _read_config(
             db, CONFIG_KEYS["transcribe_model"], defaults.mistral_transcribe_model
         ),
+        "voxtral_api_key": _read_config(
+            db, CONFIG_KEYS["voxtral_api_key"], defaults.voxtral_api_key
+        ),
+        "voxtral_base_url": _read_config(
+            db, CONFIG_KEYS["voxtral_base_url"], defaults.voxtral_base_url
+        ),
     }
 
 
@@ -185,6 +195,8 @@ class MistralClient:
         vision_model: str = "mistral-small-latest",
         ocr_model: str = "mistral-ocr-latest",
         transcribe_model: str = "voxtral-mini-transcribe-26-02",
+        transcribe_api_key: str = "",
+        transcribe_base_url: str = "",
     ) -> None:
         if not api_key:
             raise MistralError("MISTRAL_API_KEY non configurée. Renseigne-la dans Paramètres.")
@@ -195,6 +207,13 @@ class MistralClient:
         self.vision_model = vision_model
         self.ocr_model = ocr_model
         self.transcribe_model = transcribe_model
+        # Cle/URL DEDIEES a Voxtral. Vides -> repli sur la cle/URL principale
+        # (transcription inchangee tant qu'aucune cle dediee n'est renseignee).
+        self.transcribe_api_key = transcribe_api_key or api_key
+        self.transcribe_base_url = (transcribe_base_url or base_url).rstrip("/")
+        # Vrai uniquement si une cle Voxtral DEDIEE a ete fournie (pilote le
+        # test/liste par API : on ne teste Voxtral separement que dans ce cas).
+        self.transcribe_dedicated = bool(transcribe_api_key)
 
     @classmethod
     def from_db(cls, db: Session) -> "MistralClient":
@@ -207,6 +226,8 @@ class MistralClient:
             vision_model=s.get("vision_model") or "mistral-small-latest",
             ocr_model=s.get("ocr_model") or "mistral-ocr-latest",
             transcribe_model=s.get("transcribe_model") or "voxtral-mini-transcribe-26-02",
+            transcribe_api_key=s.get("voxtral_api_key") or "",
+            transcribe_base_url=s.get("voxtral_base_url") or "",
         )
 
     def transcribe_audio(
@@ -226,10 +247,11 @@ class MistralClient:
         data: dict[str, str] = {"model": self.transcribe_model}
         if language:
             data["language"] = language
+        # Cle/URL dediees Voxtral (= principale si non renseignees, cf. __init__).
         with httpx.Client(timeout=timeout) as client:
             r = client.post(
-                f"{self.base_url}/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                f"{self.transcribe_base_url}/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {self.transcribe_api_key}"},
                 files=files,
                 data=data,
             )
@@ -242,12 +264,25 @@ class MistralClient:
             "Content-Type": "application/json",
         }
 
-    def list_models(self) -> list[str]:
+    def _list_models_at(self, base_url: str, api_key: str) -> list[str]:
+        """GET /v1/models sur une API donnee (cle/URL explicites)."""
         with httpx.Client(timeout=30.0) as client:
-            r = client.get(f"{self.base_url}/v1/models", headers=self._headers())
+            r = client.get(
+                f"{base_url.rstrip('/')}/v1/models",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            )
             r.raise_for_status()
             data = r.json()
             return [m.get("id", "") for m in data.get("data", [])]
+
+    def list_models(self) -> list[str]:
+        """Modeles de l'API Mistral principale (chat/embed/vision/ocr)."""
+        return self._list_models_at(self.base_url, self.api_key)
+
+    def list_transcribe_models(self) -> list[str]:
+        """Modeles de l'API DEDIEE a la transcription (Voxtral). Identique a
+        list_models si aucune cle dediee n'est configuree (meme endpoint)."""
+        return self._list_models_at(self.transcribe_base_url, self.transcribe_api_key)
 
     def chat_json(
         self,

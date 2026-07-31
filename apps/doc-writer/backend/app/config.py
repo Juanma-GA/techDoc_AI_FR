@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # Id de modele exact (pas d'alias "-latest" pour Voxtral) ; surchargeable via .env
     # si Mistral fait evoluer la version.
     mistral_transcribe_model: str = "voxtral-mini-transcribe-26-02"
+    # Cle API / endpoint DEDIES a la transcription Voxtral (optionnel). Permet
+    # d'appeler Voxtral mini avec un compte/une cle differente de la cle Mistral
+    # principale (ex. Voxtral active sur un abonnement a part). Vides = on retombe
+    # sur `mistral_api_key` / `mistral_base_url` (comportement historique).
+    voxtral_api_key: str = ""
+    voxtral_base_url: str = ""
 
     # Repli LOCAL (quand Mistral indisponible) : couche texte PyMuPDF + OCR
     # Tesseract page par page sur les pages sans texte. Tesseract est un binaire

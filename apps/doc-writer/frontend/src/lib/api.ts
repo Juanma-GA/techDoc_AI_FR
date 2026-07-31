@@ -215,14 +215,31 @@ export type SettingsDto = {
   ocr_model: string;
   // Modele de transcription audio (Voxtral) pour la dictee vocale.
   transcribe_model: string;
+  // Cle dediee Voxtral enregistree ? (secret jamais renvoye). Vide = la
+  // transcription utilise la cle Mistral principale.
+  voxtral_api_key_set: boolean;
+  // URL de base dediee Voxtral (vide = URL Mistral principale).
+  voxtral_base_url: string;
   // Interrupteur LLM global (false = les taches IA sont sautees).
   llm_enabled: boolean;
 };
 
-export type TestConnectionDto = {
+// Resultat du test d'UNE API appelee (Mistral principale ou Voxtral dediee).
+export type ApiTestResultDto = {
+  api: string; // "mistral" | "voxtral"
+  base_url: string;
   ok: boolean;
   models: string[];
   error?: string | null;
+};
+
+export type TestConnectionDto = {
+  // ok/models/error = API Mistral principale (compat, pilote le badge).
+  ok: boolean;
+  models: string[];
+  error?: string | null;
+  // Detail PAR API appelee (Mistral + Voxtral dediee si configuree).
+  apis: ApiTestResultDto[];
 };
 
 // ---------------------------------------------------------------------------
@@ -524,6 +541,8 @@ export const settingsApi = {
     vision_model?: string;
     ocr_model?: string;
     transcribe_model?: string;
+    voxtral_api_key?: string;
+    voxtral_base_url?: string;
     llm_enabled?: boolean;
   }) =>
     request<SettingsDto>("/settings", {
