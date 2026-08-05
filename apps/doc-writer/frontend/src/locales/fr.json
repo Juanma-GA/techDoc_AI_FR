@@ -4,6 +4,7 @@
     "version": "0.1.0"
   },
   "nav": {
+    "portal": "Portail",
     "generate": "Génération",
     "documents": "Documents",
     "sessions": "Sessions",

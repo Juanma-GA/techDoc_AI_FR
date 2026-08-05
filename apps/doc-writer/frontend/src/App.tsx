@@ -1,3 +1,4 @@
+import { PortalLink } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
@@ -31,6 +32,7 @@ export function App() {
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-header">
+            <PortalLink className="sidebar-home" label={t("nav.portal")} />
             <span className="brand">doc-writer</span>
             <span className="label">v{t("app.version")}</span>
             <ThemeToggleButton />

@@ -70,6 +70,9 @@
 .layout { display: flex; height: 100vh; }
 aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
 .sidebar-header { display: flex; align-items: baseline; gap: 8px; padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-home { display: inline-flex; align-items: center; align-self: center; color: var(--fg-dim); transition: color 0.15s; }
+.sidebar-home:hover { color: var(--brand-light); }
+.sidebar-home:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); border-radius: 6px; }
 .brand { font-family: "Orbitron", sans-serif; font-size: 1.15rem; color: var(--brand-light); }
 .label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; padding: 12px; flex: 1; }

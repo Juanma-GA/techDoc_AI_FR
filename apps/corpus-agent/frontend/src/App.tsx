@@ -1,3 +1,4 @@
+import { PortalLink } from "@internal/ui";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -85,6 +86,7 @@ export function App() {
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-header">
+            <PortalLink className="sidebar-home" label={t("nav.portal")} />
             <span className="brand" title={t("app.titleTooltip")}>
               {t("app.title")}
             </span>
