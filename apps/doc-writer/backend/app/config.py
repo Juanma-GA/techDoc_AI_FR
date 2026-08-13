@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'doc-writer.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")
 
+    # Tier mode : tier1 (local-only) vs tier2 (cloud + auth).
+    # tier1 (default) : development, bind 127.0.0.1, no auth required.
+    # tier2 : production/cloud, bind 0.0.0.0, auth middleware required.
+    tier_mode: str = "tier1"
+
     # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
     # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les
     # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).

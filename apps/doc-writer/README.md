@@ -4,9 +4,19 @@ POC de **génération de contenu RAG** : à partir d'un prompt utilisateur et de
 
 Conforme à [`STANDARD_POC.md`](../../STANDARD_POC.md). Bootstrap depuis [`apps/_template`](../_template/).
 
+## Tier
+
+**Default** : Tier 1 (local-only, development)
+
+- **Tier 1** (`TIER_MODE=tier1`) : 127.0.0.1 bind, no auth. Encryption (ENCRYPTION_KEY) and strict CORS are optional. Use this for local development.
+
+- **Tier 2** (`TIER_MODE=tier2`) : 0.0.0.0 bind, auth middleware required. Encryption (ENCRYPTION_KEY) and strict CORS are MANDATORY. Set this for Azure deployment or any cloud environment. App fails to start if security requirements are not met (fail-fast validation per HR8).
+
+Configure `TIER_MODE` in `backend/.env` (values: `tier1` | `tier2`, default `tier1`).
+
 ## Auth
 
-**Palier** : 1 — local seul, bind `127.0.0.1`, pas d'authentification.
+**Palier 1 only (tier1)** : No authentication required. Bind `127.0.0.1`, local-only. Palier 2/3 deployment requires tier2 + auth (outside POC scope).
 
 ## Stack
 
