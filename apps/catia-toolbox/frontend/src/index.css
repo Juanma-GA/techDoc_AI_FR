@@ -12,6 +12,81 @@
   }
 }
 
+@layer components {
+  /* Layout: 2-column grid (sidebar + main) */
+  .ct {
+    @apply flex h-screen flex-col bg-bg text-fg;
+  }
+
+  .layout {
+    @apply flex flex-1 gap-0 overflow-hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    @apply w-64 flex-shrink-0 flex flex-col gap-4 border-r border-border bg-surface px-4 py-4 overflow-y-auto;
+  }
+
+  .sidebar-header {
+    @apply flex flex-col gap-2 border-b border-border pb-4;
+  }
+
+  .brand {
+    @apply text-xl font-bold text-fg;
+  }
+
+  /* Navigation */
+  nav {
+    @apply flex flex-1 flex-col gap-2;
+  }
+
+  .nav-group {
+    @apply flex flex-col gap-1;
+  }
+
+  .nav-group-title {
+    @apply text-xs font-bold uppercase text-fg-dim px-2 py-1 mt-2;
+  }
+
+  .nav-item {
+    @apply block rounded px-3 py-2 text-sm font-medium text-fg-dim hover:bg-surface-hover hover:text-fg transition-colors;
+  }
+
+  .nav-item.active {
+    @apply bg-primary text-primary-fg font-semibold;
+  }
+
+  /* Language switch */
+  .lang-switch {
+    @apply flex gap-1 border-t border-border pt-4;
+  }
+
+  .lang-btn {
+    @apply flex-1 rounded px-2 py-1 text-xs font-semibold uppercase text-fg-dim hover:bg-surface-hover transition-colors;
+  }
+
+  .lang-btn.active {
+    @apply bg-primary text-primary-fg;
+  }
+
+  /* Main content */
+  main {
+    @apply flex-1 flex flex-col overflow-auto bg-bg;
+  }
+
+  .page-header {
+    @apply border-b border-border bg-surface px-6 py-4;
+  }
+
+  .page-header h1 {
+    @apply text-3xl font-bold text-fg;
+  }
+
+  .page-header p {
+    @apply text-sm text-fg-dim;
+  }
+}
+
 @layer utilities {
   .label {
     @apply font-mono text-label uppercase tracking-wider text-fg-dim;

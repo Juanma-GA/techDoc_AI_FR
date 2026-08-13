@@ -178,6 +178,11 @@ def requires_llm(route_name: str):
         func.__llm_route_name__ = route_name
         return func
     return decorator
+
+
+class MistralClient:
+    """Mistral API client with sync methods and DB-backed settings."""
+
     def __init__(
         self,
         api_key: str,
