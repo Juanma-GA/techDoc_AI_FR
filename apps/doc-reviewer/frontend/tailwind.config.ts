@@ -9,18 +9,4 @@ export default {
     "./src/**/*.{ts,tsx}",
     "../../../packages/ui/src/**/*.{ts,tsx}",
   ],
-  safelist: [
-    "ct",
-    "layout",
-    "sidebar",
-    "sidebar-header",
-    "brand",
-    "nav-group",
-    "nav-group-title",
-    "nav-item",
-    "lang-switch",
-    "lang-btn",
-    "page-header",
-    "label",
-  ],
 } satisfies Config;

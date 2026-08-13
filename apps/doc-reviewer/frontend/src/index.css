@@ -16,7 +16,7 @@
     @apply outline-none ring-2 ring-brand-blue-light ring-offset-0;
   }
   .label {
-    @apply font-mono uppercase tracking-widest text-fg-dim;
+    @apply font-mono text-label uppercase text-fg-dim;
     font-size: 0.6rem;
     letter-spacing: 1px;
   }

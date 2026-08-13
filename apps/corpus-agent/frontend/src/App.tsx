@@ -1,4 +1,4 @@
-import { Button, PortalLink } from "@internal/ui";
+import { PortalLink } from "@internal/ui";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -26,7 +26,8 @@ const Architecture = lazy(() =>
 const Data = lazy(() => import("./routes/Data").then((m) => ({ default: m.Data })));
 const Settings = lazy(() => import("./routes/Settings").then((m) => ({ default: m.Settings })));
 
-// Navigation items sans logos. Layout construit avec Tailwind + @internal/ui.
+// Coquille pixel-identique au preview.html (.layout / .sidebar / .nav-item /
+// .lang-switch dans styles/preview-skin.css). Pas de logos sur les onglets.
 const navItems = [
   { to: "/", labelKey: "nav.manager" },
   { to: "/projects", labelKey: "nav.projects" },
@@ -81,35 +82,27 @@ export function App() {
   };
 
   return (
-    <div className="h-full min-h-screen bg-bg text-fg">
-      <div className="flex h-screen">
-        {/* Sidebar */}
-        <aside className="w-64 flex-shrink-0 border-r border-base bg-bg-2 flex flex-col">
-          {/* Header */}
-          <div className="flex items-baseline gap-2 p-4 border-b border-base">
-            <PortalLink className="flex-shrink-0" label={t("nav.portal")} title="Portal" />
-            <span className="font-display text-lg text-brand-blue-light" title={t("app.titleTooltip")}>
+    <div className="ca">
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="sidebar-header">
+            <PortalLink className="sidebar-home" label={t("nav.portal")} />
+            <span className="brand" title={t("app.titleTooltip")}>
               {t("app.title")}
             </span>
-            <span className="font-mono uppercase text-xs tracking-widest text-fg-muted">{t("app.version")}</span>
+            <span className="label">{t("app.version")}</span>
             <ThemeToggleButton />
           </div>
 
-          {/* LLM Badge */}
           <LlmBadge />
 
-          {/* Navigation */}
-          <nav className="flex-1 flex flex-col gap-1 p-3 overflow-y-auto">
+          <nav>
             {navItems.map(({ to, labelKey }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={to === "/"}
-                className={({ isActive }) =>
-                  isActive
-                    ? "flex items-center px-3 py-2 rounded-lg bg-brand text-fg text-sm font-medium transition-colors"
-                    : "flex items-center px-3 py-2 rounded-lg text-fg-dim hover:bg-card-hover hover:text-fg text-sm font-medium transition-colors cursor-pointer"
-                }
+                className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
                 onClick={handleNavClick(to)}
               >
                 {t(labelKey)}
@@ -117,51 +110,37 @@ export function App() {
             ))}
           </nav>
 
-          {/* Unsaved Guard Banner */}
           {pendingTo && (
-            <div className="bg-warning/10 border-t border-warning text-warning-600 p-3 space-y-2">
-              <p className="text-sm font-medium">{guardMessage}</p>
-              <div className="flex gap-2">
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={confirmLeave}
-                  className="flex-1"
-                >
+            <div className="banner warn" style={{ margin: "8px 12px" }}>
+              {guardMessage}
+              <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                <button type="button" className="btn danger small" onClick={confirmLeave}>
                   {t("nav.leaveWithoutSaving")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPendingTo(null)}
-                  className="flex-1"
-                >
+                </button>
+                <button type="button" className="btn ghost small" onClick={() => setPendingTo(null)}>
                   {t("nav.stayHere")}
-                </Button>
+                </button>
               </div>
             </div>
           )}
 
-          {/* Language Switcher */}
-          <div className="flex gap-1 p-3 border-t border-base">
+          <div className="lang-switch" role="group" aria-label="Language">
             {LANGS.map((lng) => (
-              <Button
+              <button
                 key={lng}
-                variant={currentLang === lng ? "default" : "outline"}
-                size="sm"
+                type="button"
+                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
                 onClick={() => void setAppLanguage(lng)}
-                className="flex-1 text-xs"
               >
                 {lng.toUpperCase()}
-              </Button>
+              </button>
             ))}
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto px-8 py-6">
+        <main>
           <ErrorBoundary>
-            <Suspense fallback={<div className="flex items-center justify-center h-screen text-fg-muted">{t("common.loading")}</div>}>
+            <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
               <Routes>
                 <Route path="/" element={<Manager />} />
                 <Route path="/projects" element={<Projects />} />
