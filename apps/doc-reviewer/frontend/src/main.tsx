@@ -1,5 +1,4 @@
 import "./index.css";
-import "./styles/preview-skin.css";
 import "./i18n";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -33,3 +32,4 @@ createRoot(rootElement).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
