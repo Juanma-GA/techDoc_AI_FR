@@ -12,7 +12,7 @@ REM   3. Auto-install silencieux via tools\python-installer.exe
 REM ===========================================================================
 
 REM ---- Port unique - a ajuster par POC : 8001, 8002, ...  -----------------
-set "PORT=8003"
+set "PORT=8005"
 
 set "APP_DIR=%~dp0"
 set "BACKEND_DIR=%APP_DIR%backend"

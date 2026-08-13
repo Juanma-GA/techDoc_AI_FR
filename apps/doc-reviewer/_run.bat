@@ -15,7 +15,7 @@ REM  Aux lancements suivants : ~5 secondes.
 REM ===========================================================================
 
 REM ---- Port unique (a ajuster par POC) -------------------------------------
-set "PORT=8008"
+set "PORT=8003"
 
 set "BACKEND_DIR=%~dp0backend"
 cd /d "%BACKEND_DIR%"
