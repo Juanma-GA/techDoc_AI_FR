@@ -160,7 +160,24 @@ def set_llm_tested(db: Session, ok: bool) -> None:
     db.commit()
 
 
-class MistralClient:
+def requires_llm(route_name: str):
+    """Decorator pour marquer une route comme exigeant le LLM.
+    
+    Documente à titre informatif (pour audit AACF HR4/HR7) qu'une route 
+    dépend entièrement du LLM. Quand LLM est OFF, la route se comporte 
+    en dégradation gracieuse (cf. chat.py, analysis.py pour l'implémentation).
+    
+    Usage:
+        @router.post("/ask")
+        @requires_llm("corpus-agent.chat.ask")
+        async def ask(body: ChatAskIn, db: Session = Depends(get_db)):
+            ...
+    """
+    def decorator(func):
+        func.__requires_llm__ = True
+        func.__llm_route_name__ = route_name
+        return func
+    return decorator
     def __init__(
         self,
         api_key: str,

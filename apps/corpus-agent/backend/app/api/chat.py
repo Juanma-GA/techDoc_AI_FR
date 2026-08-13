@@ -18,7 +18,7 @@ from app.core.chat_engine import (
     stream_answer,
 )
 from app.core.errors import AppError
-from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
+from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled, requires_llm
 from app.core.prompt_sanitizer import sanitize_prompt
 from app.db.models import ChatMessage, ChatSession, Project
 from app.db.session import SessionLocal, get_db
@@ -74,6 +74,7 @@ def _resolve_projects(db: Session, project_ids: list[uuid.UUID]) -> list[Project
 
 
 @router.post("/ask")
+@requires_llm("corpus-agent.chat.ask")
 async def ask(body: ChatAskIn, db: Session = Depends(get_db)):
     projects = _resolve_projects(db, list(body.project_ids))
 

@@ -63,6 +63,21 @@ POC **local-first** (SQLite + stockage disque, pas de Docker à ce stade).
 
 POC local-first stricte conforme à [`STANDARD_POC.md §3.5`](../../STANDARD_POC.md). Aucun déploiement dans le périmètre du standard.
 
+## LLM & Graceful Degradation
+
+**Checklist NLP Rules** (`llm_nl`) are evaluated by Mistral. When LLM is **OFF** or Mistral key is missing, these rules produce **no findings** (HTTP 200, graceful degradation per HR7).
+
+**Fallback** (HR4/HR7 Compliance): For increased transparency when LLM is disabled, `doc-reviewer` includes ~10 regex-based fallback patterns that detect common writing issues:
+- Passive voice (`was written`)
+- Intensifiers (`very`, `extremely`)
+- Multiple punctuation (`!!`, `...`)
+- ALL CAPS words
+- Weak words (`basically`, `stuff`)
+- Contractions (`don't`, `can't`)
+- Vague quantifiers (`many`, `several`)
+
+The built-in **deterministic catalog** (ASD-STE100, MAT10000, ATA 100) and **unit conversions** remain fully functional regardless of LLM state. Only checklist NLP findings are affected.
+
 ---
 
 ## Démarrage rapide

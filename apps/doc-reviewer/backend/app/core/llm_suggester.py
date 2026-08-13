@@ -10,6 +10,10 @@ a useless `original → original` suggestion.
 Errors raised:
 - `MISTRAL_NOT_CONFIGURED` (400) — no API key in `app_config`.
 - `LLM_REPHRASE_FAILED` (502) — Mistral 4xx/5xx, network error, JSON parse fail.
+
+**Fallback (HR4/HR7):** When LLM is disabled, `scan_with_prompt` applies
+deterministic regex patterns (fallback_rules.py) to detect common writing
+issues. Results are returned with llm_used=false marker for UI transparency.
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.fallback_rules import FallbackNLPRules
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
 try:
@@ -240,9 +245,23 @@ def scan_with_prompt(
 
     Returns a list of dicts `{original, proposed, message}` filtered to
     keep only items whose `original` appears verbatim in the page text.
-    Empty list on Mistral failure or unparseable response."""
+    Empty list on Mistral failure or unparseable response.
+    
+    **Fallback (HR4/HR7):** When LLM is disabled, applies deterministic regex
+    patterns to detect common writing issues. Results logged as llm_disabled.
+    """
     if not get_llm_enabled(db):
-        return []
+        logger.info("llm_disabled: using fallback regex rules")
+        fallback_matches = FallbackNLPRules.analyze_all(page_text)
+        # Convert FallbackMatch objects to {original, proposed, message} dicts
+        return [
+            {
+                "original": match.original,
+                "proposed": match.suggestion,
+                "message": f"{match.rule_name} — {match.reason}",
+            }
+            for match in fallback_matches
+        ]
     rules_block = _format_rules_block(s1000d_rules, custom_rules_list, custom_prompt)
     if not rules_block or not page_text.strip():
         return []

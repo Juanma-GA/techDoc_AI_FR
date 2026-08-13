@@ -8,6 +8,18 @@
 
 POC local-first stricte conforme à [`STANDARD_POC.md §3.5`](../../STANDARD_POC.md). Aucun déploiement dans le périmètre du standard.
 
+## Tier & LLM Dependency
+
+**Tier**: Tier 1 (local-only 127.0.0.1)
+
+**LLM Required**: **Yes** — corpus-agent is **LLM-first**. All analysis, anomaly detection, chat, and rule evaluation depend on Mistral AI.
+
+- **Chat** (`POST /api/v1/chat/ask`): Entirely LLM-driven; returns empty result if LLM disabled.
+- **Analysis** (`POST /api/v1/projects/{id}/analyze`): Evaluates all custom rules (checklist-based) via LLM; no deterministic fallback.
+- **Compliance**: HR4/HR7 — when LLM is **OFF** (via `POST /settings {llm_enabled: false}`), analysis routes return HTTP 200 with **no anomalies detected** (graceful degradation, logged as `llm_disabled`). This is intentional: rules are 100% LLM-driven per business requirement (2026-07-21 decision).
+
+If Mistral API key is missing or LLM is disabled, the app remains operational but produces **no actionable results** on analysis/chat routes — conforming to AACF HR4 (transparent failure).
+
 ## Démarrage rapide
 
 Double-clic sur `start.bat` (Windows) ou `bash start.sh` (Unix).

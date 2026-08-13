@@ -1,0 +1,71 @@
+{
+  "planHash": "c38cc6a559b64f9b8a7fd7e5858a69c395bf188e8becf20499b8b19375580655",
+  "phase": "baseline",
+  "recordedAtUtc": "2026-08-13T07:34:58.6889861Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 7019,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "tsc-no-emit",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": false,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 2,
+        "outputSample": "tsconfig.json(17,18): error TS6310: Referenced project \u0027C:/Users/cdelafouchardiere/Documents/GitHub/ATEXIS_POCS/apps/catia-toolbox/frontend/tsconfig.node.json\u0027 may not disable emit.\r\n",
+        "durationMs": 6869
+      },
+      {
+        "name": "dev-server-serves-home",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\n\u003Chtml lang=\u0022fr\u0022\u003E\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\n    \u003Cmeta name=\u0022color-scheme\u0022 content=\u0022dark light\u0022 /\u003E\n    \u003Ctitle\u003ECatia Toolbox\u003C/title\u003E\n    \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.googleapis.com\u0022 /\u003E\n    \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.gstatic.com\u0022 crossorigin /\u003E\n    \u003Clink\n      rel=\u0022stylesheet\u0022\n      href=\u0022https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700\u0026family=JetBrains\u002BMono:wght@400;500;700\u0026family=Orbitron:wght@500;700\u0026display=swap\u0022\n    /\u003E\n    \u003Cscript\u003E\n      (function () {\n        var stored = localStorage.getItem(\u0022theme\u0022);\n        var prefersDark = window.matchMedia(\u0022(prefers-color-scheme: dark)\u0022).matches;\n        if (stored === \u0022dark\u0022 || (!stored \u0026\u0026 prefersDark)) {\n          document.documentElement.classList.add(\u0022dark\u0022);\n        }\n      })();\n    \u003C/script\u003E\n  \u003C/head\u003E\n  \u003Cbody\u003E\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.tsx\u0022\u003E\u003C/script\u003E\n  \u003C/body\u003E\n\u003C/html\u003E\n",
+        "durationMs": 37
+      },
+      {
+        "name": "home-flow",
+        "kind": "playwright-route",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\nRunning 1 test using 1 worker\r\n\r\n  ok 1 [chromium] \u203A tests\\e2e\\home.spec.ts:3:1 \u203A home page renders (3.5s)\r\n\r\n  1 passed (10.8s)\r\n",
+        "durationMs": 20332
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": false,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 1,
+        "outputSample": "\r\n\u003E @apps/catia-toolbox-frontend@0.1.0 test C:\\Users\\cdelafouchardiere\\Documents\\GitHub\\ATEXIS_POCS\\apps\\catia-toolbox\\frontend\r\n\u003E vitest run\r\n\r\n\r\n\u001B[1m\u001B[7m\u001B[36m RUN \u001B[39m\u001B[27m\u001B[22m \u001B[36mv2.1.9 \u001B[39m\u001B[90mC:/Users/cdelafouchardiere/Documents/GitHub/ATEXIS_POCS/apps/catia-toolbox/frontend\u001B[39m\r\n\r\n \u001B[31m\u276F\u001B[39m tests/e2e/home.spec.ts \u001B[2m(\u001B[22m\u001B[2m0 test\u001B[22m\u001B[2m)\u001B[22m\r\n\r\n\u001B[31m\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u001B[1m\u001B[7m Failed Suites 1 \u001B[27m\u001B[22m\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u001B[39m\r\n\r\n\u001B[31m\u001B[1m\u001B[7m FAIL \u001B[27m\u001B[22m\u001B[39m tests/e2e/home.spec.ts\u001B[2m [ tests/e2e/home.spec.ts ]\u001B[22m\r\n\u001B[31m\u001B[1mError\u001B[22m: Playwright Test did not expect test() to be called here.\r\nMost common reasons include:\r\n- You are calling test() in a configuration file.\r\n- You are calling test() in a file that is imported by the configuration file.\r\n- You have two different versions of @playwright/test. This usually happens\r\n  when one of the dependencies in your package.json depends on @playwright/test.\u001B[39m\r\n\u001B[90m \u001B[2m\u276F\u001B[22m _TestTypeImpl._currentSuite ../../../node_modules/.pnpm/playwright@1.60.0/node_modules/playwright/lib/common/index.js:\u001B[2m2221:13\u001B[22m\u001B[39m\r\n\u001B[90m \u001B[2m\u276F\u001B[22m _TestTypeImpl._createTest ../../../node_modules/.pnpm/playwright@1.60.0/node_modules/playwright/lib/common/index.js:\u001B[2m2234:24\u001B[22m\u001B[39m\r\n\u001B[90m \u001B[2m\u276F\u001B[22m Module.\u003Canonymous\u003E ../../../node_modules/.pnpm/playwright@1.60.0/node_modules/playwright/lib/common/index.js:\u001B[2m1111:12\u001B[22m\u001B[39m\r\n\u001B[36m \u001B[2m\u276F\u001B[22m tests/e2e/home.spec.ts:\u001B[2m3:1\u001B[22m\u001B[39m\r\n    \u001B[90m  1| \u001B[39m\u001B[35mimport\u001B[39m { expect\u001B[33m,\u001B[39m test } \u001B[35mfrom\u001B[39m \u001B[32m\u0022@playwright/test\u0022\u001B[39m\u001B[33m;\u001B[39m\r\n    \u001B[90m  2| \u001B[39m\r\n    \u001B[90m  3| \u001B[39m\u001B[34mtest\u001B[39m(\u001B[32m\u0022home page renders\u0022\u001B[39m\u001B[33m,\u001B[39m \u001B[35masync\u001B[39m ({ page }) \u001B[33m=\u003E\u001B[39m {\r\n    \u001B[90m   | \u001B[39m\u001B[31m^\u001B[39m\r\n    \u001B[90m  4| \u001B[39m  \u001B[35mawait\u001B[39m page\u001B[33m.\u001B[39m\u001B[34mgoto\u001B[39m(\u001B[32m\u0022/\u0022\u001B[39m)\u001B[33m;\u001B[39m\r\n    \u001B[90m  5| \u001B[39m  \u001B[35mawait\u001B[39m \u001B[34mexpect\u001B[39m(page\u001B[33m.\u001B[39m\u001B[34mgetByText\u001B[39m(\u001B[36m/Catia Toolbox/\u001B[39m))\u001B[33m.\u001B[39m\u001B[34mtoBeVisible\u001B[39m()\u001B[33m;\u001B[39m\r\n\r\n\u001B[31m\u001B[2m\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF\u23AF[1/1]\u23AF\u001B[22m\u001B[39m\r\n\r\n\u001B[2m Test Files \u001B[22m \u001B[1m\u001B[31m1 failed\u001B[39m\u001B[22m\u001B[90m (1)\u001B[39m\r\n\u001B[2m      Tests \u001B[22m \u001B[2mno tests\u001B[22m\r\n\u001B[2m   Start at \u001B[22m 09:34:55\r\n\u001B[2m   Duration \u001B[22m 2.77s\u001B[2m (transform 52ms, setup 0ms, collect 0ms, tests 0ms, environment 0ms, prepare 1.21s)\u001B[22m\r\n\r\n\u2009ELIFECYCLE\u2009 Test failed. See above for more details.\r\n",
+        "durationMs": 7175,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 0,
+          "testsPassed": 0,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": true
+        }
+      }
+    ]
+  }
+}
