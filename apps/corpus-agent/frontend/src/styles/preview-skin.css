@@ -12,48 +12,48 @@
  */
 
 :root {
-  --bg: #ffffff;
-  --bg-2: #f8fafc;
-  --bg-3: #e2e8f0;
-  --card: #ffffff;
-  --card-hover: #f1f5f9;
-  --brand: #2563eb;
-  --brand-light: #3b82f6;
-  --fg: #0f172a;
-  --fg-dim: #64748b;
-  --fg-muted: #94a3b8;
-  --border: rgba(0, 0, 0, 0.07);
-  --border-bright: rgba(37, 99, 235, 0.4);
-  --success: #059669;
-  --warning: #d97706;
-  --danger: #dc2626;
-  --info: #2563eb;
-  --accent-orange: #ea7c3c;
-  --accent-yellow: #e4bf4e;
-  --accent-pink: #d6549b;
-  --accent-purple: #9b6dd6;
-  --accent-teal: #3cb5a8;
+  --bg: var(--color-bg-base);
+  --bg-2: var(--color-bg-2);
+  --bg-3: var(--color-bg-3);
+  --card: var(--color-card-base);
+  --card-hover: var(--color-card-hover);
+  --brand: var(--color-brand-blue);
+  --brand-light: var(--color-brand-blue-light);
+  --fg: var(--color-text-base);
+  --fg-dim: var(--color-text-dim);
+  --fg-muted: var(--color-text-muted);
+  --border: var(--color-border-base);
+  --border-bright: var(--color-border-bright);
+  --success: var(--color-semantic-success);
+  --warning: var(--color-semantic-warning);
+  --danger: var(--color-semantic-danger);
+  --info: var(--color-semantic-info);
+  --accent-orange: var(--color-accent-orange);
+  --accent-yellow: var(--color-accent-yellow);
+  --accent-pink: var(--color-accent-pink);
+  --accent-purple: var(--color-accent-purple);
+  --accent-teal: var(--color-accent-teal);
   --sidebar-w: 252px;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .dark {
-  --bg: #0e1117;
-  --bg-2: #131720;
-  --bg-3: #1a2035;
-  --card: #161c2b;
-  --card-hover: #1d2540;
-  --brand: #2563eb;
-  --brand-light: #3b82f6;
-  --fg: #e2e8f0;
-  --fg-dim: #94a3b8;
-  --fg-muted: #4b5563;
-  --border: rgba(255, 255, 255, 0.07);
-  --border-bright: rgba(37, 99, 235, 0.4);
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #3b82f6;
+  --bg: var(--color-bg-base);
+  --bg-2: var(--color-bg-2);
+  --bg-3: var(--color-bg-3);
+  --card: var(--color-card-base);
+  --card-hover: var(--color-card-hover);
+  --brand: var(--color-brand-blue);
+  --brand-light: var(--color-brand-blue-light);
+  --fg: var(--color-text-base);
+  --fg-dim: var(--color-text-dim);
+  --fg-muted: var(--color-text-muted);
+  --border: var(--color-border-base);
+  --border-bright: var(--color-border-bright);
+  --success: var(--color-semantic-success);
+  --warning: var(--color-semantic-warning);
+  --danger: var(--color-semantic-danger);
+  --info: var(--color-semantic-info);
 }
 
 .theme-toggle { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--fg-dim); border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }

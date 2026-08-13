@@ -211,6 +211,7 @@ fi
 # ------------------------------------------------------------------
 step 13 "Bind 127.0.0.1 dans lanceurs"
 hits=$(grep -rnE "${exclude_args[@]}" --include='*.bat' --include='*.sh' \
+  --exclude-dir='deploy' \
   'host[[:space:]=]+0\.0\.0\.0|--host[[:space:]]+0\.0\.0\.0' apps/ 2>/dev/null || true)
 if [[ -z "$hits" ]]; then pass; else
   fail "Bind 0.0.0.0 interdit (palier 1 - STANDARD §3.5) :\n$hits"

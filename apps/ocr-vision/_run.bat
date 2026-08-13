@@ -109,6 +109,32 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- Rebuild frontend si dist absent ou perime ---------------------------
+set "FRONTEND_DIR=%APP_DIR%frontend"
+where pnpm >nul 2>nul
+if errorlevel 1 goto :front_ready
+
+set "NEED_BUILD=0"
+if not exist "%FRONTEND_DIR%\dist\index.html" set "NEED_BUILD=1"
+if "%NEED_BUILD%"=="0" if exist "%APP_DIR%_needs_rebuild.ps1" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%"
+    if errorlevel 1 set "NEED_BUILD=1"
+)
+if "%NEED_BUILD%"=="0" goto :front_ready
+
+echo [setup] Build du front React - dist absent ou sources modifiees...
+pushd "%FRONTEND_DIR%"
+if not exist node_modules call pnpm install
+call pnpm build
+if errorlevel 1 (
+    popd
+    echo [erreur] Echec build frontend.
+    pause
+    exit /b 1
+)
+popd
+:front_ready
+
 REM ---- Recherche d'un port libre (defaut %PORT%, sinon les suivants) -------
 set /a PORT_TRY=%PORT%
 set /a PORT_MAX=%PORT% + 20
