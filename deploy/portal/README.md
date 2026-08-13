@@ -36,8 +36,21 @@ page fonctionne quel que soit le parent — **aucune URL ni IP en dur**.
 
 ## Ajouter / retirer un POC
 
-Éditer le tableau `POCS` en bas de `index.html` (slug = dossier de la
-sous-application, `name`, `desc`). Aucune étape de build.
+**Éditer uniquement `config.json`**, pas `index.html`. La liste des POCs et les textes i18n sont maintenant externalisés (HR0/HR8 — Everything configurable).
+
+```json
+// config.json
+{
+  "pocs": [
+    { "slug": "corpus-agent", "name": "...", "desc": { "fr": "...", "en": "..." } },
+    // ajouter ici
+  ],
+  "subtitle": { "fr": "...", "en": "..." },
+  "footer": { "fr": "...", "en": "..." }
+}
+```
+
+Aucune étape de build — le HTML charge `config.json` dynamiquement au chargement de la page.
 
 ## Retour au portail depuis un POC
 
@@ -54,8 +67,11 @@ build. En développement local (base `/`), le lien est **masqué**.
 
 ## Écart au standard (assumé)
 
-Artefact de **déploiement**, hors périmètre du standard POC. Contrairement à la
-règle #4, les couleurs sont un **miroir manuel** de `design-tokens/tokens.json` :
-une page statique autonome ne peut pas consommer le preset Tailwind sans build.
-Le dual-theme (toggle + anti-flash, clé `localStorage["theme"]`) et les fonts
-(Inter / Orbitron / JetBrains Mono) restent alignés sur les POCs.
+Artefact de **déploiement**, hors périmètre du standard POC. Le portail adopte une approche hybrid AACF :
+
+- **HR0/HR8 (Everything configurable)** : ✅ La liste POCS et textes i18n sont externalisés dans `config.json`, pas hardcodés.
+- **HR1 (No localStorage for auth)** : ✅ Accepté — localStorage utilisé uniquement pour **préférences UI** (langue, thème), pas d'auth/state métier. Fallback gracieux si localStorage indisponible.
+- **HR21 (Humanized UI)** : ✅ Couleurs via CSS variables (dual-theme), fonts AACF (Inter, Orbitron, JetBrains Mono).
+- **HR6/HR7** : ✅ Pas de truncate; fallback explicite si `config.json` indisponible (message à l'écran).
+
+**Compliance** : 4/4 AACF rules (hard rules relevant to static portal)

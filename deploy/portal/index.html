@@ -249,75 +249,44 @@
     </div>
 
     <script>
-      // ==== Liste des POCs affiches (editer ici pour ajouter/retirer) ========
-      // slug = dossier de la sous-application IIS (lien relatif "slug/").
-      const POCS = [
-        {
-          slug: "corpus-agent",
-          name: "Corpus Agent",
-          desc: {
-            fr: "Contrôle de cohérence d'un corpus documentaire.",
-            en: "Document corpus consistency checks.",
-          },
-        },
-        {
-          slug: "doc-writer",
-          name: "Doc Writer",
-          desc: {
-            fr: "Génération assistée de documents à partir de templates.",
-            en: "Assisted document generation from templates.",
-          },
-        },
-        {
-          slug: "doc-reviewer",
-          name: "Doc Reviewer",
-          desc: {
-            fr: "Relecture détection-first de PDF / Word, PDF commenté en sortie.",
-            en: "Detection-first PDF / Word review with an annotated PDF output.",
-          },
-        },
-        {
-          slug: "catia-toolbox",
-          name: "Catia Toolbox",
-          desc: {
-            fr: "Automatisations CATIA sur données neutres, plans relisables (dry-run).",
-            en: "CATIA automations on neutral data, reviewable dry-run plans.",
-          },
-        },
-        {
-          slug: "ocr-vision",
-          name: "OCR Vision",
-          desc: {
-            fr: "OCR et reconnaissance visuelle de documents techniques.",
-            en: "OCR and visual recognition of technical documents.",
-          },
-        },
-        {
-          slug: "s1000d-extractor",
-          name: "S1000D Extractor",
-          desc: {
-            fr: "Migration de documentation legacy vers un squelette XML S1000D.",
-            en: "Legacy documentation migration into an S1000D XML skeleton.",
-          },
-        },
-      ];
-
-      // ==== Chaines d'interface bilingues ====================================
-      const I18N = {
+      // ==== Configuration externalisée (HR0/HR8 — Everything configurable) =====
+      // La liste des POCs et les strings i18n sont maintenant chargées depuis
+      // config.json (fichier externe), pas hardcodées en JavaScript.
+      // Pour ajouter/retirer un POC : éditer config.json, pas ce fichier.
+      let CONFIG = null;
+      let POCS = [];
+      let I18N = {
         fr: {
-          subtitle: "Applications de preuve de concept",
-          footer: "Hébergé sur l'espace de la plateforme IA Atexis.",
-          empty: "Aucun POC configuré. Éditer le tableau POCS dans index.html.",
+          empty: "Aucun POC configuré. Vérifier config.json.",
           themeLabel: "Basculer le thème clair / sombre",
         },
         en: {
-          subtitle: "Proof-of-concept applications",
-          footer: "Hosted on the Atexis AI platform workspace.",
-          empty: "No POC configured. Edit the POCS array in index.html.",
+          empty: "No POC configured. Check config.json.",
           themeLabel: "Toggle light / dark theme",
         },
       };
-      // =======================================================================
+
+      // Charger config.json (external configuration file per HR0/HR8)
+      fetch("config.json", { cache: "no-cache" })
+        .then((r) => r.json())
+        .then((data) => {
+          CONFIG = data;
+          POCS = data.pocs || [];
+          // Merger les strings de config avec les fallbacks
+          I18N.fr.subtitle = data.subtitle?.fr || I18N.fr.subtitle;
+          I18N.fr.footer = data.footer?.fr || I18N.fr.footer;
+          I18N.en.subtitle = data.subtitle?.en || I18N.en.subtitle;
+          I18N.en.footer = data.footer?.en || I18N.en.footer;
+          // Réappliquer la langue actuelle pour afficher la config mise à jour
+          applyLang(initialLang());
+        })
+        .catch((err) => {
+          console.error("Failed to load config.json:", err);
+          // Fallback gracieux : afficher message erreur et continuer
+          document.getElementById("grid").innerHTML =
+            '<div class="empty">Configuration indisponible. Vérifier config.json.</div>';
+        });
+      // =========================================================================
 
       const LANG_KEY = "atexis-portal-lang";
       function initialLang() {
