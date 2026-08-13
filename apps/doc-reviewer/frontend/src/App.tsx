@@ -34,7 +34,7 @@ export function App() {
   const isReviewer = location.pathname.startsWith("/documents/");
   if (isReviewer) {
     return (
-      <div className="h-full min-h-screen bg text-fg">
+      <div className="h-full min-h-screen bg-bg text-fg">
         <ErrorBoundary>
           <Routes>
             <Route path="/documents/:id" element={<DocumentReviewer />} />
@@ -45,7 +45,7 @@ export function App() {
   }
 
   return (
-    <div className="h-full min-h-screen bg text-fg">
+    <div className="h-full min-h-screen bg-bg text-fg">
       <div className="flex h-screen">
         {/* Sidebar */}
         <aside className="w-64 flex-shrink-0 border-r border bg-2 flex flex-col">
