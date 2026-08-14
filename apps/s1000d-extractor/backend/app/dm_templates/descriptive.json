@@ -1,0 +1,36 @@
+{
+  "name": "descriptive",
+  "dm_type": "descriptive",
+  "info_code": "040",
+  "sections": [
+    {
+      "key": "introduction",
+      "title": "Introduction",
+      "required": false,
+      "match": ["introduction", "generalites", "general", "objet", "purpose"]
+    },
+    {
+      "key": "description",
+      "title": "Description",
+      "required": true,
+      "match": ["description", "presentation", "overview"]
+    },
+    {
+      "key": "operation",
+      "title": "Fonctionnement",
+      "required": false,
+      "match": ["fonctionnement", "principe", "operation", "theory of operation"]
+    },
+    {
+      "key": "characteristics",
+      "title": "Caracteristiques",
+      "required": false,
+      "match": ["caracteristiques", "donnees techniques", "characteristics", "technical data"]
+    }
+  ],
+  "defaults": {
+    "security": { "securityClassification": "01" },
+    "responsiblePartnerCompany": "TODO",
+    "originator": "TODO"
+  }
+}

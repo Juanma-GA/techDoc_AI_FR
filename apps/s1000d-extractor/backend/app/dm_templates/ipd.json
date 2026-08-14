@@ -1,0 +1,24 @@
+{
+  "name": "ipd",
+  "dm_type": "ipd",
+  "info_code": "941",
+  "sections": [
+    {
+      "key": "introduction",
+      "title": "Introduction",
+      "required": false,
+      "match": ["introduction", "generalites", "general"]
+    },
+    {
+      "key": "parts",
+      "title": "Catalogue de pieces",
+      "required": true,
+      "match": ["catalogue", "nomenclature", "liste des pieces", "parts list", "parts data"]
+    }
+  ],
+  "defaults": {
+    "security": { "securityClassification": "01" },
+    "responsiblePartnerCompany": "TODO",
+    "originator": "TODO"
+  }
+}

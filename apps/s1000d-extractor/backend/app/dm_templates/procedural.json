@@ -1,0 +1,38 @@
+{
+  "name": "procedural",
+  "dm_type": "procedural",
+  "info_code": "520",
+  "sections": [
+    {
+      "key": "preliminary",
+      "title": "Conditions preliminaires",
+      "required": true,
+      "match": [
+        "conditions prealables",
+        "preliminaires",
+        "prerequis",
+        "outillage",
+        "consommables",
+        "preliminary requirements",
+        "required conditions"
+      ]
+    },
+    {
+      "key": "procedure",
+      "title": "Procedure",
+      "required": true,
+      "match": ["procedure", "mode operatoire", "operations", "steps"]
+    },
+    {
+      "key": "close",
+      "title": "Operations de cloture",
+      "required": false,
+      "match": ["cloture", "remise en etat", "close up", "closing requirements"]
+    }
+  ],
+  "defaults": {
+    "security": { "securityClassification": "01" },
+    "responsiblePartnerCompany": "TODO",
+    "originator": "TODO"
+  }
+}
