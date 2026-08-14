@@ -18,7 +18,7 @@ import logging
 from lxml import etree
 
 from app.core import brex as brex_mod
-from app.core import s1000d_schema
+from app.core import s1000d_schema, xml_safe
 
 log = logging.getLogger("s1000d_extractor.validator")
 
@@ -39,7 +39,7 @@ def validate_document(
 
     # 1. Well-formedness (toujours).
     try:
-        etree.fromstring(xml.encode("utf-8"))
+        xml_safe.fromstring(xml)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "WELLFORMED", f"XML mal forme : {exc}")]
 
@@ -48,7 +48,9 @@ def validate_document(
         violations.extend(s1000d_schema.validate_xsd(xml, issue))
     except Exception as exc:
         log.warning("XSD validation failed: %s", exc)
-        violations.append(_v("info", "XSD", f"Validation XSD indisponible : {exc}"))
+        # `warning`, pas `info` : "non validee" ne doit pas se lire comme "validee
+        # avec une remarque benigne".
+        violations.append(_v("warning", "XSD", f"Validation XSD NON EXECUTEE : {exc}"))
 
     # 3. BREX projet (si fourni).
     if brex_xml:
@@ -57,7 +59,7 @@ def validate_document(
             violations.extend(brex_mod.validate_brex(xml, rules))
         except Exception as exc:
             log.warning("BREX validation failed: %s", exc)
-            violations.append(_v("info", "BREX", f"Validation BREX indisponible : {exc}"))
+            violations.append(_v("warning", "BREX", f"Validation BREX NON EXECUTEE : {exc}"))
 
     # 4. Regles client (BREX JSON) sur le DM lui-meme, si fournies.
     if brex_rules and dm is not None:
@@ -67,6 +69,8 @@ def validate_document(
             violations.extend(validate_dm_against_brex(dm, brex_rules))
         except Exception as exc:
             log.warning("client BREX rules failed: %s", exc)
-            violations.append(_v("info", "BREX_RULES", f"Regles client non appliquees : {exc}"))
+            violations.append(
+                _v("warning", "BREX_RULES", f"Regles client NON APPLIQUEES : {exc}")
+            )
 
     return violations

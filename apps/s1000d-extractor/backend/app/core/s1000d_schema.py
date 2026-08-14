@@ -16,6 +16,8 @@ from pathlib import Path
 
 from lxml import etree
 
+from app.core import xml_safe
+
 SUPPORTED_ISSUES = ("4.2", "5.0")
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
 
@@ -79,8 +81,8 @@ def validate_xsd(xml: str, issue: str) -> list[dict]:
     if xsd_path is None:
         return [_v("info", "XSD", f"Aucun .xsd trouve pour l'Issue {issue}.", "/")]
     try:
-        schema = etree.XMLSchema(etree.parse(str(xsd_path)))
-        doc = etree.fromstring(xml.encode("utf-8"))
+        schema = etree.XMLSchema(xml_safe.parse(str(xsd_path)))
+        doc = xml_safe.fromstring(xml)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "XSD", f"XML mal forme : {exc}", "/")]
     except Exception as exc:

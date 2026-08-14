@@ -19,6 +19,7 @@ from pathlib import Path
 
 from lxml import etree
 
+from app.core import xml_safe
 from app.core.errors import AppError
 
 _REF_RE = re.compile(
@@ -61,7 +62,7 @@ def load_cir(file_path: str | Path) -> dict[str, dict]:
     if not path.exists():
         raise AppError("CIR_NOT_FOUND", f"CIR introuvable : {path.name}", 404)
     try:
-        root = etree.fromstring(path.read_bytes())
+        root = xml_safe.fromstring(path.read_bytes())
     except etree.XMLSyntaxError as exc:
         raise AppError("CIR_INVALID", f"CIR mal forme : {exc}", 422) from exc
 

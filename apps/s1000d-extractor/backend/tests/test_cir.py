@@ -43,6 +43,37 @@ def test_load_cir_rejects_missing(tmp_path):
         load_cir(tmp_path / "absent.xml")
 
 
+def test_load_cir_blocks_external_entities(tmp_path):
+    """XXE : les entites externes ne doivent jamais etre resolues (le contenu du
+    CIR finit dans les DM generes et dans l'UI)."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("MOT-DE-PASSE", encoding="utf-8")
+    path = tmp_path / "cir.xml"
+    path.write_text(
+        '<?xml version="1.0"?>'
+        f'<!DOCTYPE r [<!ENTITY xxe SYSTEM "file:///{secret.as_posix()}">]>'
+        '<commonRepository><warning id="W1">&xxe;</warning></commonRepository>',
+        encoding="utf-8",
+    )
+    with pytest.raises(AppError) as exc:
+        load_cir(path)
+    assert "MOT-DE-PASSE" not in str(exc.value)
+
+
+def test_load_cir_blocks_entity_expansion_bomb(tmp_path):
+    path = tmp_path / "cir.xml"
+    path.write_text(
+        '<?xml version="1.0"?>'
+        '<!DOCTYPE r [<!ENTITY a "aaaaaaaaaa">'
+        '<!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">'
+        '<!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">]>'
+        '<commonRepository><warning id="W1">&c;</warning></commonRepository>',
+        encoding="utf-8",
+    )
+    with pytest.raises(AppError):
+        load_cir(path)
+
+
 def test_resolve_cir_references_all_syntaxes(cir_file):
     cir = load_cir(cir_file)
     dm = {

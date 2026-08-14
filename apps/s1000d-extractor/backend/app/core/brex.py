@@ -17,6 +17,8 @@ from dataclasses import dataclass
 
 from lxml import etree
 
+from app.core import xml_safe
+
 
 @dataclass
 class BrexRule:
@@ -33,7 +35,7 @@ def _localname(tag: str) -> str:
 def parse_brex(brex_xml: str) -> list[BrexRule]:
     """Extrait les regles de structure d'un Data Module BREX."""
     try:
-        root = etree.fromstring(brex_xml.encode("utf-8"))
+        root = xml_safe.fromstring(brex_xml)
     except etree.XMLSyntaxError:
         return []
     rules: list[BrexRule] = []
@@ -78,7 +80,7 @@ def validate_brex(xml: str, rules: list[BrexRule]) -> list[dict]:
     if not rules:
         return []
     try:
-        doc = etree.fromstring(xml.encode("utf-8"))
+        doc = xml_safe.fromstring(xml)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "BREX", f"XML mal forme : {exc}", "/")]
 
