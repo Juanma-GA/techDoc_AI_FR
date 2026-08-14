@@ -128,6 +128,7 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
             "title": u.title,
             # Le type declare dans la DMRL fait foi quand il existe.
             "dm_type": dmrl_types.get(u.title) or types[u.dm_id],
+            "is_orphan": u.is_orphan,
             "tree": ir_mod.to_dict(u.root),
             "xml": None,
             "violations": None,
@@ -283,6 +284,7 @@ def state(doc: Document) -> dict:
             "dm_id": dm["dm_id"],
             "title": dm["title"],
             "dm_type": dm["dm_type"],
+            "is_orphan": bool(dm.get("is_orphan")),
             "node_count": ws.node_count(dm["tree"]),
         }
         if step == "split":
@@ -300,16 +302,24 @@ def state(doc: Document) -> dict:
         "split_level": doc.split_level or _DEFAULT_LEVEL,
         "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
-        "resources": {
-            "dmrl_count": len(wres.dmrl_entries(doc)),
-            "has_cir": bool(doc.cir_path),
-            "has_brex_rules": bool(doc.brex_rules_path),
-        },
+        "resources": _resources_state(doc),
         "dms": out_dms,
     }
     if step == "dmrl":
         out["dmrl"] = wres.dmrl_report(doc)
     return out
+
+
+def _resources_state(doc: Document) -> dict:
+    """Etat REEL des ressources : une ressource attachee mais illisible ne doit
+    pas s'afficher comme active."""
+    res = wres.load_resources(doc) if (doc.cir_path or doc.brex_rules_path) else None
+    return {
+        "dmrl_count": len(wres.dmrl_entries(doc)),
+        "has_cir": bool(res and res.cir),
+        "has_brex_rules": bool(res and res.brex_rules),
+        "errors": list(res.errors) if res else [],
+    }
 
 
 def dm_xml(doc: Document, dm_id: str) -> str:

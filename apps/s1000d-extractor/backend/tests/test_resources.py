@@ -80,8 +80,11 @@ def test_dmrl_step_edits_before_split(client, pdf_bytes) -> None:
     assert [row["title"] for row in state["dmrl"]] == ["Removal Procedure"]
 
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
-    assert [d["title"] for d in state["dms"]] == ["Removal Procedure"]
-    assert state["dms"][0]["dm_type"] == "ipd"
+    # Le contenu qui precede le 1er DM retenu n'est pas jete : il devient un DM
+    # marque `is_orphan` (libelle rendu cote UI) que l'humain rattache ou exclut.
+    assert [d["is_orphan"] for d in state["dms"]] == [True, False]
+    assert state["dms"][1]["title"] == "Removal Procedure"
+    assert state["dms"][1]["dm_type"] == "ipd"
 
 
 def test_wizard_back_returns_to_dmrl_step(client, pdf_bytes) -> None:
@@ -131,7 +134,50 @@ def test_cir_and_brex_rules_upload(client, pdf_bytes) -> None:
     rules = json.dumps({"max_title_levels": 0}).encode()
     assert _upload_resource(client, doc_id, "brex_rules", "rules.json", rules).status_code == 200
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
-    assert state["resources"] == {"dmrl_count": 0, "has_cir": True, "has_brex_rules": True}
+    assert state["resources"] == {
+        "dmrl_count": 0, "has_cir": True, "has_brex_rules": True, "errors": []
+    }
+
+
+def test_unreadable_resource_is_reported_not_swallowed(client, pdf_bytes, tmp_path) -> None:
+    """Une ressource attachee puis devenue illisible ne doit pas s'afficher comme
+    active : l'utilisateur livrerait des DM en croyant ses regles appliquees."""
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload_doc(client, pdf_bytes)
+    broken = tmp_path / "rules.json"
+    broken.write_text("{ pas du json", encoding="utf-8")
+    db = SessionLocal()
+    try:
+        db.get(Document, doc_id).brex_rules_path = str(broken)
+        db.commit()
+    finally:
+        db.close()
+
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    assert state["resources"]["has_brex_rules"] is False
+    assert state["resources"]["errors"], "l'echec de chargement doit remonter a l'UI"
+
+    for payload in ({}, {"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    assert state["step"] == "generate"
+    assert all(d["violation_count"] for d in state["dms"])
+
+
+def test_cir_upload_rejects_external_entities(client, pdf_bytes, tmp_path) -> None:
+    """XXE : un CIR qui reference un fichier local ne doit rien exfiltrer."""
+    secret = tmp_path / "secret.txt"
+    secret.write_text("MOT-DE-PASSE", encoding="utf-8")
+    xxe = (
+        '<?xml version="1.0"?>'
+        f'<!DOCTYPE r [<!ENTITY xxe SYSTEM "file:///{secret.as_posix()}">]>'
+        '<commonRepository><warning id="W1">&xxe;</warning></commonRepository>'
+    )
+    doc_id = _upload_doc(client, pdf_bytes)
+    r = _upload_resource(client, doc_id, "cir", "cir.xml", xxe.encode())
+    assert r.status_code == 422, "un CIR avec entite externe doit etre refuse"
+    assert "MOT-DE-PASSE" not in r.text
 
 
 def test_client_brex_rules_are_reported_at_generation(client, pdf_bytes) -> None:

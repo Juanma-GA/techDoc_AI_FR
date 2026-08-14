@@ -125,8 +125,11 @@ def _llm_refine(sections: list[IRNode], db: Session) -> None:
         client = MistralClient.from_db(db)
     except MistralError:
         return
+    # Pas de troncature de l'entree (HR6) : un titre ou un extrait coupe peut
+    # faire basculer un DM du bon type au mauvais. La brievete est demandee a la
+    # SORTIE (JSON guide), pas en decoupant l'entree.
     listing = [
-        {"i": i, "title": s.text[:120], "sample": _first_text(s)[:200]}
+        {"i": i, "title": s.text, "sample": _first_text(s)}
         for i, s in enumerate(sections)
     ]
     if not listing:
@@ -211,7 +214,7 @@ def _llm_refine_dms(dms: list, types: dict[str, str], db: Session) -> None:
         client = MistralClient.from_db(db)
     except MistralError:
         return
-    listing = [{"id": dm.dm_id, "title": dm.title[:120], "sample": _first_text(dm.root)[:200]} for dm in dms]
+    listing = [{"id": dm.dm_id, "title": dm.title, "sample": _first_text(dm.root)} for dm in dms]
     if not listing:
         return
     prompt = (

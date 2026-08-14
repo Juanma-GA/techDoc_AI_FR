@@ -29,6 +29,9 @@ class Resources:
     templates: dict[str, dict]
     cir: dict[str, dict]
     brex_rules: dict
+    # Ressource attachee mais illisible : l'utilisateur doit le savoir, sinon il
+    # livre des DM en croyant que ses regles/son CIR ont ete appliques.
+    errors: list[str]
 
 
 def dmrl_entries(doc: Document) -> list[DmrlEntry]:
@@ -43,21 +46,23 @@ def save_dmrl(doc: Document, entries: list[DmrlEntry]) -> None:
 
 def load_resources(doc: Document) -> Resources:
     """Charge templates + CIR + regles client. Une ressource illisible est
-    tracee et ignoree (elle ne doit pas bloquer une generation)."""
-    templates = _safe(lambda: dm_templates.load_templates(), {}, "templates")
-    cir = _safe(lambda: cir_mod.load_cir(doc.cir_path), {}, "cir") if doc.cir_path else {}
+    tracee ET remontee dans `errors` (jamais ignoree en silence)."""
+    errors: list[str] = []
+    templates = _safe(lambda: dm_templates.load_templates(), {}, "templates", errors)
+    cir = _safe(lambda: cir_mod.load_cir(doc.cir_path), {}, "CIR", errors) if doc.cir_path else {}
     rules = (
-        _safe(lambda: brex_rules_mod.load_brex_rules(doc.brex_rules_path), {}, "brex_rules")
+        _safe(lambda: brex_rules_mod.load_brex_rules(doc.brex_rules_path), {}, "regles client", errors)
         if doc.brex_rules_path else {}
     )
-    return Resources(templates=templates, cir=cir, brex_rules=rules)
+    return Resources(templates=templates, cir=cir, brex_rules=rules, errors=errors)
 
 
-def _safe(fn, default, label: str):
+def _safe(fn, default, label: str, errors: list[str]):
     try:
         return fn()
     except Exception as exc:
         log.warning("ressource %s ignoree : %s", label, exc)
+        errors.append(f"{label} : {exc}")
         return default
 
 
@@ -95,6 +100,11 @@ def apply_resources(dm: dict, res: Resources, document_text: str = "") -> tuple[
     violations: list[dict] = []
     if res.brex_rules:
         violations = brex_rules_mod.validate_dm_against_brex(out, res.brex_rules)
+    for err in res.errors:
+        violations.append({
+            "severity": "error", "rule": "RESOURCE",
+            "message": f"Ressource attachee mais NON APPLIQUEE - {err}", "path": "/",
+        })
     for key in out.get("cir_unresolved") or []:
         violations.append({
             "severity": "warning", "rule": "CIR",

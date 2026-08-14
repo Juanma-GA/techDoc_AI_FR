@@ -37,6 +37,9 @@ class DmUnit:
     root: IRNode                       # racine synthetique : children = contenu du DM
     page: int | None = None
     node_count: int = 0
+    # Contenu du document non couvert par la DMRL : le libelle est rendu cote UI
+    # (pas de chaine d'affichage en dur dans le moteur).
+    is_orphan: bool = False
 
 
 def _collect(node: IRNode, depth: int, out: list[IRNode]) -> None:
@@ -109,19 +112,19 @@ def _flat_nodes(root: IRNode) -> list[IRNode]:
     return out
 
 
-def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[int | None]:
-    """Index du noeud-titre apparie a chaque entree DMRL (`None` si introuvable).
+def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | None, str]]:
+    """Pour chaque entree DMRL : index du noeud-titre apparie + rang d'appariement.
 
     Sert AVANT le decoupage : l'utilisateur valide la DMRL en voyant ce qui a
-    ete retrouve dans son document.
+    ete retrouve dans son document, et A QUEL POINT c'est sur.
     """
     nodes = _flat_nodes(root)
     norm_nodes = [dmrl.normalize(n.text) for n in nodes]
-    out: list[int | None] = []
+    out: list[tuple[int | None, str]] = []
     cursor = 0
     for entry in dmrl_data:
-        idx = _find_node(norm_nodes, dmrl.normalize(entry.title), cursor)
-        out.append(idx)
+        idx, rank = dmrl.find_title(norm_nodes, dmrl.normalize(entry.title), cursor)
+        out.append((idx, rank))
         if idx is not None:
             cursor = idx + 1
     return out
@@ -136,10 +139,11 @@ def match_report(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[dict]:
             **entry.to_dict(),
             "index": i,
             "matched": idx is not None,
+            "match_rank": rank,
             "page": nodes[idx].page if idx is not None else None,
             "matched_text": nodes[idx].text if idx is not None else "",
         }
-        for i, (entry, idx) in enumerate(zip(dmrl_data, matches, strict=True))
+        for i, (entry, (idx, rank)) in enumerate(zip(dmrl_data, matches, strict=True))
     ]
 
 
@@ -148,15 +152,17 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
 
     Le titre de chaque entree DMRL est apparie sur les noeuds du document ; le
     contenu d'un DM = les noeuds situes entre son titre et le titre suivant.
-    Les entrees non retrouvees produisent un DM VIDE (jamais silencieusement
-    supprime) : l'humain voit ce qu'il reste a rattacher.
+
+    Rien n'est jete : le contenu qui precede le premier DM (pages de garde,
+    preface, avertissements) devient un DM marque `is_orphan`, et les entrees
+    non retrouvees produisent un DM VIDE — l'humain voit ce qui reste a traiter.
     """
     nodes = _flat_nodes(root)
     matches = match_dmrl(root, dmrl_data)
 
     anchors: list[tuple[int, DmrlEntry]] = []
     missing: list[DmrlEntry] = []
-    for entry, idx in zip(dmrl_data, matches, strict=True):
+    for entry, (idx, _rank) in zip(dmrl_data, matches, strict=True):
         if idx is None:
             missing.append(entry)
         else:
@@ -164,6 +170,13 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
     anchors.sort(key=lambda t: t[0])
 
     dms: list[DmUnit] = []
+    if anchors and anchors[0][0] > 0:
+        syn = IRNode(id="dm1-root", kind="section", level=0, children=list(nodes[:anchors[0][0]]))
+        dms.append(DmUnit(
+            dm_id="dm1", title="", root=syn, page=nodes[0].page,
+            node_count=len(syn.walk()), is_orphan=True,
+        ))
+
     for i, (idx, entry) in enumerate(anchors):
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(nodes)
         dm_id = f"dm{len(dms) + 1}"
@@ -180,21 +193,3 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
             node_count=1,
         ))
     return dms
-
-
-def _find_node(norm_nodes: list[str], needle: str, from_idx: int) -> int | None:
-    if not needle:
-        return None
-    for scope in (range(from_idx, len(norm_nodes)), range(0, from_idx)):
-        for rank in ("eq", "prefix", "contains"):
-            for i in scope:
-                text = norm_nodes[i]
-                if not text:
-                    continue
-                if rank == "eq" and text == needle:
-                    return i
-                if rank == "prefix" and text.startswith(needle):
-                    return i
-                if rank == "contains" and needle in text:
-                    return i
-    return None

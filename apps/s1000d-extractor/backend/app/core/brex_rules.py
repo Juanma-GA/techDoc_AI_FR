@@ -91,7 +91,7 @@ def validate_dm_against_brex(dm: dict, brex_rules: dict) -> list[dict]:
                 out.append(_v(
                     "BREX_TITLE_LEVEL",
                     f"Niveau de titre {depth} > maximum autorise ({max_levels}) : "
-                    f"{(node.get('text') or '')[:60]}",
+                    f"{node.get('text') or ''}",
                     node.get("id", "/"),
                 ))
 

@@ -172,54 +172,70 @@ def _line_offsets(text: str) -> list[tuple[int, str]]:
     return out
 
 
-def _match_line(lines: list[tuple[int, str]], needle: str, from_idx: int) -> int | None:
-    """Index de la ligne qui porte le titre `needle` (egalite > prefixe > contenu).
+# Rangs d'appariement, du plus sur au plus hasardeux. `contains` peut ancrer un
+# DM au mauvais endroit (titre court present dans une autre phrase) : le rang est
+# remonte a l'UI pour que l'humain verifie au lieu de faire confiance.
+MATCH_RANKS = ("exact", "prefix", "contains")
 
-    Recherche d'abord a partir de `from_idx` (les DM se suivent dans le
-    document), puis en repli sur tout le document.
+
+def find_title(haystack: list[str], needle: str, from_idx: int = 0) -> tuple[int | None, str]:
+    """Index du texte normalise qui porte `needle`, et le rang d'appariement.
+
+    Cherche d'abord a partir de `from_idx` (les DM se suivent), puis en repli sur
+    le debut. Renvoie `(None, "")` si rien ne correspond.
     """
     if not needle:
-        return None
-    for scope in (range(from_idx, len(lines)), range(0, from_idx)):
-        for rank in ("eq", "prefix", "contains"):
+        return None, ""
+    for scope in (range(from_idx, len(haystack)), range(0, from_idx)):
+        for rank in MATCH_RANKS:
             for i in scope:
-                line = lines[i][1]
-                if rank == "eq" and line == needle:
-                    return i
-                if rank == "prefix" and line.startswith(needle):
-                    return i
-                if rank == "contains" and needle in line:
-                    return i
-    return None
+                text = haystack[i]
+                if not text:
+                    continue
+                if rank == "exact" and text == needle:
+                    return i, rank
+                if rank == "prefix" and text.startswith(needle):
+                    return i, rank
+                if rank == "contains" and needle in text:
+                    return i, rank
+    return None, ""
 
 
 def find_dm_boundaries(document_text: str, dmrl_data: list[DmrlEntry]) -> list[dict]:
     """Localise chaque DM de la DMRL dans le texte source.
 
     Renvoie une entree par DM : `{dmc, title, arbo, dm_type, start, end,
-    matched}`. `start`/`end` sont des offsets caracteres dans `document_text`
-    (`None` si le titre n'a pas ete retrouve — l'entree reste presente pour que
-    l'humain voie ce qui manque, cf. jamais de troncature silencieuse).
+    matched, match_rank}`. `start`/`end` sont des offsets caracteres dans
+    `document_text` (`None` si le titre n'a pas ete retrouve — l'entree reste
+    presente pour que l'humain voie ce qui manque, cf. jamais de troncature
+    silencieuse).
     """
     lines = _line_offsets(document_text or "")
-    found: list[tuple[int, int, DmrlEntry]] = []   # (line_idx, offset, entry)
+    norm = [text for _off, text in lines]
+    found: list[tuple[int, int, str, DmrlEntry]] = []   # (line_idx, offset, rank, entry)
     missing: list[DmrlEntry] = []
     cursor = 0
     for entry in dmrl_data:
-        idx = _match_line(lines, normalize(entry.title), cursor)
+        idx, rank = find_title(norm, normalize(entry.title), cursor)
         if idx is None:
             missing.append(entry)
             continue
-        found.append((idx, lines[idx][0], entry))
+        found.append((idx, lines[idx][0], rank, entry))
         cursor = idx + 1
 
     found.sort(key=lambda t: t[0])
     total = len(document_text or "")
     out: list[dict] = []
-    for i, (_idx, offset, entry) in enumerate(found):
+    for i, (_idx, offset, rank, entry) in enumerate(found):
         end = found[i + 1][1] if i + 1 < len(found) else total
-        out.append({**entry.to_dict(), "start": offset, "end": end, "matched": True})
-    out.extend({**e.to_dict(), "start": None, "end": None, "matched": False} for e in missing)
+        out.append({
+            **entry.to_dict(), "start": offset, "end": end,
+            "matched": True, "match_rank": rank,
+        })
+    out.extend(
+        {**e.to_dict(), "start": None, "end": None, "matched": False, "match_rank": ""}
+        for e in missing
+    )
     return out
 
 
