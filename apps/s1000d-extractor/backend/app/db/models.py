@@ -70,4 +70,9 @@ class Document(Base):
     # Pile d'annulation (undo) des editions de decoupage : liste JSON
     # d'instantanes `dms_json` successifs (bornee cote code).
     dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Ressources client optionnelles : DMRL (decoupage impose + PMC), CIR
+    # (contenus partages), regles client BREX JSON.
+    dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cir_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    brex_rules_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

@@ -18,12 +18,14 @@ merge / split / masquage entetes-pieds / undo / apercu) vit dans `wizard_split`.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from app.core import context_classifier, ingest, resolver, splitter, structure_infer
 from app.core import ir as ir_mod
+from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.errors import AppError
 from app.core.s1000d_serializer import serialize
@@ -31,7 +33,16 @@ from app.core.validator import validate_document
 from app.db.models import BrexProfile, Document
 
 STEPS = ("split", "type", "structure", "generate")
+# Une DMRL chargee insere une etape de validation AVANT le decoupage : on ne
+# decoupe pas sur une liste de DM que l'utilisateur n'a pas encore validee.
+STEPS_WITH_DMRL = ("dmrl", *STEPS)
 _DEFAULT_LEVEL = "section"
+
+log = logging.getLogger("s1000d_extractor.wizard")
+
+
+def steps_for(doc: Document) -> tuple[str, ...]:
+    return STEPS_WITH_DMRL if doc.dmrl_json else STEPS
 
 
 # --- helpers d'etat ----------------------------------------------------------
@@ -53,11 +64,15 @@ def images_dir(doc_id: str) -> Path:
 
 def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
     """Extrait les images du PDF en JPG et pose l'ICN sur les figures (no-op si
-    echec / pas d'image)."""
+    echec / pas d'image). Le dossier est purge d'abord : relancer l'assistant ne
+    doit pas empiler des doublons d'illustrations."""
     from app.core import illustrations
+    out_dir = images_dir(doc.id)
     try:
+        for old in out_dir.glob("*.jpg"):
+            old.unlink(missing_ok=True)
         illustrations.attach_illustrations(
-            root, pdf_path=doc.storage_path, out_dir=images_dir(doc.id), doc_id=doc.id
+            root, pdf_path=doc.storage_path, out_dir=out_dir, doc_id=doc.id
         )
     except Exception:  # jamais bloquant : le squelette reste generable sans images
         pass
@@ -87,7 +102,7 @@ def start(db: Session, doc: Document, progress_cb=_noop_progress) -> dict:
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
     _resplit(db, doc, _DEFAULT_LEVEL, progress_cb=progress_cb)
-    doc.wizard_step = "split"
+    doc.wizard_step = steps_for(doc)[0]
     doc.status = "wizard"
     progress_cb("done", 100)
     db.commit()
@@ -95,17 +110,24 @@ def start(db: Session, doc: Document, progress_cb=_noop_progress) -> dict:
 
 
 def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_progress) -> None:
-    """Recoupe l'IR en DMs et propose un type pour chacun."""
+    """Recoupe l'IR en DMs et propose un type pour chacun.
+
+    Une DMRL attachee PRIME sur le niveau de titre : le decoupage suit alors la
+    liste des DM attendus par le client.
+    """
     progress_cb("split", 60)
     root = ir_mod.from_dict(json.loads(doc.ir_json))
-    units = splitter.split_into_dms(root, split_level)
+    entries = wres.dmrl_entries(doc)
+    units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     progress_cb("classify", 80)
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
+    dmrl_types = {e.title: e.dm_type for e in entries if e.dm_type}
     ws.save_dms(doc, [
         {
             "dm_id": u.dm_id,
             "title": u.title,
-            "dm_type": types[u.dm_id],
+            # Le type declare dans la DMRL fait foi quand il existe.
+            "dm_type": dmrl_types.get(u.title) or types[u.dm_id],
             "tree": ir_mod.to_dict(u.root),
             "xml": None,
             "violations": None,
@@ -122,7 +144,10 @@ def update(db: Session, doc: Document, params: dict) -> dict:
     (re-analyse complete qui ecrase les ajustements). L'historique undo n'est
     empile qu'ICI, jamais dans `_resplit`/`apply_split_op` (partages avec
     `start`/`advance`)."""
-    if doc.wizard_step == "split":
+    if doc.wizard_step == "dmrl":
+        wres.apply_dmrl_op(doc, params)
+        db.commit()
+    elif doc.wizard_step == "split":
         op = params.get("op")
         if op == "undo":
             ws.undo(doc)
@@ -140,7 +165,11 @@ def update(db: Session, doc: Document, params: dict) -> dict:
 
 def advance(db: Session, doc: Document, params: dict) -> dict:
     step = doc.wizard_step
-    if step == "split":
+    if step == "dmrl":
+        # La DMRL validee (eventuellement editee) pilote le decoupage.
+        _resplit(db, doc, doc.split_level or _DEFAULT_LEVEL)
+        doc.wizard_step = "split"
+    elif step == "split":
         # Ne re-decouper QUE si le niveau a explicitement change : sinon on
         # ecraserait les editions manuelles (exclure / fusionner / scinder /
         # renommer). Le decoupage valide doit etre respecte a l'etape suivante.
@@ -164,8 +193,9 @@ def advance(db: Session, doc: Document, params: dict) -> dict:
 
 
 def back(db: Session, doc: Document) -> dict:
-    idx = STEPS.index(doc.wizard_step) if doc.wizard_step in STEPS else 0
-    doc.wizard_step = STEPS[max(0, idx - 1)]
+    steps = steps_for(doc)
+    idx = steps.index(doc.wizard_step) if doc.wizard_step in steps else 0
+    doc.wizard_step = steps[max(0, idx - 1)]
     db.commit()
     return state(doc)
 
@@ -206,13 +236,38 @@ def _apply_overrides(doc: Document, overrides: list[dict]) -> None:
 
 
 def _generate_all(db: Session, doc: Document) -> None:
+    """Serialise et valide chaque DM. Etape 100% deterministe : aucun appel IA
+    ici (un appel LLM pendant la generation/validation faisait remonter une
+    "Unexpected server error" au moindre incident reseau).
+
+    Un DM qui echoue ne casse plus toute l'etape : il porte sa propre violation.
+    """
     dms = ws.load_dms(doc)
     brex_xml = _brex_xml(db, doc.brex_id)
+    res = wres.load_resources(doc)
     for dm in dms:
-        root = ir_mod.from_dict(dm["tree"])
-        xml = serialize(root, issue=doc.s1000d_issue, dm_type=dm["dm_type"], title=dm["title"])
-        dm["xml"] = xml
-        dm["violations"] = validate_document(xml, issue=doc.s1000d_issue, brex_xml=brex_xml)
+        try:
+            enriched, extra = wres.apply_resources(dm, res)
+            root = ir_mod.from_dict(enriched["tree"])
+            xml = serialize(root, issue=doc.s1000d_issue, dm_type=dm["dm_type"], title=dm["title"])
+            # `content_html`/`content_xml` ne sont pas persistes : ce sont des
+            # rendus derives du tree, ils doubleraient inutilement le JSON.
+            dm.update({
+                k: v for k, v in enriched.items()
+                if k not in ("xml", "violations", "content_html", "content_xml")
+            })
+            dm["xml"] = xml
+            dm["violations"] = validate_document(
+                xml, issue=doc.s1000d_issue, brex_xml=brex_xml,
+                brex_rules=res.brex_rules, dm=enriched,
+            ) + extra
+        except Exception as exc:
+            log.exception("generation du DM %s echouee", dm.get("dm_id"))
+            dm["xml"] = None
+            dm["violations"] = [{
+                "severity": "error", "rule": "GENERATE",
+                "message": f"Generation impossible pour ce DM : {exc}", "path": "/",
+            }]
     ws.save_dms(doc, dms)
 
 
@@ -220,7 +275,8 @@ def _generate_all(db: Session, doc: Document) -> None:
 
 def state(doc: Document) -> dict:
     dms = ws.load_dms(doc)
-    step = doc.wizard_step or "split"
+    steps = steps_for(doc)
+    step = doc.wizard_step or steps[0]
     out_dms = []
     for dm in dms:
         entry = {
@@ -236,14 +292,24 @@ def state(doc: Document) -> dict:
         if step == "generate":
             entry["violation_count"] = len(dm.get("violations") or [])
             entry["has_xml"] = bool(dm.get("xml"))
+            entry["missing_fields"] = dm.get("missing_fields") or []
+            entry["cir_unresolved"] = dm.get("cir_unresolved") or []
         out_dms.append(entry)
-    return {
+    out = {
         "step": step,
         "split_level": doc.split_level or _DEFAULT_LEVEL,
-        "steps": list(STEPS),
+        "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
+        "resources": {
+            "dmrl_count": len(wres.dmrl_entries(doc)),
+            "has_cir": bool(doc.cir_path),
+            "has_brex_rules": bool(doc.brex_rules_path),
+        },
         "dms": out_dms,
     }
+    if step == "dmrl":
+        out["dmrl"] = wres.dmrl_report(doc)
+    return out
 
 
 def dm_xml(doc: Document, dm_id: str) -> str:

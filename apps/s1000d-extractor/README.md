@@ -34,6 +34,39 @@ parse (PDF/DOCX) -> IR -> classification contexte (IA) -> segmentation forme
 Entrées : le document + la **version S1000D** (4.2 ou 5.0) + le **BREX projet**
 (optionnel). Sortie streamée en SSE (`session -> progress -> done`).
 
+## Ressources client (optionnelles)
+
+Trois fichiers facultatifs peuvent être attachés à un document au moment du
+chargement (onglet *Migration*). Sans eux, l'assistant fonctionne comme avant.
+
+| Ressource | Formats | Effet |
+|---|---|---|
+| **DMRL** | `.xlsx`, `.xlsm`, `.csv`, `.json` | **pilote le découpage** : un DM par ligne de la DMRL (le niveau de titre est ignoré) et permet de générer la **PMC** |
+| **CIR** | `.xml` | les références `{{CIR:ID}}`, `[CIR:ID]`, `<cirRef refId="ID"/>` sont remplacées par le contenu du repository |
+| **Règles client** | `.json` | contraintes rédactionnelles (profondeur de titres, longueur, rubriques obligatoires…) vérifiées à la génération |
+
+Routes : `POST /api/v1/documents/{id}/resources/{dmrl|cir|brex_rules}`,
+`GET /api/v1/documents/{id}/dmrl`, `GET /api/v1/documents/{id}/pmc`.
+
+**DMRL** — colonnes reconnues (insensible à la casse/aux accents) : `Arbo`,
+`DMC`, `Titre`/`Title`, `Type`/`Nature`, `Info code`, `Tech name`, `Info name`.
+Le type de DM est déduit du code information quand la colonne `Type` est vide
+(`941*` → IPD, `2/3/5/6/7/8**` → procédural, sinon descriptif). Une entrée dont
+le titre n'est pas retrouvé dans le document produit un **DM vide** — jamais une
+suppression silencieuse ([app/core/dmrl.py](backend/app/core/dmrl.py),
+[app/core/pmc.py](backend/app/core/pmc.py)).
+
+**Templates de DM** ([backend/app/dm_templates/](backend/app/dm_templates/)) :
+un JSON par type de DM décrit les rubriques attendues et les métadonnées par
+défaut. À la génération, le contenu du DM est réparti dans ces rubriques, les
+listes à puces sont converties en balisage, et toute rubrique obligatoire vide
+remonte en anomalie ([app/core/dm_templates.py](backend/app/core/dm_templates.py)).
+
+**Règles client** — clés supportées : `max_title_levels`, `max_title_length`,
+`allowed_dm_types`, `forbidden_kinds`, `required_sections`, `max_list_depth`.
+Une clé inconnue est signalée (severity `info`), jamais ignorée en silence
+([app/core/brex_rules.py](backend/app/core/brex_rules.py)).
+
 ## Auth
 
 **Palier** : 1 — local seul, bind `127.0.0.1`, pas d'authentification.
@@ -86,15 +119,25 @@ curl -X PATCH -H "Content-Type: application/json" -d '{"element":"proceduralStep
 # BREX projet (reutilisable)
 curl -F "file=@project.brex" -F "name=Projet A" -F "s1000d_issue=5.0" \
      http://127.0.0.1:8004/api/v1/brex
+
+# Ressources client d'un document (DMRL / CIR / regles client)
+curl -F "file=@DMRL.xlsx" http://127.0.0.1:8004/api/v1/documents/<ID>/resources/dmrl
+curl -F "file=@cir.xml"   http://127.0.0.1:8004/api/v1/documents/<ID>/resources/cir
+curl -F "file=@rules.json" http://127.0.0.1:8004/api/v1/documents/<ID>/resources/brex_rules
+
+# PMC generee depuis la DMRL
+curl -o pmc.xml http://127.0.0.1:8004/api/v1/documents/<ID>/pmc
 ```
 
-Tests : `cd backend && pytest` (20 tests, fixtures PDF/DOCX/BREX synthétiques).
+Tests : `cd backend && pytest` (fixtures PDF/DOCX/BREX/DMRL/CIR synthétiques,
+jamais de donnée utilisateur réelle).
 
 ## Écarts au standard
 
 - **Nouvelles dépendances** vs `_template` : `PyMuPDF` (extraction PDF),
-  `python-docx` (Word), `lxml` (sérialisation + validation XSD). Justifiées par
-  le métier. Aucun SDK propriétaire, ni LangChain (règles 1 & 2 respectées).
+  `python-docx` (Word), `lxml` (sérialisation + validation XSD), `openpyxl`
+  (lecture des DMRL Excel). Justifiées par le métier. Aucun SDK propriétaire,
+  ni LangChain (règles 1 & 2 respectées).
 - **Squelette != Data Module valide.** La sortie est un squelette structurel
   best-effort. **DMC, SNS, applicabilité, sécurité et ICN ne sont PAS
   récupérables d'un PDF** et sont laissés en placeholders `<!-- TODO -->`. Une

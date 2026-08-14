@@ -1,0 +1,147 @@
+"""Tests DMRL : chargement, bornes de DM, PMC, decoupage IR.
+
+Fixtures 100 % synthetiques (regle CLAUDE.md : jamais de donnee utilisateur).
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+from lxml import etree
+
+from app.core import splitter
+from app.core.dmrl import DmrlEntry, find_dm_boundaries, generate_pmc, load_dmrl
+from app.core.errors import AppError
+from app.core.ir import IRNode
+from app.core.pmc import parse_dmc
+
+_ROWS = [
+    {"Arbo": "1", "DMC": "DMC-BRAKE-A-00-00-00-00A-040A-D", "Titre": "Description generale",
+     "Type": "Descriptif"},
+    {"Arbo": "1.1", "DMC": "DMC-BRAKE-A-00-00-00-00A-520A-D", "Titre": "Depose du frein",
+     "Type": "Procedure"},
+    {"Arbo": "2", "DMC": "DMC-BRAKE-A-00-00-00-00A-941A-D", "Titre": "Catalogue de pieces",
+     "Type": ""},
+]
+
+
+@pytest.fixture
+def dmrl_json(tmp_path):
+    path = tmp_path / "DMRL.json"
+    path.write_text(json.dumps(_ROWS), encoding="utf-8")
+    return path
+
+
+def test_load_dmrl_json_maps_columns(dmrl_json):
+    entries = load_dmrl(dmrl_json)
+    assert [e.title for e in entries] == ["Description generale", "Depose du frein",
+                                          "Catalogue de pieces"]
+    assert entries[0].dm_type == "descriptive"
+    assert entries[1].dm_type == "procedural"
+    # Type absent -> deduit de l'info code du DMC (941 = IPD).
+    assert entries[2].dm_type == "ipd"
+    assert entries[1].arbo == "1.1"
+
+
+def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
+    path = tmp_path / "dmrl.csv"
+    path.write_text(
+        "Arbo;Code DM;Titre;Nature\n1;DMC-X-A-00-00-00-00A-040A-D;Présentation;Descriptif\n",
+        encoding="utf-8",
+    )
+    entries = load_dmrl(path)
+    assert entries[0].title == "Présentation"
+    assert entries[0].dm_type == "descriptive"
+
+
+def test_load_dmrl_rejects_unknown_format(tmp_path):
+    path = tmp_path / "dmrl.txt"
+    path.write_text("x", encoding="utf-8")
+    with pytest.raises(AppError):
+        load_dmrl(path)
+
+
+def test_load_dmrl_rejects_empty(tmp_path):
+    path = tmp_path / "dmrl.json"
+    path.write_text("[]", encoding="utf-8")
+    with pytest.raises(AppError):
+        load_dmrl(path)
+
+
+def test_find_dm_boundaries_contiguous_and_missing(dmrl_json):
+    entries = load_dmrl(dmrl_json)
+    text = (
+        "Manuel de maintenance\n"
+        "Description generale\n"
+        "Le frein est compose de deux etriers.\n"
+        "Depose du frein\n"
+        "Deposer les vis puis retirer l'etrier.\n"
+    )
+    bounds = find_dm_boundaries(text, entries)
+    matched = [b for b in bounds if b["matched"]]
+    assert [b["title"] for b in matched] == ["Description generale", "Depose du frein"]
+    # Les bornes s'enchainent sans trou et couvrent la fin du document.
+    assert matched[0]["end"] == matched[1]["start"]
+    assert matched[1]["end"] == len(text)
+    assert text[matched[0]["start"]:matched[0]["end"]].startswith("Description generale")
+    # L'entree non trouvee reste presente (jamais supprimee en silence).
+    missing = [b for b in bounds if not b["matched"]]
+    assert [b["title"] for b in missing] == ["Catalogue de pieces"]
+
+
+def test_find_dm_boundaries_ignores_accents_and_case(tmp_path):
+    entries = [DmrlEntry(title="Depose du frein")]
+    bounds = find_dm_boundaries("blabla\nDÉPOSE DU FREIN\ncontenu", entries)
+    assert bounds[0]["matched"] is True
+
+
+def test_parse_dmc_components():
+    parsed = parse_dmc("DMC-BRAKE-A-00-00-00-00A-040A-D")
+    assert parsed is not None
+    assert parsed["modelIdentCode"] == "BRAKE"
+    assert parsed["infoCode"] == "040"
+    assert parsed["itemLocationCode"] == "D"
+    assert parse_dmc("pas-un-dmc") is None
+
+
+def test_generate_pmc_hierarchy(dmrl_json):
+    xml = generate_pmc(load_dmrl(dmrl_json), pm_title="Frein")
+    root = etree.fromstring(xml.encode("utf-8"))
+    top = root.findall("./content/pmEntry")
+    assert len(top) == 2                                   # Arbo "1" et "2"
+    assert top[0].findtext("pmEntryTitle") == "Description generale"
+    nested = top[0].findall("./pmEntry")                   # Arbo "1.1" imbrique
+    assert len(nested) == 1
+    assert nested[0].findtext("pmEntryTitle") == "Depose du frein"
+    assert root.find(".//dmCode").get("modelIdentCode") == "BRAKE"
+    assert root.findtext("./identAndStatusSection/pmAddress/pmTitle") == "Frein"
+
+
+def _ir_with_sections() -> IRNode:
+    def sec(title: str, body: str) -> IRNode:
+        return IRNode(id=title, kind="section", level=1, text=title, children=[
+            IRNode(id=f"{title}-p", kind="paragraph", text=body),
+        ])
+
+    return IRNode(id="root", kind="section", level=0, children=[
+        sec("Description generale", "Le frein comporte deux etriers."),
+        sec("Depose du frein", "Deposer les vis."),
+    ])
+
+
+def test_split_by_dmrl_uses_dmrl_titles():
+    entries = [DmrlEntry(title="Depose du frein"), DmrlEntry(title="Description generale")]
+    units = splitter.split_by_dmrl(_ir_with_sections(), entries)
+    titles = [u.title for u in units]
+    assert set(titles) == {"Description generale", "Depose du frein"}
+    contents = {u.title: splitter.ir_to_text(u.root) for u in units}
+    assert "Le frein comporte deux etriers." in contents["Description generale"]
+    assert "Deposer les vis." in contents["Depose du frein"]
+
+
+def test_split_by_dmrl_keeps_missing_entry_as_empty_dm():
+    entries = [DmrlEntry(title="Description generale"), DmrlEntry(title="Chapitre absent")]
+    units = splitter.split_by_dmrl(_ir_with_sections(), entries)
+    assert [u.title for u in units][-1] == "Chapitre absent"
+    assert units[-1].root.children == []

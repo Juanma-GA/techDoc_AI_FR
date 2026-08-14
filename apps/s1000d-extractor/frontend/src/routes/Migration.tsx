@@ -6,9 +6,11 @@ import { PageFlag, RefFlag, TableFlag, ZoneFlag } from "../components/zoneFlags"
 import {
   brexApi,
   documentsApi,
+  resourcesApi,
   startWizardStream,
   wizardApi,
   type ContextHint,
+  type ResourceKind,
   type S1000dIssue,
   type TreeNode,
   type WizardState,
@@ -23,12 +25,15 @@ const START_LABELS: Record<string, string> = {
   done: "Prêt.",
 };
 
-const STEP_ORDER: [WizardState["step"], string][] = [
-  ["split", "1. Découpage"],
-  ["type", "2. Types"],
-  ["structure", "3. Structure"],
-  ["generate", "4. Génération"],
-];
+const STEP_LABELS: Record<WizardState["step"], string> = {
+  dmrl: "DMRL",
+  split: "Découpage",
+  type: "Types",
+  structure: "Structure",
+  generate: "Génération",
+};
+
+const DEFAULT_STEPS: WizardState["step"][] = ["split", "type", "structure", "generate"];
 
 function DmTypeBadge({ type }: { type: string }) {
   return <span className={`badge ${type === "procedural" ? "warn" : "ok"}`}>{type}</span>;
@@ -107,6 +112,8 @@ export function Migration() {
   const [hint, setHint] = useState<ContextHint>("mixed");
   const [brexId, setBrexId] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Ressources client optionnelles, attachees au document avant le decoupage.
+  const [resourceFiles, setResourceFiles] = useState<Partial<Record<ResourceKind, File>>>({});
 
   // Assistant.
   const [docId, setDocId] = useState<string | null>(null);
@@ -118,6 +125,7 @@ export function Migration() {
   // Éditions locales de l'étape courante (réinitialisées à chaque nouvel état).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [titleEdits, setTitleEdits] = useState<Record<string, string>>({});
+  const [dmrlEdits, setDmrlEdits] = useState<Record<number, string>>({});
   const [typeEdits, setTypeEdits] = useState<Record<string, string>>({});
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [splitLevel, setSplitLevel] = useState("section");
@@ -127,6 +135,7 @@ export function Migration() {
   useEffect(() => {
     setSelected(new Set());
     setTitleEdits({});
+    setDmrlEdits({});
     setTypeEdits({});
     setOverrides({});
     setSplitMsg(null);
@@ -148,6 +157,10 @@ export function Migration() {
     try {
       const doc = await documentsApi.upload(file, issue, hint, brexId || undefined);
       setDocId(doc.id);
+      // La DMRL doit etre attachee AVANT le demarrage : elle pilote le decoupage.
+      for (const [kind, resource] of Object.entries(resourceFiles)) {
+        if (resource) await resourcesApi.upload(doc.id, kind as ResourceKind, resource);
+      }
       setStarting({ pct: 5, label: "Démarrage…" });
       await startWizardStream(doc.id, (ev, data) => {
         if (ev === "progress") {
@@ -230,6 +243,12 @@ export function Migration() {
     void wizAction("advance", { overrides: ov });
   };
 
+  const validateTypes = () => {
+    const types: Record<string, string> = {};
+    for (const d of wiz?.dms ?? []) types[d.dm_id] = typeEdits[d.dm_id] ?? d.dm_type;
+    void wizAction("advance", { types });
+  };
+
   const imagesQuery = useQuery({
     queryKey: ["s1000d-images", docId],
     queryFn: () => wizardApi.images(docId as string),
@@ -287,6 +306,39 @@ export function Migration() {
                   </option>
                 ))}
               </select>
+            </label>
+          </div>
+          <div className="row">
+            <label className="grow">
+              <div className="label">DMRL (xlsx / csv / json) — pilote le découpage + la PMC</div>
+              <input
+                className="input"
+                type="file"
+                accept=".xlsx,.xlsm,.csv,.json"
+                onChange={(e) =>
+                  setResourceFiles((p) => ({ ...p, dmrl: e.target.files?.[0] }))
+                }
+              />
+            </label>
+            <label className="grow">
+              <div className="label">CIR (xml) — contenus partagés</div>
+              <input
+                className="input"
+                type="file"
+                accept=".xml"
+                onChange={(e) => setResourceFiles((p) => ({ ...p, cir: e.target.files?.[0] }))}
+              />
+            </label>
+            <label className="grow">
+              <div className="label">Règles client (json)</div>
+              <input
+                className="input"
+                type="file"
+                accept=".json"
+                onChange={(e) =>
+                  setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }))
+                }
+              />
             </label>
           </div>
           <div className="row">
@@ -359,20 +411,139 @@ export function Migration() {
           <>
             <div className="card">
               <div className="row">
-                {STEP_ORDER.map(([s, l], i) => (
+                {(wiz.steps ?? DEFAULT_STEPS).map((s, i) => (
                   <span key={s} style={{ display: "inline-flex", alignItems: "center" }}>
                     {i > 0 ? <span className="label">&nbsp;→&nbsp;</span> : null}
-                    <span className={`badge ${s === wiz.step ? "ok" : ""}`}>{l}</span>
+                    <span className={`badge ${s === wiz.step ? "ok" : ""}`}>
+                      {i + 1}. {STEP_LABELS[s]}
+                    </span>
                   </span>
                 ))}
               </div>
             </div>
+
+            {wiz.step === "dmrl" ? (
+              <div className="card">
+                <h2 className="card-title">
+                  Étape 1 — Valider la DMRL ({wiz.dmrl?.length ?? 0} Data Modules)
+                </h2>
+                <p className="label">
+                  Vérifie les DM attendus avant le découpage. « Localisé » = le titre a
+                  été retrouvé dans le document ; sinon le DM sera créé vide.{" "}
+                  {(wiz.dmrl ?? []).filter((r) => !r.matched).length} non localisé(s).
+                </p>
+                <div className="row" style={{ marginBottom: 10 }}>
+                  <a
+                    className="btn secondary small"
+                    href={docId ? resourcesApi.pmcUrl(docId) : "#"}
+                  >
+                    Télécharger la PMC
+                  </a>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    style={{ marginLeft: "auto" }}
+                    disabled={busy}
+                    onClick={() => void wizAction("advance", {})}
+                  >
+                    Valider la DMRL →
+                  </button>
+                </div>
+                <div>
+                  {(wiz.dmrl ?? []).map((row) => (
+                    <div
+                      key={row.index}
+                      className="row"
+                      style={{ borderBottom: "1px solid var(--border)", padding: "6px 0" }}
+                    >
+                      <span className="badge info">{row.arbo || "—"}</span>
+                      <input
+                        className="input grow"
+                        value={dmrlEdits[row.index] ?? row.title}
+                        onChange={(e) =>
+                          setDmrlEdits((p) => ({ ...p, [row.index]: e.target.value }))
+                        }
+                      />
+                      <select
+                        value={row.dm_type || "descriptive"}
+                        onChange={(e) =>
+                          void wizAction("update", {
+                            op: "set_type",
+                            index: row.index,
+                            dm_type: e.target.value,
+                          })
+                        }
+                      >
+                        {["descriptive", "procedural", "ipd"].map((tp) => (
+                          <option key={tp} value={tp}>
+                            {tp}
+                          </option>
+                        ))}
+                      </select>
+                      <span className={`badge ${row.matched ? "ok" : "warn"}`}>
+                        {row.matched ? `localisé p.${row.page ?? "?"}` : "non localisé"}
+                      </span>
+                      <span className="label" title={row.dmc}>
+                        {row.dmc || "—"}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        disabled={busy}
+                        onClick={() =>
+                          void wizAction("update", {
+                            op: "rename",
+                            index: row.index,
+                            title: dmrlEdits[row.index] ?? row.title,
+                          })
+                        }
+                      >
+                        Renommer
+                      </button>
+                      <button
+                        type="button"
+                        className="btn danger small"
+                        disabled={busy}
+                        onClick={() =>
+                          void wizAction("update", { op: "exclude", index: row.index })
+                        }
+                      >
+                        Exclure
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="row" style={{ marginTop: 12 }}>
+                  <a
+                    className="btn secondary small"
+                    href={docId ? resourcesApi.pmcUrl(docId) : "#"}
+                  >
+                    Télécharger la PMC
+                  </a>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    style={{ marginLeft: "auto" }}
+                    disabled={busy}
+                    onClick={() => void wizAction("advance", {})}
+                  >
+                    Valider la DMRL →
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             {wiz.step === "split" ? (
               <div className="card">
                 <h2 className="card-title">
                   Étape 1 — Découpage en Data Modules ({wiz.dms.length})
                 </h2>
+                {wiz.resources?.dmrl_count ? (
+                  <p className="label">
+                    <span className="badge ok">DMRL</span> Découpage piloté par la DMRL
+                    ({wiz.resources.dmrl_count} DM attendus) : le niveau de titre est ignoré.
+                  </p>
+                ) : null}
                 <div className="row" style={{ marginBottom: 10 }}>
                   <label>
                     <div className="label">Niveau de découpage</div>
@@ -520,6 +691,25 @@ export function Migration() {
             {wiz.step === "type" ? (
               <div className="card">
                 <h2 className="card-title">Étape 2 — Type de chaque Data Module</h2>
+                <div className="row" style={{ marginBottom: 10 }}>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void wizAction("back")}
+                  >
+                    ← Retour
+                  </button>
+                  <button
+                    type="button"
+                    className="btn primary"
+                    style={{ marginLeft: "auto" }}
+                    disabled={busy}
+                    onClick={validateTypes}
+                  >
+                    Valider les types →
+                  </button>
+                </div>
                 <p className="label">
                   Corrige le type proposé (descriptive / procedural / ipd).
                 </p>
@@ -559,11 +749,7 @@ export function Migration() {
                     type="button"
                     className="btn primary"
                     disabled={busy}
-                    onClick={() => {
-                      const types: Record<string, string> = {};
-                      for (const d of wiz.dms) types[d.dm_id] = typeEdits[d.dm_id] ?? d.dm_type;
-                      void wizAction("advance", { types });
-                    }}
+                    onClick={validateTypes}
                   >
                     Valider les types →
                   </button>
@@ -644,6 +830,13 @@ export function Migration() {
                 <h2 className="card-title">
                   Étape 4 — Data Modules générés ({wiz.dms.length})
                 </h2>
+                {wiz.resources?.dmrl_count && docId ? (
+                  <div className="row" style={{ marginBottom: 10 }}>
+                    <a className="btn secondary small" href={resourcesApi.pmcUrl(docId)}>
+                      Télécharger la PMC
+                    </a>
+                  </div>
+                ) : null}
                 <div>
                   {wiz.dms.map((d) => (
                     <div
@@ -656,6 +849,16 @@ export function Migration() {
                         <span className={`badge ${d.violation_count ? "warn" : "ok"}`}>
                           {d.violation_count} viol.
                         </span>
+                        {d.missing_fields?.length ? (
+                          <span className="badge warn">
+                            {d.missing_fields.length} rubrique(s) template vide(s)
+                          </span>
+                        ) : null}
+                        {d.cir_unresolved?.length ? (
+                          <span className="badge warn">
+                            {d.cir_unresolved.length} réf. CIR non résolue(s)
+                          </span>
+                        ) : null}
                       </span>
                       <a
                         className="btn secondary small"

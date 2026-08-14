@@ -109,7 +109,7 @@ export type DocumentOut = {
 
 // ----- Wizard ---------------------------------------------------------------
 
-export type WizardStep = "split" | "type" | "structure" | "generate";
+export type WizardStep = "dmrl" | "split" | "type" | "structure" | "generate";
 
 export type PreviewSnippet = {
   text: string;
@@ -128,13 +128,35 @@ export type WizardDm = {
   tree: TreeNode;
   violation_count: number;
   preview?: DmPreview;
+  missing_fields?: string[];
+  cir_unresolved?: string[];
+};
+
+export type WizardResources = {
+  dmrl_count: number;
+  has_cir: boolean;
+  has_brex_rules: boolean;
+};
+
+export type DmrlRow = {
+  index: number;
+  arbo: string;
+  dmc: string;
+  title: string;
+  dm_type: string;
+  matched: boolean;
+  page: number | null;
+  matched_text: string;
 };
 
 export type WizardState = {
   step: WizardStep;
   split_level: string;
+  steps?: WizardStep[];
   dms: WizardDm[];
   can_undo?: boolean;
+  resources?: WizardResources;
+  dmrl?: DmrlRow[];
 };
 
 export type Override = { dm_id: string; node_id: string; element: string };
@@ -163,6 +185,27 @@ export const documentsApi = {
     }
     return (await res.json()) as DocumentOut;
   },
+};
+
+export type ResourceKind = "dmrl" | "cir" | "brex_rules";
+export type ResourceUploadDto = { kind: ResourceKind; count: number };
+
+// Ressources client optionnelles : DMRL (decoupage + PMC), CIR, regles BREX JSON.
+export const resourcesApi = {
+  upload: async (docId: string, kind: ResourceKind, file: File): Promise<ResourceUploadDto> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${API_BASE}/documents/${docId}/resources/${kind}`, {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      const e = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(e?.message || res.statusText);
+    }
+    return (await res.json()) as ResourceUploadDto;
+  },
+  pmcUrl: (docId: string) => `${API_BASE}/documents/${docId}/pmc`,
 };
 
 export const wizardApi = {
