@@ -17,5 +17,122 @@
     "off": "OFF",
     "untested": "À TESTER",
     "noKey": "NO KEY"
+  },
+  "dmType": {
+    "descriptive": "Descriptif",
+    "procedural": "Procédure",
+    "ipd": "Catalogue de pièces"
+  },
+  "docStatus": {
+    "uploaded": "Chargé",
+    "wizard": "En configuration",
+    "extracted": "Extrait",
+    "extract_failed": "Échec d'extraction"
+  },
+  "common": {
+    "back": "← Retour",
+    "none": "—"
+  },
+  "migration": {
+    "title": "Migration",
+    "subtitle": "Assistant guidé legacy → S1000D.",
+    "upload": {
+      "title": "Charger un document",
+      "file": "Document PDF ou Word",
+      "issue": "Version S1000D",
+      "issueValue": "Issue {{issue}}",
+      "hint": "Nature dominante (hint)",
+      "hintMixed": "Mixte",
+      "brex": "BREX projet",
+      "brexNone": "(aucun BREX)",
+      "dmrl": "DMRL (xlsx / csv / json) — pilote le découpage + la PMC",
+      "cir": "CIR (xml) — contenus partagés",
+      "rules": "Règles client (json)",
+      "start": "Démarrer l'assistant",
+      "noFile": "Choisis un fichier PDF ou Word."
+    },
+    "docs": {
+      "title": "Documents",
+      "empty": "Aucun document. Charge un PDF/Word ci-dessus.",
+      "open": "Ouvrir l'assistant"
+    },
+    "start": {
+      "title": "Démarrage de l'assistant",
+      "starting": "Démarrage…",
+      "failed": "Échec du démarrage.",
+      "parse": "Lecture du document…",
+      "ocr": "PDF scanné : OCR en cours (IA)…",
+      "infer": "Analyse de la structure…",
+      "split": "Découpage en Data Modules…",
+      "classify": "Typage des modules (IA)…",
+      "done": "Prêt.",
+      "fallback": "Traitement…"
+    },
+    "resource": {
+      "notApplied": "Ressource attachée mais NON APPLIQUÉE — {{detail}}"
+    },
+    "step": {
+      "dmrl": "DMRL",
+      "split": "Découpage",
+      "type": "Types",
+      "structure": "Structure",
+      "generate": "Génération"
+    },
+    "dm": {
+      "orphan": "Contenu hors DMRL (à rattacher)"
+    },
+    "match": {
+      "notFound": "non localisé",
+      "exact": "localisé p.{{page}}",
+      "prefix": "à vérifier p.{{page}} (préfixe)",
+      "contains": "à vérifier p.{{page}} (approchant)"
+    },
+    "dmrl": {
+      "title": "Valider la DMRL ({{count}} Data Modules)",
+      "help": "Vérifie les DM attendus avant le découpage. « Localisé » = titre retrouvé à l'identique ; « à vérifier » = correspondance approchante, le DM peut être ancré au mauvais endroit ; « non localisé » = le DM sera créé vide.",
+      "counts": "{{missing}} non localisé(s), {{uncertain}} à vérifier.",
+      "pmc": "Télécharger la PMC",
+      "validate": "Valider la DMRL →",
+      "rename": "Renommer",
+      "exclude": "Exclure"
+    },
+    "split": {
+      "title": "Découpage en Data Modules ({{count}})",
+      "dmrlDriven": "Découpage piloté par la DMRL ({{count}} DM attendus) : le niveau de titre est ignoré.",
+      "level": "Niveau de découpage",
+      "levelChapter": "Chapitre",
+      "levelSection": "Section",
+      "levelSubsection": "Sous-section",
+      "reanalyze": "Ré-analyser",
+      "merge": "Fusionner la sélection",
+      "needTwo": "Coche au moins 2 DMs.",
+      "hideZones": "Masquer entêtes/pieds",
+      "undo": "Annuler",
+      "validate": "Valider le découpage →",
+      "help": "Coche plusieurs DMs puis « Fusionner » ; édite un titre puis « Renommer » ; « Scinder » redécoupe ; « Exclure » retire le bruit.",
+      "rename": "Renommer",
+      "split": "Scinder",
+      "exclude": "Exclure"
+    },
+    "type": {
+      "title": "Type de chaque Data Module",
+      "help": "Corrige le type proposé (descriptif / procédure / catalogue de pièces).",
+      "validate": "Valider les types →"
+    },
+    "structure": {
+      "validate": "Valider la structure →",
+      "level": "niv. {{level}}"
+    },
+    "generate": {
+      "title": "Data Modules générés ({{count}})",
+      "pmc": "Télécharger la PMC",
+      "violations": "{{count}} viol.",
+      "missingFields": "{{count}} rubrique(s) template vide(s)",
+      "cirUnresolved": "{{count}} réf. CIR non résolue(s)",
+      "xml": "XML",
+      "images": "Illustrations extraites ({{count}})",
+      "imageAlt": "Illustration extraite {{index}}",
+      "zip": "Télécharger tout (ZIP)"
+    }
   }
 }

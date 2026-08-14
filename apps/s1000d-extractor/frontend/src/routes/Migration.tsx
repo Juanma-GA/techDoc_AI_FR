@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { DmPreview } from "../components/DmPreview";
 import { PageFlag, RefFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
@@ -10,33 +11,40 @@ import {
   startWizardStream,
   wizardApi,
   type ContextHint,
+  type DmrlRow,
   type ResourceKind,
   type S1000dIssue,
   type TreeNode,
   type WizardState,
 } from "../lib/api";
 
-const START_LABELS: Record<string, string> = {
-  parse: "Lecture du document…",
-  ocr: "PDF scanné : OCR en cours (IA)…",
-  infer: "Analyse de la structure…",
-  split: "Découpage en Data Modules…",
-  classify: "Typage des modules (IA)…",
-  done: "Prêt.",
-};
-
-const STEP_LABELS: Record<WizardState["step"], string> = {
-  dmrl: "DMRL",
-  split: "Découpage",
-  type: "Types",
-  structure: "Structure",
-  generate: "Génération",
-};
-
+const DM_TYPES = ["descriptive", "procedural", "ipd"] as const;
 const DEFAULT_STEPS: WizardState["step"][] = ["split", "type", "structure", "generate"];
 
+// Les enums du backend ne sont jamais rendus tels quels (HR21) : ils passent par
+// une cle i18n.
 function DmTypeBadge({ type }: { type: string }) {
-  return <span className={`badge ${type === "procedural" ? "warn" : "ok"}`}>{type}</span>;
+  const { t } = useTranslation();
+  return (
+    <span className={`badge ${type === "procedural" ? "warn" : "ok"}`}>
+      {t(`dmType.${type}`, { defaultValue: type })}
+    </span>
+  );
+}
+
+// Un appariement `contains` peut ancrer un DM au mauvais endroit : il ne doit
+// jamais s'afficher comme une certitude.
+function MatchBadge({ row }: { row: DmrlRow }) {
+  const { t } = useTranslation();
+  if (!row.matched) return <span className="badge warn">{t("migration.match.notFound")}</span>;
+  const page = row.page ?? "?";
+  if (row.match_rank === "exact")
+    return <span className="badge ok">{t("migration.match.exact", { page })}</span>;
+  return (
+    <span className="badge warn" title={row.matched_text}>
+      {t(`migration.match.${row.match_rank || "contains"}`, { page })}
+    </span>
+  );
 }
 
 // Arbre récursif de la structure (étape 3) + boutons de surcharge (override).
@@ -51,24 +59,30 @@ function WizNode({
   onOverride: (dmId: string, nodeId: string, element: string) => void;
   overrides: Record<string, string>;
 }) {
+  const { t } = useTranslation();
   const el = node.candidates?.[0]?.element ?? node.kind;
   const low = node.confidence != null && node.confidence < 0.6 ? " low" : "";
   const ctx = node.context && node.context !== "unknown" ? node.context : null;
-  const txt = node.text ? node.text.slice(0, 70) : null;
   const alts = (node.candidates ?? []).slice(1);
   return (
     <li>
       <div className={`tnode${low}`}>
         <span className="el">{el}</span>
-        {ctx ? <span className="ctx">{ctx}</span> : null}
+        {ctx ? <span className="ctx">{t(`dmType.${ctx}`, { defaultValue: ctx })}</span> : null}
         {node.kind === "section" && node.level != null ? (
-          <span className="badge info">niv. {node.level}</span>
+          <span className="badge info">{t("migration.structure.level", { level: node.level })}</span>
         ) : null}
         <PageFlag page={node.page} />
         <ZoneFlag zone={node.zone} />
         <TableFlag kind={node.kind} />
         <RefFlag refs={node.refs} />
-        {txt ? <span className="txt"> {txt}</span> : null}
+        {/* Texte complet : la coupe visuelle est faite en CSS, la donnee reste intacte. */}
+        {node.text ? (
+          <span className="txt tnode-text" title={node.text}>
+            {" "}
+            {node.text}
+          </span>
+        ) : null}
         {alts.map((c) => {
           const key = `${dmId}|${node.id}`;
           const chosen = overrides[key] === c.element;
@@ -102,6 +116,7 @@ function WizNode({
 }
 
 export function Migration() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const brexQuery = useQuery({ queryKey: ["brex"], queryFn: brexApi.list });
   const docsQuery = useQuery({ queryKey: ["s1000d-docs"], queryFn: documentsApi.list });
@@ -146,9 +161,24 @@ export function Migration() {
 
   const refreshDocs = () => void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
 
+  const stepLabel = (step: unknown) =>
+    t(`migration.start.${String(step)}`, { defaultValue: t("migration.start.fallback") });
+
+  const onStreamEvent = (ev: string, data: Record<string, unknown>) => {
+    if (ev === "progress") {
+      setStarting({ pct: (data.pct as number) || 0, label: stepLabel(data.step) });
+    } else if (ev === "done") {
+      setStarting(null);
+      setWiz(data as unknown as WizardState);
+    } else if (ev === "error") {
+      setStarting(null);
+      setWizError((data.message as string) || t("migration.start.failed"));
+    }
+  };
+
   const doStart = async () => {
     if (!file) {
-      setLoadError("Choisis un fichier PDF ou Word.");
+      setLoadError(t("migration.upload.noFile"));
       return;
     }
     setLoadError(null);
@@ -161,21 +191,8 @@ export function Migration() {
       for (const [kind, resource] of Object.entries(resourceFiles)) {
         if (resource) await resourcesApi.upload(doc.id, kind as ResourceKind, resource);
       }
-      setStarting({ pct: 5, label: "Démarrage…" });
-      await startWizardStream(doc.id, (ev, data) => {
-        if (ev === "progress") {
-          setStarting({
-            pct: (data.pct as number) || 0,
-            label: START_LABELS[data.step as string] ?? "Traitement…",
-          });
-        } else if (ev === "done") {
-          setStarting(null);
-          setWiz(data as unknown as WizardState);
-        } else if (ev === "error") {
-          setStarting(null);
-          setWizError((data.message as string) || "Échec du démarrage.");
-        }
-      });
+      setStarting({ pct: 5, label: t("migration.start.starting") });
+      await startWizardStream(doc.id, onStreamEvent);
       refreshDocs();
     } catch (e) {
       setStarting(null);
@@ -192,22 +209,9 @@ export function Migration() {
       setWiz(st);
     } catch {
       // Pas encore démarré : lance le stream de démarrage.
-      setStarting({ pct: 5, label: "Démarrage…" });
+      setStarting({ pct: 5, label: t("migration.start.starting") });
       try {
-        await startWizardStream(id, (ev, data) => {
-          if (ev === "progress")
-            setStarting({
-              pct: (data.pct as number) || 0,
-              label: START_LABELS[data.step as string] ?? "Traitement…",
-            });
-          else if (ev === "done") {
-            setStarting(null);
-            setWiz(data as unknown as WizardState);
-          } else if (ev === "error") {
-            setStarting(null);
-            setWizError((data.message as string) || "Échec du démarrage.");
-          }
-        });
+        await startWizardStream(id, onStreamEvent);
       } catch (e) {
         setStarting(null);
         setWizError(e instanceof Error ? e.message : String(e));
@@ -262,16 +266,16 @@ export function Migration() {
   return (
     <>
       <div className="page-header">
-        <h1>Migration</h1>
-        <p>Assistant guidé legacy → S1000D.</p>
+        <h1>{t("migration.title")}</h1>
+        <p>{t("migration.subtitle")}</p>
       </div>
 
       <div className="card">
-        <h2 className="card-title">Charger un document</h2>
+        <h2 className="card-title">{t("migration.upload.title")}</h2>
         <div className="form">
           <div className="row">
             <label className="grow">
-              <div className="label">Document PDF ou Word</div>
+              <div className="label">{t("migration.upload.file")}</div>
               <input
                 className="input"
                 type="file"
@@ -282,24 +286,24 @@ export function Migration() {
           </div>
           <div className="row">
             <label className="grow">
-              <div className="label">Version S1000D</div>
+              <div className="label">{t("migration.upload.issue")}</div>
               <select value={issue} onChange={(e) => setIssue(e.target.value as S1000dIssue)}>
-                <option value="5.0">Issue 5.0</option>
-                <option value="4.2">Issue 4.2</option>
+                <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
+                <option value="4.2">{t("migration.upload.issueValue", { issue: "4.2" })}</option>
               </select>
             </label>
             <label className="grow">
-              <div className="label">Nature dominante (hint)</div>
+              <div className="label">{t("migration.upload.hint")}</div>
               <select value={hint} onChange={(e) => setHint(e.target.value as ContextHint)}>
-                <option value="mixed">Mixte</option>
-                <option value="descriptive">Descriptif</option>
-                <option value="procedural">Procédure</option>
+                <option value="mixed">{t("migration.upload.hintMixed")}</option>
+                <option value="descriptive">{t("dmType.descriptive")}</option>
+                <option value="procedural">{t("dmType.procedural")}</option>
               </select>
             </label>
             <label className="grow">
-              <div className="label">BREX projet</div>
+              <div className="label">{t("migration.upload.brex")}</div>
               <select value={brexId} onChange={(e) => setBrexId(e.target.value)}>
-                <option value="">(aucun BREX)</option>
+                <option value="">{t("migration.upload.brexNone")}</option>
                 {brex.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name} [{b.s1000d_issue}]
@@ -310,7 +314,7 @@ export function Migration() {
           </div>
           <div className="row">
             <label className="grow">
-              <div className="label">DMRL (xlsx / csv / json) — pilote le découpage + la PMC</div>
+              <div className="label">{t("migration.upload.dmrl")}</div>
               <input
                 className="input"
                 type="file"
@@ -321,7 +325,7 @@ export function Migration() {
               />
             </label>
             <label className="grow">
-              <div className="label">CIR (xml) — contenus partagés</div>
+              <div className="label">{t("migration.upload.cir")}</div>
               <input
                 className="input"
                 type="file"
@@ -330,7 +334,7 @@ export function Migration() {
               />
             </label>
             <label className="grow">
-              <div className="label">Règles client (json)</div>
+              <div className="label">{t("migration.upload.rules")}</div>
               <input
                 className="input"
                 type="file"
@@ -348,7 +352,7 @@ export function Migration() {
               disabled={busy || starting !== null}
               onClick={() => void doStart()}
             >
-              Démarrer l'assistant
+              {t("migration.upload.start")}
             </button>
             {loadError ? <span className="error grow">{loadError}</span> : null}
           </div>
@@ -356,9 +360,9 @@ export function Migration() {
       </div>
 
       <div className="card">
-        <h2 className="card-title">Documents</h2>
+        <h2 className="card-title">{t("migration.docs.title")}</h2>
         {docs.length === 0 ? (
-          <div className="empty-state">Aucun document. Charge un PDF/Word ci-dessus.</div>
+          <div className="empty-state">{t("migration.docs.empty")}</div>
         ) : (
           docs.map((d) => (
             <div
@@ -374,7 +378,7 @@ export function Migration() {
                 <div>
                   {d.filename}{" "}
                   <span className={`badge ${d.status === "extracted" ? "ok" : "warn"}`}>
-                    {d.status}
+                    {t(`docStatus.${d.status}`, { defaultValue: d.status })}
                   </span>
                 </div>
                 <div className="label">{d.source_format.toUpperCase()}</div>
@@ -384,7 +388,7 @@ export function Migration() {
                 className="btn secondary small"
                 onClick={() => void openWizard(d.id)}
               >
-                Ouvrir l'assistant
+                {t("migration.docs.open")}
               </button>
             </div>
           ))
@@ -395,7 +399,7 @@ export function Migration() {
       <div ref={wizRef}>
         {starting ? (
           <div className="card">
-            <h2 className="card-title">Démarrage de l'assistant</h2>
+            <h2 className="card-title">{t("migration.start.title")}</h2>
             <div className="label" style={{ marginBottom: 6 }}>
               {starting.label}
             </div>
@@ -407,6 +411,16 @@ export function Migration() {
 
         {wizError ? <div className="card"><div className="error">{wizError}</div></div> : null}
 
+        {wiz?.resources?.errors?.length ? (
+          <div className="card">
+            {wiz.resources.errors.map((e) => (
+              <div key={e} className="error">
+                {t("migration.resource.notApplied", { detail: e })}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
         {wiz ? (
           <>
             <div className="card">
@@ -415,7 +429,7 @@ export function Migration() {
                   <span key={s} style={{ display: "inline-flex", alignItems: "center" }}>
                     {i > 0 ? <span className="label">&nbsp;→&nbsp;</span> : null}
                     <span className={`badge ${s === wiz.step ? "ok" : ""}`}>
-                      {i + 1}. {STEP_LABELS[s]}
+                      {i + 1}. {t(`migration.step.${s}`)}
                     </span>
                   </span>
                 ))}
@@ -425,19 +439,23 @@ export function Migration() {
             {wiz.step === "dmrl" ? (
               <div className="card">
                 <h2 className="card-title">
-                  Étape 1 — Valider la DMRL ({wiz.dmrl?.length ?? 0} Data Modules)
+                  {t("migration.dmrl.title", { count: wiz.dmrl?.length ?? 0 })}
                 </h2>
                 <p className="label">
-                  Vérifie les DM attendus avant le découpage. « Localisé » = le titre a
-                  été retrouvé dans le document ; sinon le DM sera créé vide.{" "}
-                  {(wiz.dmrl ?? []).filter((r) => !r.matched).length} non localisé(s).
+                  {t("migration.dmrl.help")}{" "}
+                  {t("migration.dmrl.counts", {
+                    missing: (wiz.dmrl ?? []).filter((r) => !r.matched).length,
+                    uncertain: (wiz.dmrl ?? []).filter(
+                      (r) => r.matched && r.match_rank !== "exact",
+                    ).length,
+                  })}
                 </p>
                 <div className="row" style={{ marginBottom: 10 }}>
                   <a
                     className="btn secondary small"
                     href={docId ? resourcesApi.pmcUrl(docId) : "#"}
                   >
-                    Télécharger la PMC
+                    {t("migration.dmrl.pmc")}
                   </a>
                   <button
                     type="button"
@@ -446,7 +464,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={() => void wizAction("advance", {})}
                   >
-                    Valider la DMRL →
+                    {t("migration.dmrl.validate")}
                   </button>
                 </div>
                 <div>
@@ -456,7 +474,7 @@ export function Migration() {
                       className="row"
                       style={{ borderBottom: "1px solid var(--border)", padding: "6px 0" }}
                     >
-                      <span className="badge info">{row.arbo || "—"}</span>
+                      <span className="badge info">{row.arbo || t("common.none")}</span>
                       <input
                         className="input grow"
                         value={dmrlEdits[row.index] ?? row.title}
@@ -474,17 +492,15 @@ export function Migration() {
                           })
                         }
                       >
-                        {["descriptive", "procedural", "ipd"].map((tp) => (
+                        {DM_TYPES.map((tp) => (
                           <option key={tp} value={tp}>
-                            {tp}
+                            {t(`dmType.${tp}`)}
                           </option>
                         ))}
                       </select>
-                      <span className={`badge ${row.matched ? "ok" : "warn"}`}>
-                        {row.matched ? `localisé p.${row.page ?? "?"}` : "non localisé"}
-                      </span>
+                      <MatchBadge row={row} />
                       <span className="label" title={row.dmc}>
-                        {row.dmc || "—"}
+                        {row.dmc || t("common.none")}
                       </span>
                       <button
                         type="button"
@@ -498,7 +514,7 @@ export function Migration() {
                           })
                         }
                       >
-                        Renommer
+                        {t("migration.dmrl.rename")}
                       </button>
                       <button
                         type="button"
@@ -508,7 +524,7 @@ export function Migration() {
                           void wizAction("update", { op: "exclude", index: row.index })
                         }
                       >
-                        Exclure
+                        {t("migration.dmrl.exclude")}
                       </button>
                     </div>
                   ))}
@@ -518,7 +534,7 @@ export function Migration() {
                     className="btn secondary small"
                     href={docId ? resourcesApi.pmcUrl(docId) : "#"}
                   >
-                    Télécharger la PMC
+                    {t("migration.dmrl.pmc")}
                   </a>
                   <button
                     type="button"
@@ -527,7 +543,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={() => void wizAction("advance", {})}
                   >
-                    Valider la DMRL →
+                    {t("migration.dmrl.validate")}
                   </button>
                 </div>
               </div>
@@ -536,24 +552,24 @@ export function Migration() {
             {wiz.step === "split" ? (
               <div className="card">
                 <h2 className="card-title">
-                  Étape 1 — Découpage en Data Modules ({wiz.dms.length})
+                  {t("migration.split.title", { count: wiz.dms.length })}
                 </h2>
                 {wiz.resources?.dmrl_count ? (
                   <p className="label">
-                    <span className="badge ok">DMRL</span> Découpage piloté par la DMRL
-                    ({wiz.resources.dmrl_count} DM attendus) : le niveau de titre est ignoré.
+                    <span className="badge ok">{t("migration.step.dmrl")}</span>{" "}
+                    {t("migration.split.dmrlDriven", { count: wiz.resources.dmrl_count })}
                   </p>
                 ) : null}
                 <div className="row" style={{ marginBottom: 10 }}>
                   <label>
-                    <div className="label">Niveau de découpage</div>
+                    <div className="label">{t("migration.split.level")}</div>
                     <select
                       value={splitLevel}
                       onChange={(e) => setSplitLevel(e.target.value)}
                     >
-                      <option value="chapter">Chapitre</option>
-                      <option value="section">Section</option>
-                      <option value="subsection">Sous-section</option>
+                      <option value="chapter">{t("migration.split.levelChapter")}</option>
+                      <option value="section">{t("migration.split.levelSection")}</option>
+                      <option value="subsection">{t("migration.split.levelSubsection")}</option>
                     </select>
                   </label>
                   <button
@@ -562,7 +578,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={() => void wizAction("update", { split_level: splitLevel })}
                   >
-                    Ré-analyser
+                    {t("migration.split.reanalyze")}
                   </button>
                   <button
                     type="button"
@@ -571,13 +587,13 @@ export function Migration() {
                     onClick={() => {
                       const ids = [...selected];
                       if (ids.length < 2) {
-                        setSplitMsg("Coche au moins 2 DMs.");
+                        setSplitMsg(t("migration.split.needTwo"));
                         return;
                       }
                       void wizAction("update", { op: "merge", ids });
                     }}
                   >
-                    Fusionner la sélection
+                    {t("migration.split.merge")}
                   </button>
                   <button
                     type="button"
@@ -587,7 +603,7 @@ export function Migration() {
                       void wizAction("update", { op: "hide_zones", zones: ["header", "footer"] })
                     }
                   >
-                    Masquer entêtes/pieds
+                    {t("migration.split.hideZones")}
                   </button>
                   <button
                     type="button"
@@ -595,7 +611,7 @@ export function Migration() {
                     disabled={busy || !wiz.can_undo}
                     onClick={() => void wizAction("update", { op: "undo" })}
                   >
-                    Annuler
+                    {t("migration.split.undo")}
                   </button>
                   {splitMsg ? <span className="error grow">{splitMsg}</span> : null}
                   <button
@@ -605,13 +621,10 @@ export function Migration() {
                     disabled={busy}
                     onClick={validateSplit}
                   >
-                    Valider le découpage →
+                    {t("migration.split.validate")}
                   </button>
                 </div>
-                <p className="label">
-                  Coche plusieurs DMs puis « Fusionner » ; édite un titre puis
-                  « Renommer » ; « Scinder » redécoupe ; « Exclure » retire le bruit.
-                </p>
+                <p className="label">{t("migration.split.help")}</p>
                 <div>
                   {wiz.dms.map((d) => (
                     <div
@@ -633,7 +646,7 @@ export function Migration() {
                       />
                       <input
                         className="input grow"
-                        value={titleEdits[d.dm_id] ?? d.title}
+                        value={titleEdits[d.dm_id] ?? (d.is_orphan ? t("migration.dm.orphan") : d.title)}
                         onChange={(e) =>
                           setTitleEdits((p) => ({ ...p, [d.dm_id]: e.target.value }))
                         }
@@ -652,7 +665,7 @@ export function Migration() {
                           })
                         }
                       >
-                        Renommer
+                        {t("migration.split.rename")}
                       </button>
                       <button
                         type="button"
@@ -660,7 +673,7 @@ export function Migration() {
                         disabled={busy}
                         onClick={() => void wizAction("update", { op: "split", id: d.dm_id })}
                       >
-                        Scinder
+                        {t("migration.split.split")}
                       </button>
                       <button
                         type="button"
@@ -668,7 +681,7 @@ export function Migration() {
                         disabled={busy}
                         onClick={() => void wizAction("update", { op: "exclude", id: d.dm_id })}
                       >
-                        Exclure
+                        {t("migration.split.exclude")}
                       </button>
                     </div>
                     <DmPreview preview={d.preview} />
@@ -682,7 +695,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={validateSplit}
                   >
-                    Valider le découpage →
+                    {t("migration.split.validate")}
                   </button>
                 </div>
               </div>
@@ -690,7 +703,7 @@ export function Migration() {
 
             {wiz.step === "type" ? (
               <div className="card">
-                <h2 className="card-title">Étape 2 — Type de chaque Data Module</h2>
+                <h2 className="card-title">{t("migration.type.title")}</h2>
                 <div className="row" style={{ marginBottom: 10 }}>
                   <button
                     type="button"
@@ -698,7 +711,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={() => void wizAction("back")}
                   >
-                    ← Retour
+                    {t("common.back")}
                   </button>
                   <button
                     type="button"
@@ -707,12 +720,10 @@ export function Migration() {
                     disabled={busy}
                     onClick={validateTypes}
                   >
-                    Valider les types →
+                    {t("migration.type.validate")}
                   </button>
                 </div>
-                <p className="label">
-                  Corrige le type proposé (descriptive / procedural / ipd).
-                </p>
+                <p className="label">{t("migration.type.help")}</p>
                 <div>
                   {wiz.dms.map((d) => (
                     <div
@@ -720,16 +731,18 @@ export function Migration() {
                       className="row"
                       style={{ borderBottom: "1px solid var(--border)", padding: "6px 0" }}
                     >
-                      <span className="grow">{d.title}</span>
+                      <span className="grow">
+                        {d.is_orphan ? t("migration.dm.orphan") : d.title}
+                      </span>
                       <select
                         value={typeEdits[d.dm_id] ?? d.dm_type}
                         onChange={(e) =>
                           setTypeEdits((p) => ({ ...p, [d.dm_id]: e.target.value }))
                         }
                       >
-                        {["descriptive", "procedural", "ipd"].map((tp) => (
+                        {DM_TYPES.map((tp) => (
                           <option key={tp} value={tp}>
-                            {tp}
+                            {t(`dmType.${tp}`)}
                           </option>
                         ))}
                       </select>
@@ -743,7 +756,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={() => void wizAction("back")}
                   >
-                    ← Retour
+                    {t("common.back")}
                   </button>
                   <button
                     type="button"
@@ -751,7 +764,7 @@ export function Migration() {
                     disabled={busy}
                     onClick={validateTypes}
                   >
-                    Valider les types →
+                    {t("migration.type.validate")}
                   </button>
                 </div>
               </div>
@@ -767,7 +780,7 @@ export function Migration() {
                       disabled={busy}
                       onClick={() => void wizAction("back")}
                     >
-                      ← Retour
+                      {t("common.back")}
                     </button>
                     <button
                       type="button"
@@ -776,14 +789,15 @@ export function Migration() {
                       disabled={busy}
                       onClick={validateStructure}
                     >
-                      Valider la structure →
+                      {t("migration.structure.validate")}
                     </button>
                   </div>
                 </div>
                 {wiz.dms.map((d) => (
                   <div className="card" key={d.dm_id}>
                     <h2 className="card-title">
-                      {d.title} <DmTypeBadge type={d.dm_type} />
+                      {d.is_orphan ? t("migration.dm.orphan") : d.title}{" "}
+                      <DmTypeBadge type={d.dm_type} />
                     </h2>
                     <div className="tree">
                       <ul>
@@ -810,7 +824,7 @@ export function Migration() {
                       disabled={busy}
                       onClick={() => void wizAction("back")}
                     >
-                      ← Retour
+                      {t("common.back")}
                     </button>
                     <button
                       type="button"
@@ -818,7 +832,7 @@ export function Migration() {
                       disabled={busy}
                       onClick={validateStructure}
                     >
-                      Valider la structure →
+                      {t("migration.structure.validate")}
                     </button>
                   </div>
                 </div>
@@ -828,12 +842,12 @@ export function Migration() {
             {wiz.step === "generate" ? (
               <div className="card">
                 <h2 className="card-title">
-                  Étape 4 — Data Modules générés ({wiz.dms.length})
+                  {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>
                 {wiz.resources?.dmrl_count && docId ? (
                   <div className="row" style={{ marginBottom: 10 }}>
                     <a className="btn secondary small" href={resourcesApi.pmcUrl(docId)}>
-                      Télécharger la PMC
+                      {t("migration.generate.pmc")}
                     </a>
                   </div>
                 ) : null}
@@ -845,18 +859,23 @@ export function Migration() {
                       style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}
                     >
                       <span className="grow">
-                        {d.title} <DmTypeBadge type={d.dm_type} />{" "}
+                        {d.is_orphan ? t("migration.dm.orphan") : d.title}{" "}
+                        <DmTypeBadge type={d.dm_type} />{" "}
                         <span className={`badge ${d.violation_count ? "warn" : "ok"}`}>
-                          {d.violation_count} viol.
+                          {t("migration.generate.violations", { count: d.violation_count })}
                         </span>
                         {d.missing_fields?.length ? (
                           <span className="badge warn">
-                            {d.missing_fields.length} rubrique(s) template vide(s)
+                            {t("migration.generate.missingFields", {
+                              count: d.missing_fields.length,
+                            })}
                           </span>
                         ) : null}
                         {d.cir_unresolved?.length ? (
                           <span className="badge warn">
-                            {d.cir_unresolved.length} réf. CIR non résolue(s)
+                            {t("migration.generate.cirUnresolved", {
+                              count: d.cir_unresolved.length,
+                            })}
                           </span>
                         ) : null}
                       </span>
@@ -864,16 +883,18 @@ export function Migration() {
                         className="btn secondary small"
                         href={docId ? wizardApi.dmXmlUrl(docId, d.dm_id) : "#"}
                       >
-                        XML
+                        {t("migration.generate.xml")}
                       </a>
                     </div>
                   ))}
                 </div>
                 {images.length ? (
                   <div style={{ marginTop: 16 }}>
-                    <h3 className="label">Illustrations extraites ({images.length})</h3>
+                    <h3 className="label">
+                      {t("migration.generate.images", { count: images.length })}
+                    </h3>
                     <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
-                      {images.map((name) => (
+                      {images.map((name, i) => (
                         <a
                           key={name}
                           href={docId ? wizardApi.imageUrl(docId, name) : "#"}
@@ -884,7 +905,7 @@ export function Migration() {
                         >
                           <img
                             src={docId ? wizardApi.imageUrl(docId, name) : undefined}
-                            alt={name}
+                            alt={t("migration.generate.imageAlt", { index: i + 1 })}
                             style={{
                               width: 96,
                               height: 72,
@@ -893,7 +914,10 @@ export function Migration() {
                               borderRadius: 4,
                             }}
                           />
-                          <span style={{ maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <span
+                            title={name}
+                            style={{ maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis" }}
+                          >
                             {name}
                           </span>
                         </a>
@@ -908,13 +932,13 @@ export function Migration() {
                     disabled={busy}
                     onClick={() => void wizAction("back")}
                   >
-                    ← Retour
+                    {t("common.back")}
                   </button>
                   <a
                     className="btn primary"
                     href={docId ? wizardApi.zipUrl(docId) : "#"}
                   >
-                    Télécharger tout (ZIP)
+                    {t("migration.generate.zip")}
                   </a>
                 </div>
               </div>

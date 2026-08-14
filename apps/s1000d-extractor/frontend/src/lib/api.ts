@@ -130,13 +130,17 @@ export type WizardDm = {
   preview?: DmPreview;
   missing_fields?: string[];
   cir_unresolved?: string[];
+  is_orphan?: boolean;
 };
 
 export type WizardResources = {
   dmrl_count: number;
   has_cir: boolean;
   has_brex_rules: boolean;
+  errors?: string[];
 };
+
+export type DmrlMatchRank = "exact" | "prefix" | "contains" | "";
 
 export type DmrlRow = {
   index: number;
@@ -145,6 +149,7 @@ export type DmrlRow = {
   title: string;
   dm_type: string;
   matched: boolean;
+  match_rank: DmrlMatchRank;
   page: number | null;
   matched_text: string;
 };

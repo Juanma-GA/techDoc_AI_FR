@@ -138,6 +138,13 @@ jamais de donnée utilisateur réelle).
   `python-docx` (Word), `lxml` (sérialisation + validation XSD), `openpyxl`
   (lecture des DMRL Excel). Justifiées par le métier. Aucun SDK propriétaire,
   ni LangChain (règles 1 & 2 respectées).
+- **`localStorage` pour le thème et la langue** (`ThemeToggleButton.tsx`,
+  `i18n.ts`). Écart littéral à `rules/javascript.mdc` de l'AACF (« *No
+  localStorage/sessionStorage* »), mais **HR1 est respecté** : HR1 vise l'état
+  *authoritative ou persistant* (auth, données), pas une préférence
+  d'affichage. Ce pattern est par ailleurs **imposé** par le standard interne
+  ([`CLAUDE.md`](../../CLAUDE.md) règle #13). Aucun état métier ni jeton n'est
+  stocké côté navigateur.
 - **Squelette != Data Module valide.** La sortie est un squelette structurel
   best-effort. **DMC, SNS, applicabilité, sécurité et ICN ne sont PAS
   récupérables d'un PDF** et sont laissés en placeholders `<!-- TODO -->`. Une

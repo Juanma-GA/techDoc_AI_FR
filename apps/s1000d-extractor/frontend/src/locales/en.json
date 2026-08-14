@@ -17,5 +17,122 @@
     "off": "OFF",
     "untested": "UNTESTED",
     "noKey": "NO KEY"
+  },
+  "dmType": {
+    "descriptive": "Descriptive",
+    "procedural": "Procedural",
+    "ipd": "Illustrated parts data"
+  },
+  "docStatus": {
+    "uploaded": "Uploaded",
+    "wizard": "Configuring",
+    "extracted": "Extracted",
+    "extract_failed": "Extraction failed"
+  },
+  "common": {
+    "back": "← Back",
+    "none": "—"
+  },
+  "migration": {
+    "title": "Migration",
+    "subtitle": "Guided legacy → S1000D assistant.",
+    "upload": {
+      "title": "Upload a document",
+      "file": "PDF or Word document",
+      "issue": "S1000D version",
+      "issueValue": "Issue {{issue}}",
+      "hint": "Dominant nature (hint)",
+      "hintMixed": "Mixed",
+      "brex": "Project BREX",
+      "brexNone": "(no BREX)",
+      "dmrl": "DMRL (xlsx / csv / json) — drives the split + the PMC",
+      "cir": "CIR (xml) — shared content",
+      "rules": "Client rules (json)",
+      "start": "Start the assistant",
+      "noFile": "Pick a PDF or Word file."
+    },
+    "docs": {
+      "title": "Documents",
+      "empty": "No document yet. Upload a PDF/Word file above.",
+      "open": "Open the assistant"
+    },
+    "start": {
+      "title": "Starting the assistant",
+      "starting": "Starting…",
+      "failed": "Startup failed.",
+      "parse": "Reading the document…",
+      "ocr": "Scanned PDF: running OCR (AI)…",
+      "infer": "Analysing the structure…",
+      "split": "Splitting into Data Modules…",
+      "classify": "Typing the modules (AI)…",
+      "done": "Ready.",
+      "fallback": "Processing…"
+    },
+    "resource": {
+      "notApplied": "Resource attached but NOT APPLIED — {{detail}}"
+    },
+    "step": {
+      "dmrl": "DMRL",
+      "split": "Split",
+      "type": "Types",
+      "structure": "Structure",
+      "generate": "Generation"
+    },
+    "dm": {
+      "orphan": "Content outside the DMRL (to be assigned)"
+    },
+    "match": {
+      "notFound": "not found",
+      "exact": "found p.{{page}}",
+      "prefix": "check p.{{page}} (prefix)",
+      "contains": "check p.{{page}} (approximate)"
+    },
+    "dmrl": {
+      "title": "Validate the DMRL ({{count}} Data Modules)",
+      "help": "Review the expected DMs before splitting. \"Found\" = title matched exactly; \"check\" = approximate match, the DM may be anchored in the wrong place; \"not found\" = the DM will be created empty.",
+      "counts": "{{missing}} not found, {{uncertain}} to check.",
+      "pmc": "Download the PMC",
+      "validate": "Validate the DMRL →",
+      "rename": "Rename",
+      "exclude": "Exclude"
+    },
+    "split": {
+      "title": "Split into Data Modules ({{count}})",
+      "dmrlDriven": "Split driven by the DMRL ({{count}} expected DMs): the heading level is ignored.",
+      "level": "Split level",
+      "levelChapter": "Chapter",
+      "levelSection": "Section",
+      "levelSubsection": "Subsection",
+      "reanalyze": "Re-analyse",
+      "merge": "Merge selection",
+      "needTwo": "Select at least 2 DMs.",
+      "hideZones": "Hide headers/footers",
+      "undo": "Undo",
+      "validate": "Validate the split →",
+      "help": "Tick several DMs then \"Merge\"; edit a title then \"Rename\"; \"Split\" re-splits; \"Exclude\" removes noise.",
+      "rename": "Rename",
+      "split": "Split",
+      "exclude": "Exclude"
+    },
+    "type": {
+      "title": "Type of each Data Module",
+      "help": "Correct the proposed type (descriptive / procedural / illustrated parts data).",
+      "validate": "Validate the types →"
+    },
+    "structure": {
+      "validate": "Validate the structure →",
+      "level": "lvl. {{level}}"
+    },
+    "generate": {
+      "title": "Generated Data Modules ({{count}})",
+      "pmc": "Download the PMC",
+      "violations": "{{count}} viol.",
+      "missingFields": "{{count}} empty template section(s)",
+      "cirUnresolved": "{{count}} unresolved CIR ref(s)",
+      "xml": "XML",
+      "images": "Extracted illustrations ({{count}})",
+      "imageAlt": "Extracted illustration {{index}}",
+      "zip": "Download all (ZIP)"
+    }
   }
 }

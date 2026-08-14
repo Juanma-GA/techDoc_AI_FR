@@ -253,4 +253,6 @@ table.data-table tr:hover td { background: var(--bg-2); }
 .tnode .el { font-family: "JetBrains Mono", monospace; color: var(--brand-light); }
 .tnode .ctx { font-family: "JetBrains Mono", monospace; font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1px; color: var(--fg-dim); margin-left: 6px; }
 .tnode .txt { color: var(--fg-dim); }
+/* Coupe VISUELLE seulement : la donnee reste complete (survol = texte entier). */
+.tnode .tnode-text { display: inline-block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .tnode.low > .el { color: var(--warning); }
