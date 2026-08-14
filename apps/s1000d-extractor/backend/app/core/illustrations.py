@@ -60,9 +60,12 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
 
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
+    # `seen` est GLOBAL au document : une meme image (xref) reutilisee sur
+    # plusieurs pages (logo, bandeau, figure repetee) ne doit etre extraite
+    # qu'UNE fois, sinon le dossier se remplit de doublons.
+    seen: set[int] = set()
     try:
         for pidx, page in enumerate(doc, start=1):
-            seen: set[int] = set()
             figs = list(figs_by_page.get(pidx, []))
             for img in page.get_images(full=True):
                 xref = int(img[0])
@@ -71,7 +74,7 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
                 seen.add(xref)
                 fig = figs.pop(0) if figs else None
                 base = slugify(fig.text) if fig and fig.text else f"illustration-{doc_id[:8]}-p{pidx}-{xref}"
-                name = f"{base}.jpg"
+                name = _unique_name(out_dir, base)
                 if _save_pixmap(doc, xref, out_dir / name):
                     saved += 1
                     if fig is not None:
@@ -79,3 +82,13 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
         return saved
     finally:
         doc.close()
+
+
+def _unique_name(out_dir: Path, base: str) -> str:
+    """Nom de fichier libre : deux legendes identiques ne doivent pas s'ecraser."""
+    name = f"{base}.jpg"
+    n = 2
+    while (out_dir / name).exists():
+        name = f"{base}-{n}.jpg"
+        n += 1
+    return name

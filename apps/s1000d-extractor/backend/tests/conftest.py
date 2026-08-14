@@ -156,6 +156,35 @@ def pdf_bytes_image() -> bytes:
 
 
 @pytest.fixture
+def pdf_bytes_repeated_image() -> bytes:
+    """PDF 3 pages qui reutilisent LA MEME image (cas du logo / bandeau).
+
+    Sert de garde-fou anti-duplication : une image reutilisee ne doit produire
+    qu'un seul fichier extrait.
+    """
+    import fitz
+
+    doc = fitz.open()
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+    pix.set_rect(pix.irect, (0, 0, 255))
+    for i in range(1, 4):
+        page = doc.new_page()
+        page.insert_text((72, 60), f"{i} Section {i}", fontsize=18, fontname="hebo")
+        page.insert_image(fitz.Rect(72, 90, 168, 186), pixmap=pix)
+        y = 220
+        for j in range(6):
+            page.insert_text(
+                (72, y),
+                f"Le circuit hydraulique alimente les actionneurs, paragraphe {j} de la page {i}.",
+                fontsize=11,
+            )
+            y += 20
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+@pytest.fixture
 def docx_bytes() -> bytes:
     import io
 

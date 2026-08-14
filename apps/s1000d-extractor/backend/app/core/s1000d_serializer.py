@@ -17,6 +17,8 @@ Noms d'elements conformes Issue 4.2 / 5.0 (stables entre les deux) :
 
 from __future__ import annotations
 
+import re
+
 from lxml import etree
 
 from app.core.ir import IRNode
@@ -27,9 +29,26 @@ _BANNER = (
     "a completer manuellement (voir les commentaires TODO). "
 )
 
+# Caracteres de controle interdits en XML 1.0 (le texte d'un PDF en contient
+# souvent : form feed, NUL...). lxml leve une ValueError -> 500 cote API. On les
+# retire au seuil de la serialisation, une fois pour toutes.
+_INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]")
+# Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
+_NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
+
+
+def xml_text(value: str | None) -> str:
+    """Texte utilisable comme contenu XML (caracteres de controle retires)."""
+    return _INVALID_XML_CHARS.sub("", value or "")
+
+
+def _safe_element(name: str, fallback: str) -> str:
+    return name if _NCNAME.match(name or "") else fallback
+
 
 def _top_element(node: IRNode, fallback: str) -> str:
-    return node.candidates[0].element if node.candidates else fallback
+    element = node.candidates[0].element if node.candidates else fallback
+    return _safe_element(element, fallback)
 
 
 def _alt_comment(node: IRNode) -> str | None:
@@ -37,6 +56,11 @@ def _alt_comment(node: IRNode) -> str | None:
         alts = ", ".join(f"{c.element}({c.score:.2f})" for c in node.candidates[1:])
         return f" alt: {alts} "
     return None
+
+
+def _comment(text: str) -> etree._Comment:
+    """Commentaire XML sur : pas de `--` (interdit) ni de caractere de controle."""
+    return etree.Comment(xml_text(text).replace("--", "- -"))
 
 
 def _emit_refs(parent: etree._Element, node: IRNode) -> None:
@@ -47,21 +71,22 @@ def _emit_refs(parent: etree._Element, node: IRNode) -> None:
         kind = ref.get("kind")
         if kind == "internal":
             el = etree.SubElement(
-                parent, "internalRef", internalRefTargetType=ref.get("target_kind", "section")
+                parent, "internalRef",
+                internalRefTargetType=xml_text(ref.get("target_kind", "section")),
             )
-            el.set("internalRefId", f"TODO-{ref.get('target', '')}")
-            el.append(etree.Comment(f" renvoi detecte : {ref.get('text', '')} "))
+            el.set("internalRefId", f"TODO-{xml_text(ref.get('target', ''))}")
+            el.append(_comment(f" renvoi detecte : {ref.get('text', '')} "))
         elif kind == "uri":
-            parent.append(etree.Comment(f" lien externe (a mapper) : {ref.get('target', '')} "))
+            parent.append(_comment(f" lien externe (a mapper) : {ref.get('target', '')} "))
         else:
             etree.SubElement(parent, "externalPubRef").append(
-                etree.Comment(f" TODO: publication externe : {ref.get('text', '')} ")
+                _comment(f" TODO: publication externe : {ref.get('text', '')} ")
             )
 
 
 def _para(parent: etree._Element, text: str) -> None:
     el = etree.SubElement(parent, "para")
-    el.text = text or ""
+    el.text = xml_text(text)
 
 
 def _emit_row(parent: etree._Element, cells: list[str]) -> None:
@@ -85,7 +110,7 @@ def _emit_table(parent: etree._Element, node: IRNode) -> None:
     ncols = max([len(r) for r in rows] + ([len(header)] if header else []), default=1)
     table = etree.SubElement(parent, "table")
     if node.text:
-        etree.SubElement(table, "title").text = node.text
+        etree.SubElement(table, "title").text = xml_text(node.text)
     tgroup = etree.SubElement(table, "tgroup", cols=str(ncols))
     for c in range(1, ncols + 1):
         etree.SubElement(tgroup, "colspec", colname=f"c{c}")
@@ -100,20 +125,23 @@ def _emit_table(parent: etree._Element, node: IRNode) -> None:
 def _emit_figure(parent: etree._Element, node: IRNode) -> None:
     fig = etree.SubElement(parent, "figure")
     title = etree.SubElement(fig, "title")
-    title.text = node.text or "Figure"
+    title.text = xml_text(node.text) or "Figure"
     if node.icn:
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
-        etree.SubElement(fig, "graphic", infoEntityIdent=node.icn)
+        etree.SubElement(fig, "graphic", infoEntityIdent=xml_text(node.icn))
     else:
         fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
         etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")
 
 
 def _emit_admonition(parent: etree._Element, node: IRNode) -> None:
-    el = etree.SubElement(parent, node.candidates[0].element)
+    # Fallback si la resolution n'a pas tourne (candidats vides) : sans lui,
+    # l'acces `candidates[0]` levait une IndexError -> 500 "Unexpected server error".
+    element = _top_element(node, node.admonition or "note")
+    el = etree.SubElement(parent, element)
     child = "notePara" if node.admonition == "note" else "warningAndCautionPara"
     para = etree.SubElement(el, child)
-    para.text = node.text or ""
+    para.text = xml_text(node.text)
 
 
 def _emit_list(parent: etree._Element, node: IRNode) -> None:
@@ -160,7 +188,7 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
         sect = etree.SubElement(parent, top)
         if node.text:
             title = etree.SubElement(sect, "title")  # optionnel mais conventionnel
-            title.text = node.text
+            title.text = xml_text(node.text)
         for child in node.children:
             _emit_node(sect, child)
 
@@ -194,7 +222,7 @@ def serialize(root: IRNode, *, issue: str, dm_type: str, title: str = "") -> str
 
     ident = etree.SubElement(dmodule, "identAndStatusSection")
     if title:
-        ident.append(etree.Comment(f" dmTitle (detecte) : {title.replace('--', '- -')} "))
+        ident.append(etree.Comment(f" dmTitle (detecte) : {xml_text(title).replace('--', '- -')} "))
     ident.append(etree.Comment(" TODO: dmAddress (DMC, langue, issueInfo, dmTitle) a completer "))
     etree.SubElement(ident, "dmAddress")
     status = etree.SubElement(ident, "dmStatus")
