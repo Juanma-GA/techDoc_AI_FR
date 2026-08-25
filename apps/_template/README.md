@@ -26,7 +26,7 @@ Quand tu copies ce template, tu obtiens déjà :
 - **Backend FastAPI** prêt à l'emploi : `/api/v1/health`, `/api/v1/settings` (config Mistral runtime), `/api/v1/admin/stats` + `/api/v1/admin/reset/all`
 - **Client Mistral** générique (`core/mistral_client.py`) en httpx async + sync
 - **Modèle `AppConfig`** + migration Alembic initiale pour stocker la clé Mistral en SQLite
-- **Preview HTML autonome** (`backend/app/templates/preview.html`) servi à `/` quand `frontend/dist/` n'existe pas — UI vanilla JS avec onglets Home / Architecture / Données / Paramètres, theme toggle, design-tokens injectés
+- **UI React/Vite** (`frontend/dist/`) servie à `/` — React est le seul mode UI supporté ; Node/Vite est requis pour construire le bundle
 - **Wrapper `start.bat` + `_run.bat`** ASCII pur, fenêtre persistante (`cmd /k`), port vérifié avant bind
 - **Wrapper `package.bat` + `_package.bat`** qui appelle `scripts/package_TEMPLATE.py`
 

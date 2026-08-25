@@ -56,6 +56,40 @@
         "fr": "Migration de documentation legacy vers un squelette XML S1000D.",
         "en": "Legacy documentation migration into an S1000D XML skeleton."
       }
+    },
+    {
+      "slug": "brdp-manager",
+      "name": "BRDP Manager",
+      "desc": {
+        "fr": "Gestion des BRDP S1000D/DITA, génération BREX/Schematron, extraction IA.",
+        "en": "S1000D/DITA BRDP management, BREX/Schematron generation, AI extraction."
+      }
+    },
+    {
+      "slug": "xml-proofreader",
+      "name": "XML Proofreader",
+      "desc": {
+        "fr": "Annotation DITA/S1000D façon PDF, compatible Oxygen XML Author.",
+        "en": "PDF-like annotation of DITA/S1000D content, Oxygen XML Author compatible."
+      }
+    },
+    {
+      "slug": "imagebot-ai-processing-image",
+      "url": "http://itgfrapapp800.prod.altengroup.dir:2010/",
+      "name": "ImageBot- AI Processing Image",
+      "desc": {
+        "fr": "Traitement d'image assiste par IA.",
+        "en": "AI-assisted image processing."
+      }
+    },
+    {
+      "slug": "a3-linguo",
+      "url": "https://context-aware-translation.apps.alten.ai/home",
+      "name": "A³ Linguo",
+      "desc": {
+        "fr": "Traduction contextuelle assistee par IA.",
+        "en": "AI-assisted context-aware translation."
+      }
     }
   ]
 }

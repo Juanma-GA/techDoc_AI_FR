@@ -4,13 +4,14 @@ Prompt déclenché manuellement. Usage : « lis `PROMPT_AUDIT_STANDARD.md` et ap
 
 ## Mission
 
-Tu vas auditer l'app `apps/<poc>` indiquée par l'utilisateur contre les règles de [`STANDARD_POC.md`](./STANDARD_POC.md). Tu produis un rapport d'écarts au format imposé ci-dessous. Tu **proposes** les correctifs mais tu ne **les appliques pas** sans validation explicite de l'utilisateur.
+Tu vas auditer l'app `apps/<poc>` indiquée par l'utilisateur contre les règles de [`STANDARD_POC.md`](./STANDARD_POC.md), après vérification de la hiérarchie AACF. Tu produis un rapport d'écarts en lecture seule. Tu **proposes** les correctifs mais tu ne modifies aucun fichier pendant l'audit.
 
 ## Avant de commencer
 
-1. Vérifie que `STANDARD_POC.md` existe à la racine du repo. S'il est absent, arrête et demande où il se trouve.
-2. Lis intégralement `STANDARD_POC.md`. C'est la seule référence de vérité.
-3. Vérifie que l'app cible existe : `ls apps/<poc>/`. Si le chemin est ambigu, demande confirmation à l'utilisateur.
+1. Vérifie si l'AACF live est accessible et récupère sa version. Si elle est inaccessible, indique explicitement que le verdict AACF est non vérifiable.
+2. Vérifie que `STANDARD_POC.md` existe à la racine du repo. S'il est absent, arrête et demande où il se trouve.
+3. Lis intégralement `STANDARD_POC.md`, puis applique le profil déclaré par l'app. L'AACF reste prioritaire en cas de conflit.
+4. Vérifie que l'app cible existe : `ls apps/<poc>/`. Si le chemin est ambigu, demande confirmation à l'utilisateur.
 4. Explore systématiquement (sans rien inventer) :
    - `apps/<poc>/README.md` (niveau app — section Auth, section Écarts au standard)
    - `apps/<poc>/start.bat`, `apps/<poc>/start.sh`
@@ -20,7 +21,7 @@ Tu vas auditer l'app `apps/<poc>` indiquée par l'utilisateur contre les règles
    - `apps/<poc>/backend/alembic.ini` et `alembic/env.py`
    - `apps/<poc>/backend/.env.example`
    - `apps/<poc>/backend/README.md` (s'il existe)
-   - `apps/<poc>/backend/app/api/preview.py` et `apps/<poc>/backend/app/templates/preview.html` (s'ils existent — mode no-Node)
+   - les éventuels fichiers historiques `preview.py` / `preview.html` uniquement pour signaler un écart au mode React/Vite, jamais comme mode conforme
    - `apps/<poc>/frontend/src/main.tsx`, `App.tsx`, `i18n.ts`, `index.html`
    - `apps/<poc>/frontend/package.json`, `vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`
 
@@ -86,7 +87,7 @@ Une case par règle de `STANDARD_POC.md`. Pour chaque ligne, statut + fichier:li
 - [ ] Section `## Auth` présente dans `apps/<poc>/README.md` avec ligne `**Palier** : 1 — local seul, bind 127.0.0.1, pas d'authentification.`
 - [ ] Aucun `--host 0.0.0.0` dans `start.bat`, `start.sh`, ou les invocations uvicorn
 - [ ] CORS liste blanche explicite, pas `["*"]`
-- [ ] Clé API LLM côté serveur uniquement, jamais saisie dans l'UI
+- [ ] Profil `llm` : clé saisissable localement uniquement, non renvoyée au frontend, non journalisée et non committée
 - [ ] `.env` gitignoré, `.env.example` à jour avec valeurs factices
 
 ### Observabilité
@@ -135,11 +136,8 @@ Une case par règle de `STANDARD_POC.md`. Pour chaque ligne, statut + fichier:li
 - [ ] **Mode Vite** : `ThemeToggle` (depuis `@internal/ui`) présent dans `App.tsx` (topbar)
 - [ ] **Mode Vite** : snippet anti-flash dans `frontend/index.html` qui applique `.dark` sur `<html>` avant rendu React
 - [ ] **Mode Vite** : `meta color-scheme="dark light"` dans `frontend/index.html` (jamais `"dark"` seul)
-- [ ] **Mode preview HTML** (si `app/templates/preview.html` existe) : `_build_css_vars()` émet `:root` (light) + `.dark` (dark override), avec liste de tokens identique à celle des autres POCs (uniformité visuelle inter-apps)
-- [ ] **Mode preview HTML** : snippet anti-flash dans `<head>` de `preview.html` (avant `<link>`)
-- [ ] **Mode preview HTML** : `meta color-scheme="dark light"`, pas de `class="dark"` hardcodé sur `<html>`
-- [ ] **Mode preview HTML** : bouton SVG Sun/Moon + JS toggle inline présents (cherche `data-theme-toggle`)
-- [ ] Persistance `localStorage['theme']` câblée dans les deux modes
+- [ ] Aucun preview HTML présenté comme UI supportée ; si présent, il est signalé comme héritage à supprimer
+- [ ] Persistance navigateur limitée aux préférences non sensibles de thème/langue ; aucune auth, donnée métier ou session
 - [ ] Aucune trace de `alert()` ou `confirm()`
 - [ ] Aucune icône Unicode/emoji dans le JSX
 
@@ -173,7 +171,7 @@ Une case par règle de `STANDARD_POC.md`. Pour chaque ligne, statut + fichier:li
 
 ## Format de sortie attendu
 
-Produis un fichier `apps/<poc>/AUDIT_STANDARD.md` (à la racine de l'app auditée) avec **exactement** cette structure :
+Produis le rapport dans la réponse ou dans un fichier uniquement si l'utilisateur le demande explicitement. L'audit par défaut est read-only. Utilise la structure suivante :
 
 ```markdown
 # Audit standard — <nom du POC>

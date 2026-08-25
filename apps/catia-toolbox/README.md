@@ -132,7 +132,7 @@ Conforme a [`STANDARD_POC.md`](../../STANDARD_POC.md). Bootstrap depuis
 
 Double-clic sur `start.bat` (Windows) ou `bash start.sh` (Unix). Le backend
 ecoute sur http://127.0.0.1:8005/ (Swagger : `/api/v1/docs`). Sans
-`frontend/dist/`, le **preview HTML autonome** (sans Node) est servi a `/`.
+`frontend/dist/`, l'UI React buildée, est servie a `/`. Le preview HTML autonome historique n'est plus un mode supporte.
 
 Frontend React en mode dev (port 5173), depuis la racine du monorepo :
 

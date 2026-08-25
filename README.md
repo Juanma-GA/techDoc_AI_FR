@@ -26,19 +26,19 @@ Chaque app fournit un launcher Windows à sa racine :
 Double-clic sur :  apps\<poc>\start.bat
 ```
 
-**Seul Python 3.11+ est requis.** Au premier lancement, le script crée
-le venv, installe les deps Python et applique les migrations Alembic
-(1-3 min). Aux lancements suivants, ~5 secondes : le marker
-`.venv\.installed` saute l'install.
+**Python 3.11+ et Node 20 + pnpm sont requis pour construire l'UI React.**
+Le package partageable contient le bundle React validé ; l'utilisateur final
+n'a pas besoin de Node pour l'exécuter. Au premier lancement, le script crée
+le venv, installe les deps Python et applique les migrations Alembic.
 
-Le navigateur s'ouvre tout seul sur `http://127.0.0.1:<port>/` — il
-sert l'UI React si `frontend/dist/` a été buildé, sinon la **preview
-HTML autonome** (UI vanilla servie par FastAPI, sans Node). `Ctrl+C`
-dans la console pour arrêter.
+Le navigateur s'ouvre tout seul sur `http://127.0.0.1:<port>/` et sert
+l'UI React buildée depuis `frontend/dist/`. Si le bundle est absent, le
+lanceur signale l'erreur de build au lieu de servir une seconde UI.
+`Ctrl+C` dans la console pour arrêter.
 
-> Pour obtenir l'UI React complète, build le frontend Vite
-> (`pnpm install && pnpm build` dans `apps/<poc>/frontend/`, nécessite
-> Node 20). Le backend détecte automatiquement `frontend/dist/`.
+> En développement, build le frontend Vite avec `pnpm build` dans
+> `apps/<poc>/frontend/`. Le packaging doit inclure un `frontend/dist/`
+> valide avant distribution.
 
 ## Partage à un collègue
 
@@ -127,10 +127,10 @@ Avant chaque commit :
 bash scripts/check_standard.sh
 ```
 
-Vérifie 13 contraintes — 7 structurelles (préfixe `/api/v1/`, absence
-de `console.log` / `print()` / hex en dur / `alert` / `confirm` /
-`debug=True`, et variable `PORT` + bascule auto dans chaque `_run.bat`)
-+ 6 d'instanciation qui rattrapent les copier-coller incomplets depuis
+Vérifie 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de
+configuration LLM et 1 de robustesse du launcher. Il ne constitue pas une
+preuve de conformité AACF.
+Les contrôles rattrapent notamment les copier-coller incomplets depuis
 `apps/_template/` (nom `pyproject.toml`, README réécrit, DB renommée,
 section `## Auth`, scripts racine wirés, bind `127.0.0.1`). Voir
 [`STANDARD_POC.md`](STANDARD_POC.md#8-tests) pour le détail de chaque règle.

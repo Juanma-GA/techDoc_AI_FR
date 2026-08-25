@@ -2,7 +2,22 @@
 
 Référence technique des règles de développement. Lue par les humains et par Claude quand [`CLAUDE.md`](./CLAUDE.md) le pointe. Format : énoncé court, justification, exemple conforme, exemple non conforme.
 
+**Hiérarchie** : l'AACF live est normative. Ce document définit le profil local-first de ce monorepo ; [`CLAUDE.md`](./CLAUDE.md) en est le résumé opératoire. Une exception locale doit être documentée, bornée et ne peut pas affaiblir une règle AACF.
+
 **Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker, pas de CI, pas de déploiement dans le périmètre du standard. Si un POC sort de ce périmètre, il bascule vers un autre standard (hors scope ici).
+
+### Profils d'application
+
+Les règles communes s'appliquent à tous les POCs. Les capacités optionnelles sont déclarées dans le README de l'app :
+
+| Profil | Obligations supplémentaires |
+|---|---|
+| `local-first` | SQLite local, React/Vite buildé, bind `127.0.0.1` |
+| `llm` | Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
+| `files` | Validation MIME/taille, stockage sous `data/storage`, SHA-256 et versionnage |
+| `production` | Hors scope POC : PostgreSQL, authentification, déploiement et contrôles d'exploitation dédiés |
+
+Un POC peut combiner `local-first` avec `llm` et/ou `files`. Il ne doit pas implémenter les obligations d'un profil non déclaré.
 
 ## 1. Structure du monorepo
 
@@ -174,7 +189,7 @@ async def create_project(request: Request):
 
 **Autres règles de sécurité** :
 - CORS liste blanche explicite, pas `["*"]`.
-- Clé API LLM côté serveur uniquement, jamais saisie dans l'UI.
+- Clé API LLM saisissable dans l'UI uniquement pour le profil local-first ; elle est transmise au backend, jamais renvoyée au frontend, jamais journalisée et jamais committée. En production, utiliser un secret manager et une authentification adaptée.
 - Aucun secret committé. `.env` gitignoré, `.env.example` fournit la liste des variables avec valeurs factices.
 - Validation MIME et taille des uploads côté serveur (`max_upload_size_mb` dans `config.py`).
 
@@ -199,9 +214,9 @@ async def create_project(request: Request):
 
 **Bannis** : `print()` en code committé, `console.log` en code committé, `debug=True` en code committé.
 
-### 3.7 Endpoints standards + `AppConfig`
+### 3.7 Endpoints standards + `AppConfig` (profil `llm`)
 
-Au-delà de `/health`, tout POC expose :
+Au-delà de `/health`, tout POC déclarant le profil `llm` expose :
 
 | Endpoint | Description |
 |---|---|
@@ -213,7 +228,7 @@ Au-delà de `/health`, tout POC expose :
 | `POST /api/v1/settings/test` | Liste les modèles Mistral pour vérifier la connexion ; persiste le résultat (`set_llm_tested`) ; renvoie `{ok:false, error:"LLM desactive"}` si `llm_enabled=false`. |
 | `GET /api/v1/health` | `llm: "ok" | "untested" | "not_configured" | "disabled"` — `ok` = clé effective + test réussi + `llm_enabled` ; `untested` = clé sans test réussi ; `not_configured` = pas de clé effective ; `disabled` quand `llm_enabled=false`. **Détecter la clé via `get_effective_settings(db)`, pas `settings.llm_configured`** (ce dernier ne lit que le `.env`). |
 
-**Table `AppConfig`** (`app_config`) **obligatoire** dans tout POC :
+**Table `AppConfig`** (`app_config`) est obligatoire pour le profil `llm` :
 
 ```python
 class AppConfig(Base):
@@ -405,7 +420,7 @@ Toggle dark/light dans l'app React :
 - **Rendu** : `App.tsx` avec un bouton sun/moon dans le sidebar (cf. §10), ou `<ThemeToggle />` de `@internal/ui`.
 - **Mode initial** : si `localStorage['theme']` est défini → respect ; à défaut → dark (continuité POC).
 - **Application** : classe `.dark` sur `<html>`. Le preset Tailwind est en `darkMode: "class"`.
-- **Persistance** : `localStorage['theme']` = `"dark"` ou `"light"`.
+- **Persistance** : seules des préférences non sensibles (`theme` et éventuellement `language`) peuvent être conservées dans le navigateur. Jamais d'authentification, d'état métier ou de session dans `localStorage`/`sessionStorage`.
 
 **Snippet anti-flash** (dans `index.html`, en haut du `<head>` avant tout `<link>`) :
 
@@ -507,7 +522,7 @@ while (true) {
 | Parcours critiques | Playwright | 1 smoke test par parcours métier majeur |
 | Linter | ruff (Python) + ESLint (TS) | Bloquant à la sauvegarde |
 
-`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie 13 contraintes — 7 structurelles et 6 d'instanciation (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`) :
+`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM et 1 de robustesse du launcher (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
 1. Préfixe `/api/v1/` monté dans chaque `apps/*/backend/app/main.py`.
@@ -626,14 +641,13 @@ L'UI de chaque POC est l'**app React buildée** (`frontend/dist/`), servie par l
 | `frontend/dist/` | Bundle React buildé (`vite build`). C'est l'UI servie. |
 | `backend/app/main.py` | `_mount_frontend()` → `_mount_vite_dist()` : sert le dist, `/api/v1/*` enregistrées AVANT le catch-all SPA. `index.html` servi en **no-cache** (assets hashés `/assets/*` cacheables) → un rebuild prend effet sans Ctrl+F5. Si `frontend/dist/` est absent, `/` renvoie un message « frontend non buildé » (HTTP 503), jamais une UI de substitution. |
 
-> Historique : un « preview HTML autonome » (vanilla JS, sans Node) servait d'UI de repli quand le build React était indisponible. Il est **supprimé** du standard — Node/Vite est désormais requis. Si un POC réutilise le CSS sur-mesure de l'ancien preview comme skin React, c'est un **écart documenté** (cf. §12).
+> Historique : un « preview HTML autonome » (vanilla JS, sans Node) servait d’UI de repli. Il est **supprimé** du standard et ne doit plus être développé ni présenté comme mode supporté. Les références historiques sont conservées uniquement dans les ADRs marquées `Superseded`.
 
 ### Onglets standards (minimum)
 
 | Onglet | Contenu |
 |---|---|
 | **Home** | Page d'accueil sobre. Statut backend (`/health`) en badge. Pointe vers les fichiers à éditer pour personnaliser le POC. |
-| **Architecture** | Card 1 : 2 colonnes (`.grid-2`) Backend / Frontend décrivant la stack en 30 secondes. Card 2 : workflow utilisateur numéroté (6 étapes typiques). |
 | **Données** | KPI grid alimentée par `GET /api/v1/admin/stats` + bouton "Tout supprimer" avec pattern double-clic → `POST /api/v1/admin/reset/all`. |
 | **Paramètres** | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
 
@@ -657,8 +671,6 @@ Le POC ajoute ses onglets métier.
 | `.btn` | `.primary` `.secondary` `.ghost` `.danger` `.small` | Tous les boutons |
 | `.card` | + `.card-title` (Orbitron) | Container de section |
 | `.kpi-grid` | + `.kpi` + `.kpi-value` (`.info` `.ok` `.warn` `.err`) | Compteurs onglet Données |
-| `.arch-flow` | + `.arch-step` + `.step-n` (mono) | Workflow numéroté Architecture |
-| `.arch-split` | + `.label.brand-color` / `.label.accent-color` | 2-col Backend/Frontend |
 | `.banner` | + `.warn` | Bandeau d'info ou warning |
 | `.badge` | `.ok` `.warn` `.danger` `.info` | Pastilles d'état |
 | `.input` | (state via classe ajoutée) | Champs `<input>`, `<select>`, `<textarea>` |

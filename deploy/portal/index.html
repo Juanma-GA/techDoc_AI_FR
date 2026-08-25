@@ -49,8 +49,11 @@
         --bg-2: #131720;
         --card: #161c2b;
         --card-hover: #1d2540;
+        --card-external: #1d1f2f;
+        --card-external-hover: #252840;
         --brand: #2563eb;
         --brand-light: #3b82f6;
+        --external-accent: #f59e0b;
         --on-brand: #ffffff;
         --text: #e2e8f0;
         --dim: #94a3b8;
@@ -64,8 +67,11 @@
         --bg-2: #f8fafc;
         --card: #ffffff;
         --card-hover: #f1f5f9;
+        --card-external: #fff7ed;
+        --card-external-hover: #ffedd5;
         --brand: #2563eb;
         --brand-light: #3b82f6;
+        --external-accent: #b45309;
         --on-brand: #ffffff;
         --text: #0f172a;
         --dim: #64748b;
@@ -190,9 +196,20 @@
         background: var(--card-hover);
         border-color: var(--brand);
       }
+      .card.external {
+        background: var(--card-external);
+        border-color: color-mix(in srgb, var(--external-accent) 28%, var(--border));
+      }
+      .card.external:hover {
+        background: var(--card-external-hover);
+        border-color: var(--external-accent);
+      }
       .card:focus-visible {
         outline: 2px solid var(--brand-light);
         outline-offset: 2px;
+      }
+      .card.external:focus-visible {
+        outline-color: var(--external-accent);
       }
       .card-name {
         font-weight: 700;
@@ -316,7 +333,15 @@
         for (const poc of POCS) {
           const a = document.createElement("a");
           a.className = "card";
-          a.href = poc.slug + "/";
+          const isExternalUrl = typeof poc.url === "string" && /^https?:\/\//i.test(poc.url);
+          a.href = isExternalUrl ? poc.url : poc.slug + "/";
+          if (isExternalUrl) {
+            a.classList.add("external");
+          }
+          if (isExternalUrl) {
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+          }
           a.innerHTML = '<div class="card-name"></div><div class="card-desc"></div>';
           a.querySelector(".card-name").textContent = poc.name;
           a.querySelector(".card-desc").textContent = poc.desc[lang];
