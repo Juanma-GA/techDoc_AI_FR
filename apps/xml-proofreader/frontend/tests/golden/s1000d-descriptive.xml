@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_4-1/xml_schema_flat/descript.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmAddressItems>
+        <dmTitle><techName>Motor bogie</techName><infoName>Description</infoName></dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+  </identAndStatusSection>
+  <content>
+    <description>
+      <levelledPara>
+        <title>General</title>
+        <para>The bogie frame is a welded steel structure supporting the primary and secondary suspension.</para>
+        <warning><warningAndCautionPara>Observe the BREX rules for this issue before editing the data module.</warningAndCautionPara></warning>
+        <table>
+          <title>Principal data</title>
+          <tgroup cols="2">
+            <thead><row><entry>Parameter</entry><entry>Value</entry></row></thead>
+            <tbody>
+              <row><entry>Mass</entry><entry>5200 kg</entry></row>
+              <row><entry>Wheelbase</entry><entry>2500 mm</entry></row>
+            </tbody>
+          </tgroup>
+        </table>
+        <figure>
+          <title>Bogie frame overview</title>
+          <graphic infoEntityIdent="ICN-FLIRT-A-320000-001-01"/>
+        </figure>
+      </levelledPara>
+    </description>
+  </content>
+</dmodule>

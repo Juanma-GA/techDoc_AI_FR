@@ -1,0 +1,45 @@
+@import "./theme.css";
+@import "./shell.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* color-scheme tied to the .dark class (not the OS preference) so native
+   form controls (inputs, selects, scrollbars) follow OUR toggle, not the
+   system's — otherwise Chrome renders them dark-by-default whenever the OS
+   prefers dark, even while our own theme is light. */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+input,
+textarea,
+select {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+

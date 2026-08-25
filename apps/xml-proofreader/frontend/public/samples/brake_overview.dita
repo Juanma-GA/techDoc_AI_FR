@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE concept PUBLIC "-//OASIS//DTD DITA 1.3 Concept//EN" "concept.dtd">
+<concept id="brake-overview" xml:lang="en">
+  <title>Brake System Overview</title>
+  <shortdesc>How the blended braking system combines electrodynamic and friction braking.</shortdesc>
+  <conbody>
+    <section>
+      <title>Braking modes</title>
+      <p>The unit uses a blended braking system that prioritizes the electrodynamic brake and supplements it with the pneumatic friction brake when required.</p>
+      <ul>
+        <li>Electrodynamic brake — primary, energy-recuperating.</li>
+        <li>Pneumatic friction brake — supplementary and parking.</li>
+        <li>Magnetic track brake — emergency only.</li>
+      </ul>
+    </section>
+    <section>
+      <title>Mode selection</title>
+      <table frame="all">
+        <title>Brake modes and their use</title>
+        <tgroup cols="2">
+          <thead><row><entry>Mode</entry><entry>Use</entry></row></thead>
+          <tbody>
+            <row><entry>Service</entry><entry>Normal, comfort-optimized stops</entry></row>
+            <row><entry>Emergency</entry><entry>Maximum deceleration, all brakes engaged</entry></row>
+          </tbody>
+        </tgroup>
+      </table>
+      <note type="caution">Do not test the magnetic track brake on a populated platform track.</note>
+    </section>
+  </conbody>
+</concept>

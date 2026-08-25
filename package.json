@@ -13,6 +13,8 @@
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
     "check-standard": "bash scripts/check_standard.sh",
+    "dev:brdp-manager": "concurrently -n back,front -c blue,green \"cd apps/brdp-manager/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8006\" \"pnpm --filter @apps/brdp-manager-frontend dev\"",
+    "dev:xml-proofreader": "concurrently -n back,front -c blue,green \"cd apps/xml-proofreader/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8007\" \"pnpm --filter @apps/xml-proofreader-frontend dev\"",
     "dev:catia-toolbox": "concurrently -n back,front -c blue,green \"cd apps/catia-toolbox/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8005\" \"pnpm --filter @apps/catia-toolbox-frontend dev\"",
     "dev:corpus-agent": "concurrently -n back,front -c blue,green \"cd apps/corpus-agent/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000\" \"pnpm --filter @apps/corpus-agent-frontend dev\"",
     "dev:doc-reviewer": "concurrently -n back,front -c blue,green \"cd apps/doc-reviewer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8008\" \"pnpm --filter @apps/doc-reviewer-frontend dev\"",

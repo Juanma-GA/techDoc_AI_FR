@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE task PUBLIC "-//OASIS//DTD DITA 1.3 Task//EN" "task.dtd">
+<task id="SR-MNT-BOGIE-04" xml:lang="en">
+  <title>Motor Bogie Maintenance — Periodic Inspection</title>
+  <shortdesc>Visual and clearance inspection procedure every 25,000 km.</shortdesc>
+  <taskbody>
+    <context>
+      <section>
+        <title>1. Purpose and scope</title>
+        <p>This procedure describes the checks the maintenance technician must perform on the motor bogie during the periodic inspection. The scope covers <?oxy_comment_start author="Maria Ruiz" timestamp="20260612T101500+0000" comment="Should the secondary suspension also be in scope? On the new series it is inspected too."?><?oxy_custom_start type="oxy_content_highlight" color="255,243,163"?>the primary suspension, the dampers and the axlebox fastening<?oxy_custom_end?><?oxy_comment_end?>.</p>
+        <p>The operations described here must be carried out with the unit immobilized and locked out according to the facility's lock-out and tag-out procedure.</p>
+        <note type="warning">Do not enter the pit without confirming that the overhead line above the track is de-energized and earthed. Failure to do so may cause serious injury.</note>
+      </section>
+      <section>
+        <title>2. Required tools and equipment</title>
+        <table frame="all">
+          <title>Table 1. Required tools</title>
+          <tgroup cols="3">
+            <thead>
+              <row><entry>Item</entry><entry>Reference</entry><entry>Quantity</entry></row>
+            </thead>
+            <tbody>
+              <row><entry>Torque wrench 40–200 Nm</entry><entry>TRQ-200</entry><entry>1</entry></row>
+              <row><entry>Feeler gauge</entry><entry>FG-0.05</entry><entry>1</entry></row>
+              <row><entry>ATEX inspection lamp</entry><entry>LMP-EX</entry><entry>1</entry></row>
+              <row><entry>Digital vernier caliper</entry><entry>CAL-150</entry><entry>1</entry></row>
+            </tbody>
+          </tgroup>
+        </table>
+      </section>
+    </context>
+    <steps>
+      <step><cmd>Visually inspect the primary suspension springs for cracks, deformation or corrosion.</cmd></step>
+      <step><cmd>Check the tightening torque of the axlebox fastening bolts with the torque wrench <?oxy_comment_start author="Maria Ruiz" timestamp="20260612T130500+0000" comment="Per the latest technical note NT-2024-18 the correct torque is 130 Nm, not 120. Please verify." flag="done"?><?oxy_custom_start type="oxy_content_highlight" color="255,201,222"?>set to 120 Nm<?oxy_custom_end?><?oxy_comment_end?>.</cmd></step>
+      <step><cmd>Measure the clearance between the damper plate and its support with the feeler gauge; the nominal value is 0.05 mm.</cmd></step>
+      <step><cmd>Check the condition of the elastic stops and the absence of oil leaks in the hydraulic dampers.</cmd></step>
+      <step><cmd>Record the readings obtained and compare them with the limit values in Table 2.</cmd></step>
+    </steps>
+    <result>
+      <section>
+        <title>4. Limit values and acceptance criteria</title>
+        <note>If the measured clearance exceeds 0.15 mm, replace the anti-friction bushing before returning the unit to service.</note>
+        <table frame="all">
+          <title>Table 2. Acceptance criteria</title>
+          <tgroup cols="3">
+            <thead>
+              <row><entry>Parameter</entry><entry>Nominal</entry><entry>Service limit</entry></row>
+            </thead>
+            <tbody>
+              <row><entry>Damper clearance</entry><entry>0.05 mm</entry><entry>0.15 mm</entry></row>
+              <row><entry>Axlebox torque</entry><entry>120 Nm</entry><entry>±10 %</entry></row>
+              <row><entry>Primary spring height</entry><entry>210 mm</entry><entry>≥ 204 mm</entry></row>
+            </tbody>
+          </tgroup>
+        </table>
+        <fig>
+          <title>Inspection points on the motor bogie (side view).</title>
+          <image href="bogie-inspection.svg" placement="break"/>
+        </fig>
+        <note type="danger">After replacing any suspension component, a test run is mandatory before returning the unit to commercial service.</note>
+      </section>
+      <section>
+        <title>5. Records and traceability</title>
+        <p>All measurements must be recorded in the maintenance management system with the date, the unit identifier and the signature of the responsible technician.</p>
+      </section>
+    </result>
+  </taskbody>
+</task>

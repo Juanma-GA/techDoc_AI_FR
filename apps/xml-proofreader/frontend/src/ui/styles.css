@@ -1,0 +1,8 @@
+/* F0 placeholder styles; the full PDF-like theme lands in F2. */
+:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+.f0-shell { display: flex; flex-direction: column; height: 100%; }
+.f0-shell header { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid #dfe4ea; }
+.f0-shell header button { margin-left: auto; }
+.f0-source { flex: 1; overflow: auto; margin: 0; padding: 14px; background: #0f1622; color: #cdd6e3; white-space: pre-wrap; }
