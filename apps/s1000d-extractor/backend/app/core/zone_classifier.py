@@ -27,6 +27,10 @@ _PAGE_NUM_RE = re.compile(
     re.IGNORECASE,
 )
 _DIGITS_WS = re.compile(r"[\d\s\W_]+", re.UNICODE)
+_TOC_RE = re.compile(r"\b(?:table\s+of\s+contents|contents|sommaire|table\s+des\s+mati[eè]res)\b", re.IGNORECASE)
+_TOC_ENTRY_RE = re.compile(r"^\s*.{3,}\.{2,}(?:\s*\d{1,4})?\s*[.…]*\s*$")
+_TOC_LABEL_RE = re.compile(r"^\s*(?:chapitre|chapter|fran[cç]ais|english|deutsch)\s*$", re.IGNORECASE)
+_COVER_RE = re.compile(r"\b(?:page\s+de\s+garde|cover\s+page|manuel|manual|proprietary|confidentiel)\b", re.IGNORECASE)
 
 
 def _normalize(text: str) -> str:
@@ -37,7 +41,7 @@ def _normalize(text: str) -> str:
 
 
 def classify_zones(blocks: list[RawBlock]) -> None:
-    """Tague `header` / `footer` sur les RawBlock, en place (PDF uniquement)."""
+    """Tague les zones de mise en page sur les blocs PDF, en place."""
     geo = [b for b in blocks if b.page_height and b.y0 is not None and b.y1 is not None]
     if not geo:
         return
@@ -59,6 +63,13 @@ def classify_zones(blocks: list[RawBlock]) -> None:
 
     repeat_min = max(2, round(0.5 * n_pages))
 
+    # Les pages de garde et tables des matieres sont des zones explicites,
+    # detectees uniquement dans les deux premieres pages pour eviter les faux positifs.
+    toc_pages = {
+        b.page for b in geo
+        if b.page is not None and b.page <= 2 and _TOC_RE.search(b.text)
+    }
+
     for b in geo:
         assert b.page_height and b.y0 is not None and b.y1 is not None
         top = b.y0 / b.page_height
@@ -66,6 +77,19 @@ def classify_zones(blocks: list[RawBlock]) -> None:
         key = _normalize(b.text)
         text = b.text.strip()
         is_page_num = bool(_PAGE_NUM_RE.match(text))
+        is_toc_entry = bool(_TOC_ENTRY_RE.match(text) or _TOC_LABEL_RE.match(text))
+        if b.page == 1 and _COVER_RE.search(text) and len(top_pages.get(key, ())) < repeat_min:
+            b.zone = "cover"
+            continue
+        if b.page in toc_pages and (_TOC_RE.search(text) or _TOC_ENTRY_RE.match(text)):
+            b.zone = "toc"
+            continue
+        if is_page_num:
+            b.zone = "footer"
+            continue
+        if is_toc_entry:
+            b.zone = "toc"
+            continue
         # Entete/pied = signal de REPETITION : sur une page unique on ne peut pas
         # distinguer un entete recurrent du titre du document -> on ne tague que
         # les numeros de page en pied (motif sur), jamais d'entete "au flair".

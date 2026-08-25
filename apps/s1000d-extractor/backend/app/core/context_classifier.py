@@ -53,6 +53,25 @@ _IMPERATIVE = re.compile(
     re.IGNORECASE,
 )
 
+_PROMPT_INJECTION_MARKERS = (
+    "ignore previous instructions",
+    "ignore all previous instructions",
+    "ignore the instructions above",
+    "disregard previous instructions",
+    "system message:",
+    "developer message:",
+    "assistant message:",
+    "reponds uniquement",
+    "respond only with",
+    "follow these instructions instead",
+)
+
+
+def _contains_prompt_injection(text: str) -> bool:
+    """Return true for explicit attempts to address or override the model."""
+    normalized = " ".join((text or "").casefold().split())
+    return any(marker in normalized for marker in _PROMPT_INJECTION_MARKERS)
+
 
 def _section_signal(section: IRNode) -> Context:
     title = section.text or ""
@@ -128,10 +147,14 @@ def _llm_refine(sections: list[IRNode], db: Session) -> None:
     # Pas de troncature de l'entree (HR6) : un titre ou un extrait coupe peut
     # faire basculer un DM du bon type au mauvais. La brievete est demandee a la
     # SORTIE (JSON guide), pas en decoupant l'entree.
-    listing = [
-        {"i": i, "title": s.text, "sample": _first_text(s)}
-        for i, s in enumerate(sections)
-    ]
+    listing = []
+    for i, section in enumerate(sections):
+        title = section.text
+        sample = _first_text(section)
+        if _contains_prompt_injection(title) or _contains_prompt_injection(sample):
+            log.warning("LLM context refine skipped for suspicious section %s", i)
+            continue
+        listing.append({"i": i, "title": title, "sample": sample})
     if not listing:
         return
     prompt = (
@@ -214,7 +237,14 @@ def _llm_refine_dms(dms: list, types: dict[str, str], db: Session) -> None:
         client = MistralClient.from_db(db)
     except MistralError:
         return
-    listing = [{"id": dm.dm_id, "title": dm.title, "sample": _first_text(dm.root)} for dm in dms]
+    listing = []
+    for dm in dms:
+        title = dm.title
+        sample = _first_text(dm.root)
+        if _contains_prompt_injection(title) or _contains_prompt_injection(sample):
+            log.warning("LLM DM typing skipped for suspicious module %s", dm.dm_id)
+            continue
+        listing.append({"id": dm.dm_id, "title": title, "sample": sample})
     if not listing:
         return
     prompt = (

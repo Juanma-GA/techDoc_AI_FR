@@ -13,6 +13,7 @@ les figures gardent leur placeholder ICN).
 from __future__ import annotations
 
 import re
+import hashlib
 from pathlib import Path
 
 from app.core.ir import IRNode
@@ -37,6 +38,19 @@ def _save_pixmap(doc, xref: int, dest: Path) -> bool:
         return True
     except Exception:
         return False
+
+
+def _image_digest(doc, xref: int) -> str | None:
+    """Return a stable digest of the decoded image pixels."""
+    import fitz
+
+    try:
+        pix = fitz.Pixmap(doc, xref)
+        if pix.n >= 5 or pix.alpha:
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+        return hashlib.sha256(pix.samples).hexdigest()
+    except Exception:
+        return None
 
 
 def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: str) -> int:
@@ -64,6 +78,7 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
     # plusieurs pages (logo, bandeau, figure repetee) ne doit etre extraite
     # qu'UNE fois, sinon le dossier se remplit de doublons.
     seen: set[int] = set()
+    seen_digests: set[str] = set()
     try:
         for pidx, page in enumerate(doc, start=1):
             figs = list(figs_by_page.get(pidx, []))
@@ -72,6 +87,11 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
                 if xref in seen:
                     continue
                 seen.add(xref)
+                digest = _image_digest(doc, xref)
+                if digest is not None and digest in seen_digests:
+                    continue
+                if digest is not None:
+                    seen_digests.add(digest)
                 fig = figs.pop(0) if figs else None
                 base = slugify(fig.text) if fig and fig.text else f"illustration-{doc_id[:8]}-p{pidx}-{xref}"
                 name = _unique_name(out_dir, base)

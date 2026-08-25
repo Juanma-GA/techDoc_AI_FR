@@ -80,14 +80,14 @@ POC local-first stricte conforme à [`STANDARD_POC.md §3.5`](../../STANDARD_POC
 | Backend | FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog |
 | Parsing | PyMuPDF (PDF), python-docx (Word), lxml (XML + validation XSD) |
 | LLM | Mistral via `httpx` (chat JSON pour la classification de contexte) |
-| Frontend | React 18 + TS + Vite + Tailwind + i18next + `@internal/ui` ; preview HTML autonome (Node-free) |
+| Frontend | React 18 + TS + Vite + Tailwind + i18next + `@internal/ui` ; bundle React buildé |
 | Persistance | SQLite (`backend/data/s1000d-extractor.db`), Alembic |
 
 ## Démarrage rapide
 
 Double-clic sur `start.bat` (Windows) ou `bash start.sh` (Unix). Backend sur
-http://127.0.0.1:8004/ — la **preview HTML autonome** (onglet *Migration*) est
-servie quand `frontend/dist/` n'existe pas. OpenAPI : `/api/v1/docs`.
+http://127.0.0.1:8004/ — le **bundle React buildé** (onglet *Migration*) est
+servi depuis `frontend/dist/`. OpenAPI : `/api/v1/docs`.
 
 ```bash
 cd apps/s1000d-extractor/backend
@@ -173,9 +173,5 @@ jamais de donnée utilisateur réelle).
 - **IA optionnelle, dégradée.** Sans clé Mistral, la classification de contexte
   retombe sur l'heuristique (qualité moindre, jamais de crash).
 - **Frontend React non build-vérifié dans cet environnement** (Node absent au
-  moment du dev). La **preview HTML autonome** (onglet *Migration*) est l'UI
-  active et testée end-to-end ; le frontend React est fourni et aligné sur le
-  template mais doit être `pnpm install` + `build` pour validation.
-- **Taille `app/templates/preview.html`** > 200 lignes : page autonome
-  HTML/CSS/JS non splittable sans bundler en mode preview (même justification
-  que les autres POCs).
+  moment du dev). Le bundle React doit être construit avec `pnpm build` avant
+  distribution et validation end-to-end.

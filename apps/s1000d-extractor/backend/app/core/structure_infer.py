@@ -55,7 +55,7 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         # 0) Entete / pied recurrent : court-circuite toute la cascade pour ne
         # PAS promouvoir un entete repete en titre (via infer_heading_level).
         # Garde comme paragraphe TAGGE : visible, hierarchisable, excluable.
-        if block.zone in ("header", "footer"):
+        if block.zone in ("header", "footer", "cover", "toc"):
             close_list()
             current().children.append(
                 IRNode(id=ids.next(), kind="paragraph", form="plain",

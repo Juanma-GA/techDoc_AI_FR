@@ -1,11 +1,13 @@
 import type { DmPreview as DmPreviewT, PreviewSnippet } from "../lib/api";
-import { ZoneFlag } from "./zoneFlags";
+import { ReviewFlag, ZoneFlag } from "./zoneFlags";
 
 function Line({ s }: { s: PreviewSnippet }) {
+  const suspected = s.zone === "header" || s.zone === "footer" || s.zone === "cover" || s.zone === "toc";
   return (
-    <div className="row" style={{ gap: 6, alignItems: "baseline" }}>
+    <div className={`row${suspected ? " suspected-preview" : ""}`} style={{ gap: 6, alignItems: "baseline" }}>
       {s.page != null ? <span className="badge">p.{s.page}</span> : null}
       <ZoneFlag zone={s.zone} />
+      <ReviewFlag zone={s.zone} />
       <span className="txt" style={{ color: "var(--fg-dim)" }}>
         {s.text}
       </span>

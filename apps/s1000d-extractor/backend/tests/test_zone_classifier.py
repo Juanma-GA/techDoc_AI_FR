@@ -49,3 +49,21 @@ def test_first_heading_not_tagged_header() -> None:
     ]
     classify_zones(blocks)
     assert all(b.zone == "body" for b in blocks)
+
+
+def test_page_refs_and_dotted_contents_are_review_flags() -> None:
+    blocks = [
+        _block("p.5", 5, y0=90, y1=105),
+        _block("chapitre", 5, y0=120, y1=135),
+        _block("FRANÇAIS", 5, y0=140, y1=155),
+        _block("INSTALLATION..............................................", 3, y0=180, y1=200),
+        _block("6.1. FONDATIONS...........................................", 3, y0=205, y1=225),
+        _block("MAINTENANCE.................................", 4, y0=230, y1=250),
+    ]
+    classify_zones(blocks)
+    assert blocks[0].zone == "footer"
+    assert blocks[1].zone == "toc"
+    assert blocks[2].zone == "toc"
+    assert blocks[3].zone == "toc"
+    assert blocks[4].zone == "toc"
+    assert blocks[5].zone == "toc"

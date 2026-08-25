@@ -1,21 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Badge } from "@internal/ui";
 
 import { healthApi, type HealthDto } from "../lib/api";
 
-const BADGE_CLASS: Record<string, string> = {
-  ok: "badge ok",
-  disabled: "badge off",
-  untested: "badge warn",
-  not_configured: "badge warn",
+type LlmStatus = "ok" | "disabled" | "untested" | "not_configured";
+
+const BADGE_VARIANT: Record<LlmStatus, "success" | "danger" | "warning" | "info"> = {
+  ok: "success",
+  disabled: "danger",
+  untested: "warning",
+  not_configured: "warning",
 };
-const LABEL_KEY: Record<string, string> = {
+
+const LABEL_KEY: Record<LlmStatus, string> = {
   ok: "llm.on",
   disabled: "llm.off",
   untested: "llm.untested",
   not_configured: "llm.noKey",
 };
 
+export function llmBadgeVariant(status: LlmStatus): "success" | "danger" | "warning" | "info" {
+  return BADGE_VARIANT[status];
+}
+
+export function llmBadgeLabelKey(status: LlmStatus): string {
+  return LABEL_KEY[status];
+}
+
+/**
+ * POC-specific LLM status badge.
+ * Uses @internal/ui Badge component for consistent styling (Rule #3).
+ */
 export function LlmBadge() {
   const { t } = useTranslation();
   const { data } = useQuery<HealthDto>({
@@ -23,13 +39,16 @@ export function LlmBadge() {
     queryFn: healthApi.read,
     refetchInterval: 15_000,
   });
-  const status = data?.llm;
-  const badgeClass = status ? (BADGE_CLASS[status] ?? "badge warn") : "badge off";
-  const label = status && LABEL_KEY[status] ? t(LABEL_KEY[status]) : "?";
+  const status = (data?.llm ?? "not_configured") as LlmStatus;
+  const variant = llmBadgeVariant(status);
+  const label = llmBadgeLabelKey(status) ? t(llmBadgeLabelKey(status)) : "?";
 
   return (
-    <div className="llm-status" title={t("llm.title")}>
-      {t("llm.label")} <span className={badgeClass}>{label}</span>
+    <div className="flex flex-col items-start gap-2 p-4">
+      <span className="text-sm font-medium text-muted-foreground">{t("llm.label")}</span>
+      <Badge variant={variant} title={t("llm.title")}>
+        {label}
+      </Badge>
     </div>
   );
 }

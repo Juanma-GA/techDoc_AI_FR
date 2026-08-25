@@ -10,7 +10,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from app.core.errors import AppError
 from app.core.s1000d_schema import SUPPORTED_ISSUES
 from app.core.s1000d_serializer import serialize
 from app.core.validator import validate_document
-from app.db.models import BrexProfile, Document
+from app.db.models import BrexProfile, Document, DmDocumentLink, DmVersion
 from app.db.session import SessionLocal, get_db
 from app.parsers import detect_format
 from app.parsers.pdf_parser import pdf_page_count
@@ -59,6 +59,35 @@ def list_documents(db: Session = Depends(get_db)) -> list[DocumentOut]:
 @router.get("/{doc_id}", response_model=DocumentOut)
 def get_document(doc_id: str, db: Session = Depends(get_db)) -> DocumentOut:
     return _to_out(_require(db, doc_id))
+
+
+@router.delete("/{doc_id}")
+def delete_document(
+    doc_id: str,
+    confirm_token: str = Query("", min_length=10),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Delete one document and its generated files after explicit confirmation."""
+    if not confirm_token:
+        raise AppError(
+            "DELETE_NOT_CONFIRMED",
+            "Suppression non confirmée. Utilisez le double-clic de confirmation.",
+            422,
+        )
+    doc = _require(db, doc_id)
+    import shutil
+
+    from app.core.wizard import images_dir
+
+    for path in (doc.storage_path, doc.xml_path, doc.cir_path, doc.brex_rules_path):
+        if path:
+            Path(path).unlink(missing_ok=True)
+    shutil.rmtree(images_dir(doc.id), ignore_errors=True)
+    db.query(DmDocumentLink).filter(DmDocumentLink.doc_id == doc.id).delete()
+    db.query(DmVersion).filter(DmVersion.doc_id == doc.id).delete()
+    db.delete(doc)
+    db.commit()
+    return {"id": doc_id, "status": "deleted"}
 
 
 @router.post("", response_model=DocumentOut, status_code=201)

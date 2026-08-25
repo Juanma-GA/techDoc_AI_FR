@@ -7,6 +7,13 @@
 // IIS (ex. /app/s1000d-extractor/api/v1). Defaut relatif '/api/v1' en local.
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
+// Store X-Request-Id for tracing end-to-end (backend → frontend → logs)
+let _currentRequestId: string | null = null;
+
+export function getRequestId(): string | null {
+  return _currentRequestId;
+}
+
 export type ApiError = {
   code: string;
   message: string;
@@ -15,10 +22,23 @@ export type ApiError = {
 };
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  // Include X-Request-Id in outgoing request (if we have one from a previous response)
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (_currentRequestId) {
+    headers["X-Request-Id"] = _currentRequestId;
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { ...headers, ...(init?.headers ?? {}) },
     ...init,
   });
+
+  // Extract and store X-Request-Id from response for tracing
+  const responseRequestId = response.headers.get("X-Request-Id");
+  if (responseRequestId) {
+    _currentRequestId = responseRequestId;
+  }
+
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as ApiError | null;
     throw new Error(error?.message || response.statusText || "Erreur");
@@ -53,8 +73,11 @@ export const healthApi = { read: () => api<HealthDto>("/health") };
 
 export const adminApi = {
   stats: () => api<AdminStatsDto>("/admin/stats"),
-  reset: (scope: "documents" | "all") =>
-    api<AdminResetDto>(`/admin/reset/${scope}`, { method: "POST" }),
+  reset: (scope: "documents" | "all", confirmToken: string) =>
+    api<AdminResetDto>(
+      `/admin/reset/${scope}?confirm_token=${encodeURIComponent(confirmToken)}`,
+      { method: "POST" },
+    ),
 };
 
 export const settingsApi = {
@@ -105,6 +128,30 @@ export type DocumentOut = {
   filename: string;
   source_format: string;
   status: string;
+};
+
+export type DmVersion = {
+  id: string;
+  doc_id: string;
+  dm_code: string;
+  author: string;
+  status: string;
+  notes?: string | null;
+  created_at: string;
+  content_length: number;
+};
+
+export type DmVersionContent = Omit<DmVersion, "content_length"> & { content: string };
+
+export const versioningApi = {
+  list: (docId: string, dmCode?: string) =>
+    api<DmVersion[]>(`/documents/${docId}/dm-versions${dmCode ? `?dm_code=${encodeURIComponent(dmCode)}` : ""}`),
+  get: (docId: string, versionId: string) =>
+    api<DmVersionContent>(`/documents/${docId}/dm-versions/${versionId}`),
+  restore: (docId: string, versionId: string) =>
+    api<{ restored_version_id: string }>(`/documents/${docId}/dm-versions/${versionId}/restore`, {
+      method: "POST",
+    }),
 };
 
 // ----- Wizard ---------------------------------------------------------------
@@ -172,6 +219,11 @@ export const brexApi = {
 
 export const documentsApi = {
   list: () => api<DocumentOut[]>("/documents"),
+  delete: (docId: string, confirmToken: string) =>
+    api<{ id: string; status: string }>(
+      `/documents/${docId}?confirm_token=${encodeURIComponent(confirmToken)}`,
+      { method: "DELETE" },
+    ),
   upload: async (
     file: File,
     issue: S1000dIssue,
@@ -265,6 +317,38 @@ export async function startWizardStream(
         /* ignore */
       }
       onEvent(event, parsed);
+    }
+  }
+}
+
+export async function generatePmcStream(
+  docId: string,
+  onEvent: (event: string, data: Record<string, unknown>) => void,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/documents/${docId}/validate-and-generate-pmc`, { method: "POST" });
+  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+    const blocks = buf.split("\n\n");
+    buf = blocks.pop() ?? "";
+    for (const block of blocks) {
+      let event = "message";
+      let data = "";
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      try {
+        onEvent(event, JSON.parse(data) as Record<string, unknown>);
+      } catch {
+        onEvent(event, {});
+      }
     }
   }
 }

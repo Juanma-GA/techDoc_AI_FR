@@ -3,18 +3,16 @@ import { NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
-import { Architecture } from "./routes/Architecture";
 import { Data } from "./routes/Data";
-import { Home } from "./routes/Home";
 import { Migration } from "./routes/Migration";
 import { Settings } from "./routes/Settings";
+import { Versioning } from "./routes/Versioning";
 
 const navItems = [
-  { to: "/", labelKey: "nav.home" },
   { to: "/migration", labelKey: "nav.migration" },
-  { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
+  { to: "/versioning", labelKey: "nav.versioning" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;
@@ -40,7 +38,6 @@ export function App() {
               <NavLink
                 key={to}
                 to={to}
-                end={to === "/"}
                 className={({ isActive }) =>
                   isActive ? "nav-item active" : "nav-item"
                 }
@@ -66,11 +63,10 @@ export function App() {
 
         <main>
           <Routes>
-            <Route path="/" element={<Home />} />
             <Route path="/migration" element={<Migration />} />
-            <Route path="/architecture" element={<Architecture />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/versioning" element={<Versioning />} />
           </Routes>
         </main>
       </div>

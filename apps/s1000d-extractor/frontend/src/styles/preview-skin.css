@@ -126,6 +126,13 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .btn.small { padding: 4px 10px; font-size: 0.8rem; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
+.version-layout { display: grid; grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.5fr); gap: 16px; }
+.version-row { display: grid; gap: 4px; width: 100%; margin: 0 0 8px; padding: 12px; text-align: left; color: var(--fg); background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.version-row:hover, .version-row.active { border-color: var(--brand-light); background: var(--card-hover); }
+.version-row span, .version-row small { color: var(--fg-dim); }
+.code-preview { max-height: 55vh; overflow: auto; padding: 14px; margin: 0 0 14px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: "JetBrains Mono", monospace; font-size: 0.78rem; }
+@media (max-width: 760px) { .version-layout { grid-template-columns: 1fr; } }
+
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--brand-light); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -256,3 +263,6 @@ table.data-table tr:hover td { background: var(--bg-2); }
 /* Coupe VISUELLE seulement : la donnee reste complete (survol = texte entier). */
 .tnode .tnode-text { display: inline-block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .tnode.low > .el { color: var(--warning); }
+.tnode.suspected { border-left: 3px solid var(--danger); padding-left: 8px; background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.tnode.suspected .txt { color: var(--danger); }
+.suspected-preview { border-left: 3px solid var(--danger); padding-left: 8px; background: color-mix(in srgb, var(--danger) 8%, transparent); }

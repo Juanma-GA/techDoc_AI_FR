@@ -8,7 +8,8 @@
     "migration": "Migration",
     "architecture": "Architecture",
     "data": "Data",
-    "settings": "Settings"
+    "settings": "Settings",
+    "versioning": "Versions"
   },
   "llm": {
     "label": "LLM",
@@ -54,7 +55,8 @@
     "docs": {
       "title": "Documents",
       "empty": "No document yet. Upload a PDF/Word file above.",
-      "open": "Open the assistant"
+      "open": "Open the assistant",
+      "delete": "Delete"
     },
     "start": {
       "title": "Starting the assistant",

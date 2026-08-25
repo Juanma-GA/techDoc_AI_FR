@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, brex, extract, health, resources, wizard
+from app.api import admin, brex, dm_versions, extract, health, pmc, resources, wizard
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
@@ -92,6 +92,8 @@ def create_app() -> FastAPI:
     api_v1.include_router(brex.router)
     api_v1.include_router(extract.router)
     api_v1.include_router(resources.router)
+    api_v1.include_router(dm_versions.router)
+    api_v1.include_router(pmc.router)
     api_v1.include_router(wizard.router)
     app.include_router(api_v1)
 

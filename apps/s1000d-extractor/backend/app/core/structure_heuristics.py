@@ -13,10 +13,11 @@ import re
 import statistics
 
 from app.core.ir import RawBlock
+from app.core.notes_detector import detect_note_kind
 
 # --- Formes de liste ---------------------------------------------------------
 
-_BULLET_RE = re.compile(r"^\s*[•·‣◦⁃∙\-–—*]\s+")  # noqa: RUF001 (puces en/em dash)
+_BULLET_RE = re.compile(r"^\s*(?:[•·‣◦⁃∙\-–—*]|:)\s+")  # noqa: RUF001 (puces en/em dash)
 _ORDERED_RE = re.compile(r"^\s*(?:\(?\d{1,3}[.)]|\(?[a-z][.)]|\(?[ivxlcdm]{1,5}[.)])\s+", re.IGNORECASE)
 
 # --- Admonitions S1000D (warning / caution / note) ---------------------------
@@ -107,7 +108,7 @@ def detect_admonition(text: str) -> str | None:
     for kind, pat in _ADMONITION_RES:
         if pat.match(text):
             return kind
-    return None
+    return detect_note_kind(text)
 
 
 def is_caption(text: str) -> bool:

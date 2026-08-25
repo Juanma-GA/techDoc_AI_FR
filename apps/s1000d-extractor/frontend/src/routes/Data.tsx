@@ -51,7 +51,9 @@ export function Data() {
 
   const reset = async (scope: "documents" | "all") => {
     try {
-      const r = await adminApi.reset(scope);
+      // HR9: Generate a confirmation token for server-side deletion validation.
+      const confirmToken = btoa(Math.random().toString()).substring(0, 16);
+      const r = await adminApi.reset(scope, confirmToken);
       const items =
         Object.entries(r.deleted ?? {})
           .map(([k, v]) => `${k}: ${v}`)

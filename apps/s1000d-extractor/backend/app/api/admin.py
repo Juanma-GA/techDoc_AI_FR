@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -41,12 +41,41 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
 
 
 @router.post("/reset/all", response_model=AdminResetOut)
-def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
+def reset_all(
+    db: Session = Depends(get_db),
+    confirm_token: str = Query("", min_length=10),
+) -> AdminResetOut:
+    """
+    Reset all documents. Requires a confirm_token from the frontend (double-click pattern).
+    Complies with HR9: never delete persistent user data without explicit confirmation.
+
+    Query param: ?confirm_token=<random_value_>=10_chars>
+    Frontend enforces double-click: send with a generated token on second click.
+    """
+    if not confirm_token:
+        raise AppError(
+            "DELETE_NOT_CONFIRMED",
+            "Deletion requires confirmation. Use the double-click pattern in UI.",
+            422,
+        )
     return _reset_documents(db, scope="all")
 
 
 @router.post("/reset/documents", response_model=AdminResetOut)
-def reset_documents(db: Session = Depends(get_db)) -> AdminResetOut:
+def reset_documents(
+    db: Session = Depends(get_db),
+    confirm_token: str = Query("", min_length=10),
+) -> AdminResetOut:
+    """
+    Reset documents only (preserve BREX profiles).
+    Query param: ?confirm_token=<random_value_>=10_chars>
+    """
+    if not confirm_token:
+        raise AppError(
+            "DELETE_NOT_CONFIRMED",
+            "Deletion requires confirmation. Use the double-click pattern in UI.",
+            422,
+        )
     return _reset_documents(db, scope="documents")
 
 

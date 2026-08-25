@@ -43,6 +43,15 @@ def _extract(client, doc_id: str) -> dict:
     return done
 
 
+def test_delete_document_requires_confirmation_and_removes_it(client, pdf_bytes) -> None:
+    doc_id = _upload(client, pdf_bytes, "manual.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
+
+    assert client.delete(f"/api/v1/documents/{doc_id}").status_code == 422
+    response = client.delete(f"/api/v1/documents/{doc_id}?confirm_token=confirmed-token")
+    assert response.status_code == 200
+    assert all(document["id"] != doc_id for document in client.get("/api/v1/documents").json())
+
+
 def test_pdf_extract_flow(client, pdf_bytes) -> None:
     doc_id = _upload(client, pdf_bytes, "manual.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
     done = _extract(client, doc_id)

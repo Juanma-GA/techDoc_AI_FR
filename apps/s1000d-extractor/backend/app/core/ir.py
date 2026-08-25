@@ -29,7 +29,7 @@ Context = Literal["descriptive", "procedural", "unknown"]
 # Zone de mise en page detectee (localisation du contenu dans la page source).
 # `chapter` = titre de section ; `header`/`footer` = entete/pied recurrent (bruit
 # a exclure) ; `body` = corps. Sert a hierarchiser et a filtrer le bruit.
-Zone = Literal["header", "footer", "chapter", "body"]
+Zone = Literal["header", "footer", "chapter", "cover", "toc", "body"]
 
 # Nature logique du noeud (independante de la balise S1000D finale).
 NodeKind = Literal[

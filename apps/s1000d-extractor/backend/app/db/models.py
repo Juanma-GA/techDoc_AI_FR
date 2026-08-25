@@ -76,3 +76,57 @@ class Document(Base):
     cir_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     brex_rules_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class DmDocumentLink(Base):
+    """
+    Link DMRL line to extracted Data Module.
+
+    Enables:
+    - Auto-linking (one DMRL row → one DM file)
+    - Manual link edits (user maps DMRL to DM)
+    - Traceability (which DMRL line generated which DM)
+    """
+
+    __tablename__ = "dm_document_links"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    doc_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    dmrl_line_id: Mapped[str | None] = mapped_column(
+        String(100), nullable=True, index=True
+    )  # DMRL unique ID (if provided)
+    dm_code: Mapped[str] = mapped_column(
+        String(100), index=True
+    )  # Data Module code (e.g., "DMC-ABC-123-00A-001A-001-A")
+    auto_linked: Mapped[bool] = mapped_column(default=True)  # True if auto-linked from DMRL
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class DmVersion(Base):
+    """
+    Track DM evolution: content changes, author, timestamp, status.
+
+    Enables:
+    - Versioning: restore previous DM versions
+    - Audit trail: who changed what, when
+    - Diff UI: compare versions
+    """
+
+    __tablename__ = "dm_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    doc_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    dm_code: Mapped[str] = mapped_column(String(100), index=True)
+    # XML content of the Data Module
+    content: Mapped[str] = mapped_column(Text)
+    # Metadata
+    author: Mapped[str] = mapped_column(String(100), default="unknown")
+    # Status: "draft", "extracted", "validated", "frozen"
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    # User notes/commit message
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

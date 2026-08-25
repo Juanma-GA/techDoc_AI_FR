@@ -100,3 +100,50 @@ class ExtractDoneOut(BaseModel):
 
 class NodeOverrideIn(BaseModel):
     element: str = Field(..., description="Element S1000D a forcer pour ce noeud.")
+
+
+# ----- DMRL Linking & Versioning -----------------------------------------------
+
+
+class DmDocumentLinkOut(BaseModel):
+    """Link between a DMRL line and an extracted Data Module."""
+
+    id: str
+    doc_id: str
+    dmrl_line_id: str | None = None
+    dm_code: str
+    auto_linked: bool
+    created_at: str
+
+
+class DmVersionOut(BaseModel):
+    """Data Module version snapshot (for audit trail / restore)."""
+
+    id: str
+    doc_id: str
+    dm_code: str
+    author: str
+    status: str  # "draft", "extracted", "validated", "frozen"
+    notes: str | None = None
+    created_at: str
+    content_length: int  # size of content in bytes
+
+
+class DmVersionContentOut(BaseModel):
+    """Full Data Module version with content (for restore / diff)."""
+
+    id: str
+    doc_id: str
+    dm_code: str
+    content: str  # XML
+    author: str
+    status: str
+    notes: str | None = None
+    created_at: str
+
+
+class LinkDmrlIn(BaseModel):
+    """Request to link DMRL to Data Modules (auto or manual)."""
+
+    mode: str = "auto"  # "auto" | "manual"
+    dmrl_links: list[dict] = Field(default_factory=list)  # [{"dmrl_line_id": "...", "dm_code": "..."}]

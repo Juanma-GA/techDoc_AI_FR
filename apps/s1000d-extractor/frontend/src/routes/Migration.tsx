@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DmPreview } from "../components/DmPreview";
-import { PageFlag, RefFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
+import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
   brexApi,
   documentsApi,
@@ -20,6 +20,36 @@ import {
 
 const DM_TYPES = ["descriptive", "procedural", "ipd"] as const;
 const DEFAULT_STEPS: WizardState["step"][] = ["split", "type", "structure", "generate"];
+
+function ConfirmButton({
+  label,
+  onConfirm,
+}: {
+  label: string;
+  onConfirm: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return (
+    <button
+      type="button"
+      className="btn danger small"
+      onClick={() => {
+        if (!armed) {
+          setArmed(true);
+          timer.current = setTimeout(() => setArmed(false), 3000);
+          return;
+        }
+        if (timer.current) clearTimeout(timer.current);
+        setArmed(false);
+        onConfirm();
+      }}
+    >
+      {armed ? "Cliquer encore pour confirmer" : label}
+    </button>
+  );
+}
 
 // Les enums du backend ne sont jamais rendus tels quels (HR21) : ils passent par
 // une cle i18n.
@@ -62,11 +92,12 @@ function WizNode({
   const { t } = useTranslation();
   const el = node.candidates?.[0]?.element ?? node.kind;
   const low = node.confidence != null && node.confidence < 0.6 ? " low" : "";
+  const suspected = node.zone === "header" || node.zone === "footer" || node.zone === "cover" || node.zone === "toc";
   const ctx = node.context && node.context !== "unknown" ? node.context : null;
   const alts = (node.candidates ?? []).slice(1);
   return (
     <li>
-      <div className={`tnode${low}`}>
+      <div className={`tnode${low}${suspected ? " suspected" : ""}`}>
         <span className="el">{el}</span>
         {ctx ? <span className="ctx">{t(`dmType.${ctx}`, { defaultValue: ctx })}</span> : null}
         {node.kind === "section" && node.level != null ? (
@@ -74,6 +105,7 @@ function WizNode({
         ) : null}
         <PageFlag page={node.page} />
         <ZoneFlag zone={node.zone} />
+        <ReviewFlag zone={node.zone} />
         <TableFlag kind={node.kind} />
         <RefFlag refs={node.refs} />
         {/* Texte complet : la coupe visuelle est faite en CSS, la donnee reste intacte. */}
@@ -216,6 +248,21 @@ export function Migration() {
         setStarting(null);
         setWizError(e instanceof Error ? e.message : String(e));
       }
+    }
+  };
+
+  const deleteDocument = async (id: string) => {
+    try {
+      const confirmToken = btoa(Math.random().toString()).substring(0, 16);
+      await documentsApi.delete(id, confirmToken);
+      if (docId === id) {
+        setDocId(null);
+        setWiz(null);
+      }
+      setWizError(null);
+      refreshDocs();
+    } catch (e) {
+      setWizError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -383,13 +430,19 @@ export function Migration() {
                 </div>
                 <div className="label">{d.source_format.toUpperCase()}</div>
               </div>
-              <button
-                type="button"
-                className="btn secondary small"
-                onClick={() => void openWizard(d.id)}
-              >
-                {t("migration.docs.open")}
-              </button>
+              <div className="row" style={{ gap: 8, flexWrap: "nowrap" }}>
+                <button
+                  type="button"
+                  className="btn secondary small"
+                  onClick={() => void openWizard(d.id)}
+                >
+                  {t("migration.docs.open")}
+                </button>
+                <ConfirmButton
+                  label={t("migration.docs.delete")}
+                  onConfirm={() => void deleteDocument(d.id)}
+                />
+              </div>
             </div>
           ))
         )}
@@ -424,7 +477,7 @@ export function Migration() {
         {wiz ? (
           <>
             <div className="card">
-              <div className="row">
+              <div className="row" style={{ alignItems: "center" }}>
                 {(wiz.steps ?? DEFAULT_STEPS).map((s, i) => (
                   <span key={s} style={{ display: "inline-flex", alignItems: "center" }}>
                     {i > 0 ? <span className="label">&nbsp;→&nbsp;</span> : null}
@@ -433,6 +486,15 @@ export function Migration() {
                     </span>
                   </span>
                 ))}
+                {wiz.resources?.dmrl_count && docId ? (
+                  <a
+                    className="btn secondary small"
+                    style={{ marginLeft: "auto" }}
+                    href={resourcesApi.pmcUrl(docId)}
+                  >
+                    {t("migration.generate.pmc")}
+                  </a>
+                ) : null}
               </div>
             </div>
 
@@ -451,12 +513,6 @@ export function Migration() {
                   })}
                 </p>
                 <div className="row" style={{ marginBottom: 10 }}>
-                  <a
-                    className="btn secondary small"
-                    href={docId ? resourcesApi.pmcUrl(docId) : "#"}
-                  >
-                    {t("migration.dmrl.pmc")}
-                  </a>
                   <button
                     type="button"
                     className="btn primary"
@@ -530,12 +586,6 @@ export function Migration() {
                   ))}
                 </div>
                 <div className="row" style={{ marginTop: 12 }}>
-                  <a
-                    className="btn secondary small"
-                    href={docId ? resourcesApi.pmcUrl(docId) : "#"}
-                  >
-                    {t("migration.dmrl.pmc")}
-                  </a>
                   <button
                     type="button"
                     className="btn primary"
@@ -844,13 +894,6 @@ export function Migration() {
                 <h2 className="card-title">
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>
-                {wiz.resources?.dmrl_count && docId ? (
-                  <div className="row" style={{ marginBottom: 10 }}>
-                    <a className="btn secondary small" href={resourcesApi.pmcUrl(docId)}>
-                      {t("migration.generate.pmc")}
-                    </a>
-                  </div>
-                ) : null}
                 <div>
                   {wiz.dms.map((d) => (
                     <div
