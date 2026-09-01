@@ -63,6 +63,9 @@ export function SuggestionItem({
         <span className="suggestion-loc">
           p.{suggestion.page} · {suggestion.rule_code}
         </span>
+        <span className="badge default" title={t(`source.${suggestion.source_kind}`)}>
+          {t(`source.${suggestion.source_kind}`)}
+        </span>
         {isMultiPage ? (
           <span
             className="badge info"

@@ -27,6 +27,13 @@ export function useDocument(id: string | undefined) {
 export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
+    // Cle stable : permet de retrouver l'etat "upload en cours" via
+    // `useIsMutating` (cache global TanStack Query) meme si le composant qui
+    // a lance l'upload a ete demonte entre-temps (navigation puis retour sur
+    // la page) — l'upload continue reellement en arriere-plan cote serveur
+    // (requete non annulee par un changement de route SPA), seul l'etat
+    // local du composant se perdait sans ca.
+    mutationKey: ["upload-document"],
     mutationFn: ({
       file,
       target,
@@ -91,5 +98,22 @@ export function useDeleteDocument() {
   return useMutation({
     mutationFn: (id: string) => api.delete<void>(`/documents/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export type DocumentMetaPatch = {
+  meta_revision_date?: string | null;
+  meta_cmm_number?: string | null;
+  meta_first_issue_date?: string | null;
+  meta_revision_number?: string | null;
+};
+
+/** Mapping manuel par document (repris par les consignes de checklist qui
+ * y font reference lors du scan IA). */
+export function usePatchDocumentMeta(id: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: DocumentMetaPatch) => api.patch<Document>(`/documents/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["document", id] }),
   });
 }

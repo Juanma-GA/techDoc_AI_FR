@@ -21,6 +21,10 @@ export function useAnalyze(documentId: string | undefined) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [quality, setQuality] = useState<AnalyzeQuality | null>(null);
+  // Avertissements non bloquants (ex. scan checklist/IA interrompu par une
+  // erreur Mistral) : l'analyse se termine quand meme (statut "done"), mais
+  // le resultat peut etre incomplet — ne doit jamais passer inaperçu.
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const start = useCallback(async (vision?: boolean) => {
     if (!documentId) return;
@@ -28,6 +32,7 @@ export function useAnalyze(documentId: string | undefined) {
     setProgress(0);
     setError(null);
     setQuality(null);
+    setWarnings([]);
 
     try {
       // Cible « checklist » (toggle Documents) transmise a chaque run ; `vision`
@@ -49,7 +54,11 @@ export function useAnalyze(documentId: string | undefined) {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        // sse-starlette emet des lignes CRLF ("\r\n") : normaliser en LF avant
+        // de decouper sur "\n\n", sinon aucun bloc n'est jamais detecte (la
+        // sous-chaine "\n\n" n'existe pas dans "\r\n\r\n") et rien ne se met a
+        // jour (jauge figee a 0%, "done" jamais recu via ce parsing).
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
         let idx = buffer.indexOf("\n\n");
         while (idx !== -1) {
           const block = buffer.slice(0, idx);
@@ -82,6 +91,13 @@ export function useAnalyze(documentId: string | undefined) {
               } else if (currentEvent === "done") {
                 setStatus("done");
                 setProgress(100);
+              } else if (currentEvent === "warning") {
+                try {
+                  const parsed = JSON.parse(data) as { messages?: string[] };
+                  if (Array.isArray(parsed.messages)) setWarnings(parsed.messages);
+                } catch {
+                  /* ignore */
+                }
               } else if (currentEvent === "error") {
                 setStatus("error");
                 try {
@@ -105,5 +121,5 @@ export function useAnalyze(documentId: string | undefined) {
     }
   }, [documentId, qc, status, checklistActive]);
 
-  return { status, progress, error, quality, start };
+  return { status, progress, error, quality, warnings, start };
 }

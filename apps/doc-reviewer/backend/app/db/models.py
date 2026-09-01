@@ -110,6 +110,14 @@ class Document(Base):
     quality: Mapped[str] = mapped_column(
         String(20), default="analyzable", server_default="analyzable", index=True
     )
+    # Mapping manuel par document (saisi par le relecteur) : les consignes de
+    # checklist peuvent y faire reference (ex. « verifier que la date de
+    # revision de la page de garde correspond a la date de revision saisie
+    # ici ») — injecte dans le contexte du scan IA par `rules_engine`.
+    meta_revision_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    meta_cmm_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    meta_first_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    meta_revision_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     suggestions: Mapped[list["Suggestion"]] = relationship(
@@ -160,6 +168,12 @@ class Suggestion(Base):
     )
     rule_kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     rule_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    # Provenance affichee dans la liste des anomalies : "norme" | "checklist" |
+    # "regle" (custom deterministe) | "transverse" (unites/mise en page/vision).
+    # Calculee a la materialisation par `rules_engine.classify_source`.
+    source_kind: Mapped[str] = mapped_column(
+        String(20), default="norme", server_default="norme", index=True
+    )
     severity: Mapped[str] = mapped_column(
         String(20), default="warning", server_default="warning"
     )

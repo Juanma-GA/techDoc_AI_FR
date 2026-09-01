@@ -1,9 +1,12 @@
-import { ArrowLeft, Download } from "lucide-react";
-import { useMemo } from "react";
+import { ArrowLeft, Download, Play } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
+import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { useAnalyze } from "../hooks/useAnalyze";
 import {
   useApplyGroup,
   useApplySuggestion,
@@ -27,6 +30,7 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
   const document = useDocument(documentId);
   const blocks = useDocxBlocks(documentId, true);
   const suggestions = useSuggestions(documentId);
+  const analyze = useAnalyze(documentId);
   const apply = useApplySuggestion(documentId);
   const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
@@ -50,6 +54,17 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
     () => suggestions.data?.find((s) => s.id === selectedId)?.target_id ?? null,
     [suggestions.data, selectedId],
   );
+
+  // Navigue jusqu'au bloc porteur de l'anomalie selectionnee (clic depuis le
+  // panneau de suggestions) : fait defiler la liste des blocs jusqu'a lui.
+  const blocksListRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!selectedTarget || !blocksListRef.current) return;
+    const el = blocksListRef.current.querySelector<HTMLElement>(
+      `[data-target-id="${selectedTarget}"]`,
+    );
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [selectedTarget]);
 
   const handleAccept = (id: string): void => {
     patch.mutate({ id, status: "accepted" }, { onSuccess: () => apply.mutate(id) });
@@ -82,6 +97,13 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
     window.open(`${API_BASE_URL}/documents/${documentId}/export`, "_blank", "noopener,noreferrer");
   };
 
+  // Le format natif effectivement revise/exporte est celui du fichier importe
+  // (.doc reste .doc, .docx reste .docx) — le libelle du bouton ne doit jamais
+  // dire ".docx" pour un document importe en .doc (cf. `_persist_docx`).
+  const nativeExt = (document.data?.original_filename ?? "").toLowerCase().endsWith(".doc")
+    ? ".doc"
+    : ".docx";
+
   return (
     <div className="reviewer">
       <div className="reviewer-viewer">
@@ -94,24 +116,56 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
             <span className="badge info">{t("reviewer.docxMode")}</span>
           </div>
           <div className="reviewer-toolbar-group">
+            <button
+              type="button"
+              onClick={() => void analyze.start()}
+              disabled={analyze.status === "running"}
+              className="btn secondary small"
+            >
+              <Play size={14} />
+              {analyze.status === "running"
+                ? t("reviewer.toolbar.analyzing")
+                : t("reviewer.toolbar.analyze")}
+            </button>
+            {analyze.status === "running" ? (
+              <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
+                <span className="label">{analyze.progress}%</span>
+              </span>
+            ) : null}
+            {analyze.status === "error" && analyze.error ? (
+              <span className="label" style={{ color: "var(--danger)" }}>{analyze.error}</span>
+            ) : null}
+            {analyze.warnings.length > 0 ? (
+              <span className="badge warn" title={analyze.warnings.join("\n")}>
+                {analyze.warnings[0]}
+              </span>
+            ) : null}
             <button type="button" onClick={handleExport} className="btn primary small">
               <Download size={14} />
-              {t("reviewer.toolbar.exportDocx")}
+              {t("reviewer.toolbar.exportDocx", { ext: nativeExt })}
             </button>
+            {document.data ? <DocumentMetaPanel document={document.data} /> : null}
           </div>
         </div>
+
+        <AnalysisTargetBanner />
 
         <main className="reviewer-canvas" style={{ overflow: "auto", padding: 16 }}>
           {blocks.isLoading ? (
             <p className="hint">{t("common.loading")}</p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 900 }}>
+            <div
+              ref={blocksListRef}
+              style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 900 }}
+            >
               {(blocks.data?.blocks ?? []).map((b) => {
                 const count = byTarget.get(b.target_id) ?? 0;
                 const isSelected = selectedTarget === b.target_id;
                 return (
                   <div
                     key={b.target_id}
+                    data-target-id={b.target_id}
                     style={{
                       padding: "6px 10px",
                       borderRadius: 6,

@@ -1,11 +1,14 @@
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, Download, Play } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PdfViewer } from "../components/reviewer/PdfViewer";
+import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { DocxReviewer } from "./DocxReviewer";
+import { useAnalyze } from "../hooks/useAnalyze";
 import {
   useApplyGroup,
   useApplySuggestion,
@@ -24,6 +27,7 @@ export function DocumentReviewer() {
 
   const document = useDocument(documentId);
   const suggestions = useSuggestions(documentId);
+  const analyze = useAnalyze(documentId);
   const apply = useApplySuggestion(documentId);
   const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
@@ -161,6 +165,31 @@ export function DocumentReviewer() {
           <div className="reviewer-toolbar-group">
             <button
               type="button"
+              onClick={() => void analyze.start()}
+              disabled={analyze.status === "running"}
+              className="btn secondary small"
+            >
+              <Play size={14} />
+              {analyze.status === "running"
+                ? t("reviewer.toolbar.analyzing")
+                : t("reviewer.toolbar.analyze")}
+            </button>
+            {analyze.status === "running" ? (
+              <span className="row" style={{ gap: 6, alignItems: "center" }}>
+                <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
+                <span className="label">{analyze.progress}%</span>
+              </span>
+            ) : null}
+            {analyze.status === "error" && analyze.error ? (
+              <span className="label" style={{ color: "var(--danger)" }}>{analyze.error}</span>
+            ) : null}
+            {analyze.warnings.length > 0 ? (
+              <span className="badge warn" title={analyze.warnings.join("\n")}>
+                {analyze.warnings[0]}
+              </span>
+            ) : null}
+            <button
+              type="button"
               onClick={handleExportCommented}
               className="btn primary small"
               data-testid="export-commented"
@@ -172,8 +201,11 @@ export function DocumentReviewer() {
               <Download size={14} />
               {t("reviewer.toolbar.export")}
             </button>
+            {document.data ? <DocumentMetaPanel document={document.data} /> : null}
           </div>
         </div>
+
+        <AnalysisTargetBanner />
 
         <main className="reviewer-canvas">
           <PdfViewer

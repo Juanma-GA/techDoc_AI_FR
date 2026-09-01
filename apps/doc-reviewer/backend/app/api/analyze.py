@@ -6,6 +6,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
+from queue import Empty, SimpleQueue
 
 from typing import Optional
 
@@ -124,6 +125,12 @@ def analyze_stream(
     checklist_enabled_value = checklist  # captured for the worker thread
     rejected_sigs_value = rejected_sigs  # captured for the worker thread
     is_docx_value = is_docx  # pipeline Word natif vs PDF
+    # Mapping manuel du document (cf. rules_engine._doc_meta_block) — capture
+    # avant d'entrer dans le worker thread (pas de reutilisation de session ORM).
+    meta_revision_date_value = doc.meta_revision_date
+    meta_cmm_number_value = doc.meta_cmm_number
+    meta_first_issue_date_value = doc.meta_first_issue_date
+    meta_revision_number_value = doc.meta_revision_number
 
     async def event_gen():
         yield {
@@ -153,6 +160,10 @@ def analyze_stream(
             # don't reuse the ORM session inside the worker thread).
             class _DocStub:
                 target_unit_system = target_unit
+                meta_revision_date = meta_revision_date_value
+                meta_cmm_number = meta_cmm_number_value
+                meta_first_issue_date = meta_first_issue_date_value
+                meta_revision_number = meta_revision_number_value
 
             scoped_session: Session = SessionLocal()
             try:
@@ -165,30 +176,75 @@ def analyze_stream(
                     sv = scoped_session.get(StandardVersion, vid)
                     if sv is not None:
                         versions.append(sv)
+
+                # Le scan checklist/IA (une passe Mistral par page) domine
+                # generalement le temps d'une analyse : sans remontee de
+                # progression pendant ce calcul (execute dans un thread), la
+                # jauge restait figee puis sautait directement a la fin,
+                # donnant l'impression qu'elle "disparaissait". `progress_q`
+                # relie le callback (appele depuis le thread) au generateur
+                # SSE (event loop) via `call_soon_threadsafe`.
+                progress_q: "SimpleQueue[int]" = SimpleQueue()
+                loop = asyncio.get_running_loop()
+
+                def _on_progress(pct: int) -> None:
+                    loop.call_soon_threadsafe(progress_q.put_nowait, pct)
+
+                # Echecs du scan checklist/IA (Mistral mal configure, quota,
+                # modele invalide sur un endpoint prive…) : remontes ici au
+                # lieu de se traduire silencieusement par "0 anomalie" (HR7).
+                run_warnings: list[str] = []
+
                 if is_docx_value:
                     from app.core import docx_pipeline
 
-                    raws = await asyncio.to_thread(
-                        lambda: docx_pipeline.run_docx(
-                            parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
-                            checklist_enabled=checklist_enabled_value,
+                    task = asyncio.create_task(
+                        asyncio.to_thread(
+                            lambda: docx_pipeline.run_docx(
+                                parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
+                                checklist_enabled=checklist_enabled_value,
+                                progress_cb=_on_progress,
+                                warnings=run_warnings,
+                            )
                         )
                     )
+                    while not task.done():
+                        try:
+                            pct = progress_q.get_nowait()
+                            yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
+                        except Empty:
+                            await asyncio.sleep(0.2)
+                    raws = await task
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = docx_pipeline.materialize_docx(
                         raws, parsed, document_id_value, run_id_value
                     )
                 else:
-                    raws = await asyncio.to_thread(
-                        lambda: run_all(
-                            parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
-                            src_path=src_path,
-                            vision_enabled_override=vision_override_value,
-                            checklist_enabled=checklist_enabled_value,
+                    task = asyncio.create_task(
+                        asyncio.to_thread(
+                            lambda: run_all(
+                                parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
+                                src_path=src_path,
+                                vision_enabled_override=vision_override_value,
+                                checklist_enabled=checklist_enabled_value,
+                                progress_cb=_on_progress,
+                                warnings=run_warnings,
+                            )
                         )
                     )
+                    while not task.done():
+                        try:
+                            pct = progress_q.get_nowait()
+                            yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
+                        except Empty:
+                            await asyncio.sleep(0.2)
+                    raws = await task
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
+
+                if run_warnings:
+                    yield {"event": "warning", "data": json.dumps({"messages": run_warnings})}
+
                 total = 0
                 suppressed_rejected = 0
                 for sug in rows:

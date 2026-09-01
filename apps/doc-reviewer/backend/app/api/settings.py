@@ -76,7 +76,13 @@ def update_mistral_settings(
     body: MistralSettingsIn,
     db: Session = Depends(get_db),
 ) -> MistralSettingsOut:
-    payload = body.model_dump()
+    # `exclude_unset` : ne retient QUE les champs explicitement envoyes par le
+    # client. Un `model_dump()` plat inclurait aussi les champs absents du
+    # payload avec leur valeur par defaut Pydantic (ex. `base_url` retombe a
+    # "https://api.mistral.ai") et les ecraserait en base — un update partiel
+    # comme `{chat_model: "..."}` (choix d'un modele dans la liste du test)
+    # effacait alors silencieusement le base_url/vision_model deja configures.
+    payload = body.model_dump(exclude_unset=True)
     # Empty api_key in the request means "keep the current one".
     if not payload.get("api_key"):
         payload.pop("api_key", None)

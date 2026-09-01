@@ -24,6 +24,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from app.core.errors import AppError
@@ -81,26 +82,34 @@ def _find_soffice() -> str | None:
 # d'une conversion a l'autre. URI file:// exige par -env:UserInstallation.
 _LO_PROFILE = Path(tempfile.gettempdir()) / "dr_lo_profile"
 
+# LibreOffice refuse une 2e instance sur le meme profil ("verrou de profil") :
+# deux conversions concurrentes (ex. import d'un .doc pendant qu'un export
+# .docx -> .doc tourne deja) se marchaient dessus et l'une des deux echouait
+# avec DOC_CONVERT_UNAVAILABLE alors que LibreOffice est bien installe. On
+# serialise donc tout appel soffice avec ce verrou process-local.
+_SOFFICE_LOCK = threading.Lock()
+
 
 def _convert_libreoffice(soffice: str, src: Path, outdir: Path) -> Path | None:
     """Convertit `src` (.doc/.docx) vers PDF via LibreOffice headless."""
     try:
-        result = subprocess.run(
-            [
-                soffice,
-                f"-env:UserInstallation={_LO_PROFILE.as_uri()}",
-                "--headless",
-                "--norestore",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                str(outdir),
-                str(src),
-            ],
-            check=True,
-            capture_output=True,
-            timeout=180,
-        )
+        with _SOFFICE_LOCK:
+            result = subprocess.run(
+                [
+                    soffice,
+                    f"-env:UserInstallation={_LO_PROFILE.as_uri()}",
+                    "--headless",
+                    "--norestore",
+                    "--convert-to",
+                    "pdf",
+                    "--outdir",
+                    str(outdir),
+                    str(src),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=180,
+            )
         log.info("LibreOffice convert ok: %s", (result.stdout or b"").decode("utf-8", "replace").strip()[:200])
     except Exception as exc:  # noqa: BLE001
         stderr = getattr(exc, "stderr", b"") or b""
@@ -197,3 +206,91 @@ def doc_to_pdf_bytes(data: bytes, suffix: str) -> tuple[bytes, str]:
         return produced.read_bytes(), engine or "unknown"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _convert_libreoffice_format(src: Path, outdir: Path, target_format: str) -> Path | None:
+    """Convertit `src` vers `target_format` (ex. "docx", "doc") via LibreOffice
+    headless. Generalise `_convert_libreoffice` (fige sur "pdf")."""
+    soffice = _find_soffice()
+    if not soffice:
+        return None
+    try:
+        with _SOFFICE_LOCK:
+            result = subprocess.run(
+                [
+                    soffice,
+                    f"-env:UserInstallation={_LO_PROFILE.as_uri()}",
+                    "--headless",
+                    "--norestore",
+                    "--convert-to",
+                    target_format,
+                    "--outdir",
+                    str(outdir),
+                    str(src),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=180,
+            )
+        log.info(
+            "LibreOffice convert (%s) ok: %s",
+            target_format,
+            (result.stdout or b"").decode("utf-8", "replace").strip()[:200],
+        )
+    except Exception as exc:  # noqa: BLE001
+        stderr = getattr(exc, "stderr", b"") or b""
+        log.warning(
+            "conversion LibreOffice (%s) echouee: %s | stderr=%s",
+            target_format, exc, stderr.decode("utf-8", "replace")[:300],
+        )
+        return None
+    out = outdir / (src.stem + f".{target_format}")
+    return out if out.exists() else None
+
+
+def office_to_docx_bytes(data: bytes, suffix: str) -> bytes:
+    """Convertit des octets `.doc` (legacy) en `.docx` (OOXML) via LibreOffice,
+    pour que la revue **Word native** (pipeline docx) puisse s'appliquer a un
+    `.doc` sans passer par le pipeline PDF. Seul LibreOffice est supporte ici
+    (Word COM n'exporte pas de .docx fiable hors politique de securite Office).
+    """
+    suffix = suffix if suffix.startswith(".") else f".{suffix}"
+    tmp = Path(tempfile.mkdtemp(prefix="dr_doc2docx_"))
+    src = tmp / f"input{suffix}"
+    src.write_bytes(data)
+    try:
+        produced = _convert_libreoffice_format(src, tmp, "docx")
+        if produced is None or not produced.exists():
+            raise AppError(
+                "DOC_CONVERT_UNAVAILABLE",
+                "Conversion .doc -> .docx impossible sur ce poste : LibreOffice "
+                "n'a pas produit de fichier (absent, ou conversion concurrente "
+                "en echec). Verifiez DR_SOFFICE_PATH, ou reessayez.",
+                status_code=400,
+            )
+        return produced.read_bytes()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def docx_to_doc_bytes(data: bytes) -> bytes:
+    """Convertit des octets `.docx` (revise nativement) vers `.doc` (legacy),
+    pour rendre a l'export le format d'origine de l'utilisateur sans etape de
+    conversion manuelle de sa part."""
+    tmp = Path(tempfile.mkdtemp(prefix="dr_docx2doc_"))
+    src = tmp / "input.docx"
+    src.write_bytes(data)
+    try:
+        produced = _convert_libreoffice_format(src, tmp, "doc")
+        if produced is None or not produced.exists():
+            raise AppError(
+                "DOC_CONVERT_UNAVAILABLE",
+                "Conversion .docx -> .doc impossible sur ce poste : LibreOffice "
+                "n'a pas produit de fichier (absent, ou conversion concurrente "
+                "en echec). Verifiez DR_SOFFICE_PATH, ou reessayez.",
+                status_code=400,
+            )
+        return produced.read_bytes()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+

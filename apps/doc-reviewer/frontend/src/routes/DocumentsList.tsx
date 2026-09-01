@@ -1,11 +1,13 @@
 import { Play, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
+import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
 import { useStandards } from "../hooks/useStandards";
@@ -32,6 +34,11 @@ export function DocumentsList() {
   const upload = useUploadDocument();
   const remove = useDeleteDocument();
   const standards = useStandards();
+  // Nombre d'uploads en cours dans TOUT le cache TanStack Query (pas juste
+  // cette instance du hook) : reste correct meme apres avoir navigue puis
+  // etre revenu sur cette page pendant qu'un upload tourne encore en fond.
+  const uploadingCount = useIsMutating({ mutationKey: ["upload-document"] });
+  const isUploading = uploadingCount > 0;
   const targetUnits = useFiltersStore((s) => s.targetUnits);
   const toggleTargetUnit = useFiltersStore((s) => s.toggleTargetUnit);
   const checklistActive = useFiltersStore((s) => s.checklistActive);
@@ -55,12 +62,18 @@ export function DocumentsList() {
   }, [standards.data, activeStandardVersionIds]);
 
   const handleUpload = (file: File): void => {
+    const lowerName = file.name.toLowerCase();
+    // Un .doc (legacy binaire) n'a pas d'interet a etre revise en PDF : le
+    // pipeline Word natif (conversion interne, export reconverti en .doc) est
+    // force pour ce format, sans dependre du switch (qui reste au choix de
+    // l'utilisateur pour un .docx : PDF ou Word natif).
+    const isLegacyDoc = lowerName.endsWith(".doc") && !lowerName.endsWith(".docx");
     upload.mutate(
       {
         file,
         target: effectiveTarget(targetUnits),
         standardVersionIds: activeStandardVersionIds,
-        wordMode: wordNative ? "docx" : "pdf",
+        wordMode: isLegacyDoc || wordNative ? "docx" : "pdf",
       },
       {
         // Fichier unique -> navigation vers le reviewer ; .zip (batch) -> on
@@ -85,12 +98,14 @@ export function DocumentsList() {
         <div className="banner">
           <span>{t("documents.activeStandardLabel")}</span>
           <strong className="label">
-            {activeStandardLabel ?? t("standards.transverse")}
+            {activeStandardLabel ?? t("documents.noStandardSelected")}
           </strong>
           <Link to="/settings" className="grow" style={{ textAlign: "right" }}>
             {t("documents.changeStandard")}
           </Link>
         </div>
+
+        <AnalysisTargetBanner />
 
         {/* Cible checklist : toggle runtime, independant des normes. */}
         <div className="switch-row">
@@ -148,11 +163,13 @@ export function DocumentsList() {
             </div>
           </div>
 
-          <PdfUploadZone onFile={handleUpload} uploading={upload.isPending} />
+          <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
 
           {/* Statut d'import explicite (l'upload est synchrone cote serveur :
-              conversion Word->PDF, portail qualite -> plusieurs secondes). */}
-          {upload.isPending ? (
+              conversion Word->PDF, portail qualite -> plusieurs secondes).
+              Base sur le cache global (useIsMutating), donc reste affiche
+              meme si on quitte cette page et qu'on y revient pendant l'upload. */}
+          {isUploading ? (
             <div
               className="banner"
               role="status"

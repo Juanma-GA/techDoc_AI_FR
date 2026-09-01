@@ -70,6 +70,13 @@ export function Settings() {
     );
   };
 
+  // Choisir un modele dans la liste renvoyee par le test de connexion
+  // l'enregistre immediatement (pas de saisie libre -> pas de risque de
+  // faute de frappe), pour eviter la question "dois-je encore enregistrer ?".
+  const pickModel = (id: string): void => {
+    updateMistral.mutate({ chat_model: id });
+  };
+
   return (
     <div>
       <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
@@ -122,24 +129,24 @@ export function Settings() {
                 </Field>
                 <Field label={t("settings.mistral.baseUrl")}>
                   <input
-                    placeholder={mistral.data?.base_url ?? "https://api.mistral.ai"}
-                    value={baseUrlDraft}
+                    placeholder="https://api.mistral.ai"
+                    value={baseUrlDraft || mistral.data?.base_url || ""}
                     onChange={(e) => setBaseUrlDraft(e.target.value)}
                     className="input mono"
                   />
                 </Field>
                 <Field label={t("settings.mistral.chatModel")}>
                   <input
-                    placeholder={mistral.data?.chat_model ?? "mistral-small-latest"}
-                    value={modelDraft}
+                    placeholder="mistral-small-latest"
+                    value={modelDraft || mistral.data?.chat_model || ""}
                     onChange={(e) => setModelDraft(e.target.value)}
                     className="input mono"
                   />
                 </Field>
                 <Field label={t("settings.mistral.visionModel")}>
                   <input
-                    placeholder={mistral.data?.vision_model ?? "pixtral-12b-2409"}
-                    value={visionModelDraft}
+                    placeholder="pixtral-12b-2409"
+                    value={visionModelDraft || mistral.data?.vision_model || ""}
                     onChange={(e) => setVisionModelDraft(e.target.value)}
                     className="input mono"
                   />
@@ -176,6 +183,26 @@ export function Settings() {
                     </span>
                   ) : null}
                 </div>
+
+                {testMistral.data?.ok && testMistral.data.models.length > 0 ? (
+                  <div className="form" style={{ gap: 6 }}>
+                    <span className="label">{t("settings.mistral.modelsFound")}</span>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+                      {testMistral.data.models.map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className="btn ghost small mono"
+                          title={t("settings.mistral.useThisModel")}
+                          disabled={updateMistral.isPending}
+                          onClick={() => pickModel(id)}
+                        >
+                          {id}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </Card>

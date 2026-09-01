@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections import defaultdict
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
 
@@ -53,6 +53,8 @@ def run_docx(
     standard_versions: Optional[list[StandardVersion]] = None,
     *,
     checklist_enabled: bool = True,
+    progress_cb: Optional[Callable[[int], None]] = None,
+    warnings: Optional[list[str]] = None,
 ) -> list[RawSuggestion]:
     """Détection sur un document Word natif. `RawSuggestion.page` porte l'index
     du bloc (→ `target_id = dp<page>`).
@@ -78,6 +80,8 @@ def run_docx(
         src_path=None,
         vision_enabled_override=False,
         checklist_enabled=checklist_enabled,
+        progress_cb=progress_cb,
+        warnings=warnings,
     )
     # Checks Word natifs (revision) : toujours actifs sur un docx.
     out.extend(docx_checks.run(parsed))
@@ -109,6 +113,7 @@ def materialize_docx(
                 run_id=run_id,
                 rule_kind=raw.rule_kind,
                 rule_code=raw.rule_code,
+                source_kind=rules_engine.classify_source(raw.rule_kind, raw.rule_code),
                 severity=raw.severity,
                 message=raw.message,
                 original_text=raw.original,

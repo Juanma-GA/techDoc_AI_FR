@@ -34,6 +34,7 @@ export function PdfViewer({
   const [error, setError] = useState(false);
   const [box, setBox] = useState<Box | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   const measure = useCallback(() => {
     const img = imgRef.current;
@@ -63,12 +64,24 @@ export function PdfViewer({
 
   const filtered = suggestions.filter((s) => s.page === pageNumber);
 
+  // Fait defiler le viewer jusqu'au surlignage selectionne (clic depuis le
+  // panneau de suggestions) : utile quand la page rendue depasse la hauteur
+  // de l'ecran et que le surlignage n'est pas deja visible.
+  useEffect(() => {
+    if (!selectedSuggestionId || !box || !wrapRef.current) return;
+    const el = wrapRef.current.querySelector<HTMLElement>(
+      `[data-suggestion-id="${selectedSuggestionId}"]`,
+    );
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [selectedSuggestionId, box]);
+
   return (
     <div style={{ width: "100%", textAlign: "center" }}>
       {error ? (
         <div className="empty-state">Apercu de page indisponible.</div>
       ) : (
         <div
+          ref={wrapRef}
           className="viewer-wrap"
           style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}
         >

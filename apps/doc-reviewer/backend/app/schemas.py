@@ -33,6 +33,11 @@ class DocumentOut(BaseModel):
     convert_engine: str = "pdf"
     text_coverage: int = 100
     quality: str = "analyzable"
+    # Mapping manuel par document, reference par les consignes de checklist.
+    meta_revision_date: Optional[str] = None
+    meta_cmm_number: Optional[str] = None
+    meta_first_issue_date: Optional[str] = None
+    meta_revision_number: Optional[str] = None
     created_at: datetime
 
     @field_validator("standard_version_ids", mode="before")
@@ -51,6 +56,16 @@ class RollbackIn(BaseModel):
     target_version: int = Field(..., ge=0)
 
 
+class DocumentMetaPatchIn(BaseModel):
+    """Mapping manuel par document — champs libres references par les
+    consignes de checklist (ex. « verifier la date de revision »)."""
+
+    meta_revision_date: Optional[str] = Field(default=None, max_length=60)
+    meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
+    meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
+    meta_revision_number: Optional[str] = Field(default=None, max_length=60)
+
+
 # =============================================================================
 # Suggestions
 # =============================================================================
@@ -64,6 +79,7 @@ class SuggestionOut(BaseModel):
     run_id: Optional[uuid.UUID]
     rule_kind: str
     rule_code: str
+    source_kind: str = "norme"
     severity: str
     message: str
     original_text: str

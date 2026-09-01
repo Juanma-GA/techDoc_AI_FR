@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import type { RuleKind, Severity } from "../types/domain";
+import type { RuleKind, Severity, SourceKind } from "../types/domain";
 
 type FiltersState = {
   severities: Severity[];
@@ -19,6 +19,10 @@ type FiltersState = {
   // Normes cibles actives (multi-select Parametres, parite preview) : liste de
   // version IDs fusionnees a chaque analyse et appliquees a chaque upload.
   activeStandardVersionIds: string[];
+  // Filtre de la liste des anomalies (panneau reviewer) : source (checklist /
+  // norme / regle / transverse) et regle precise. `null` = pas de filtre.
+  sourceKindFilter: SourceKind | null;
+  ruleCodeFilter: string | null;
   toggleSeverity: (s: Severity) => void;
   toggleKind: (k: RuleKind) => void;
   setHideAccepted: (v: boolean) => void;
@@ -28,6 +32,8 @@ type FiltersState = {
   setLastStandard: (standardId: string | null, versionId: string | null) => void;
   toggleActiveStandardVersion: (versionId: string) => void;
   clearActiveStandards: () => void;
+  setSourceKindFilter: (v: SourceKind | null) => void;
+  setRuleCodeFilter: (v: string | null) => void;
 };
 
 export const useFiltersStore = create<FiltersState>()(
@@ -45,6 +51,8 @@ export const useFiltersStore = create<FiltersState>()(
       lastStandardId: null,
       lastStandardVersionId: null,
       activeStandardVersionIds: [],
+      sourceKindFilter: null,
+      ruleCodeFilter: null,
       toggleSeverity: (s) =>
         set({
           severities: get().severities.includes(s)
@@ -75,6 +83,8 @@ export const useFiltersStore = create<FiltersState>()(
             : [...get().activeStandardVersionIds, versionId],
         }),
       clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
+      setSourceKindFilter: (v) => set({ sourceKindFilter: v }),
+      setRuleCodeFilter: (v) => set({ ruleCodeFilter: v }),
     }),
     { name: "doc-reviewer-filters" },
   ),

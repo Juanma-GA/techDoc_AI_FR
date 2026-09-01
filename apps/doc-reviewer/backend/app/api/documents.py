@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Literal, Optional
 
 import fitz  # PyMuPDF
@@ -12,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core import docx_pipeline, docx_versioning, ingest
+from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
 from app.core.versioning import sha256_of_bytes
@@ -20,7 +21,7 @@ from app.db.models import Document, EditHistory, StandardVersion
 from app.db.session import get_db
 from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf
-from app.schemas import DocumentOut, EditHistoryOut, RollbackIn
+from app.schemas import DocumentMetaPatchIn, DocumentOut, EditHistoryOut, RollbackIn
 
 
 router = APIRouter(tags=["documents"])
@@ -177,38 +178,53 @@ def _persist_docx(
     standard_version_id: Optional[uuid.UUID] = None,
     standard_version_ids: Optional[list[uuid.UUID]] = None,
 ) -> Document:
-    """Persiste un `.docx` pour la revue **Word native** (source_format="docx").
+    """Persiste un document pour la revue **Word native** (source_format="docx").
 
-    L'original est stocke en v0.docx (versioning docx), parse pour compter les
-    blocs/pages. Aucune conversion : la revue et l'edition se font sur le .docx.
-    Phase 1 : n'accepte que `.docx` (pas `.doc`) — pour un `.doc`, utiliser le
-    mode PDF ou le convertir en `.docx` au prealable.
+    `.docx` : l'original est stocke tel quel en v0.docx (versioning docx),
+    parse pour compter les blocs/pages — aucune conversion.
+
+    `.doc` (legacy binaire) : converti **une seule fois, en interne** en
+    `.docx` via LibreOffice (`doc_convert.office_to_docx_bytes`) pour pouvoir
+    beneficier de la revue native au lieu d'etre bascule vers le pipeline PDF.
+    L'utilisateur n'a rien a convertir lui-meme : `original_filename` garde
+    l'extension `.doc` d'origine, et l'export (`GET .../export`) reconvertit
+    le `.docx` de travail en `.doc` avant de le renvoyer (cf. `export_pdf`).
     """
     from app.core.security import safe_filename
 
     safe = safe_filename(name)
-    if not safe.lower().endswith(".docx"):
+    ext = Path(safe).suffix.lower()
+    if ext not in (".docx", ".doc"):
         raise AppError(
             "DOCX_MODE_REQUIRES_DOCX",
-            "Le mode Word natif n'accepte que des fichiers .docx. Pour un .doc, "
-            "convertis-le en .docx ou utilise le mode PDF.",
+            "Le mode Word natif n'accepte que des fichiers .doc ou .docx.",
             status_code=400,
         )
     if len(data) == 0:
         raise AppError("UPLOAD_EMPTY", "Fichier vide", status_code=400)
     if len(data) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", f"{safe} depasse la taille max.", status_code=413)
-    if data[:2] != b"PK":
-        raise AppError("DOCX_INVALID", "Fichier .docx illisible (OOXML attendu).", status_code=400)
 
-    sha = sha256_of_bytes(data)
+    if ext == ".doc":
+        # Conversion interne .doc -> .docx (silencieuse pour l'utilisateur) :
+        # le fichier de travail est du docx, mais `original_filename` conserve
+        # le suffixe .doc pour un aller-retour transparent a l'export.
+        working_data = doc_convert.office_to_docx_bytes(data, ".doc")
+        engine = "docx-native-from-doc"
+    else:
+        if data[:2] != b"PK":
+            raise AppError("DOCX_INVALID", "Fichier .docx illisible (OOXML attendu).", status_code=400)
+        working_data = data
+        engine = "docx-native"
+
+    sha = sha256_of_bytes(working_data)
     doc_id = uuid.uuid4()
     storage_dir_value = f"document_{doc_id.hex}"
-    docx_versioning.write_version(storage_dir_value, 0, data)
+    docx_versioning.write_version(storage_dir_value, 0, working_data)
     try:
         parsed = parse_docx(docx_versioning.version_path(storage_dir_value, 0))
     except Exception as exc:  # noqa: BLE001
-        raise AppError("DOCX_INVALID", f"{safe} n'est pas un .docx lisible.", status_code=400) from exc
+        raise AppError("DOCX_INVALID", f"{safe} n'est pas lisible.", status_code=400) from exc
 
     page_count = max((b.page for b in parsed.blocks), default=1)
 
@@ -226,7 +242,7 @@ def _persist_docx(
         status="uploaded",
         current_version=0,
         source_format="docx",
-        convert_engine="docx-native",
+        convert_engine=engine,
         text_coverage=100,
         quality="analyzable",
     )
@@ -244,8 +260,9 @@ def upload_document(
         default="pdf",
         description=(
             "Pipeline de revue (dual-mode). 'pdf' (defaut) : conversion en PDF "
-            "fidele puis edition PDF. 'docx' : revue Word native (.docx requis), "
-            "sortie .docx corrigee."
+            "fidele puis edition PDF. 'docx' : revue Word native (.doc/.docx), "
+            "sortie dans le format d'origine (un .doc est converti en interne "
+            "puis reconverti a l'export, sans etape manuelle)."
         ),
     ),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
@@ -350,6 +367,26 @@ def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Docum
     return doc
 
 
+@router.patch("/documents/{document_id}", response_model=DocumentOut)
+def patch_document_meta(
+    document_id: uuid.UUID,
+    body: DocumentMetaPatchIn,
+    db: Session = Depends(get_db),
+) -> Document:
+    """Enregistre le mapping manuel du document (date de revision, numero
+    CMM, date de premiere issue, numero de revision) — repris par les
+    consignes de checklist lors du scan IA (cf. rules_engine)."""
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    patch = body.model_dump(exclude_unset=True)
+    for key, value in patch.items():
+        setattr(doc, key, value)
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
 @router.delete("/documents/{document_id}", status_code=204)
 def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
     doc = db.get(Document, document_id)
@@ -437,28 +474,44 @@ def render_page_png(
     )
 
 
-@router.get("/documents/{document_id}/export")
-def export_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> FileResponse:
+@router.get("/documents/{document_id}/export", response_model=None)
+def export_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> FileResponse | Response:
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
-    # Pipeline Word natif : on rend le .docx corrige (version courante).
+    # Pipeline Word natif : on rend le .docx corrige (version courante). Si le
+    # document d'origine etait un `.doc` (converti en interne a l'upload, cf.
+    # `_persist_docx`), on reconvertit le .docx de travail en .doc a la volee
+    # pour que l'utilisateur recupere le format qu'il a envoye, sans etape
+    # manuelle de conversion de sa part.
     if doc.source_format == "docx":
         target = docx_versioning.version_path(doc.storage_dir, doc.current_version)
         if not target.is_file():
             raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=404)
+        if doc.original_filename.lower().endswith(".doc") and not doc.original_filename.lower().endswith(".docx"):
+            doc_bytes = doc_convert.docx_to_doc_bytes(target.read_bytes())
+            return Response(
+                content=doc_bytes,
+                media_type="application/msword",
+                headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
+            )
         return FileResponse(
             target,
             media_type=_DOCX_MIME,
             filename=doc.original_filename,
             headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
         )
+    # Pipeline PDF (defaut, y compris pour un .doc/.docx converti a l'upload) :
+    # le livrable est toujours un PDF -> le nom rendu porte l'extension .pdf,
+    # jamais l'extension Word d'origine (sinon le fichier telecharge s'appelle
+    # "manuel.doc" alors que son contenu est un PDF, illisible tel quel dans Word).
     target = current_path(doc.storage_dir, doc.current_version)
+    pdf_filename = Path(doc.original_filename).stem + ".pdf"
     return FileResponse(
         target,
         media_type="application/pdf",
-        filename=doc.original_filename,
-        headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
+        filename=pdf_filename,
+        headers={"Content-Disposition": f'attachment; filename="{pdf_filename}"'},
     )
 
 

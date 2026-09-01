@@ -1,6 +1,9 @@
 export type Severity = "info" | "warning" | "error";
 
-export type RuleKind = "standard" | "custom" | "units" | "layout";
+export type RuleKind = "standard" | "custom" | "units" | "layout" | "vision";
+
+/** Provenance affichee/filtrable dans la liste des anomalies. */
+export type SourceKind = "norme" | "checklist" | "regle" | "transverse";
 
 export type RuleKindStored =
   | "regex_replace"
@@ -37,6 +40,7 @@ export type Suggestion = {
   run_id: string | null;
   rule_kind: RuleKind;
   rule_code: string;
+  source_kind: SourceKind;
   severity: Severity;
   message: string;
   original_text: string;
@@ -90,6 +94,11 @@ export type Document = {
   convert_engine: string;
   text_coverage: number;
   quality: QualityState;
+  /** Mapping manuel par document, reference par les consignes de checklist. */
+  meta_revision_date: string | null;
+  meta_cmm_number: string | null;
+  meta_first_issue_date: string | null;
+  meta_revision_number: string | null;
   created_at: string;
 };
 
