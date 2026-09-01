@@ -1,7 +1,7 @@
 ---
 name: Global Standards Control
 description: "Use when reviewing the whole ATEXIS POC monorepo against AACF, CLAUDE.md, STANDARD_POC.md, ADRs, app exceptions, and executable local checks. Performs a read-only global consistency and compliance control with evidence, severity, and remediation backlog."
-tools: [read, search, execute, "atexis-aacf/*"]
+tools: ['atexis-aacf/*', azure-mcp/search]
 user-invocable: true
 argument-hint: "Run a global control, or specify a scope such as standards, all apps, documentation, security, frontend, or backend"
 agents: []
