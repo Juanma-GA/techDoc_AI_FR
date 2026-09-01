@@ -1,4 +1,4 @@
-# Portail ATEXIS POCS
+# Portail AI@ATEXIS
 
 Page d'accueil statique qui liste les POCs déployés et pointe vers chacun. Elle
 se pose **à la racine du chemin parent** sous lequel les POCs sont montés en IIS,
@@ -12,7 +12,6 @@ commun**. Exemples observés :
 
 - `https://172.21.28.92/Customizations/AtexisPOCS/<poc>/` (cf.
   `apps/corpus-agent/DEPLOYMENT_GUIDE.md`)
-- `http://172.21.28.81/app/atexispocs-cd/<poc>/`
 
 Le portail se pose à la **racine de ce parent** :
 

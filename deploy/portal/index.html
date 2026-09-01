@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
-    <title>Atexis POCs</title>
+    <title>AI@ATEXIS</title>
 
     <!--
       Portail de lancement des POCs deployes sous un chemin parent commun
-      (IIS : .../AtexisPOCS/ ou /app/atexispocs-cd/). Poser CE fichier a la
+      (IIS : .../AtexisPOCS/). Poser CE fichier a la
       RACINE de ce chemin parent ; chaque POC est une sous-application IIS.
       Les liens sont RELATIFS (href="corpus-agent/") -> la page fonctionne
       quel que soit le chemin parent, sans URL ni IP en dur. Voir README.md.
@@ -40,7 +40,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;600;700&display=swap"
     />
 
     <style>
@@ -93,15 +93,16 @@
         -webkit-font-smoothing: antialiased;
       }
       .wrap {
-        max-width: 1080px;
+        max-width: 1120px;
         margin: 0 auto;
-        padding: clamp(28px, 6vw, 64px) 32px 56px;
+        padding: 40px 24px 56px;
       }
       header {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
         gap: 16px;
+        margin-bottom: 20px;
       }
       .title {
         font-weight: 800;
@@ -109,18 +110,59 @@
         letter-spacing: -0.02em;
         color: var(--text);
         margin: 0;
+        font-family: "Orbitron", "Inter", sans-serif;
       }
       .subtitle {
         color: var(--dim);
-        margin: 10px 0 40px;
+        margin: 8px 0 24px;
         font-size: clamp(15px, 2vw, 18px);
       }
 
-      .controls {
+      .topbar-actions {
         flex: none;
         display: inline-flex;
         align-items: center;
         gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .nav-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .portal-action {
+        appearance: none;
+        border: 1px solid var(--border-md);
+        background: rgba(37, 99, 235, 0.08);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, transform 0.15s;
+      }
+      .portal-action:hover {
+        background: rgba(59, 130, 246, 0.16);
+        border-color: var(--brand-light);
+        transform: translateY(-1px);
+      }
+      .portal-action.primary {
+        background: var(--brand);
+        color: var(--on-brand);
+        border-color: var(--brand);
+      }
+      .portal-action.primary:hover {
+        background: var(--brand-light);
+      }
+      .portal-action.active {
+        background: var(--brand);
+        color: var(--on-brand);
+        border-color: var(--brand);
       }
       .lang-switch {
         display: inline-flex;
@@ -180,6 +222,17 @@
         grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
         gap: 20px;
       }
+      .section {
+        margin-top: 28px;
+      }
+      .section-title {
+        margin: 0 0 14px;
+        color: var(--dim);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
       .card {
         display: flex;
         flex-direction: column;
@@ -196,6 +249,14 @@
         background: var(--card-hover);
         border-color: var(--brand);
       }
+      .card.validation {
+        border-color: rgba(245, 158, 11, 0.45);
+        background: rgba(245, 158, 11, 0.06);
+      }
+      .card.validation:hover {
+        border-color: rgba(245, 158, 11, 0.8);
+        background: rgba(245, 158, 11, 0.12);
+      }
       .card.external {
         background: var(--card-external);
         border-color: color-mix(in srgb, var(--external-accent) 28%, var(--border));
@@ -211,10 +272,31 @@
       .card.external:focus-visible {
         outline-color: var(--external-accent);
       }
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
       .card-name {
         font-weight: 700;
         font-size: 20px;
         color: var(--text);
+      }
+      .card-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 88px;
+        padding: 5px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(245, 158, 11, 0.45);
+        background: rgba(245, 158, 11, 0.12);
+        color: #fbbf24;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
       .card-desc {
         color: var(--dim);
@@ -237,11 +319,18 @@
   <body>
     <div class="wrap">
       <header>
-        <h1 class="title">Atexis POCs</h1>
-        <div class="controls">
-          <div class="lang-switch" role="group" aria-label="Language">
-            <button type="button" class="lang-btn" data-lang="fr">FR</button>
-            <button type="button" class="lang-btn" data-lang="en">EN</button>
+        <h1 class="title">AI@ATEXIS</h1>
+        <div class="topbar-actions">
+          <div class="nav-actions" aria-label="Navigation stratégique">
+            <button type="button" class="portal-action active" data-target="index.html" data-i18n="portalBtn">
+              Portail
+            </button>
+            <button type="button" class="portal-action" data-target="roadmap.html" data-i18n="roadmapBtn">
+              Roadmap IA
+            </button>
+            <button type="button" class="portal-action" data-target="ia-ecosystem.html" data-i18n="ecosystemBtn">
+              Écosystème IA
+            </button>
           </div>
           <button type="button" class="theme-toggle" id="theme-toggle">
             <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none"
@@ -256,11 +345,15 @@
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           </button>
+          <div class="lang-switch" role="group" aria-label="Language">
+            <button type="button" class="lang-btn" data-lang="fr">FR</button>
+            <button type="button" class="lang-btn" data-lang="en">EN</button>
+          </div>
         </div>
       </header>
       <p class="subtitle" id="subtitle"></p>
 
-      <div class="grid" id="grid"></div>
+      <div id="grid"></div>
 
       <footer id="footer"></footer>
     </div>
@@ -276,10 +369,16 @@
         fr: {
           empty: "Aucun POC configuré. Vérifier config.json.",
           themeLabel: "Basculer le thème clair / sombre",
+          portalBtn: "Portail",
+          roadmapBtn: "Roadmap IA",
+          ecosystemBtn: "Écosystème IA",
         },
         en: {
           empty: "No POC configured. Check config.json.",
           themeLabel: "Toggle light / dark theme",
+          portalBtn: "Portal",
+          roadmapBtn: "AI Roadmap",
+          ecosystemBtn: "AI Ecosystem",
         },
       };
 
@@ -321,18 +420,23 @@
       const footer = document.getElementById("footer");
       const themeToggle = document.getElementById("theme-toggle");
 
-      function renderCards(lang) {
-        grid.innerHTML = "";
-        if (!POCS.length) {
-          const div = document.createElement("div");
-          div.className = "empty";
-          div.textContent = I18N[lang].empty;
-          grid.appendChild(div);
-          return;
-        }
-        for (const poc of POCS) {
+      function buildSection(title, items, lang) {
+        const section = document.createElement("section");
+        section.className = "section";
+        const h2 = document.createElement("h2");
+        h2.className = "section-title";
+        h2.textContent = title;
+        section.appendChild(h2);
+
+        const list = document.createElement("div");
+        list.className = "grid";
+
+        items.forEach((poc) => {
           const a = document.createElement("a");
           a.className = "card";
+          if (poc.status === "validation") {
+            a.classList.add("validation");
+          }
           const isExternalUrl = typeof poc.url === "string" && /^https?:\/\//i.test(poc.url);
           a.href = isExternalUrl ? poc.url : poc.slug + "/";
           if (isExternalUrl) {
@@ -342,10 +446,41 @@
             a.target = "_blank";
             a.rel = "noopener noreferrer";
           }
-          a.innerHTML = '<div class="card-name"></div><div class="card-desc"></div>';
+          a.innerHTML = '<div class="card-head"><div class="card-name"></div><div class="card-badge"></div></div><div class="card-desc"></div>';
           a.querySelector(".card-name").textContent = poc.name;
+          const badge = a.querySelector(".card-badge");
+          if (poc.status === "validation") {
+            badge.textContent = lang === "fr" ? "À valider" : "To validate";
+          } else {
+            badge.textContent = "";
+            badge.style.display = "none";
+          }
           a.querySelector(".card-desc").textContent = poc.desc[lang];
-          grid.appendChild(a);
+          list.appendChild(a);
+        });
+
+        section.appendChild(list);
+        return section;
+      }
+
+      function renderCards(lang) {
+        grid.innerHTML = "";
+        if (!POCS.length) {
+          const div = document.createElement("div");
+          div.className = "empty";
+          div.textContent = I18N[lang].empty;
+          grid.appendChild(div);
+          return;
+        }
+
+        const active = POCS.filter((poc) => poc.status !== "validation");
+        const validation = POCS.filter((poc) => poc.status === "validation");
+
+        if (active.length) {
+          grid.appendChild(buildSection(lang === "fr" ? "Applications actives" : "Active applications", active, lang));
+        }
+        if (validation.length) {
+          grid.appendChild(buildSection(lang === "fr" ? "À valider" : "To validate", validation, lang));
         }
       }
 
@@ -354,6 +489,9 @@
         subtitle.textContent = I18N[lang].subtitle;
         footer.textContent = I18N[lang].footer;
         themeToggle.setAttribute("aria-label", I18N[lang].themeLabel);
+        document.querySelectorAll("[data-i18n]").forEach(function (element) {
+          element.textContent = I18N[lang][element.dataset.i18n];
+        });
         document.querySelectorAll(".lang-btn").forEach(function (btn) {
           btn.classList.toggle("active", btn.dataset.lang === lang);
         });
@@ -370,6 +508,13 @@
       document.querySelectorAll(".lang-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {
           applyLang(btn.dataset.lang);
+        });
+      });
+
+      document.querySelectorAll(".portal-action").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const target = btn.dataset.target || "roadmap.html";
+          window.location.href = target;
         });
       });
 

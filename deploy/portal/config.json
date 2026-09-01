@@ -1,5 +1,5 @@
 {
-  "title": "Atexis POCs",
+  "title": "AI@ATEXIS",
   "subtitle": {
     "fr": "Applications de preuve de concept",
     "en": "Proof-of-concept applications"
@@ -12,6 +12,7 @@
     {
       "slug": "corpus-agent",
       "name": "Corpus Agent",
+      "stage": "validation",
       "desc": {
         "fr": "Contrôle de cohérence d'un corpus documentaire.",
         "en": "Document corpus consistency checks."
@@ -20,6 +21,7 @@
     {
       "slug": "doc-writer",
       "name": "Doc Writer",
+      "stage": "translation",
       "desc": {
         "fr": "Génération assistée de documents à partir de templates.",
         "en": "Assisted document generation from templates."
@@ -28,6 +30,7 @@
     {
       "slug": "doc-reviewer",
       "name": "Doc Reviewer",
+      "stage": "validation",
       "desc": {
         "fr": "Relecture détection-first de PDF / Word, PDF commenté en sortie.",
         "en": "Detection-first PDF / Word review with an annotated PDF output."
@@ -36,6 +39,7 @@
     {
       "slug": "catia-toolbox",
       "name": "Catia Toolbox",
+      "stage": "illustration",
       "desc": {
         "fr": "Automatisations CATIA sur données neutres, plans relisables (dry-run).",
         "en": "CATIA automations on neutral data, reviewable dry-run plans."
@@ -44,6 +48,7 @@
     {
       "slug": "ocr-vision",
       "name": "OCR Vision",
+      "stage": "structuring",
       "desc": {
         "fr": "OCR et reconnaissance visuelle de documents techniques.",
         "en": "OCR and visual recognition of technical documents."
@@ -52,14 +57,37 @@
     {
       "slug": "s1000d-extractor",
       "name": "S1000D Extractor",
+      "stage": "structuring",
       "desc": {
         "fr": "Migration de documentation legacy vers un squelette XML S1000D.",
         "en": "Legacy documentation migration into an S1000D XML skeleton."
       }
     },
     {
+      "slug": "imagebot-ai-processing-image",
+      "url": "http://itgfrapapp800.prod.altengroup.dir:2010/",
+      "name": "ImageBot- AI Processing Image",
+      "stage": "illustration",
+      "desc": {
+        "fr": "Traitement d'image assisté par IA.",
+        "en": "AI-assisted image processing."
+      }
+    },
+    {
+      "slug": "a3-linguo",
+      "url": "https://context-aware-translation.apps.alten.ai/home",
+      "name": "A³ Linguo",
+      "stage": "translation",
+      "desc": {
+        "fr": "Traduction contextuelle assistée par IA.",
+        "en": "AI-assisted context-aware translation."
+      }
+    },
+    {
       "slug": "brdp-manager",
       "name": "BRDP Manager",
+      "stage": "validation",
+      "status": "validation",
       "desc": {
         "fr": "Gestion des BRDP S1000D/DITA, génération BREX/Schematron, extraction IA.",
         "en": "S1000D/DITA BRDP management, BREX/Schematron generation, AI extraction."
@@ -68,27 +96,11 @@
     {
       "slug": "xml-proofreader",
       "name": "XML Proofreader",
+      "stage": "validation",
+      "status": "validation",
       "desc": {
         "fr": "Annotation DITA/S1000D façon PDF, compatible Oxygen XML Author.",
         "en": "PDF-like annotation of DITA/S1000D content, Oxygen XML Author compatible."
-      }
-    },
-    {
-      "slug": "imagebot-ai-processing-image",
-      "url": "http://itgfrapapp800.prod.altengroup.dir:2010/",
-      "name": "ImageBot- AI Processing Image",
-      "desc": {
-        "fr": "Traitement d'image assiste par IA.",
-        "en": "AI-assisted image processing."
-      }
-    },
-    {
-      "slug": "a3-linguo",
-      "url": "https://context-aware-translation.apps.alten.ai/home",
-      "name": "A³ Linguo",
-      "desc": {
-        "fr": "Traduction contextuelle assistee par IA.",
-        "en": "AI-assisted context-aware translation."
       }
     }
   ]
