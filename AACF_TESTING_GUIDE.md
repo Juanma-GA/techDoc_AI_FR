@@ -1,6 +1,10 @@
-# AACF Compliance Testing Guide
+# Operational POC Validation Guide
 
-**Status**: ✅ **All 6 POCs ready for local testing**
+**Status**: historical operational procedure being refreshed for 8 active POCs.
+
+This guide organizes manual validation. It is not an AACF or local normative source and does not prove compliance. When live AACF content is unavailable, the AACF verdict is `AACF NON VERIFIABLE`.
+
+The ports below are target defaults. Launchers may select the next free port, and current Windows/Unix launcher differences remain known deviations.
 
 ## Pre-Launch Checklist
 
@@ -14,12 +18,14 @@ All POCs have passed pre-launch validation:
 | catia-toolbox | 8004 | ✅ | ✅ built | ✅ | Ready |
 | ocr-vision | 8005 | ✅ | ✅ built | ✅ | Ready |
 | s1000d-extractor | 8006 | ✅ | ✅ built | ✅ | Ready |
+| brdp-manager | 8007 | Not revalidated | Not revalidated | Not revalidated | Pending |
+| xml-proofreader | 8008 | Not revalidated | Not revalidated | Not revalidated | Pending |
 
 ## How to Test
 
 ### Step 1: Launch POCs
 
-Open **6 separate command windows** (one per POC):
+Open one separate command window per POC under test. The commands below are the previously validated six-app sequence; `brdp-manager` and `xml-proofreader` still require an updated operational pass.
 
 ```batch
 # Terminal 1: corpus-agent

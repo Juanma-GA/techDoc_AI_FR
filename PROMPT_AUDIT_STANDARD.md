@@ -1,6 +1,6 @@
 # PROMPT_AUDIT_STANDARD.md — audit d'un POC contre le standard
 
-Prompt déclenché manuellement. Usage : « lis `PROMPT_AUDIT_STANDARD.md` et applique-le sur `apps/<poc>` ».
+Ce document est la source de vérité du format de rapport pour l'audit local contre `STANDARD_POC.md`. Il reste utilisable manuellement : « lis `PROMPT_AUDIT_STANDARD.md` et applique-le sur `apps/<poc>` ». La skill portable `audit-standard` doit pointer ici sans recopier cette checklist.
 
 ## Mission
 
@@ -11,8 +11,8 @@ Tu vas auditer l'app `apps/<poc>` indiquée par l'utilisateur contre les règles
 1. Vérifie si l'AACF live est accessible et récupère sa version. Si elle est inaccessible, indique explicitement que le verdict AACF est non vérifiable.
 2. Vérifie que `STANDARD_POC.md` existe à la racine du repo. S'il est absent, arrête et demande où il se trouve.
 3. Lis intégralement `STANDARD_POC.md`, puis applique le profil déclaré par l'app. L'AACF reste prioritaire en cas de conflit.
-4. Vérifie que l'app cible existe : `ls apps/<poc>/`. Si le chemin est ambigu, demande confirmation à l'utilisateur.
-4. Explore systématiquement (sans rien inventer) :
+4. Vérifie que l'app cible existe. Si le chemin est ambigu, demande confirmation à l'utilisateur. L'usage d'un terminal est optionnel et ne conditionne pas l'audit.
+5. Explore systématiquement (sans rien inventer) :
    - `apps/<poc>/README.md` (niveau app — section Auth, section Écarts au standard)
    - `apps/<poc>/start.bat`, `apps/<poc>/start.sh`
    - `apps/<poc>/backend/app/main.py`, `config.py`, `schemas.py`

@@ -1,4 +1,8 @@
 
+# Archived Reorganization Plan
+
+> Execution status: phases 0 through 7 completed. The live AACF source was unavailable, so AACF compliance remains `AACF NON VERIFIABLE`. `scripts/check_standard.sh` was not executed because Bash was unavailable in the Windows environment. Known launcher port discrepancies were documented but not changed by this documentation reorganization.
+
 Plan : refactor documentation et skills
 
 Contexte global

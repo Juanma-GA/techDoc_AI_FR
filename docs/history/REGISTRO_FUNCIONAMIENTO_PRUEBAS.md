@@ -1,5 +1,7 @@
 # REGISTRO DE FUNCIONAMIENTO — Guía de Pruebas en Navegador
 
+> Registro histórico. Los nombres y puertos reflejan una campaña anterior y no deben usarse como configuración actual.
+
 **Fecha**: 1 de junio de 2026  
 **Propósito**: Documento de trabajo para validación funcional de los 4 POCs  
 **Uso**: Seguir esta guía paso a paso cuando se ordenen las pruebas en navegador

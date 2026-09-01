@@ -1,6 +1,6 @@
 # STANDARD_POC.md — référence technique du monorepo
 
-Référence technique des règles de développement. Lue par les humains et par Claude quand [`CLAUDE.md`](./CLAUDE.md) le pointe. Format : énoncé court, justification, exemple conforme, exemple non conforme.
+Référence technique des règles de développement. Lue par les humains et par les agents quand [`CLAUDE.md`](./CLAUDE.md) ou [`AGENTS.md`](./AGENTS.md) la pointe. Voir [`docs/index.md`](./docs/index.md) pour la hiérarchie documentaire. Format : énoncé court, justification, exemple conforme, exemple non conforme.
 
 **Hiérarchie** : l'AACF live est normative. Ce document définit le profil local-first de ce monorepo ; [`CLAUDE.md`](./CLAUDE.md) en est le résumé opératoire. Une exception locale doit être documentée, bornée et ne peut pas affaiblir une règle AACF.
 
@@ -555,6 +555,8 @@ Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat`
 | `package.bat` + `_package.bat` | Wrapper Windows qui spawn une fenêtre `cmd /k` et délègue à `scripts/package_<poc>.py` pour produire un ZIP autonome. |
 
 **Comportement attendu de `start.bat`** :
+
+Les ports par défaut cibles sont définis dans [`docs/apps/README.md`](./docs/apps/README.md) : `_template` 8000, puis `corpus-agent` à `xml-proofreader` de 8001 à 8008. Cette attribution est unique ; le port effectivement choisi peut être supérieur lorsque le défaut est occupé.
 
 1. Variable `PORT` unique en haut du `_run.bat` (à ajuster par POC).
 2. Détecter Python 3.11+ (system, embed, ou installer silencieux selon le contexte).

@@ -6,13 +6,24 @@ scripts, standard) et conformes à [`STANDARD_POC.md`](STANDARD_POC.md).
 Chaque app est indépendante côté runtime mais s'aligne sur les mêmes
 règles, les mêmes composants UI et les mêmes tokens.
 
-| App | Rôle | Port |
+Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
+[`docs/apps/README.md`](docs/apps/README.md) pour l'inventaire canonique.
+
+| App | Rôle | Port par défaut cible |
 |---|---|---|
-| [`apps/corpus-agent/`](apps/corpus-agent/) | Corpus Agent v2 — analyse de Fiches de Tâches de Maintenance | 8000 |
-| [`apps/doc-reviewer/`](apps/doc-reviewer/) | Révision d'anomalies dans des documents techniques (PDF + Word natif) | 8008 |
+| [`apps/corpus-agent/`](apps/corpus-agent/) | Analyse de corpus et de fiches de tâches de maintenance | 8001 |
 | [`apps/doc-writer/`](apps/doc-writer/) | Génération de contenu rédactionnel en RAG streaming | 8002 |
-| [`apps/ocr-vision/`](apps/ocr-vision/) | OCR + extraction visuelle sur documents techniques | 8003 |
+| [`apps/doc-reviewer/`](apps/doc-reviewer/) | Révision d'anomalies dans des documents techniques | 8003 |
+| [`apps/catia-toolbox/`](apps/catia-toolbox/) | Outils de traitement documentaire CATIA | 8004 |
+| [`apps/ocr-vision/`](apps/ocr-vision/) | OCR et extraction visuelle sur documents techniques | 8005 |
+| [`apps/s1000d-extractor/`](apps/s1000d-extractor/) | Extraction et transformation S1000D | 8006 |
+| [`apps/brdp-manager/`](apps/brdp-manager/) | Gestion de BRDP | 8007 |
+| [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
 | [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
+
+Le launcher tente le port par défaut puis utilise le premier port libre
+suivant. Les différences actuelles entre launchers sont recensées dans
+[`docs/apps/README.md`](docs/apps/README.md) et seront corrigées séparément.
 
 > **Principe directeur** : ces apps sont des **POC local-first stricts**
 > — ils tournent localement sur le PC du dev. Pas de Docker, pas de CI,
@@ -58,10 +69,7 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 .
 ├── apps/                       # 1 dossier = 1 POC autonome
 │   ├── _template/              # squelette canonique — copie pour chaque nouveau POC
-│   ├── corpus-agent/           # POC Corpus Agent v2
-│   ├── doc-reviewer/           # POC Doc Reviewer (PDF + Word natif)
-│   ├── doc-writer/             # POC Doc Writer
-│   └── ocr-vision/             # POC OCR Vision
+│   └── <poc>/                  # voir docs/apps/README.md pour la liste complète
 │       ├── start.bat + _run.bat        # lancement local (wrapper + logique)
 │       ├── package.bat + _package.bat  # génération du ZIP partageable
 │       ├── start.sh                    # lanceur Unix
@@ -71,13 +79,17 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 │   └── ui/                     # @internal/ui — composants partagés (Radix + shadcn)
 ├── design-tokens/              # tokens.json (dual-theme dark/light) + preset Tailwind
 ├── docs/
+│   ├── index.md                # index et hiérarchie documentaire
+│   ├── apps/                   # inventaire et onboarding des apps
+│   ├── standards/              # modèles et contrats partagés
+│   ├── history/                # rapports datés non normatifs
 │   └── adr/                    # Architecture Decision Records
 ├── scripts/                    # check_standard.sh + package_<poc>.py (un par app)
 ├── tools/                      # binaires optionnels (ex. installeur Python silencieux)
-├── legacy/
-│   └── ftm-v1/                 # code FTM v1 — lecture seule
 ├── STANDARD_POC.md             # référence technique du standard
-├── CLAUDE.md                   # règles non-négociables (lu par Claude Code)
+├── CLAUDE.md                   # méthode et sécurité locales
+├── AGENTS.md                   # point d'entrée de compatibilité des agents
+├── CONTRIBUTING.md             # workflow Git, commits et pull requests
 ├── PROMPT_AUDIT_STANDARD.md    # prompt d'audit d'un POC contre le standard
 ├── package.json                # workspace pnpm racine — scripts dev:<poc>
 ├── pnpm-workspace.yaml
@@ -92,11 +104,10 @@ le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
 
 ```bash
 pnpm install
-pnpm dev:corpus-agent   # backend uvicorn + frontend Vite (HMR) en parallèle
-pnpm dev:doc-reviewer   # idem sur port 8008
-pnpm dev:doc-writer     # idem sur port 8002
-pnpm dev:ocr-vision     # idem sur port 8003
+pnpm dev:<poc>          # backend uvicorn + frontend Vite (HMR) en parallèle
 ```
+
+Les scripts disponibles sont déclarés dans [`package.json`](package.json).
 
 ## Observabilité
 
@@ -112,12 +123,6 @@ pnpm dev:ocr-vision     # idem sur port 8003
 - Uploads : taille max + MIME validés côté serveur.
 - Secrets uniquement via `.env` (jamais committés). `.env.example` à jour.
 - `debug=True` interdit hors dev local.
-
-## Legacy
-
-Le code FTM v1 reste à `legacy/ftm-v1/` en **lecture seule**. Les
-hotfixes sécurité appliqués au démarrage du monorepo sont documentés
-dans [`legacy/ftm-v1/HOTFIX.md`](legacy/ftm-v1/HOTFIX.md).
 
 ## Conformité
 

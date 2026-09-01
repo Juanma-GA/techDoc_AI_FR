@@ -1,5 +1,7 @@
 # ANÁLISIS TÉCNICO EJECUTIVO — Monorepo ATEXIS_POCS
 
+> Informe histórico. Conserva nombres, puertos y observaciones de un estado anterior del repositorio; no es una fuente normativa ni un inventario actual.
+
 **Fecha**: 1 de junio de 2026  
 **Analista**: Equipo Técnico  
 **Objetivo**: Evaluación exhaustiva del estado actual del monorepo para establecer plan de soporte y mantenimiento

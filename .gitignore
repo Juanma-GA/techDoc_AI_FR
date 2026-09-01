@@ -71,10 +71,6 @@ desktop.ini
 *.log
 .cache/
 
-# Legacy v1 — contient son propre .git, exclu pour eviter
-# le conflit nested repo (cf. git status).
-legacy/ftm-v1/FTM Agent/
-
 # Claude Code local config (paths machine, hooks, permissions)
 .claude/
 
