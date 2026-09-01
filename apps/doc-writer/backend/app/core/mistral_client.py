@@ -81,6 +81,15 @@ _VISION_PROMPT = (
 )
 
 
+def _normalize_base_url(url: str) -> str:
+    """Ramene une URL Mistral (racine ou endpoint connu) a sa racine API."""
+    normalized = url.rstrip("/")
+    for suffix in ("/v1/audio/transcriptions", "/v1/models", "/v1"):
+        if normalized.endswith(suffix):
+            return normalized[: -len(suffix)]
+    return normalized
+
+
 def _get_secret_manager():  # type: ignore[no-untyped-def]
     """SecretManager configure depuis settings. Cle absente => chiffrement off
     (valeurs lues/ecrites en clair, mode dev/local)."""
@@ -201,7 +210,7 @@ class MistralClient:
         if not api_key:
             raise MistralError("MISTRAL_API_KEY non configurée. Renseigne-la dans Paramètres.")
         self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _normalize_base_url(base_url)
         self.chat_model = chat_model
         self.embed_model = embed_model
         self.vision_model = vision_model
@@ -210,7 +219,7 @@ class MistralClient:
         # Cle/URL DEDIEES a Voxtral. Vides -> repli sur la cle/URL principale
         # (transcription inchangee tant qu'aucune cle dediee n'est renseignee).
         self.transcribe_api_key = transcribe_api_key or api_key
-        self.transcribe_base_url = (transcribe_base_url or base_url).rstrip("/")
+        self.transcribe_base_url = _normalize_base_url(transcribe_base_url or base_url)
         # Vrai uniquement si une cle Voxtral DEDIEE a ete fournie (pilote le
         # test/liste par API : on ne teste Voxtral separement que dans ce cas).
         self.transcribe_dedicated = bool(transcribe_api_key)

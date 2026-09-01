@@ -230,6 +230,21 @@ def test_transcribe_client_uses_dedicated_voxtral_key() -> None:
     assert c.base_url == "https://api.mistral.ai"
 
 
+def test_transcribe_client_normalizes_full_endpoint_url() -> None:
+    from app.core.mistral_client import MistralClient
+
+    client = MistralClient(
+        "sk-main",
+        "https://api.mistral.ai",
+        "chat-model",
+        "embed-model",
+        transcribe_api_key="vx-dedicated",
+        transcribe_base_url="https://api.mistral.ai/v1/audio/transcriptions",
+    )
+
+    assert client.transcribe_base_url == "https://api.mistral.ai"
+
+
 # ---------------------------------------------------------------------------
 # /settings/test : un test + une LISTE de modeles PAR API appelee.
 # On stub list_models / list_transcribe_models (aucun appel reseau reel).
