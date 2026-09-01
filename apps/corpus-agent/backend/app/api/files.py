@@ -195,14 +195,15 @@ def upload_files(
     return UploadResultOut(uploaded=created)
 
 
-@router.delete("/projects/{project_id}/files/{file_id}", status_code=204)
-def delete_file(project_id: uuid.UUID, file_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/projects/{project_id}/files/{file_id}", status_code=204, response_class=Response)
+def delete_file(project_id: uuid.UUID, file_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     f = db.get(DBFile, file_id)
     if not f or f.project_id != project_id:
         raise AppError("FILE_NOT_FOUND", "Fichier introuvable", status_code=404,
                        detail={"id": str(file_id)})
     db.delete(f)
     db.commit()
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
@@ -254,12 +255,13 @@ def get_corpus_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> C
     return CorpusPathOut(path=_project_or_404(db, project_id).corpus_path or None)
 
 
-@router.delete("/projects/{project_id}/corpus-folder", status_code=204)
-def disconnect_corpus_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/projects/{project_id}/corpus-folder", status_code=204, response_class=Response)
+def disconnect_corpus_folder(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     """Oublie le dossier connecté (n'efface pas les fichiers déjà ingérés)."""
     project = _project_or_404(db, project_id)
     project.corpus_path = None
     db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/projects/{project_id}/files/list-folder", response_model=FolderListOut)
@@ -522,11 +524,12 @@ def update_reference_mapping(
     return _reference_out(project)
 
 
-@router.delete("/projects/{project_id}/reference", status_code=204)
-def delete_reference(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/projects/{project_id}/reference", status_code=204, response_class=Response)
+def delete_reference(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     project = _project_or_404(db, project_id)
     project.reference_path = None
     db.commit()
+    return Response(status_code=204)
 
 
 def _basl_header_rows(project: Project) -> dict[str, int]:
@@ -700,8 +703,9 @@ def update_basl_mapping(
     return _basl_out(project)
 
 
-@router.delete("/projects/{project_id}/basl", status_code=204)
-def delete_basl(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/projects/{project_id}/basl", status_code=204, response_class=Response)
+def delete_basl(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     project = _project_or_404(db, project_id)
     project.basl_path = None
     db.commit()
+    return Response(status_code=204)

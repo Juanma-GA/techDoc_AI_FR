@@ -8,7 +8,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -230,9 +230,10 @@ def list_runs(project_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Anal
     )
 
 
-@router.delete("/projects/{project_id}/analysis/reset", status_code=204)
-def reset_analysis(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/projects/{project_id}/analysis/reset", status_code=204, response_class=Response)
+def reset_analysis(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     _project_or_404(db, project_id)
     db.execute(delete(Anomaly).where(Anomaly.project_id == project_id))
     db.execute(delete(AnalysisRun).where(AnalysisRun.project_id == project_id))
     db.commit()
+    return Response(status_code=204)

@@ -7,7 +7,7 @@ import logging
 import traceback
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -45,14 +45,15 @@ def list_messages(session_id: uuid.UUID, db: Session = Depends(get_db)) -> list[
     return list(s.messages)
 
 
-@router.delete("/sessions/{session_id}", status_code=204)
-def delete_session(session_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/sessions/{session_id}", status_code=204, response_class=Response)
+def delete_session(session_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     s = db.get(ChatSession, session_id)
     if s is None:
         raise AppError("CHAT_SESSION_NOT_FOUND", "Session introuvable",
                        status_code=404, detail={"id": str(session_id)})
     db.delete(s)
     db.commit()
+    return Response(status_code=204)
 
 
 def _resolve_projects(db: Session, project_ids: list[uuid.UUID]) -> list[Project]:
