@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -26,7 +26,8 @@ from app.core.security import (
     validate_upload_bytes,
 )
 from app.core.versioning import sha256_of_bytes
-from app.db.models import Anomaly, DocumentChunk, File as DBFile, FileVersion, Project
+from app.db.models import Anomaly, DocumentChunk, FileVersion, Project
+from app.db.models import File as DBFile
 from app.db.session import get_db
 from app.parsers import parse_any
 from app.parsers.reference import sheet_columns, sheet_names, sheet_preview
