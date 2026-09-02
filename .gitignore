@@ -26,6 +26,7 @@ yarn-error.log*
 .next/
 .turbo/
 .vite/
+*.tsbuildinfo
 
 # Build outputs
 **/dist/
