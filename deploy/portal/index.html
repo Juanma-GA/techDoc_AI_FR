@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
-    <title>AI@ATEXIS</title>
+    <title>AI4TECHDOC</title>
 
     <!--
       Portail de lancement des POCs deployes sous un chemin parent commun
@@ -42,179 +42,18 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;600;700&display=swap"
     />
+    <link rel="stylesheet" href="portal.css" />
 
     <style>
       :root {
-        --bg-base: #0e1117;
-        --bg-2: #131720;
-        --card: #161c2b;
-        --card-hover: #1d2540;
         --card-external: #1d1f2f;
         --card-external-hover: #252840;
-        --brand: #2563eb;
-        --brand-light: #3b82f6;
         --external-accent: #f59e0b;
-        --on-brand: #ffffff;
-        --text: #e2e8f0;
-        --dim: #94a3b8;
-        --border: rgba(255, 255, 255, 0.07);
-        --border-md: rgba(255, 255, 255, 0.12);
-        --radius-lg: 12px;
-        --radius-sm: 8px;
       }
       html.light {
-        --bg-base: #ffffff;
-        --bg-2: #f8fafc;
-        --card: #ffffff;
-        --card-hover: #f1f5f9;
         --card-external: #fff7ed;
         --card-external-hover: #ffedd5;
-        --brand: #2563eb;
-        --brand-light: #3b82f6;
         --external-accent: #b45309;
-        --on-brand: #ffffff;
-        --text: #0f172a;
-        --dim: #64748b;
-        --border: rgba(0, 0, 0, 0.07);
-        --border-md: rgba(0, 0, 0, 0.12);
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: var(--bg-base);
-        color: var(--text);
-        font-family: "Inter", system-ui, -apple-system, sans-serif;
-        font-size: 14px;
-        line-height: 1.5;
-        -webkit-font-smoothing: antialiased;
-      }
-      .wrap {
-        max-width: 1120px;
-        margin: 0 auto;
-        padding: 40px 24px 56px;
-      }
-      header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 20px;
-      }
-      .title {
-        font-weight: 800;
-        font-size: clamp(28px, 5vw, 44px);
-        letter-spacing: -0.02em;
-        color: var(--text);
-        margin: 0;
-        font-family: "Orbitron", "Inter", sans-serif;
-      }
-      .subtitle {
-        color: var(--dim);
-        margin: 8px 0 24px;
-        font-size: clamp(15px, 2vw, 18px);
-      }
-
-      .topbar-actions {
-        flex: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-      .nav-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .portal-action {
-        appearance: none;
-        border: 1px solid var(--border-md);
-        background: rgba(37, 99, 235, 0.08);
-        color: var(--text);
-        border-radius: 999px;
-        padding: 8px 14px;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        cursor: pointer;
-        transition: background 0.15s, border-color 0.15s, transform 0.15s;
-      }
-      .portal-action:hover {
-        background: rgba(59, 130, 246, 0.16);
-        border-color: var(--brand-light);
-        transform: translateY(-1px);
-      }
-      .portal-action.primary {
-        background: var(--brand);
-        color: var(--on-brand);
-        border-color: var(--brand);
-      }
-      .portal-action.primary:hover {
-        background: var(--brand-light);
-      }
-      .portal-action.active {
-        background: var(--brand);
-        color: var(--on-brand);
-        border-color: var(--brand);
-      }
-      .lang-switch {
-        display: inline-flex;
-        border: 1px solid var(--border-md);
-        border-radius: var(--radius-sm);
-        overflow: hidden;
-      }
-      .lang-btn {
-        appearance: none;
-        border: 0;
-        background: transparent;
-        color: var(--dim);
-        font-family: "JetBrains Mono", ui-monospace, monospace;
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        padding: 8px 11px;
-        cursor: pointer;
-        transition: color 0.15s, background 0.15s;
-      }
-      .lang-btn:hover {
-        color: var(--text);
-        background: var(--card-hover);
-      }
-      .lang-btn.active {
-        color: var(--on-brand);
-        background: var(--brand);
-      }
-      .theme-toggle {
-        width: 36px;
-        height: 36px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid var(--border-md);
-        border-radius: var(--radius-sm);
-        background: transparent;
-        color: var(--dim);
-        cursor: pointer;
-        transition: color 0.15s, background 0.15s, border-color 0.15s;
-      }
-      .theme-toggle:hover {
-        color: var(--text);
-        background: var(--card-hover);
-      }
-      .theme-toggle .moon {
-        display: none;
-      }
-      html.light .theme-toggle .sun {
-        display: none;
-      }
-      html.light .theme-toggle .moon {
-        display: inline;
       }
 
       .grid {
@@ -317,48 +156,22 @@
     </style>
   </head>
   <body>
-    <div class="wrap">
-      <header>
-        <h1 class="title">AI@ATEXIS</h1>
-        <div class="topbar-actions">
-          <div class="nav-actions" aria-label="Navigation stratégique">
-            <button type="button" class="portal-action active" data-target="index.html" data-i18n="portalBtn">
-              Portail
-            </button>
-            <button type="button" class="portal-action" data-target="roadmap.html" data-i18n="roadmapBtn">
-              Roadmap IA
-            </button>
-            <button type="button" class="portal-action" data-target="ia-ecosystem.html" data-i18n="ecosystemBtn">
-              Écosystème IA
-            </button>
-          </div>
-          <button type="button" class="theme-toggle" id="theme-toggle">
-            <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-            </svg>
-            <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          </button>
-          <div class="lang-switch" role="group" aria-label="Language">
-            <button type="button" class="lang-btn" data-lang="fr">FR</button>
-            <button type="button" class="lang-btn" data-lang="en">EN</button>
-          </div>
-        </div>
-      </header>
-      <p class="subtitle" id="subtitle"></p>
+    <div class="portal-page">
+      <div id="portal-header"></div>
 
       <div id="grid"></div>
 
       <footer id="footer"></footer>
     </div>
 
+    <script src="portal.js"></script>
     <script>
+      PortalUI.mountHeader({
+        activePage: "portal",
+        title: "AI4TECHDOC",
+        subtitle: "Applications de preuve de concept"
+      });
+
       // ==== Configuration externalisée (HR0/HR8 — Everything configurable) =====
       // La liste des POCs et les strings i18n sont maintenant chargées depuis
       // config.json (fichier externe), pas hardcodées en JavaScript.
@@ -368,19 +181,12 @@
       let I18N = {
         fr: {
           empty: "Aucun POC configuré. Vérifier config.json.",
-          themeLabel: "Basculer le thème clair / sombre",
-          portalBtn: "Portail",
-          roadmapBtn: "Roadmap IA",
-          ecosystemBtn: "Écosystème IA",
         },
         en: {
           empty: "No POC configured. Check config.json.",
-          themeLabel: "Toggle light / dark theme",
-          portalBtn: "Portal",
-          roadmapBtn: "AI Roadmap",
-          ecosystemBtn: "AI Ecosystem",
         },
       };
+      let currentLang = "fr";
 
       // Charger config.json (external configuration file per HR0/HR8)
       fetch("config.json", { cache: "no-cache" })
@@ -394,31 +200,17 @@
           I18N.en.subtitle = data.subtitle?.en || I18N.en.subtitle;
           I18N.en.footer = data.footer?.en || I18N.en.footer;
           // Réappliquer la langue actuelle pour afficher la config mise à jour
-          applyLang(initialLang());
+          applyLang(currentLang);
         })
-        .catch((err) => {
-          console.error("Failed to load config.json:", err);
+        .catch(() => {
           // Fallback gracieux : afficher message erreur et continuer
           document.getElementById("grid").innerHTML =
             '<div class="empty">Configuration indisponible. Vérifier config.json.</div>';
         });
       // =========================================================================
 
-      const LANG_KEY = "atexis-portal-lang";
-      function initialLang() {
-        try {
-          const stored = localStorage.getItem(LANG_KEY);
-          if (stored === "fr" || stored === "en") return stored;
-        } catch (e) {
-          /* localStorage indisponible */
-        }
-        return (navigator.language || "fr").slice(0, 2).toLowerCase() === "en" ? "en" : "fr";
-      }
-
       const grid = document.getElementById("grid");
-      const subtitle = document.getElementById("subtitle");
       const footer = document.getElementById("footer");
-      const themeToggle = document.getElementById("theme-toggle");
 
       function buildSection(title, items, lang) {
         const section = document.createElement("section");
@@ -485,47 +277,14 @@
       }
 
       function applyLang(lang) {
-        document.documentElement.lang = lang;
-        subtitle.textContent = I18N[lang].subtitle;
-        footer.textContent = I18N[lang].footer;
-        themeToggle.setAttribute("aria-label", I18N[lang].themeLabel);
-        document.querySelectorAll("[data-i18n]").forEach(function (element) {
-          element.textContent = I18N[lang][element.dataset.i18n];
-        });
-        document.querySelectorAll(".lang-btn").forEach(function (btn) {
-          btn.classList.toggle("active", btn.dataset.lang === lang);
-        });
+        currentLang = lang;
+        document.getElementById("page-title").textContent = CONFIG?.title || "AI4TECHDOC";
+        if (I18N[lang].subtitle) document.getElementById("page-subtitle").textContent = I18N[lang].subtitle;
+        footer.textContent = I18N[lang].footer || "";
         renderCards(lang);
-        try {
-          localStorage.setItem(LANG_KEY, lang);
-        } catch (e) {
-          /* localStorage indisponible : le choix reste effectif pour la session */
-        }
       }
 
-      applyLang(initialLang());
-
-      document.querySelectorAll(".lang-btn").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          applyLang(btn.dataset.lang);
-        });
-      });
-
-      document.querySelectorAll(".portal-action").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          const target = btn.dataset.target || "roadmap.html";
-          window.location.href = target;
-        });
-      });
-
-      themeToggle.addEventListener("click", function () {
-        const isLight = document.documentElement.classList.toggle("light");
-        try {
-          localStorage.setItem("theme", isLight ? "light" : "dark");
-        } catch (e) {
-          /* localStorage indisponible : le toggle reste effectif pour la session */
-        }
-      });
+      PortalUI.initialize(applyLang);
     </script>
   </body>
 </html>

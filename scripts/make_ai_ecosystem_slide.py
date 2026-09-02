@@ -135,7 +135,7 @@ def build():
     background.solid()
     background.fore_color.rgb = BG
 
-    text(slide, "AI@ATEXIS", 0.56, 0.34, 3.1, 0.32, size=11, color=BLUE_2,
+    text(slide, "AI4TECHDOC", 0.56, 0.34, 3.1, 0.32, size=11, color=BLUE_2,
          bold=True, font="JetBrains Mono")
     text(slide, "ÉCOSYSTÈME IA", 0.56, 0.72, 3.55, 0.58, size=28, bold=True, font="Orbitron")
     text(slide, "De la donnée technique brute à la livraison documentaire sécurisée",
@@ -182,7 +182,7 @@ def build():
     pill(slide, "Externe", 11.28, 6.65, 1.02, VIOLET)
     text(slide, "Humain dans la boucle • Orchestration traçable • Autonomie sous gouvernance",
          0.56, 7.04, 8.2, 0.2, size=9.2, color=TEXT, bold=True)
-    text(slide, "Source : portail AI@ATEXIS", 10.55, 7.04, 2.22, 0.18, size=7.5,
+    text(slide, "Source : portail AI4TECHDOC", 10.55, 7.04, 2.22, 0.18, size=7.5,
          color=MUTED, align=PP_ALIGN.RIGHT)
 
     presentation.save(OUTPUT)

@@ -10,6 +10,7 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;600;700&display=swap"
     />
+    <link rel="stylesheet" href="portal.css" />
     <script>
       (function () {
         try {
@@ -22,165 +23,6 @@
       })();
     </script>
     <style>
-      :root {
-        --bg-base: #0e1117;
-        --bg-2: #131720;
-        --card: #161c2b;
-        --card-hover: #1d2540;
-        --brand: #2563eb;
-        --brand-light: #3b82f6;
-        --on-brand: #ffffff;
-        --text: #e2e8f0;
-        --dim: #94a3b8;
-        --border: rgba(255, 255, 255, 0.07);
-        --border-md: rgba(255, 255, 255, 0.12);
-        --radius-lg: 12px;
-        --radius-sm: 8px;
-      }
-      html.light {
-        --bg-base: #ffffff;
-        --bg-2: #f8fafc;
-        --card: #ffffff;
-        --card-hover: #f1f5f9;
-        --brand: #2563eb;
-        --brand-light: #3b82f6;
-        --on-brand: #ffffff;
-        --text: #0f172a;
-        --dim: #64748b;
-        --border: rgba(0, 0, 0, 0.07);
-        --border-md: rgba(0, 0, 0, 0.12);
-      }
-      * { box-sizing: border-box; }
-      html, body {
-        margin: 0;
-        min-height: 100%;
-        background:
-          radial-gradient(circle at top left, rgba(37, 99, 235, 0.11), transparent 34%),
-          radial-gradient(circle at bottom right, rgba(59, 130, 246, 0.1), transparent 32%),
-          var(--bg-base);
-        color: var(--text);
-        font-family: "Inter", system-ui, -apple-system, sans-serif;
-      }
-      body {
-        padding: 40px 24px 56px;
-      }
-      .page {
-        max-width: 1120px;
-        margin: 0 auto;
-      }
-      .topbar {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 20px;
-      }
-      .topbar-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-      }
-      .nav-actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .brand {
-        display: block;
-      }
-      .title {
-        margin: 0;
-        font-size: clamp(28px, 5vw, 44px);
-        font-weight: 800;
-        letter-spacing: -0.02em;
-        line-height: 1.1;
-        color: var(--text);
-        font-family: "Orbitron", "Inter", sans-serif;
-      }
-      .subtitle {
-        margin: 8px 0 0;
-        color: var(--dim);
-        font-size: clamp(14px, 2vw, 18px);
-      }
-      .back {
-        appearance: none;
-        border: 1px solid var(--border-md);
-        background: rgba(37, 99, 235, 0.08);
-        color: var(--text);
-        border-radius: 999px;
-        padding: 8px 14px;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        cursor: pointer;
-        transition: background 0.15s, border-color 0.15s, transform 0.15s;
-      }
-      .back:hover {
-        background: rgba(59, 130, 246, 0.16);
-        border-color: var(--brand-light);
-        transform: translateY(-1px);
-      }
-      .back.active {
-        background: var(--brand);
-        border-color: var(--brand);
-        color: var(--on-brand);
-      }
-      .lang-switch {
-        display: inline-flex;
-        border: 1px solid var(--border-md);
-        border-radius: var(--radius-sm);
-        overflow: hidden;
-      }
-      .lang-btn {
-        appearance: none;
-        border: 0;
-        background: transparent;
-        color: var(--dim);
-        font-family: "JetBrains Mono", ui-monospace, monospace;
-        font-size: 11px;
-        letter-spacing: 0.06em;
-        padding: 8px 11px;
-        cursor: pointer;
-        transition: color 0.15s, background 0.15s;
-      }
-      .lang-btn:hover {
-        color: var(--text);
-        background: var(--card-hover);
-      }
-      .lang-btn.active {
-        color: var(--on-brand);
-        background: var(--brand);
-      }
-      .theme-toggle {
-        width: 36px;
-        height: 36px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid var(--border-md);
-        border-radius: var(--radius-sm);
-        background: transparent;
-        color: var(--dim);
-        cursor: pointer;
-        transition: color 0.15s, background 0.15s, border-color 0.15s;
-      }
-      .theme-toggle:hover {
-        color: var(--text);
-        background: var(--card-hover);
-      }
-      .theme-toggle .moon {
-        display: none;
-      }
-      html.light .theme-toggle .sun {
-        display: none;
-      }
-      html.light .theme-toggle .moon {
-        display: inline;
-      }
       .hero {
         display: grid;
         grid-template-columns: 1.2fr 0.8fr;
@@ -236,43 +78,6 @@
         color: var(--dim);
         line-height: 1.6;
       }
-      .tiers {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 18px;
-        margin-top: 30px;
-      }
-      .tier {
-        position: relative;
-        padding: 22px 20px 18px;
-        border-radius: var(--radius-lg);
-        border: 1px solid var(--border);
-        background: linear-gradient(180deg, rgba(22, 28, 43, 0.95), rgba(22, 28, 43, 0.76));
-      }
-      .tier::before {
-        content: "";
-        position: absolute;
-        inset: 0 auto auto 0;
-        width: 100%;
-        height: 2px;
-        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-        background: linear-gradient(90deg, var(--brand), var(--brand-light), transparent);
-      }
-      .tier h3 {
-        margin: 0 0 12px;
-        font-size: 22px;
-      }
-      .tier p {
-        margin: 0;
-        color: var(--dim);
-        line-height: 1.65;
-      }
-      .tier ul {
-        margin: 16px 0 0;
-        padding-left: 18px;
-        color: var(--text);
-      }
-      .tier li { margin: 8px 0; }
       .phase-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -308,48 +113,15 @@
         font-size: 14px;
       }
       @media (max-width: 900px) {
-        .hero, .tiers, .phase-grid {
+        .hero, .phase-grid {
           grid-template-columns: 1fr;
         }
-        .topbar { align-items: flex-start; flex-direction: column; }
-        .topbar-actions { width: 100%; justify-content: space-between; }
       }
     </style>
   </head>
   <body>
-    <div class="page">
-      <div class="topbar">
-        <div class="brand">
-          <div>
-            <h1 class="title" id="page-title">Roadmap IA</h1>
-            <p class="subtitle" id="page-subtitle">De la couche humaine à l’autonomie contrôlée</p>
-          </div>
-        </div>
-        <div class="topbar-actions">
-          <div class="nav-actions">
-            <button class="back" type="button" onclick="location.href='index.html'" id="portal-btn">Portail</button>
-            <button class="back active" type="button" onclick="location.href='roadmap.html'" id="roadmap-btn">Roadmap IA</button>
-            <button class="back" type="button" onclick="location.href='ia-ecosystem.html'" id="ecosystem-btn">Écosystème IA</button>
-          </div>
-          <button type="button" class="theme-toggle" id="theme-toggle">
-            <svg class="sun" width="17" height="17" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-            </svg>
-            <svg class="moon" width="17" height="17" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          </button>
-          <div class="lang-switch" role="group" aria-label="Language">
-            <button class="lang-btn" type="button" data-lang="fr">FR</button>
-            <button class="lang-btn" type="button" data-lang="en">EN</button>
-          </div>
-        </div>
-      </div>
+    <div class="portal-page">
+      <div id="portal-header"></div>
 
       <section class="hero">
         <div class="card panel">
@@ -370,41 +142,6 @@
             <p id="principle-text">Augmenter les équipes, pas les remplacer. Les décisions critiques restent humaines.</p>
           </div>
         </div>
-      </section>
-
-      <section class="tiers">
-        <article class="tier card">
-          <h3 id="tier1-title">1. Human-Agent Engineering</h3>
-          <p id="tier1-text">La couche actuelle, la plus crédible pour créer du ROI rapidement.</p>
-          <ul>
-            <li id="tier1-li1">Agents spécialisés par métier</li>
-            <li id="tier1-li2">Validation humaine sur les décisions critiques</li>
-            <li id="tier1-li3">Workflows guidés et traçables</li>
-            <li id="tier1-li4">Sorties structurées et auditées</li>
-          </ul>
-        </article>
-
-        <article class="tier card">
-          <h3 id="tier2-title">2. Multi-agent orchestration</h3>
-          <p id="tier2-text">On passe des tâches isolées à des flux end-to-end.</p>
-          <ul>
-            <li id="tier2-li1">Coordination de plusieurs agents</li>
-            <li id="tier2-li2">Accès aux outils et données contrôlés</li>
-            <li id="tier2-li3">Gestion d’état des workflows</li>
-            <li id="tier2-li4">Escalade humaine sur exceptions</li>
-          </ul>
-        </article>
-
-        <article class="tier card">
-          <h3 id="tier3-title">3. Autonomie contrôlée</h3>
-          <p id="tier3-text">La dernière étape, réservée aux tâches standardisées et à faible risque.</p>
-          <ul>
-            <li id="tier3-li1">Automation de tâches répétitives</li>
-            <li id="tier3-li2">Garde-fous, monitorings et rollbacks</li>
-            <li id="tier3-li3">Contrôle par seuils et validation</li>
-            <li id="tier3-li4">Exécution seulement dans un périmètre clair</li>
-          </ul>
-        </article>
       </section>
 
       <section class="phase-grid">
@@ -430,18 +167,18 @@
         </div>
       </section>
     </div>
+    <script src="portal.js"></script>
     <script>
-      const LANG_KEY = "atexis-portal-lang";
-      const themeToggle = document.getElementById("theme-toggle");
+      PortalUI.mountHeader({
+        activePage: "roadmap",
+        title: "Roadmap IA",
+        subtitle: "De la couche humaine à l’autonomie contrôlée"
+      });
 
       const I18N = {
         fr: {
           pageTitle: "Roadmap IA",
           pageSubtitle: "De la couche humaine à l’autonomie contrôlée",
-          portalBtn: "Portail",
-          roadmapBtn: "Roadmap IA",
-          ecosystemBtn: "Écosystème IA",
-          themeLabel: "Basculer le thème clair / sombre",
           positioningEyebrow: "Positionnement",
           positioningTitle: "Nous ne sommes pas encore dans l’autonomie généralisée ; nous sommes dans l’engineering humain-agent, avec une vraie voie de montée en maturité.",
           positioningText: "La bonne stratégie est de structurer un système où le humain pilote, les agents spécialisés exécutent, et l’orchestration coordonne les tâches selon un cadre clair, mesurable et auditables.",
@@ -449,24 +186,6 @@
           objectiveText: "Créer un système IA utile, gouverné, fiable, et scalable sans perdre la responsabilité métier.",
           principleLabel: "Principe",
           principleText: "Augmenter les équipes, pas les remplacer. Les décisions critiques restent humaines.",
-          tier1Title: "1. Human-Agent Engineering",
-          tier1Text: "La couche actuelle, la plus crédible pour créer du ROI rapidement.",
-          tier1Li1: "Agents spécialisés par métier",
-          tier1Li2: "Validation humaine sur les décisions critiques",
-          tier1Li3: "Workflows guidés et traçables",
-          tier1Li4: "Sorties structurées et auditées",
-          tier2Title: "2. Multi-agent orchestration",
-          tier2Text: "On passe des tâches isolées à des flux end-to-end.",
-          tier2Li1: "Coordination de plusieurs agents",
-          tier2Li2: "Accès aux outils et données contrôlés",
-          tier2Li3: "Gestion d’état des workflows",
-          tier2Li4: "Escalade humaine sur exceptions",
-          tier3Title: "3. Autonomie contrôlée",
-          tier3Text: "La dernière étape, réservée aux tâches standardisées et à faible risque.",
-          tier3Li1: "Automation de tâches répétitives",
-          tier3Li2: "Garde-fous, monitorings et rollbacks",
-          tier3Li3: "Contrôle par seuils et validation",
-          tier3Li4: "Exécution seulement dans un périmètre clair",
           phase1Title: "Fondation",
           phase1Text: "Standardiser la production d’assets IA, la traçabilité, les rôles et les garde-fous.",
           phase2Title: "Agents spécialisés",
@@ -479,10 +198,6 @@
         en: {
           pageTitle: "AI Roadmap",
           pageSubtitle: "From human layer to controlled autonomy",
-          portalBtn: "Portal",
-          roadmapBtn: "AI Roadmap",
-          ecosystemBtn: "AI Ecosystem",
-          themeLabel: "Toggle light / dark theme",
           positioningEyebrow: "Positioning",
           positioningTitle: "We are not yet in generalized autonomy; we are in human-agent engineering, with a clear path to higher maturity.",
           positioningText: "The right strategy is to structure a system where humans lead, specialized agents execute, and orchestration coordinates tasks within a clear, measurable, and auditable framework.",
@@ -490,24 +205,6 @@
           objectiveText: "Build an AI system that is useful, governed, reliable, and scalable without losing business accountability.",
           principleLabel: "Principle",
           principleText: "Augment teams, do not replace them. Critical decisions remain human.",
-          tier1Title: "1. Human-Agent Engineering",
-          tier1Text: "The current layer, and the most credible path to create fast ROI.",
-          tier1Li1: "Specialized domain agents",
-          tier1Li2: "Human validation for critical decisions",
-          tier1Li3: "Guided and traceable workflows",
-          tier1Li4: "Structured and auditable outputs",
-          tier2Title: "2. Multi-agent orchestration",
-          tier2Text: "We move from isolated tasks to end-to-end flows.",
-          tier2Li1: "Coordination across multiple agents",
-          tier2Li2: "Controlled access to tools and data",
-          tier2Li3: "Workflow state management",
-          tier2Li4: "Human escalation on exceptions",
-          tier3Title: "3. Controlled autonomy",
-          tier3Text: "The final step, reserved for standardized and low-risk tasks.",
-          tier3Li1: "Automation of repetitive tasks",
-          tier3Li2: "Guardrails, monitoring, and rollbacks",
-          tier3Li3: "Threshold-based control and validation",
-          tier3Li4: "Execution only within a clear scope",
           phase1Title: "Foundation",
           phase1Text: "Standardize AI asset production, traceability, roles, and guardrails.",
           phase2Title: "Specialized agents",
@@ -519,50 +216,17 @@
         }
       };
 
-      function initialLang() {
-        try {
-          const stored = localStorage.getItem(LANG_KEY);
-          if (stored === "fr" || stored === "en") return stored;
-        } catch (e) {
-          /* localStorage unavailable */
-        }
-        return (navigator.language || "fr").slice(0, 2).toLowerCase() === "en" ? "en" : "fr";
-      }
-
       function applyLang(lang) {
         const t = I18N[lang] || I18N.fr;
-        document.documentElement.lang = lang;
         Object.keys(t).forEach((key) => {
           const el = document.getElementById(
             key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())
           );
           if (el) el.textContent = t[key];
         });
-        document.querySelectorAll(".lang-btn").forEach((btn) => {
-          btn.classList.toggle("active", btn.dataset.lang === lang);
-        });
-        themeToggle.setAttribute("aria-label", t.themeLabel);
-        try {
-          localStorage.setItem(LANG_KEY, lang);
-        } catch (e) {
-          /* localStorage unavailable */
-        }
       }
 
-      applyLang(initialLang());
-
-      document.querySelectorAll(".lang-btn").forEach((btn) => {
-        btn.addEventListener("click", () => applyLang(btn.dataset.lang));
-      });
-
-      themeToggle.addEventListener("click", function () {
-        const isLight = document.documentElement.classList.toggle("light");
-        try {
-          localStorage.setItem("theme", isLight ? "light" : "dark");
-        } catch (e) {
-          /* localStorage unavailable */
-        }
-      });
+      PortalUI.initialize(applyLang);
     </script>
   </body>
 </html>

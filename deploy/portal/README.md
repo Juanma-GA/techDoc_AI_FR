@@ -1,4 +1,4 @@
-# Portail AI@ATEXIS
+# Portail AI4TECHDOC
 
 Page d'accueil statique qui liste les POCs déployés et pointe vers chacun. Elle
 se pose **à la racine du chemin parent** sous lequel les POCs sont montés en IIS,
@@ -16,7 +16,8 @@ commun**. Exemples observés :
 Le portail se pose à la **racine de ce parent** :
 
 ```
-/<parent>/                 <-- index.html (ce portail)
+/<parent>/                 <-- index.html, roadmap.html, ia-ecosystem.html
+                             portal.css, portal.js, config.json
 /<parent>/corpus-agent/    <-- sous-application IIS
 /<parent>/doc-writer/      <-- sous-application IIS
 ```
@@ -26,8 +27,9 @@ page fonctionne quel que soit le parent — **aucune URL ni IP en dur**.
 
 ## Pose sur IIS
 
-1. Copier `index.html` dans le dossier physique mappé sur le chemin parent
-   (p. ex. `C:\inetpub\wwwroot\Customizations\AtexisPOCS\`).
+1. Copier les trois fichiers HTML, `portal.css`, `portal.js` et `config.json`
+  dans le dossier physique mappé sur le chemin parent (p. ex.
+  `C:\inetpub\wwwroot\Customizations\AtexisPOCS\`).
 2. S'assurer que `index.html` est dans les **Default Documents** du site/dossier
    (sinon activer *Directory Browsing*, mais le `index.html` est préférable).
 3. Chaque POC reste une application IIS distincte sous ce parent, buildée avec
@@ -49,7 +51,8 @@ page fonctionne quel que soit le parent — **aucune URL ni IP en dur**.
 }
 ```
 
-Aucune étape de build — le HTML charge `config.json` dynamiquement au chargement de la page.
+Aucune étape de build : les pages chargent `portal.css` et `portal.js` pour
+l'UI commune, puis `config.json` pour les applications et textes configurables.
 
 ## Retour au portail depuis un POC
 
