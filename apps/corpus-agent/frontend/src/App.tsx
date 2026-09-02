@@ -33,7 +33,6 @@ const navItems = [
   { to: "/projects", labelKey: "nav.projects" },
   { to: "/redacteur", labelKey: "nav.redacteur" },
   { to: "/chatbot", labelKey: "nav.chatbot" },
-  { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;

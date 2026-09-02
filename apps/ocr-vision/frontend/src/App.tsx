@@ -16,8 +16,6 @@ const navItems = [
   { to: "/", labelKey: "nav.ocr" },
   { to: "/extraction", labelKey: "nav.extraction" },
   { to: "/templates", labelKey: "nav.templates" },
-  { to: "/home", labelKey: "nav.home" },
-  { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;

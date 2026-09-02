@@ -16,7 +16,6 @@ import { Settings } from "./routes/Settings";
 const navItems = [
   { to: "/", labelKey: "nav.generate" },
   { to: "/documents", labelKey: "nav.documents" },
-  { to: "/sessions", labelKey: "nav.sessions" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
