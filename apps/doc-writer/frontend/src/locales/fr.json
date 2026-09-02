@@ -27,7 +27,7 @@
     "dictate": "Dicter",
     "dictateStop": "Arrêter",
     "dictateTranscribing": "Transcription…",
-    "dictateHint": "Dicter du contenu au micro (Voxtral). Le texte est ajouté au brief. Nécessite un modèle de transcription activé sur la clé Mistral (Paramètres) — non activé pour le moment.",
+    "dictateHint": "Dicter avec Voxtral Realtime. Le texte apparaît dans le brief pendant la parole.",
     "promptPlaceholder": "Ex : Rédige une synthèse en trois paragraphes des points clés des documents sélectionnés.",
     "scopeLabel": "Documents à utiliser",
     "scopeAll": "Tous les documents",

@@ -14,12 +14,24 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.errors import AppError
-from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
+from app.core.mistral_client import (
+    REALTIME_TRANSCRIBE_MODEL,
+    MistralClient,
+    MistralError,
+    get_llm_enabled,
+)
 from app.core.writer_engine import ensure_session_title, stream_answer
 from app.db.models import Message
 from app.db.models import Session as SessionRow
 from app.db.session import SessionLocal, get_db
-from app.schemas import AskIn, MessageOut, SessionCreateIn, SessionOut, TranscriptionOut
+from app.schemas import (
+    AskIn,
+    MessageOut,
+    RealtimeTranscriptionTokenOut,
+    SessionCreateIn,
+    SessionOut,
+    TranscriptionOut,
+)
 
 # Formats audio acceptes pour la dictee (MediaRecorder produit surtout du webm/ogg).
 _AUDIO_EXTS = (".webm", ".ogg", ".oga", ".mp3", ".m4a", ".wav", ".mp4", ".flac")
@@ -29,6 +41,40 @@ _MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 Mo (~20 min de dictee)
 log = logging.getLogger("doc_writer.sessions")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+@router.post("/transcribe/realtime-token", response_model=RealtimeTranscriptionTokenOut)
+async def create_realtime_transcription_token(
+    db: Session = Depends(get_db),
+) -> RealtimeTranscriptionTokenOut:
+    """Emet un jeton court pour connecter le navigateur a Voxtral Realtime."""
+    if not get_llm_enabled(db):
+        return RealtimeTranscriptionTokenOut(
+            enabled=False,
+            token="",
+            model=REALTIME_TRANSCRIBE_MODEL,
+            websocket_url="",
+        )
+    try:
+        client = MistralClient.from_db(db)
+        token = await client.create_realtime_token()
+    except MistralError as exc:
+        raise AppError("MISTRAL_NOT_CONFIGURED", str(exc), 400) from exc
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        detail = (exc.response.text or "")[:300]
+        raise AppError(
+            "REALTIME_TOKEN_FAILED",
+            f"Connexion Voxtral Realtime refusee (HTTP {status}).",
+            502,
+            detail={"status": status, "response": detail},
+        ) from exc
+    return RealtimeTranscriptionTokenOut(
+        enabled=True,
+        token=token,
+        model=REALTIME_TRANSCRIBE_MODEL,
+        websocket_url=client.realtime_websocket_url(),
+    )
 
 
 @router.post("/transcribe", response_model=TranscriptionOut)
@@ -84,6 +130,56 @@ async def transcribe(
             "TRANSCRIBE_FAILED", f"Transcription echouee : {type(exc).__name__}", 502
         ) from exc
     return TranscriptionOut(text=text, llm_used=True)
+
+
+@router.post("/transcribe/stream")
+async def transcribe_stream(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Transcrit une dictee avec Voxtral Realtime et relaie ses deltas en SSE."""
+    if not get_llm_enabled(db):
+        async def disabled_gen():
+            yield {"event": "done", "data": json.dumps({"llm_used": False})}
+
+        return EventSourceResponse(disabled_gen())
+
+    name = (file.filename or "audio.webm").lower()
+    if not name.endswith(_AUDIO_EXTS):
+        raise AppError("BAD_AUDIO", f"Format audio non supporte ({name}).", 400)
+    audio = await file.read()
+    if not audio:
+        raise AppError("EMPTY_AUDIO", "Audio vide.", 400)
+    if len(audio) > _MAX_AUDIO_BYTES:
+        raise AppError("AUDIO_TOO_LARGE", "Audio trop volumineux (max 25 Mo).", 413)
+
+    try:
+        client = MistralClient.from_db(db)
+    except MistralError as exc:
+        raise AppError("MISTRAL_NOT_CONFIGURED", str(exc), 400) from exc
+
+    async def event_gen():
+        try:
+            async for delta in client.transcribe_audio_stream(audio, filename=name):
+                yield {"event": "token", "data": delta}
+            yield {"event": "done", "data": json.dumps({"llm_used": True})}
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            body = (exc.response.text or "")[:300]
+            log.warning("Voxtral streaming transcription HTTP %s: %s", status, body)
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"message": f"Transcription refusee par Mistral (HTTP {status}). {body}"}
+                ),
+            }
+        except Exception as exc:
+            log.exception("Voxtral streaming transcription failed")
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"message": f"Transcription echouee : {type(exc).__name__}"}
+                ),
+            }
+
+    return EventSourceResponse(event_gen())
 
 
 @router.get("", response_model=list[SessionOut])

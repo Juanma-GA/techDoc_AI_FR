@@ -27,7 +27,7 @@
     "dictate": "Dictar",
     "dictateStop": "Detener",
     "dictateTranscribing": "Transcribiendo…",
-    "dictateHint": "Dicta contenido con el micrófono (Voxtral). El texto se añade al brief. Requiere un modelo de transcripción activado en la clave Mistral (Ajustes) — no activado por el momento.",
+    "dictateHint": "Dicta con Voxtral Realtime. El texto aparece en el brief mientras hablas.",
     "promptPlaceholder": "P.ej.: Redacta una síntesis en tres párrafos de los puntos clave de los documentos seleccionados.",
     "scopeLabel": "Documentos a utilizar",
     "scopeAll": "Todos los documentos",

@@ -389,3 +389,12 @@ class TranscriptionOut(BaseModel):
 
     text: str
     llm_used: bool
+
+
+class RealtimeTranscriptionTokenOut(BaseModel):
+    """Jeton court permettant au navigateur d'ouvrir Voxtral Realtime."""
+
+    enabled: bool
+    token: str
+    model: str
+    websocket_url: str

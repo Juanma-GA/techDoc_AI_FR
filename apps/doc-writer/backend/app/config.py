@@ -62,10 +62,9 @@ class Settings(BaseSettings):
     #   3. Extraction LOCALE (couche texte PyMuPDF + Tesseract).
     mistral_vision_model: str = "mistral-small-latest"
     mistral_ocr_model: str = "mistral-ocr-latest"
-    # Transcription audio (dictee vocale) via Voxtral — endpoint /v1/audio/transcriptions.
-    # Id de modele exact (pas d'alias "-latest" pour Voxtral) ; surchargeable via .env
-    # si Mistral fait evoluer la version.
-    mistral_transcribe_model: str = "voxtral-mini-transcribe-26-02"
+    # Transcription audio streamee via /v1/audio/transcriptions.
+    # Voxtral Mini Transcribe 2 accepte les fichiers audio et `stream=true`.
+    mistral_transcribe_model: str = "voxtral-mini-latest"
     # Cle API / endpoint DEDIES a la transcription Voxtral (optionnel). Permet
     # d'appeler Voxtral mini avec un compte/une cle differente de la cle Mistral
     # principale (ex. Voxtral active sur un abonnement a part). Vides = on retombe

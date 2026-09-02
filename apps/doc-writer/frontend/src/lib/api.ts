@@ -357,8 +357,19 @@ export const documentsApi = {
 
 export type ExportFormat = "md" | "docx" | "pdf" | "pptx";
 
+export type RealtimeTranscriptionTokenDto = {
+  enabled: boolean;
+  token: string;
+  model: string;
+  websocket_url: string;
+};
+
 export const sessionsApi = {
   list: () => request<SessionDto[]>("/sessions"),
+  realtimeTranscriptionToken: () =>
+    request<RealtimeTranscriptionTokenDto>("/sessions/transcribe/realtime-token", {
+      method: "POST",
+    }),
   // Dictee vocale -> texte (Voxtral). Multipart : fetch direct (le helper
   // `request` force un Content-Type JSON incompatible avec FormData).
   transcribe: async (
