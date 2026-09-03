@@ -27,8 +27,11 @@ class DocumentOut(BaseModel):
     standard_version_ids: list[uuid.UUID] = Field(default_factory=list)
     status: str
     current_version: int
-    # Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif).
+    has_applied_edits: bool = False
+    # Format source fourni par l'utilisateur, puis format interne choisi automatiquement.
     source_format: str = "pdf"
+    working_format: str = "pdf"
+    original_sha256: Optional[str] = None
     # Portail qualite (revuabilite homogene tous formats).
     convert_engine: str = "pdf"
     text_coverage: int = 100

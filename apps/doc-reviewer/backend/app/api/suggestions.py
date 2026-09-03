@@ -438,7 +438,7 @@ def apply_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) ->
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
     # Pipeline Word natif : edition dans le .docx (pas de geometrie PDF).
-    if doc.source_format == "docx":
+    if doc.working_format == "docx":
         _apply_one_docx(db, s, doc)
         db.commit()
         return SuggestionApplyOut(
@@ -511,7 +511,7 @@ def apply_suggestion_group(
             skipped += 1
             continue
         try:
-            if doc.source_format == "docx":
+            if doc.working_format == "docx":
                 _apply_one_docx(db, member, doc)
             else:
                 _apply_one(db, member, doc)
@@ -557,7 +557,7 @@ def revert_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) -
         raise AppError("VERSION_INVALID", "Aucune version antérieure", status_code=400)
 
     # Pipeline Word natif : versions .docx ; sinon versions .pdf.
-    if doc.source_format == "docx":
+    if doc.working_format == "docx":
         target = docx_versioning.version_path(doc.storage_dir, target_version)
         if not target.is_file():
             raise AppError("DOCX_VERSION_MISSING", "Version .docx antérieure absente", status_code=404)

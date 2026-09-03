@@ -84,7 +84,7 @@ def inspect_uploaded_pdf(client: httpx.Client, document_id: str) -> None:
     data = show_response("document", client.get(api_url(f"documents/{document_id}")))
     if data:
         print("\nMetadonnees importantes:")
-        for key in ("id", "original_filename", "source_format", "convert_engine", "page_count", "quality", "status", "current_version"):
+        for key in ("id", "original_filename", "source_format", "working_format", "original_sha256", "convert_engine", "page_count", "quality", "status", "current_version"):
             print(f"  {key}: {data.get(key)}")
 
     OUTPUT_DIR.mkdir(exist_ok=True)

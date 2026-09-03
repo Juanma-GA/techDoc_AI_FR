@@ -50,7 +50,7 @@ def analyze_stream(
     # analysis after applying suggestions and pick up new issues that the
     # edit may have introduced (or simply check that fixes hold). Le chemin
     # depend du pipeline : .pdf (defaut) ou .docx (pipeline Word natif).
-    is_docx = doc.source_format == "docx"
+    is_docx = doc.working_format == "docx"
     if is_docx:
         from app.core import docx_versioning
 

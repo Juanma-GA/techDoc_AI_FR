@@ -1,4 +1,4 @@
-"""Pipeline de revue **Word natif** (dual-mode, cf. Document.source_format).
+"""Pipeline de revue **Word natif** (selected by Document.working_format).
 
 Un document `.docx` est parsé en blocs (`docx_parser`), chaque bloc portant un
 `target_id` stable `dp<N>`. La détection **réutilise le moteur texte existant**
