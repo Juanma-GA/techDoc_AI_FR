@@ -97,10 +97,12 @@ class Document(Base):
         String(30), default="uploaded", server_default="uploaded", index=True
     )
     current_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    # Format de revue : "pdf" (pipeline PDF : conversion + edition PDF, defaut) ou
-    # "docx" (pipeline Word natif : parse python-docx, edition run-level, sortie
-    # .docx corrigee). Choisi a l'upload (dual-mode). cf. core/docx_pipeline.py.
+    # Format source fourni par l'utilisateur; le routage se fait via
+    # `working_format` et non via ce champ.
     source_format: Mapped[str] = mapped_column(String(10), default="pdf", server_default="pdf")
+    working_format: Mapped[str] = mapped_column(String(10), default="pdf", server_default="pdf")
+    original_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    original_storage_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     # Portail qualite (homogeneite tous formats) : moteur de normalisation
     # ("pdf" natif, "libreoffice", "word"), % de pages porteuses de texte, et
     # etat de revuabilite ("analyzable" | "degraded" | "unusable"). Renseignes
@@ -119,6 +121,10 @@ class Document(Base):
     meta_first_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_revision_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+    @property
+    def has_applied_edits(self) -> bool:
+        return self.current_version > 0
 
     suggestions: Mapped[list["Suggestion"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"

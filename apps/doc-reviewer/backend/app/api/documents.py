@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+import tempfile
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -87,6 +88,8 @@ def _persist_pdf(
     standard_version_id: Optional[uuid.UUID] = None,
     standard_version_ids: Optional[list[uuid.UUID]] = None,
     convert_engine: str = "pdf",
+    source_format: str = "pdf",
+    original_data: Optional[bytes] = None,
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
@@ -135,6 +138,10 @@ def _persist_pdf(
         standard_version_ids=_json.dumps([str(v) for v in (standard_version_ids or [])]),
         status="uploaded",
         current_version=0,
+        source_format=source_format,
+        working_format="pdf",
+        original_sha256=sha256_of_bytes(original_data if original_data is not None else pdf_bytes),
+        original_storage_path=str(path_for(storage_dir_value, 0)),
         convert_engine=convert_engine,
         text_coverage=report.coverage,
         quality=report.state,
@@ -152,6 +159,8 @@ def _ingest_and_persist(
     db: Session,
     standard_version_id: Optional[uuid.UUID] = None,
     standard_version_ids: Optional[list[uuid.UUID]] = None,
+    source_format: str = "pdf",
+    original_data: Optional[bytes] = None,
 ) -> Document:
     """Normalize one supported file (.pdf/.doc/.docx) to a faithful PDF, persist it.
 
@@ -164,6 +173,8 @@ def _ingest_and_persist(
         standard_version_id=standard_version_id,
         standard_version_ids=standard_version_ids,
         convert_engine=engine,
+        source_format=source_format,
+        original_data=original_data,
     )
 
 
@@ -177,10 +188,13 @@ def _persist_docx(
     db: Session,
     standard_version_id: Optional[uuid.UUID] = None,
     standard_version_ids: Optional[list[uuid.UUID]] = None,
+    original_data: Optional[bytes] = None,
+    source_format: Optional[str] = None,
+    engine_override: Optional[str] = None,
 ) -> Document:
-    """Persiste un document pour la revue **Word native** (source_format="docx").
+    """Persist a DOCX working document while retaining the detected source.
 
-    `.docx` : l'original est stocke tel quel en v0.docx (versioning docx),
+    `.docx` : le fichier de travail est stocke tel quel en v0.docx,
     parse pour compter les blocs/pages — aucune conversion.
 
     `.doc` (legacy binaire) : converti **une seule fois, en interne** en
@@ -194,7 +208,7 @@ def _persist_docx(
 
     safe = safe_filename(name)
     ext = Path(safe).suffix.lower()
-    if ext not in (".docx", ".doc"):
+    if source_format is None and ext not in (".docx", ".doc"):
         raise AppError(
             "DOCX_MODE_REQUIRES_DOCX",
             "Le mode Word natif n'accepte que des fichiers .doc ou .docx.",
@@ -205,7 +219,10 @@ def _persist_docx(
     if len(data) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", f"{safe} depasse la taille max.", status_code=413)
 
-    if ext == ".doc":
+    if source_format is not None:
+        working_data = data
+        engine = engine_override or "docx-native"
+    elif ext == ".doc":
         # Conversion interne .doc -> .docx (silencieuse pour l'utilisateur) :
         # le fichier de travail est du docx, mais `original_filename` conserve
         # le suffixe .doc pour un aller-retour transparent a l'export.
@@ -221,6 +238,8 @@ def _persist_docx(
     doc_id = uuid.uuid4()
     storage_dir_value = f"document_{doc_id.hex}"
     docx_versioning.write_version(storage_dir_value, 0, working_data)
+    source_data = original_data if original_data is not None else data
+    original_path = docx_versioning.write_original(storage_dir_value, source_data, safe)
     try:
         parsed = parse_docx(docx_versioning.version_path(storage_dir_value, 0))
     except Exception as exc:  # noqa: BLE001
@@ -241,7 +260,10 @@ def _persist_docx(
         standard_version_ids=_json.dumps([str(v) for v in (standard_version_ids or [])]),
         status="uploaded",
         current_version=0,
-        source_format="docx",
+        source_format=source_format or "docx",
+        working_format="docx",
+        original_sha256=sha256_of_bytes(source_data),
+        original_storage_path=str(original_path),
         convert_engine=engine,
         text_coverage=100,
         quality="analyzable",
@@ -256,8 +278,8 @@ def _persist_docx(
 def upload_document(
     file: UploadFile = File(...),
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
-    word_mode: Literal["pdf", "docx"] = Query(
-        default="pdf",
+    word_mode: Optional[Literal["pdf", "docx"]] = Query(
+        default=None,
         description=(
             "Pipeline de revue (dual-mode). 'pdf' (defaut) : conversion en PDF "
             "fidele puis edition PDF. 'docx' : revue Word native (.doc/.docx), "
@@ -283,16 +305,40 @@ def upload_document(
             status_code=400,
         )
     data = file.file.read()
+    # `word_mode` is retained only for old clients. New clients omit it and
+    # the source extension determines the working format automatically.
     if word_mode == "docx":
         return _persist_docx(
             name, data, target, db,
             standard_version_id=primary,
             standard_version_ids=all_ids,
         )
-    return _ingest_and_persist(
-        name, data, target, db,
+    if word_mode == "pdf":
+        detected_source = Path(name).suffix.lower().lstrip(".") or "pdf"
+        return _ingest_and_persist(
+            name, data, target, db,
+            standard_version_id=primary,
+            standard_version_ids=all_ids,
+            source_format=detected_source,
+            original_data=data,
+        )
+    prepared = ingest.prepare_document(name, data)
+    if prepared.working_format == "docx":
+        return _persist_docx(
+            prepared.filename, prepared.working_bytes, target, db,
+            standard_version_id=primary,
+            standard_version_ids=all_ids,
+            original_data=prepared.original_bytes,
+            source_format=prepared.source_format,
+            engine_override=prepared.convert_engine,
+        )
+    return _persist_pdf(
+        prepared.working_bytes, prepared.filename, target, db,
         standard_version_id=primary,
         standard_version_ids=all_ids,
+        convert_engine=prepared.convert_engine,
+        source_format=prepared.source_format,
+        original_data=prepared.original_bytes,
     )
 
 
@@ -327,11 +373,25 @@ def upload_documents_batch(
     failed: list[dict] = []
     for name, data in expanded:
         try:
-            doc = _ingest_and_persist(
-                name, data, target, db,
-                standard_version_id=primary,
-                standard_version_ids=all_ids,
-            )
+            prepared = ingest.prepare_document(name, data)
+            if prepared.working_format == "docx":
+                doc = _persist_docx(
+                    prepared.filename, prepared.working_bytes, target, db,
+                    standard_version_id=primary,
+                    standard_version_ids=all_ids,
+                    original_data=prepared.original_bytes,
+                    source_format=prepared.source_format,
+                    engine_override=prepared.convert_engine,
+                )
+            else:
+                doc = _persist_pdf(
+                    prepared.working_bytes, prepared.filename, target, db,
+                    standard_version_id=primary,
+                    standard_version_ids=all_ids,
+                    convert_engine=prepared.convert_engine,
+                    source_format=prepared.source_format,
+                    original_data=prepared.original_bytes,
+                )
             created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
         except AppError as exc:
             failed.append({"filename": name, "code": exc.code, "message": exc.message})
@@ -413,6 +473,12 @@ def get_pdf(
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    if doc.working_format != "pdf":
+        raise AppError(
+            "EXPORT_FORMAT_UNAVAILABLE",
+            "Ce document a un DOCX comme format de travail; utilisez l'export PDF explicite.",
+            status_code=409,
+        )
 
     if version == "current":
         target = current_path(doc.storage_dir, doc.current_version)
@@ -450,6 +516,12 @@ def render_page_png(
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    if doc.working_format != "pdf":
+        raise AppError(
+            "EXPORT_FORMAT_UNAVAILABLE",
+            "Le rendu page PNG est disponible pour un document de travail PDF uniquement.",
+            status_code=409,
+        )
     if page_number < 1 or page_number > doc.page_count:
         raise AppError(
             "PDF_PAGE_OUT_OF_RANGE",
@@ -474,27 +546,120 @@ def render_page_png(
     )
 
 
-@router.get("/documents/{document_id}/export", response_model=None)
-def export_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) -> FileResponse | Response:
+def _commented_pdf_response(doc: Document, db: Session) -> Response:
+    from app.core.pdf_annotate import build_commented_pdf
+    from app.db.models import Suggestion as SuggestionModel
+
+    suggestions = list(db.scalars(
+        select(SuggestionModel)
+        .where(SuggestionModel.document_id == doc.id, SuggestionModel.status != "rejected")
+        .order_by(SuggestionModel.page, SuggestionModel.span_index)
+    ))
+    if doc.working_format == "pdf":
+        pdf_path = current_path(doc.storage_dir, doc.current_version)
+        pdf_bytes = build_commented_pdf(str(pdf_path), suggestions)
+    else:
+        working = docx_versioning.version_path(doc.storage_dir, doc.current_version)
+        if not working.is_file():
+            raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=404)
+        with tempfile.TemporaryDirectory(prefix="dr_commented_") as temp_dir:
+            converted, _ = doc_convert.doc_to_pdf_bytes(working.read_bytes(), ".docx")
+            pdf_path = Path(temp_dir) / "working.pdf"
+            pdf_path.write_bytes(converted)
+            pdf_bytes = build_commented_pdf(str(pdf_path), suggestions)
+    stem = Path(doc.original_filename).stem
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{stem}_commente.pdf"'},
+    )
+
+
+@router.get("/documents/{document_id}/exports")
+def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    """Return only exports supported by this document's current state."""
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    available: list[dict[str, str]] = []
+    if doc.source_format == "doc" and doc.original_storage_path:
+        available.append({"kind": "original", "format": "doc", "label": "DOC original"})
+    elif doc.source_format == "pdf":
+        available.append({"kind": "original", "format": "pdf", "label": "PDF original"})
+    elif doc.source_format == "docx":
+        available.append({"kind": "original", "format": "docx", "label": "DOCX original"})
+    if doc.working_format == "pdf":
+        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente"})
+        if doc.has_applied_edits:
+            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige"})
+    else:
+        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente"})
+        if doc.has_applied_edits:
+            available.append({"kind": "corrected", "format": "docx", "label": "DOCX corrige"})
+            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige"})
+        if doc.source_format == "doc" and doc.has_applied_edits and doc_convert._find_soffice():
+            available.append({"kind": "corrected", "format": "doc", "label": "DOC corrige"})
+    return {
+        "source_format": doc.source_format,
+        "working_format": doc.working_format,
+        "has_applied_edits": doc.has_applied_edits,
+        "available": available,
+    }
+
+
+@router.get("/documents/{document_id}/export", response_model=None)
+def export_pdf(
+    document_id: uuid.UUID,
+    format: Optional[Literal["original", "corrected", "commented", "pdf", "docx", "doc"]] = Query(default=None),
+    db: Session = Depends(get_db),
+) -> FileResponse | Response:
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    if format == "commented":
+        return _commented_pdf_response(doc, db)
+    requested = format or "corrected"
+    if requested == "original":
+        if doc.source_format == "pdf":
+            target = path_for(doc.storage_dir, 0)
+            return FileResponse(target, media_type="application/pdf", filename=doc.original_filename)
+        original = Path(doc.original_storage_path or "")
+        if not original.is_file():
+            raise AppError("ORIGINAL_FILE_MISSING", "Fichier original absent", status_code=404)
+        media = "application/msword" if doc.source_format == "doc" else _DOCX_MIME
+        return FileResponse(original, media_type=media, filename=doc.original_filename)
+    if requested == "pdf" and doc.working_format != "pdf":
+        if not docx_versioning.version_path(doc.storage_dir, doc.current_version).is_file():
+            raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=404)
+        converted, _ = doc_convert.doc_to_pdf_bytes(
+            docx_versioning.read_version(doc.storage_dir, doc.current_version), ".docx"
+        )
+        return Response(content=converted, media_type="application/pdf")
+    if requested == "doc" and doc.source_format != "doc":
+        raise AppError("EXPORT_FORMAT_UNAVAILABLE", "L'export DOC n'est disponible que pour une entree DOC.", status_code=409)
+    if requested not in {"corrected", "pdf", "docx", "doc"}:
+        raise AppError("EXPORT_FORMAT_UNAVAILABLE", "Format d'export incompatible.", status_code=409)
     # Pipeline Word natif : on rend le .docx corrige (version courante). Si le
     # document d'origine etait un `.doc` (converti en interne a l'upload, cf.
     # `_persist_docx`), on reconvertit le .docx de travail en .doc a la volee
     # pour que l'utilisateur recupere le format qu'il a envoye, sans etape
     # manuelle de conversion de sa part.
-    if doc.source_format == "docx":
+    if doc.working_format == "docx":
         target = docx_versioning.version_path(doc.storage_dir, doc.current_version)
         if not target.is_file():
             raise AppError("DOCX_VERSION_MISSING", "DOCX courant absent", status_code=404)
-        if doc.original_filename.lower().endswith(".doc") and not doc.original_filename.lower().endswith(".docx"):
+        if requested == "doc":
             doc_bytes = doc_convert.docx_to_doc_bytes(target.read_bytes())
             return Response(
                 content=doc_bytes,
                 media_type="application/msword",
                 headers={"Content-Disposition": f'attachment; filename="{doc.original_filename}"'},
             )
+        if requested == "pdf":
+            converted, _ = doc_convert.doc_to_pdf_bytes(target.read_bytes(), ".docx")
+            return Response(content=converted, media_type="application/pdf")
+        if requested not in {"corrected", "docx"}:
+            raise AppError("EXPORT_FORMAT_UNAVAILABLE", "Format d'export incompatible.", status_code=409)
         return FileResponse(
             target,
             media_type=_DOCX_MIME,
@@ -522,7 +687,7 @@ def get_docx_blocks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> di
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
-    if doc.source_format != "docx":
+    if doc.working_format != "docx":
         raise AppError(
             "NOT_DOCX_DOCUMENT",
             "Ce document n'est pas en pipeline Word natif.",
@@ -540,35 +705,10 @@ def export_commented_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) 
     """PDF **commente** : le PDF fidele + les anomalies retenues (non rejetees)
     estampillees en annotations, plus une page-sommaire. C'est le livrable sur
     lequel le relecteur s'appuie pour corriger son document Word."""
-    from app.core.pdf_annotate import build_commented_pdf
-    from app.db.models import Suggestion as SuggestionModel
-
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
-    src = current_path(doc.storage_dir, doc.current_version)
-    if not src.is_file():
-        raise AppError("PDF_VERSION_MISSING", "PDF courant absent", status_code=500)
-
-    suggestions = list(
-        db.scalars(
-            select(SuggestionModel)
-            .where(
-                SuggestionModel.document_id == document_id,
-                SuggestionModel.status != "rejected",
-            )
-            .order_by(SuggestionModel.page, SuggestionModel.span_index)
-        )
-    )
-    pdf_bytes = build_commented_pdf(str(src), suggestions)
-
-    stem = doc.original_filename.rsplit(".", 1)[0]
-    out_name = f"{stem}_commente.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{out_name}"'},
-    )
+    return _commented_pdf_response(doc, db)
 
 
 @router.post("/documents/{document_id}/rollback", response_model=DocumentOut)
@@ -581,10 +721,14 @@ def rollback_document(
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
-    target = path_for(doc.storage_dir, body.target_version)
+    target = (
+        docx_versioning.version_path(doc.storage_dir, body.target_version)
+        if doc.working_format == "docx"
+        else path_for(doc.storage_dir, body.target_version)
+    )
     if not target.is_file():
         raise AppError(
-            "PDF_VERSION_MISSING",
+            "WORKING_VERSION_MISSING",
             f"Version {body.target_version} introuvable",
             status_code=404,
         )

@@ -118,3 +118,18 @@ def test_docx_mode_rejects_non_docx(client: TestClient) -> None:
     )
     assert up.status_code == 400
     assert up.json()["code"] == "DOCX_MODE_REQUIRES_DOCX"
+
+
+def test_docx_upload_selects_working_format_automatically(client: TestClient) -> None:
+    data = _docx_bytes("A native Word document")
+    up = client.post(
+        "/api/v1/documents",
+        files={"file": ("automatic.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+    assert up.status_code == 201, up.text
+    document = up.json()
+    assert document["source_format"] == "docx"
+    assert document["working_format"] == "docx"
+    exports = client.get(f"/api/v1/documents/{document['id']}/exports")
+    assert exports.status_code == 200
+    assert {item["format"] for item in exports.json()["available"]} == {"docx", "pdf"}

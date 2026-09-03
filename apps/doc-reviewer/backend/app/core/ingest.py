@@ -1,11 +1,8 @@
-"""Ingestion universelle -> PDF fidele.
+"""Ingestion universelle with automatic source and working formats.
 
-Doc Reviewer accepte `.pdf`, `.doc`, `.docx` (et des `.zip` en contenant). Quel
-que soit le format, la detection tourne sur un **PDF** :
-- `.pdf`  -> utilise tel quel (zero conversion) ;
-- `.doc/.docx` -> **PDF fidele** via `doc_convert.convert_to_pdf` (LibreOffice
-  prioritaire pour un rendu reproductible, repli Word COM) -> plus d'artefacts
-  de conversion `.doc -> .docx` lossy.
+Doc Reviewer accepte `.pdf`, `.doc`, `.docx` (et des `.zip` en contenant).
+PDF and DOCX remain native working files; legacy DOC is retained as the
+original and converted to a DOCX working copy.
 
 Garde-fous anti zip-bomb : taille par fichier, taille decompressee totale et
 nombre de fichiers bornes (repris de word-reviewer).
@@ -16,6 +13,7 @@ from __future__ import annotations
 import io
 import logging
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.config import settings
@@ -29,6 +27,16 @@ SUPPORTED_EXTS = (".pdf", ".doc", ".docx")
 
 MAX_FILES = 300
 MAX_TOTAL_UNCOMPRESSED = 800 * 1024 * 1024  # 800 MB decompresses
+
+
+@dataclass(frozen=True)
+class PreparedDocument:
+    source_format: str
+    working_format: str
+    original_bytes: bytes
+    working_bytes: bytes
+    filename: str
+    convert_engine: str
 
 
 def _max_single() -> int:
@@ -125,3 +133,45 @@ def to_pdf_bytes(name: str, data: bytes) -> tuple[bytes, str, str]:
         f"Format non supporte : {ext or '?'} (attendu .pdf / .doc / .docx)",
         status_code=400,
     )
+
+
+def prepare_document(name: str, data: bytes) -> PreparedDocument:
+    """Validate and prepare an upload without applying any document edits.
+
+    PDF and DOCX remain in their native working format. Legacy DOC is retained
+    as the original and converted once to DOCX for analysis and corrections.
+    """
+    safe = safe_filename(name)
+    ext = Path(safe).suffix.lower()
+    if ext not in SUPPORTED_EXTS:
+        raise AppError(
+            "UNSUPPORTED_FORMAT",
+            f"Format non supporte : {ext or '?'} (attendu .pdf / .doc / .docx)",
+            status_code=400,
+        )
+    if not data:
+        raise AppError("UPLOAD_EMPTY", "Fichier vide", status_code=400)
+    if len(data) > _max_single():
+        raise AppError("FILE_TOO_LARGE", f"{safe} depasse la taille max.", status_code=413)
+    if ext == ".pdf":
+        validate_pdf_bytes(data, _max_single())
+        try:
+            import fitz
+
+            pdf = fitz.open(stream=data, filetype="pdf")
+            pdf.close()
+        except Exception as exc:  # noqa: BLE001
+            raise AppError("PDF_INVALID", "PDF illisible", status_code=400) from exc
+        return PreparedDocument("pdf", "pdf", data, data, safe, "pdf")
+    if ext == ".docx":
+        if not data.startswith(b"PK"):
+            raise AppError("DOCX_INVALID", "Fichier .docx illisible (OOXML attendu).", status_code=400)
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                if "[Content_Types].xml" not in archive.namelist():
+                    raise ValueError("OOXML content types missing")
+        except (zipfile.BadZipFile, ValueError) as exc:
+            raise AppError("DOCX_INVALID", "Fichier .docx illisible.", status_code=400) from exc
+        return PreparedDocument("docx", "docx", data, data, safe, "docx-native")
+    working = doc_convert.office_to_docx_bytes(data, ".doc")
+    return PreparedDocument("doc", "docx", data, working, safe, "libreoffice")
