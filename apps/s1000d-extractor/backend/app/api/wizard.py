@@ -34,6 +34,18 @@ def _dm_filename(dm: dict) -> str:
     return f"{dm['dm_id']}.xml"
 
 
+def _start_options(params: dict) -> tuple[bool, int | None]:
+    cut_pdf = params.get("cut_pdf", True)
+    start_page = params.get("start_page")
+    if not isinstance(cut_pdf, bool):
+        raise AppError("PDF_CUT_INVALID", "Le champ cut_pdf doit etre booleen.", 422)
+    if start_page is not None and (
+        isinstance(start_page, bool) or not isinstance(start_page, int) or start_page < 1
+    ):
+        raise AppError("PDF_PAGE_INVALID", "Le champ start_page doit etre un entier positif.", 422)
+    return cut_pdf, start_page
+
+
 def _require(db: Session, doc_id: str) -> Document:
     doc = db.get(Document, doc_id)
     if doc is None:
@@ -42,15 +54,30 @@ def _require(db: Session, doc_id: str) -> Document:
 
 
 @router.post("/{doc_id}/wizard/start")
-def wizard_start(doc_id: str, db: Session = Depends(get_db)) -> dict:
-    return wizard.start(db, _require(db, doc_id))
+def wizard_start(
+    doc_id: str,
+    params: dict = Body(default={}),
+    db: Session = Depends(get_db),
+) -> dict:
+    cut_pdf, start_page = _start_options(params)
+    return wizard.start(
+        db,
+        _require(db, doc_id),
+        cut_pdf=cut_pdf,
+        start_page=start_page,
+    )
 
 
 @router.post("/{doc_id}/wizard/start_stream")
-async def wizard_start_stream(doc_id: str, db: Session = Depends(get_db)) -> EventSourceResponse:
+async def wizard_start_stream(
+    doc_id: str,
+    params: dict = Body(default={}),
+    db: Session = Depends(get_db),
+) -> EventSourceResponse:
     """Demarre l'assistant en streamant la progression (parse / ocr / infer /
     split / classify) ; l'evenement `done` porte l'etat initial (etape split)."""
     doc = _require(db, doc_id)
+    cut_pdf, start_page = _start_options(params)
     doc_id = doc.id
 
     async def gen():
@@ -66,7 +93,13 @@ async def wizard_start_stream(doc_id: str, db: Session = Depends(get_db)) -> Eve
                 d = s.get(Document, doc_id)
                 if d is None:
                     raise AppError("DOC_NOT_FOUND", "Document inconnu.", 404)
-                return wizard.start(s, d, progress_cb=cb)
+                return wizard.start(
+                    s,
+                    d,
+                    progress_cb=cb,
+                    cut_pdf=cut_pdf,
+                    start_page=start_page,
+                )
             finally:
                 s.close()
 
