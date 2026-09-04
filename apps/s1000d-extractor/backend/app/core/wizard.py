@@ -132,7 +132,7 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     progress_cb("classify", 80)
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
     dmrl_types = {e.dmc: e.dm_type for e in entries if e.dmc and e.dm_type}
-    ws.save_dms(doc, [
+    dms = [
         {
             "dm_id": u.dm_id,
             "dmc": u.dmc,
@@ -145,7 +145,10 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
             "violations": None,
         }
         for u in units
-    ])
+    ]
+    if entries:
+        ws.sync_dmcs(dms, doc)
+    ws.save_dms(doc, dms)
     doc.split_level = split_level
 
 
