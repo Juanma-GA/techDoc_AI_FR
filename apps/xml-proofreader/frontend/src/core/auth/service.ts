@@ -1,41 +1,66 @@
-// Local account service. Pure logic over a StoragePort — no UI deps, fully
-// testable with an in-memory storage. (SSO is a future extension point: a
-// remote AuthService implementing the same shape could replace this.)
-import type { StoragePort } from "../../ports/StoragePort";
-import { hashPassword, verifyPassword } from "./passwords";
+// Local account service. Talks to the backend's /api/v1/users routes so that
+// emails and password hashes live only in the server's SQLite database, never
+// in browser-accessible storage (localStorage was readable via devtools —
+// see H-NEW-04 in the hardening checklist). No session/cookie layer: the
+// frontend only keeps a non-sensitive "currently selected user id" locally
+// (see sessionStore.ts) and re-fetches the account list from the backend.
 import type { User } from "./types";
 
-const USERS_KEY = "users";
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+const BASE = `${API_BASE}/users`;
+
+interface UserApiShape {
+  id: string;
+  name: string;
+  email: string;
+  created_at: number;
+}
+
+function toUser(raw: UserApiShape): User {
+  return { id: raw.id, name: raw.name, email: raw.email, createdAt: raw.created_at };
+}
+
+async function parseOrThrow(res: Response): Promise<unknown> {
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const message = (body as { message?: string } | null)?.message ?? `Request failed (${res.status})`;
+    throw new Error(message);
+  }
+  return body;
+}
 
 export class AuthService {
-  constructor(private storage: StoragePort) {}
-
   async listUsers(): Promise<User[]> {
-    return (await this.storage.get<User[]>(USERS_KEY)) ?? [];
+    const res = await fetch(BASE);
+    const body = (await parseOrThrow(res)) as UserApiShape[];
+    return body.map(toUser);
   }
 
   async register(name: string, email: string, password: string): Promise<User> {
-    const users = await this.listUsers();
-    const norm = email.trim().toLowerCase();
-    if (users.some((u) => u.email.toLowerCase() === norm)) {
-      throw new Error("An account with this email already exists");
-    }
-    const user: User = {
-      id: "u_" + Math.random().toString(36).slice(2, 10),
-      name: name.trim(),
-      email: email.trim(),
-      password: await hashPassword(password),
-      createdAt: Date.now(),
-    };
-    await this.storage.set(USERS_KEY, [...users, user]);
-    return user;
+    const res = await fetch(`${BASE}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
+    return toUser((await parseOrThrow(res)) as UserApiShape);
   }
 
   async login(email: string, password: string): Promise<User | null> {
-    const users = await this.listUsers();
-    const norm = email.trim().toLowerCase();
-    const user = users.find((u) => u.email.toLowerCase() === norm);
-    if (!user) return null;
-    return (await verifyPassword(password, user.password)) ? user : null;
+    const res = await fetch(`${BASE}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.status === 401) return null;
+    return toUser((await parseOrThrow(res)) as UserApiShape);
+  }
+
+  async updateProfile(userId: string, name: string, email: string): Promise<User> {
+    const res = await fetch(`${BASE}/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email }),
+    });
+    return toUser((await parseOrThrow(res)) as UserApiShape);
   }
 }

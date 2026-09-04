@@ -8,9 +8,10 @@ chaque app.
 ## Modèle de déploiement
 
 Les POCs sont déployés comme sous-applications IIS sous un **chemin parent
-commun**. Exemples observés :
+commun**. Exemple de forme observée (IP/hôte réel non reproduit ici — voir le
+guide de déploiement de l'app concernée pour la valeur réelle) :
 
-- `https://172.21.28.92/Customizations/AtexisPOCS/<poc>/` (cf.
+- `https://<hote-iis-interne>/Customizations/AtexisPOCS/<poc>/` (cf.
   `apps/corpus-agent/DEPLOYMENT_GUIDE.md`)
 
 Le portail se pose à la **racine de ce parent** :

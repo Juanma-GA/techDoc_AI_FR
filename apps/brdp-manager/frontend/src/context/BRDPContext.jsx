@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { fetchBRDPs, saveBRDPs, resetToDemoBRDPs } from '../services/api';
+import { fetchBRDPs, syncBRDPs, resetToDemoBRDPs } from '../services/api';
 
 const BRDPContext = createContext();
 
@@ -27,14 +27,25 @@ export function BRDPProvider({ children }) {
     loadBRDPs();
   }, []);
 
-  const setBrdps = useCallback(async (newBrdps) => {
-    setBrdpsState(newBrdps);
+  /**
+   * Accepts either the new array directly or a React-style updater function
+   * (`prev => ...`), like `useState`'s setter — several callers (delete one,
+   * delete selected) rely on the functional form to avoid stale closures.
+   * Only the items that actually changed are synced to the backend (see
+   * `syncBRDPs`): deleting one BRDP deletes only that one BRDP server-side.
+   */
+  const setBrdps = useCallback(async (newBrdpsOrUpdater) => {
+    const previous = brdps;
+    const resolved = typeof newBrdpsOrUpdater === 'function'
+      ? newBrdpsOrUpdater(previous)
+      : newBrdpsOrUpdater;
+    setBrdpsState(resolved);
     try {
-      await saveBRDPs(newBrdps);
+      await syncBRDPs(resolved, previous);
     } catch (err) {
       console.error('Failed to save BRDPs to server:', err);
     }
-  }, []);
+  }, [brdps]);
 
   const updateBRDP = useCallback((id, changes) => {
     const updated = brdps.map(b => {

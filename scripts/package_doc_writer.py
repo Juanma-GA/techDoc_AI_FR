@@ -90,7 +90,8 @@ def _build_frontend(frontend_dir: Path) -> bool:
     dist = frontend_dir / "dist"
     has_existing_dist = (dist / "index.html").is_file()
 
-    if shutil.which("pnpm") is None or shutil.which("node") is None:
+    pnpm = shutil.which("pnpm")
+    if pnpm is None or shutil.which("node") is None:
         print("[frontend] pnpm/node not found — skipping build")
         if has_existing_dist:
             print("           bundling the existing frontend/dist/ as-is")
@@ -102,9 +103,9 @@ def _build_frontend(frontend_dir: Path) -> bool:
             print("[frontend] node_modules present — skipping pnpm install")
         else:
             print(f"[frontend] pnpm install ({frontend_dir})")
-            subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
+            subprocess.run([pnpm, "install"], cwd=frontend_dir, check=True)
         print("[frontend] pnpm build")
-        subprocess.run("pnpm build", cwd=frontend_dir, check=True, shell=True)
+        subprocess.run([pnpm, "build"], cwd=frontend_dir, check=True)
     except subprocess.CalledProcessError as exc:
         if has_existing_dist:
             print(f"[frontend] build failed ({exc}) — keeping existing frontend/dist/")

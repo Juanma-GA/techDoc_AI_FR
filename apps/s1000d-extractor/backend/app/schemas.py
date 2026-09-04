@@ -147,3 +147,19 @@ class LinkDmrlIn(BaseModel):
 
     mode: str = "auto"  # "auto" | "manual"
     dmrl_links: list[dict] = Field(default_factory=list)  # [{"dmrl_line_id": "...", "dm_code": "..."}]
+
+
+class SaveDmVersionIn(BaseModel):
+    """Request body to snapshot a Data Module version.
+
+    Was previously accepted as query parameters (content included) — moved to
+    a validated JSON body so the XML content is no longer embedded in the URL
+    (access logs / proxies / browser history) and gets the same request-size
+    handling as other upload endpoints (see save_dm_version's explicit
+    max_upload_size_bytes check).
+    """
+
+    content: str = Field(..., min_length=1, description="DM XML content")
+    author: str = "unknown"
+    status: str = "draft"
+    notes: str = ""

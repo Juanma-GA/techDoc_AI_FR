@@ -2,7 +2,7 @@
  * API service layer — REST calls to the FastAPI backend (`/api/v1/*`).
  */
 
-const BASE = '/api/v1';
+const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 // ─── BRDPs ────────────────────────────────────────────────────────────────────
 
@@ -32,23 +32,42 @@ export async function updateBRDPApi(id, brdp) {
   return res.json();
 }
 
+// Confirmation marker required by the backend (see brdps.py::_require_confirm_token).
+// Not a secret — the real confirmation is the double-click UX gate the caller has
+// already passed (DetailPanel's delete button, BRDPTable's "delete selected") before
+// any of the functions below ever run.
+const DELETE_CONFIRM_TOKEN = 'ui-confirmed-delete';
+
 export async function deleteBRDP(id) {
-  const res = await fetch(`${BASE}/brdps/${id}`, { method: 'DELETE' });
+  const res = await fetch(`${BASE}/brdps/${id}?confirm_token=${DELETE_CONFIRM_TOKEN}`, {
+    method: 'DELETE',
+  });
   if (!res.ok) throw new Error('Failed to delete BRDP');
   return res.json();
 }
 
-export async function deleteAllBRDPs() {
-  const res = await fetch(`${BASE}/brdps`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to delete all BRDPs');
-  return res.json();
-}
+/**
+ * Reconciles the backend with the new BRDP list by diffing against the
+ * previous one: only the items that actually changed are deleted / created /
+ * updated, one targeted request per item — never a blind "delete everything"
+ * (see H-NEW-09: that used to be the whole save strategy and a bug meant
+ * deleting a single BRDP silently wiped every BRDP on the server).
+ */
+export async function syncBRDPs(newBrdps, previousBrdps) {
+  const newIds = new Set(newBrdps.map((b) => b.id));
+  const prevIds = new Set(previousBrdps.map((b) => b.id));
 
-export async function saveBRDPs(brdps) {
-  // Save full array: delete all then insert each
-  await deleteAllBRDPs();
-  for (const brdp of brdps) {
-    await createBRDP(brdp);
+  const removed = previousBrdps.filter((b) => !newIds.has(b.id));
+  for (const brdp of removed) {
+    await deleteBRDP(brdp.id);
+  }
+
+  for (const brdp of newBrdps) {
+    if (prevIds.has(brdp.id)) {
+      await updateBRDPApi(brdp.id, brdp);
+    } else {
+      await createBRDP(brdp);
+    }
   }
 }
 

@@ -1,11 +1,10 @@
-import type { PasswordHash } from "./passwords";
-
-/** A local user account. Passwords are stored only as PBKDF2 hashes. */
+/** A local user account as seen by the client. The password never reaches
+ * the frontend — hashing and verification happen server-side (see
+ * core/auth/service.ts and the backend's /api/v1/users routes). */
 export interface User {
   id: string;
   name: string;
   email: string;
-  password: PasswordHash;
   createdAt: number;
 }
 

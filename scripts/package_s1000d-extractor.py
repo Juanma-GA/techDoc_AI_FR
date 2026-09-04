@@ -115,10 +115,10 @@ def _build_frontend(frontend_dir: Path) -> bool:
             print(f"[frontend] node vite build ({frontend_dir})")
             subprocess.run([node_exe, str(vite_bin), "build"], cwd=str(frontend_dir), check=True)
             built = True
-        elif shutil.which("pnpm") is not None:
+        elif (pnpm := shutil.which("pnpm")) is not None:
             print(f"[frontend] pnpm install + build ({frontend_dir})")
-            subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
-            subprocess.run("pnpm build", cwd=frontend_dir, check=True, shell=True)
+            subprocess.run([pnpm, "install"], cwd=frontend_dir, check=True)
+            subprocess.run([pnpm, "build"], cwd=frontend_dir, check=True)
             built = True
         else:
             print("[frontend] ni node+vite ni pnpm — dist existant conserve tel quel")
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         epilog=__doc__,
     )
     parser.add_argument("--version", default="0.1.0")
-    parser.add_argument("--out", type=Path, default=Path("dist"))
+    parser.add_argument("--out", type=Path, default=Path(f"apps/{APP_SLUG}/dist"))
     parser.add_argument(
         "--embed-python",
         dest="embed_python",

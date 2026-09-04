@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -36,7 +37,12 @@ class Settings(BaseSettings):
     # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).
     bind_host: str = "127.0.0.1"
 
-    cors_origins: list[str] = [
+    # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur
+    # du .env pour les champs "complexes" (list/dict) AVANT les validators. Une
+    # liste CSV (ex. "https://host,https://host2") n'est pas du JSON -> crash au
+    # demarrage. NoDecode desactive ce decode et laisse le validator ci-dessous
+    # parser le CSV. Meme correctif que corpus-agent.
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8002",

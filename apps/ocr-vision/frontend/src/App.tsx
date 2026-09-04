@@ -1,7 +1,7 @@
+import { ErrorBoundary } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { Architecture } from "./routes/Architecture";

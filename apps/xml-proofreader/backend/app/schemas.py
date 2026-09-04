@@ -40,6 +40,34 @@ class TestConnectionOut(BaseModel):
     error: Optional[str] = None
 
 
+# ----- Users (local accounts, per-workstation profiles) ---------------------
+
+
+class UserOut(BaseModel):
+    """Public user shape. Never carries password_hash/password_salt."""
+
+    id: str
+    name: str
+    email: str
+    created_at: int
+
+
+class UserRegisterIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class UserLoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class UserUpdateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    email: str = Field(min_length=3, max_length=320)
+
+
 # ----- Admin (stats + reset) ------------------------------------------------
 
 

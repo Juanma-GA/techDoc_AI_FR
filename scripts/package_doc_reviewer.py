@@ -91,7 +91,8 @@ def _build_frontend(frontend_dir: Path) -> bool:
     failure (pnpm/node absent, build error) — the recipient then falls back to
     the backend's preview HTML mode.
     """
-    if shutil.which("pnpm") is None or shutil.which("node") is None:
+    pnpm = shutil.which("pnpm")
+    if pnpm is None or shutil.which("node") is None:
         print("[frontend] pnpm/node not found — skipping build")
         print("           (recipient sees preview HTML; install pnpm+node to bundle React UI)")
         return False
@@ -100,9 +101,9 @@ def _build_frontend(frontend_dir: Path) -> bool:
             print("[frontend] node_modules present — skipping pnpm install")
         else:
             print(f"[frontend] pnpm install ({frontend_dir})")
-            subprocess.run("pnpm install", cwd=frontend_dir, check=True, shell=True)
+            subprocess.run([pnpm, "install"], cwd=frontend_dir, check=True)
         print("[frontend] pnpm build")
-        subprocess.run("pnpm build", cwd=frontend_dir, check=True, shell=True)
+        subprocess.run([pnpm, "build"], cwd=frontend_dir, check=True)
     except subprocess.CalledProcessError as exc:
         if (frontend_dir / "dist" / "index.html").is_file():
             print(f"[frontend] build failed ({exc}) — keeping existing frontend/dist/")

@@ -41,17 +41,66 @@ RATE_LIMIT_LLM=10/minute        # 10 requests/min para endpoints LLM
 
 ```ini
 # .env
-BIND_HOST=0.0.0.0    # Producción (permite conexiones externas)
-BIND_PORT=8000        # Puerto del backend
+BIND_HOST=127.0.0.1   # Produccion Y desarrollo: SIEMPRE local
+BIND_PORT=8000        # Puerto del backend, accesible solo desde IIS
 ```
 
-**Desarrollo local**:
-
-```ini
-BIND_HOST=127.0.0.1   # Solo conexiones locales (default)
-```
+> ⚠️ **Nunca `0.0.0.0` en este despliegue.** IIS es quien autentica (Windows
+> Auth) y hace de reverse proxy. Si uvicorn escucha en `0.0.0.0`, cualquiera en
+> la red corporativa alcanza el backend **en directo por el puerto 8000**,
+> saltandose IIS y por tanto toda la autenticacion. El backend debe ser
+> alcanzable unicamente desde el propio servidor, es decir `127.0.0.1`.
 
 **Archivo**: `app/config.py`
+
+---
+
+### ✅ 2.bis Autenticación y autorización
+
+**Implementación**: `app/core/auth.py` + cableado en `app/main.py`
+
+Hasta esta version **ningun endpoint pedia identidad**: cualquiera que
+alcanzara la URL leia el corpus completo, subia ficheros y podia vaciar la
+base con `POST /api/v1/admin/reset`. Ahora:
+
+| Superficie | Requisito |
+|---|---|
+| `GET /api/v1/health` | publico (sonda de disponibilidad) |
+| Resto de `/api/v1/*` | usuario autenticado, si no **401** |
+| `/api/v1/settings/*` y `/api/v1/admin/*` | ademas grupo `ADMIN_ROLE`, si no **403** |
+
+`require_user` se aplica al **router `/api/v1` completo**, no ruta por ruta:
+toda ruta nueva nace protegida. El test `test_every_api_route_requires_authentication`
+recorre el esquema OpenAPI y falla si aparece una ruta anonima.
+
+#### Configurar IIS (modo `AUTH_MODE=iis`)
+
+1. **Habilitar Windows Authentication** en la aplicacion IIS `corpus-agent`
+   (IIS Manager > la app > Authentication):
+   - `Windows Authentication` → **Enabled**
+   - `Anonymous Authentication` → **Disabled**
+2. **Autorizar las variables de servidor** que usa la regla de rewrite:
+   IIS Manager > **servidor** > URL Rewrite > *View Server Variables* > Add:
+   - `HTTP_X_FORWARDED_USER`
+   - `HTTP_X_FORWARDED_GROUPS` *(solo si se propagan grupos AD)*
+3. La regla `API Proxy` del `web.config` (Paso 5.2) ya inyecta `{LOGON_USER}`.
+4. En el `.env` del servidor: `AUTH_MODE=iis`, `TRUSTED_PROXIES=127.0.0.1,::1`,
+   `ADMIN_ROLE=<grupo AD>`, y `BIND_HOST=127.0.0.1`.
+
+> **Por que `TRUSTED_PROXIES`.** `X-Forwarded-User` es una simple cabecera HTTP:
+> cualquiera puede enviarla. El backend solo la cree si la conexion viene de un
+> host de esta lista. Junto con `BIND_HOST=127.0.0.1`, eso cierra el camino de
+> «llamar al backend en directo declarandose administrador». Cubierto por el
+> test `test_iis_header_is_ignored_from_an_untrusted_source`.
+
+#### Propagar grupos AD (opcional, para el rol admin)
+
+`{LOGON_USER}` da el usuario pero no sus grupos. Para que `ADMIN_ROLE` funcione
+por pertenencia a grupo hay dos vias: propagar `HTTP_X_FORWARDED_GROUPS` desde
+un modulo IIS que resuelva los grupos, o —mas simple— fijar `ADMIN_ROLE` a un
+valor que solo reciban los administradores. Mientras no se propaguen grupos,
+ningun usuario tendra el rol y `/settings` y `/admin` quedaran cerrados: es el
+fallo **cerrado** deseado, nunca abierto.
 
 ---
 
@@ -164,8 +213,21 @@ CORS_ORIGINS=https://172.21.28.92
 MAX_UPLOAD_SIZE_MB=50
 
 # === Security ===
-BIND_HOST=0.0.0.0
+# 127.0.0.1 obligatorio : IIS reverse-proxea. Ver la advertencia mas arriba.
+BIND_HOST=127.0.0.1
 BIND_PORT=8000
+
+# Autenticacion : IIS hace la Windows Auth y propaga la identidad.
+AUTH_MODE=iis
+ADMIN_ROLE=admin
+TRUSTED_PROXIES=127.0.0.1,::1
+
+# Gobernanza IA : endpoints LLM aprobados. Obligatorio en despliegue.
+# El corpus es C1/C2 : NO puede salir hacia api.mistral.ai en directo
+# (politica AIMS doc=160 §8.2.2). Poner el host de la plataforma gobernada
+# por ALTEN y apuntar MISTRAL_BASE_URL ahi.
+LLM_ALLOWED_HOSTS=<host-plataforma-IA-gobernada>
+MISTRAL_BASE_URL=https://<host-plataforma-IA-gobernada>
 
 RATE_LIMIT_ENABLED=true
 RATE_LIMIT_DEFAULT=60/minute
@@ -178,11 +240,19 @@ ENCRYPTION_KEY=<CLAVE_GENERADA_EN_PASO_1>
 > **Validacion de postura de seguridad (fail-fast).** En cuanto `BIND_HOST` no
 > es local (`127.0.0.1`/`localhost`/`::1`) — es decir, en despliegue — la app
 > **rechaza arrancar** si:
+> - `AUTH_MODE=none` (todos los endpoints quedarian anonimos), o
+> - `AUTH_MODE=iis` sin `TRUSTED_PROXIES`, o
+> - `LLM_ALLOWED_HOSTS` vacio, o que no cubra `MISTRAL_BASE_URL` (el corpus
+>   C1/C2 saldria hacia un endpoint IA no aprobado), o
 > - `ENCRYPTION_KEY` falta o es demasiado corta (la clave Mistral quedaria en
 >   claro), o
 > - `CORS_ORIGINS` contiene origenes locales de dev.
 >
-> En local (`BIND_HOST=127.0.0.1`, regla #8) la validacion es inerte.
+> Un `AUTH_MODE` mal escrito se rechaza **siempre**, incluso en local: asi el
+> error se ve al arrancar y no se traduce en 401 sistematicos ya desplegado.
+>
+> En local (`BIND_HOST=127.0.0.1`, regla #8) el resto de la validacion es inerte:
+> `AUTH_MODE=none` sigue siendo el defecto y `start.bat` funciona sin cambios.
 
 > **Rate limiting detras de IIS (proxy de confianza).** El limitador
 > (`slowapi`) usa la IP del cliente del socket (`request.client.host`). Detras
@@ -241,7 +311,16 @@ Crear `web.config` en `...\corpus-agent\frontend\dist`:
       <rules>
         <rule name="API Proxy" stopProcessing="true">
           <match url="^api/(.*)" />
-          <action type="Rewrite" url="http://localhost:8000/api/{R:1}" />
+          <!-- Propage l'identite Windows authentifiee par IIS vers FastAPI.
+               Le backend ne lit cet en-tete que si la connexion vient de
+               TRUSTED_PROXIES (cf. app/core/auth.py). Requiert d'autoriser
+               la variable au niveau serveur :
+                 IIS Manager > serveur > URL Rewrite > View Server Variables
+                 > Add : HTTP_X_FORWARDED_USER et HTTP_X_FORWARDED_GROUPS -->
+          <serverVariables>
+            <set name="HTTP_X_FORWARDED_USER" value="{LOGON_USER}" />
+          </serverVariables>
+          <action type="Rewrite" url="http://127.0.0.1:8000/api/{R:1}" />
         </rule>
         <rule name="SPA Fallback" stopProcessing="true">
           <match url=".*" />
@@ -276,7 +355,7 @@ Crear `web.config` en `...\corpus-agent\frontend\dist`:
 ```powershell
 nssm install CorpusAgentBackend "C:\inetpub\wwwroot\Customizations\AtexisPOCS\corpus-agent\backend\.venv\Scripts\python.exe"
 nssm set CorpusAgentBackend AppDirectory "C:\inetpub\wwwroot\Customizations\AtexisPOCS\corpus-agent\backend"
-nssm set CorpusAgentBackend AppParameters "-m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+nssm set CorpusAgentBackend AppParameters "-m uvicorn app.main:app --host 127.0.0.1 --port 8000"
 nssm set CorpusAgentBackend DisplayName "Corpus Agent v4 Backend"
 nssm set CorpusAgentBackend Description "FastAPI backend for Corpus Agent"
 nssm set CorpusAgentBackend Start SERVICE_AUTO_START
@@ -290,7 +369,7 @@ nssm set CorpusAgentBackend AppStderr "C:\inetpub\wwwroot\Customizations\AtexisP
 #### Opción B: Task Scheduler
 
 1. Crear tarea programada que se ejecute al inicio
-2. Comando: `C:\...\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000`
+2. Comando: `C:\...\backend\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
 
 ---
 

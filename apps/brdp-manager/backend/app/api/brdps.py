@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.demo_data import DEMO_BRDPS
@@ -82,8 +82,24 @@ def update_brdp(brdp_id: str, payload: BrdpIn, db: Session = Depends(get_db)) ->
     return _to_out(row)
 
 
+def _require_confirm_token(confirm_token: str) -> None:
+    """HR9 / rule #13: no destructive delete without explicit confirmation.
+    The frontend enforces the double-click pattern before ever calling these
+    endpoints; this is the server-side backstop for direct API callers."""
+    if not confirm_token or len(confirm_token) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="Deletion requires confirmation. Use the double-click pattern in UI.",
+        )
+
+
 @router.delete("/{brdp_id}")
-def delete_brdp(brdp_id: str, db: Session = Depends(get_db)) -> dict[str, bool]:
+def delete_brdp(
+    brdp_id: str,
+    db: Session = Depends(get_db),
+    confirm_token: str = Query("", min_length=0),
+) -> dict[str, bool]:
+    _require_confirm_token(confirm_token)
     row = db.get(Brdp, brdp_id)
     if row is not None:
         db.delete(row)
@@ -92,7 +108,11 @@ def delete_brdp(brdp_id: str, db: Session = Depends(get_db)) -> dict[str, bool]:
 
 
 @router.delete("")
-def delete_all_brdps(db: Session = Depends(get_db)) -> dict[str, bool]:
+def delete_all_brdps(
+    db: Session = Depends(get_db),
+    confirm_token: str = Query("", min_length=0),
+) -> dict[str, bool]:
+    _require_confirm_token(confirm_token)
     db.query(Brdp).delete()
     db.commit()
     return {"ok": True}

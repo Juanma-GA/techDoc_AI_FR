@@ -12,10 +12,17 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.errors import AppError
 from app.db.models import Document, DmDocumentLink, DmVersion
 from app.db.session import get_db
-from app.schemas import DmDocumentLinkOut, DmVersionContentOut, DmVersionOut, LinkDmrlIn
+from app.schemas import (
+    DmDocumentLinkOut,
+    DmVersionContentOut,
+    DmVersionOut,
+    LinkDmrlIn,
+    SaveDmVersionIn,
+)
 
 router = APIRouter(prefix="/documents", tags=["dm-versions"])
 
@@ -131,24 +138,24 @@ def get_dm_links(doc_id: str, db: Session = Depends(get_db)) -> list[DmDocumentL
 @router.post("/{doc_id}/dm-versions/{dm_code}")
 def save_dm_version(
     doc_id: str,
+    payload: SaveDmVersionIn,
     dm_code: str = Path(..., min_length=1),
-    content: str = Query(..., description="DM XML content"),
-    author: str = Query("unknown"),
-    status: str = Query("draft"),
-    notes: str = Query(""),
     db: Session = Depends(get_db),
 ) -> DmVersionOut:
     """Save a Data Module version (snapshot for audit trail)."""
     doc = _require(db, doc_id)
 
+    if len(payload.content.encode("utf-8")) > settings.max_upload_size_bytes:
+        raise AppError("CONTENT_TOO_LARGE", "Contenu du Data Module trop volumineux.", 413)
+
     version = DmVersion(
         id=str(uuid4()),
         doc_id=doc_id,
         dm_code=dm_code,
-        content=content,
-        author=author,
-        status=status,
-        notes=notes or None,
+        content=payload.content,
+        author=payload.author,
+        status=payload.status,
+        notes=payload.notes or None,
         created_at=datetime.now(timezone.utc),
     )
 

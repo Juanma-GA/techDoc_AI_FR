@@ -9,7 +9,7 @@ import { defaultSettings, type Settings } from "../core/workspace/types";
 import { useStore } from "./store";
 
 const storage = createStorage();
-const auth = new AuthService(storage);
+const auth = new AuthService();
 const CURRENT_KEY = "currentUserId";
 const settingsKey = (userId: string) => `ws:${userId}`;
 
@@ -45,12 +45,16 @@ export const useSession = create<SessionState>((set, get) => ({
   error: null,
 
   init: async () => {
-    const users = await auth.listUsers();
-    const currentId = await storage.get<string>(CURRENT_KEY);
-    const user = users.find((u) => u.id === currentId) ?? null;
-    const settings = user ? await loadSettings(user.id) : defaultSettings();
-    applyAuthorToDoc(user);
-    set({ ready: true, users, user, settings });
+    try {
+      const users = await auth.listUsers();
+      const currentId = await storage.get<string>(CURRENT_KEY);
+      const user = users.find((u) => u.id === currentId) ?? null;
+      const settings = user ? await loadSettings(user.id) : defaultSettings();
+      applyAuthorToDoc(user);
+      set({ ready: true, users, user, settings });
+    } catch (e) {
+      set({ ready: true, error: (e as Error).message });
+    }
   },
 
   register: async (name, email, password) => {
@@ -68,16 +72,21 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   login: async (email, password) => {
-    const user = await auth.login(email, password);
-    if (!user) {
-      set({ error: "Invalid email or password" });
+    try {
+      const user = await auth.login(email, password);
+      if (!user) {
+        set({ error: "Invalid email or password" });
+        return false;
+      }
+      await storage.set(CURRENT_KEY, user.id);
+      const settings = await loadSettings(user.id);
+      applyAuthorToDoc(user);
+      set({ user, settings, error: null });
+      return true;
+    } catch (e) {
+      set({ error: (e as Error).message });
       return false;
     }
-    await storage.set(CURRENT_KEY, user.id);
-    const settings = await loadSettings(user.id);
-    applyAuthorToDoc(user);
-    set({ user, settings, error: null });
-    return true;
   },
 
   logout: () => {
@@ -100,10 +109,13 @@ export const useSession = create<SessionState>((set, get) => ({
   updateProfile: async (name, email) => {
     const user = get().user;
     if (!user) return;
-    const updated = { ...user, name: name.trim(), email: email.trim() };
-    const users = (await auth.listUsers()).map((u) => (u.id === user.id ? updated : u));
-    await storage.set("users", users);
-    applyAuthorToDoc(updated);
-    set({ user: updated, users });
+    try {
+      const updated = await auth.updateProfile(user.id, name, email);
+      const users = get().users.map((u) => (u.id === user.id ? updated : u));
+      applyAuthorToDoc(updated);
+      set({ user: updated, users, error: null });
+    } catch (e) {
+      set({ error: (e as Error).message });
+    }
   },
 }));
