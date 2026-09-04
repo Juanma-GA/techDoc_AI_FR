@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
@@ -63,6 +63,7 @@ export function App() {
 
         <main>
           <Routes>
+            <Route path="/" element={<Navigate to="/migration" replace />} />
             <Route path="/migration" element={<Migration />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
