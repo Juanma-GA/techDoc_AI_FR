@@ -60,8 +60,8 @@ export class ErrorBoundary extends Component<Props, State> {
               </summary>
               <pre
                 style={{
-                  background: "#0f1622",
-                  color: "#cdd6e3",
+                  background: "var(--surface-1, var(--bg))",
+                  color: "var(--text-secondary, var(--fg))",
                   borderRadius: 8,
                   padding: 12,
                   fontFamily: "var(--mono)",
