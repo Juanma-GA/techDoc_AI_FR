@@ -57,6 +57,8 @@ class Document(Base):
         String(36), ForeignKey("brex_profiles.id", ondelete="SET NULL"), nullable=True
     )
     storage_path: Mapped[str] = mapped_column(String(1000))
+    pdf_cut_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    pdf_cut_start_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     xml_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="uploaded", index=True)

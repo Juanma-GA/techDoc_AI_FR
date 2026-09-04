@@ -72,7 +72,7 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
         for old in out_dir.glob("*.jpg"):
             old.unlink(missing_ok=True)
         illustrations.attach_illustrations(
-            root, pdf_path=doc.storage_path, out_dir=out_dir, doc_id=doc.id
+            root, pdf_path=doc.pdf_cut_path or doc.storage_path, out_dir=out_dir, doc_id=doc.id
         )
     except Exception:  # jamais bloquant : le squelette reste generable sans images
         pass
@@ -84,15 +84,25 @@ def _noop_progress(step: str, pct: int) -> None:
     pass
 
 
-def start(db: Session, doc: Document, progress_cb=_noop_progress) -> dict:
+def start(
+    db: Session,
+    doc: Document,
+    progress_cb=_noop_progress,
+    *,
+    cut_pdf: bool = True,
+    start_page: int | None = None,
+) -> dict:
     """Parse le document, construit l'IR, propose un decoupage par defaut.
 
     `progress_cb(step, pct)` permet de streamer la progression (parse / ocr /
     infer / split / classify) vers une barre cote UI.
     """
+    from app.core.pdf_cut import prepare_source
+
+    source_path = prepare_source(doc, db, cut_pdf=cut_pdf, start_page=start_page)
     progress_cb("parse", 10)
     blocks = ingest.extract_blocks(
-        doc.storage_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
+        source_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
     )
     progress_cb("infer", 40)
     root = structure_infer.build_ir(blocks)

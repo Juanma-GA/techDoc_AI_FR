@@ -79,7 +79,9 @@ def delete_document(
 
     from app.core.wizard import images_dir
 
-    for path in (doc.storage_path, doc.xml_path, doc.cir_path, doc.brex_rules_path):
+    for path in (
+        doc.storage_path, doc.pdf_cut_path, doc.xml_path, doc.cir_path, doc.brex_rules_path
+    ):
         if path:
             Path(path).unlink(missing_ok=True)
     shutil.rmtree(images_dir(doc.id), ignore_errors=True)
