@@ -131,10 +131,17 @@ def _ir_with_sections() -> IRNode:
 
 
 def test_split_by_dmrl_uses_dmrl_titles():
-    entries = [DmrlEntry(title="Depose du frein"), DmrlEntry(title="Description generale")]
+    entries = [
+        DmrlEntry(dmc="DMC-BRAKE-A-00-00-00-00A-520A-D", title="Depose du frein"),
+        DmrlEntry(dmc="DMC-BRAKE-A-00-00-00-00A-040A-D", title="Description generale"),
+    ]
     units = splitter.split_by_dmrl(_ir_with_sections(), entries)
     titles = [u.title for u in units]
     assert set(titles) == {"Description generale", "Depose du frein"}
+    assert {u.title: u.dmc for u in units} == {
+        "Description generale": "DMC-BRAKE-A-00-00-00-00A-040A-D",
+        "Depose du frein": "DMC-BRAKE-A-00-00-00-00A-520A-D",
+    }
     contents = {u.title: splitter.ir_to_text(u.root) for u in units}
     assert "Le frein comporte deux etriers." in contents["Description generale"]
     assert "Deposer les vis." in contents["Depose du frein"]

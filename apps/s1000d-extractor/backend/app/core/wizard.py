@@ -121,13 +121,14 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     progress_cb("classify", 80)
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
-    dmrl_types = {e.title: e.dm_type for e in entries if e.dm_type}
+    dmrl_types = {e.dmc: e.dm_type for e in entries if e.dmc and e.dm_type}
     ws.save_dms(doc, [
         {
             "dm_id": u.dm_id,
+            "dmc": u.dmc,
             "title": u.title,
             # Le type declare dans la DMRL fait foi quand il existe.
-            "dm_type": dmrl_types.get(u.title) or types[u.dm_id],
+            "dm_type": dmrl_types.get(u.dmc) or types[u.dm_id],
             "is_orphan": u.is_orphan,
             "tree": ir_mod.to_dict(u.root),
             "xml": None,
@@ -282,6 +283,7 @@ def state(doc: Document) -> dict:
     for dm in dms:
         entry = {
             "dm_id": dm["dm_id"],
+            "dmc": dm.get("dmc", ""),
             "title": dm["title"],
             "dm_type": dm["dm_type"],
             "is_orphan": bool(dm.get("is_orphan")),
