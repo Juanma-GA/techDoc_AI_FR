@@ -37,6 +37,7 @@ class DmUnit:
     root: IRNode                       # racine synthetique : children = contenu du DM
     page: int | None = None
     node_count: int = 0
+    dmc: str = ""
     # Contenu du document non couvert par la DMRL : le libelle est rendu cote UI
     # (pas de chaine d'affichage en dur dans le moteur).
     is_orphan: bool = False
@@ -184,12 +185,12 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
                      children=list(nodes[idx + 1:end]))
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title or f"Data Module {i + 1}",
-            root=syn, page=nodes[idx].page, node_count=len(syn.walk()),
+            root=syn, page=nodes[idx].page, node_count=len(syn.walk()), dmc=entry.dmc,
         ))
     for entry in missing:
         dm_id = f"dm{len(dms) + 1}"
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title, root=IRNode(id=f"{dm_id}-root", kind="section", level=0),
-            node_count=1,
+            node_count=1, dmc=entry.dmc,
         ))
     return dms

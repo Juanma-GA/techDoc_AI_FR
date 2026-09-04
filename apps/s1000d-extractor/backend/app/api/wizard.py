@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import re
 import zipfile
 
 from fastapi import APIRouter, Body, Depends
@@ -23,6 +24,14 @@ from app.db.models import Document
 from app.db.session import SessionLocal, get_db
 
 router = APIRouter(prefix="/documents", tags=["wizard"])
+
+
+def _dm_filename(dm: dict) -> str:
+    """Retourne le nom d'export du DM, avec fallback sur son identifiant technique."""
+    candidate = str(dm.get("dmc") or "").strip()
+    if candidate and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", candidate):
+        return f"{candidate}.xml"
+    return f"{dm['dm_id']}.xml"
 
 
 def _require(db: Session, doc_id: str) -> Document:
@@ -109,9 +118,11 @@ def wizard_back(doc_id: str, db: Session = Depends(get_db)) -> dict:
 def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Response:
     doc = _require(db, doc_id)
     xml = wizard.dm_xml(doc, dm_id)
+    dms = json.loads(doc.dms_json) if doc.dms_json else []
+    dm = next((item for item in dms if item.get("dm_id") == dm_id), {"dm_id": dm_id})
     return Response(
         content=xml, media_type="application/xml",
-        headers={"Content-Disposition": f'attachment; filename="{doc.id}_{dm_id}.xml"'},
+        headers={"Content-Disposition": f'attachment; filename="{_dm_filename(dm)}"'},
     )
 
 
@@ -148,7 +159,7 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
-            zf.writestr(f"{d['dm_id']}.xml", d["xml"])
+            zf.writestr(_dm_filename(d), d["xml"])
         img_dir = wizard.images_dir(doc_id)
         if img_dir.exists():
             for img in sorted(img_dir.glob("*.jpg")):
