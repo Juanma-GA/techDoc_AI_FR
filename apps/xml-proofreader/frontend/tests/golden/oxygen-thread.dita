@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE task PUBLIC "-//OASIS//DTD DITA Task//EN" "task.dtd">
+<task id="montar_bicicleta">
+  <title>Montar la bicicleta</title>
+  <shortdesc><?oxy_comment_start author="jsevillano" timestamp="20260618T163247+0200" comment="Este procedimiento esta mal." id="q52_qnb_qjc"?><?oxy_comment_start author="jsevillano" timestamp="20260618T163259+0200" parentID="q52_qnb_qjc" comment="De hecho esta bien." mid="1"?><?oxy_comment_start author="jsevillano" timestamp="20260618T163308+0200" parentID="q52_qnb_qjc" comment="Me parece a mi que no lo esta." mid="2"?>Este
+    procedimiento describe<?oxy_comment_end mid="2"?><?oxy_comment_end mid="1"?><?oxy_comment_end?>
+    cómo iniciar el uso básico de la bicicleta de forma segura.</shortdesc>
+  <taskbody>
+    <prereq>
+      <p>Compruebe que la bicicleta está en buen estado, que las ruedas tienen presión suficiente y que los frenos funcionan correctamente.</p>
+    </prereq>
+    <steps>
+      <step>
+        <cmd>Colóquese al lado de la bicicleta y
+          <?oxy_comment_start author="jsevillano" timestamp="20260618T163317+0200" comment="Esta palabra no me gusta.O quizas si?"?>sujete<?oxy_comment_end?>
+          firmemente el manillar.</cmd>
+      </step>
+      <step>
+        <cmd>Siéntese en el sillín y coloque un pie sobre un pedal en posición de arranque.</cmd>
+      </step>
+      <step>
+        <cmd>Impúlsese suavemente y comience a pedalear mientras mantiene el equilibrio y la dirección.</cmd>
+        
+        <info props="mtb">
+          <note type="tip">En terrenos irregulares o
+            d<?oxy_comment_start author="jsevillano" timestamp="20260618T163338+0200" comment="Resuelto estara." flag="done"?>e
+            montañ<?oxy_comment_end?>a, mantenga los brazos semiflexionados para absorber los
+            impactos de la suspensión.</note>
+        </info>
+        
+        <info props="road">
+          <note type="tip">En carreteras o superficies asfaltadas, adopte una postura aerodinámica apoyando las manos en la curva baja del manillar.</note>
+        </info>
+        
+      </step>
+      <step>
+        <cmd>Accione los frenos de forma progresiva para reducir la velocidad o detener la bicicleta.</cmd>
+        <info>
+         <p conref = "snippets.dita#biblioteca_snippets/aviso_frenado"/>
+        </info>
+      </step>
+    </steps>
+    <result>
+      <p>El usuario inicia o finaliza la marcha de forma controlada y segura.</p>
+    </result>
+  </taskbody>
+</task>

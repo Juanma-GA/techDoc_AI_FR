@@ -304,6 +304,10 @@ class SettingsIn(BaseModel):
     vision_model: Optional[str] = None
     ocr_model: Optional[str] = None
     transcribe_model: Optional[str] = None
+    # Cle/URL dediees a la transcription Voxtral (optionnel). "" = efface la
+    # valeur (repli sur la cle/URL Mistral principale) ; None = inchange.
+    voxtral_api_key: Optional[str] = None
+    voxtral_base_url: Optional[str] = None
     llm_enabled: Optional[bool] = None
 
 
@@ -315,14 +319,33 @@ class SettingsOut(BaseModel):
     vision_model: str
     ocr_model: str
     transcribe_model: str
+    # True si une cle Voxtral dediee est enregistree (le secret n'est jamais
+    # renvoye). base_url dedie renvoye en clair (vide = principale).
+    voxtral_api_key_set: bool = False
+    voxtral_base_url: str = ""
     llm_enabled: bool
     llm_tested: bool = False
 
 
-class TestConnectionOut(BaseModel):
+class ApiTestResult(BaseModel):
+    """Resultat du test d'UNE API appelee (Mistral principale ou Voxtral dediee).
+    `api` = identifiant logique, `base_url` = endpoint teste, `models` = liste
+    renvoyee par GET /v1/models sur CETTE API."""
+
+    api: str  # "mistral" | "voxtral"
+    base_url: str
     ok: bool
     models: list[str] = Field(default_factory=list)
     error: Optional[str] = None
+
+
+class TestConnectionOut(BaseModel):
+    # `ok`/`models`/`error` = API Mistral principale (pilote le badge LLM et
+    # llm_tested) — conserves pour compat. `apis` = detail PAR API appelee.
+    ok: bool
+    models: list[str] = Field(default_factory=list)
+    error: Optional[str] = None
+    apis: list[ApiTestResult] = Field(default_factory=list)
 
 
 # ----- Prompts (editables runtime via /settings/prompts) ---------------------
@@ -366,3 +389,12 @@ class TranscriptionOut(BaseModel):
 
     text: str
     llm_used: bool
+
+
+class RealtimeTranscriptionTokenOut(BaseModel):
+    """Jeton court permettant au navigateur d'ouvrir Voxtral Realtime."""
+
+    enabled: bool
+    token: str
+    model: str
+    websocket_url: str

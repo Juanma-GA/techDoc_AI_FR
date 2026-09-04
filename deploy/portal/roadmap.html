@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roadmap IA — Atexis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;600;700&display=swap"
+    />
+    <link rel="stylesheet" href="portal.css" />
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem("theme") === "light") {
+            document.documentElement.classList.add("light");
+          }
+        } catch (e) {
+          /* localStorage unavailable */
+        }
+      })();
+    </script>
+    <style>
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+      }
+      .panel {
+        padding: 28px;
+      }
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--brand);
+        margin-bottom: 12px;
+        font-weight: 800;
+      }
+      .large {
+        font-size: clamp(22px, 2.2vmin, 30px);
+        line-height: 1.3;
+        margin: 0;
+      }
+      .muted {
+        color: var(--dim);
+        line-height: 1.7;
+        margin-top: 16px;
+      }
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+      .mini {
+        padding: 20px 22px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .mini strong {
+        display: block;
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--brand);
+        margin-bottom: 8px;
+      }
+      .mini p {
+        margin: 0;
+        color: var(--dim);
+        line-height: 1.6;
+      }
+      .phase-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 18px;
+        margin-top: 28px;
+      }
+      .phase {
+        padding: 18px 18px 16px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        background: rgba(37, 99, 235, 0.05);
+      }
+      .phase .num {
+        display: inline-flex;
+        width: 34px;
+        height: 34px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: rgba(37, 99, 235, 0.14);
+        color: var(--brand);
+        font-weight: 800;
+        margin-bottom: 14px;
+      }
+      .phase h4 {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+      .phase p {
+        margin: 0;
+        color: var(--dim);
+        line-height: 1.6;
+        font-size: 14px;
+      }
+      @media (max-width: 900px) {
+        .hero, .phase-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="portal-page">
+      <div id="portal-header"></div>
+
+      <section class="hero">
+        <div class="card panel">
+          <div class="eyebrow" id="positioning-eyebrow">Positionnement</div>
+          <p class="large" id="positioning-title">Nous ne sommes pas encore dans l’autonomie généralisée ; nous sommes dans l’engineering humain-agent, avec une vraie voie de montée en maturité.</p>
+          <p class="muted" id="positioning-text">
+            La bonne stratégie est de structurer un système où le humain pilote, les agents spécialisés exécutent,
+            et l’orchestration coordonne les tâches selon un cadre clair, mesurable et auditables.
+          </p>
+        </div>
+        <div class="stack">
+          <div class="mini card">
+            <strong id="objective-label">Objectif</strong>
+            <p id="objective-text">Créer un système IA utile, gouverné, fiable, et scalable sans perdre la responsabilité métier.</p>
+          </div>
+          <div class="mini card">
+            <strong id="principle-label">Principe</strong>
+            <p id="principle-text">Augmenter les équipes, pas les remplacer. Les décisions critiques restent humaines.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase-grid">
+        <div class="phase card">
+          <div class="num">1</div>
+          <h4 id="phase1-title">Fondation</h4>
+          <p id="phase1-text">Standardiser la production d’assets IA, la traçabilité, les rôles et les garde-fous.</p>
+        </div>
+        <div class="phase card">
+          <div class="num">2</div>
+          <h4 id="phase2-title">Agents spécialisés</h4>
+          <p id="phase2-text">Créer des agents par besoin : exigences, design, validation, documentation, extraction.</p>
+        </div>
+        <div class="phase card">
+          <div class="num">3</div>
+          <h4 id="phase3-title">Orchestration</h4>
+          <p id="phase3-text">Relier les agents et les données dans des workflows métier complets et intelligibles.</p>
+        </div>
+        <div class="phase card">
+          <div class="num">4</div>
+          <h4 id="phase4-title">Autonomie maîtrisée</h4>
+          <p id="phase4-text">Étendre la mise en œuvre uniquement sur les cas à faible risque et à forte répétition.</p>
+        </div>
+      </section>
+    </div>
+    <script src="portal.js"></script>
+    <script>
+      PortalUI.mountHeader({
+        activePage: "roadmap",
+        title: "Roadmap IA",
+        subtitle: "De la couche humaine à l’autonomie contrôlée"
+      });
+
+      const I18N = {
+        fr: {
+          pageTitle: "Roadmap IA",
+          pageSubtitle: "De la couche humaine à l’autonomie contrôlée",
+          positioningEyebrow: "Positionnement",
+          positioningTitle: "Nous ne sommes pas encore dans l’autonomie généralisée ; nous sommes dans l’engineering humain-agent, avec une vraie voie de montée en maturité.",
+          positioningText: "La bonne stratégie est de structurer un système où le humain pilote, les agents spécialisés exécutent, et l’orchestration coordonne les tâches selon un cadre clair, mesurable et auditables.",
+          objectiveLabel: "Objectif",
+          objectiveText: "Créer un système IA utile, gouverné, fiable, et scalable sans perdre la responsabilité métier.",
+          principleLabel: "Principe",
+          principleText: "Augmenter les équipes, pas les remplacer. Les décisions critiques restent humaines.",
+          phase1Title: "Fondation",
+          phase1Text: "Standardiser la production d’assets IA, la traçabilité, les rôles et les garde-fous.",
+          phase2Title: "Agents spécialisés",
+          phase2Text: "Créer des agents par besoin : exigences, design, validation, documentation, extraction.",
+          phase3Title: "Orchestration",
+          phase3Text: "Relier les agents et les données dans des workflows métier complets et intelligibles.",
+          phase4Title: "Autonomie maîtrisée",
+          phase4Text: "Étendre la mise en œuvre uniquement sur les cas à faible risque et à forte répétition."
+        },
+        en: {
+          pageTitle: "AI Roadmap",
+          pageSubtitle: "From human layer to controlled autonomy",
+          positioningEyebrow: "Positioning",
+          positioningTitle: "We are not yet in generalized autonomy; we are in human-agent engineering, with a clear path to higher maturity.",
+          positioningText: "The right strategy is to structure a system where humans lead, specialized agents execute, and orchestration coordinates tasks within a clear, measurable, and auditable framework.",
+          objectiveLabel: "Objective",
+          objectiveText: "Build an AI system that is useful, governed, reliable, and scalable without losing business accountability.",
+          principleLabel: "Principle",
+          principleText: "Augment teams, do not replace them. Critical decisions remain human.",
+          phase1Title: "Foundation",
+          phase1Text: "Standardize AI asset production, traceability, roles, and guardrails.",
+          phase2Title: "Specialized agents",
+          phase2Text: "Create agents by need: requirements, design, validation, documentation, extraction.",
+          phase3Title: "Orchestration",
+          phase3Text: "Connect agents and data into complete, understandable business workflows.",
+          phase4Title: "Controlled autonomy",
+          phase4Text: "Extend execution only to low-risk, high-repetition use cases."
+        }
+      };
+
+      function applyLang(lang) {
+        const t = I18N[lang] || I18N.fr;
+        Object.keys(t).forEach((key) => {
+          const el = document.getElementById(
+            key.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())
+          );
+          if (el) el.textContent = t[key];
+        });
+      }
+
+      PortalUI.initialize(applyLang);
+    </script>
+  </body>
+</html>

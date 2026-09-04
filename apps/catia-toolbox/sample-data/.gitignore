@@ -1,0 +1,6 @@
+# Artefacts generes par generate_sample.py (reproductibles) - non versionnes.
+assembly_v1/
+assembly_v2/
+listing_v1.csv
+listing_v2.json
+replacement_mapping.csv

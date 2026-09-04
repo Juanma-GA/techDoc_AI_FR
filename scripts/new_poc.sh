@@ -53,7 +53,7 @@ fi
 if ! [[ "$SLUG" =~ ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ ]]; then
     echo "[erreur] '$SLUG' n'est pas en kebab-case."
     echo "         Format attendu : lettres minuscules + chiffres + tirets,"
-    echo "         demarre par une lettre. Ex. 'mon-poc', 'pdf-reviewer'."
+    echo "         demarre par une lettre. Ex. 'mon-poc', 'doc-reviewer'."
     exit 1
 fi
 
@@ -222,9 +222,13 @@ sed_inplace "$APP_DIR/backend/README.md" \
 sed_inplace "$APP_DIR/backend/app/db/models.py" \
     -e "s|squelette TEMPLATE|squelette ${TITLE_HUMAN}|g"
 
-sed_inplace "$APP_DIR/backend/app/templates/preview.html" \
-    -e "s|<title>TEMPLATE</title>|<title>${TITLE_HUMAN}</title>|g" \
-    -e "s|class=\"brand\">TEMPLATE</span>|class=\"brand\">${TITLE_HUMAN}</span>|g"
+# preview.html a ete supprime par la migration React-only : on ne le sed que
+# s'il existe encore (retro-compat template ancien).
+if [[ -f "$APP_DIR/backend/app/templates/preview.html" ]]; then
+    sed_inplace "$APP_DIR/backend/app/templates/preview.html" \
+        -e "s|<title>TEMPLATE</title>|<title>${TITLE_HUMAN}</title>|g" \
+        -e "s|class=\"brand\">TEMPLATE</span>|class=\"brand\">${TITLE_HUMAN}</span>|g"
+fi
 
 sed_inplace "$APP_DIR/frontend/src/App.tsx" \
     -e "s|>TEMPLATE<|>${TITLE_HUMAN}<|g"
@@ -265,7 +269,7 @@ cat > "$APP_DIR/README.md" <<EOF
 
 > **A REECRIRE.** Ce README a ete genere automatiquement par
 > \`scripts/new_poc.sh\`. Remplacez ce contenu par la description metier
-> du POC (cf. \`apps/doc-writer/README.md\` ou \`apps/pdf-reviewer/README.md\`
+> du POC (cf. \`apps/doc-writer/README.md\` ou \`apps/doc-reviewer/README.md\`
 > comme references).
 
 Conforme a [\`STANDARD_POC.md\`](../../STANDARD_POC.md). Bootstrap depuis

@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Écosystème IA — Atexis</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Orbitron:wght@500;600;700&display=swap"
+    />
+    <link rel="stylesheet" href="portal.css" />
+    <script>
+      (function () {
+        try {
+          if (localStorage.getItem("theme") === "light") {
+            document.documentElement.classList.add("light");
+          }
+        } catch (e) {
+          /* localStorage unavailable */
+        }
+      })();
+    </script>
+    <style>
+      :root {
+        --panel: rgba(22, 28, 43, 0.9);
+        --panel-2: rgba(22, 28, 43, 0.72);
+        --violet: #9a8bff;
+        --amber: #ffbe55;
+        --rose: #f587b7;
+        --ok: #34d399;
+        --warning: #f59e0b;
+      }
+      html.light {
+        --panel: rgba(255, 255, 255, 0.9);
+        --panel-2: rgba(255, 255, 255, 0.75);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+      }
+
+      .card-pad { padding: 18px; }
+
+      .hero p {
+        margin: 0;
+        line-height: 1.6;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .stat {
+        padding: 12px;
+        border-radius: var(--radius-lg);
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+      }
+
+      .stat .k {
+        color: var(--muted);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+
+      .stat .v {
+        display: block;
+        margin-top: 6px;
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .stack {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .layer {
+        position: relative;
+        padding: 14px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--line);
+        background: linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--portal-surface) 96%, var(--portal-brand) 4%),
+          var(--portal-bg-raised)
+        );
+        overflow: hidden;
+      }
+
+      .layer h3 {
+        margin: 0 0 7px;
+        font-size: 16px;
+      }
+
+      .layer p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 13px;
+      }
+
+      .flow {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .stage {
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--panel);
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .stage .n {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        font-size: 12px;
+        font-weight: 800;
+        color: #ffffff;
+        background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      }
+
+      .stage h4 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .stage-solution {
+        margin: 4px 0 0;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        gap: 8px;
+        margin-top: 4px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--portal-bg-raised);
+        color: var(--text);
+        font-size: 12px;
+        text-decoration: none;
+        padding: 6px 10px;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+
+      .chip:hover {
+        transform: translateY(-1px);
+        border-color: var(--brand-2);
+      }
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+      }
+
+      .chip.validation .dot {
+        background: var(--warning);
+      }
+
+      .chip.external .dot {
+        background: var(--violet);
+      }
+
+      .legend {
+        margin-top: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--panel-2);
+        padding: 10px 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .legend-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+      }
+
+      .pulse {
+        animation: pulse 2.6s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0% { opacity: 0.65; }
+        50% { opacity: 1; }
+        100% { opacity: 0.65; }
+      }
+
+      @media (max-width: 1024px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+        .flow {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 880px) {
+        .flow {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 760px) {
+        .stack {
+          grid-template-columns: 1fr;
+        }
+        .flow {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="portal-page">
+      <div id="portal-header"></div>
+
+      <section class="hero">
+        <article class="card card-pad">
+          <p id="hero-text">Notre trajectoire: clarifier ce qui est déjà opérationnel (human-agent), structurer les flux multi-agents, puis étendre seulement les zones automatisables sous gouvernance.</p>
+          <div class="stack">
+            <div class="layer">
+              <h3 id="layer-1-title">1. Human-Agent Engineering</h3>
+              <p id="layer-1-text">Couche actuelle: assistance spécialisée et validation humaine des décisions critiques.</p>
+            </div>
+            <div class="layer">
+              <h3 id="layer-2-title">2. Multi-agent Orchestration</h3>
+              <p id="layer-2-text">Prochain palier: relier les applications en workflows intelligibles, tracés et pilotables.</p>
+            </div>
+            <div class="layer">
+              <h3 id="layer-3-title">3. Controlled Autonomy</h3>
+              <p id="layer-3-text">Cible: automatiser seulement les cas répétitifs à faible risque avec garde-fous.</p>
+            </div>
+          </div>
+        </article>
+
+        <aside class="card card-pad stats">
+          <div class="stat">
+            <span class="k" id="stat-total-label">Applications</span>
+            <span class="v pulse" id="stat-total">0</span>
+          </div>
+          <div class="stat">
+            <span class="k" id="stat-active-label">Actives</span>
+            <span class="v" id="stat-active">0</span>
+          </div>
+          <div class="stat">
+            <span class="k" id="stat-validation-label">À valider</span>
+            <span class="v" id="stat-validation">0</span>
+          </div>
+        </aside>
+      </section>
+
+      <section class="flow" id="flow"></section>
+
+      <section class="legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#34d399"></span><span id="legend-active">App active</span></span>
+        <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span><span id="legend-validation">App en validation</span></span>
+        <span class="legend-item"><span class="legend-dot" style="background:#9a8bff"></span><span id="legend-external">App externe</span></span>
+      </section>
+    </main>
+
+    <script src="portal.js"></script>
+    <script>
+      PortalUI.mountHeader({
+        activePage: "ecosystem",
+        title: "Écosystème IA",
+        subtitle: "Vue lisible du présent, du prochain palier et des apps en production/validation."
+      });
+
+      const I18N = {
+        fr: {
+          title: "Écosystème IA",
+          subtitle: "Vue lisible du présent, du prochain palier et des apps en production/validation.",
+          heroText: "Notre trajectoire: aligner les applications sur un process cible en 5 piliers, de la structuration des données jusqu'à la publication sécurisée.",
+          layer1Title: "1. Human-Agent Engineering",
+          layer1Text: "Couche actuelle: assistance spécialisée et validation humaine des décisions critiques.",
+          layer2Title: "2. Multi-agent Orchestration",
+          layer2Text: "Prochain palier: relier les applications en workflows intelligibles, tracés et pilotables.",
+          layer3Title: "3. Controlled Autonomy",
+          layer3Text: "Cible: automatiser seulement les cas répétitifs à faible risque avec garde-fous.",
+          statTotalLabel: "Applications",
+          statActiveLabel: "Actives",
+          statValidationLabel: "À valider",
+          legendActive: "App active",
+          legendValidation: "App en validation",
+          legendExternal: "App externe",
+          stages: [
+            { key: "structuring", title: "Analyse, préparation & migration des données", desc: "Transformer des données brutes en documentation structurée.", solution: "Transformer le contenu technique legacy en actifs numériques structurés, recherchables et réutilisables." },
+            { key: "translation", title: "Rédaction & traduction technique", desc: "Créer, éditer et traduire documents et illustrations.", solution: "Accélérer les mises à jour multilingues tout en conservant la cohérence terminologique." },
+            { key: "illustration", title: "Mise à jour & annotation des illustrations", desc: "Mettre à jour les illustrations et repères techniques avec moins de reprise manuelle.", solution: "Synchroniser textes et illustrations pour réduire l'effort manuel, les erreurs et les reprises." },
+            { key: "validation", title: "Validation documentaire & qualité", desc: "Détecter les incohérences, conflits et problèmes de conformité avant l'approbation finale.", solution: "Détecter plus tôt les problèmes qualité et conformité pour raccourcir les cycles de revue et d'approbation." },
+            { key: "publishing", title: "Publication sécurisée & livraison", desc: "Générer et livrer les packages documentaires finaux en toute sécurité.", solution: "Livrer efficacement des packages documentaires validés, avec qualité et traçabilité.", empty: "Aucune application dédiée pour le moment." }
+          ]
+        },
+        en: {
+          title: "AI Ecosystem",
+          subtitle: "Readable view of current state, next maturity step, and production/validation apps.",
+          heroText: "Our path: align applications on a target 5-pillar process, from data structuring to secure publishing.",
+          layer1Title: "1. Human-Agent Engineering",
+          layer1Text: "Current layer: specialized assistance with human validation on critical decisions.",
+          layer2Title: "2. Multi-agent Orchestration",
+          layer2Text: "Next step: connect applications into traceable and controllable workflows.",
+          layer3Title: "3. Controlled Autonomy",
+          layer3Text: "Target: automate only repetitive low-risk cases with guardrails.",
+          statTotalLabel: "Applications",
+          statActiveLabel: "Active",
+          statValidationLabel: "To validate",
+          legendActive: "Active app",
+          legendValidation: "Validation app",
+          legendExternal: "External app",
+          stages: [
+            { key: "structuring", title: "Data analysis, preparation & migration", desc: "Turn raw data into structured technical documentation.", solution: "Transform legacy technical content into structured, searchable and reusable digital assets." },
+            { key: "translation", title: "Authoring & technical translation", desc: "Create, edit and translate documents and illustrations.", solution: "Accelerate multilingual documentation updates while maintaining terminology consistency." },
+            { key: "illustration", title: "Illustration update & annotation", desc: "Update technical illustrations and callouts with less manual rework.", solution: "Synchronize text and illustrations to reduce manual effort, errors and rework." },
+            { key: "validation", title: "Documentation validation & quality", desc: "Detect inconsistencies, conflicts and compliance issues before final approval.", solution: "Detect quality and compliance issues earlier to shorten review and approval cycles." },
+            { key: "publishing", title: "Secure publishing & delivery", desc: "Generate and deliver final documentation packages securely to end clients.", solution: "Deliver validated documentation packages efficiently while maintaining quality and traceability.", empty: "No dedicated application mapped yet." }
+          ]
+        }
+      };
+
+      const STAGE_BY_SLUG = {
+        "ocr-vision": "structuring",
+        "corpus-agent": "validation",
+        "s1000d-extractor": "structuring",
+        "a3-linguo": "translation",
+        "catia-toolbox": "illustration",
+        "imagebot-ai-processing-image": "illustration",
+        "xml-proofreader": "validation",
+        "doc-reviewer": "validation",
+        "brdp-manager": "validation",
+        "doc-writer": "translation"
+      };
+
+      function applyText(lang) {
+        const t = I18N[lang] || I18N.fr;
+        document.getElementById("page-title").textContent = t.title;
+        document.getElementById("page-subtitle").textContent = t.subtitle;
+        document.getElementById("hero-text").textContent = t.heroText;
+        document.getElementById("layer-1-title").textContent = t.layer1Title;
+        document.getElementById("layer-1-text").textContent = t.layer1Text;
+        document.getElementById("layer-2-title").textContent = t.layer2Title;
+        document.getElementById("layer-2-text").textContent = t.layer2Text;
+        document.getElementById("layer-3-title").textContent = t.layer3Title;
+        document.getElementById("layer-3-text").textContent = t.layer3Text;
+        document.getElementById("stat-total-label").textContent = t.statTotalLabel;
+        document.getElementById("stat-active-label").textContent = t.statActiveLabel;
+        document.getElementById("stat-validation-label").textContent = t.statValidationLabel;
+        document.getElementById("legend-active").textContent = t.legendActive;
+        document.getElementById("legend-validation").textContent = t.legendValidation;
+        document.getElementById("legend-external").textContent = t.legendExternal;
+      }
+
+      function appHref(app) {
+        if (typeof app.url === "string" && /^https?:\/\//i.test(app.url)) return app.url;
+        return (app.slug || "") + "/";
+      }
+
+      function stageFor(app) {
+        if (typeof app.stage === "string") return app.stage;
+        const slug = app.slug || "";
+        if (STAGE_BY_SLUG[slug]) return STAGE_BY_SLUG[slug];
+        return "publishing";
+      }
+
+      function renderFlow(apps, lang) {
+        const t = I18N[lang] || I18N.fr;
+        const flow = document.getElementById("flow");
+        flow.innerHTML = "";
+
+        const grouped = {
+          structuring: [],
+          translation: [],
+          illustration: [],
+          validation: [],
+          publishing: []
+        };
+        apps.forEach((app) => {
+          grouped[stageFor(app)].push(app);
+        });
+
+        t.stages.forEach((stage, idx) => {
+          const card = document.createElement("article");
+          card.className = "stage";
+
+          const index = document.createElement("span");
+          index.className = "n";
+          index.textContent = String(idx + 1);
+
+          const title = document.createElement("h4");
+          title.textContent = stage.title;
+
+          const desc = document.createElement("p");
+          desc.style.margin = "0";
+          desc.style.color = "var(--muted)";
+          desc.style.fontSize = "13px";
+          desc.style.lineHeight = "1.5";
+          desc.textContent = stage.desc;
+
+          const solution = document.createElement("p");
+          solution.className = "stage-solution";
+          solution.textContent = stage.solution || "";
+
+          const chips = document.createElement("div");
+          chips.className = "chips";
+
+          const stageApps = grouped[stage.key] || [];
+          stageApps.forEach((app) => {
+            const a = document.createElement("a");
+            a.className = "chip";
+            const isExternal = typeof app.url === "string" && /^https?:\/\//i.test(app.url);
+            const isValidation = app.status === "validation";
+            if (isExternal) a.classList.add("external");
+            if (isValidation) a.classList.add("validation");
+            a.href = appHref(app);
+            if (isExternal) {
+              a.target = "_blank";
+              a.rel = "noopener noreferrer";
+            }
+
+            const dot = document.createElement("span");
+            dot.className = "dot";
+            const txt = document.createElement("span");
+            txt.textContent = app.name || app.slug || "App";
+            a.appendChild(dot);
+            a.appendChild(txt);
+            chips.appendChild(a);
+          });
+          if (!stageApps.length && stage.empty) {
+            const empty = document.createElement("span");
+            empty.className = "stage-empty";
+            empty.textContent = stage.empty;
+            chips.appendChild(empty);
+          }
+
+          card.appendChild(index);
+          card.appendChild(title);
+          card.appendChild(desc);
+          if (stage.solution) card.appendChild(solution);
+          card.appendChild(chips);
+          flow.appendChild(card);
+        });
+      }
+
+      async function boot() {
+        let apps = [];
+        let currentLang = "fr";
+        PortalUI.initialize((lang) => {
+          currentLang = lang;
+          applyText(lang);
+          renderFlow(apps, lang);
+        });
+
+        try {
+          const res = await fetch("config.json", { cache: "no-cache" });
+          const cfg = await res.json();
+          apps = Array.isArray(cfg.pocs) ? cfg.pocs : [];
+        } catch (e) {
+          apps = [];
+        }
+
+        const total = apps.length;
+        const validation = apps.filter((a) => a.status === "validation").length;
+        const active = total - validation;
+
+        document.getElementById("stat-total").textContent = String(total);
+        document.getElementById("stat-active").textContent = String(active);
+        document.getElementById("stat-validation").textContent = String(validation);
+
+        renderFlow(apps, currentLang);
+      }
+
+      boot();
+    </script>
+  </body>
+</html>

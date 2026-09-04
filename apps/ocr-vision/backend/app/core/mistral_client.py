@@ -8,13 +8,17 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any, Optional
 
 import httpx
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models import AppConfig
+
+logger = logging.getLogger(__name__)
 
 
 try:
@@ -33,17 +37,57 @@ CONFIG_KEYS = {
     "vision_model": "MISTRAL_VISION_MODEL",
 }
 
+# Cles dont la valeur est chiffree au repos dans AppConfig (cf. encryption.py).
+# Seul le secret Mistral est sensible ; flags et modeles restent en clair.
+ENCRYPTED_KEYS = {"MISTRAL_API_KEY"}
+
+# Interrupteur global LLM (standard). Cle bare dans `app_config`, defaut "true".
+# OFF = on saute la tache confiee a l'IA (fallback gracieux), la cle Mistral est conservee.
+LLM_ENABLED_KEY = "llm_enabled"
+
+# Dernier test de connexion Mistral reussi ? (standard). Cle bare dans
+# `app_config`, defaut "false". Le badge LLM ne passe au vert (ON) que si la cle
+# est configuree, le LLM active ET ce flag vrai. Remis a "false" des que la cle
+# ou la base_url change (re-test obligatoire).
+LLM_TESTED_KEY = "llm_last_test_ok"
+
 
 class MistralError(RuntimeError):
     """Levee si Mistral n'est pas configure ou rejette un appel."""
 
 
+def _get_secret_manager():  # type: ignore[no-untyped-def]
+    """SecretManager configure depuis settings. Cle absente => chiffrement off
+    (valeurs lues/ecrites en clair, mode dev/local)."""
+    from app.config import settings
+    from app.core.encryption import SecretManager
+
+    if not settings.encryption_key:
+        logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
+        return SecretManager(None)
+    return SecretManager(settings.encryption_key)
+
+
 def _read_config(db: Session, key: str, default: str = "") -> str:
     row = db.get(AppConfig, key)
-    return row.value if row and row.value else default
+    if not row or not row.value:
+        return default
+    if key in ENCRYPTED_KEYS:
+        try:
+            return _get_secret_manager().decrypt(row.value)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to decrypt %s: %s", key, e)
+            return default
+    return row.value
 
 
 def _write_config(db: Session, key: str, value: str) -> None:
+    if key in ENCRYPTED_KEYS and value:
+        try:
+            value = _get_secret_manager().encrypt(value)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Failed to encrypt %s: %s", key, e)
+            raise MistralError(f"Encryption failed: {e}") from e
     row = db.get(AppConfig, key)
     if row is None:
         db.add(AppConfig(key=key, value=value))
@@ -68,9 +112,43 @@ def get_effective_settings(db: Session) -> dict[str, str]:
 
 
 def save_settings(db: Session, data: dict[str, Any]) -> None:
+    invalidate_test = False
     for k, v in data.items():
         if k in CONFIG_KEYS and v is not None:
             _write_config(db, CONFIG_KEYS[k], str(v))
+            if k in {"api_key", "base_url"}:
+                invalidate_test = True
+    # Changer la cle ou l'endpoint invalide le dernier test reussi.
+    if invalidate_test:
+        _write_config(db, LLM_TESTED_KEY, "false")
+    db.commit()
+
+
+def get_llm_enabled(db: Session) -> bool:
+    """Etat de l'interrupteur LLM (defaut: active)."""
+    try:
+        return _read_config(db, LLM_ENABLED_KEY, "true").strip().lower() in {"1", "true", "yes"}
+    except SQLAlchemyError:
+        db.rollback()
+        return True
+
+
+def set_llm_enabled(db: Session, enabled: bool) -> None:
+    _write_config(db, LLM_ENABLED_KEY, "true" if enabled else "false")
+    db.commit()
+
+
+def get_llm_tested(db: Session) -> bool:
+    """Dernier test de connexion Mistral reussi ? (defaut: false)."""
+    try:
+        return _read_config(db, LLM_TESTED_KEY, "false").strip().lower() in {"1", "true", "yes"}
+    except SQLAlchemyError:
+        db.rollback()
+        return False
+
+
+def set_llm_tested(db: Session, ok: bool) -> None:
+    _write_config(db, LLM_TESTED_KEY, "true" if ok else "false")
     db.commit()
 
 
@@ -214,6 +292,28 @@ class MistralClient:
             for p in pages
             if isinstance(p, dict)
         ).strip()
+
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        model: Optional[str] = None,
+        temperature: float = 0.1,
+    ) -> str:
+        """Chat completion synchrone (non stream). Renvoie le texte de la reponse."""
+        payload = {
+            "model": model or self.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        with httpx.Client(timeout=120.0) as client:
+            r = client.post(
+                f"{self.base_url}/v1/chat/completions",
+                headers=self._headers(),
+                json=payload,
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]
 
     async def chat_stream(
         self,

@@ -59,6 +59,9 @@ export {
 // Theme
 export { ThemeToggle, type ThemeToggleProps } from "./components/ThemeToggle";
 
+// Error handling
+export { ErrorBoundary, type ErrorBoundaryProps } from "./components/ErrorBoundary";
+
 // Hooks & utils
 export { useMediaQuery } from "./hooks/useMediaQuery";
 export { cn } from "./lib/utils";

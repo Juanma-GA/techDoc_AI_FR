@@ -1,63 +1,81 @@
-# TEMPLATE
+# Canonical POC Template
 
-> **CE README EST CELUI DU TEMPLATE — À RÉÉCRIRE INTÉGRALEMENT après instanciation.**
->
-> Pour créer un nouveau POC, **n'éditez pas ce fichier**. Lancez à la place :
->
-> ```bash
-> bash scripts/new_poc.sh <slug> [<port>]
-> ```
->
-> Le script copie ce template, fait les substitutions, et écrase
-> `apps/<slug>/README.md` par un stub propre que vous remplirez avec la
-> description métier de votre POC (cf. `apps/doc-writer/README.md` ou
-> `apps/pdf-reviewer/README.md` comme références).
+## Purpose
 
-Squelette canonique pour démarrer un nouveau POC. Conforme à [`STANDARD_POC.md`](../../STANDARD_POC.md).
+Provide the required FastAPI and React/Vite foundation for a new local-first POC. Create applications with `scripts/new_poc.sh`; do not use an existing POC as a template.
+
+## Maturity
+
+**Status:** To be confirmed. This directory is a scaffold, not an instantiated application.
+
+## Features
+
+- Standard health, settings, admin statistics, and reset endpoints under `/api/v1/`.
+- Runtime Mistral configuration through `AppConfig`.
+- React/Vite frontend served by FastAPI at `/`.
+- Windows and Unix launchers, conditional frontend rebuild, and Windows packaging wrappers.
 
 ## Auth
 
-**Palier** : 1 — local seul, bind `127.0.0.1`, pas d'authentification.
+**Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
-## Ce que le template fournit d'office
+## Port
 
-Quand tu copies ce template, tu obtiens déjà :
+The target default port is `8000`. Launchers must select and display the next free port when it is unavailable. See the [application inventory](../../docs/apps/README.md).
 
-- **Backend FastAPI** prêt à l'emploi : `/api/v1/health`, `/api/v1/settings` (config Mistral runtime), `/api/v1/admin/stats` + `/api/v1/admin/reset/all`
-- **Client Mistral** générique (`core/mistral_client.py`) en httpx async + sync
-- **Modèle `AppConfig`** + migration Alembic initiale pour stocker la clé Mistral en SQLite
-- **Preview HTML autonome** (`backend/app/templates/preview.html`) servi à `/` quand `frontend/dist/` n'existe pas — UI vanilla JS avec onglets Home / Architecture / Données / Paramètres, theme toggle, design-tokens injectés
-- **Wrapper `start.bat` + `_run.bat`** ASCII pur, fenêtre persistante (`cmd /k`), port vérifié avant bind
-- **Wrapper `package.bat` + `_package.bat`** qui appelle `scripts/package_TEMPLATE.py`
+## Prerequisites
 
-## Démarrage rapide
+- Python 3.11 or later.
+- Node 20 and pnpm 9 for frontend development and builds.
+- A Mistral API key only for features that use the LLM profile.
 
-Double-clic sur `start.bat` (Windows) ou `bash start.sh` (Unix). Le script :
+## Start On Windows
 
-1. Détecte Python 3.11+ (system, embed, ou installer silencieux).
-2. Crée le venv `backend/.venv/`.
-3. Installe les deps Python.
-4. Applique les migrations Alembic.
-5. Vérifie que le port (8000 par défaut) est libre.
-6. Lance uvicorn sur `http://127.0.0.1:8000/` et ouvre le navigateur sur la preview HTML.
+Double-click `start.bat`.
 
-Pour le frontend en mode dev (port 5173), depuis la racine du monorepo :
+## Start On Unix
+
+Run `bash start.sh`.
+
+## Frontend Development
+
+From the repository root:
 
 ```bash
 pnpm install
 pnpm dev:TEMPLATE
 ```
 
-## Adaptation pour un nouveau POC
+## Served Interface
 
-Voir [`STANDARD_POC.md` §11](../../STANDARD_POC.md#11-ajout-dun-nouveau-poc).
-Deux méthodes y sont documentées :
+FastAPI serves the built React application from `frontend/dist/` at `/`. If the bundle is absent and cannot be built, `/` returns HTTP 503; there is no standalone preview UI.
 
-- **Recommandée** : `bash scripts/new_poc.sh <slug> [<port>]` — automatise les ~15 substitutions et passe `check_standard.sh`.
-- **Manuelle (fallback)** : liste exhaustive des fichiers à éditer si le script n'est pas utilisable.
+## Persistence
 
-Après instanciation, les étapes restant à la charge du dev (logique métier, migration, routes, preview) sont listées dans le stub de README généré par le script.
+The local-first profile uses the gitignored SQLite file `backend/data/TEMPLATE.db`. `AppConfig` stores runtime configuration and is preserved by the standard admin reset convention.
 
-## Écarts au standard
+## LLM Configuration
 
-Aucun par défaut. Documenter ici tout écart introduit dans un POC instancié à partir de ce template.
+The scaffold provides runtime settings, health states, connection testing, and the global `llm_enabled` switch. An instantiated POC must document deterministic or empty-result behavior when LLM use is disabled.
+
+## Tests
+
+- Backend: run the declared pytest suite under `backend/tests/`.
+- Frontend: add and run Vitest and Playwright coverage for the instantiated workflows.
+- Repository: run `bash scripts/check_standard.sh` when Bash is available.
+
+No test command was executed during the documentation reorganization.
+
+## Limitations
+
+The template has no business workflow and must be completed after instantiation.
+
+## Standard Deviations
+
+None by default. Every instantiated POC must document its own deviations.
+
+## Technical References
+
+- [Repository technical standard](../../STANDARD_POC.md)
+- [New POC skill](../../.github/skills/new-poc/SKILL.md)
+- [Application README template](../../docs/standards/app-readme-template.md)

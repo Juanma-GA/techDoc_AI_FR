@@ -1,9 +1,8 @@
-import { PortalLink } from "@internal/ui";
+import { ErrorBoundary, PortalLink } from "@internal/ui";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
-import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { setAppLanguage } from "./i18n";
@@ -33,7 +32,6 @@ const navItems = [
   { to: "/projects", labelKey: "nav.projects" },
   { to: "/redacteur", labelKey: "nav.redacteur" },
   { to: "/chatbot", labelKey: "nav.chatbot" },
-  { to: "/architecture", labelKey: "nav.architecture" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;

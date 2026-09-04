@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,12 +27,22 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'doc-writer.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")
 
+    # Tier mode : tier1 (local-only) vs tier2 (cloud + auth).
+    # tier1 (default) : development, bind 127.0.0.1, no auth required.
+    # tier2 : production/cloud, bind 0.0.0.0, auth middleware required.
+    tier_mode: str = "tier1"
+
     # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
     # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les
     # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).
     bind_host: str = "127.0.0.1"
 
-    cors_origins: list[str] = [
+    # NoDecode : sans lui, pydantic-settings tente un json.loads() sur la valeur
+    # du .env pour les champs "complexes" (list/dict) AVANT les validators. Une
+    # liste CSV (ex. "https://host,https://host2") n'est pas du JSON -> crash au
+    # demarrage. NoDecode desactive ce decode et laisse le validator ci-dessous
+    # parser le CSV. Meme correctif que corpus-agent.
+    cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8002",
@@ -57,10 +68,15 @@ class Settings(BaseSettings):
     #   3. Extraction LOCALE (couche texte PyMuPDF + Tesseract).
     mistral_vision_model: str = "mistral-small-latest"
     mistral_ocr_model: str = "mistral-ocr-latest"
-    # Transcription audio (dictee vocale) via Voxtral — endpoint /v1/audio/transcriptions.
-    # Id de modele exact (pas d'alias "-latest" pour Voxtral) ; surchargeable via .env
-    # si Mistral fait evoluer la version.
-    mistral_transcribe_model: str = "voxtral-mini-transcribe-26-02"
+    # Transcription audio streamee via /v1/audio/transcriptions.
+    # Voxtral Mini Transcribe 2 accepte les fichiers audio et `stream=true`.
+    mistral_transcribe_model: str = "voxtral-mini-latest"
+    # Cle API / endpoint DEDIES a la transcription Voxtral (optionnel). Permet
+    # d'appeler Voxtral mini avec un compte/une cle differente de la cle Mistral
+    # principale (ex. Voxtral active sur un abonnement a part). Vides = on retombe
+    # sur `mistral_api_key` / `mistral_base_url` (comportement historique).
+    voxtral_api_key: str = ""
+    voxtral_base_url: str = ""
 
     # Repli LOCAL (quand Mistral indisponible) : couche texte PyMuPDF + OCR
     # Tesseract page par page sur les pages sans texte. Tesseract est un binaire

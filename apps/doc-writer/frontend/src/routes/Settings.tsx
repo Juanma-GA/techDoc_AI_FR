@@ -8,6 +8,7 @@ import { TemplatesManagerCard } from "../components/TemplatesManagerCard";
 import {
   ApiClientError,
   settingsApi,
+  type ApiTestResultDto,
   type SettingsDto,
   type TestConnectionDto,
 } from "../lib/api";
@@ -22,9 +23,15 @@ export function Settings() {
   const [chatModel, setChatModel] = useState("");
   const [embedModel, setEmbedModel] = useState("");
   const [transcribeModel, setTranscribeModel] = useState("");
+  // Cle/URL DEDIEES a Voxtral (volet discret). Vides = la transcription utilise
+  // la cle Mistral principale.
+  const [voxtralApiKey, setVoxtralApiKey] = useState("");
+  const [voxtralBaseUrl, setVoxtralBaseUrl] = useState("");
   // Modeles disponibles decouverts au test de connexion (/v1/models), pour
   // proposer le bon id de transcription sans le deviner.
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  // Detail du dernier test PAR API appelee (Mistral principale + Voxtral dediee).
+  const [apiResults, setApiResults] = useState<ApiTestResultDto[]>([]);
   const [feedback, setFeedback] = useState<
     { kind: "ok" | "error"; text: string } | null
   >(null);
@@ -42,6 +49,7 @@ export function Settings() {
     setChatModel(d.chat_model);
     setEmbedModel(d.embed_model);
     setTranscribeModel(d.transcribe_model);
+    setVoxtralBaseUrl(d.voxtral_base_url);
   }, [settingsQuery.data]);
 
   const saveMutation = useMutation({
@@ -52,9 +60,12 @@ export function Settings() {
         chat_model: chatModel,
         embed_model: embedModel,
         transcribe_model: transcribeModel || undefined,
+        voxtral_api_key: voxtralApiKey || undefined,
+        voxtral_base_url: voxtralBaseUrl,
       }),
     onSuccess: () => {
       setApiKey("");
+      setVoxtralApiKey("");
       setFeedback({ kind: "ok", text: t("settings.saved") });
       void qc.invalidateQueries({ queryKey: ["settings"] });
       // Rafraichit le badge LLM du sidebar (la cle change l'etat /health).
@@ -66,7 +77,13 @@ export function Settings() {
   const testMutation = useMutation({
     mutationFn: () => settingsApi.test(),
     onSuccess: (r: TestConnectionDto) => {
-      if (r.ok) setAvailableModels(r.models);
+      setApiResults(r.apis);
+      // Le select de transcription se remplit depuis l'API qui SERT la
+      // transcription : Voxtral dediee si presente et OK, sinon l'API principale.
+      const vx = r.apis.find((a) => a.api === "voxtral");
+      const main = r.apis.find((a) => a.api === "mistral");
+      const source = vx?.ok ? vx.models : main?.ok ? main.models : r.models;
+      if (source?.length) setAvailableModels(source);
       setFeedback(
         r.ok
           ? { kind: "ok", text: t("settings.testOk", { count: r.models.length }) }
@@ -87,6 +104,7 @@ export function Settings() {
 
   const cfg = settingsQuery.data;
   const apiKeySet = cfg?.api_key_set ?? false;
+  const voxtralKeySet = cfg?.voxtral_api_key_set ?? false;
   const llmEnabled = cfg?.llm_enabled ?? true;
 
   return (
@@ -206,6 +224,63 @@ export function Settings() {
                 : t("settings.transcribeModelHint")}
             </small>
           </label>
+          <details
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "8px 12px",
+            }}
+          >
+            <summary
+              style={{
+                cursor: "pointer",
+                fontSize: "0.82rem",
+                color: "var(--fg-dim)",
+                userSelect: "none",
+              }}
+            >
+              {t("settings.voxtralSummary")}
+              {voxtralKeySet ? (
+                <span className="badge ok" style={{ marginLeft: 8 }}>
+                  {t("settings.voxtralDedicated")}
+                </span>
+              ) : null}
+            </summary>
+            <div className="form" style={{ marginTop: 10 }}>
+              <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+                {t("settings.voxtralHint")}
+              </small>
+              <label>
+                <div className="label">{t("settings.voxtralApiKeyLabel")}</div>
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={t("settings.apiKeyPlaceholder")}
+                  value={voxtralApiKey}
+                  onChange={(e) => setVoxtralApiKey(e.target.value)}
+                />
+                {voxtralKeySet ? (
+                  <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+                    {t("settings.apiKeyStored")}
+                  </small>
+                ) : null}
+              </label>
+              <label>
+                <div className="label">{t("settings.voxtralBaseUrlLabel")}</div>
+                <input
+                  className="input"
+                  type="url"
+                  placeholder="https://api.mistral.ai"
+                  value={voxtralBaseUrl}
+                  onChange={(e) => setVoxtralBaseUrl(e.target.value)}
+                />
+                <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
+                  {t("settings.voxtralBaseUrlHint")}
+                </small>
+              </label>
+            </div>
+          </details>
           <div className="row">
             <button
               type="button"
@@ -230,6 +305,34 @@ export function Settings() {
               {t("settings.test")}
             </button>
           </div>
+          {apiResults.length > 0 ? (
+            <div className="form" style={{ gap: 6 }}>
+              <div className="label">{t("settings.apisTestedLabel")}</div>
+              {apiResults.map((a) => (
+                <div
+                  key={a.api}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    fontSize: "0.82rem",
+                  }}
+                >
+                  <span className={a.ok ? "badge ok" : "badge warn"}>
+                    {a.api === "voxtral"
+                      ? t("settings.apiVoxtral")
+                      : t("settings.apiMistral")}
+                  </span>
+                  <span style={{ color: "var(--fg-dim)" }}>{a.base_url}</span>
+                  <span style={{ marginLeft: "auto", color: "var(--fg-dim)" }}>
+                    {a.ok
+                      ? t("settings.apiModelsCount", { count: a.models.length })
+                      : (a.error ?? t("settings.apiFailed"))}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {feedback ? (
             <div className={feedback.kind === "ok" ? "success" : "error"}>
               {feedback.text}

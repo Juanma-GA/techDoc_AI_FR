@@ -9,8 +9,8 @@
 # Excluded from every check: legacy/, node_modules, .venv, __pycache__,
 # build/dist artefacts, Playwright reports, and the .git folder. The hex
 # check additionally tolerates tokens.json (the canonical palette),
-# tailwind-preset.ts (consumes tokens), theme.css (CSS variables for
-# dark/light), and any *.test.* / tests/ file.
+# tailwind-preset.ts (consumes tokens), theme.css + preview-skin.css (CSS
+# variables for dark/light), and any *.test.* / tests/ file.
 
 set -o pipefail
 
@@ -25,7 +25,7 @@ for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
 done
 
-step()  { printf "[%d/14] %-38s" "$1" "$2"; }
+step()  { printf "[%d/16] %-38s" "$1" "$2"; }
 pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
@@ -208,20 +208,60 @@ fi
 
 # ------------------------------------------------------------------
 # 13. Aucun --host 0.0.0.0 dans les lanceurs (palier 1 strict).
-#     Les artefacts deploy/ (palier 2 : conteneur / IIS) sont exemptes : un
-#     entrypoint de conteneur DOIT binder 0.0.0.0 derriere l'ingress/reverse-proxy.
 # ------------------------------------------------------------------
 step 13 "Bind 127.0.0.1 dans lanceurs"
-hits=$(grep -rnE "${exclude_args[@]}" --exclude-dir=deploy --include='*.bat' --include='*.sh' \
+hits=$(grep -rnE "${exclude_args[@]}" --include='*.bat' --include='*.sh' \
+  --exclude-dir='deploy' \
   'host[[:space:]=]+0\.0\.0\.0|--host[[:space:]]+0\.0\.0\.0' apps/ 2>/dev/null || true)
 if [[ -z "$hits" ]]; then pass; else
   fail "Bind 0.0.0.0 interdit (palier 1 - STANDARD §3.5) :\n$hits"
 fi
 
 # ------------------------------------------------------------------
-# 14. Summary
+# 14. Interrupteur LLM : chaque app expose la cle llm_enabled
+#     (helper get_llm_enabled + champ settings), cf. STANDARD §3.7 / §6.
 # ------------------------------------------------------------------
-step 14 "Summary"
+step 14 "Interrupteur LLM (llm_enabled)"
+missing=""
+for d in apps/*/backend/app; do
+  [[ -d "$d" ]] || continue
+  if ! grep -rq 'llm_enabled' "$d" 2>/dev/null; then
+    poc="$(basename "$(dirname "$(dirname "$d")")")"
+    missing+="apps/$poc — manque l'interrupteur LLM 'llm_enabled' (get_llm_enabled + champ /settings)\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else
+  fail "Chaque app doit exposer l'interrupteur LLM 'llm_enabled' (STANDARD §3.7 / §6) :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 15. pnpm install garde par node_modules dans les lanceurs (rule #12).
+#     En reseau a TLS intercepte, un 'pnpm install' non garde retente
+#     chaque paquet "in 1 minute" et fige le lancement plusieurs minutes.
+# ------------------------------------------------------------------
+step 15 "pnpm install garde par node_modules"
+missing=""
+for runbat in apps/*/_run.bat; do
+  [[ -f "$runbat" ]] || continue
+  # Ne verifie que les .bat qui appellent effectivement pnpm install.
+  if grep -q 'pnpm install' "$runbat" && ! grep -q 'if not exist node_modules call pnpm install' "$runbat"; then
+    missing+="$runbat — 'call pnpm install' doit etre garde par 'if not exist node_modules'\n"
+  fi
+done
+for sh in apps/*/start.sh; do
+  [[ -f "$sh" ]] || continue
+  if grep -q 'pnpm install' "$sh" && ! grep -q 'node_modules \] || pnpm install' "$sh"; then
+    missing+="$sh — 'pnpm install' doit etre garde par '[ -d node_modules ] ||'\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else
+  fail "Lanceurs : 'pnpm install' interdit sur le chemin critique, garder par node_modules absent (STANDARD §lanceurs, rule #12) :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 16. Summary
+# ------------------------------------------------------------------
+step 16 "Summary"
 if [[ $violations -gt 0 ]]; then
   printf " \033[31m%d violation(s)\033[0m\n" "$violations"
   exit 1

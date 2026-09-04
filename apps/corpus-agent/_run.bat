@@ -25,7 +25,7 @@ REM  existant tel quel. Un seul onglet ouvert : http://127.0.0.1:8000/.
 REM ===========================================================================
 
 REM ---- Port unique (a ajuster par POC) -------------------------------------
-set "PORT=8000"
+set "PORT=8001"
 
 set "APP_DIR=%~dp0"
 set "BACKEND_DIR=%APP_DIR%backend"

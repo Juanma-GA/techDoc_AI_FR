@@ -22,6 +22,7 @@ class SettingsIn(BaseModel):
     base_url: Optional[str] = None
     chat_model: Optional[str] = None
     embed_model: Optional[str] = None
+    llm_enabled: Optional[bool] = None
 
 
 class SettingsOut(BaseModel):
@@ -29,6 +30,8 @@ class SettingsOut(BaseModel):
     base_url: str
     chat_model: str
     embed_model: str
+    llm_enabled: bool
+    llm_tested: bool = False
 
 
 class TestConnectionOut(BaseModel):

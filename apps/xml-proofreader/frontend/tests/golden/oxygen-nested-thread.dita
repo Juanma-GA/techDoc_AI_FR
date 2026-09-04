@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE task PUBLIC "-//OASIS//DTD DITA Task//EN" "task.dtd">
+<task id="nested_reply_test">
+  <title>Nested reply test</title>
+  <shortdesc><?oxy_comment_start author="jsevillano" timestamp="20260622T100000+0000" comment="Comentario raiz." id="z2b_nst_tst"?><?oxy_comment_start author="jsevillano" timestamp="20260622T100100+0000" parentID="z2b_nst_tst" comment="Primera respuesta." mid="1" id="tfw_nst_tst"?><?oxy_comment_start author="jsevillano" timestamp="20260622T100200+0000" parentID="tfw_nst_tst" comment="Doble REPLY" mid="2"?><?oxy_comment_start author="jsevillano" timestamp="20260622T100300+0000" parentID="z2b_nst_tst" comment="De verdad?" mid="3"?>Texto compartido.<?oxy_comment_end mid="2"?><?oxy_comment_end mid="3"?><?oxy_comment_end mid="1"?><?oxy_comment_end?></shortdesc>
+  <taskbody>
+    <steps>
+      <step>
+        <cmd>Paso de ejemplo.</cmd>
+      </step>
+    </steps>
+  </taskbody>
+</task>

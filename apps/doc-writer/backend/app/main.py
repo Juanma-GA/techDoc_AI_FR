@@ -1,4 +1,16 @@
-"""FastAPI app factory — `create_app()` returns a configured FastAPI."""
+"""FastAPI app factory — `create_app()` returns a configured FastAPI.
+
+**Tier Modes (AACF HR8 — Configuration)**
+
+- **Tier 1 (local-only)** : development, bind 127.0.0.1, no auth required (default).
+  Set `TIER_MODE=tier1` in `.env`. Encryption and strict CORS are optional.
+  
+- **Tier 2 (cloud)** : production/Azure, bind 0.0.0.0, auth middleware required.
+  Set `TIER_MODE=tier2` in `.env`. Encryption (ENCRYPTION_KEY) and strict CORS
+  become MANDATORY. App fails to start if security requirements are not met.
+
+The tier mode is validated at startup via `_validate_security_posture()`.
+"""
 
 from __future__ import annotations
 
@@ -38,26 +50,50 @@ def _is_local_origin(origin: str) -> bool:
 
 def _validate_security_posture() -> None:
     """Refuse de demarrer en posture deploiement (bind expose) si les protections
-    sensibles ne sont pas configurees. Inerte en local (bind 127.0.0.1)."""
-    if _is_local_bind():
+    sensibles ne sont pas configurees. Inerte en local (bind 127.0.0.1).
+    
+    En tier2, les verifications sont toujours appliquees (bind expose + auth obligatoire).
+    """
+    # Tier1 (local) : skip security checks.
+    if settings.tier_mode.lower() == "tier1" and _is_local_bind():
         return
 
+    # Tier2 (cloud) ou bind expose : validation stricte.
     problems: list[str] = []
-    if not settings.encryption_configured:
-        problems.append(
-            "ENCRYPTION_KEY manquante ou trop courte : la cle Mistral serait "
-            "stockee en clair. Generer une cle via app.core.encryption.generate_key()."
-        )
-    leftover = [o for o in settings.cors_origins if _is_local_origin(o)]
-    if leftover:
-        problems.append(
-            "CORS_ORIGINS contient des origines locales de dev "
-            f"({', '.join(leftover)}). Definir uniquement les origines de prod."
-        )
+    
+    # Tier2 specific : auth/encryption/CORS strictes sont OBLIGATOIRES.
+    if settings.tier_mode.lower() == "tier2":
+        if not settings.encryption_configured:
+            problems.append(
+                "TIER_MODE=tier2 (cloud) : ENCRYPTION_KEY manquante ou trop courte. "
+                "Generer une cle via app.core.encryption.generate_key() et la passer via .env."
+            )
+        leftover = [o for o in settings.cors_origins if _is_local_origin(o)]
+        if leftover:
+            problems.append(
+                "TIER_MODE=tier2 (cloud) : CORS_ORIGINS contient des origines de dev "
+                f"({', '.join(leftover)}). Definir uniquement les origines de prod."
+            )
+    
+    # Bind expose (hote non-local) : securite obligatoire independemment du tier.
+    elif not _is_local_bind():
+        if not settings.encryption_configured:
+            problems.append(
+                "ENCRYPTION_KEY manquante ou trop courte : la cle Mistral serait "
+                "stockee en clair. Generer une cle via app.core.encryption.generate_key()."
+            )
+        leftover = [o for o in settings.cors_origins if _is_local_origin(o)]
+        if leftover:
+            problems.append(
+                "CORS_ORIGINS contient des origines locales de dev "
+                f"({', '.join(leftover)}). Definir uniquement les origines de prod."
+            )
+    
     if problems:
         raise RuntimeError(
-            "Posture de securite invalide pour un bind expose ("
-            f"BIND_HOST={settings.bind_host}) :\n  - " + "\n  - ".join(problems)
+            "Posture de securite invalide (TIER_MODE="
+            f"{settings.tier_mode}, BIND_HOST={settings.bind_host}) :\n  - "
+            + "\n  - ".join(problems)
         )
 
 

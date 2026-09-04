@@ -1,101 +1,69 @@
-# ocr-vision
+# OCR Vision
 
-POC d'**OCR + reconnaissance visuelle** sur des documents techniques :
-à partir d'une image (PNG/JPG) ou d'un PDF, le backend envoie le fichier
-aux modèles Mistral (`/v1/ocr` + modèle multimodal) et renvoie en
-parallèle :
+## Purpose
 
-- le **texte transcrit** par l'OCR,
-- une **description en français** du contenu visible (objets,
-  équipements, schémas, pictogrammes, texte visible).
+Run OCR and multimodal vision on images or PDFs, then extract structured table rows and export them for local capitalization workflows.
 
-OCR et reconnaissance sont indépendants : si l'un échoue, l'autre peut
-quand même remonter.
+## Maturity
 
-Conforme à [`STANDARD_POC.md`](../../STANDARD_POC.md). Bootstrap depuis
-[`apps/_template`](../_template/).
+**Status:** To be confirmed. Existing functional claims were not revalidated during the documentation reorganization.
 
-## État actuel du POC
+## Features
 
-**Périmètre minimal** : un seul endpoint métier (`POST /api/v1/vision/test`)
-qui valide la chaîne OCR + multimodal Mistral. Pas encore de persistance
-des analyses ni de workflow utilisateur — c'est une brique de validation
-technique, pas une app complète à ce stade.
+- Run OCR text extraction and multimodal description in parallel.
+- Define reusable table templates and project tables.
+- Extract multiple structured rows from a document.
+- Extract embedded images and export CSV or XLSX results.
 
 ## Auth
 
-**Palier** : 1 — local seul, bind `127.0.0.1`, pas d'authentification.
+**Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
-## Stack
+## Port
 
-| Couche | Choix |
-|---|---|
-| Backend | FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog |
-| LLM | Mistral via `httpx` async (OCR `/v1/ocr` + modèle multimodal), pas de SDK |
-| Frontend | React 18 + TS + Vite + Tailwind + RHF + Zod + i18next + Zustand + TanStack Query |
-| UI | `@internal/ui` exclusivement |
-| Persistance | SQLite par défaut (`backend/data/ocr-vision.db`), Alembic dès J1 |
+The target default port is `8005`, followed by the next free port when needed. The current Unix launcher and development configuration use older defaults.
 
-## Démarrage rapide
+## Prerequisites
 
-Double-clic sur `start.bat` (Windows) ou `bash start.sh` (Unix). Le script :
+Python 3.11+, Node 20, pnpm 9, and a Mistral API key for OCR, vision, and structured extraction.
 
-1. Détecte Python 3.11+
-2. Crée le venv `backend/.venv/`
-3. Installe les deps Python
-4. Applique les migrations Alembic
-5. Lance uvicorn sur `http://127.0.0.1:8003/`
+## Start On Windows
 
-Pour le frontend en mode dev (port 5173), depuis la racine du monorepo :
+Double-click `start.bat`.
 
-```bash
-pnpm install
-pnpm dev:ocr-vision
-```
+## Start On Unix
 
-## Endpoint métier
+Run `bash start.sh`.
 
-`POST /api/v1/vision/test` — multipart/form-data
+## Frontend Development
 
-| Champ | Type | Description |
-|---|---|---|
-| `file` | file (image/* ou application/pdf) | Le document à analyser |
-| `prompt` | string (optionnel) | Prompt custom pour la reconnaissance visuelle (par défaut : description FR en 3-5 phrases) |
+From the repository root, run `pnpm dev:ocr-vision` after confirming its configured backend port.
 
-Réponse :
+## Served Interface
 
-```json
-{
-  "ocr_text": "...",
-  "description": "...",
-  "errors": []
-}
-```
+FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
-`errors` liste les erreurs partielles (ex. OCR a échoué mais description OK).
+## Persistence
 
-La clé Mistral est lue depuis la table `app_config` (configurable via
-l'onglet **Paramètres** du preview ou via `POST /api/v1/settings`).
+SQLite stores projects, templates, extracted rows, image metadata, and runtime configuration. Generated images remain under the gitignored `backend/data/storage/` tree.
 
-## Écarts au standard
+## LLM Configuration
 
-Aucun.
+OCR, multimodal description, and table extraction use Mistral. Disabled or unreadable inputs return best-effort empty results rather than server failures.
 
 ## Tests
 
-```bash
-# Backend
-cd backend && pytest
+Use the backend pytest suite and frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:ocr-vision`. No tests were executed during this documentation change.
 
-# Frontend (Vitest unitaire)
-pnpm --filter @apps/ocr-vision-frontend test
+## Limitations
 
-# E2E Playwright
-pnpm --filter @apps/ocr-vision-frontend test:e2e
-```
+Extraction quality depends on document readability and table-template rules. Platform launcher defaults are not yet aligned.
 
-Conformité :
+## Standard Deviations
 
-```bash
-bash scripts/check_standard.sh
-```
+The export endpoint may write CSV or XLSX files to a caller-selected existing local directory. This is limited to the local-first tier and requires review before any exposed deployment.
+
+## Technical References
+
+- [Repository technical standard](../../STANDARD_POC.md)
+- [Application inventory](../../docs/apps/README.md)

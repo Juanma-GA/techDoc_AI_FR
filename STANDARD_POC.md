@@ -1,8 +1,23 @@
 # STANDARD_POC.md — référence technique du monorepo
 
-Référence technique des règles de développement. Lue par les humains et par Claude quand [`CLAUDE.md`](./CLAUDE.md) le pointe. Format : énoncé court, justification, exemple conforme, exemple non conforme.
+Référence technique des règles de développement. Lue par les humains et par les agents quand [`CLAUDE.md`](./CLAUDE.md) ou [`AGENTS.md`](./AGENTS.md) la pointe. Voir [`docs/index.md`](./docs/index.md) pour la hiérarchie documentaire. Format : énoncé court, justification, exemple conforme, exemple non conforme.
+
+**Hiérarchie** : l'AACF live est normative. Ce document définit le profil local-first de ce monorepo ; [`CLAUDE.md`](./CLAUDE.md) en est le résumé opératoire. Une exception locale doit être documentée, bornée et ne peut pas affaiblir une règle AACF.
 
 **Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker, pas de CI, pas de déploiement dans le périmètre du standard. Si un POC sort de ce périmètre, il bascule vers un autre standard (hors scope ici).
+
+### Profils d'application
+
+Les règles communes s'appliquent à tous les POCs. Les capacités optionnelles sont déclarées dans le README de l'app :
+
+| Profil | Obligations supplémentaires |
+|---|---|
+| `local-first` | SQLite local, React/Vite buildé, bind `127.0.0.1` |
+| `llm` | Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
+| `files` | Validation MIME/taille, stockage sous `data/storage`, SHA-256 et versionnage |
+| `production` | Hors scope POC : PostgreSQL, authentification, déploiement et contrôles d'exploitation dédiés |
+
+Un POC peut combiner `local-first` avec `llm` et/ou `files`. Il ne doit pas implémenter les obligations d'un profil non déclaré.
 
 ## 1. Structure du monorepo
 
@@ -90,13 +105,12 @@ apps/<poc>/backend/
 │   ├── config.py            # pydantic-settings, validation des env vars au boot
 │   ├── schemas.py           # Pydantic I/O par endpoint
 │   ├── api/                 # 1 fichier par ressource (+ health.py obligatoire)
-│   │   └── preview.py       # facultatif — render_preview() + _build_css_vars() pour mode no-Node
 │   ├── core/                # logging, request_id, errors, mistral_client, etc.
 │   ├── parsers/             # 1 module par format (docx, pdf, xlsx) — pur, testable
 │   ├── checks/              # 1 module par contrôle métier — pur, testable
 │   ├── db/                  # session, Base, modèles SQLAlchemy
 │   ├── static/              # facultatif — assets servis par FastAPI (favicon, i18n JSON, etc.)
-│   └── templates/           # facultatif — preview.html (UI autonome HTML/CSS/JS pour mode no-Node)
+│   └── templates/           # facultatif — rare en React-only (pas de Jinja métier)
 ├── tests/                   # 1 fichier par route minimum
 ├── alembic/
 ├── data/                    # SQLite + uploads (gitignoré)
@@ -105,7 +119,7 @@ apps/<poc>/backend/
 └── pyproject.toml
 ```
 
-**Règle**. Pas de fichier `routes.py` monolithique. Une ressource = un fichier dans `api/`. Logique transverse = `core/`. Code métier pur = `parsers/` ou `checks/`. Les dossiers `static/` et `templates/` sont tolérés pour servir le bundle Vite buildé ou une page preview HTML/JS autonome — pas pour héberger des templates Jinja métier.
+**Règle**. Pas de fichier `routes.py` monolithique. Une ressource = un fichier dans `api/`. Logique transverse = `core/`. Code métier pur = `parsers/` ou `checks/`. Les dossiers `static/` et `templates/` sont tolérés pour servir des assets via FastAPI — pas pour héberger des templates Jinja métier. L'UI est le bundle Vite buildé (`frontend/dist/`).
 
 ### 3.3 Conventions API
 
@@ -175,7 +189,7 @@ async def create_project(request: Request):
 
 **Autres règles de sécurité** :
 - CORS liste blanche explicite, pas `["*"]`.
-- Clé API LLM côté serveur uniquement, jamais saisie dans l'UI.
+- Clé API LLM saisissable dans l'UI uniquement pour le profil local-first ; elle est transmise au backend, jamais renvoyée au frontend, jamais journalisée et jamais committée. En production, utiliser un secret manager et une authentification adaptée.
 - Aucun secret committé. `.env` gitignoré, `.env.example` fournit la liste des variables avec valeurs factices.
 - Validation MIME et taille des uploads côté serveur (`max_upload_size_mb` dans `config.py`).
 
@@ -200,20 +214,21 @@ async def create_project(request: Request):
 
 **Bannis** : `print()` en code committé, `console.log` en code committé, `debug=True` en code committé.
 
-### 3.7 Endpoints standards + `AppConfig`
+### 3.7 Endpoints standards + `AppConfig` (profil `llm`)
 
-Au-delà de `/health`, tout POC expose :
+Au-delà de `/health`, tout POC déclarant le profil `llm` expose :
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Consommé par l'onglet Données du preview. |
+| `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Consommé par l'onglet Données de l'app React. |
 | `POST /api/v1/admin/reset/all` | Vide les tables métier ; **préserve `app_config`** (clé Mistral). |
 | `POST /api/v1/admin/reset/<scope>` | Reset par scope (ex. `documents`, `sessions`). |
-| `GET /api/v1/settings` | Lit la config Mistral runtime (`api_key_set: bool`, `base_url`, `chat_model`, `embed_model`). |
-| `POST /api/v1/settings` | Met à jour les clés fournies (vide = inchangé). |
-| `POST /api/v1/settings/test` | Liste les modèles Mistral pour vérifier la connexion. |
+| `GET /api/v1/settings` | Lit la config Mistral runtime (`api_key_set: bool`, `base_url`, `chat_model`, `embed_model`, `llm_enabled: bool`, `llm_tested: bool`). |
+| `POST /api/v1/settings` | Met à jour les clés fournies (vide = inchangé). Accepte `llm_enabled: bool` (interrupteur LLM). Changer `api_key`/`base_url` invalide le flag `llm_tested`. |
+| `POST /api/v1/settings/test` | Liste les modèles Mistral pour vérifier la connexion ; persiste le résultat (`set_llm_tested`) ; renvoie `{ok:false, error:"LLM desactive"}` si `llm_enabled=false`. |
+| `GET /api/v1/health` | `llm: "ok" | "untested" | "not_configured" | "disabled"` — `ok` = clé effective + test réussi + `llm_enabled` ; `untested` = clé sans test réussi ; `not_configured` = pas de clé effective ; `disabled` quand `llm_enabled=false`. **Détecter la clé via `get_effective_settings(db)`, pas `settings.llm_configured`** (ce dernier ne lit que le `.env`). |
 
-**Table `AppConfig`** (`app_config`) **obligatoire** dans tout POC :
+**Table `AppConfig`** (`app_config`) est obligatoire pour le profil `llm` :
 
 ```python
 class AppConfig(Base):
@@ -223,6 +238,60 @@ class AppConfig(Base):
 ```
 
 Sert à stocker la clé Mistral et toute config runtime (modèles utilisés, base URL...). **Préservée par convention lors d'un reset admin** — le user ne doit pas perdre sa clé en cliquant « Tout supprimer ». Migration `0001_initial.py` créant cette table est fournie par le `_template`.
+
+#### Interrupteur LLM (`llm_enabled`)
+
+Clé `AppConfig` **`llm_enabled`** (`"true"`/`"false"`, défaut `"true"` via fallback de lecture — **aucune migration** : c'est un simple row key/value). Permet de couper l'IA à la demande sans effacer la clé Mistral. Helpers standards dans `core/mistral_client.py` :
+
+```python
+LLM_ENABLED_KEY = "llm_enabled"
+
+def get_llm_enabled(db: Session) -> bool:
+    # Lecture defensive : /health peut etre appele avant la migration Alembic
+    # (table app_config absente) — on retombe sur le defaut ON, jamais de 500.
+    try:
+        return _read_config(db, LLM_ENABLED_KEY, "true").strip().lower() in {"1", "true", "yes"}
+    except SQLAlchemyError:
+        db.rollback()
+        return True
+
+def set_llm_enabled(db: Session, enabled: bool) -> None:
+    _write_config(db, LLM_ENABLED_KEY, "true" if enabled else "false")
+    db.commit()
+```
+
+**Garde-fou obligatoire** — avant tout `MistralClient.from_db(db)` d'une route métier :
+
+```python
+if not get_llm_enabled(db):
+    return ...  # resultat deterministe / vide ; on saute la tache IA, jamais de 5xx
+client = MistralClient.from_db(db)
+```
+
+Le comportement OFF est un **fallback gracieux** : la partie déterministe de l'app continue de fonctionner, seule la tâche confiée à l'IA est omise. Exposé côté UI par un badge d'état (sidebar + home) et un `.switch` dans l'onglet Paramètres (cf. §13 du `CLAUDE.md`).
+
+#### Flag « testé » (`llm_last_test_ok`)
+
+Le badge LLM ne passe au **vert (ON)** que si la clé est configurée **ET** un test de connexion a réussi **ET** l'interrupteur est ON. Tant qu'aucun test n'a réussi, `/health` renvoie `untested` → badge orange « A TESTER ». Clé `AppConfig` **`llm_last_test_ok`** (`"true"`/`"false"`, défaut `"false"`, **aucune migration** : row key/value). Helpers standards dans `core/mistral_client.py` :
+
+```python
+LLM_TESTED_KEY = "llm_last_test_ok"
+
+def get_llm_tested(db: Session) -> bool:
+    try:
+        return _read_config(db, LLM_TESTED_KEY, "false").strip().lower() in {"1", "true", "yes"}
+    except SQLAlchemyError:
+        db.rollback()
+        return False
+
+def set_llm_tested(db: Session, ok: bool) -> None:
+    _write_config(db, LLM_TESTED_KEY, "true" if ok else "false")
+    db.commit()
+```
+
+- `POST /settings/test` appelle `set_llm_tested(db, True)` au succès, `set_llm_tested(db, False)` sur chaque échec.
+- `save_settings` remet le flag à `"false"` dès que `api_key` ou `base_url` change (re-test obligatoire).
+- `/health` calcule l'état avec `get_effective_settings(db)["api_key"]` + `get_llm_tested(db)` (jamais `settings.llm_configured`, qui ignore la clé saisie en Paramètres et persistée en DB).
 
 ## 4. Frontend
 
@@ -346,34 +415,27 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 
 ### 5.4 Theme dark / light
 
-Chaque POC supporte le toggle dark/light dans **les deux modes de rendu** :
+Toggle dark/light dans l'app React :
 
-- **Mode Vite/React** (quand Node est installé et le bundle frontend buildé) : `index.html` + `App.tsx` avec `<ThemeToggle />` importé de `@internal/ui`.
-- **Mode preview HTML** (fallback servi par FastAPI quand pas de bundle Vite, via `app/api/preview.py` + `app/templates/preview.html`) : bouton SVG inline + JS toggle inline + CSS variables émises par `_build_css_vars()` à partir de `tokens.json`.
+- **Rendu** : `App.tsx` avec un bouton sun/moon dans le sidebar (cf. §10), ou `<ThemeToggle />` de `@internal/ui`.
+- **Mode initial** : si `localStorage['theme']` est défini → respect ; à défaut → dark (continuité POC).
+- **Application** : classe `.dark` sur `<html>`. Le preset Tailwind est en `darkMode: "class"`.
+- **Persistance** : seules des préférences non sensibles (`theme` et éventuellement `language`) peuvent être conservées dans le navigateur. Jamais d'authentification, d'état métier ou de session dans `localStorage`/`sessionStorage`.
 
-**Mécanique commune aux deux modes** :
-
-- **Mode initial** : si `localStorage['theme']` est défini → respect ; sinon `prefers-color-scheme` ; à défaut → dark (continuité POC).
-- **Application** : classe `.dark` sur `<html>`. Le preset Tailwind est en `darkMode: "class"` ; le preview consomme directement les vars CSS générées sous `:root` (light) et `.dark` (dark override).
-- **Persistance** : `localStorage['theme']` = `"dark"` ou `"light"`, écrit par `ThemeToggle` ou par le toggle inline du preview.
-
-**Snippet anti-flash** (à inclure tel quel dans `index.html` Vite **et** dans `preview.html`, en haut du `<head>` avant tout `<link>`) :
+**Snippet anti-flash** (dans `index.html`, en haut du `<head>` avant tout `<link>`) :
 
 ```html
 <script>
   (function () {
     var stored = localStorage.getItem("theme");
-    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+    if (stored !== "light") {
       document.documentElement.classList.add("dark");
     }
   })();
 </script>
 ```
 
-**`meta color-scheme`** : valeur `"dark light"` dans les deux `<head>` (signal au navigateur que les deux thèmes sont supportés). Jamais `"dark"` seul (forcerait le scrollbar dark même en mode light).
-
-**Toggle inline** dans `preview.html` (côté backend, sans React disponible) : bouton SVG Sun/Moon dans `.sidebar-header`, JS minimal qui ajoute/retire `.dark` et écrit `localStorage['theme']`. Le code identique vit dans `apps/<poc>/backend/app/templates/preview.html` de chaque app.
+**`meta color-scheme`** : valeur `"dark light"` dans le `<head>` (les deux thèmes supportés). Jamais `"dark"` seul (forcerait le scrollbar dark même en mode light).
 
 ## 6. LLM
 
@@ -386,6 +448,7 @@ Chaque POC supporte le toggle dark/light dans **les deux modes de rendu** :
 | Exception LangChain | LangGraph standalone toléré pour graphes d'agents complexes |
 | Audit | Table `llm_invocation_audit` peuplée à chaque appel (model, status, tokens, request_id) |
 | Clé API | Côté serveur uniquement, persistée dans la table `AppConfig` (jamais committée, jamais saisie dans le frontend) |
+| Interrupteur | Clé `AppConfig` `llm_enabled` (défaut `true`). Garde-fou `get_llm_enabled(db)` avant tout `from_db` ; OFF = on saute la tâche IA (fallback gracieux, jamais 5xx). Cf. §3.7. |
 
 **Conforme** : appel `httpx.AsyncClient` + stream SSE + ligne `LLMInvocationAudit` écrite. **Non conforme** : `from langchain.chat_models import ChatMistralAI`, ou appel synchrone qui bloque l'event loop.
 
@@ -420,7 +483,7 @@ data: {"message": "raison de l'erreur"}
 
 **Persistance** : le user message est inséré dans `messages` AVANT le premier delta ; l'assistant message complet est inséré APRÈS le `done`. Cette ordre évite de laisser un message user orphelin si le stream échoue mid-way.
 
-**Client preview HTML** : snippet de référence pour parser le flux :
+**Client SSE** (`fetch` + `ReadableStream`, React) : snippet de référence pour parser le flux :
 
 ```js
 const resp = await fetch(API + "/sessions/" + id + "/ask", {
@@ -459,7 +522,7 @@ while (true) {
 | Parcours critiques | Playwright | 1 smoke test par parcours métier majeur |
 | Linter | ruff (Python) + ESLint (TS) | Bloquant à la sauvegarde |
 
-`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie 13 contraintes — 7 structurelles et 6 d'instanciation (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`) :
+`scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM et 1 de robustesse du launcher (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
 1. Préfixe `/api/v1/` monté dans chaque `apps/*/backend/app/main.py`.
@@ -481,16 +544,19 @@ while (true) {
 
 ## 9. Lanceurs locaux et packaging
 
-Chaque POC fournit **cinq** fichiers à la racine de `apps/<poc>/` (quatre `.bat` + un `start.sh`), copiés depuis `apps/_template/` :
+Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/` :
 
 | Fichier | Rôle |
 |---|---|
 | `start.bat` | Wrapper Windows ultra-court — `start "..." cmd /k "%~dp0_run.bat"` pour spawn une fenêtre qui reste ouverte quoi qu'il arrive. |
-| `_run.bat` | Logique de lancement Windows (détection Python, venv, deps, Alembic, uvicorn). **ASCII pur** : aucun accent (sinon cmd.exe ferme la fenêtre avant que l'utilisateur ne voie le message). |
-| `start.sh` | Équivalent Unix (variable `PORT` configurable, `lsof` pour vérifier que le port est libre). |
+| `_run.bat` | Logique de lancement Windows (détection Python, venv, deps, Alembic, **rebuild front auto**, uvicorn). **ASCII pur** : aucun accent (sinon cmd.exe ferme la fenêtre avant que l'utilisateur ne voie le message). |
+| `_needs_rebuild.ps1` | Helper PowerShell appelé par `_run.bat` : compare la date de `frontend/dist/index.html` aux sources front (`frontend/src` + configs) et renvoie `exit 1` si le dist est périmé. Permet le **rebuild auto** sans comparaison de dates en batch pur (impossible proprement). |
+| `start.sh` | Équivalent Unix (variable `PORT` configurable, `lsof` pour vérifier que le port est libre, **même rebuild front auto** via comparaison `find -newer`). |
 | `package.bat` + `_package.bat` | Wrapper Windows qui spawn une fenêtre `cmd /k` et délègue à `scripts/package_<poc>.py` pour produire un ZIP autonome. |
 
 **Comportement attendu de `start.bat`** :
+
+Les ports par défaut cibles sont définis dans [`docs/apps/README.md`](./docs/apps/README.md) : `_template` 8000, puis `corpus-agent` à `xml-proofreader` de 8001 à 8008. Cette attribution est unique ; le port effectivement choisi peut être supérieur lorsque le défaut est occupé.
 
 1. Variable `PORT` unique en haut du `_run.bat` (à ajuster par POC).
 2. Détecter Python 3.11+ (system, embed, ou installer silencieux selon le contexte).
@@ -498,8 +564,10 @@ Chaque POC fournit **cinq** fichiers à la racine de `apps/<poc>/` (quatre `.bat
 4. Installer les deps Python si pas déjà fait (marker `.installed`).
 5. Lancer `alembic upgrade head` (idempotent).
 6. **Résoudre un port libre** : tester `PORT` ; s'il est occupé, basculer automatiquement sur le premier port libre suivant (jusqu'à `PORT+20`). Sortir en erreur seulement si toute la plage est occupée.
-7. Lancer `uvicorn app.main:app --host 127.0.0.1 --port %PORT%` sur le port résolu.
-8. Ouvrir le navigateur sur `http://127.0.0.1:<port>/` — sert l'UI React si `frontend/dist/` a été buildé, sinon la preview HTML autonome (mount auto dans `main.py`). Swagger reste accessible sur `/api/v1/docs`.
+7. **Rebuild front automatique** : si `frontend/dist/index.html` est **absent** OU si une **source front est plus récente** que ce dist (helper `_needs_rebuild.ps1` sous Windows, `find -newer` sous Unix), lancer `pnpm build` une fois ; sinon servir le dist tel quel (restart instantané). Si `pnpm` est introuvable, servir le dist existant sans rebuild. Une modif du code front est ainsi prise en compte au prochain `start.bat`, **sans supprimer `dist/` à la main**.
+   - **`pnpm install` uniquement si `frontend/node_modules` est absent** — jamais avant chaque build. En bat : `if not exist node_modules call pnpm install` ; en sh : `[ -d node_modules ] || pnpm install`. **Pourquoi** : derrière un proxy qui **intercepte le TLS** (erreur `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`), un `pnpm install` déjà « à jour » **retente chaque paquet « in 1 minute »** et fige le lancement plusieurs minutes (symptôme « le POC ne s'ouvre pas »). `pnpm build` (= `vite build`) tourne parfaitement **hors-ligne** quand `node_modules` est présent. Le même principe s'applique au packager (`_build_frontend`) : skip `install` si `node_modules` existe, et **conserver un `dist/` valide déjà présent** si le build échoue au lieu de le traiter comme un échec silencieux (sinon le ZIP part sans UI → 503 chez le destinataire).
+8. Lancer `uvicorn app.main:app --host 127.0.0.1 --port %PORT%` sur le port résolu.
+9. Ouvrir le navigateur sur `http://127.0.0.1:<port>/` — sert l'UI React (`frontend/dist/`). Si le dist n'a pas pu être buildé (pnpm absent et dist jamais généré), `/` renvoie un message « frontend non buildé » (HTTP 503) → lancer `vite build`. Swagger reste accessible sur `/api/v1/docs`.
 
 **Comportement attendu de `package.bat`** :
 
@@ -508,11 +576,13 @@ Chaque POC fournit **cinq** fichiers à la racine de `apps/<poc>/` (quatre `.bat
 3. Le script `scripts/package_<poc>.py` est créé par `cp scripts/package_TEMPLATE.py scripts/package_<poc>.py` et l'adaptation de `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête de fichier.
 
 **Règles non négociables** :
+- **Le ZIP sort TOUJOURS dans `apps/<poc>/dist/`**, jamais à la racine du repo. Le `--out` par défaut de `scripts/package_<poc>.py` pointe sur `apps/<poc>/dist` **et** `_package.bat` le passe explicitement. Ne jamais lancer le script à la main sans ce `--out` (sinon le ZIP atterrit dans `./dist` racine).
 - `--host 127.0.0.1` toujours. Jamais `0.0.0.0` (palier 1 strict).
 - `.bat` en ASCII pur. Les accents dans un `.bat` non-CP1252 peuvent provoquer une fermeture immédiate de cmd.exe — préférer "echec" à "échec".
 - La fenêtre cmd doit **toujours rester ouverte** en cas d'erreur (wrapper `cmd /k`).
 - Chaque `_run.bat` **doit** déclarer `set "PORT=80XX"` en tête et résoudre un port libre **avant** uvicorn — bascule automatique sur `PORT+1`, `PORT+2`… si le port par défaut est occupé. Jamais de port codé en dur dans la commande uvicorn. **Vérifié automatiquement par `scripts/check_standard.sh` (check 7)** — un `_run.bat` sans variable `PORT`, sans check `findstr "LISTENING"`, ou sans la boucle de bascule `:find_port` fait échouer le script.
 - Pas de `--reload` sur uvicorn : c'est un flag de dev, proscrit dans un `_run.bat` destiné au lancement local stable et au packaging.
+- **Rebuild front auto, jamais de `dist/` servi périmé**. `_run.bat` / `start.sh` doivent reconstruire `frontend/dist/` quand il est absent OU quand une source front est plus récente (helper `_needs_rebuild.ps1` / `find -newer`), **avant** de lancer uvicorn. Interdit : court-circuiter le build dès que `dist/` existe (`if exist dist goto ...` sec) — c'est le piège qui fait servir un ancien bundle après une modif front. Le rebuild reste **conditionnel** (pas de `pnpm build` systématique qui ralentirait chaque restart) et **silencieux si rien n'a changé**. Pour itérer en continu sur le front, utiliser `pnpm dev` (serveur Vite, hot reload) en parallèle ; `start.bat` reste le mode « POC fini ».
 
 ### 9.1 Pièges courants des `.bat`
 
@@ -562,26 +632,24 @@ set "PORT=%PORT_TRY%"
 
 Le navigateur et uvicorn consomment ensuite `%PORT%` résolu. Hisser le port par défaut dans une variable unique en tête de `_run.bat` (`set "PORT=80XX"`).
 
-## 10. Preview HTML autonome (sans Node)
+## 10. UI React (Vite)
 
-### Motivation
+### Principe
 
-Palier 1 = local-first strict, sans pré-requis Node côté utilisateur. Sans `frontend/dist/` (= sans build React préalable), le backend doit quand même servir une UI utilisable à `/`. Le preview HTML est cette UI — vanilla JS, design-tokens injectés, consomme directement l'API REST.
-
-### Fichiers obligatoires
+L'UI de chaque POC est l'**app React buildée** (`frontend/dist/`), servie par le backend à `/`. **React est obligatoire** : le **build Node/Vite est un pré-requis** du POC (cf. §9 ; `build` = `vite build`). Il n'y a **plus de preview HTML autonome**.
 
 | Fichier | Rôle |
 |---|---|
-| `backend/app/templates/preview.html` | UI vanilla JS complète. ASCII pur dans les strings inline (les accents passent par l'i18n FR injecté dynamiquement). |
-| `backend/app/api/preview.py` | Renderer qui lit `design-tokens/tokens.json` + `frontend/src/locales/fr.json`, remplace les placeholders `/*__CSS_VARS__*/` et `/*__I18N_FR__*/` dans le template, retourne `HTMLResponse`. |
-| `backend/app/main.py` | `_mount_frontend()` : si `frontend/dist/` existe → SPA Vite ; sinon → `render_preview()` à `/`. Les routes `/api/v1/*` sont enregistrées AVANT pour priorité sur le catch-all. |
+| `frontend/dist/` | Bundle React buildé (`vite build`). C'est l'UI servie. |
+| `backend/app/main.py` | `_mount_frontend()` → `_mount_vite_dist()` : sert le dist, `/api/v1/*` enregistrées AVANT le catch-all SPA. `index.html` servi en **no-cache** (assets hashés `/assets/*` cacheables) → un rebuild prend effet sans Ctrl+F5. Si `frontend/dist/` est absent, `/` renvoie un message « frontend non buildé » (HTTP 503), jamais une UI de substitution. |
+
+> Historique : un « preview HTML autonome » (vanilla JS, sans Node) servait d’UI de repli. Il est **supprimé** du standard et ne doit plus être développé ni présenté comme mode supporté. Les références historiques sont conservées uniquement dans les ADRs marquées `Superseded`.
 
 ### Onglets standards (minimum)
 
 | Onglet | Contenu |
 |---|---|
 | **Home** | Page d'accueil sobre. Statut backend (`/health`) en badge. Pointe vers les fichiers à éditer pour personnaliser le POC. |
-| **Architecture** | Card 1 : 2 colonnes (`.grid-2`) Backend / Frontend décrivant la stack en 30 secondes. Card 2 : workflow utilisateur numéroté (6 étapes typiques). |
 | **Données** | KPI grid alimentée par `GET /api/v1/admin/stats` + bouton "Tout supprimer" avec pattern double-clic → `POST /api/v1/admin/reset/all`. |
 | **Paramètres** | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
 
@@ -594,6 +662,10 @@ Le POC ajoute ses onglets métier.
   - `JetBrains Mono` (400/500/700) — `.label`, `code`, `.kpi-value`
   - `Orbitron` (500/700) — `.brand`, `.page-header h1`, `.card-title`
 - **Layout** : `html { font-size: 13.5px; }`, sidebar `var(--sidebar-w)` (252px), topbar 52px, main padding `24px 32px`.
+- **Description brève de l'app (obligatoire)** : le nom / logo (`.brand`) porte une
+  **infobulle** décrivant l'app en une phrase — attribut `title={t("app.description")}`
+  (clé i18n `app.description` FR + EN) + `cursor: help`. Chaque POC personnalise cette
+  clé lors du bootstrap.
 - **Classes CSS standardisées** :
 
 | Classe | Variants | Usage |
@@ -601,8 +673,6 @@ Le POC ajoute ses onglets métier.
 | `.btn` | `.primary` `.secondary` `.ghost` `.danger` `.small` | Tous les boutons |
 | `.card` | + `.card-title` (Orbitron) | Container de section |
 | `.kpi-grid` | + `.kpi` + `.kpi-value` (`.info` `.ok` `.warn` `.err`) | Compteurs onglet Données |
-| `.arch-flow` | + `.arch-step` + `.step-n` (mono) | Workflow numéroté Architecture |
-| `.arch-split` | + `.label.brand-color` / `.label.accent-color` | 2-col Backend/Frontend |
 | `.banner` | + `.warn` | Bandeau d'info ou warning |
 | `.badge` | `.ok` `.warn` `.danger` `.info` | Pastilles d'état |
 | `.input` | (state via classe ajoutée) | Champs `<input>`, `<select>`, `<textarea>` |
@@ -610,7 +680,7 @@ Le POC ajoute ses onglets métier.
 | `.empty-state` | — | Texte centré "Aucun X" |
 | `.label` | — | Étiquette uppercase mono |
 
-- **Couleurs** : toutes via CSS vars injectées depuis `tokens.json` par `preview.py`. **Aucun hex en dur** dans le HTML (règle #4).
+- **Couleurs** : toutes via les CSS vars des design-tokens (`@internal/design-tokens/theme.css` + preset Tailwind). **Aucun hex en dur** (règle #4).
 
 ### Theme toggle (dark ↔ light)
 
@@ -630,75 +700,25 @@ Pattern obligatoire dans `<head>` (anti-flash, applique le theme AVANT que le HT
 
 Bouton sun/moon SVG dans la `sidebar-header`. CSS toggle entre les deux via `.dark .theme-toggle-sun` / `.theme-toggle-moon`. Le clic toggle la classe `.dark` sur `<html>` et persiste en `localStorage["theme"]`.
 
-### i18n pattern (auto-switch FR ↔ EN)
+### i18n pattern (FR ↔ EN)
 
-Deux niveaux :
-
-1. **Strings statiques** (HTML) : attribut `data-i18n="key"` sur les éléments dont le `textContent` doit être traduit.
-2. **Strings dynamiques** (rendus par JS) : fonction `t(key)` appelée dans les `innerHTML` template literals.
-
-Snippet de référence :
-
-```js
-const I18N = {
-  fr: { "nav.generate": "Generation", "page.generate.title": "Generation de contenu" /* ... */ },
-  en: { "nav.generate": "Generate",   "page.generate.title": "Content generation"    /* ... */ },
-};
-let LANG = localStorage.getItem("<poc>-lang") || "fr";
-
-function t(key) {
-  return (I18N[LANG] && I18N[LANG][key]) || (I18N.fr && I18N.fr[key]) || key;
-}
-
-function applyI18n() {
-  document.querySelectorAll("[data-i18n]").forEach((el) => {
-    el.textContent = t(el.dataset.i18n);
-  });
-  document.documentElement.lang = LANG;
-}
-
-function setLang(lang) {
-  LANG = lang;
-  try { localStorage.setItem("<poc>-lang", lang); } catch (e) { /* ignore */ }
-  document.querySelectorAll(".lang-btn").forEach((b) => {
-    b.classList.toggle("active", b.dataset.lang === lang);
-  });
-  applyI18n();
-  navigate(state.currentRoute);  // re-render la page active avec les nouvelles trads
-}
-
-document.querySelectorAll(".lang-btn").forEach((b) => {
-  b.addEventListener("click", () => setLang(b.dataset.lang));
-});
-```
-
-Au boot : appeler `setLang(LANG)` (qui déclenche `applyI18n` + `navigate` initial).
+`i18next` + `react-i18next` (cf. §7), dictionnaires `frontend/src/locales/{fr,en}.json` minimum, clés sémantiques (`nav.generate`), jamais la chaîne FR comme clé. Le composant accède aux trads via `const { t } = useTranslation()` et `t("nav.generate")`. Un switch FR/EN dans le sidebar appelle `i18n.changeLanguage(lng)` (persisté par `i18next-browser-languagedetector` en `localStorage`).
 
 ### Pattern double-clic (au lieu de `confirm()`)
 
-À utiliser pour toute action destructrice. La règle #2 (pas de `alert`/`confirm`) s'applique aussi au preview HTML.
+À utiliser pour toute action destructrice (règle #2 : pas de `alert`/`confirm`). En React : un `useState` « armed » par bouton — 1er clic arme et remplace le label par « Cliquer encore pour confirmer » (+ `setTimeout` de 3 s qui désarme), 2e clic dans les 3 s exécute l'action puis désarme.
 
-```js
-document.querySelectorAll("[data-reset]").forEach((btn) => {
-  let armed = false;
-  let timer = null;
-  const original = btn.textContent;
-  btn.addEventListener("click", async () => {
-    if (!armed) {
-      armed = true;
-      btn.textContent = t("data.confirmAgain");
-      timer = setTimeout(() => { armed = false; btn.textContent = original; }, 3000);
-      return;
-    }
-    clearTimeout(timer);
-    armed = false;
-    btn.textContent = original;
-    // ... appel API ici ...
-  });
-});
+```tsx
+const [armed, setArmed] = useState(false);
+const fire = () => {
+  if (!armed) { setArmed(true); setTimeout(() => setArmed(false), 3000); return; }
+  setArmed(false);
+  // ... appel API ici ...
+};
+<button className={`btn ${armed ? "danger" : "secondary"}`} onClick={fire}>
+  {armed ? t("data.confirmAgain") : t("data.resetAll")}
+</button>
 ```
-
-1er clic remplace le label par « Cliquer encore pour confirmer » ; 2e clic dans les 3 secondes exécute ; au-delà, le bouton revient à son état initial.
 
 ## 11. Ajout d'un nouveau POC
 
@@ -712,7 +732,7 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 
 - Vérifie que `<slug>` est en kebab-case et que `apps/<slug>/` n'existe pas.
 - Choisit automatiquement le prochain port libre dès 8000 si le 2e argument est omis (sinon vérifie qu'il n'est pas déjà pris par un autre POC).
-- Copie `apps/_template/` → `apps/<slug>/` puis substitue tous les marqueurs `TEMPLATE` / `8000` / `'template'` dans `pyproject.toml`, `config.py`, `alembic.ini`, `.env.example`, les 4 `.bat` + `start.sh`, `frontend/package.json`, `vite.config.ts`, `index.html`, `locales/{fr,en}.json`, `backend/README.md`, `db/models.py`, `templates/preview.html`, `App.tsx`, `tests/e2e/home.spec.ts`.
+- Copie `apps/_template/` → `apps/<slug>/` puis substitue tous les marqueurs `TEMPLATE` / `8000` / `'template'` dans `pyproject.toml`, `config.py`, `alembic.ini`, `.env.example`, les 4 `.bat` + `start.sh`, `frontend/package.json`, `vite.config.ts`, `index.html`, `locales/{fr,en}.json`, `backend/README.md`, `db/models.py`, `App.tsx`, `tests/e2e/home.spec.ts`.
 - Génère `scripts/package_<slug>.py` depuis `package_TEMPLATE.py` avec les bons `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX`.
 - Ajoute `dev:<slug>` / `test:e2e:<slug>` / `openapi:gen:<slug>` dans `package.json` racine.
 - Écrase `apps/<slug>/README.md` par un stub avec bannière **« À RÉÉCRIRE »** + section `## Auth` palier 1.
@@ -720,11 +740,11 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 
 **Après le script**, il reste à la charge du dev :
 
-1. **Réécrire `apps/<slug>/README.md`** — titre + description métier + endpoints exposés (cf. `apps/doc-writer/README.md` ou `apps/pdf-reviewer/README.md` comme références).
+1. **Réécrire `apps/<slug>/README.md`** — titre + description métier + endpoints exposés (cf. `apps/doc-writer/README.md` ou `apps/doc-reviewer/README.md` comme références).
 2. **Ajouter la logique métier** dans `backend/app/api/<feature>.py` (+ register dans `main.py`) et `backend/app/db/models.py` (au-delà d'`AppConfig`).
 3. **Générer la migration métier** : `alembic revision -m "0002 <feature>"`. La migration `0001_initial` (table `AppConfig`) est déjà fournie par le template.
-4. **Adapter `backend/app/templates/preview.html`** (remplacer page Home + ajouter onglets métier au-delà des 4 standards).
-5. **Implémenter les routes React** dans `frontend/src/routes/` + remplir `locales/{fr,en}.json`.
+4. **Adapter l'UI React** : `frontend/src/App.tsx` (brand + onglets) et la page `frontend/src/routes/Home.tsx`.
+5. **Implémenter les routes React** dans `frontend/src/routes/` (onglets métier au-delà des 4 standards) + remplir `locales/{fr,en}.json`.
 6. **Premier commit** : `feat(<slug>): bootstrap from template`.
 
 ### Méthode manuelle (fallback)
@@ -732,7 +752,7 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 Si `scripts/new_poc.sh` n'est pas utilisable (système sans bash, debug du script), les substitutions à faire à la main sont :
 
 1. `cp -r apps/_template apps/<slug>`.
-2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/backend/app/templates/preview.html` (`<title>` + `.brand`), `apps/<slug>/frontend/src/App.tsx` (`<span>`), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
+2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/frontend/src/App.tsx` (`<span>` brand), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
 3. Choisir un port unique (8000, 8001, …) et le poser dans `set "PORT=80XX"` (`_run.bat`), `PORT="${PORT:-80XX}"` (`start.sh`), proxy `"/api"` (`vite.config.ts`), `openapi:gen` (`frontend/package.json`), `cors_origins` (`config.py`).
 4. `cp scripts/package_TEMPLATE.py scripts/package_<slug>.py` puis adapter `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête. Mettre à jour `_package.bat` pour appeler le nouveau script.
 5. Ajouter dans `package.json` racine : `dev:<slug>`, `test:e2e:<slug>`, `openapi:gen:<slug>`.

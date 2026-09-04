@@ -1,8 +1,10 @@
 # ADR 0004 — Preview HTML autonome servie par FastAPI quand `frontend/dist/` est absent
 
-- **Status** — Accepted (2026-04-30)
+- **Status** — Superseded (2026-08-24)
 - **Scope** — Tous les POC du monorepo. Concerne le mode de rendu UI par défaut quand Node n'est pas disponible côté utilisateur.
-- **Reference** — [`STANDARD_POC.md`](../../STANDARD_POC.md) §10 (Preview HTML autonome) et §9 (Lanceurs locaux).
+- **Reference historique** — [`STANDARD_POC.md`](../../STANDARD_POC.md) §10 et §9. Cette décision est remplacée par le standard React/Vite obligatoire.
+
+> Cette ADR documente une décision historique. Elle ne définit plus le comportement conforme du monorepo.
 
 ---
 

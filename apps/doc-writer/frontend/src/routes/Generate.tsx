@@ -34,8 +34,14 @@ export function Generate() {
   const [prompt, setPrompt] = useState("");
   // Dictee vocale (Voxtral) : le texte transcrit est ajoute au brief, que le
   // flux de generation repartira ensuite dans les zones du template.
-  const dictation = useDictation((text) =>
-    setPrompt((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text)),
+  const dictation = useDictation((text, isFirstDelta) =>
+    setPrompt((prev) => {
+      const needsSpace = isFirstDelta
+        && prev.length > 0
+        && !/\s$/.test(prev)
+        && !/^\s|^[.,;:!?]/.test(text);
+      return `${prev}${needsSpace ? " " : ""}${text}`;
+    }),
   );
   const [feedback, setFeedback] = useState<
     { kind: "ok" | "error"; text: string } | null

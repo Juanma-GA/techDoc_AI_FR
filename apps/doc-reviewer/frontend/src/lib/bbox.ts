@@ -1,0 +1,79 @@
+/**
+ * Convert a PDF-points bbox (PyMuPDF) into a CSS rectangle inside a
+ * react-pdf <Page> render container, using the viewport reported by
+ * pdfjs at `onRenderSuccess` time.
+ *
+ * Backend bboxes are in top-left origin PDF points. pdfjs viewport's
+ * `convertToViewportRectangle([x0, y0, x1, y1])` yields canvas pixels.
+ * We divide by `devicePixelRatio` to get CSS pixels.
+ */
+
+export type Bbox = {
+  x0: number | null;
+  y0: number | null;
+  x1: number | null;
+  y1: number | null;
+  page_w?: number;
+  page_h?: number;
+  page_rotation?: number;
+};
+
+export type ViewportLike = {
+  convertToViewportRectangle(rect: [number, number, number, number]): [number, number, number, number];
+};
+
+export type CssRect = { left: number; top: number; width: number; height: number };
+
+/** Rectangle en pourcentages de la page (left/top/width/height en %). */
+export type PercentRect = { left: number; top: number; width: number; height: number };
+
+/**
+ * Positionne une bbox en POURCENTAGES de la page, exactement comme l'ancien
+ * preview.html : origine haut-gauche (PyMuPDF) divisee par page_w/page_h. C'est
+ * robuste (independant du zoom, du dpr et du rendu pdf.js) et se superpose
+ * directement au calque `absolute; inset:0` qui couvre la page rendue.
+ */
+export function bboxToPercentRect(bbox: Bbox): PercentRect | null {
+  if (!hasValidBbox(bbox)) return null;
+  const pw = bbox.page_w ?? 0;
+  const ph = bbox.page_h ?? 0;
+  if (pw <= 0 || ph <= 0) return null;
+  const x0 = bbox.x0 as number;
+  const y0 = bbox.y0 as number;
+  const x1 = bbox.x1 as number;
+  const y1 = bbox.y1 as number;
+  return {
+    left: (Math.min(x0, x1) / pw) * 100,
+    top: (Math.min(y0, y1) / ph) * 100,
+    width: (Math.abs(x1 - x0) / pw) * 100,
+    height: (Math.abs(y1 - y0) / ph) * 100,
+  };
+}
+
+export function hasValidBbox(bbox: Bbox): boolean {
+  return (
+    typeof bbox.x0 === "number" && typeof bbox.y0 === "number" &&
+    typeof bbox.x1 === "number" && typeof bbox.y1 === "number"
+  );
+}
+
+export function bboxToCssRect(bbox: Bbox, viewport: ViewportLike, dpr = 1): CssRect {
+  if (!hasValidBbox(bbox)) return { left: 0, top: 0, width: 0, height: 0 };
+  // Defensif : un viewport mal forme (mauvaise version pdf.js, page proxy passe
+  // a la place du viewport...) ne doit pas crasher toute l'UI — on degrade en
+  // "pas de surlignage" plutot que de lever dans le rendu React.
+  if (typeof viewport?.convertToViewportRectangle !== "function") {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+  const [vx0, vy0, vx1, vy1] = viewport.convertToViewportRectangle([
+    bbox.x0 as number,
+    bbox.y0 as number,
+    bbox.x1 as number,
+    bbox.y1 as number,
+  ]);
+  const left = Math.min(vx0, vx1) / dpr;
+  const top = Math.min(vy0, vy1) / dpr;
+  const width = Math.abs(vx1 - vx0) / dpr;
+  const height = Math.abs(vy1 - vy0) / dpr;
+  return { left, top, width, height };
+}

@@ -39,6 +39,26 @@ fi
 echo "[setup] Migrations Alembic..."
 alembic upgrade head
 
+FRONTEND_DIR="${APP_DIR}/frontend"
+if command -v pnpm >/dev/null 2>&1; then
+    NEED_BUILD=0
+    if [[ ! -f "${FRONTEND_DIR}/dist/index.html" ]]; then
+        NEED_BUILD=1
+    elif find "${FRONTEND_DIR}/src" "${FRONTEND_DIR}/index.html" "${FRONTEND_DIR}/package.json" \
+        "${FRONTEND_DIR}/vite.config.ts" "${FRONTEND_DIR}/tailwind.config.ts" \
+        "${FRONTEND_DIR}/postcss.config.js" -type f -newer "${FRONTEND_DIR}/dist/index.html" \
+        -print -quit | grep -q .; then
+        NEED_BUILD=1
+    fi
+    if [[ "$NEED_BUILD" -eq 1 ]]; then
+        echo "[setup] Build du front React - dist absent ou sources modifiees..."
+        cd "${FRONTEND_DIR}"
+        [ -d node_modules ] || pnpm install
+        pnpm build
+        cd "${BACKEND_DIR}"
+    fi
+fi
+
 # Vérifier que le port est libre
 if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
     echo "[erreur] Le port $PORT est deja utilise :"

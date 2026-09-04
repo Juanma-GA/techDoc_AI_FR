@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>BRDP Manager</title>
+    <!-- Anti-flash : applique le theme avant le render (defaut sombre, comme le
+         preview). Toggle via la classe .dark sur <html>. -->
+    <script>
+      (function () {
+        var stored = localStorage.getItem("theme");
+        if (stored !== "light") {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
+    <!-- Polices du standard preview : Inter / JetBrains Mono / Orbitron. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700&display=swap"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

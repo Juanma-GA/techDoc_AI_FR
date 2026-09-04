@@ -8,14 +8,14 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.checks.custom_rules import active_custom_rule_count, run_custom_rules
 from app.core.errors import AppError
 from app.core.indexer import index_file_version
-from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
+from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled, requires_llm
 from app.core.rules import ANOMALY_TYPES
 from app.db.models import AnalysisRun, Anomaly, File, Project
 from app.db.session import get_db
@@ -73,6 +73,7 @@ def _project_or_404(db: Session, project_id: uuid.UUID) -> Project:
 
 
 @router.post("/projects/{project_id}/analysis/run", response_model=AnalysisRunOut)
+@requires_llm("corpus-agent.analysis.run")
 def run_analysis(
     project_id: uuid.UUID,
     body: AnalysisRunIn | None = None,
@@ -229,9 +230,10 @@ def list_runs(project_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Anal
     )
 
 
-@router.delete("/projects/{project_id}/analysis/reset", status_code=204)
-def reset_analysis(project_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/projects/{project_id}/analysis/reset", status_code=204, response_class=Response)
+def reset_analysis(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     _project_or_404(db, project_id)
     db.execute(delete(Anomaly).where(Anomaly.project_id == project_id))
     db.execute(delete(AnalysisRun).where(AnalysisRun.project_id == project_id))
     db.commit()
+    return Response(status_code=204)

@@ -32,6 +32,9 @@ yarn-error.log*
 **/dist/
 **/build/
 
+# Cache incremental TypeScript (regenere par tsc/vite a chaque build)
+*.tsbuildinfo
+
 # Tests
 playwright-report/
 test-results/
@@ -43,6 +46,9 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+
+# Polices telechargees au runtime (cf. apps/doc-writer/backend/app/core/fonts.py)
+apps/*/backend/app/assets/fonts/*.ttf
 
 # Env / secrets
 .env
@@ -65,10 +71,6 @@ desktop.ini
 # Misc
 *.log
 .cache/
-
-# Legacy v1 — contient son propre .git, exclu pour eviter
-# le conflit nested repo (cf. git status).
-legacy/ftm-v1/FTM Agent/
 
 # Claude Code local config (paths machine, hooks, permissions)
 .claude/
