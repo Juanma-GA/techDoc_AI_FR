@@ -9,6 +9,12 @@ export type BatchUploadResult = {
   ignored: string[];
 };
 
+type UploadDocumentVariables = {
+  file: File;
+  target: "metric" | "imperial" | "auto" | "none";
+  standardVersionIds?: string[];
+};
+
 export function useDocuments() {
   return useQuery({
     queryKey: ["documents"],
@@ -26,7 +32,7 @@ export function useDocument(id: string | undefined) {
 
 export function useUploadDocument() {
   const qc = useQueryClient();
-  return useMutation({
+  return useMutation<Document | BatchUploadResult, Error, UploadDocumentVariables>({
     // Cle stable : permet de retrouver l'etat "upload en cours" via
     // `useIsMutating` (cache global TanStack Query) meme si le composant qui
     // a lance l'upload a ete demonte entre-temps (navigation puis retour sur
@@ -38,27 +44,16 @@ export function useUploadDocument() {
       file,
       target,
       standardVersionIds,
-      wordMode,
-    }: {
-      file: File;
-      target: "metric" | "imperial" | "auto" | "none";
-      // Set de normes cibles actives (Parametres). Le backend accepte un
-      // `standard_version_ids` repete et le persiste sur le document.
-      standardVersionIds?: string[];
-      // Pipeline de revue (dual-mode) : "pdf" (defaut) ou "docx" (Word natif).
-      wordMode?: "pdf" | "docx";
-    }) => {
+    }: UploadDocumentVariables) => {
       const params = new URLSearchParams({ target });
       // Le backend attend une chaine CSV `standard_version_ids=id1,id2`
       // (Query Optional[str], split sur ","), pas des params repetes.
       const ids = (standardVersionIds ?? []).filter(Boolean);
       if (ids.length > 0) params.set("standard_version_ids", ids.join(","));
-      if (wordMode === "docx") params.set("word_mode", "docx");
       const fd = new FormData();
-      // Les .zip passent par /documents/batch (extraction + conversion Word
-      // -> PDF cote serveur) ; un fichier unique passe par /documents. Le mode
-      // Word natif ne s'applique qu'au fichier unique (.docx).
-      if (wordMode !== "docx" && file.name.toLowerCase().endsWith(".zip")) {
+      // Les .zip passent par /documents/batch ; un fichier unique passe par
+      // /documents, qui choisit automatiquement son format de travail.
+      if (file.name.toLowerCase().endsWith(".zip")) {
         fd.append("files", file);
         return api.upload<BatchUploadResult>(`/documents/batch?${params.toString()}`, fd);
       }
@@ -106,6 +101,7 @@ export type DocumentMetaPatch = {
   meta_cmm_number?: string | null;
   meta_first_issue_date?: string | null;
   meta_revision_number?: string | null;
+  document_language?: "fr" | "en" | null;
 };
 
 /** Mapping manuel par document (repris par les consignes de checklist qui

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -7,6 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 import { useDocuments } from "../hooks/useDocuments";
 import { useRules } from "../hooks/useRules";
 import { api } from "../lib/api";
+import { useFiltersStore } from "../stores/filtersStore";
 import type {
   ResetAllResult,
   Rule,
@@ -18,6 +19,9 @@ type Dialog = "sugs" | "all" | null;
 
 export function Data(): JSX.Element {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const clearActiveStandards = useFiltersStore((s) => s.clearActiveStandards);
+  const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
 
   const docs = useDocuments();
   const rules = useRules();
@@ -55,9 +59,16 @@ export function Data(): JSX.Element {
     api
       .post<ResetAllResult>("/admin/reset")
       .then(async (r) => {
+        clearActiveStandards();
+        setChecklistActive(false);
+        await queryClient.invalidateQueries({ queryKey: ["compiled-rules"] });
         const folders = r.storage_folders_cleaned + r.orphan_folders_cleaned;
         setFeedback(
-          t("data.resetDone", { docs: r.documents_deleted, folders }),
+          t("data.resetDone", {
+            docs: r.documents_deleted,
+            rules: r.rules_deleted + r.checklist_rules_deleted,
+            folders,
+          }),
         );
         await refresh();
       })

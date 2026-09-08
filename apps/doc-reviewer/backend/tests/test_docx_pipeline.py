@@ -29,9 +29,9 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool before the check.")
 
-    # 1. Upload en mode Word natif.
+    # 1. Upload : le format d'entree selectionne automatiquement le mode natif.
     up = client.post(
-        f"/api/v1/documents?word_mode=docx&standard_version_ids={sv_id}",
+        f"/api/v1/documents?standard_version_ids={sv_id}",
         files={
             "file": (
                 "manual.docx",
@@ -89,7 +89,7 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool.")
     up = client.post(
-        f"/api/v1/documents?word_mode=docx&standard_version_ids={sv_id}",
+        f"/api/v1/documents?standard_version_ids={sv_id}",
         files={"file": ("m.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
     )
     doc_id = up.json()["id"]
@@ -109,15 +109,6 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
     assert rev.json()["new_version"] == 0
     restored = Docx(io.BytesIO(client.get(f"/api/v1/documents/{doc_id}/export").content))
     assert "utilize" in "\n".join(p.text for p in restored.paragraphs)
-
-
-def test_docx_mode_rejects_non_docx(client: TestClient) -> None:
-    up = client.post(
-        "/api/v1/documents?word_mode=docx",
-        files={"file": ("notes.pdf", b"%PDF-1.4 fake", "application/pdf")},
-    )
-    assert up.status_code == 400
-    assert up.json()["code"] == "DOCX_MODE_REQUIRES_DOCX"
 
 
 def test_docx_upload_selects_working_format_automatically(client: TestClient) -> None:

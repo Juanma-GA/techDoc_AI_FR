@@ -80,7 +80,8 @@ _OUTPUT_INSTRUCTIONS = (
 
 
 _BATCH_LIMIT = 30
-_TIMEOUT_S = 30.0
+_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
+_NETWORK_ATTEMPTS = 2
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -137,23 +138,47 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
         "temperature": temperature,
         "response_format": {"type": "json_object"},
     }
-    try:
-        with httpx.Client(timeout=_TIMEOUT_S) as client:
-            r = client.post(
-                f"{s['base_url'].rstrip('/')}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {s['api_key']}",
-                    "Content-Type": "application/json",
-                },
-                content=json.dumps(payload),
+    r: httpx.Response | None = None
+    for attempt in range(1, _NETWORK_ATTEMPTS + 1):
+        try:
+            with httpx.Client(timeout=_TIMEOUT) as client:
+                r = client.post(
+                    f"{s['base_url'].rstrip('/')}/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {s['api_key']}",
+                        "Content-Type": "application/json",
+                    },
+                    content=json.dumps(payload),
+                )
+            break
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            logger.warning(
+                "llm_network_error",
+                error=type(exc).__name__,
+                message=str(exc),
+                attempt=attempt,
+                retrying=attempt < _NETWORK_ATTEMPTS,
             )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("llm_network_error", error=type(exc).__name__, message=str(exc))
+            if attempt == _NETWORK_ATTEMPTS:
+                raise AppError(
+                    "LLM_REPHRASE_FAILED",
+                    f"Échec d'appel Mistral : {type(exc).__name__}",
+                    status_code=502,
+                ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("llm_network_error", error=type(exc).__name__, message=str(exc))
+            raise AppError(
+                "LLM_REPHRASE_FAILED",
+                f"Échec d'appel Mistral : {type(exc).__name__}",
+                status_code=502,
+            ) from exc
+
+    if r is None:
         raise AppError(
             "LLM_REPHRASE_FAILED",
-            f"Échec d'appel Mistral : {type(exc).__name__}",
+            "Échec d'appel Mistral sans réponse.",
             status_code=502,
-        ) from exc
+        )
 
     if r.status_code != 200:
         raise AppError(

@@ -15,16 +15,21 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
 from app.core import ingest
+from app.core.checklist_compiler import compile_checklist_rule
+from app.core.compiled_rule_store import persist_compiled_rule
+from app.core.compiled_rules import validate_compiled_rule_json
+from app.core.standard_rule_compiler import compile_standard_rule
 from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.llm_suggester import suggest_rules_from_corpus
 from app.core.pdf_versioning import current_path
 from app.core.rules_engine import validate_rule_pattern
-from app.db.models import Document, Rule, StandardVersion
+from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion
 from app.db.session import get_db
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import (
     RuleImportResult,
+    CompiledRuleSummary,
     RuleIn,
     RuleOut,
     RulePatchIn,
@@ -280,6 +285,71 @@ def _name_key(name: str) -> str:
     return " ".join(name.split()).strip().lower()
 
 
+def _compiled_summary(row: CompiledRuleVersion) -> CompiledRuleSummary:
+    rule = validate_compiled_rule_json(row.compiled_json)
+    return CompiledRuleSummary(
+        id=rule.id,
+        topic=rule.topic,
+        execution=rule.execution,
+        active=row.active,
+        source=rule.source,
+        origin_ref=rule.origin_ref,
+        manual_instruction=rule.manual_instruction,
+        compilation_error=rule.compilation_error,
+    )
+
+
+@router.get("/compiled-rules", response_model=list[CompiledRuleSummary])
+def list_compiled_rules(
+    standard_version_id: list[uuid.UUID] = Query(default=[]),
+    db: Session = Depends(get_db),
+) -> list[CompiledRuleSummary]:
+    summaries: dict[str, CompiledRuleSummary] = {}
+    versions: list[StandardVersion] = []
+    if standard_version_id:
+        versions = list(
+            db.scalars(
+                select(StandardVersion)
+                .where(StandardVersion.id.in_(standard_version_id))
+                .order_by(StandardVersion.created_at)
+            )
+        )
+    for version in versions:
+        try:
+            disabled_codes = set(json.loads(version.disabled_rule_codes or "[]"))
+        except (TypeError, ValueError):
+            disabled_codes = set()
+        try:
+            catalog = json.loads(version.catalog_json or "[]")
+        except (TypeError, ValueError):
+            catalog = []
+        for source in catalog if isinstance(catalog, list) else []:
+            if str(source.get("code") or "") in disabled_codes:
+                continue
+            rule = compile_standard_rule(
+                source,
+                f"{version.standard.code}:{version.label}:{source.get('code', '')}",
+            )
+            if rule is not None:
+                summaries[rule.id] = CompiledRuleSummary(
+                    id=rule.id,
+                    topic=rule.topic,
+                    execution=rule.execution,
+                    active=True,
+                    source=rule.source,
+                    origin_ref=rule.origin_ref,
+                )
+    rows = list(
+        db.scalars(
+            select(CompiledRuleVersion).order_by(CompiledRuleVersion.created_at.desc())
+        )
+    )
+    for row in rows:
+        summary = _compiled_summary(row)
+        summaries[summary.id] = summary
+    return list(summaries.values())
+
+
 @router.post("/rules/import", response_model=RuleImportResult)
 async def import_checklist(
     file: UploadFile,
@@ -288,15 +358,10 @@ async def import_checklist(
     mode: str = Form(default="replace"),
     db: Session = Depends(get_db),
 ) -> RuleImportResult:
-    """Importe une checklist Excel en regles `llm_nl` (consigne = prompt Mistral).
+    """Compile chaque ligne via Mistral et conserve tous les résultats typés.
 
-    - `mode=replace` : purge d'abord les regles checklist existantes (`llm_nl` /
-      `manual`), puis reimporte. `mode=add` : ajoute sans purger (dedup par nom).
-    - Les lignes « manuelles » (verification visuelle humaine) sont **ignorees**
-      (comptees dans `skipped_manual`) : le LLM ne peut pas les juger sur du texte.
-    - Les regles importees arrivent **desactivees** (`enabled=false`) : l'utilisateur
-      active celles qu'il veut (switch UI) ou tout via `/rules/validate-all`, ce qui
-      evite d'envoyer 100 consignes au LLM des le premier import.
+    Les règles déterministes valides sont actives immédiatement. Les règles
+    manuelles ou non supportées restent persistées et visibles, sans être exécutées.
     """
     if mode not in {"replace", "add"}:
         raise AppError("BAD_MODE", f"Mode d'import inconnu : {mode}.", status_code=400)
@@ -316,15 +381,28 @@ async def import_checklist(
 
     replaced_count = 0
     if mode == "replace":
-        existing = list(db.scalars(select(Rule).where(Rule.kind.in_(_CHECKLIST_KINDS))))
+        existing = list(
+            db.scalars(
+                select(CompiledRuleVersion).where(
+                    CompiledRuleVersion.source == "user_checklist"
+                )
+            )
+        )
         replaced_count = len(existing)
+        db.execute(
+            delete(CompiledRuleVersion).where(
+                CompiledRuleVersion.source == "user_checklist"
+            )
+        )
         db.execute(delete(Rule).where(Rule.kind.in_(_CHECKLIST_KINDS)))
 
     existing_keys: set[str] = set()
     if mode == "add":
         existing_keys = {
-            _name_key(n) for (n,) in db.execute(
-                select(Rule.name).where(Rule.kind.in_(_CHECKLIST_KINDS))
+            code for (code,) in db.execute(
+                select(CompiledRuleVersion.code).where(
+                    CompiledRuleVersion.source == "user_checklist"
+                )
             )
         }
 
@@ -332,28 +410,16 @@ async def import_checklist(
     skipped_manual = 0
     by_kind: dict[str, int] = {}
     seen: set[str] = set(existing_keys)
+    compiled_rows: list[CompiledRuleVersion] = []
     for pr in parsed:
-        if pr.kind == "manual":
-            skipped_manual += 1
+        compiled = compile_checklist_rule(db, pr, file.filename or "checklist.xlsx")
+        if compiled.id in seen:
             continue
-        key = _name_key(pr.name)
-        if key in seen:
-            continue
-        seen.add(key)
-        db.add(
-            Rule(
-                name=pr.name[:255],
-                kind="llm_nl",
-                pattern="",  # consigne NL, pas de regex : jugee par le LLM
-                replacement="",
-                severity=pr.severity if pr.severity in {"info", "warning", "error"} else "warning",
-                message=pr.message,
-                enabled=False,
-                standard_version_id=None,
-            )
-        )
+        seen.add(compiled.id)
+        row = persist_compiled_rule(db, compiled)
+        compiled_rows.append(row)
         imported += 1
-        by_kind["llm_nl"] = by_kind.get("llm_nl", 0) + 1
+        by_kind[compiled.execution] = by_kind.get(compiled.execution, 0) + 1
 
     db.commit()
     return RuleImportResult(
@@ -362,6 +428,7 @@ async def import_checklist(
         replaced_count=replaced_count,
         by_kind=by_kind,
         skipped_manual=skipped_manual,
+        rules=[_compiled_summary(row) for row in compiled_rows],
     )
 
 

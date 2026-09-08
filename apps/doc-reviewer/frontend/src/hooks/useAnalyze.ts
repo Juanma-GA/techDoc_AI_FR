@@ -14,6 +14,12 @@ export type AnalyzeQuality = {
   engine: string;
 };
 
+export type AnalyzeOptions = {
+  vision?: boolean;
+  firstPage?: number;
+  lastPage?: number;
+};
+
 export function useAnalyze(documentId: string | undefined) {
   const qc = useQueryClient();
   const checklistActive = useFiltersStore((s) => s.checklistActive);
@@ -26,7 +32,7 @@ export function useAnalyze(documentId: string | undefined) {
   // le resultat peut etre incomplet — ne doit jamais passer inaperçu.
   const [warnings, setWarnings] = useState<string[]>([]);
 
-  const start = useCallback(async (vision?: boolean) => {
+  const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
     setStatus("running");
     setProgress(0);
@@ -38,7 +44,9 @@ export function useAnalyze(documentId: string | undefined) {
       // Cible « checklist » (toggle Documents) transmise a chaque run ; `vision`
       // override le reglage persiste le temps d'un run.
       const params = new URLSearchParams({ checklist: String(checklistActive) });
-      if (vision !== undefined) params.set("vision", String(vision));
+      if (options.vision !== undefined) params.set("vision", String(options.vision));
+      if (options.firstPage !== undefined) params.set("first_page", String(options.firstPage));
+      if (options.lastPage !== undefined) params.set("last_page", String(options.lastPage));
       const url = `${API_BASE_URL}/documents/${documentId}/analyze?${params.toString()}`;
       const response = await fetch(url, {
         method: "POST",
@@ -113,6 +121,7 @@ export function useAnalyze(documentId: string | undefined) {
         }
       }
       qc.invalidateQueries({ queryKey: ["suggestions", documentId] });
+      qc.invalidateQueries({ queryKey: ["rule-results", documentId] });
       qc.invalidateQueries({ queryKey: ["document", documentId] });
       if (status !== "error") setStatus("done");
     } catch (exc) {

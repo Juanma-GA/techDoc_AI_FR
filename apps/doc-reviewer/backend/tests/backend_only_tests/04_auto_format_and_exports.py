@@ -3,8 +3,8 @@
 Run with the backend venv, for example:
     .venv\\Scripts\\python.exe tests\\backend_only_tests\\04_auto_format_and_exports.py path\\to\\file.docx
 
-The script never sends word_mode. It prints every request and saves the
-metadata/export manifest under backend_only_tests/outputs.
+The script prints every request and saves the metadata/export manifest under
+backend_only_tests/outputs.
 """
 from __future__ import annotations
 

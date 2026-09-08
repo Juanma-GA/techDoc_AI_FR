@@ -97,5 +97,6 @@ export function effectiveTarget(
   units: ("metric" | "imperial")[],
 ): "metric" | "imperial" | "auto" | "none" {
   if (units.length === 0) return "none";
-  return units.length === 1 ? units[0] : "auto";
+  const selectedUnit = units[0];
+  return units.length === 1 && selectedUnit ? selectedUnit : "auto";
 }

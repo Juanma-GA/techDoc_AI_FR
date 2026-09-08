@@ -24,12 +24,14 @@ export function DocumentMetaPanel({ document }: Props) {
   const [cmmNumber, setCmmNumber] = useState(document.meta_cmm_number ?? "");
   const [firstIssueDate, setFirstIssueDate] = useState(document.meta_first_issue_date ?? "");
   const [revisionNumber, setRevisionNumber] = useState(document.meta_revision_number ?? "");
+  const [documentLanguage, setDocumentLanguage] = useState(document.document_language ?? "");
 
   useEffect(() => {
     setRevisionDate(document.meta_revision_date ?? "");
     setCmmNumber(document.meta_cmm_number ?? "");
     setFirstIssueDate(document.meta_first_issue_date ?? "");
     setRevisionNumber(document.meta_revision_number ?? "");
+    setDocumentLanguage(document.document_language ?? "");
   }, [document]);
 
   function save(): void {
@@ -38,6 +40,7 @@ export function DocumentMetaPanel({ document }: Props) {
       meta_cmm_number: cmmNumber || null,
       meta_first_issue_date: firstIssueDate || null,
       meta_revision_number: revisionNumber || null,
+      document_language: documentLanguage === "fr" || documentLanguage === "en" ? documentLanguage : null,
     });
   }
 
@@ -51,7 +54,10 @@ export function DocumentMetaPanel({ document }: Props) {
   }
 
   return (
-    <div className="card" style={{ position: "fixed", top: 52, right: 16, zIndex: 20, width: 320 }}>
+    <div
+      className="card"
+      style={{ position: "fixed", top: 52, right: 16, zIndex: 20, width: 320, maxHeight: "calc(100vh - 68px)", overflowY: "auto" }}
+    >
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
         <div className="card-title" style={{ margin: 0 }}>
           {t("reviewer.meta.title")}
@@ -101,6 +107,19 @@ export function DocumentMetaPanel({ document }: Props) {
           onBlur={save}
           placeholder={t("reviewer.meta.revisionNumberPlaceholder")}
         />
+      </label>
+      <label className="label">
+        {t("reviewer.meta.documentLanguage")}
+        <select
+          className="input"
+          value={documentLanguage}
+          onChange={(e) => setDocumentLanguage(e.target.value)}
+          onBlur={save}
+        >
+          <option value="">{t("reviewer.meta.languageUnset")}</option>
+          <option value="fr">{t("reviewer.meta.languageFr")}</option>
+          <option value="en">{t("reviewer.meta.languageEn")}</option>
+        </select>
       </label>
     </div>
   );

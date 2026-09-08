@@ -278,15 +278,6 @@ def _persist_docx(
 def upload_document(
     file: UploadFile = File(...),
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
-    word_mode: Optional[Literal["pdf", "docx"]] = Query(
-        default=None,
-        description=(
-            "Pipeline de revue (dual-mode). 'pdf' (defaut) : conversion en PDF "
-            "fidele puis edition PDF. 'docx' : revue Word native (.doc/.docx), "
-            "sortie dans le format d'origine (un .doc est converti en interne "
-            "puis reconverti a l'export, sans etape manuelle)."
-        ),
-    ),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
     standard_version_ids: Optional[str] = Query(
         default=None,
@@ -305,23 +296,6 @@ def upload_document(
             status_code=400,
         )
     data = file.file.read()
-    # `word_mode` is retained only for old clients. New clients omit it and
-    # the source extension determines the working format automatically.
-    if word_mode == "docx":
-        return _persist_docx(
-            name, data, target, db,
-            standard_version_id=primary,
-            standard_version_ids=all_ids,
-        )
-    if word_mode == "pdf":
-        detected_source = Path(name).suffix.lower().lstrip(".") or "pdf"
-        return _ingest_and_persist(
-            name, data, target, db,
-            standard_version_id=primary,
-            standard_version_ids=all_ids,
-            source_format=detected_source,
-            original_data=data,
-        )
     prepared = ingest.prepare_document(name, data)
     if prepared.working_format == "docx":
         return _persist_docx(
@@ -433,9 +407,7 @@ def patch_document_meta(
     body: DocumentMetaPatchIn,
     db: Session = Depends(get_db),
 ) -> Document:
-    """Enregistre le mapping manuel du document (date de revision, numero
-    CMM, date de premiere issue, numero de revision) — repris par les
-    consignes de checklist lors du scan IA (cf. rules_engine)."""
+    """Enregistre le mapping manuel et la langue du document."""
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)

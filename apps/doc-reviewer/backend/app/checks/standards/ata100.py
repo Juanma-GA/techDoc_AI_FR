@@ -13,15 +13,18 @@ from app.checks.standards._base import StandardRule
 _RULES_REV38 = [
     StandardRule(
         code="ATA_CHAPTER_REF",
-        title="Référence chapitre ATA bien formée",
+        title="Référence chapitre ATA mal formée",
         description=(
-            "Les renvois doivent suivre le format chapitre-section-sujet "
-            "(ex : 24-21-00). Le tiret est obligatoire."
+            "Signale les références explicitement préfixées ATA, Chapter ou Chapitre "
+            "qui ne suivent pas le format chapitre-section-sujet (ex : ATA 24-21-00)."
         ),
         kind="regex_flag",
         severity="warning",
-        pattern=r"\b\d{2}-\d{2}-\d{2}\b",
-        message="Référence ATA — vérifier le format CH-SE-SU.",
+        pattern=(
+            r"\b(?i:ATA|Chapter|Chapitre)\s+"
+            r"(?!\d{2}-\d{2}-\d{2}\b)\d{1,3}(?:\s*[-./]\s*\d{1,3}){0,2}\b"
+        ),
+        message="Référence ATA mal formée — utiliser le format CH-SE-SU.",
     ),
     StandardRule(
         code="ATA_CHAPTER_RANGE",

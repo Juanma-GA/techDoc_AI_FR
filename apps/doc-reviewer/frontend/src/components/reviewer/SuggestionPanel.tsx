@@ -3,10 +3,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFiltersStore } from "../../stores/filtersStore";
+import { useRuleResults } from "../../hooks/useSuggestions";
 import type { SourceKind, Suggestion } from "../../types/domain";
 import { SuggestionItem } from "./SuggestionItem";
 
 type Props = {
+  documentId: string;
   suggestions: Suggestion[];
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -35,6 +37,7 @@ const PENDING_STATUSES = new Set(["open", "accepted", "edited"]);
 const SOURCE_KINDS: SourceKind[] = ["norme", "checklist", "regle", "transverse"];
 
 export function SuggestionPanel({
+  documentId,
   suggestions,
   selectedId,
   onSelect,
@@ -47,6 +50,7 @@ export function SuggestionPanel({
   onUndo,
 }: Props) {
   const { t } = useTranslation();
+  const ruleResults = useRuleResults(documentId);
   const showUnits = useFiltersStore((s) => s.showUnitConversions);
   const hideAccepted = useFiltersStore((s) => s.hideAccepted);
   const sourceKindFilter = useFiltersStore((s) => s.sourceKindFilter);
@@ -169,6 +173,32 @@ export function SuggestionPanel({
       </div>
 
       <div ref={containerRef} className="reviewer-panel-body">
+        {(ruleResults.data?.length ?? 0) > 0 ? (
+          <section style={{ padding: "0 12px 10px" }}>
+            <div className="rules-section-title">{t("reviewer.compiled.title")}</div>
+            {ruleResults.data?.map((result) => {
+              const location = result.evidence?.location;
+              const locationLabel = location?.type === "bbox"
+                ? `bbox ${location.bbox.join(", ")}`
+                : location?.type === "target_id" ? location.target_id : "";
+              return (
+                <div key={result.rule_id} className="banner" data-rule-status={result.status} style={{ marginBottom: 6 }}>
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    <span className={`badge ${result.status === "PASS" ? "success" : "default"}`}>{result.status}</span>
+                    <strong>{result.rule_id}</strong>
+                    {result.evidence ? <span className="label">{t("reviewer.compiled.location", { page: result.evidence.page, location: locationLabel })}</span> : null}
+                  </div>
+                  {result.evidence ? (
+                    <div className="label">{t("reviewer.compiled.values", {
+                      observed: result.evidence.observed_value ?? "—",
+                      expected: result.evidence.expected_value ?? "—",
+                    })}</div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </section>
+        ) : null}
         {visible.length === 0 ? (
           <p className="empty-state">{t("reviewer.panel.empty")}</p>
         ) : (

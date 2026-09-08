@@ -1,17 +1,18 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
   importChecklist,
   rulesInspect,
-  useValidateAllRules,
+  type CompiledRuleSummary,
   type SheetInfo,
 } from "../hooks/useRules";
 import { API_BASE_URL } from "../lib/api";
 
 type Mode = "replace" | "add";
+type ImportPhase = "inspect" | "compile";
 
 /** Index colonne 0-based -> lettre tableur (A, B, ... AA). */
 function colLabel(idx: number): string {
@@ -27,12 +28,11 @@ function colLabel(idx: number): string {
 /**
  * Import d'une checklist Excel : choix du fichier -> apercu (inspect) -> onglet +
  * ligne d'en-tete + mapping des colonnes (tableau cliquable) -> import. Inspire
- * de l'UI corpus-agent. Les regles importees arrivent desactivees (curation).
+ * de l'UI corpus-agent. Les regles deterministes sont actives des compilation.
  */
 export function ChecklistImportCard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const validateAll = useValidateAllRules();
 
   const [file, setFile] = useState<File | null>(null);
   const [sheets, setSheets] = useState<SheetInfo[]>([]);
@@ -46,9 +46,10 @@ export function ChecklistImportCard() {
   const [contextCol, setContextCol] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("replace");
   const [msg, setMsg] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [directBusy, setDirectBusy] = useState(false);
+  const [phase, setPhase] = useState<ImportPhase | null>(null);
   const [diag, setDiag] = useState("");
+  const [compiledRules, setCompiledRules] = useState<CompiledRuleSummary[]>([]);
+  const busy = phase !== null;
 
   const sheet = sheets[sheetIdx];
   const ncols = sheet ? Math.max(0, ...sheet.rows.map((r) => r.length)) : 0;
@@ -64,8 +65,9 @@ export function ChecklistImportCard() {
     setSheets([]);
     setMsg("");
     setDiag("");
+    setCompiledRules([]);
     if (!f) return;
-    setBusy(true);
+    setPhase("inspect");
     try {
       const out = await rulesInspect(f);
       const sh = out?.sheets ?? [];
@@ -87,7 +89,7 @@ export function ChecklistImportCard() {
     } catch (e) {
       setDiag(t("rules.import.inspectFail", { error: e instanceof Error ? e.message : String(e) }));
     } finally {
-      setBusy(false);
+      setPhase(null);
     }
   }
 
@@ -101,22 +103,26 @@ export function ChecklistImportCard() {
 
   async function doDirectImport(): Promise<void> {
     if (!file) return;
-    setDirectBusy(true);
+    setPhase("compile");
     setMsg("");
     try {
       const r = await importChecklist(file, { mode });
       setMsg(resultMsg(r));
-      await qc.invalidateQueries({ queryKey: ["rules"] });
+      setCompiledRules(r.rules);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["rules"] }),
+        qc.invalidateQueries({ queryKey: ["compiled-rules"] }),
+      ]);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
-      setDirectBusy(false);
+      setPhase(null);
     }
   }
 
   async function doImport(): Promise<void> {
     if (!file || checkCol == null) return;
-    setBusy(true);
+    setPhase("compile");
     setMsg("");
     try {
       const r = await importChecklist(file, {
@@ -131,11 +137,15 @@ export function ChecklistImportCard() {
         context: contextCol != null ? [contextCol] : [],
       });
       setMsg(resultMsg(r));
-      await qc.invalidateQueries({ queryKey: ["rules"] });
+      setCompiledRules(r.rules);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["rules"] }),
+        qc.invalidateQueries({ queryKey: ["compiled-rules"] }),
+      ]);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(false);
+      setPhase(null);
     }
   }
 
@@ -171,18 +181,12 @@ export function ChecklistImportCard() {
         <input
           type="file"
           accept=".xlsx,.xlsm"
+          disabled={busy}
           onChange={(e) => onPick(e.target.files?.[0] ?? null)}
         />
-        <button
-          type="button"
-          className="btn secondary small"
-          disabled={validateAll.isPending}
-          onClick={() => validateAll.mutate()}
-        >
-          <CheckCheck size={13} />
-          {t("rules.import.validateAll")}
-        </button>
       </div>
+
+      {phase ? <ChecklistImportProgress phase={phase} /> : null}
 
       {mode === "replace" ? (
         <p className="banner warn" style={{ marginTop: 8 }}>
@@ -199,10 +203,10 @@ export function ChecklistImportCard() {
           <button
             type="button"
             className="btn primary small"
-            disabled={directBusy}
+            disabled={busy}
             onClick={doDirectImport}
           >
-            {directBusy ? t("rules.import.importing") : t("rules.import.direct")}
+            {phase === "compile" ? t("rules.import.importing") : t("rules.import.direct")}
           </button>
           <span className="label">{t("rules.import.directHint")}</span>
         </div>
@@ -317,13 +321,52 @@ export function ChecklistImportCard() {
           {msg}
         </p>
       ) : null}
-      {validateAll.data ? (
-        <p className="banner ok" style={{ marginTop: 8 }}>
-          {t("rules.import.activated", { count: validateAll.data.activated })}
-        </p>
+      {compiledRules.length > 0 ? (
+        <div style={{ overflowX: "auto", marginTop: 8 }}>
+          <table className="rules-table">
+            <thead>
+              <tr>
+                <th>{t("rules.compiled.status")}</th>
+                <th>{t("rules.form.name")}</th>
+                <th>{t("rules.compiled.detail")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <CompiledRuleRows rules={compiledRules} />
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </div>
   );
+}
+
+export function ChecklistImportProgress({ phase }: { phase: ImportPhase }) {
+  const { t } = useTranslation();
+  const label = t(`rules.import.progress.${phase}`);
+  return (
+    <div className="checklist-import-progress">
+      <span className="label">{label}</span>
+      <div className="progress" role="progressbar" aria-label={label}>
+        <div className="progress-bar indeterminate" />
+      </div>
+    </div>
+  );
+}
+
+export function CompiledRuleRows({ rules }: { rules: CompiledRuleSummary[] }) {
+  const { t } = useTranslation();
+  return rules.map((rule) => (
+    <tr key={rule.id} data-execution={rule.execution}>
+      <td>
+        <span className={`badge ${rule.execution === "deterministic" ? "success" : "default"}`}>
+          {t(`rules.compiled.${rule.execution}`)}
+        </span>
+      </td>
+      <td>{rule.topic}</td>
+      <td>{rule.manual_instruction ?? rule.compilation_error ?? t("rules.compiled.activeImmediately")}</td>
+    </tr>
+  ));
 }
 
 function ColSelect({

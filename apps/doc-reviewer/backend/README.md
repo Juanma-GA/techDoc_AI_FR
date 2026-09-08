@@ -17,9 +17,6 @@ without applying corrections. For DOCX, this renders a temporary PDF and does
 not replace the DOCX working version. DOCX-to-DOC is only available when
 LibreOffice is installed and may lose layout fidelity.
 
-The legacy `word_mode=pdf|docx` upload query is accepted for existing clients,
-but new clients must omit it and rely on automatic selection.
-
 Example:
 
 ```bash

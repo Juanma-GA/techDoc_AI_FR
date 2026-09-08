@@ -20,10 +20,14 @@ from sqlalchemy.orm import Session
 
 from app.checks import catalog_runner, custom_rules, layout_checks, units_check, vision_checks
 from app.checks.raw import RawSuggestion
+from app.core.compiled_rule_executor import execute_pdf_rules
+from app.core.compiled_rules import CompiledRule, RuleResult, validate_compiled_rule_json
 from app.core.errors import AppError
 from app.core.llm_suggester import rephrase_batch, scan_with_prompt
 from app.core.mistral_settings import get_ai_custom_prompt, get_vision_enabled
-from app.db.models import Document, Rule, StandardVersion, Suggestion
+from app.core.rule_applicability import RuleExecutionContext, is_rule_kind_applicable
+from app.core.standard_rule_compiler import MIGRATED_REGEX_FLAG_CODES, compile_standard_rule
+from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion, Suggestion
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, find_span_bbox, locate_with_search_for
 
 import structlog
@@ -53,8 +57,11 @@ def run_all(
     src_path: Optional[str] = None,
     vision_enabled_override: Optional[bool] = None,
     checklist_enabled: bool = True,
+    layout_enabled: bool = False,
     progress_cb: Optional[Callable[[int], None]] = None,
     warnings: Optional[list[str]] = None,
+    compiled_results: Optional[list[RuleResult]] = None,
+    execute_compiled: bool = True,
 ) -> list[RawSuggestion]:
     """Run every check against the parsed PDF, return raw suggestions.
 
@@ -78,6 +85,10 @@ def run_all(
     wall-clock time when checklist rules are active.
     """
     versions = standard_versions or []
+    execution_context = RuleExecutionContext.from_document(
+        document,
+        layout_enabled=layout_enabled,
+    )
     raw_target = document.target_unit_system
     target = raw_target if raw_target in {"metric", "imperial", "auto"} else "none"
     units_active = target != "none"
@@ -90,7 +101,13 @@ def run_all(
         return []
 
     sv_ids = [v.id for v in versions]
-    catalog: list[dict] = _merge_catalogs(versions)
+    catalog: list[dict] = [
+        rule
+        for rule in _merge_catalogs(versions)
+        if is_rule_kind_applicable(str(rule.get("kind") or ""), execution_context)
+    ]
+    compiled_rules = load_compiled_rules(db, versions, checklist_enabled=checklist_enabled)
+    catalog = [rule for rule in catalog if str(rule.get("code") or "") not in MIGRATED_REGEX_FLAG_CODES]
 
     if sv_ids:
         rules_stmt = select(Rule).where(
@@ -108,15 +125,24 @@ def run_all(
     # que soit le detecteur qui la consommera ensuite.
     norm_rules = [r for r in rules if r.standard_version_id is not None and r.enabled]
     transverse_rules = [r for r in rules if r.standard_version_id is None and r.enabled]
-    active_custom = norm_rules + (transverse_rules if checklist_enabled else [])
+    active_custom = [
+        rule
+        for rule in norm_rules + (transverse_rules if checklist_enabled else [])
+        if is_rule_kind_applicable(rule.kind, execution_context)
+    ]
 
     out: list[RawSuggestion] = []
+    if execute_compiled and compiled_rules:
+        results, compiled_raws = execute_pdf_rules(parsed, compiled_rules)
+        if compiled_results is not None:
+            compiled_results.extend(results)
+        out.extend(compiled_raws)
     if catalog:
         out.extend(catalog_runner.run(parsed, catalog))
     out.extend(custom_rules.run(active_custom, parsed.pages))
     if units_active:
         out.extend(units_check.run(parsed.pages, target))  # type: ignore[arg-type]
-    if src_path:
+    if src_path and execution_context.layout_enabled:
         # Controles geometriques (alignement / disposition / pieds de page).
         try:
             out.extend(layout_checks.run(src_path))
@@ -136,6 +162,42 @@ def run_all(
     out = _enrich_with_ai(out, db)
     out = _apply_reliability(out, db)
     return _dedupe(out)
+
+
+def load_compiled_rules(
+    db: Session,
+    standard_versions: list[StandardVersion],
+    *,
+    checklist_enabled: bool,
+) -> list[CompiledRule]:
+    """Return deterministic rules for this run, de-duplicated by rule id."""
+    compiled: dict[str, CompiledRule] = {}
+    for version in standard_versions:
+        disabled_codes = _disabled_codes(version)
+        try:
+            catalog = json.loads(version.catalog_json or "[]")
+        except (TypeError, ValueError):
+            catalog = []
+        for source in catalog if isinstance(catalog, list) else []:
+            if str(source.get("code") or "") in disabled_codes:
+                continue
+            rule = compile_standard_rule(
+                source,
+                f"{version.standard.code}:{version.label}:{source.get('code', '')}",
+            )
+            if rule is not None:
+                compiled[rule.id] = rule
+    if checklist_enabled:
+        rows = db.scalars(
+            select(CompiledRuleVersion).where(
+                CompiledRuleVersion.source == "user_checklist",
+                CompiledRuleVersion.active.is_(True),
+            )
+        )
+        for row in rows:
+            rule = validate_compiled_rule_json(row.compiled_json)
+            compiled[rule.id] = rule
+    return list(compiled.values())
 
 
 def _apply_reliability(raws: list[RawSuggestion], db: Session) -> list[RawSuggestion]:
@@ -309,6 +371,7 @@ def _doc_meta_block(document: object) -> str:
         ("Numero CMM", getattr(document, "meta_cmm_number", None)),
         ("Date de premiere issue", getattr(document, "meta_first_issue_date", None)),
         ("Numero de revision", getattr(document, "meta_revision_number", None)),
+        ("Langue du document", getattr(document, "document_language", None)),
     ]
     lines = [
         f"- {label} : {_escape_meta_value(str(value))}"
@@ -403,15 +466,13 @@ def _run_ai_custom(
                 error_code=exc.code,
                 message=exc.message,
             )
-            # HR7 : ne jamais degrader silencieusement — un echec Mistral (cle
-            # invalide, modele inconnu sur un endpoint prive, quota…) doit
-            # remonter jusqu'a l'UI au lieu de se traduire par « 0 anomalie »
-            # sans explication.
+            # HR7 : signaler la degradation, mais laisser les autres lots de
+            # pages poursuivre leur analyse.
             if warnings is not None:
-                warnings.append(
-                    f"Scan checklist/IA interrompu ({exc.code}) : {exc.message}"
-                )
-            return out
+                warning = f"Scan checklist/IA partiellement indisponible ({exc.code}) : {exc.message}"
+                if warning not in warnings:
+                    warnings.append(warning)
+            continue
 
         for item in items:
             original = item["original"]
@@ -605,6 +666,10 @@ def classify_source(rule_kind: str, rule_code: str) -> str:
     """
     if rule_kind == "units" or rule_kind == "layout" or rule_kind == "vision":
         return "transverse"
+    if rule_kind == "compiled_standard":
+        return "norme"
+    if rule_kind == "compiled_checklist":
+        return "checklist"
     if rule_kind == "custom":
         return "checklist" if rule_code == "AI_SCAN" else "regle"
     if rule_kind == "standard":

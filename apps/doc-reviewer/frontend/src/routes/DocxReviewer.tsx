@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Play } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
   useApplyGroup,
@@ -116,17 +117,11 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
             <span className="badge info">{t("reviewer.docxMode")}</span>
           </div>
           <div className="reviewer-toolbar-group">
-            <button
-              type="button"
-              onClick={() => void analyze.start()}
-              disabled={analyze.status === "running"}
-              className="btn secondary small"
-            >
-              <Play size={14} />
-              {analyze.status === "running"
-                ? t("reviewer.toolbar.analyzing")
-                : t("reviewer.toolbar.analyze")}
-            </button>
+            <AnalysisPageRange
+              pageCount={document.data?.page_count ?? 0}
+              running={analyze.status === "running"}
+              onStart={(range) => void analyze.start(range)}
+            />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
                 <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
@@ -207,6 +202,7 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
       </div>
 
       <SuggestionPanel
+        documentId={documentId}
         suggestions={suggestions.data ?? []}
         selectedId={selectedId}
         onSelect={setSelected}

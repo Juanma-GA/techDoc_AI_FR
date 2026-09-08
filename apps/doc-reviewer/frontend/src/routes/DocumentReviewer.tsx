@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Play } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PdfViewer } from "../components/reviewer/PdfViewer";
 import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { DocxReviewer } from "./DocxReviewer";
 import { useAnalyze } from "../hooks/useAnalyze";
@@ -163,17 +164,11 @@ export function DocumentReviewer() {
           </div>
 
           <div className="reviewer-toolbar-group">
-            <button
-              type="button"
-              onClick={() => void analyze.start()}
-              disabled={analyze.status === "running"}
-              className="btn secondary small"
-            >
-              <Play size={14} />
-              {analyze.status === "running"
-                ? t("reviewer.toolbar.analyzing")
-                : t("reviewer.toolbar.analyze")}
-            </button>
+            <AnalysisPageRange
+              pageCount={totalPages}
+              running={analyze.status === "running"}
+              onStart={(range) => void analyze.start(range)}
+            />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
                 <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
@@ -219,6 +214,7 @@ export function DocumentReviewer() {
       </div>
 
       <SuggestionPanel
+        documentId={documentId}
         suggestions={suggestions.data ?? []}
         selectedId={selectedId}
         onSelect={(id) => {

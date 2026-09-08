@@ -41,6 +41,7 @@ class DocumentOut(BaseModel):
     meta_cmm_number: Optional[str] = None
     meta_first_issue_date: Optional[str] = None
     meta_revision_number: Optional[str] = None
+    document_language: Optional[Literal["fr", "en"]] = None
     created_at: datetime
 
     @field_validator("standard_version_ids", mode="before")
@@ -67,6 +68,7 @@ class DocumentMetaPatchIn(BaseModel):
     meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
     meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
     meta_revision_number: Optional[str] = Field(default=None, max_length=60)
+    document_language: Optional[Literal["fr", "en"]] = None
 
 
 # =============================================================================
@@ -245,6 +247,18 @@ class RuleImportResult(BaseModel):
     by_kind: dict[str, int] = Field(default_factory=dict)
     skipped_manual: int = 0
     skipped: list[str] = Field(default_factory=list)
+    rules: list["CompiledRuleSummary"] = Field(default_factory=list)
+
+
+class CompiledRuleSummary(BaseModel):
+    id: str
+    topic: str
+    execution: Literal["deterministic", "manual", "unsupported"]
+    active: bool
+    source: Literal["standard_rule", "user_checklist"]
+    origin_ref: Optional[str] = None
+    manual_instruction: Optional[str] = None
+    compilation_error: Optional[str] = None
 
 
 # =============================================================================

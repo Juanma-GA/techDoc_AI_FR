@@ -6,12 +6,14 @@ import { ChecklistImportCard } from "./ChecklistImportCard";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import {
   useDeleteRule,
+    useCompiledRules,
   usePatchRule,
   useRules,
   useValidateAllRules,
   type RuleInput,
 } from "../hooks/useRules";
 import { useStandards } from "../hooks/useStandards";
+import { useFiltersStore } from "../stores/filtersStore";
 import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
 
@@ -19,6 +21,8 @@ export function Rules() {
   const { t } = useTranslation();
   const standards = useStandards();
   const rules = useRules();
+  const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
+  const compiledRules = useCompiledRules(activeStandardVersionIds);
   const patch = usePatchRule();
   const remove = useDeleteRule();
   const validateAll = useValidateAllRules();
@@ -41,6 +45,36 @@ export function Rules() {
       <ChecklistImportCard />
 
       <RulesSuggestPanel />
+
+      {(compiledRules.data?.length ?? 0) > 0 ? (
+        <div>
+          <div className="rules-section-title">
+            {t("rules.compiled.title")} · {compiledRules.data?.length ?? 0}
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table className="rules-table">
+              <thead>
+                <tr>
+                  <th>{t("rules.compiled.status")}</th>
+                  <th>{t("rules.form.name")}</th>
+                  <th>{t("rules.compiled.detail")}</th>
+                  <th>{t("rules.form.scope")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compiledRules.data?.map((rule) => (
+                  <tr key={rule.id} style={rule.active ? undefined : { opacity: 0.7 }}>
+                    <td><span className={`badge ${rule.execution === "deterministic" ? "success" : "default"}`}>{t(`rules.compiled.${rule.execution}`)}</span></td>
+                    <td>{rule.topic}</td>
+                    <td>{rule.manual_instruction ?? rule.compilation_error ?? t("rules.compiled.activeImmediately")}</td>
+                    <td><span className="label">{rule.origin_ref ?? t("standards.transverse")}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
 
       <div>
         {rules.isLoading ? (

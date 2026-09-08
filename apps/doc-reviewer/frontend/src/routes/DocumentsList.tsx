@@ -1,5 +1,5 @@
-import { Play, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { useMemo } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
@@ -8,6 +8,7 @@ import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
 import { useStandards } from "../hooks/useStandards";
@@ -44,8 +45,6 @@ export function DocumentsList() {
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
-  // Pipeline de revue (dual-mode) : PDF (defaut) ou Word natif (.docx).
-  const [wordNative, setWordNative] = useState(false);
 
   // Bandeau "Normes cibles actives" (preview 289-293) : libelles des versions
   // actives selectionnees dans Parametres. Le choix du standard ne se fait plus
@@ -62,18 +61,11 @@ export function DocumentsList() {
   }, [standards.data, activeStandardVersionIds]);
 
   const handleUpload = (file: File): void => {
-    const lowerName = file.name.toLowerCase();
-    // Un .doc (legacy binaire) n'a pas d'interet a etre revise en PDF : le
-    // pipeline Word natif (conversion interne, export reconverti en .doc) est
-    // force pour ce format, sans dependre du switch (qui reste au choix de
-    // l'utilisateur pour un .docx : PDF ou Word natif).
-    const isLegacyDoc = lowerName.endsWith(".doc") && !lowerName.endsWith(".docx");
     upload.mutate(
       {
         file,
         target: effectiveTarget(targetUnits),
         standardVersionIds: activeStandardVersionIds,
-        wordMode: isLegacyDoc || wordNative ? "docx" : "pdf",
       },
       {
         // Fichier unique -> navigation vers le reviewer ; .zip (batch) -> on
@@ -118,22 +110,6 @@ export function DocumentsList() {
               type="checkbox"
               checked={checklistActive}
               onChange={(e) => setChecklistActive(e.target.checked)}
-            />
-            <span className="track" />
-          </label>
-        </div>
-
-        {/* Pipeline de revue (dual-mode) : Word natif -> sortie .docx corrigee. */}
-        <div className="switch-row">
-          <div>
-            <div>{t("documents.wordNative")}</div>
-            <div className="label">{t("documents.wordNativeHint")}</div>
-          </div>
-          <label className="switch" title={t("documents.wordNative")}>
-            <input
-              type="checkbox"
-              checked={wordNative}
-              onChange={(e) => setWordNative(e.target.checked)}
             />
             <span className="track" />
           </label>
@@ -264,15 +240,11 @@ function DocRow({
       </span>
 
       <div className="item-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={() => void analyze.start()}
-          disabled={running}
-          className="btn small secondary"
-        >
-          <Play size={14} />
-          {running ? t("reviewer.toolbar.analyzing") : t("reviewer.toolbar.analyze")}
-        </button>
+        <AnalysisPageRange
+          pageCount={doc.page_count}
+          running={running}
+          onStart={(range) => void analyze.start(range)}
+        />
         <button type="button" onClick={onOpen} className="btn small primary">
           {t("documents.open")}
         </button>

@@ -120,6 +120,7 @@ class Document(Base):
     meta_cmm_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     meta_first_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_revision_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    document_language: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
     @property
@@ -154,6 +155,9 @@ class AnalysisRun(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="running", server_default="running")
     summary: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    context_snapshot_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    compiled_rules_snapshot_json: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    snapshot_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     document: Mapped[Document] = relationship(back_populates="runs")
     suggestions: Mapped[list["Suggestion"]] = relationship(back_populates="run")
@@ -225,6 +229,23 @@ class Rule(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class CompiledRuleVersion(Base):
+    __tablename__ = "compiled_rule_versions"
+    __table_args__ = (UniqueConstraint("code", "version", name="uq_compiled_rule_code_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
+    code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    source: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    source_ref: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    compiled_json: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    validation_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
 class EditHistory(Base):

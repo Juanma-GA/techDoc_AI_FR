@@ -97,7 +97,32 @@ export type ChecklistImportResult = {
   by_kind: Record<string, number>;
   skipped_manual: number;
   skipped: string[];
+  rules: CompiledRuleSummary[];
 };
+
+export type CompiledRuleSummary = {
+  id: string;
+  topic: string;
+  execution: "deterministic" | "manual" | "unsupported";
+  active: boolean;
+  source: "standard_rule" | "user_checklist";
+  origin_ref: string | null;
+  manual_instruction: string | null;
+  compilation_error: string | null;
+};
+
+export function useCompiledRules(standardVersionIds: string[] = []) {
+  const selectedIds = [...standardVersionIds].sort();
+  return useQuery({
+    queryKey: ["compiled-rules", selectedIds],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      selectedIds.forEach((id) => params.append("standard_version_id", id));
+      const query = params.toString();
+      return api.get<CompiledRuleSummary[]>(`/compiled-rules${query ? `?${query}` : ""}`);
+    },
+  });
+}
 
 // Apercu d'un onglet Excel (pour piloter le mapping des colonnes).
 export type SheetInfo = { name: string; header_row: number; rows: string[][] };
