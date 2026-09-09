@@ -402,8 +402,8 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
                 wrap_rect = fitz.Rect(
                     redact_rect.x0,
                     redact_rect.y0,
-                    redact_rect.x1,
-                    redact_rect.y0 + 2 * target_h,
+                        max(redact_rect.x1, page.rect.x1 - 4),
+                        max(redact_rect.y0 + 2 * target_h, page.rect.y1 - 4),
                 )
             wrapped = True
             leftover = page.insert_textbox(

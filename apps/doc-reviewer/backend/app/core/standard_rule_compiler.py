@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.checks.standards._catalog import compiled_rule_from_payload, is_compiled_catalog_payload
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 
 
@@ -24,6 +25,11 @@ MIGRATED_REGEX_FLAG_CODES = frozenset(
 
 def compile_standard_rule(rule: dict[str, Any], origin_ref: str) -> CompiledRule | None:
     """Compile only reviewed regex flags whose match proves a violation."""
+    if is_compiled_catalog_payload(rule):
+        compiled = compiled_rule_from_payload(rule, origin_ref=origin_ref)
+        if compiled.source != "standard_rule":
+            return None
+        return compiled
     code = str(rule.get("code") or "")
     pattern = str(rule.get("pattern") or "")
     if rule.get("kind") != "regex_flag" or code not in MIGRATED_REGEX_FLAG_CODES or not pattern:

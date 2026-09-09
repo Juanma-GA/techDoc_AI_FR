@@ -22,7 +22,7 @@ export default defineConfig(({ command }) => ({
     strictPort: false,
     proxy: {
       "/api": {
-        target: "http://localhost:8008",
+        target: "http://localhost:8003",
         changeOrigin: true,
       },
     },
@@ -31,5 +31,6 @@ export default defineConfig(({ command }) => ({
     environment: "jsdom",
     globals: true,
     css: false,
+    exclude: ["**/node_modules/**", "**/dist/**", "tests/e2e/**"],
   },
 }));

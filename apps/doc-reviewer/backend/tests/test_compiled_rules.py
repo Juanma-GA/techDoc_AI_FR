@@ -209,6 +209,149 @@ def test_checklist_compiler_accepts_deterministic_output() -> None:
     assert rule.target.region == "header"
 
 
+def test_checklist_compiler_injects_settings_context(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        "app.core.checklist_compiler.get_checklist_context",
+        lambda _db: {
+            "meta_revision_date": "MAR 18/26",
+            "meta_cmm_number": "32-11-00",
+            "meta_first_issue_date": None,
+            "meta_revision_number": "Rev. 01",
+            "document_language": "en",
+        },
+    )
+
+    def chat(_db, system_prompt: str, user_prompt: str, **_kwargs) -> str:
+        captured["system"] = system_prompt
+        captured["user"] = json.loads(user_prompt)
+        return json.dumps(
+            {
+                "id": checklist_rule_id("checklist.xlsx:Review:7"),
+                "topic": "Revision",
+                "execution": "deterministic",
+                "target": {"page": "all", "region": "header"},
+                "checks": [{"field": "revision_number", "operator": "equals", "expected": "REV 02"}],
+                "source": "user_checklist",
+                "origin_ref": "checklist.xlsx:Review:7",
+            }
+        )
+
+    rule = compile_checklist_rule(SessionLocal(), _checklist_row(), "checklist.xlsx", chat=chat)
+
+    assert rule.execution == "deterministic"
+    prompt = captured["user"]
+    assert isinstance(prompt, dict)
+    assert prompt["settings_context"] == {
+        "meta_revision_date": "MAR 18/26",
+        "meta_cmm_number": "32-11-00",
+        "meta_revision_number": "Rev. 01",
+        "document_language": "en",
+    }
+    assert "settings_context" in str(captured["system"])
+
+
+def test_checklist_compiler_accepts_wrapped_deterministic_output() -> None:
+    origin_ref = "checklist.xlsx:Review:7"
+
+    def chat(*_args, **_kwargs) -> str:
+        return json.dumps(
+            {
+                "required_metadata": {
+                    "id": checklist_rule_id(origin_ref),
+                    "topic": "Revision",
+                    "source": "user_checklist",
+                    "origin_ref": origin_ref,
+                },
+                "target": {"page": "all", "region": "header"},
+                "rules": [
+                    {"field": "revision_number", "operator": "equals", "expected": "REV 02"}
+                ],
+            }
+        )
+
+    rule = compile_checklist_rule(SessionLocal(), _checklist_row(), "checklist.xlsx", chat=chat)
+
+    assert rule.execution == "deterministic"
+    assert rule.checks[0].field == "revision_number"
+
+
+def test_checklist_compiler_normalizes_value_alias() -> None:
+    def chat(*_args, **_kwargs) -> str:
+        return json.dumps(
+            {
+                "id": checklist_rule_id("checklist.xlsx:Review:7"),
+                "topic": "Revision",
+                "execution": "deterministic",
+                "target": {"page": "all", "region": "header"},
+                "checks": [{"field": "revision_date", "operator": "regex", "value": r"JAN\s+\d{2}"}],
+                "source": "user_checklist",
+                "origin_ref": "checklist.xlsx:Review:7",
+            }
+        )
+
+    rule = compile_checklist_rule(SessionLocal(), _checklist_row(), "checklist.xlsx", chat=chat)
+
+    assert rule.execution == "deterministic"
+    assert rule.checks[0].expected == r"JAN\s+\d{2}"
+
+
+def test_checklist_compiler_promotes_embedded_semantic_instruction() -> None:
+    def chat(*_args, **_kwargs) -> str:
+        return json.dumps(
+            {
+                "id": checklist_rule_id("checklist.xlsx:Review:7"),
+                "topic": "Revision",
+                "execution": "deterministic",
+                "target": {"page": "all", "region": "header"},
+                "checks": [
+                    {"field": "revision_number", "operator": "equals", "expected": "REV 02"},
+                    {"semantic_instruction": "Vérifier que le numéro respecte la présentation attendue."},
+                ],
+                "source": "user_checklist",
+                "origin_ref": "checklist.xlsx:Review:7",
+            }
+        )
+
+    rule = compile_checklist_rule(SessionLocal(), _checklist_row(), "checklist.xlsx", chat=chat)
+
+    assert rule.execution == "semantic"
+    assert rule.checks == []
+    assert "présentation attendue" in (rule.semantic_instruction or "")
+    assert "revision_number" in (rule.semantic_instruction or "")
+
+
+def test_checklist_compiler_promotes_root_semantic_instruction_with_checks() -> None:
+    def chat(*_args, **_kwargs) -> str:
+        return json.dumps(
+            {
+                "id": checklist_rule_id("checklist.xlsx:Review:7"),
+                "topic": "Revision",
+                "execution": "semantic",
+                "target": {"page": "all", "region": "footer"},
+                "checks": [
+                    {"field": "revision_date", "operator": "regex", "expected": r"MAR\s+\d{2}/\d{2}"}
+                ],
+                "semantic_instruction": "Vérifier que la date de révision correspond à la date attendue.",
+                "source": "user_checklist",
+                "origin_ref": "checklist.xlsx:Review:7",
+            }
+        )
+
+    rule = compile_checklist_rule(
+        SessionLocal(),
+        _checklist_row(target_zone="footer"),
+        "checklist.xlsx",
+        chat=chat,
+    )
+
+    assert rule.execution == "semantic"
+    assert rule.checks == []
+    assert "date de révision" in (rule.semantic_instruction or "")
+    assert "revision_date" in (rule.semantic_instruction or "")
+
+
 def test_checklist_compiler_accepts_manual_output() -> None:
     row = _checklist_row(
         check="Verify the logo placement visually.",

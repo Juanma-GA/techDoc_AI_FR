@@ -1,5 +1,7 @@
 """Deterministic CompiledRule execution tests on synthetic document structures."""
 
+import json
+
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 from app.parsers.docx_parser import Block
@@ -76,3 +78,81 @@ def test_pdf_geometric_region_is_inconclusive() -> None:
 
     assert results[0].status == "INCONCLUSIVE"
     assert raws == []
+
+
+def test_pdf_semantic_violation_emits_exact_comment(monkeypatch) -> None:
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            ParsedPage(
+                page=1,
+                text="The technician may continue without recording the torque value.",
+                spans=[
+                    Span(
+                        text="may continue",
+                        bbox=(10.0, 20.0, 90.0, 40.0),
+                        page=1,
+                        font="Arial",
+                        size=10.0,
+                    )
+                ],
+            )
+        ],
+        full_text="The technician may continue without recording the torque value.",
+        is_signed=False,
+    )
+    rule = CompiledRule(
+        id="CHECKLIST_SEMANTIC",
+        topic="Modal verb usage",
+        execution="semantic",
+        target=RuleTarget(page="all", region="full_page"),
+        semantic_instruction="La procédure ne doit pas autoriser une action sans enregistrement du couple.",
+        source="user_checklist",
+    )
+
+    monkeypatch.setattr(
+        "app.core.compiled_rule_executor.call_chat",
+        lambda *_args, **_kwargs: json.dumps(
+            {
+                "violations": [
+                    {
+                        "page": "1",
+                        "original": "may continue",
+                        "proposed": "must record the torque value before continuing",
+                        "message": "The procedure permits continuing without the required record.",
+                    }
+                ]
+            }
+        ),
+    )
+
+    results, raws = execute_pdf_rules(parsed, [rule], db=object())
+
+    assert results[0].status == "FAIL"
+    assert len(raws) == 1
+    assert raws[0].original == "may continue"
+    assert raws[0].proposed.startswith("must record")
+    assert raws[0].page == 1
+
+
+def test_active_manual_rule_emits_user_review_comment() -> None:
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[ParsedPage(page=1, text="Visual content")],
+        full_text="Visual content",
+        is_signed=False,
+    )
+    rule = CompiledRule(
+        id="CHECKLIST_MANUAL",
+        topic="Logo placement",
+        execution="manual",
+        target=RuleTarget(page="all", region="full_page"),
+        manual_instruction="Verify the logo placement visually.",
+        source="user_checklist",
+    )
+
+    results, raws = execute_pdf_rules(parsed, [rule])
+
+    assert results[0].status == "MANUAL"
+    assert len(raws) == 1
+    assert "logo placement" in raws[0].message

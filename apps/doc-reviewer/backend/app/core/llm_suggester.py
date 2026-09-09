@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.logging import sanitize_llm_debug
 from app.core.fallback_rules import FallbackNLPRules
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
@@ -141,6 +142,13 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
     r: httpx.Response | None = None
     for attempt in range(1, _NETWORK_ATTEMPTS + 1):
         try:
+            logger.debug(
+                "llm_request",
+                provider="mistral",
+                endpoint="chat/completions",
+                model=payload["model"],
+                payload=sanitize_llm_debug(payload),
+            )
             with httpx.Client(timeout=_TIMEOUT) as client:
                 r = client.post(
                     f"{s['base_url'].rstrip('/')}/v1/chat/completions",
@@ -187,6 +195,13 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
             status_code=502,
             detail={"body": r.text[:300]},
         )
+    logger.debug(
+        "llm_response",
+        provider="mistral",
+        model=payload["model"],
+        status_code=r.status_code,
+        response=sanitize_llm_debug(getattr(r, "text", "")),
+    )
     try:
         data = r.json()
         return data["choices"][0]["message"]["content"] or ""

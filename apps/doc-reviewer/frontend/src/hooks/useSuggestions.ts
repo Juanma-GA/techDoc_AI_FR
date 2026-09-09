@@ -28,7 +28,7 @@ export function useRejectionsSummary() {
   });
 }
 
-export function usePatchSuggestion(documentId: string | undefined) {
+export function usePatchSuggestion(_documentId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -54,7 +54,7 @@ export function usePatchSuggestion(documentId: string | undefined) {
   });
 }
 
-export function useBulkStatus(documentId: string | undefined) {
+export function useBulkStatus(_documentId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ ids, status }: { ids: string[]; status: SuggestionStatus }) =>

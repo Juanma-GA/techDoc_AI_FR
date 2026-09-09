@@ -1,16 +1,20 @@
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../components/PageHeader";
 import {
   useAiPrompt,
+  useChecklistContext,
   useMistralSettings,
   useReliability,
   useTestMistralConnection,
   useToggleLlm,
   useUpdateAiPrompt,
+  useUpdateChecklistContext,
   useUpdateMistralSettings,
   useUpdateReliability,
+  type ChecklistContext,
 } from "../hooks/useMistralSettings";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
@@ -34,12 +38,23 @@ export function Settings() {
       .map((v) => `${s.code} ${v.label}`),
   );
 
+  const toggleStandard = (versionIds: string[]): void => {
+    if (versionIds.length === 0) return;
+    const allActive = versionIds.every((id) => activeStandardVersionIds.includes(id));
+    for (const versionId of versionIds) {
+      const isActive = activeStandardVersionIds.includes(versionId);
+      if (allActive ? isActive : !isActive) toggleActiveStandardVersion(versionId);
+    }
+  };
+
   const mistral = useMistralSettings();
   const updateMistral = useUpdateMistralSettings();
   const testMistral = useTestMistralConnection();
   const toggleLlm = useToggleLlm();
   const aiPrompt = useAiPrompt();
   const updateAiPrompt = useUpdateAiPrompt();
+  const checklistContext = useChecklistContext();
+  const updateChecklistContext = useUpdateChecklistContext();
   const reliability = useReliability();
   const updateReliability = useUpdateReliability();
 
@@ -48,8 +63,19 @@ export function Settings() {
   const [modelDraft, setModelDraft] = useState("");
   const [visionModelDraft, setVisionModelDraft] = useState("");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
+  const [checklistContextDraft, setChecklistContextDraft] = useState<ChecklistContext | null>(null);
 
   const effectivePrompt = promptDraft ?? aiPrompt.data?.prompt ?? "";
+  const effectiveChecklistContext = checklistContextDraft ?? checklistContext.data;
+
+  function updateChecklistField<K extends keyof ChecklistContext>(
+    field: K,
+    value: ChecklistContext[K],
+  ): void {
+    const current = checklistContextDraft ?? checklistContext.data;
+    if (!current) return;
+    setChecklistContextDraft({ ...current, [field]: value });
+  }
 
   const submitMistral = (): void => {
     updateMistral.mutate(
@@ -145,7 +171,7 @@ export function Settings() {
                 </Field>
                 <Field label={t("settings.mistral.visionModel")}>
                   <input
-                    placeholder="pixtral-12b-2409"
+                    placeholder="mistral-medium-3-5"
                     value={visionModelDraft || mistral.data?.vision_model || ""}
                     onChange={(e) => setVisionModelDraft(e.target.value)}
                     className="input mono"
@@ -328,6 +354,93 @@ export function Settings() {
           </Card>
         </Collapsible>
 
+        <Card
+          title={t("settings.checklistContext.title")}
+          description={t("settings.checklistContext.description")}
+        >
+          {checklistContext.isLoading || !effectiveChecklistContext ? (
+            <p className="hint">{t("common.loading")}</p>
+          ) : (
+            <div className="form">
+              <p className="hint">{t("settings.checklistContext.hint")}</p>
+              <Field label={t("settings.checklistContext.revisionDate")}>
+                <input
+                  className="input"
+                  value={effectiveChecklistContext.meta_revision_date ?? ""}
+                  onChange={(e) => updateChecklistField("meta_revision_date", e.target.value || null)}
+                  placeholder={t("settings.checklistContext.revisionDatePlaceholder")}
+                />
+              </Field>
+              <Field label={t("settings.checklistContext.cmmNumber")}>
+                <input
+                  className="input"
+                  value={effectiveChecklistContext.meta_cmm_number ?? ""}
+                  onChange={(e) => updateChecklistField("meta_cmm_number", e.target.value || null)}
+                  placeholder={t("settings.checklistContext.cmmNumberPlaceholder")}
+                />
+              </Field>
+              <Field label={t("settings.checklistContext.firstIssueDate")}>
+                <input
+                  className="input"
+                  value={effectiveChecklistContext.meta_first_issue_date ?? ""}
+                  onChange={(e) => updateChecklistField("meta_first_issue_date", e.target.value || null)}
+                  placeholder={t("settings.checklistContext.firstIssueDatePlaceholder")}
+                />
+              </Field>
+              <Field label={t("settings.checklistContext.revisionNumber")}>
+                <input
+                  className="input"
+                  value={effectiveChecklistContext.meta_revision_number ?? ""}
+                  onChange={(e) => updateChecklistField("meta_revision_number", e.target.value || null)}
+                  placeholder={t("settings.checklistContext.revisionNumberPlaceholder")}
+                />
+              </Field>
+              <Field label={t("settings.checklistContext.documentLanguage")}>
+                <select
+                  className="input"
+                  value={effectiveChecklistContext.document_language ?? ""}
+                  onChange={(e) =>
+                    updateChecklistField(
+                      "document_language",
+                      e.target.value === ""
+                        ? null
+                        : (e.target.value as ChecklistContext["document_language"]),
+                    )
+                  }
+                >
+                  <option value="">{t("settings.checklistContext.languageUnset")}</option>
+                  <option value="fr">{t("settings.checklistContext.languageFr")}</option>
+                  <option value="en">{t("settings.checklistContext.languageEn")}</option>
+                </select>
+              </Field>
+              <div className="row">
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    if (checklistContextDraft === null) return;
+                    updateChecklistContext.mutate(checklistContextDraft, {
+                      onSuccess: () => setChecklistContextDraft(null),
+                    });
+                  }}
+                  disabled={checklistContextDraft === null || updateChecklistContext.isPending}
+                >
+                  {t("common.save")}
+                </button>
+                {checklistContextDraft !== null ? (
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => setChecklistContextDraft(null)}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </Card>
+
         {/* 1. Normes cibles actives (multi-select pills, parite preview) :
             chaque version selectionnee est fusionnee a l'analyse et appliquee
             a chaque upload. Choix persistant (filtersStore). */}
@@ -342,12 +455,28 @@ export function Settings() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {(standards.data ?? []).map((std) => {
+                const versionIds = std.versions.map((v) => v.id);
                 const stdActive = std.versions.some((v) =>
                   activeStandardVersionIds.includes(v.id),
                 );
+                const allVersionsActive =
+                  versionIds.length > 0 && versionIds.every((id) => activeStandardVersionIds.includes(id));
                 return (
                 <div
                   key={std.id}
+                  className="standard-option"
+                  role={versionIds.length > 0 ? "button" : undefined}
+                  tabIndex={versionIds.length > 0 ? 0 : undefined}
+                  aria-pressed={versionIds.length > 0 ? allVersionsActive : undefined}
+                  aria-label={`${std.code} ${std.label}`}
+                  onClick={() => toggleStandard(versionIds)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggleStandard(versionIds);
+                    }
+                  }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -359,6 +488,7 @@ export function Settings() {
                     background: stdActive ? "var(--card-hover)" : "var(--bg-2)",
                     border: `1px solid ${stdActive ? "var(--brand-light)" : "var(--border)"}`,
                     borderRadius: 8,
+                    cursor: versionIds.length > 0 ? "pointer" : "default",
                   }}
                 >
                   <span
@@ -383,7 +513,10 @@ export function Settings() {
                         key={v.id}
                         type="button"
                         aria-pressed={on}
-                        onClick={() => toggleActiveStandardVersion(v.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleActiveStandardVersion(v.id);
+                        }}
                         className={on ? "slicer-pill active" : "slicer-pill"}
                       >
                         {v.label}
@@ -463,10 +596,11 @@ function Collapsible({
   return (
     <details className="collapsible" open={defaultOpen} style={{ marginBottom: 4 }}>
       <summary
-        className="card-title"
-        style={{ cursor: "pointer", listStyle: "none", padding: "6px 2px", userSelect: "none" }}
+        className="collapsible-summary card-title"
+        style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
       >
-        ▸ {title}
+        <ChevronRight size={16} aria-hidden="true" />
+        <span>{title}</span>
       </summary>
       <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 16 }}>
         {children}

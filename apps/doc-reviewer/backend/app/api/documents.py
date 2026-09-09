@@ -549,28 +549,30 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
 
 @router.get("/documents/{document_id}/exports")
 def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
-    """Return only exports supported by this document's current state."""
+    """Return exports supported by the current state and their conversion warnings."""
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     available: list[dict[str, str]] = []
     if doc.source_format == "doc" and doc.original_storage_path:
-        available.append({"kind": "original", "format": "doc", "label": "DOC original"})
+        available.append({"kind": "original", "format": "doc", "label": "DOC original", "warning": ""})
     elif doc.source_format == "pdf":
-        available.append({"kind": "original", "format": "pdf", "label": "PDF original"})
+        available.append({"kind": "original", "format": "pdf", "label": "PDF original", "warning": ""})
     elif doc.source_format == "docx":
-        available.append({"kind": "original", "format": "docx", "label": "DOCX original"})
+        available.append({"kind": "original", "format": "docx", "label": "DOCX original", "warning": ""})
     if doc.working_format == "pdf":
-        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente"})
+        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente", "warning": ""})
         if doc.has_applied_edits:
-            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige"})
+            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": ""})
     else:
-        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente"})
+        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente", "warning": "Conversion Word -> PDF : le rendu peut varier selon LibreOffice."})
         if doc.has_applied_edits:
-            available.append({"kind": "corrected", "format": "docx", "label": "DOCX corrige"})
-            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige"})
-        if doc.source_format == "doc" and doc.has_applied_edits and doc_convert._find_soffice():
-            available.append({"kind": "corrected", "format": "doc", "label": "DOC corrige"})
+            available.append({"kind": "corrected", "format": "docx", "label": "DOCX corrige", "warning": ""})
+            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": "Conversion Word -> PDF : le rendu peut varier selon LibreOffice."})
+    if doc_convert._find_soffice():
+        if doc.working_format == "pdf":
+            available.append({"kind": "converted", "format": "docx", "label": "DOCX converti", "warning": "Conversion PDF -> DOCX : mise en page, tableaux, polices et positionnement peuvent etre modifies."})
+        available.append({"kind": "converted", "format": "doc", "label": "DOC converti", "warning": "Conversion vers DOC legacy : degradation possible de la mise en page, des polices et des elements avances."})
     return {
         "source_format": doc.source_format,
         "working_format": doc.working_format,
@@ -607,8 +609,6 @@ def export_pdf(
             docx_versioning.read_version(doc.storage_dir, doc.current_version), ".docx"
         )
         return Response(content=converted, media_type="application/pdf")
-    if requested == "doc" and doc.source_format != "doc":
-        raise AppError("EXPORT_FORMAT_UNAVAILABLE", "L'export DOC n'est disponible que pour une entree DOC.", status_code=409)
     if requested not in {"corrected", "pdf", "docx", "doc"}:
         raise AppError("EXPORT_FORMAT_UNAVAILABLE", "Format d'export incompatible.", status_code=409)
     # Pipeline Word natif : on rend le .docx corrige (version courante). Si le
@@ -643,6 +643,25 @@ def export_pdf(
     # jamais l'extension Word d'origine (sinon le fichier telecharge s'appelle
     # "manuel.doc" alors que son contenu est un PDF, illisible tel quel dans Word).
     target = current_path(doc.storage_dir, doc.current_version)
+    if requested == "docx" and doc.working_format == "pdf":
+        return Response(
+            content=doc_convert.pdf_to_docx_bytes(target.read_bytes()),
+            media_type=_DOCX_MIME,
+            headers={"Content-Disposition": f'attachment; filename="{Path(doc.original_filename).stem}.docx"'},
+        )
+    if requested == "doc" and doc.working_format == "pdf":
+        return Response(
+            content=doc_convert.pdf_to_doc_bytes(target.read_bytes()),
+            media_type="application/msword",
+            headers={"Content-Disposition": f'attachment; filename="{Path(doc.original_filename).stem}.doc"'},
+        )
+    if requested == "doc" and doc.working_format == "docx":
+        working = docx_versioning.read_version(doc.storage_dir, doc.current_version)
+        return Response(
+            content=doc_convert.docx_to_doc_bytes(working),
+            media_type="application/msword",
+            headers={"Content-Disposition": f'attachment; filename="{Path(doc.original_filename).stem}.doc"'},
+        )
     pdf_filename = Path(doc.original_filename).stem + ".pdf"
     return FileResponse(
         target,

@@ -10,6 +10,7 @@ import {
   type SheetInfo,
 } from "../hooks/useRules";
 import { API_BASE_URL } from "../lib/api";
+import { useFiltersStore } from "../stores/filtersStore";
 
 type Mode = "replace" | "add";
 type ImportPhase = "inspect" | "compile";
@@ -33,6 +34,7 @@ function colLabel(idx: number): string {
 export function ChecklistImportCard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const setChecklistActive = useFiltersStore((state) => state.setChecklistActive);
 
   const [file, setFile] = useState<File | null>(null);
   const [sheets, setSheets] = useState<SheetInfo[]>([]);
@@ -109,6 +111,7 @@ export function ChecklistImportCard() {
       const r = await importChecklist(file, { mode });
       setMsg(resultMsg(r));
       setCompiledRules(r.rules);
+      setChecklistActive(true);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["rules"] }),
         qc.invalidateQueries({ queryKey: ["compiled-rules"] }),
@@ -138,6 +141,7 @@ export function ChecklistImportCard() {
       });
       setMsg(resultMsg(r));
       setCompiledRules(r.rules);
+      setChecklistActive(true);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["rules"] }),
         qc.invalidateQueries({ queryKey: ["compiled-rules"] }),
@@ -359,12 +363,23 @@ export function CompiledRuleRows({ rules }: { rules: CompiledRuleSummary[] }) {
   return rules.map((rule) => (
     <tr key={rule.id} data-execution={rule.execution}>
       <td>
-        <span className={`badge ${rule.execution === "deterministic" ? "success" : "default"}`}>
+        <span
+          className={`badge ${
+            rule.execution === "deterministic" || rule.execution === "semantic"
+              ? "success"
+              : "default"
+          }`}
+        >
           {t(`rules.compiled.${rule.execution}`)}
         </span>
       </td>
       <td>{rule.topic}</td>
-      <td>{rule.manual_instruction ?? rule.compilation_error ?? t("rules.compiled.activeImmediately")}</td>
+      <td>
+        {rule.semantic_instruction ??
+          rule.manual_instruction ??
+          rule.compilation_error ??
+          t("rules.compiled.activeImmediately")}
+      </td>
     </tr>
   ));
 }

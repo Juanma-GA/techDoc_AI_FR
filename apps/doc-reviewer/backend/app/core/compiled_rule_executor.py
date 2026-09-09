@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from app.checks.raw import RawSuggestion
 from app.core.compiled_rules import (
@@ -15,6 +19,8 @@ from app.core.compiled_rules import (
     PdfEvidenceLocation,
     RuleResult,
 )
+from app.core.errors import AppError
+from app.core.llm_suggester import call_chat
 from app.parsers.docx_parser import Block
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
@@ -39,15 +45,27 @@ class _TextTarget:
     target_id: str | None = None
 
 
-def execute_pdf_rules(parsed: ParsedPdf, rules: list[CompiledRule]) -> tuple[list[RuleResult], list[RawSuggestion]]:
+_SEMANTIC_GROUP_CHAR_LIMIT = 10_000
+_SEMANTIC_TOTAL_CHAR_LIMIT = 120_000
+
+
+def execute_pdf_rules(
+    parsed: ParsedPdf,
+    rules: list[CompiledRule],
+    db: Session | None = None,
+) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(page=str(page.page), text=page.text, raw_page=page.page)
         for page in parsed.pages
     ]
-    return _execute(rules, targets, parsed.pages, is_docx=False)
+    return _execute(rules, targets, parsed.pages, is_docx=False, db=db)
 
 
-def execute_docx_rules(blocks: list[Block], rules: list[CompiledRule]) -> tuple[list[RuleResult], list[RawSuggestion]]:
+def execute_docx_rules(
+    blocks: list[Block],
+    rules: list[CompiledRule],
+    db: Session | None = None,
+) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
             page=str(block.page),
@@ -57,7 +75,7 @@ def execute_docx_rules(blocks: list[Block], rules: list[CompiledRule]) -> tuple[
         )
         for block in blocks
     ]
-    return _execute(rules, targets, None, is_docx=True, blocks=blocks)
+    return _execute(rules, targets, None, is_docx=True, blocks=blocks, db=db)
 
 
 def _execute(
@@ -67,14 +85,24 @@ def _execute(
     *,
     is_docx: bool,
     blocks: list[Block] | None = None,
+    db: Session | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     results: list[RuleResult] = []
     raws: list[RawSuggestion] = []
     for rule in rules:
-        if rule.execution != "deterministic":
-            results.append(RuleResult(rule_id=rule.id, status=rule.execution.upper()))  # type: ignore[arg-type]
+        scoped = _scope_targets(rule, targets, is_docx=is_docx, blocks=blocks, pdf_pages=pdf_pages)
+        if rule.execution == "semantic":
+            result, semantic_raws = _execute_semantic(rule, scoped or [], db, is_docx, pdf_pages)
+            results.append(result)
+            raws.extend(semantic_raws)
             continue
-        scoped = _scope_targets(rule, targets, is_docx=is_docx, blocks=blocks)
+        if rule.execution == "manual":
+            results.append(RuleResult(rule_id=rule.id, status="MANUAL"))
+            raws.extend(_manual_suggestions(rule, scoped or targets))
+            continue
+        if rule.execution == "unsupported":
+            results.append(RuleResult(rule_id=rule.id, status="UNSUPPORTED"))
+            continue
         if scoped is None or not scoped:
             evidence = _evidence(targets[0] if targets else None, None, None, is_docx, pdf_pages)
             results.append(RuleResult(rule_id=rule.id, status="INCONCLUSIVE", evidence=evidence))
@@ -82,19 +110,7 @@ def _execute(
         result = _evaluate_rule(rule, scoped, is_docx, pdf_pages)
         results.append(result)
         if result.status == "FAIL" and result.evidence is not None:
-            raw_page = next((target.raw_page for target in scoped if target.page == result.evidence.page), scoped[0].raw_page)
-            raws.append(
-                RawSuggestion(
-                    rule_kind="compiled_standard" if rule.source == "standard_rule" else "compiled_checklist",
-                    rule_code=rule.id,
-                    severity="warning",
-                    message=f"Règle compilée non satisfaite: {rule.topic}",
-                    original=result.evidence.observed_value or "",
-                    proposed=result.evidence.expected_value or "",
-                    page=raw_page,
-                    span=(0, len(result.evidence.observed_value or "")),
-                )
-            )
+            raws.extend(_deterministic_suggestions(rule, scoped, result, is_docx, pdf_pages))
     return results, raws
 
 
@@ -104,14 +120,211 @@ def _scope_targets(
     *,
     is_docx: bool,
     blocks: list[Block] | None,
+    pdf_pages: list[ParsedPage] | None,
 ) -> list[_TextTarget] | None:
     scoped = targets if rule.target.page == "all" else [target for target in targets if target.page == rule.target.page]
     if rule.target.region == "full_page":
         return scoped
-    if not is_docx or blocks is None:
+    if is_docx:
+        if blocks is None:
+            return None
+        allowed_ids = {block.target_id for block in blocks if block.zone == rule.target.region}
+        return [target for target in scoped if target.target_id in allowed_ids]
+    if pdf_pages is None:
         return None
-    allowed_ids = {block.target_id for block in blocks if block.zone == rule.target.region}
-    return [target for target in scoped if target.target_id in allowed_ids]
+    pages_by_number = {page.page: page for page in pdf_pages}
+    selected: list[_TextTarget] = []
+    for target in scoped:
+        page = pages_by_number.get(target.raw_page)
+        if page is None or not page.spans:
+            continue
+        min_y = min(span.bbox[1] for span in page.spans)
+        max_y = max(span.bbox[3] for span in page.spans)
+        height = max_y - min_y
+        if height <= 0:
+            continue
+        if rule.target.region == "header":
+            spans = [span for span in page.spans if span.bbox[1] <= min_y + height * 0.25]
+        elif rule.target.region == "footer":
+            spans = [span for span in page.spans if span.bbox[3] >= max_y - height * 0.25]
+        else:
+            spans = [
+                span
+                for span in page.spans
+                if span.bbox[1] > min_y + height * 0.25
+                and span.bbox[3] < max_y - height * 0.25
+            ]
+        if spans:
+            selected.append(replace(target, text=" ".join(span.text.strip() for span in spans)))
+    return selected or None
+
+
+def _execute_semantic(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    db: Session | None,
+    is_docx: bool,
+    pdf_pages: list[ParsedPage] | None,
+) -> tuple[RuleResult, list[RawSuggestion]]:
+    fallback_target = targets[0] if targets else None
+    if db is None or not targets:
+        return (
+            RuleResult(
+                rule_id=rule.id,
+                status="INCONCLUSIVE",
+                evidence=_evidence(fallback_target, None, rule.semantic_instruction, is_docx, pdf_pages),
+            ),
+            [],
+        )
+
+    groups = _semantic_groups(targets)
+    violations: list[tuple[_TextTarget, str, str, str]] = []
+    failed_call = False
+    for group in groups:
+        payload = {
+            "rule": rule.semantic_instruction,
+            "topic": rule.topic,
+            "pages": [{"page": target.page, "text": target.text} for target in group],
+        }
+        system = (
+            "Tu es un contrôleur de conformité documentaire. Évalue uniquement la règle fournie "
+            "sur les pages données. Retourne strictement un objet JSON de la forme "
+            '{"violations":[{"page":"1","original":"extrait exact",'
+            '"proposed":"correction optionnelle","message":"explication"}]}. '
+            "Une absence de violation retourne {\"violations\":[]}. "
+            "`original` doit être une sous-chaîne exacte du texte de sa page. "
+            "Ne signale pas un problème que la règle ne demande pas de vérifier."
+        )
+        try:
+            response = call_chat(
+                db,
+                system,
+                json.dumps(payload, ensure_ascii=False),
+                temperature=0.0,
+            )
+            parsed = _parse_json_object(response)
+            entries = parsed.get("violations", []) if isinstance(parsed, dict) else []
+            if not isinstance(entries, list):
+                raise ValueError("violations must be a list")
+        except (AppError, ValueError, TypeError, json.JSONDecodeError):
+            failed_call = True
+            continue
+        except Exception:
+            failed_call = True
+            continue
+
+        by_page = {target.page: target for target in group}
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            page = str(entry.get("page") or "")
+            target = by_page.get(page)
+            original = entry.get("original")
+            if target is None or not isinstance(original, str) or not original.strip():
+                continue
+            original = original.strip()
+            if original not in target.text:
+                continue
+            proposed = entry.get("proposed")
+            proposed = proposed.strip() if isinstance(proposed, str) else ""
+            if proposed == original:
+                proposed = ""
+            message = entry.get("message")
+            message = str(message).strip()[:500] if message else rule.topic
+            violations.append((target, original, proposed, message))
+
+    if violations:
+        target, original, _proposed, _message = violations[0]
+        result = RuleResult(
+            rule_id=rule.id,
+            status="FAIL",
+            evidence=_evidence(target, original, rule.semantic_instruction, is_docx, pdf_pages),
+        )
+        raws = [
+            RawSuggestion(
+                rule_kind="compiled_checklist" if rule.source == "user_checklist" else "compiled_standard",
+                rule_code=rule.id,
+                severity=rule.severity,
+                message=message,
+                original=original,
+                proposed=proposed,
+                page=target.raw_page,
+                span=(0, len(original)),
+            )
+            for target, original, proposed, message in violations
+        ]
+        return result, raws
+    if failed_call:
+        return (
+            RuleResult(
+                rule_id=rule.id,
+                status="INCONCLUSIVE",
+                evidence=_evidence(fallback_target, None, rule.semantic_instruction, is_docx, pdf_pages),
+            ),
+            [],
+        )
+    return (
+        RuleResult(
+            rule_id=rule.id,
+            status="PASS",
+            evidence=_evidence(fallback_target, None, rule.semantic_instruction, is_docx, pdf_pages),
+        ),
+        [],
+    )
+
+
+def _semantic_groups(targets: list[_TextTarget]) -> list[list[_TextTarget]]:
+    groups: list[list[_TextTarget]] = []
+    current: list[_TextTarget] = []
+    current_len = 0
+    total_len = 0
+    for target in targets:
+        text = target.text.strip()
+        if not text or total_len >= _SEMANTIC_TOTAL_CHAR_LIMIT:
+            continue
+        if len(text) > _SEMANTIC_GROUP_CHAR_LIMIT:
+            text = text[:_SEMANTIC_GROUP_CHAR_LIMIT]
+            target = replace(target, text=text)
+        if current and current_len + len(text) > _SEMANTIC_GROUP_CHAR_LIMIT:
+            groups.append(current)
+            current = []
+            current_len = 0
+        current.append(target)
+        current_len += len(text)
+        total_len += len(text)
+    if current:
+        groups.append(current)
+    return groups
+
+
+def _parse_json_object(value: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        start = value.find("{")
+        end = value.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        parsed = json.loads(value[start : end + 1])
+    if not isinstance(parsed, dict):
+        raise ValueError("semantic response must be an object")
+    return parsed
+
+
+def _manual_suggestions(rule: CompiledRule, targets: list[_TextTarget]) -> list[RawSuggestion]:
+    return [
+        RawSuggestion(
+            rule_kind="compiled_checklist" if rule.source == "user_checklist" else "compiled_standard",
+            rule_code=rule.id,
+            severity=rule.severity,
+            message=f"Vérification manuelle requise : {rule.manual_instruction}",
+            original="",
+            proposed="",
+            page=target.raw_page,
+            span=(0, 0),
+        )
+        for target in targets
+    ]
 
 
 def _evaluate_rule(
@@ -157,6 +370,63 @@ def _evaluate_check(check: Check, targets: list[_TextTarget]) -> tuple[bool, _Te
         if left == right:
             return True, target, value
     return False, values[0][0], values[0][1]
+
+
+def _deterministic_suggestions(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    result: RuleResult,
+    is_docx: bool,
+    pdf_pages: list[ParsedPage] | None,
+) -> list[RawSuggestion]:
+    rule_kind = "compiled_standard" if rule.source == "standard_rule" else "compiled_checklist"
+    message = f"Règle compilée non satisfaite: {rule.topic}"
+    suggestions: list[RawSuggestion] = []
+    for check in rule.checks:
+        if check.operator != "regex" or check.expected is None:
+            continue
+        try:
+            matches = [
+                (target, match.group(0))
+                for target in targets
+                for match in re.finditer(str(check.expected), target.text)
+                if match.group(0)
+            ]
+        except re.error:
+            matches = []
+        for target, original in matches:
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule.id,
+                    severity=rule.severity,
+                    message=message,
+                    original=original,
+                    proposed="",
+                    page=target.raw_page,
+                    span=(0, len(original)),
+                )
+            )
+        if suggestions:
+            return suggestions
+
+    raw_page = next(
+        (target.raw_page for target in targets if target.page == result.evidence.page),
+        targets[0].raw_page,
+    )
+    observed = result.evidence.observed_value or ""
+    return [
+        RawSuggestion(
+            rule_kind=rule_kind,
+            rule_code=rule.id,
+            severity=rule.severity,
+            message=message,
+            original=observed,
+            proposed=result.evidence.expected_value or "",
+            page=raw_page,
+            span=(0, len(observed)),
+        )
+    ]
 
 
 def _field_value(field: str, text: str, page: str) -> str | None:

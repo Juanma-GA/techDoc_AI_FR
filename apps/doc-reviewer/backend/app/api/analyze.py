@@ -56,7 +56,7 @@ def analyze_stream(
     vision: Optional[bool] = Query(
         default=None,
         description=(
-            "Override per-run vision (Pixtral) opt-in/out. None = use the "
+            "Override per-run multimodal vision opt-in/out. None = use the "
             "persisted `vision.enabled` setting from /settings/mistral."
         ),
     ),

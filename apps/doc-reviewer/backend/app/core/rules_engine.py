@@ -24,7 +24,7 @@ from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import CompiledRule, RuleResult, validate_compiled_rule_json
 from app.core.errors import AppError
 from app.core.llm_suggester import rephrase_batch, scan_with_prompt
-from app.core.mistral_settings import get_ai_custom_prompt, get_vision_enabled
+from app.core.mistral_settings import get_ai_custom_prompt, get_checklist_context, get_vision_enabled
 from app.core.rule_applicability import RuleExecutionContext, is_rule_kind_applicable
 from app.core.standard_rule_compiler import MIGRATED_REGEX_FLAG_CODES, compile_standard_rule
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion, Suggestion
@@ -70,8 +70,8 @@ def run_all(
     empty/None list means the transverse pipeline only: custom rules without
     a `standard_version_id` + units conversion.
 
-    `src_path` is the disk path to the PDF; required by the vision
-    check (Pixtral on extracted images).
+    `src_path` is the disk path to the PDF; required by the multimodal
+    vision check on extracted images.
 
     `vision_enabled_override` lets the caller opt-in or opt-out for a
     single run. `None` falls back to the persisted `vision.enabled`
@@ -133,7 +133,7 @@ def run_all(
 
     out: list[RawSuggestion] = []
     if execute_compiled and compiled_rules:
-        results, compiled_raws = execute_pdf_rules(parsed, compiled_rules)
+        results, compiled_raws = execute_pdf_rules(parsed, compiled_rules, db=db)
         if compiled_results is not None:
             compiled_results.extend(results)
         out.extend(compiled_raws)
@@ -354,7 +354,7 @@ def _escape_meta_value(value: str) -> str:
     return value.replace("<", "‹").replace(">", "›")  # noqa: RUF001 — substitution deliberee, pas une faute
 
 
-def _doc_meta_block(document: object) -> str:
+def _doc_meta_block(document: object, global_context: dict[str, object] | None = None) -> str:
     """Formatte le mapping manuel du document (saisi par le relecteur, donc
     non fiable — voir PATCH /documents/{id}) en un court paragraphe injecte
     dans le prompt du scan IA, pour que les consignes de checklist qui y font
@@ -367,17 +367,17 @@ def _doc_meta_block(document: object) -> str:
     champ serait interpretee par le modele comme une commande (injection de
     prompt via un champ utilisateur)."""
     fields = [
-        ("Date de revision", getattr(document, "meta_revision_date", None)),
-        ("Numero CMM", getattr(document, "meta_cmm_number", None)),
-        ("Date de premiere issue", getattr(document, "meta_first_issue_date", None)),
-        ("Numero de revision", getattr(document, "meta_revision_number", None)),
-        ("Langue du document", getattr(document, "document_language", None)),
+        ("meta_revision_date", "Date de revision", getattr(document, "meta_revision_date", None)),
+        ("meta_cmm_number", "Numero CMM", getattr(document, "meta_cmm_number", None)),
+        ("meta_first_issue_date", "Date de premiere issue", getattr(document, "meta_first_issue_date", None)),
+        ("meta_revision_number", "Numero de revision", getattr(document, "meta_revision_number", None)),
+        ("document_language", "Langue du document", getattr(document, "document_language", None)),
     ]
-    lines = [
-        f"- {label} : {_escape_meta_value(str(value))}"
-        for label, value in fields
-        if (value or "").strip()
-    ]
+    lines = []
+    for field, label, value in fields:
+        resolved = value or (global_context or {}).get(field)
+        if resolved and str(resolved).strip():
+            lines.append(f"- {label} : {_escape_meta_value(str(resolved))}")
     if not lines:
         return ""
     return (
@@ -403,7 +403,7 @@ def _run_ai_custom(
     rules so the model can spot violations it isn't expected to fix
     deterministically."""
     custom_prompt = get_ai_custom_prompt(db)
-    meta_block = _doc_meta_block(document) if document is not None else ""
+    meta_block = _doc_meta_block(document, get_checklist_context(db)) if document is not None else ""
     if meta_block:
         custom_prompt = (custom_prompt + "\n\n" + meta_block).strip() if custom_prompt.strip() else meta_block
 
@@ -657,7 +657,7 @@ def classify_source(rule_kind: str, rule_code: str) -> str:
     et le filtre associé dans la liste des anomalies :
 
     - `"norme"`      — règle du catalogue d'une norme sélectionnée.
-    - `"checklist"`  — jugée par le LLM (checklist importée `llm_nl`/`manual`
+    - `"checklist"`  — jugée par le LLM (checklist importée `semantic`/`manual`
       ou scan libre `AI_SCAN`).
     - `"regle"`      — règle custom déterministe (regex/terme) créée par
       l'utilisateur, transverse ou scopée à une norme.

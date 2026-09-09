@@ -93,7 +93,7 @@ def run_docx(
         checklist_enabled=checklist_enabled,
     )
     if compiled_rules:
-        results, compiled_raws = execute_docx_rules(parsed.blocks, compiled_rules)
+        results, compiled_raws = execute_docx_rules(parsed.blocks, compiled_rules, db=db)
         if compiled_results is not None:
             compiled_results.extend(results)
         out.extend(compiled_raws)

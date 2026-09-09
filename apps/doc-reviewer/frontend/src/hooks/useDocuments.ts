@@ -30,6 +30,28 @@ export function useDocument(id: string | undefined) {
   });
 }
 
+export type DocumentExport = {
+  kind: "original" | "corrected" | "commented" | "converted";
+  format: "pdf" | "docx" | "doc";
+  label: string;
+  warning: string;
+};
+
+export type DocumentExports = {
+  source_format: "pdf" | "doc" | "docx";
+  working_format: "pdf" | "docx";
+  has_applied_edits: boolean;
+  available: DocumentExport[];
+};
+
+export function useDocumentExports(id: string | undefined) {
+  return useQuery({
+    queryKey: ["document", id, "exports"],
+    queryFn: () => api.get<DocumentExports>(`/documents/${id}/exports`),
+    enabled: !!id,
+  });
+}
+
 export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation<Document | BatchUploadResult, Error, UploadDocumentVariables>({

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.core.mistral_settings import (
     get_ai_custom_prompt,
+    get_checklist_context,
     get_effective,
     get_feedback_enabled,
     get_llm_enabled,
@@ -21,6 +22,7 @@ from app.core.mistral_settings import (
     get_vision_enabled,
     save,
     set_ai_custom_prompt,
+    set_checklist_context,
     set_feedback_enabled,
     set_llm_enabled,
     set_llm_max_calls,
@@ -30,7 +32,13 @@ from app.core.mistral_settings import (
     set_vision_enabled,
 )
 from app.db.session import get_db
-from app.schemas import MistralSettingsIn, MistralSettingsOut, TestConnectionOut
+from app.schemas import (
+    ChecklistContextIn,
+    ChecklistContextOut,
+    MistralSettingsIn,
+    MistralSettingsOut,
+    TestConnectionOut,
+)
 
 # Inject the OS trust store into Python's ssl module so corporate CAs and
 # transparent SSL proxies work without `pip install certifi --upgrade` games.
@@ -59,7 +67,7 @@ def _build_out(db: Session) -> MistralSettingsOut:
         api_key_preview=preview,
         base_url=s["base_url"],
         chat_model=s["chat_model"],
-        vision_model=s.get("vision_model", "pixtral-12b-2409"),
+        vision_model=s.get("vision_model", "mistral-medium-3-5"),
         vision_enabled=get_vision_enabled(db),
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
@@ -168,6 +176,22 @@ def get_ai_prompt(db: Session = Depends(get_db)) -> dict:
 def update_ai_prompt(body: AiPromptIn, db: Session = Depends(get_db)) -> dict:
     set_ai_custom_prompt(db, body.prompt)
     return {"prompt": get_ai_custom_prompt(db)}
+
+
+@router.get("/checklist-context", response_model=ChecklistContextOut)
+def get_checklist_context_settings(db: Session = Depends(get_db)) -> ChecklistContextOut:
+    return ChecklistContextOut(**get_checklist_context(db))
+
+
+@router.post("/checklist-context", response_model=ChecklistContextOut)
+def update_checklist_context(
+    body: ChecklistContextIn,
+    db: Session = Depends(get_db),
+) -> ChecklistContextOut:
+    current = get_checklist_context(db)
+    current.update(body.model_dump(exclude_unset=True))
+    set_checklist_context(db, current)
+    return ChecklistContextOut(**get_checklist_context(db))
 
 
 # ---- Fiabilisation LLM ----------------------------------------------------

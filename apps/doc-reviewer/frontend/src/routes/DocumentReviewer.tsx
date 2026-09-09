@@ -1,13 +1,13 @@
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PdfViewer } from "../components/reviewer/PdfViewer";
-import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
+import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { DocxReviewer } from "./DocxReviewer";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
@@ -61,7 +61,7 @@ export function DocumentReviewer() {
   // Pipeline Word natif : reviewer dédié (blocs + sortie .docx), le viewer PDF
   // ne s'applique pas. On attend le chargement du document pour connaître le
   // format avant de choisir le reviewer.
-  if (document.data?.source_format === "docx") {
+  if (document.data?.working_format === "docx") {
     return <DocxReviewer documentId={documentId} />;
   }
 
@@ -109,19 +109,6 @@ export function DocumentReviewer() {
     revert.mutate(id);
   };
 
-  const handleExport = (): void => {
-    if (!document.data) return;
-    const url = `${API_BASE_URL}/documents/${documentId}/export`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  // Livrable relecteur (CR) : le PDF fidele + anomalies retenues estampillees.
-  const handleExportCommented = (): void => {
-    if (!document.data) return;
-    const url = `${API_BASE_URL}/documents/${documentId}/commented.pdf`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
   // Barre minimale (demande utilisateur) : Retour | navigation pages | Export.
   // L'analyse se lance depuis la liste Documents ; pas d'unites/suppression ici.
   return (
@@ -147,7 +134,7 @@ export function DocumentReviewer() {
               className="btn ghost small"
               aria-label={t("viewer.prev")}
             >
-              ◀
+              <ChevronLeft size={14} aria-hidden="true" />
             </button>
             <span className="label">
               {currentPage}/{totalPages || "?"}
@@ -159,7 +146,7 @@ export function DocumentReviewer() {
               className="btn ghost small"
               aria-label={t("viewer.next")}
             >
-              ▶
+              <ChevronRight size={14} aria-hidden="true" />
             </button>
           </div>
 
@@ -183,20 +170,7 @@ export function DocumentReviewer() {
                 {analyze.warnings[0]}
               </span>
             ) : null}
-            <button
-              type="button"
-              onClick={handleExportCommented}
-              className="btn primary small"
-              data-testid="export-commented"
-            >
-              <Download size={14} />
-              {t("reviewer.toolbar.exportCommented")}
-            </button>
-            <button type="button" onClick={handleExport} className="btn secondary small">
-              <Download size={14} />
-              {t("reviewer.toolbar.export")}
-            </button>
-            {document.data ? <DocumentMetaPanel document={document.data} /> : null}
+            <ExportSelector documentId={documentId} />
           </div>
         </div>
 

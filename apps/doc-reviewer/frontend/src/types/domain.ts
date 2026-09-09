@@ -112,6 +112,7 @@ export type Document = {
   current_version: number;
   /** Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif). */
   source_format: "pdf" | "docx";
+  working_format: "pdf" | "docx";
   // Portail qualite : revuabilite homogene tous formats.
   convert_engine: string;
   text_coverage: number;

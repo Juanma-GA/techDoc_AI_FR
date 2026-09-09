@@ -6,7 +6,8 @@ import { ChecklistImportCard } from "./ChecklistImportCard";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import {
   useDeleteRule,
-    useCompiledRules,
+  useCompiledRules,
+  usePatchCompiledRule,
   usePatchRule,
   useRules,
   useValidateAllRules,
@@ -23,6 +24,7 @@ export function Rules() {
   const rules = useRules();
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
   const compiledRules = useCompiledRules(activeStandardVersionIds);
+  const patchCompiled = usePatchCompiledRule();
   const patch = usePatchRule();
   const remove = useDeleteRule();
   const validateAll = useValidateAllRules();
@@ -55,6 +57,7 @@ export function Rules() {
             <table className="rules-table">
               <thead>
                 <tr>
+                  <th>{t("rules.form.enabled")}</th>
                   <th>{t("rules.compiled.status")}</th>
                   <th>{t("rules.form.name")}</th>
                   <th>{t("rules.compiled.detail")}</th>
@@ -64,9 +67,47 @@ export function Rules() {
               <tbody>
                 {compiledRules.data?.map((rule) => (
                   <tr key={rule.id} style={rule.active ? undefined : { opacity: 0.7 }}>
-                    <td><span className={`badge ${rule.execution === "deterministic" ? "success" : "default"}`}>{t(`rules.compiled.${rule.execution}`)}</span></td>
+                    <td>
+                      {rule.source === "user_checklist" ? (
+                        <label
+                          className="switch"
+                          title={rule.active ? t("rules.disable") : t("rules.enable")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={rule.active}
+                            onChange={(event) =>
+                              patchCompiled.mutate({ id: rule.id, active: event.target.checked })
+                            }
+                            disabled={patchCompiled.isPending}
+                          />
+                          <span className="track" />
+                        </label>
+                      ) : (
+                        <span className="badge success">{t("rules.compiled.standardActive")}</span>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          rule.execution === "deterministic" || rule.execution === "semantic"
+                            ? "success"
+                            : "default"
+                        }`}
+                      >
+                        {t(`rules.compiled.${rule.execution}`)}
+                      </span>
+                      <span className="label" style={{ marginLeft: 6 }}>
+                        {rule.severity}
+                      </span>
+                    </td>
                     <td>{rule.topic}</td>
-                    <td>{rule.manual_instruction ?? rule.compilation_error ?? t("rules.compiled.activeImmediately")}</td>
+                    <td>
+                      {rule.semantic_instruction ??
+                        rule.manual_instruction ??
+                        rule.compilation_error ??
+                        t("rules.compiled.activeImmediately")}
+                    </td>
                     <td><span className="label">{rule.origin_ref ?? t("standards.transverse")}</span></td>
                   </tr>
                 ))}

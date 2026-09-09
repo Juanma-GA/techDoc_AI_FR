@@ -98,6 +98,13 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow-card); margin-bottom: 16px; }
 .card-title { font-family: "Orbitron", sans-serif; font-size: 1.05rem; margin: 0 0 14px 0; }
+.collapsible-summary { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-2); transition: background 0.15s, border-color 0.15s; }
+.collapsible-summary:hover { background: var(--card-hover); border-color: var(--border-bright); }
+.collapsible-summary:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+.collapsible[open] > .collapsible-summary { border-color: var(--brand-light); }
+.collapsible-summary svg { flex-shrink: 0; transition: transform 0.15s ease; }
+.collapsible[open] > .collapsible-summary svg { transform: rotate(90deg); }
+.collapsible-summary::-webkit-details-marker { display: none; }
 .card-sub { color: var(--fg-dim); font-size: 0.85rem; margin: -8px 0 14px 0; }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .grow { flex: 1; min-width: 0; }
@@ -112,6 +119,8 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .kpi-value.info { color: var(--info); }
 
 .form { display: flex; flex-direction: column; gap: 10px; }
+.document-upload-controls { display: flex; flex-direction: column; gap: 16px; }
+.document-upload-form { gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > label, .field-label { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.7rem; color: var(--fg-dim); }
 .input, .pr select, .pr textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
@@ -194,6 +203,8 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .item-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; }
 .item-row:hover { border-color: var(--border-bright); }
 .item-row.clickable { cursor: pointer; }
+.standard-option:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+.standard-option:hover { border-color: var(--border-bright) !important; }
 .item-main { flex: 1; min-width: 0; }
 .item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .item-meta { color: var(--fg-dim); font-size: 0.85rem; margin-top: 2px; }

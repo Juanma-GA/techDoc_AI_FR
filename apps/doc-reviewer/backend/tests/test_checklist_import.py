@@ -66,6 +66,34 @@ def test_deterministic_rule_is_active_immediately(client: TestClient, monkeypatc
     assert all(rule["active"] is True for rule in body["rules"])
 
 
+def test_compiled_rule_activation_patch_is_persisted(client: TestClient, monkeypatch) -> None:
+    def compile_deterministic(_db, row, filename: str) -> CompiledRule:
+        return CompiledRule(
+            id=f"compiled-{row.row_number}",
+            topic=row.name,
+            execution="deterministic",
+            target=RuleTarget(page="all", region="full_page"),
+            checks=[Check(field="text", operator="regex", expected="ATA")],
+            source="user_checklist",
+            origin_ref=f"{filename}:{row.sheet}:{row.row_number}",
+        )
+
+    monkeypatch.setattr(rules_api, "compile_checklist_rule", compile_deterministic)
+    imported = client.post(
+        "/api/v1/rules/import",
+        files={"file": ("checklist.xlsx", _checklist_xlsx(), "application/vnd.ms-excel")},
+        data={"mode": "replace"},
+    ).json()
+    rule_id = imported["rules"][0]["id"]
+
+    disabled = client.patch(f"/api/v1/compiled-rules/{rule_id}", json={"active": False})
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["active"] is False
+
+    listed = client.get("/api/v1/compiled-rules").json()
+    assert next(rule for rule in listed if rule["id"] == rule_id)["active"] is False
+
+
 def test_compiled_standard_rules_are_filtered_by_selected_version(client: TestClient) -> None:
     from sqlalchemy import select
 

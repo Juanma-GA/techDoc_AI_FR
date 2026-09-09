@@ -37,7 +37,7 @@ export function RejectionsSummaryCard() {
     const rows = data.items.map((i) => [i.file, i.rule_code, i.severity, i.message, i.feedback]);
     const esc = (c: string): string => `"${(c ?? "").replace(/"/g, '""')}"`;
     const csv = [header, ...rows].map((r) => r.map(esc).join(";")).join("\n");
-    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

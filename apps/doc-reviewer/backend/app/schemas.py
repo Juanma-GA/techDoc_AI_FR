@@ -71,6 +71,18 @@ class DocumentMetaPatchIn(BaseModel):
     document_language: Optional[Literal["fr", "en"]] = None
 
 
+class ChecklistContextIn(BaseModel):
+    meta_revision_date: Optional[str] = Field(default=None, max_length=60)
+    meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
+    meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
+    meta_revision_number: Optional[str] = Field(default=None, max_length=60)
+    document_language: Optional[Literal["fr", "en"]] = None
+
+
+class ChecklistContextOut(ChecklistContextIn):
+    pass
+
+
 # =============================================================================
 # Suggestions
 # =============================================================================
@@ -253,12 +265,18 @@ class RuleImportResult(BaseModel):
 class CompiledRuleSummary(BaseModel):
     id: str
     topic: str
-    execution: Literal["deterministic", "manual", "unsupported"]
+    severity: Literal["info", "warning", "error"] = "warning"
+    execution: Literal["deterministic", "semantic", "manual", "unsupported"]
     active: bool
     source: Literal["standard_rule", "user_checklist"]
     origin_ref: Optional[str] = None
+    semantic_instruction: Optional[str] = None
     manual_instruction: Optional[str] = None
     compilation_error: Optional[str] = None
+
+
+class CompiledRulePatchIn(BaseModel):
+    active: bool
 
 
 # =============================================================================
@@ -353,7 +371,7 @@ class MistralSettingsIn(BaseModel):
     api_key: str = ""
     base_url: str = "https://api.mistral.ai"
     chat_model: str = "mistral-small-latest"
-    vision_model: str = "pixtral-12b-2409"
+    vision_model: str = "mistral-medium-3-5"
     vision_enabled: Optional[bool] = None
     llm_enabled: Optional[bool] = None
 
@@ -363,7 +381,7 @@ class MistralSettingsOut(BaseModel):
     api_key_preview: str = ""
     base_url: str
     chat_model: str
-    vision_model: str = "pixtral-12b-2409"
+    vision_model: str = "mistral-medium-3-5"
     vision_enabled: bool = False
     llm_enabled: bool = True
     llm_tested: bool = False

@@ -27,7 +27,7 @@ def persist_compiled_rule(
         source_ref=source_ref or rule.origin_ref,
         compiled_json=canonical_json,
         content_sha256=hashlib.sha256(canonical_json.encode("utf-8")).hexdigest(),
-        active=rule.execution == "deterministic",
+        active=rule.execution in {"deterministic", "semantic"},
         validation_error=rule.compilation_error,
     )
     db.add(row)

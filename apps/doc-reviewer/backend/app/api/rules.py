@@ -11,7 +11,7 @@ from typing import Optional
 import structlog
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.core import ingest
@@ -30,6 +30,7 @@ from app.parsers.pdf_parser import parse_pdf
 from app.schemas import (
     RuleImportResult,
     CompiledRuleSummary,
+    CompiledRulePatchIn,
     RuleIn,
     RuleOut,
     RulePatchIn,
@@ -290,10 +291,12 @@ def _compiled_summary(row: CompiledRuleVersion) -> CompiledRuleSummary:
     return CompiledRuleSummary(
         id=rule.id,
         topic=rule.topic,
+        severity=rule.severity,
         execution=rule.execution,
         active=row.active,
         source=rule.source,
         origin_ref=rule.origin_ref,
+        semantic_instruction=rule.semantic_instruction,
         manual_instruction=rule.manual_instruction,
         compilation_error=rule.compilation_error,
     )
@@ -334,10 +337,12 @@ def list_compiled_rules(
                 summaries[rule.id] = CompiledRuleSummary(
                     id=rule.id,
                     topic=rule.topic,
+                    severity=rule.severity,
                     execution=rule.execution,
                     active=True,
                     source=rule.source,
                     origin_ref=rule.origin_ref,
+                    semantic_instruction=rule.semantic_instruction,
                 )
     rows = list(
         db.scalars(
@@ -348,6 +353,29 @@ def list_compiled_rules(
         summary = _compiled_summary(row)
         summaries[summary.id] = summary
     return list(summaries.values())
+
+
+@router.patch("/compiled-rules/{rule_id}", response_model=CompiledRuleSummary)
+def patch_compiled_rule(
+    rule_id: str,
+    body: CompiledRulePatchIn,
+    db: Session = Depends(get_db),
+) -> CompiledRuleSummary:
+    row = db.scalar(
+        select(CompiledRuleVersion)
+        .where(
+            CompiledRuleVersion.code == rule_id,
+            CompiledRuleVersion.source == "user_checklist",
+        )
+        .order_by(desc(CompiledRuleVersion.created_at))
+        .limit(1)
+    )
+    if row is None:
+        raise AppError("COMPILED_RULE_NOT_FOUND", "Règle compilée introuvable", status_code=404)
+    row.active = body.active
+    db.commit()
+    db.refresh(row)
+    return _compiled_summary(row)
 
 
 @router.post("/rules/import", response_model=RuleImportResult)
@@ -434,16 +462,23 @@ async def import_checklist(
 
 @router.post("/rules/validate-all", response_model=dict)
 def validate_all(db: Session = Depends(get_db)) -> dict:
-    """Active toutes les regles checklist encore desactivees (`enabled=false`).
-
-    Raccourci « tout valider » apres un import : les consignes deviennent
-    effectives a la prochaine analyse."""
-    rows = list(db.scalars(select(Rule).where(Rule.kind.in_(_CHECKLIST_KINDS), Rule.enabled.is_(False))))
-    for r in rows:
-        r.enabled = True
-        r.updated_at = datetime.now(timezone.utc)
+    """Active toutes les règles checklist compilables encore désactivées."""
+    rows = list(
+        db.scalars(
+            select(CompiledRuleVersion).where(
+                CompiledRuleVersion.source == "user_checklist",
+                CompiledRuleVersion.active.is_(False),
+            )
+        )
+    )
+    activated = 0
+    for row in rows:
+        rule = validate_compiled_rule_json(row.compiled_json)
+        if rule.execution in {"deterministic", "semantic", "manual"}:
+            row.active = True
+            activated += 1
     db.commit()
-    return {"activated": len(rows)}
+    return {"activated": activated}
 
 
 @router.post("/rules/suggest/from-files", response_model=RuleSuggestOut)

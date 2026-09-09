@@ -1,10 +1,10 @@
-import { ArrowLeft, Download } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
-import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { useAnalyze } from "../hooks/useAnalyze";
@@ -15,7 +15,6 @@ import {
 } from "../hooks/useApplySuggestion";
 import { useDocxBlocks, useDocument } from "../hooks/useDocuments";
 import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
-import { API_BASE_URL } from "../lib/api";
 import { useViewerStore } from "../stores/viewerStore";
 
 /**
@@ -92,19 +91,6 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
     revert.mutate(id);
   };
 
-  const handleExport = (): void => {
-    if (!document.data) return;
-    // Rend le .docx corrigé (version courante).
-    window.open(`${API_BASE_URL}/documents/${documentId}/export`, "_blank", "noopener,noreferrer");
-  };
-
-  // Le format natif effectivement revise/exporte est celui du fichier importe
-  // (.doc reste .doc, .docx reste .docx) — le libelle du bouton ne doit jamais
-  // dire ".docx" pour un document importe en .doc (cf. `_persist_docx`).
-  const nativeExt = (document.data?.original_filename ?? "").toLowerCase().endsWith(".doc")
-    ? ".doc"
-    : ".docx";
-
   return (
     <div className="reviewer">
       <div className="reviewer-viewer">
@@ -136,11 +122,7 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
                 {analyze.warnings[0]}
               </span>
             ) : null}
-            <button type="button" onClick={handleExport} className="btn primary small">
-              <Download size={14} />
-              {t("reviewer.toolbar.exportDocx", { ext: nativeExt })}
-            </button>
-            {document.data ? <DocumentMetaPanel document={document.data} /> : null}
+            <ExportSelector documentId={documentId} />
           </div>
         </div>
 

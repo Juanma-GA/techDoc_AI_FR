@@ -1,196 +1,116 @@
-"""MAT10000 (Dassault Aviation) catalog — version 1.
-
-Référentiel Dassault de description des tâches de maintenance. Les
-règles ci-dessous combinent vérifications structurelles (champs
-obligatoires, sections requises, format des étapes) et règles textuelles
-(terminologie, formats de référence).
-"""
+"""MAT10000 version 1 catalog, expressed with the existing CompiledRule contract."""
 
 from __future__ import annotations
 
-from app.checks.standards._base import StandardRule
+from app.core.compiled_rules import Check, CompiledRule, RuleTarget
+
+
+_TARGET = RuleTarget(page="all", region="full_page")
+_ORIGIN = "MAT10000:v1"
+
+
+def _rule(code: str, topic: str, pattern: str) -> CompiledRule:
+    return CompiledRule(
+        id=code,
+        topic=topic,
+        execution="deterministic",
+        target=_TARGET,
+        checks=[Check(field="text", operator="regex", expected=pattern)],
+        source="standard_rule",
+        origin_ref=f"{_ORIGIN}:{code}",
+    )
 
 
 _RULES_V1 = [
-    StandardRule(
-        code="MAT_FIELD_PERIODICITE",
-        title="Périodicité renseignée",
-        description=(
-            "Pour toute tâche de maintenance préventive, la périodicité "
-            "(heures de vol, cycles, calendaire) doit être explicitement "
-            "renseignée."
-        ),
-        kind="field_required",
-        severity="error",
-        pattern="Périodicité|Periodicity|Interval",
-        message="Champ « Périodicité » obligatoire pour la maintenance préventive.",
-        metadata={"conditional": "task_type=preventive"},
+    _rule(
+        "MAT_FIELD_PERIODICITE",
+        "Périodicité renseignée",
+        r"(?is)^(?=.*\b(?:preventive|scheduled|periodic|maintenance préventive|maintenance preventive)\b)(?!.*\b(?:Périodicité|Periodicity|Interval)\b).*$",
     ),
-    StandardRule(
-        code="MAT_FIELD_DUREE",
-        title="Durée de la procédure",
-        description=(
-            "La durée estimée de la procédure (en minutes ou h/min) "
-            "doit être renseignée pour le planning de maintenance."
-        ),
-        kind="field_required",
-        severity="warning",
-        pattern="Durée|Duration|Elapsed time",
-        message="Champ « Durée » manquant.",
+    _rule(
+        "MAT_FIELD_DUREE",
+        "Durée de la procédure",
+        r"(?is)^(?!.*\b(?:Durée|Duration|Elapsed time)\b).*$",
     ),
-    StandardRule(
-        code="MAT_FIELD_PERSONNEL",
-        title="Personnel nécessaire",
-        description=(
-            "Nombre et qualification des opérateurs requis "
-            "(ex : 1 mécanicien B1, 1 inspecteur)."
-        ),
-        kind="field_required",
-        severity="warning",
-        pattern="Personnel|Manpower|Crew",
-        message="Champ « Personnel nécessaire » manquant.",
+    _rule(
+        "MAT_FIELD_PERSONNEL",
+        "Personnel nécessaire",
+        r"(?is)^(?!.*\b(?:Personnel|Manpower|Crew)\b).*$",
     ),
-    StandardRule(
-        code="MAT_FIELD_NIVEAU",
-        title="Niveau de maintenance",
-        description=(
-            "Niveau de maintenance (NTI-1 / NTI-2 / NTI-3, ou Line / "
-            "Base / Shop). Valeur énumérée."
-        ),
-        kind="enum_value",
-        severity="error",
-        pattern="NTI-1,NTI-2,NTI-3,Line,Base,Shop",
-        message="Niveau de maintenance manquant ou hors énumération.",
-        metadata={"field_label": "Niveau de maintenance"},
+    _rule(
+        "MAT_FIELD_NIVEAU",
+        "Niveau de maintenance",
+        r"(?is)^(?!.*\b(?:Niveau de maintenance|Maintenance level)\s*[:=]\s*(?:NTI-[123]|Line|Base|Shop)\b).*$",
     ),
-    StandardRule(
-        code="MAT_SECTION_EQUIPEMENT",
-        title="Équipement de soutien listé",
-        description=(
-            "Section listant l'outillage et l'équipement de soutien "
-            "nécessaires (tournevis, clé dynamométrique, banc de test…)."
-        ),
-        kind="section_required",
-        severity="warning",
-        pattern="Équipement de soutien|Outillage|Support equipment|Tools",
-        message="Section « Équipement de soutien » absente.",
+    _rule(
+        "MAT_SECTION_EQUIPEMENT",
+        "Équipement de soutien listé",
+        r"(?is)^(?!.*\b(?:Équipement de soutien|Equipement de soutien|Outillage|Support equipment|Tools)\b).*$",
     ),
-    StandardRule(
-        code="MAT_SECTION_CONSOMMABLES",
-        title="Consommables listés",
-        description=(
-            "Liste des consommables nécessaires (huile, graisse, "
-            "lockwire, joints, vernis frein)."
-        ),
-        kind="section_required",
-        severity="warning",
-        pattern="Consommables|Consumables|Materials",
-        message="Section « Consommables » absente.",
+    _rule(
+        "MAT_SECTION_CONSOMMABLES",
+        "Consommables listés",
+        r"(?is)^(?!.*\b(?:Consommables|Consumables|Materials)\b).*$",
     ),
-    StandardRule(
-        code="MAT_SECTION_RECHANGE",
-        title="Pièces de rechange listées",
-        description=(
-            "Pièces de rechange (PN/SN) listées avec quantité. Doit être "
-            "cohérent avec l'intitulé de la tâche : si la tâche est "
-            "« Remplacer le moteur », la rechange doit lister un moteur."
-        ),
-        kind="field_consistency",
-        severity="error",
-        pattern="task=replace|remplacer;spare=engine|moteur|pump|pompe|filter|filtre",
-        message="Pièce de rechange incohérente avec l'intitulé de la tâche.",
+    _rule(
+        "MAT_SECTION_RECHANGE",
+        "Pièces de rechange listées",
+        r"(?is)^(?=.*\b(?:replace|remplacer|remove|déposer|install|installer)\b)(?!.*\b(?:engine|moteur|pump|pompe|filter|filtre|spare|rechange|part|pièce|piece)\b).*$",
     ),
-    StandardRule(
-        code="MAT_SECTION_PRELIM",
-        title="Tâches préliminaires",
-        description=(
-            "Consignations, mises en sécurité, préparations à effectuer "
-            "avant les étapes principales."
-        ),
-        kind="section_required",
-        severity="error",
-        pattern="Tâches préliminaires|Préliminaires|Preliminary tasks|Safety",
-        message="Section « Tâches préliminaires » absente.",
+    _rule(
+        "MAT_SECTION_PRELIM",
+        "Tâches préliminaires",
+        r"(?is)^(?!.*\b(?:Tâches préliminaires|Tâches preliminaires|Préliminaires|Preliminary tasks|Safety)\b).*$",
     ),
-    StandardRule(
-        code="MAT_SECTION_POST",
-        title="Tâches post-maintenance",
-        description=(
-            "Tests fonctionnels, déconsignation, remise en configuration "
-            "vol après les étapes principales."
-        ),
-        kind="section_required",
-        severity="error",
-        pattern="Tâches post-maintenance|Restitution|Post-maintenance|Functional test",
-        message="Section « Tâches post-maintenance » absente.",
+    _rule(
+        "MAT_SECTION_POST",
+        "Tâches post-maintenance",
+        r"(?is)^(?!.*\b(?:Tâches post-maintenance|Restitution|Post-maintenance|Functional test)\b).*$",
     ),
-    StandardRule(
-        code="MAT_STEP_VERB",
-        title="Étape commençant par un verbe à l'infinitif",
-        description=(
-            "Chaque étape numérotée doit commencer par un verbe à "
-            "l'infinitif (« Retirer », « Vérifier », « Remove », "
-            "« Inspect »). Phrases nominales et sujets explicites sont "
-            "prohibés."
-        ),
-        kind="step_pattern",
-        severity="warning",
-        pattern=r"^(?:[A-ZÀ-Ÿ][a-zà-ÿ]+(?:er|ir|re|oir)\b|[A-Z][a-z]{3,}(?:\s|$))",
-        message="Étape : verbe à l'infinitif requis.",
-        example_invalid="1. Le panneau est retiré.",
-        example_valid="1. Retirer le panneau.",
+    _rule(
+        "MAT_STEP_VERB",
+        "Étape commençant par un verbe à l'infinitif",
+        r"(?im)^\s*(?:(?:Step|Étape|Etape)\s+)?\(?\d+[.)\]]\s+(?!(?:Remove|Inspect|Verify|Install|Replace|Disconnect|Connect|Open|Close|Check|Clean|Measure|Adjust|Set|Record|Ensure|Retirer|Inspecter|Vérifier|Installer|Remplacer|Déposer|Déconnecter|Connecter|Ouvrir|Fermer|Contrôler|Nettoyer|Mesurer|Régler|Noter)\b|[A-ZÀ-Ÿ][a-zà-ÿ]+(?:er|ir|re|oir)\b).+",
     ),
-    StandardRule(
-        code="MAT_REF_FORMAT",
-        title="Référence MAT10000 formatée",
-        description=(
-            "Les renvois vers une autre tâche MAT10000 doivent suivre le "
-            "format MAT-XX-YY-ZZ-NNN."
-        ),
-        kind="regex_flag",
-        severity="info",
-        pattern=r"\bMAT-\d{2}-\d{2}-\d{2}-\d{3}\b",
-        message="Référence MAT10000 — vérifier le format MAT-XX-YY-ZZ-NNN.",
+    _rule(
+        "MAT_REF_FORMAT",
+        "Référence MAT10000 formatée",
+        r"\bMAT-(?!\d{2}-\d{2}-\d{2}-\d{3}\b)[A-Za-z0-9.-]+",
     ),
-    StandardRule(
-        code="MAT_NO_PASSIVE",
-        title="Voix passive interdite dans les étapes",
-        description="Les étapes doivent être à l'impératif actif.",
-        kind="regex_flag",
-        severity="warning",
-        pattern=r"\b(?:est|sont|a été|ont été|doit être|doivent être)\s+\w+(?:é|és|ée|ées)\b",
-        message="Voix passive — réécrire à l'impératif actif.",
+    _rule(
+        "MAT_NO_PASSIVE",
+        "Voix passive interdite dans les étapes",
+        r"(?i)\b(?:est|sont|a été|ont été|doit être|doivent être)\s+\w+(?:é|és|ée|ées|ed|en)\b",
     ),
-    StandardRule(
-        code="MAT_TERMINOLOGY_DANGER",
-        title="Terminologie DANGER / WARNING / CAUTION",
-        description=(
-            "Hiérarchie obligatoire : DANGER (mort possible) > WARNING "
-            "(blessure possible) > CAUTION (dommage matériel). Les "
-            "synonymes (« Attention », « Important ») sont prohibés."
-        ),
-        kind="term_replace",
-        severity="warning",
-        pattern=r"\b(Attention|Important)\b",
-        replacement="CAUTION",
-        message="Préférer DANGER / WARNING / CAUTION (hiérarchie MAT10000).",
+    _rule(
+        "MAT_TERMINOLOGY_DANGER",
+        "Terminologie DANGER / WARNING / CAUTION",
+        r"(?i)\b(?:Attention|Important)\b",
     ),
-    StandardRule(
-        code="MAT_TORQUE_UNIT",
-        title="Couple de serrage en N·m",
-        description=(
-            "Les couples de serrage sont exprimés en N·m. Les unités "
-            "impériales (lb·ft, in·lb) doivent être converties ou "
-            "annotées entre parenthèses."
-        ),
-        kind="regex_flag",
-        severity="info",
-        pattern=r"\b\d+(?:\.\d+)?\s*(?:lb[·.]?ft|in[·.]?lb)\b",
-        message="Couple en unités impériales — convertir en N·m.",
+    _rule(
+        "MAT_TORQUE_UNIT",
+        "Couple de serrage en N·m",
+        r"\b\d+(?:\.\d+)?\s*(?:lb[·.]?ft|in[·.]?lb)\b",
     ),
 ]
 
 
-CATALOG: dict[str, list[StandardRule]] = {
-    "v1": _RULES_V1,
+RULE_METADATA = {
+    "MAT_FIELD_PERIODICITE": {"description": "Pour toute tâche de maintenance préventive, la périodicité doit être explicitement renseignée.", "kind": "field_required", "severity": "error", "message": "Champ « Périodicité » obligatoire pour la maintenance préventive.", "metadata": {"conditional": "task_type=preventive"}},
+    "MAT_FIELD_DUREE": {"description": "La durée estimée de la procédure doit être renseignée pour le planning de maintenance.", "kind": "field_required", "severity": "warning", "message": "Champ « Durée » manquant."},
+    "MAT_FIELD_PERSONNEL": {"description": "Nombre et qualification des opérateurs requis.", "kind": "field_required", "severity": "warning", "message": "Champ « Personnel nécessaire » manquant."},
+    "MAT_FIELD_NIVEAU": {"description": "Niveau de maintenance NTI-1 / NTI-2 / NTI-3, ou Line / Base / Shop.", "kind": "enum_value", "severity": "error", "message": "Niveau de maintenance manquant ou hors énumération.", "metadata": {"field_label": "Niveau de maintenance"}},
+    "MAT_SECTION_EQUIPEMENT": {"description": "Section listant l'outillage et l'équipement de soutien nécessaires.", "kind": "section_required", "severity": "warning", "message": "Section « Équipement de soutien » absente."},
+    "MAT_SECTION_CONSOMMABLES": {"description": "Liste des consommables nécessaires.", "kind": "section_required", "severity": "warning", "message": "Section « Consommables » absente."},
+    "MAT_SECTION_RECHANGE": {"description": "Pièces de rechange listées avec quantité et cohérentes avec l'intitulé de la tâche.", "kind": "field_consistency", "severity": "error", "message": "Pièce de rechange incohérente avec l'intitulé de la tâche."},
+    "MAT_SECTION_PRELIM": {"description": "Consignations, mises en sécurité et préparations avant les étapes principales.", "kind": "section_required", "severity": "error", "message": "Section « Tâches préliminaires » absente."},
+    "MAT_SECTION_POST": {"description": "Tests fonctionnels, déconsignation et remise en configuration vol.", "kind": "section_required", "severity": "error", "message": "Section « Tâches post-maintenance » absente."},
+    "MAT_STEP_VERB": {"description": "Chaque étape numérotée doit commencer par un verbe à l'infinitif.", "kind": "step_pattern", "severity": "warning", "message": "Étape : verbe à l'infinitif requis."},
+    "MAT_REF_FORMAT": {"description": "Les renvois vers une autre tâche MAT10000 doivent suivre le format MAT-XX-YY-ZZ-NNN.", "kind": "regex_flag", "severity": "info", "message": "Référence MAT10000 — vérifier le format MAT-XX-YY-ZZ-NNN."},
+    "MAT_NO_PASSIVE": {"description": "Les étapes doivent être à l'impératif actif.", "kind": "regex_flag", "severity": "warning", "message": "Voix passive — réécrire à l'impératif actif."},
+    "MAT_TERMINOLOGY_DANGER": {"description": "Préférer DANGER / WARNING / CAUTION à Attention / Important.", "kind": "term_replace", "severity": "warning", "replacement": "CAUTION", "message": "Préférer DANGER / WARNING / CAUTION (hiérarchie MAT10000)."},
+    "MAT_TORQUE_UNIT": {"description": "Les couples de serrage sont exprimés en N·m.", "kind": "regex_flag", "severity": "info", "message": "Couple en unités impériales — convertir en N·m."},
 }
+
+
+CATALOG: dict[str, list[CompiledRule]] = {"v1": _RULES_V1}

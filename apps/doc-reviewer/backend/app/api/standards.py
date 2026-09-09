@@ -285,7 +285,7 @@ def reset_catalog_rule(
     """Restore a built-in catalog rule from the Python source of truth
     (`app.checks.standards.*`). No-op for custom versions or codes not
     present in the factory catalog."""
-    from app.checks.standards import BUILTIN_STANDARDS
+    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 
     version = db.get(StandardVersion, version_id)
     if version is None or version.standard_id != standard_id:
@@ -303,13 +303,17 @@ def reset_catalog_rule(
     for spec in BUILTIN_STANDARDS:
         if spec["code"] != std.code:
             continue
-        for label, rules in spec["versions"].items():
+        for label in spec["versions"]:
             if label != version.label:
                 continue
-            for r in rules:
-                if r.code == code:
-                    factory_rule = r.as_dict()
-                    break
+            factory_rule = next(
+                (
+                    item
+                    for item in serialize_builtin_version(spec, label)
+                    if item.get("code") == code
+                ),
+                None,
+            )
     if factory_rule is None:
         raise AppError(
             "CATALOG_CODE_UNKNOWN",

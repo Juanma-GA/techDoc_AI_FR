@@ -40,3 +40,4 @@ def test_pdf_exports_contract(client: TestClient, sample_pdf_bytes: bytes) -> No
     assert payload["source_format"] == "pdf"
     assert payload["working_format"] == "pdf"
     assert {item["kind"] for item in payload["available"]} == {"original", "commented"}
+    assert all("warning" in item for item in payload["available"])

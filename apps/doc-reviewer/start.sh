@@ -7,14 +7,16 @@
 
 set -euo pipefail
 
-# Port unique (à ajuster par POC : 8008, 8002, ...)
-PORT="${PORT:-8008}"
+# Port unique (configurable via PORT), puis premier port libre suivant.
+PORT="${PORT:-8003}"
+REQUESTED_PORT="$PORT"
+PORT_MAX=$((PORT + 20))
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="${APP_DIR}/backend"
 
 echo "============================================================"
-echo " TEMPLATE - Lancement local"
+echo " Doc Reviewer - Lancement local"
 echo "============================================================"
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -42,11 +44,18 @@ fi
 echo "[setup] Migrations Alembic..."
 alembic upgrade head
 
-# Vérifier que le port est libre
-if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
-    echo "[erreur] Le port $PORT est deja utilise :"
-    lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n
-    exit 1
+# Chercher le premier port libre dans la plage autorisee.
+if command -v lsof >/dev/null 2>&1; then
+    while lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; do
+        if (( PORT >= PORT_MAX )); then
+            echo "[erreur] Aucun port libre entre $REQUESTED_PORT et $PORT_MAX."
+            exit 1
+        fi
+        PORT=$((PORT + 1))
+    done
+fi
+if [[ "$PORT" != "$REQUESTED_PORT" ]]; then
+    echo "[info] Le port $REQUESTED_PORT est occupe - bascule automatique sur $PORT."
 fi
 
 # Front React : rebuild auto si dist absent OU sources front plus recentes que

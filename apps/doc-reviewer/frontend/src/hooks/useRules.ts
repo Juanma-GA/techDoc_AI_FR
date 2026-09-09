@@ -103,10 +103,12 @@ export type ChecklistImportResult = {
 export type CompiledRuleSummary = {
   id: string;
   topic: string;
-  execution: "deterministic" | "manual" | "unsupported";
+  severity: "info" | "warning" | "error";
+  execution: "deterministic" | "semantic" | "manual" | "unsupported";
   active: boolean;
   source: "standard_rule" | "user_checklist";
   origin_ref: string | null;
+  semantic_instruction: string | null;
   manual_instruction: string | null;
   compilation_error: string | null;
 };
@@ -121,6 +123,15 @@ export function useCompiledRules(standardVersionIds: string[] = []) {
       const query = params.toString();
       return api.get<CompiledRuleSummary[]>(`/compiled-rules${query ? `?${query}` : ""}`);
     },
+  });
+}
+
+export function usePatchCompiledRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.patch<CompiledRuleSummary>(`/compiled-rules/${encodeURIComponent(id)}`, { active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["compiled-rules"] }),
   });
 }
 
@@ -173,6 +184,9 @@ export function useValidateAllRules() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ activated: number }>("/rules/validate-all", {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["rules"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rules"] });
+      qc.invalidateQueries({ queryKey: ["compiled-rules"] });
+    },
   });
 }

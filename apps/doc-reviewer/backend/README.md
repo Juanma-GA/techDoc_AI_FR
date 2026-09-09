@@ -20,9 +20,9 @@ LibreOffice is installed and may lose layout fidelity.
 Example:
 
 ```bash
-curl -F "file=@manual.docx" http://127.0.0.1:8008/api/v1/documents
-curl http://127.0.0.1:8008/api/v1/documents/<id>/exports
-curl -o manual_commente.pdf "http://127.0.0.1:8008/api/v1/documents/<id>/export?format=commented"
+curl -F "file=@manual.docx" http://127.0.0.1:8003/api/v1/documents
+curl http://127.0.0.1:8003/api/v1/documents/<id>/exports
+curl -o manual_commente.pdf "http://127.0.0.1:8003/api/v1/documents/<id>/export?format=commented"
 ```
 
 ## Démarrage local (dev)
@@ -35,17 +35,26 @@ pip install -e ".[dev]"
 cp .env.example .env                # remplir MISTRAL_API_KEY si besoin
 alembic upgrade head
 pytest
-uvicorn app.main:app --reload --port 8008
+uvicorn app.main:app --reload --port 8003
 ```
+
+### Logs de developpement
+
+Le niveau se regle avec `LOG_LEVEL` dans `.env` puis en redemarrant le backend.
+Utiliser `DEBUG` pour activer aussi le mode debug FastAPI et afficher les appels
+Mistral, leurs prompts et leurs reponses, ainsi que les durees HTTP. Les images
+inline sont resumees par leur type et leur taille, et la cle API n'est jamais
+ecrite dans les logs. Utiliser `INFO` au quotidien, `WARNING` ou `ERROR` pour
+reduire le bruit, et `NONE` (ou `OFF`) pour couper les logs.
 
 Test :
 
 ```bash
-curl http://127.0.0.1:8008/api/v1/health
+curl http://127.0.0.1:8003/api/v1/health
 # → {"status":"ok","version":"0.1.0","db":"ok","llm":"not_configured"}
 ```
 
-OpenAPI : `http://127.0.0.1:8008/api/v1/docs`.
+OpenAPI : `http://127.0.0.1:8003/api/v1/docs`.
 
 ## Verification manuelle
 
@@ -101,7 +110,7 @@ app/
 └── templates/                # preview.html
 alembic/                      # migrations
 tests/                        # pytest (conftest force sqlite in-memory)
-Dockerfile                    # multi-stage, user 1001, healthcheck Python pur (port 8008)
+Dockerfile                    # multi-stage, user 1001, healthcheck Python pur (port 8003)
 ```
 
 ## Format d'erreur

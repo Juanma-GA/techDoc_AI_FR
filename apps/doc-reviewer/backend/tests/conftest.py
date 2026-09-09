@@ -14,7 +14,6 @@ _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp_db.close()
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{_tmp_db.name}")
 os.environ.setdefault("STORAGE_DIR", tempfile.mkdtemp(prefix="doc-reviewer-tests-"))
-os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
 
 
@@ -36,7 +35,7 @@ def _seed_builtin_standards() -> None:
     rather than `alembic upgrade`)."""
     import json
 
-    from app.checks.standards import BUILTIN_STANDARDS
+    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     from app.db.models import Standard, StandardVersion
     from app.db.session import SessionLocal
 
@@ -53,13 +52,13 @@ def _seed_builtin_standards() -> None:
             )
             session.add(std)
             session.flush()
-            for label, rules in spec["versions"].items():
+            for label in spec["versions"]:
                 session.add(
                     StandardVersion(
                         standard_id=std.id,
                         label=label,
                         builtin=True,
-                        catalog_json=json.dumps([r.as_dict() for r in rules]),
+                        catalog_json=json.dumps(serialize_builtin_version(spec, label)),
                     )
                 )
         session.commit()

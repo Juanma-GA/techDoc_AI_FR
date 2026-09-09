@@ -22,7 +22,6 @@ class Settings(BaseSettings):
 
     app_name: str = "doc-reviewer"
     app_version: str = "2.0.0"
-    debug: bool = False
     log_level: str = "INFO"
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'doc-reviewer.db'}"
@@ -36,7 +35,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://localhost:8008",
+        "http://localhost:8003",
     ]
     max_upload_size_mb: int = 100
 
@@ -50,7 +49,7 @@ class Settings(BaseSettings):
     mistral_api_key: str = ""
     mistral_base_url: str = "https://api.mistral.ai"
     mistral_chat_model: str = "mistral-small-latest"
-    mistral_vision_model: str = "pixtral-12b-2409"
+    mistral_vision_model: str = "mistral-medium-3-5"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -62,6 +61,11 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
+
+    @property
+    def debug(self) -> bool:
+        """Enable FastAPI debug mode only when detailed logs are requested."""
+        return self.log_level.strip().upper() == "DEBUG"
 
     @property
     def llm_configured(self) -> bool:

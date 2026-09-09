@@ -99,70 +99,72 @@ export function DocumentsList() {
 
         <AnalysisTargetBanner />
 
-        {/* Cible checklist : toggle runtime, independant des normes. */}
-        <div className="switch-row">
-          <div>
-            <div>{t("documents.checklistTarget")}</div>
-            <div className="label">{t("documents.checklistTargetHint")}</div>
-          </div>
-          <label className="switch" title={t("documents.checklistTarget")}>
-            <input
-              type="checkbox"
-              checked={checklistActive}
-              onChange={(e) => setChecklistActive(e.target.checked)}
-            />
-            <span className="track" />
-          </label>
-        </div>
-
-        <div className="form">
-          <div className="field">
-            <span className="field-label">{t("documents.targetUnit")}</span>
-            <div className="slicer">
-              {TARGET_UNITS.map((unit) => {
-                const on = targetUnits.includes(unit);
-                return (
-                  <button
-                    key={unit}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggleTargetUnit(unit)}
-                    className={on ? "slicer-pill active" : "slicer-pill"}
-                  >
-                    {t(`settings.targetUnit.${unit}`)}
-                  </button>
-                );
-              })}
-              <span className="label" style={{ alignSelf: "center", marginLeft: 6 }}>
-                {targetUnits.length === 1 ? "" : t("settings.targetUnit.auto")}
-              </span>
+        <div className="document-upload-controls">
+          {/* Cible checklist : toggle runtime, independant des normes. */}
+          <div className="switch-row">
+            <div>
+              <div>{t("documents.checklistTarget")}</div>
+              <div className="label">{t("documents.checklistTargetHint")}</div>
             </div>
+            <label className="switch" title={t("documents.checklistTarget")}>
+              <input
+                type="checkbox"
+                checked={checklistActive}
+                onChange={(e) => setChecklistActive(e.target.checked)}
+              />
+              <span className="track" />
+            </label>
           </div>
 
-          <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
-
-          {/* Statut d'import explicite (l'upload est synchrone cote serveur :
-              conversion Word->PDF, portail qualite -> plusieurs secondes).
-              Base sur le cache global (useIsMutating), donc reste affiche
-              meme si on quitte cette page et qu'on y revient pendant l'upload. */}
-          {isUploading ? (
-            <div
-              className="banner"
-              role="status"
-              aria-live="polite"
-              style={{ display: "flex", alignItems: "center", gap: 10 }}
-            >
-              <span className="spinner" />
-              <strong>{t("documents.upload.uploading")}</strong>
+          <div className="form document-upload-form">
+            <div className="field">
+              <span className="field-label">{t("documents.targetUnit")}</span>
+              <div className="slicer">
+                {TARGET_UNITS.map((unit) => {
+                  const on = targetUnits.includes(unit);
+                  return (
+                    <button
+                      key={unit}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleTargetUnit(unit)}
+                      className={on ? "slicer-pill active" : "slicer-pill"}
+                    >
+                      {t(`settings.targetUnit.${unit}`)}
+                    </button>
+                  );
+                })}
+                <span className="label" style={{ alignSelf: "center", marginLeft: 6 }}>
+                  {targetUnits.length === 1 ? "" : t("settings.targetUnit.auto")}
+                </span>
+              </div>
             </div>
-          ) : null}
-          {upload.isError ? (
-            <p className="error" role="alert">
-              {t("documents.upload.failed", {
-                message: upload.error instanceof Error ? upload.error.message : "",
-              })}
-            </p>
-          ) : null}
+
+            <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
+
+            {/* Statut d'import explicite (l'upload est synchrone cote serveur :
+                conversion Word->PDF, portail qualite -> plusieurs secondes).
+                Base sur le cache global (useIsMutating), donc reste affiche
+                meme si on quitte cette page et qu'on y revient pendant l'upload. */}
+            {isUploading ? (
+              <div
+                className="banner"
+                role="status"
+                aria-live="polite"
+                style={{ display: "flex", alignItems: "center", gap: 10 }}
+              >
+                <span className="spinner" />
+                <strong>{t("documents.upload.uploading")}</strong>
+              </div>
+            ) : null}
+            {upload.isError ? (
+              <p className="error" role="alert">
+                {t("documents.upload.failed", {
+                  message: upload.error instanceof Error ? upload.error.message : "",
+                })}
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
 
