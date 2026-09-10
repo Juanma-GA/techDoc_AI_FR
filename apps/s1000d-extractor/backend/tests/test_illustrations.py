@@ -116,6 +116,41 @@ def test_two_figures_on_one_line_keep_image_alignment(tmp_path) -> None:
     ]
 
 
+def test_vector_figure_is_rasterized_when_pdf_has_no_embedded_image(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.structure_infer import build_ir
+    from app.parsers.pdf_parser import parse_pdf
+
+    pdf_path = tmp_path / "vector-figure.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 60), "1 Description", fontsize=18, fontname="hebo")
+    page.draw_rect(
+        fitz.Rect(72, 90, 300, 220),
+        color=(0, 0, 0),
+        fill=(0.8, 0.8, 0.8),
+        width=2,
+    )
+    page.draw_line((90, 110), (280, 200), color=(1, 0, 0), width=3)
+    page.insert_text((560, 130), "LANG", fontsize=9, rotate=90)
+    page.insert_text((72, 250), "Figure 1 Vector nameplate", fontsize=11)
+    assert not page.get_images(full=True)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    root = build_ir(parse_pdf(pdf_path))
+    figure = next(node for node in root.walk() if node.kind == "figure")
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert figure.icn == "figure-1-vector-nameplate.jpg"
+    image = fitz.Pixmap(str(out_dir / figure.icn))
+    assert image.width > 100
+    assert image.height > 200
+
+
 def test_images_extracted_and_served(client, pdf_bytes_image) -> None:
     doc_id = _upload(client, pdf_bytes_image)
     client.post(f"/api/v1/documents/{doc_id}/wizard/start")
