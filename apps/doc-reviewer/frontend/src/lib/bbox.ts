@@ -28,10 +28,9 @@ export type CssRect = { left: number; top: number; width: number; height: number
 export type PercentRect = { left: number; top: number; width: number; height: number };
 
 /**
- * Positionne une bbox en POURCENTAGES de la page, exactement comme l'ancien
- * preview.html : origine haut-gauche (PyMuPDF) divisee par page_w/page_h. C'est
- * robuste (independant du zoom, du dpr et du rendu pdf.js) et se superpose
- * directement au calque `absolute; inset:0` qui couvre la page rendue.
+ * Positionne une bbox en POURCENTAGES de la page, comme l'ancien preview.html.
+ * Le facteur de zoom eventuel est applique au conteneur image dans le viewer,
+ * pas a la bbox PDF : les pourcentages restent donc valables a toute echelle.
  */
 export function bboxToPercentRect(bbox: Bbox): PercentRect | null {
   if (!hasValidBbox(bbox)) return null;

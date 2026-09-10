@@ -47,6 +47,62 @@ def test_pdf_regex_violation_has_bbox_evidence() -> None:
     assert raws[0].rule_code == "CHECKLIST_TEST"
 
 
+def test_pdf_compiled_suggestion_keeps_bbox_from_scoped_footer_span() -> None:
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            ParsedPage(
+                page=1,
+                text="2025\n2025",
+                spans=[
+                    Span(text="2025", bbox=(10.0, 20.0, 50.0, 30.0), page=1, font="Arial", size=10.0),
+                    Span(text="2025", bbox=(10.0, 700.0, 50.0, 710.0), page=1, font="Arial", size=10.0),
+                ],
+            )
+        ],
+        full_text="2025\n2025",
+        is_signed=False,
+    )
+
+    results, raws = execute_pdf_rules(
+        parsed,
+        [_rule(Check(field="text", operator="regex", expected=r"2025"), region="footer")],
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(raws) == 1
+    assert raws[0].bbox == (10.0, 700.0, 50.0, 710.0)
+
+
+def test_pdf_compiled_suggestions_keep_each_repeated_footer_span_bbox() -> None:
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            ParsedPage(
+                page=1,
+                text="Header\n2025\n2025",
+                spans=[
+                    Span(text="Header", bbox=(10.0, 20.0, 50.0, 30.0), page=1, font="Arial", size=10.0),
+                    Span(text="2025", bbox=(10.0, 700.0, 50.0, 710.0), page=1, font="Arial", size=10.0),
+                    Span(text="2025", bbox=(10.0, 720.0, 50.0, 730.0), page=1, font="Arial", size=10.0),
+                ],
+            )
+        ],
+        full_text="Header\n2025\n2025",
+        is_signed=False,
+    )
+
+    _results, raws = execute_pdf_rules(
+        parsed,
+        [_rule(Check(field="text", operator="regex", expected=r"2025"), region="footer")],
+    )
+
+    assert [raw.bbox for raw in raws] == [
+        (10.0, 700.0, 50.0, 710.0),
+        (10.0, 720.0, 50.0, 730.0),
+    ]
+
+
 def test_docx_normalized_equals_has_target_evidence() -> None:
     blocks = [Block(target_id="dp4", index=4, zone="header", kind="paragraph", text="Revision number:  REV  02 ", page=1)]
     rule = _rule(

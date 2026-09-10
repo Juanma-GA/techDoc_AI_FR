@@ -103,7 +103,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 38
+    assert total == 39
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -131,6 +131,50 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
         ("79-33-02", "79-30-02")
     ]
     assert missing[0].status == "FAIL"
+
+
+def _revision_date_footer_pdf(footer: str) -> ParsedPdf:
+    body = "Title page body."
+    text = f"{body}\n{footer}"
+    page = ParsedPage(
+        page=1,
+        text=text,
+        spans=[
+            Span(text=body, bbox=(40.0, 100.0, 200.0, 120.0), page=1, font="Arial", size=10.0),
+            Span(text=footer, bbox=(40.0, 760.0, 300.0, 780.0), page=1, font="Arial", size=8.0),
+        ],
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def test_revision_date_footer_matches_document_context_value() -> None:
+    rule = _rule("CUSTOM_REVISION_DATE")
+    document = SimpleNamespace(meta_revision_date="JUL 27/26")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _revision_date_footer_pdf("Revision: JUL 27/26"),
+        [rule],
+        document=document,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _revision_date_footer_pdf("Revision: JUL 27/25"),
+        [rule],
+        document=document,
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        _revision_date_footer_pdf("Footer without a revision date"),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("JUL 27/25", "JUL 27/26")
+    ]
+    assert missing[0].status == "FAIL"
+    assert missing_suggestions == []
 
 
 def test_title_page_copyright_matches_revision_year_in_footer() -> None:

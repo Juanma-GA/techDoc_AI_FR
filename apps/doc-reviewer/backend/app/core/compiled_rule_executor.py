@@ -649,7 +649,7 @@ def _deterministic_suggestions(
         elif check.operator == "normalized_equals":
             suggestions.extend(
                 _normalized_equals_suggestions(
-                    check, targets, rule.id, rule.severity, rule_kind, message
+                    check, targets, rule.id, rule.severity, rule_kind, message, ctx.pdf_pages
                 )
             )
         elif check.operator == "equals_field":
@@ -668,12 +668,20 @@ def _deterministic_suggestions(
                     check.replacements,
                     rule_kind,
                     message,
+                    ctx.pdf_pages,
                 )
             )
         elif check.operator == "not_exists" and isinstance(check.expected, str):
             suggestions.extend(
                 _term_search_suggestions(
-                    rule, targets, [check.expected], check.replacement, None, rule_kind, message
+                    rule,
+                    targets,
+                    [check.expected],
+                    check.replacement,
+                    None,
+                    rule_kind,
+                    message,
+                    ctx.pdf_pages,
                 )
             )
 
@@ -689,9 +697,13 @@ def _deterministic_suggestions(
     if not result.evidence.observed_value:
         return []
 
-    raw_page = next(
+    fallback_target = next(
         (target.raw_page for target in targets if target.page == result.evidence.page),
         targets[0].raw_page,
+    )
+    fallback_target = next(
+        (target for target in targets if target.raw_page == fallback_target),
+        targets[0],
     )
     observed = result.evidence.observed_value or ""
     return [
@@ -702,8 +714,9 @@ def _deterministic_suggestions(
             message=message,
             original=observed,
             proposed=result.evidence.expected_value or "",
-            page=raw_page,
+            page=fallback_target.raw_page,
             span=(0, len(observed)),
+            bbox=_suggestion_bbox(fallback_target, observed, pdf_pages),
         )
     ]
 
@@ -715,6 +728,7 @@ def _normalized_equals_suggestions(
     severity: str,
     rule_kind: str,
     message: str,
+    pdf_pages: list[ParsedPage] | None,
 ) -> list[RawSuggestion]:
     expected = _normalize(
         str(check.expected) if check.expected is not None else "",
@@ -741,6 +755,7 @@ def _normalized_equals_suggestions(
                 proposed=expected,
                 page=target.raw_page,
                 span=(start, start + len(raw_value)),
+                bbox=_suggestion_bbox(target, raw_value, pdf_pages, span_start=start),
             )
         )
     return suggestions
@@ -787,6 +802,7 @@ def _equals_field_suggestions(
                 proposed=right_value,
                 page=target.raw_page,
                 span=(start, start + len(raw_value)),
+                bbox=_suggestion_bbox(target, raw_value, ctx.pdf_pages, span_start=start),
             )
         )
     return suggestions
@@ -837,6 +853,12 @@ def _regex_suggestions(
                 proposed=proposed,
                 page=target.raw_page,
                 span=match.span(),
+                bbox=_suggestion_bbox(
+                    target,
+                    original,
+                    ctx.pdf_pages,
+                    span_start=match.start(),
+                ),
             )
         )
     return suggestions
@@ -850,6 +872,7 @@ def _term_search_suggestions(
     replacements: dict[str, str] | None,
     rule_kind: str,
     message: str,
+    pdf_pages: list[ParsedPage] | None,
 ) -> list[RawSuggestion]:
     """Literal (non-regex) forbidden-term search — every occurrence of any
     term is flagged, `replacements[term]` (or the single `replacement`) gives
@@ -876,6 +899,7 @@ def _term_search_suggestions(
                         proposed=proposed,
                         page=target.raw_page,
                         span=(idx, idx + len(term)),
+                        bbox=_suggestion_bbox(target, term, pdf_pages, span_start=idx),
                     )
                 )
                 start = idx + len(term)
@@ -1002,8 +1026,10 @@ def _observed_bbox(
     target: _TextTarget,
     observed: str,
     pdf_pages: list[ParsedPage] | None,
+    *,
+    span_start: int | None = None,
 ) -> _BBox:
-    match_start = target.text.find(observed)
+    match_start = target.text.find(observed) if span_start is None else span_start
     if match_start >= 0 and target.span_ranges:
         match_end = match_start + len(observed)
         bboxes = [
@@ -1029,6 +1055,17 @@ def _observed_bbox(
 
 def _is_nonzero_bbox(bbox: _BBox) -> bool:
     return bbox[2] > bbox[0] and bbox[3] > bbox[1]
+
+
+def _suggestion_bbox(
+    target: _TextTarget,
+    observed: str,
+    pdf_pages: list[ParsedPage] | None,
+    *,
+    span_start: int | None = None,
+) -> _BBox | None:
+    bbox = _observed_bbox(target, observed, pdf_pages, span_start=span_start)
+    return bbox if _is_nonzero_bbox(bbox) else None
 
 
 def _union_bboxes(bboxes: list[_BBox]) -> _BBox:

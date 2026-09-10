@@ -19,12 +19,20 @@ STANDARD_DESCRIPTION = (
 
 _TARGET = RuleTarget(page="all", region="full_page")
 _FOOTER_TARGET = RuleTarget(page="all", region="footer")
-_TITLE_PAGE_FOOTER_TARGET = RuleTarget(page="1", region="footer")
 _ORIGIN = f"{STANDARD_CODE}:v1"
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
+_REVISION_DATE_PATTERN = (
+    r"(?:"
+    r"\d{4}[-/]\d{1,2}[-/]\d{1,2}"
+    r"|\d{1,2}/\d{1,2}/\d{2,4}"
+    r"|(?i:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)"
+    r"\s+\d{1,2}/\d{2,4}"
+    r")"
+)
+_EXPECTED_REVISION_DATE_PATTERN = r"(?<!\w){{meta_revision_date}}(?!\w)"
 _COPYRIGHT_START_YEAR = "1966"
-_TITLE_PAGE_COPYRIGHT_PATTERN = (
+_COPYRIGHT_PATTERN = (
     r"\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
     r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
     r"This\s+document\s+and\s+any\s+data\s+included\s+are\s+the\s+property\s+of\s+"
@@ -83,7 +91,7 @@ _RULES_V1 = [
     ),
     CompiledRule(
         id="CUSTOM_TITLE_PAGE_COPYRIGHT",
-        topic="Copyright de la title page conforme a l'annee de revision",
+        topic="Copyright du footer conforme a l'annee de revision",
         severity="error",
         execution="deterministic",
         target=_FOOTER_TARGET,
@@ -91,7 +99,7 @@ _RULES_V1 = [
             Check(
                 field="text",
                 operator="regex_exists",
-                expected=_TITLE_PAGE_COPYRIGHT_PATTERN,
+                expected=_COPYRIGHT_PATTERN,
             ),
             Check(
                 field="copyright_start_year",
@@ -111,6 +119,32 @@ _RULES_V1 = [
         ],
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:CUSTOM_TITLE_PAGE_COPYRIGHT",
+    ),
+    CompiledRule(
+        id="CUSTOM_REVISION_DATE",
+        topic="Date de revision du footer conforme au mapping",
+        severity="error",
+        execution="deterministic",
+        target=_FOOTER_TARGET,
+        checks=[
+            Check(
+                field="text",
+                operator="regex_exists",
+                expected=_EXPECTED_REVISION_DATE_PATTERN,
+            ),
+            Check(
+                field="text",
+                operator="regex",
+                expected=(
+                    r"(?<!\w)(?!{{meta_revision_date}}(?!\w))"
+                    + _REVISION_DATE_PATTERN
+                    + r"(?!\w)"
+                ),
+                replacement="{{meta_revision_date}}",
+            ),
+        ],
+        source="standard_rule",
+        origin_ref=f"{_ORIGIN}:CUSTOM_REVISION_DATE",
     ),
 ]
 
@@ -137,12 +171,21 @@ RULE_METADATA["CUSTOM_CMM_NUMBER"] = {
 }
 RULE_METADATA["CUSTOM_TITLE_PAGE_COPYRIGHT"] = {
     "description": (
-        "Le footer de la title page doit contenir le copyright THALES avec "
+        "Le footer du document doit contenir le copyright THALES avec "
         "l'annee de debut 1966 et l'annee de revision du document."
     ),
     "kind": "field_required",
     "severity": "error",
-    "message": "Le copyright de la title page est absent ou une annee est incorrecte.",
+    "message": "Le copyright du footer est absent ou une annee est incorrecte.",
+}
+RULE_METADATA["CUSTOM_REVISION_DATE"] = {
+    "description": (
+        "La date de revision presente dans le footer doit correspondre a la "
+        "date de revision saisie dans le mapping du document."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "La date de revision du footer ne correspond pas au mapping.",
 }
 
 
