@@ -12,13 +12,15 @@ les figures gardent leur placeholder ICN).
 
 from __future__ import annotations
 
-import re
 import hashlib
+import os
+import re
 from pathlib import Path
 
 from app.core.ir import IRNode
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 
 def slugify(text: str, *, maxlen: int = 60) -> str:
@@ -104,11 +106,57 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
         doc.close()
 
 
-def _unique_name(out_dir: Path, base: str) -> str:
-    """Nom de fichier libre : deux legendes identiques ne doivent pas s'ecraser."""
-    name = f"{base}.jpg"
+def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> str | None:
+    """Renomme une image extraite, avec conversion si l'extension change."""
+    current = Path(current_name)
+    target = Path(target_name)
+    if current.name != current_name or target.name != target_name:
+        return None
+    if current.suffix.lower() not in _IMAGE_SUFFIXES or target.suffix.lower() not in _IMAGE_SUFFIXES:
+        return None
+
+    source = out_dir / current_name
+    if not source.exists():
+        return None
+    if _same_path(source, out_dir / target_name):
+        return source.name
+
+    final_name = _unique_filename(out_dir, target_name, exclude=source)
+    destination = out_dir / final_name
+    try:
+        if current.suffix.lower() == target.suffix.lower():
+            source.replace(destination)
+        else:
+            import fitz
+
+            pixmap = fitz.Pixmap(str(source))
+            if pixmap.n >= 5 or pixmap.alpha:
+                pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
+            if target.suffix.lower() == ".png":
+                pixmap.save(str(destination))
+            else:
+                pixmap.save(str(destination), jpg_quality=85)
+            source.unlink()
+    except Exception:
+        destination.unlink(missing_ok=True)
+        return None
+    return final_name
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    return os.path.normcase(os.path.abspath(str(left))) == os.path.normcase(os.path.abspath(str(right)))
+
+
+def _unique_filename(out_dir: Path, filename: str, *, exclude: Path | None = None) -> str:
+    path = Path(filename)
+    name = filename
     n = 2
-    while (out_dir / name).exists():
-        name = f"{base}-{n}.jpg"
+    while (out_dir / name).exists() and not (exclude and _same_path(out_dir / name, exclude)):
+        name = f"{path.stem}-{n}{path.suffix}"
         n += 1
     return name
+
+
+def _unique_name(out_dir: Path, base: str) -> str:
+    """Nom de fichier libre : deux legendes identiques ne doivent pas s'ecraser."""
+    return _unique_filename(out_dir, f"{base}.jpg")

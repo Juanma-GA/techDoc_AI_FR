@@ -12,6 +12,7 @@ import io
 import json
 import re
 import zipfile
+from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import Response
@@ -51,6 +52,19 @@ def _require(db: Session, doc_id: str) -> Document:
     if doc is None:
         raise AppError("DOC_NOT_FOUND", "Document inconnu.", 404)
     return doc
+
+
+def _image_paths(doc_id: str) -> list[Path]:
+    directory = wizard.images_dir(doc_id)
+    if not directory.exists():
+        return []
+    return sorted(
+        (
+            path for path in directory.iterdir()
+            if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        ),
+        key=lambda path: path.name.lower(),
+    )
 
 
 @router.post("/{doc_id}/wizard/start")
@@ -161,23 +175,21 @@ def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Res
 
 @router.get("/{doc_id}/wizard/images")
 def wizard_images(doc_id: str, db: Session = Depends(get_db)) -> list[str]:
-    """Liste les illustrations extraites du document (noms de fichiers JPG)."""
+    """Liste les illustrations extraites du document."""
     _require(db, doc_id)
-    d = wizard.images_dir(doc_id)
-    return sorted(p.name for p in d.glob("*.jpg")) if d.exists() else []
+    return [path.name for path in _image_paths(doc_id)]
 
 
 @router.get("/{doc_id}/wizard/images/{name}")
 def wizard_image(doc_id: str, name: str, db: Session = Depends(get_db)) -> Response:
-    from pathlib import Path
-
     _require(db, doc_id)
     # Empeche toute traversee de repertoire : on ne sert que le basename.
     safe = Path(name).name
     path = wizard.images_dir(doc_id) / safe
-    if safe != name or not path.exists():
+    if safe != name or not path.exists() or path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
         raise AppError("IMAGE_NOT_FOUND", "Illustration inconnue.", 404)
-    return Response(content=path.read_bytes(), media_type="image/jpeg")
+    media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
+    return Response(content=path.read_bytes(), media_type=media_type)
 
 
 @router.get("/{doc_id}/wizard/zip")
@@ -193,10 +205,8 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
             zf.writestr(_dm_filename(d), d["xml"])
-        img_dir = wizard.images_dir(doc_id)
-        if img_dir.exists():
-            for img in sorted(img_dir.glob("*.jpg")):
-                zf.write(img, f"illustrations/{img.name}")
+        for img in _image_paths(doc_id):
+            zf.write(img, f"illustrations/{img.name}")
     return Response(
         content=buf.getvalue(), media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{doc.id}_dms.zip"'},

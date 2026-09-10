@@ -130,6 +130,19 @@ export type DocumentOut = {
   status: string;
 };
 
+export type PdfCutCandidate = {
+  page: number;
+  score: number;
+  reasons: string[];
+  preview: string;
+};
+
+export type PdfCutDetection = {
+  validation_required: boolean;
+  selected_page: number | null;
+  candidates: PdfCutCandidate[];
+};
+
 export type DmVersion = {
   id: string;
   doc_id: string;
@@ -195,6 +208,7 @@ export type DmrlRow = {
   dmc: string;
   title: string;
   dm_type: string;
+  icn: string;
   matched: boolean;
   match_rank: DmrlMatchRank;
   page: number | null;
@@ -219,6 +233,7 @@ export const brexApi = {
 
 export const documentsApi = {
   list: () => api<DocumentOut[]>("/documents"),
+  get: (docId: string) => api<DocumentOut>(`/documents/${docId}`),
   delete: (docId: string, confirmToken: string) =>
     api<{ id: string; status: string }>(
       `/documents/${docId}?confirm_token=${encodeURIComponent(confirmToken)}`,
@@ -242,6 +257,18 @@ export const documentsApi = {
     }
     return (await res.json()) as DocumentOut;
   },
+};
+
+export const pdfCutApi = {
+  detect: (docId: string) =>
+    api<PdfCutDetection>(`/documents/${docId}/pdf-cut/detect`, { method: "POST" }),
+  confirm: (docId: string, page: number) =>
+    api<{ page: number; page_count: number; status: string }>(
+      `/documents/${docId}/pdf-cut/confirm`,
+      { method: "POST", body: JSON.stringify({ page }) },
+    ),
+  previewUrl: (docId: string, page: number) =>
+    `${API_BASE}/documents/${docId}/pdf-cut/preview/${page}`,
 };
 
 export type ResourceKind = "dmrl" | "cir" | "brex_rules";

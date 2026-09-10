@@ -99,3 +99,19 @@ def test_restarting_wizard_does_not_pile_up_images(client, pdf_bytes_image) -> N
     again = client.get(f"/api/v1/documents/{doc_id}/wizard/images").json()
     assert again == first
     assert len(list(images_dir(doc_id).glob("*.jpg"))) == len(first)
+
+
+def test_multiple_figure_captions_on_one_line_create_separate_figures() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([RawBlock(
+        text="Figure 4.1 Serrage correct Figure 4.2 Serrage incorrect Figure 4.3 Detail",
+        page=1,
+    )])
+
+    assert [node.text for node in root.walk() if node.kind == "figure"] == [
+        "Figure 4.1 Serrage correct",
+        "Figure 4.2 Serrage incorrect",
+        "Figure 4.3 Detail",
+    ]

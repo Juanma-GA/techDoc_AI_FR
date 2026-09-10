@@ -11,7 +11,14 @@ import pytest
 from lxml import etree
 
 from app.core import splitter
-from app.core.dmrl import DmrlEntry, find_dm_boundaries, generate_pmc, load_dmrl
+from app.core.dmrl import (
+    DmrlEntry,
+    entry_from_dict,
+    extract_icn_filenames,
+    find_dm_boundaries,
+    generate_pmc,
+    load_dmrl,
+)
 from app.core.errors import AppError
 from app.core.ir import IRNode
 from app.core.pmc import parse_dmc
@@ -53,6 +60,20 @@ def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
     entries = load_dmrl(path)
     assert entries[0].title == "Présentation"
     assert entries[0].dm_type == "descriptive"
+
+
+def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
+    path = tmp_path / "dmrl.json"
+    icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"
+    path.write_text(json.dumps([{"Titre": "Description", "ICN": icn_cell}]), encoding="utf-8")
+
+    entry = load_dmrl(path)[0]
+
+    assert extract_icn_filenames(entry.icn) == [
+        "ICN-WEG-AA0004-00001-A-02.jpg",
+        "ICN-WEG-AA0004-00002-A-02.png",
+    ]
+    assert entry_from_dict(entry.to_dict()).icn == icn_cell
 
 
 def test_load_dmrl_rejects_unknown_format(tmp_path):

@@ -50,7 +50,15 @@
       "cir": "CIR (xml) — shared content",
       "rules": "Client rules (json)",
       "start": "Start the assistant",
-      "noFile": "Pick a PDF or Word file."
+      "noFile": "Pick a PDF or Word file.",
+      "pdfCut": {
+        "title": "Validate the chapter start page",
+        "help": "Select the first chapter page to analyse before starting extraction.",
+        "page": "Start page",
+        "candidate": "Page {{page}} — score {{score}}",
+        "validate": "Validate page and start analysis",
+        "previewAlt": "Preview of page {{page}}"
+      }
     },
     "docs": {
       "title": "Documents",
@@ -95,6 +103,7 @@
       "counts": "{{missing}} not found, {{uncertain}} to check.",
       "pmc": "Download the PMC",
       "validate": "Validate the DMRL →",
+      "icn": "ICN",
       "rename": "Rename",
       "exclude": "Exclude"
     },
