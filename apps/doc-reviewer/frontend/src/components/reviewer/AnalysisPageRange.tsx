@@ -6,9 +6,11 @@ type Props = {
   pageCount: number;
   running: boolean;
   onStart: (range?: { firstPage: number; lastPage: number }) => void;
+  blocked?: boolean;
+  blockReason?: string;
 };
 
-export function AnalysisPageRange({ pageCount, running, onStart }: Props) {
+export function AnalysisPageRange({ pageCount, running, onStart, blocked = false, blockReason }: Props) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<"all" | "range">("all");
   const [firstPage, setFirstPage] = useState(1);
@@ -69,12 +71,14 @@ export function AnalysisPageRange({ pageCount, running, onStart }: Props) {
       <button
         type="button"
         onClick={() => onStart(mode === "range" ? { firstPage, lastPage } : undefined)}
-        disabled={running || pageCount < 1 || (mode === "range" && !rangeValid)}
+        disabled={blocked || running || pageCount < 1 || (mode === "range" && !rangeValid)}
+        title={blocked ? blockReason : undefined}
         className="btn secondary small"
       >
         <Play size={14} />
         {running ? t("reviewer.toolbar.analyzing") : t("reviewer.toolbar.analyze")}
       </button>
+      {blocked && blockReason ? <span className="hint">{blockReason}</span> : null}
     </span>
   );
 }

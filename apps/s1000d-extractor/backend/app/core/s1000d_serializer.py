@@ -35,6 +35,7 @@ _BANNER = (
 _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]")
 # Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
+_GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
 
 
 def xml_text(value: str | None) -> str:
@@ -49,6 +50,10 @@ def _safe_element(name: str, fallback: str) -> str:
 def _top_element(node: IRNode, fallback: str) -> str:
     element = node.candidates[0].element if node.candidates else fallback
     return _safe_element(element, fallback)
+
+
+def _graphic_ident(icn: str) -> str:
+    return _GRAPHIC_EXTENSION.sub("", xml_text(icn))
 
 
 def _alt_comment(node: IRNode) -> str | None:
@@ -128,7 +133,7 @@ def _emit_figure(parent: etree._Element, node: IRNode) -> None:
     title.text = xml_text(node.text) or "Figure"
     if node.icn:
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
-        etree.SubElement(fig, "graphic", infoEntityIdent=xml_text(node.icn))
+        etree.SubElement(fig, "graphic", infoEntityIdent=_graphic_ident(node.icn))
     else:
         fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
         etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")

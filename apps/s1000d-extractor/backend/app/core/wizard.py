@@ -24,6 +24,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.core import context_classifier, ingest, resolver, splitter, structure_infer
+from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
@@ -69,13 +70,37 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
     from app.core import illustrations
     out_dir = images_dir(doc.id)
     try:
-        for old in out_dir.glob("*.jpg"):
-            old.unlink(missing_ok=True)
+        if out_dir.exists():
+            for old in out_dir.iterdir():
+                if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                    old.unlink(missing_ok=True)
         illustrations.attach_illustrations(
             root, pdf_path=doc.storage_path, out_dir=out_dir, doc_id=doc.id
         )
     except Exception:  # jamais bloquant : le squelette reste generable sans images
         pass
+
+
+def _apply_dmrl_icns(
+    units: list[splitter.DmUnit],
+    entries: list[dmrl_mod.DmrlEntry],
+    out_dir: Path,
+) -> None:
+    from app.core import illustrations
+
+    for unit in units:
+        if unit.dmrl_index is None or unit.dmrl_index >= len(entries):
+            continue
+        icn_names = dmrl_mod.extract_icn_filenames(entries[unit.dmrl_index].icn)
+        if not icn_names:
+            continue
+        figures = [node for node in unit.root.walk() if node.kind == "figure"]
+        for figure, icn_name in zip(figures, icn_names, strict=False):
+            if not figure.icn:
+                continue
+            renamed = illustrations.rename_illustration(out_dir, figure.icn, icn_name)
+            if renamed:
+                figure.icn = renamed
 
 
 # --- transitions -------------------------------------------------------------
@@ -119,6 +144,9 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     root = ir_mod.from_dict(json.loads(doc.ir_json))
     entries = wres.dmrl_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
+    if entries:
+        _apply_dmrl_icns(units, entries, images_dir(doc.id))
+    doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     progress_cb("classify", 80)
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
     dmrl_types = {e.title: e.dm_type for e in entries if e.dm_type}

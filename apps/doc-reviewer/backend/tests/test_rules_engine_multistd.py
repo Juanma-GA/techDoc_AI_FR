@@ -84,6 +84,39 @@ def test_no_standard_version_loads_no_hardcoded_deterministic_rule() -> None:
         session.close()
 
 
+def test_compiled_catalog_rule_does_not_fall_through_to_legacy_or_ai(monkeypatch) -> None:
+    session = SessionLocal()
+    try:
+        custom_version = _get_version(session, "ATEXIS-CUSTOM")
+        for rule in session.query(Rule):
+            rule.enabled = False
+
+        calls = 0
+
+        def _scan(*_args: Any, **_kwargs: Any) -> list[dict[str, str]]:
+            nonlocal calls
+            calls += 1
+            return []
+
+        monkeypatch.setattr(rules_engine, "get_ai_custom_prompt", lambda _db: "")
+        monkeypatch.setattr(rules_engine, "get_checklist_ai_scan", lambda _db: False)
+        monkeypatch.setattr(rules_engine, "scan_with_prompt", _scan)
+
+        out = run_all(
+            _parsed("79-30-02"),
+            _doc(),
+            session,
+            [custom_version],
+            checklist_enabled=True,
+        )
+
+        assert out == []
+        assert calls == 0
+    finally:
+        session.rollback()
+        session.close()
+
+
 def test_hardcoded_deterministic_rules_belong_to_selected_standard() -> None:
     session = SessionLocal()
     try:
@@ -272,5 +305,33 @@ def test_ai_scan_continues_after_failed_page_group(monkeypatch) -> None:
         assert calls == 2
         assert [item.page for item in results] == [2]
         assert warnings == ["Scan checklist/IA partiellement indisponible (LLM_REPHRASE_FAILED) : ReadTimeout"]
+    finally:
+        session.close()
+
+
+def test_ai_scan_is_not_triggered_by_document_metadata(monkeypatch) -> None:
+    session = SessionLocal()
+    parsed = _parsed("A document page")
+    calls = 0
+
+    def _scan(*_args: Any, **_kwargs: Any) -> list[dict[str, str]]:
+        nonlocal calls
+        calls += 1
+        return []
+
+    try:
+        monkeypatch.setattr(rules_engine, "get_ai_custom_prompt", lambda _db: "")
+        monkeypatch.setattr(rules_engine, "scan_with_prompt", _scan)
+
+        results = rules_engine._run_ai_custom(
+            parsed,
+            session,
+            [],
+            [],
+            document=_doc("en"),
+        )
+
+        assert results == []
+        assert calls == 0
     finally:
         session.close()

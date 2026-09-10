@@ -15,6 +15,10 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
+from app.core.document_context import (
+    get_document_context_defaults,
+    save_document_context_defaults,
+)
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
 from app.core.versioning import sha256_of_bytes
@@ -126,6 +130,7 @@ def _persist_pdf(
         opened.close()
 
     import json as _json
+    context_defaults = get_document_context_defaults(db)
 
     document = Document(
         id=doc_id,
@@ -145,6 +150,11 @@ def _persist_pdf(
         convert_engine=convert_engine,
         text_coverage=report.coverage,
         quality=report.state,
+        meta_revision_date=context_defaults["meta_revision_date"],
+        meta_cmm_number=context_defaults["meta_cmm_number"],
+        meta_first_issue_date=context_defaults["meta_first_issue_date"],
+        meta_revision_number=context_defaults["meta_revision_number"],
+        document_language=context_defaults["document_language"],
     )
     db.add(document)
     db.commit()
@@ -248,6 +258,7 @@ def _persist_docx(
     page_count = max((b.page for b in parsed.blocks), default=1)
 
     import json as _json
+    context_defaults = get_document_context_defaults(db)
 
     document = Document(
         id=doc_id,
@@ -267,6 +278,11 @@ def _persist_docx(
         convert_engine=engine,
         text_coverage=100,
         quality="analyzable",
+        meta_revision_date=context_defaults["meta_revision_date"],
+        meta_cmm_number=context_defaults["meta_cmm_number"],
+        meta_first_issue_date=context_defaults["meta_first_issue_date"],
+        meta_revision_number=context_defaults["meta_revision_number"],
+        document_language=context_defaults["document_language"],
     )
     db.add(document)
     db.commit()
@@ -415,6 +431,7 @@ def patch_document_meta(
     for key, value in patch.items():
         setattr(doc, key, value)
     db.commit()
+    save_document_context_defaults(db, patch)
     db.refresh(doc)
     return doc
 

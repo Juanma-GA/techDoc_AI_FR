@@ -12,7 +12,7 @@ def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     codes = {s["code"] for s in body}
     # Les normes purement XML/données (S1000D, ATA2200, S2000M) ont été
     # retirées du catalogue — seules restent les normes texte/rendu.
-    assert codes == {"ASD-STE100", "MAT10000", "ATA100"}
+    assert codes == {"ASD-STE100", "MAT10000", "ATA100", "ATEXIS-CUSTOM"}
     for std in body:
         assert std["builtin"] is True
         assert len(std["versions"]) >= 1

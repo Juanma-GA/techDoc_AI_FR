@@ -103,10 +103,7 @@ export function Rules() {
                     </td>
                     <td>{rule.topic}</td>
                     <td>
-                      {rule.semantic_instruction ??
-                        rule.manual_instruction ??
-                        rule.compilation_error ??
-                        t("rules.compiled.activeImmediately")}
+                      {rule.detail ?? t("rules.compiled.activeImmediately")}
                     </td>
                     <td><span className="label">{rule.origin_ref ?? t("standards.transverse")}</span></td>
                   </tr>

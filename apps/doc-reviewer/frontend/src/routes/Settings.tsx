@@ -5,16 +5,13 @@ import { useTranslation } from "react-i18next";
 import { PageHeader } from "../components/PageHeader";
 import {
   useAiPrompt,
-  useChecklistContext,
   useMistralSettings,
   useReliability,
   useTestMistralConnection,
   useToggleLlm,
   useUpdateAiPrompt,
-  useUpdateChecklistContext,
   useUpdateMistralSettings,
   useUpdateReliability,
-  type ChecklistContext,
 } from "../hooks/useMistralSettings";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
@@ -53,8 +50,6 @@ export function Settings() {
   const toggleLlm = useToggleLlm();
   const aiPrompt = useAiPrompt();
   const updateAiPrompt = useUpdateAiPrompt();
-  const checklistContext = useChecklistContext();
-  const updateChecklistContext = useUpdateChecklistContext();
   const reliability = useReliability();
   const updateReliability = useUpdateReliability();
 
@@ -63,19 +58,8 @@ export function Settings() {
   const [modelDraft, setModelDraft] = useState("");
   const [visionModelDraft, setVisionModelDraft] = useState("");
   const [promptDraft, setPromptDraft] = useState<string | null>(null);
-  const [checklistContextDraft, setChecklistContextDraft] = useState<ChecklistContext | null>(null);
 
   const effectivePrompt = promptDraft ?? aiPrompt.data?.prompt ?? "";
-  const effectiveChecklistContext = checklistContextDraft ?? checklistContext.data;
-
-  function updateChecklistField<K extends keyof ChecklistContext>(
-    field: K,
-    value: ChecklistContext[K],
-  ): void {
-    const current = checklistContextDraft ?? checklistContext.data;
-    if (!current) return;
-    setChecklistContextDraft({ ...current, [field]: value });
-  }
 
   const submitMistral = (): void => {
     updateMistral.mutate(
@@ -128,6 +112,23 @@ export function Settings() {
                       type="checkbox"
                       checked={!!mistral.data?.llm_enabled}
                       onChange={(e) => toggleLlm.mutate(e.target.checked)}
+                    />
+                    <span className="track" />
+                  </label>
+                </div>
+
+                <div className="switch-row">
+                  <div>
+                    <div>{t("settings.mistral.checklistAiScan")}</div>
+                    <div className="label">{t("settings.mistral.checklistAiScanHint")}</div>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={!!mistral.data?.checklist_ai_scan}
+                      onChange={(e) =>
+                        updateMistral.mutate({ checklist_ai_scan: e.target.checked })
+                      }
                     />
                     <span className="track" />
                   </label>
@@ -353,93 +354,6 @@ export function Settings() {
             )}
           </Card>
         </Collapsible>
-
-        <Card
-          title={t("settings.checklistContext.title")}
-          description={t("settings.checklistContext.description")}
-        >
-          {checklistContext.isLoading || !effectiveChecklistContext ? (
-            <p className="hint">{t("common.loading")}</p>
-          ) : (
-            <div className="form">
-              <p className="hint">{t("settings.checklistContext.hint")}</p>
-              <Field label={t("settings.checklistContext.revisionDate")}>
-                <input
-                  className="input"
-                  value={effectiveChecklistContext.meta_revision_date ?? ""}
-                  onChange={(e) => updateChecklistField("meta_revision_date", e.target.value || null)}
-                  placeholder={t("settings.checklistContext.revisionDatePlaceholder")}
-                />
-              </Field>
-              <Field label={t("settings.checklistContext.cmmNumber")}>
-                <input
-                  className="input"
-                  value={effectiveChecklistContext.meta_cmm_number ?? ""}
-                  onChange={(e) => updateChecklistField("meta_cmm_number", e.target.value || null)}
-                  placeholder={t("settings.checklistContext.cmmNumberPlaceholder")}
-                />
-              </Field>
-              <Field label={t("settings.checklistContext.firstIssueDate")}>
-                <input
-                  className="input"
-                  value={effectiveChecklistContext.meta_first_issue_date ?? ""}
-                  onChange={(e) => updateChecklistField("meta_first_issue_date", e.target.value || null)}
-                  placeholder={t("settings.checklistContext.firstIssueDatePlaceholder")}
-                />
-              </Field>
-              <Field label={t("settings.checklistContext.revisionNumber")}>
-                <input
-                  className="input"
-                  value={effectiveChecklistContext.meta_revision_number ?? ""}
-                  onChange={(e) => updateChecklistField("meta_revision_number", e.target.value || null)}
-                  placeholder={t("settings.checklistContext.revisionNumberPlaceholder")}
-                />
-              </Field>
-              <Field label={t("settings.checklistContext.documentLanguage")}>
-                <select
-                  className="input"
-                  value={effectiveChecklistContext.document_language ?? ""}
-                  onChange={(e) =>
-                    updateChecklistField(
-                      "document_language",
-                      e.target.value === ""
-                        ? null
-                        : (e.target.value as ChecklistContext["document_language"]),
-                    )
-                  }
-                >
-                  <option value="">{t("settings.checklistContext.languageUnset")}</option>
-                  <option value="fr">{t("settings.checklistContext.languageFr")}</option>
-                  <option value="en">{t("settings.checklistContext.languageEn")}</option>
-                </select>
-              </Field>
-              <div className="row">
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={() => {
-                    if (checklistContextDraft === null) return;
-                    updateChecklistContext.mutate(checklistContextDraft, {
-                      onSuccess: () => setChecklistContextDraft(null),
-                    });
-                  }}
-                  disabled={checklistContextDraft === null || updateChecklistContext.isPending}
-                >
-                  {t("common.save")}
-                </button>
-                {checklistContextDraft !== null ? (
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    onClick={() => setChecklistContextDraft(null)}
-                  >
-                    {t("common.cancel")}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </Card>
 
         {/* 1. Normes cibles actives (multi-select pills, parite preview) :
             chaque version selectionnee est fusionnee a l'analyse et appliquee

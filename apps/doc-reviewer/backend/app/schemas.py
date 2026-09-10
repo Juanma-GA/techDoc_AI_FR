@@ -273,6 +273,7 @@ class CompiledRuleSummary(BaseModel):
     semantic_instruction: Optional[str] = None
     manual_instruction: Optional[str] = None
     compilation_error: Optional[str] = None
+    detail: Optional[str] = None
 
 
 class CompiledRulePatchIn(BaseModel):
@@ -374,6 +375,7 @@ class MistralSettingsIn(BaseModel):
     vision_model: str = "mistral-medium-3-5"
     vision_enabled: Optional[bool] = None
     llm_enabled: Optional[bool] = None
+    checklist_ai_scan: Optional[bool] = None
 
 
 class MistralSettingsOut(BaseModel):
@@ -385,6 +387,7 @@ class MistralSettingsOut(BaseModel):
     vision_enabled: bool = False
     llm_enabled: bool = True
     llm_tested: bool = False
+    checklist_ai_scan: bool = False
 
 
 class TestConnectionOut(BaseModel):

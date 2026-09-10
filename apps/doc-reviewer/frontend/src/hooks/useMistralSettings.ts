@@ -11,6 +11,7 @@ export type MistralSettings = {
   vision_enabled: boolean;
   llm_enabled: boolean;
   llm_tested: boolean;
+  checklist_ai_scan: boolean;
 };
 
 export type MistralSettingsInput = {
@@ -20,6 +21,7 @@ export type MistralSettingsInput = {
   vision_model?: string;
   vision_enabled?: boolean;
   llm_enabled?: boolean;
+  checklist_ai_scan?: boolean;
 };
 
 export type TestConnectionResult = {
@@ -29,32 +31,6 @@ export type TestConnectionResult = {
 };
 
 export type AiPrompt = { prompt: string };
-
-export type ChecklistContext = {
-  meta_revision_date: string | null;
-  meta_cmm_number: string | null;
-  meta_first_issue_date: string | null;
-  meta_revision_number: string | null;
-  document_language: "fr" | "en" | null;
-};
-
-export type ChecklistContextInput = Partial<ChecklistContext>;
-
-export function useChecklistContext() {
-  return useQuery({
-    queryKey: ["settings", "checklist-context"],
-    queryFn: () => api.get<ChecklistContext>("/settings/checklist-context"),
-  });
-}
-
-export function useUpdateChecklistContext() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: ChecklistContextInput) =>
-      api.post<ChecklistContext>("/settings/checklist-context", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings", "checklist-context"] }),
-  });
-}
 
 export function useMistralSettings() {
   return useQuery({

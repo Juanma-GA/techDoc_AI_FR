@@ -19,8 +19,11 @@ os.environ.setdefault("LOG_LEVEL", "WARNING")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import delete  # noqa: E402
 
 from app.db.session import Base, engine  # noqa: E402
+from app.db.models import AppConfig  # noqa: E402
+from app.db.session import SessionLocal  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
@@ -69,6 +72,17 @@ def _seed_builtin_standards() -> None:
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(create_app())
+
+
+@pytest.fixture(autouse=True)
+def _reset_document_context_defaults() -> None:
+    """Do not leak the persisted next-upload mapping between tests."""
+    session = SessionLocal()
+    try:
+        session.execute(delete(AppConfig).where(AppConfig.key == "document.context_defaults"))
+        session.commit()
+    finally:
+        session.close()
 
 
 def _make_simple_pdf(text: str = "Torque value 12 cm and 5 in") -> bytes:

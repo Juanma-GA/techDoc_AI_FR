@@ -111,6 +111,7 @@ export type CompiledRuleSummary = {
   semantic_instruction: string | null;
   manual_instruction: string | null;
   compilation_error: string | null;
+  detail: string | null;
 };
 
 export function useCompiledRules(standardVersionIds: string[] = []) {

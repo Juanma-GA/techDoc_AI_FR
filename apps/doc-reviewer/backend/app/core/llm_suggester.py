@@ -248,6 +248,7 @@ def _format_rules_block(
     s1000d_rules: list[dict] | None,
     custom_rules_list: list[dict] | None,
     custom_prompt: str,
+    compiled_checklist_rules: list[dict] | None = None,
 ) -> str:
     """Render every rule configured in Settings as one block of natural-language
     instructions injected into the system prompt. Anything empty is skipped."""
@@ -277,6 +278,21 @@ def _format_rules_block(
             lines.append(f"- {name} ({kind}){' : ' + tail if tail else ''}")
         sections.append("Règles custom activées :\n" + "\n".join(lines))
 
+    if compiled_checklist_rules:
+        lines = []
+        for rule in compiled_checklist_rules:
+            code = rule.get("id") or "CHECKLIST"
+            severity = rule.get("severity") or "warning"
+            instruction = rule.get("instruction") or rule.get("description") or rule.get("title") or ""
+            target = rule.get("target")
+            scope = ""
+            if isinstance(target, dict):
+                page = target.get("page") or "all"
+                region = target.get("region") or "full_page"
+                scope = f" [{page}/{region}]"
+            lines.append(f"- {code} ({severity}){scope} : {instruction}")
+        sections.append("Règles checklist à appliquer avec AI_SCAN :\n" + "\n".join(lines))
+
     cleaned_prompt = (custom_prompt or "").strip()
     if cleaned_prompt:
         sections.append("Consignes en langage naturel :\n" + cleaned_prompt)
@@ -291,6 +307,8 @@ def scan_with_prompt(
     *,
     s1000d_rules: list[dict] | None = None,
     custom_rules_list: list[dict] | None = None,
+    compiled_checklist_rules: list[dict] | None = None,
+    document_metadata: str | None = None,
 ) -> list[dict]:
     """Run a single LLM pass on `page_text` with the aggregated rule set
     drawn from Settings: enabled S1000D rules + enabled custom rules +
@@ -315,12 +333,21 @@ def scan_with_prompt(
             }
             for match in fallback_matches
         ]
-    rules_block = _format_rules_block(s1000d_rules, custom_rules_list, custom_prompt)
+    rules_block = _format_rules_block(
+        s1000d_rules,
+        custom_rules_list,
+        custom_prompt,
+        compiled_checklist_rules,
+    )
     if not rules_block or not page_text.strip():
         return []
 
     text_to_scan = page_text[:_SCAN_PAGE_TEXT_LIMIT]
-    system = _SCAN_SYSTEM + "\n\n" + rules_block
+    system_parts = [_SCAN_SYSTEM]
+    if document_metadata:
+        system_parts.append(document_metadata)
+    system_parts.append(rules_block)
+    system = "\n\n".join(system_parts)
     user_payload = json.dumps({"text": text_to_scan}, ensure_ascii=False)
 
     try:

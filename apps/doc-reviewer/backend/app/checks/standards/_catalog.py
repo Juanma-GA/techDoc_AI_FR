@@ -49,6 +49,17 @@ def compiled_rule_from_payload(
     """
     core = {key: payload[key] for key in _COMPILED_FIELDS if key in payload}
     rule = CompiledRule.model_validate(core)
+    presentation_replacement = payload.get("replacement")
+    if (
+        isinstance(presentation_replacement, str)
+        and presentation_replacement
+        and rule.checks
+        and rule.checks[0].operator in {"regex", "not_exists", "contains_none"}
+        and rule.checks[0].replacement is None
+    ):
+        checks = list(rule.checks)
+        checks[0] = checks[0].model_copy(update={"replacement": presentation_replacement})
+        rule = rule.model_copy(update={"checks": checks})
     if origin_ref is not None:
         rule = rule.model_copy(update={"origin_ref": origin_ref})
     return rule

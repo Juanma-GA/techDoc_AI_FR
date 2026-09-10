@@ -1,5 +1,6 @@
 FRONT :
 
+
 - Est ce qu'on laisse le "Prompt IA Custom" (je pense pas)
 - Trop d'infos sur les input dans les paramètre pour la checklist
 - DocumentReviewer.tsx utilise encore des caractères Unicode ◀ et ▶, en contradiction avec la règle locale interdisant les icônes Unicode.
@@ -18,6 +19,7 @@ BACK :
 OTHER :
 
 - Résoudre les fails ds tests
+
 
 JUL 27/26
 79-30-02

@@ -195,6 +195,7 @@ export type DmrlRow = {
   dmc: string;
   title: string;
   dm_type: string;
+  icn: string;
   matched: boolean;
   match_rank: DmrlMatchRank;
   page: number | null;

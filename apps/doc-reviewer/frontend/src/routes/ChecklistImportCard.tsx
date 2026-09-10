@@ -374,12 +374,7 @@ export function CompiledRuleRows({ rules }: { rules: CompiledRuleSummary[] }) {
         </span>
       </td>
       <td>{rule.topic}</td>
-      <td>
-        {rule.semantic_instruction ??
-          rule.manual_instruction ??
-          rule.compilation_error ??
-          t("rules.compiled.activeImmediately")}
-      </td>
+      <td>{rule.detail ?? t("rules.compiled.activeImmediately")}</td>
     </tr>
   ));
 }

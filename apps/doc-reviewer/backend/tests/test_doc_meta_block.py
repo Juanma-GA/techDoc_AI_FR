@@ -41,14 +41,11 @@ def test_normal_fields_are_delimited() -> None:
     assert "- Numero CMM : CMM-42" in block
 
 
-def test_global_context_fills_missing_document_fields() -> None:
-    block = _doc_meta_block(
-        _doc(),
-        {"meta_revision_date": "MAR 18/26", "meta_revision_number": "Rev. 12"},
-    )
+def test_missing_document_fields_are_not_filled_from_global_context() -> None:
+    block = _doc_meta_block(_doc())
 
-    assert "- Date de revision : MAR 18/26" in block
-    assert "- Numero de revision : Rev. 12" in block
+    assert "MAR 18/26" not in block
+    assert "Rev. 12" not in block
 
 
 def test_prompt_injection_payload_is_treated_as_literal_value() -> None:

@@ -6,6 +6,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { PdfViewer } from "../components/reviewer/PdfViewer";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
+import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { DocxReviewer } from "./DocxReviewer";
@@ -28,7 +29,7 @@ export function DocumentReviewer() {
 
   const document = useDocument(documentId);
   const suggestions = useSuggestions(documentId);
-  const analyze = useAnalyze(documentId);
+  const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
   const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
@@ -154,6 +155,8 @@ export function DocumentReviewer() {
             <AnalysisPageRange
               pageCount={totalPages}
               running={analyze.status === "running"}
+              blocked={!analyze.contextReady}
+              blockReason={t("reviewer.meta.required")}
               onStart={(range) => void analyze.start(range)}
             />
             {analyze.status === "running" ? (
@@ -176,7 +179,8 @@ export function DocumentReviewer() {
 
         <AnalysisTargetBanner />
 
-        <main className="reviewer-canvas">
+        <main className="reviewer-canvas reviewer-canvas-stack">
+          {document.data ? <DocumentMetaPanel document={document.data} /> : null}
           <PdfViewer
             pageImageUrl={pageImageUrl}
             pageNumber={currentPage}

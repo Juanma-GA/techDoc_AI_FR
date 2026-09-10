@@ -92,8 +92,17 @@ def run_docx(
         standard_versions or [],
         checklist_enabled=checklist_enabled,
     )
-    if compiled_rules:
-        results, compiled_raws = execute_docx_rules(parsed.blocks, compiled_rules, db=db)
+    compiled_rules_for_execution, _compiled_checklist_rules_for_ai = rules_engine.route_compiled_rules(
+        compiled_rules,
+        checklist_ai_scan=checklist_enabled and rules_engine.get_checklist_ai_scan(db),
+    )
+    if compiled_rules_for_execution:
+        results, compiled_raws = execute_docx_rules(
+            parsed.blocks,
+            compiled_rules_for_execution,
+            db=db,
+            document=document,
+        )
         if compiled_results is not None:
             compiled_results.extend(results)
         out.extend(compiled_raws)

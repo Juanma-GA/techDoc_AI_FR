@@ -558,6 +558,14 @@ export function Migration() {
                       <span className="label" title={row.dmc}>
                         {row.dmc || t("common.none")}
                       </span>
+                      <span
+                        className="label"
+                        title={row.icn || undefined}
+                        style={{ maxWidth: 280, whiteSpace: "pre-line", overflowWrap: "anywhere" }}
+                      >
+                        <strong>{t("migration.dmrl.icn")}:</strong>{" "}
+                        {row.icn || t("common.none")}
+                      </span>
                       <button
                         type="button"
                         className="btn ghost small"

@@ -78,7 +78,7 @@ def test_figure_icn_referenced() -> None:
                             text="Figure 1", icn="figure-1-pump.jpg")]
     resolve(root)
     xml = serialize(root, issue="5.0", dm_type="descriptive")
-    assert 'infoEntityIdent="figure-1-pump.jpg"' in xml
+    assert 'infoEntityIdent="figure-1-pump"' in xml
     assert "ICN-TODO" not in xml
 
 

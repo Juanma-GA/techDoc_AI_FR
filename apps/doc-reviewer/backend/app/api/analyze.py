@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.errors import AppError
+from app.core.document_context import missing_document_context
 from app.core.compiled_rules import RuleResult
+from app.core.logging import get_logger
 from app.core.page_range import filter_docx, filter_pdf, resolve_page_range
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
@@ -28,6 +30,12 @@ from app.schemas import SuggestionOut
 
 
 router = APIRouter(tags=["analyze"])
+_logger = get_logger(__name__)
+
+
+def _text_preview(value: str, limit: int = 300) -> str:
+    compact = " ".join((value or "").split())
+    return compact if len(compact) <= limit else f"{compact[:limit]}..."
 
 
 @router.get("/documents/{document_id}/rule-results", response_model=list[RuleResult])
@@ -75,12 +83,38 @@ def analyze_stream(
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    missing_context = missing_document_context(doc)
+    if missing_context:
+        raise AppError(
+            "DOCUMENT_CONTEXT_INCOMPLETE",
+            "Renseignez le contexte du document avant de lancer l'analyse.",
+            detail={"fields": missing_context},
+            status_code=409,
+        )
     resolved_first_page, resolved_last_page = resolve_page_range(
         first_page,
         last_page,
         doc.page_count,
     )
     partial_page_range = resolved_first_page != 1 or resolved_last_page != doc.page_count
+    _logger.info(
+        "analysis_requested",
+        document_id=str(document_id),
+        source_format=doc.source_format,
+        working_format=doc.working_format,
+        page_count=doc.page_count,
+        first_page=resolved_first_page,
+        last_page=resolved_last_page,
+        checklist_enabled=checklist,
+        vision_override=vision,
+        context={
+            "meta_revision_date": doc.meta_revision_date,
+            "meta_cmm_number": doc.meta_cmm_number,
+            "meta_first_issue_date": doc.meta_first_issue_date,
+            "meta_revision_number": doc.meta_revision_number,
+            "document_language": doc.document_language,
+        },
+    )
 
     # Run on the current version (post-edit) so the user can re-run the
     # analysis after applying suggestions and pick up new issues that the
@@ -140,9 +174,10 @@ def analyze_stream(
                 "last_page": resolved_last_page,
             },
             "metadata": {
-                "CMM_number": doc.meta_cmm_number,
-                "revision_date": doc.meta_revision_date,
-                "revision_number": doc.meta_revision_number,
+                "meta_cmm_number": doc.meta_cmm_number,
+                "meta_revision_date": doc.meta_revision_date,
+                "meta_first_issue_date": doc.meta_first_issue_date,
+                "meta_revision_number": doc.meta_revision_number,
                 "document_language": doc.document_language,
             }
         },
@@ -221,6 +256,42 @@ def analyze_stream(
             else:
                 parsed = await asyncio.to_thread(parse_pdf, src_path)
                 parsed = filter_pdf(parsed, first_page_value, last_page_value)
+            if is_docx_value:
+                parsed_page_summaries = [
+                    {
+                        "page": block.page,
+                        "target_id": block.target_id,
+                        "text_chars": len(block.text or ""),
+                        "text_preview": _text_preview(block.text or ""),
+                    }
+                    for block in parsed.blocks
+                ]
+                parsed_page_count = parsed.block_count
+                parsed_text_chars = sum(len(block.text or "") for block in parsed.blocks)
+                span_count = 0
+            else:
+                parsed_page_summaries = [
+                    {
+                        "page": page.page,
+                        "text_chars": len(page.text or ""),
+                        "text_preview": _text_preview(page.text or ""),
+                        "span_count": len(page.spans),
+                    }
+                    for page in parsed.pages
+                ]
+                parsed_page_count = len(parsed.pages)
+                parsed_text_chars = sum(len(page.text or "") for page in parsed.pages)
+                span_count = sum(len(page.spans) for page in parsed.pages)
+            _logger.info(
+                "analysis_document_parsed",
+                document_id=str(document_id_value),
+                run_id=str(run_id_value),
+                format="docx" if is_docx_value else "pdf",
+                page_count=parsed_page_count,
+                text_chars=parsed_text_chars,
+                span_count=span_count,
+                pages=parsed_page_summaries,
+            )
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
 
             # Build a lightweight Document-like with target_unit_system (we
@@ -369,6 +440,15 @@ def analyze_stream(
                     doc_row.status = "analyzed"
                     scoped_session.commit()
 
+                _logger.info(
+                    "analysis_finished",
+                    document_id=str(document_id_value),
+                    run_id=str(run_id_value),
+                    total_suggestions=total,
+                    suppressed_rejected=suppressed_rejected,
+                    warning_count=len(run_warnings),
+                    compiled_result_count=len(compiled_results),
+                )
                 yield {
                     "event": "done",
                     "data": json.dumps({
@@ -380,9 +460,23 @@ def analyze_stream(
             finally:
                 scoped_session.close()
         except AppError as exc:
+            _logger.warning(
+                "analysis_failed",
+                document_id=str(document_id_value),
+                run_id=str(run_id_value),
+                error=exc.code,
+                message=exc.message,
+            )
             _mark_failed(document_id_value)
             yield {"event": "error", "data": json.dumps({"code": exc.code, "message": exc.message})}
         except Exception as exc:  # noqa: BLE001
+            _logger.exception(
+                "analysis_failed",
+                document_id=str(document_id_value),
+                run_id=str(run_id_value),
+                error=type(exc).__name__,
+                message=str(exc),
+            )
             _mark_failed(document_id_value)
             yield {
                 "event": "error",

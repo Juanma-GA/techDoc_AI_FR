@@ -95,6 +95,7 @@
       "counts": "{{missing}} non localisé(s), {{uncertain}} à vérifier.",
       "pmc": "Télécharger la PMC",
       "validate": "Valider la DMRL →",
+      "icn": "ICN",
       "rename": "Renommer",
       "exclude": "Exclure"
     },

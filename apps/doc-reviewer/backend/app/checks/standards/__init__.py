@@ -9,7 +9,7 @@ from the DB so the user can clone/override built-in catalogs.
 
 from __future__ import annotations
 
-from app.checks.standards import ata100, mat10000, ste100
+from app.checks.standards import ata100, mat10000, ste100, user_rules
 from app.checks.standards._catalog import serialize_compiled_rule
 from app.core.compiled_rules import CompiledRule
 
@@ -60,6 +60,7 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
         "versions": ata100.CATALOG,
         "metadata": ata100.RULE_METADATA,
     },
+    user_rules.USER_STANDARD_SPEC,
 ]
 
 

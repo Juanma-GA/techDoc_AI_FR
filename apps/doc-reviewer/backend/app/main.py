@@ -25,7 +25,7 @@ from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
-from app.db.seed import seed_default_rules
+from app.db.seed import seed_default_rules, sync_user_standard
 from app.db.session import SessionLocal
 
 
@@ -116,10 +116,11 @@ def create_app() -> FastAPI:
 
 
 def _seed_defaults() -> None:
-    """Insert demo custom rules at boot if the table is empty (idempotent)."""
+    """Seed demo rules and synchronize the editable local standard."""
     db = SessionLocal()
     try:
         seed_default_rules(db)
+        sync_user_standard(db)
     except Exception:  # noqa: BLE001 — seed must never block startup
         pass
     finally:

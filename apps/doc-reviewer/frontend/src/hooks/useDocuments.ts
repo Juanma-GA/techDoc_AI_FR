@@ -132,6 +132,9 @@ export function usePatchDocumentMeta(id: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: DocumentMetaPatch) => api.patch<Document>(`/documents/${id}`, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["document", id] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["document", id] });
+      void qc.invalidateQueries({ queryKey: ["documents"] });
+    },
   });
 }

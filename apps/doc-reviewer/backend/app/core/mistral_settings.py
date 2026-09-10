@@ -235,6 +235,17 @@ def _set_int(db: Session, key: str, value: int, *, lo: int, hi: int) -> None:
     db.commit()
 
 
+_CHECKLIST_AI_SCAN_KEY = "checklist.ai_scan"
+
+
+def get_checklist_ai_scan(db: Session) -> bool:
+    return _get_bool(db, _CHECKLIST_AI_SCAN_KEY, False)
+
+
+def set_checklist_ai_scan(db: Session, enabled: bool) -> None:
+    _set_bool(db, _CHECKLIST_AI_SCAN_KEY, enabled)
+
+
 def get_verify_enabled(db: Session) -> bool:
     return _get_bool(db, _VERIFY_ENABLED_KEY, True)
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 
 from lxml import etree
 
@@ -54,6 +56,41 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Le type declare dans la DMRL fait foi.
     assert [d["dm_type"] for d in state["dms"]] == ["descriptive", "procedural"]
     assert state["resources"]["dmrl_count"] == 2
+
+
+def test_dmrl_icn_renames_image_and_xml_reference_omits_extension(client, pdf_bytes_image) -> None:
+    doc_id = _upload_doc(client, pdf_bytes_image)
+    dmrl = [{
+        "Arbo": "1",
+        "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+        "Titre": "Description",
+        "Type": "Descriptif",
+        "ICN": "ICN-PUMP-00001-A-01.png",
+    }]
+    _upload_resource(client, doc_id, "dmrl", "DMRL.json", json.dumps(dmrl).encode())
+
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    assert state["dmrl"][0]["icn"] == "ICN-PUMP-00001-A-01.png"
+
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    names = client.get(f"/api/v1/documents/{doc_id}/wizard/images").json()
+    assert names == ["ICN-PUMP-00001-A-01.png"]
+    image = client.get(f"/api/v1/documents/{doc_id}/wizard/images/{names[0]}")
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+
+    for payload in ({"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    assert state["step"] == "generate"
+    xml = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
+    ).text
+    assert 'infoEntityIdent="ICN-PUMP-00001-A-01"' in xml
+    assert 'infoEntityIdent="ICN-PUMP-00001-A-01.png"' not in xml
+    archive = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+    assert archive.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(archive.content)) as bundle:
+        assert "illustrations/ICN-PUMP-00001-A-01.png" in bundle.namelist()
 
 
 def test_dmrl_step_reports_unmatched_entry(client, pdf_bytes) -> None:

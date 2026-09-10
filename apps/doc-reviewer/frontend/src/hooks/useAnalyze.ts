@@ -3,6 +3,8 @@ import { useCallback, useState } from "react";
 
 import { API_BASE_URL } from "../lib/api";
 import { useFiltersStore } from "../stores/filtersStore";
+import { missingDocumentContext } from "../types/domain";
+import type { Document } from "../types/domain";
 
 type AnalyzeStatus = "idle" | "running" | "done" | "error";
 
@@ -20,9 +22,11 @@ export type AnalyzeOptions = {
   lastPage?: number;
 };
 
-export function useAnalyze(documentId: string | undefined) {
+export function useAnalyze(documentId: string | undefined, document?: Document) {
   const qc = useQueryClient();
   const checklistActive = useFiltersStore((s) => s.checklistActive);
+  const missingContextFields = missingDocumentContext(document);
+  const contextReady = Boolean(document) && missingContextFields.length === 0;
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +38,11 @@ export function useAnalyze(documentId: string | undefined) {
 
   const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
+    if (!contextReady) {
+      setStatus("error");
+      setError("DOCUMENT_CONTEXT_INCOMPLETE");
+      return;
+    }
     setStatus("running");
     setProgress(0);
     setError(null);
@@ -53,7 +62,14 @@ export function useAnalyze(documentId: string | undefined) {
         headers: { Accept: "text/event-stream" },
       });
       if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status}`);
+        let message = `HTTP ${response.status}`;
+        try {
+          const payload = (await response.json()) as { message?: string; code?: string };
+          message = payload.message ?? payload.code ?? message;
+        } catch {
+          /* keep the HTTP fallback */
+        }
+        throw new Error(message);
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -128,7 +144,7 @@ export function useAnalyze(documentId: string | undefined) {
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [documentId, qc, status, checklistActive]);
+  }, [contextReady, documentId, qc, status, checklistActive]);
 
-  return { status, progress, error, quality, warnings, start };
+  return { status, progress, error, quality, warnings, start, contextReady, missingContextFields };
 }

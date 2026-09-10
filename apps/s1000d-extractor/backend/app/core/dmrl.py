@@ -23,7 +23,10 @@ from pathlib import Path
 from app.core.errors import AppError
 from app.core.pmc import generate_pmc as _generate_pmc
 
-__all__ = ["DmrlEntry", "find_dm_boundaries", "generate_pmc", "load_dmrl", "normalize"]
+__all__ = [
+    "DmrlEntry", "extract_icn_filenames", "find_dm_boundaries", "generate_pmc",
+    "load_dmrl", "normalize",
+]
 
 # Alias de colonnes tolerants (les DMRL clientes ne sont jamais normalisees).
 _ALIASES: dict[str, tuple[str, ...]] = {
@@ -34,7 +37,16 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "info_code": ("info code", "infocode", "ic", "code information"),
     "tech_name": ("tech name", "techname", "nom technique", "technical name"),
     "info_name": ("info name", "infoname", "nom information", "information name"),
+    "icn": (
+        "icn", "illustration code number", "illustration code no", "illustration code num",
+        "icn illustration code number", "illustration code number icn",
+    ),
 }
+
+_ICN_RE = re.compile(
+    r"""(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+\.(?:jpg|png))(?=$|[\s,;|)\]}])""",
+    re.IGNORECASE,
+)
 
 _PROC_INFO_PREFIX = ("2", "3", "5", "6", "7", "8")
 
@@ -48,17 +60,23 @@ class DmrlEntry:
     info_code: str = ""
     tech_name: str = ""
     info_name: str = ""
+    icn: str = ""
 
     def to_dict(self) -> dict:
         return {
             "arbo": self.arbo, "dmc": self.dmc, "title": self.title,
             "dm_type": self.dm_type, "info_code": self.info_code,
-            "tech_name": self.tech_name, "info_name": self.info_name,
+            "tech_name": self.tech_name, "info_name": self.info_name, "icn": self.icn,
         }
 
 
 def entry_from_dict(data: dict) -> DmrlEntry:
     return DmrlEntry(**{k: str(data.get(k) or "") for k in DmrlEntry().to_dict()})
+
+
+def extract_icn_filenames(value: str | None) -> list[str]:
+    """Extracte les noms ICN valides d'une cellule DMRL, dans leur ordre."""
+    return [match.group(1) for match in _ICN_RE.finditer(value or "")]
 
 
 def normalize(text: str) -> str:

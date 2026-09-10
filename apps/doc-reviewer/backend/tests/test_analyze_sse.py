@@ -15,6 +15,41 @@ from app.api import rules as rules_api
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 
 
+def _set_document_context(client: TestClient, document_id: str) -> None:
+    response = client.patch(
+        f"/api/v1/documents/{document_id}",
+        json={
+            "meta_revision_date": "JUL 27/26",
+            "meta_cmm_number": "79-30-02",
+            "meta_first_issue_date": "JUL 1966",
+            "meta_revision_number": "Rev. 01",
+            "document_language": "en",
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_analyze_requires_complete_document_context(client: TestClient, sample_pdf_bytes: bytes) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    doc_id = upload.json()["id"]
+
+    blocked = client.post(f"/api/v1/documents/{doc_id}/analyze")
+
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "DOCUMENT_CONTEXT_INCOMPLETE"
+    assert set(blocked.json()["detail"]["fields"]) == {
+        "meta_revision_date",
+        "meta_cmm_number",
+        "meta_first_issue_date",
+        "meta_revision_number",
+        "document_language",
+    }
+
+
 def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes: bytes) -> None:
     upload = client.post(
         "/api/v1/documents?target=imperial",
@@ -22,6 +57,7 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     )
     assert upload.status_code == 201
     doc_id = upload.json()["id"]
+    _set_document_context(client, doc_id)
 
     with client.stream("POST", f"/api/v1/documents/{doc_id}/analyze") as stream:
         assert stream.status_code == 200
@@ -76,6 +112,7 @@ def test_imported_compiled_rule_comments_matching_pdf_text(
     )
     assert upload.status_code == 201
     doc_id = upload.json()["id"]
+    _set_document_context(client, doc_id)
 
     with client.stream("POST", f"/api/v1/documents/{doc_id}/analyze?checklist=true") as stream:
         assert stream.status_code == 200

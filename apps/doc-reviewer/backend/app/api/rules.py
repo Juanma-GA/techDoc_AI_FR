@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core import ingest
 from app.core.checklist_compiler import compile_checklist_rule
 from app.core.compiled_rule_store import persist_compiled_rule
-from app.core.compiled_rules import validate_compiled_rule_json
+from app.core.compiled_rules import describe_compiled_rule, validate_compiled_rule_json
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
@@ -299,6 +299,7 @@ def _compiled_summary(row: CompiledRuleVersion) -> CompiledRuleSummary:
         semantic_instruction=rule.semantic_instruction,
         manual_instruction=rule.manual_instruction,
         compilation_error=rule.compilation_error,
+        detail=describe_compiled_rule(rule),
     )
 
 
@@ -343,6 +344,7 @@ def list_compiled_rules(
                     source=rule.source,
                     origin_ref=rule.origin_ref,
                     semantic_instruction=rule.semantic_instruction,
+                    detail=describe_compiled_rule(rule),
                 )
     rows = list(
         db.scalars(

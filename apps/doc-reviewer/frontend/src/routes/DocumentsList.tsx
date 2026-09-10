@@ -13,6 +13,7 @@ import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
 import { useStandards } from "../hooks/useStandards";
 import { effectiveTarget, useFiltersStore } from "../stores/filtersStore";
+import { missingDocumentContext } from "../types/domain";
 import type { Document } from "../types/domain";
 
 // Selection MULTIPLE : metric et/ou imperial (vide ou les deux => "auto").
@@ -207,7 +208,8 @@ function DocRow({
   onDelete: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
-  const analyze = useAnalyze(doc.id);
+  const analyze = useAnalyze(doc.id, doc);
+  const missingContextFields = missingDocumentContext(doc);
   const badgeClass = STATUS_BADGE[doc.status] ?? "default";
   const running = analyze.status === "running" || doc.status === "analyzing";
 
@@ -229,6 +231,9 @@ function DocRow({
             />
           </div>
         ) : null}
+        {missingContextFields.length > 0 ? (
+          <p className="hint">{t("reviewer.meta.required")}</p>
+        ) : null}
         {analyze.status === "running" ? (
           <div className="progress" style={{ marginTop: 6 }}>
             <div className="progress-bar" style={{ width: `${analyze.progress}%` }} />
@@ -245,6 +250,8 @@ function DocRow({
         <AnalysisPageRange
           pageCount={doc.page_count}
           running={running}
+          blocked={missingContextFields.length > 0}
+          blockReason={t("reviewer.meta.required")}
           onStart={(range) => void analyze.start(range)}
         />
         <button type="button" onClick={onOpen} className="btn small primary">

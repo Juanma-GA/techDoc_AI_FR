@@ -25,6 +25,21 @@ def _ste100_version_id(client: TestClient) -> str:
     raise AssertionError("ASD-STE100 seed introuvable")
 
 
+
+def _set_document_context(client: TestClient, document_id: str) -> None:
+    response = client.patch(
+        f"/api/v1/documents/{document_id}",
+        json={
+            "meta_revision_date": "JUL 27/26",
+            "meta_cmm_number": "79-30-02",
+            "meta_first_issue_date": "JUL 1966",
+            "meta_revision_number": "Rev. 01",
+            "document_language": "en",
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
 def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool before the check.")
@@ -45,6 +60,7 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     assert doc["source_format"] == "docx"
     assert doc["convert_engine"] == "docx-native"
     doc_id = doc["id"]
+    _set_document_context(client, doc_id)
 
     # Vue blocs disponible + zones semantiques (Phase 2).
     blocks = client.get(f"/api/v1/documents/{doc_id}/blocks").json()["blocks"]
@@ -93,6 +109,7 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
         files={"file": ("m.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
     )
     doc_id = up.json()["id"]
+    _set_document_context(client, doc_id)
     with client.stream("POST", f"/api/v1/documents/{doc_id}/analyze") as s:
         b"".join(s.iter_bytes())
     sug = [x for x in client.get(f"/api/v1/documents/{doc_id}/suggestions").json()

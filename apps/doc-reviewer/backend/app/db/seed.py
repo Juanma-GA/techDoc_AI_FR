@@ -12,11 +12,15 @@ fresh install:
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
+
 import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Rule
+from app.checks.standards import serialize_builtin_version, user_rules
+from app.db.models import Rule, Standard, StandardVersion
 
 logger = structlog.get_logger(__name__)
 
@@ -83,3 +87,58 @@ def seed_default_rules(db: Session) -> int:
     db.commit()
     logger.info("default_rules_seeded", count=len(_DEFAULTS))
     return len(_DEFAULTS)
+
+
+def sync_user_standard(db: Session) -> int:
+    """Create and refresh the file-backed local standard catalog.
+
+    The published built-in catalogs remain database-owned after their Alembic
+    migrations. This one catalog is intentionally sourced from
+    ``standards/user_rules.py`` so local experiments can be edited and tested
+    after a backend restart without a new migration for every rule change.
+    """
+    spec = user_rules.USER_STANDARD_SPEC
+    code = user_rules.STANDARD_CODE
+    standard = db.scalar(select(Standard).where(Standard.code == code))
+    now = datetime.now(timezone.utc)
+    if standard is None:
+        standard = Standard(
+            code=code,
+            label=user_rules.STANDARD_LABEL,
+            description=user_rules.STANDARD_DESCRIPTION,
+            builtin=True,
+        )
+        db.add(standard)
+        db.flush()
+
+    changed = 0
+    for label in user_rules.CATALOG:
+        payload = json.dumps(
+            serialize_builtin_version(spec, label),
+            ensure_ascii=False,
+        )
+        version = db.scalar(
+            select(StandardVersion).where(
+                StandardVersion.standard_id == standard.id,
+                StandardVersion.label == label,
+            )
+        )
+        if version is None:
+            db.add(
+                StandardVersion(
+                    standard_id=standard.id,
+                    label=label,
+                    builtin=True,
+                    catalog_json=payload,
+                )
+            )
+            changed += 1
+        elif version.catalog_json != payload:
+            version.catalog_json = payload
+            version.updated_at = now
+            changed += 1
+
+    db.commit()
+    if changed:
+        logger.info("user_standard_synced", code=code, changed_versions=changed)
+    return changed

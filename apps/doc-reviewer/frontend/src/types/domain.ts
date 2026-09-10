@@ -126,6 +126,32 @@ export type Document = {
   created_at: string;
 };
 
+export const REQUIRED_DOCUMENT_CONTEXT_FIELDS = [
+  "meta_revision_date",
+  "meta_cmm_number",
+  "meta_first_issue_date",
+  "meta_revision_number",
+  "document_language",
+] as const;
+
+export type DocumentContextField = (typeof REQUIRED_DOCUMENT_CONTEXT_FIELDS)[number];
+
+export function missingDocumentContext(
+  document: Pick<
+    Document,
+    | "meta_revision_date"
+    | "meta_cmm_number"
+    | "meta_first_issue_date"
+    | "meta_revision_number"
+    | "document_language"
+  > | null | undefined,
+): DocumentContextField[] {
+  if (!document) return [...REQUIRED_DOCUMENT_CONTEXT_FIELDS];
+  return REQUIRED_DOCUMENT_CONTEXT_FIELDS.filter(
+    (field) => !String(document[field] ?? "").trim(),
+  );
+}
+
 export type Rule = {
   id: string;
   name: string;

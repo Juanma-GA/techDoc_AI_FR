@@ -7,6 +7,7 @@ import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
 import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
+import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
   useApplyGroup,
@@ -30,7 +31,7 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
   const document = useDocument(documentId);
   const blocks = useDocxBlocks(documentId, true);
   const suggestions = useSuggestions(documentId);
-  const analyze = useAnalyze(documentId);
+  const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
   const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
@@ -106,6 +107,8 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
             <AnalysisPageRange
               pageCount={document.data?.page_count ?? 0}
               running={analyze.status === "running"}
+              blocked={!analyze.contextReady}
+              blockReason={t("reviewer.meta.required")}
               onStart={(range) => void analyze.start(range)}
             />
             {analyze.status === "running" ? (
@@ -128,7 +131,8 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
 
         <AnalysisTargetBanner />
 
-        <main className="reviewer-canvas" style={{ overflow: "auto", padding: 16 }}>
+        <main className="reviewer-canvas reviewer-canvas-stack" style={{ overflow: "auto", padding: 16 }}>
+          {document.data ? <DocumentMetaPanel document={document.data} /> : null}
           {blocks.isLoading ? (
             <p className="hint">{t("common.loading")}</p>
           ) : (

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.core.mistral_settings import (
     get_ai_custom_prompt,
+    get_checklist_ai_scan,
     get_checklist_context,
     get_effective,
     get_feedback_enabled,
@@ -22,6 +23,7 @@ from app.core.mistral_settings import (
     get_vision_enabled,
     save,
     set_ai_custom_prompt,
+    set_checklist_ai_scan,
     set_checklist_context,
     set_feedback_enabled,
     set_llm_enabled,
@@ -71,6 +73,7 @@ def _build_out(db: Session) -> MistralSettingsOut:
         vision_enabled=get_vision_enabled(db),
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
+        checklist_ai_scan=get_checklist_ai_scan(db),
     )
 
 
@@ -98,11 +101,14 @@ def update_mistral_settings(
     # client config). Pop it before delegating to `save()`.
     vision_enabled = payload.pop("vision_enabled", None)
     llm_enabled = payload.pop("llm_enabled", None)
+    checklist_ai_scan = payload.pop("checklist_ai_scan", None)
     save(db, payload)
     if vision_enabled is not None:
         set_vision_enabled(db, bool(vision_enabled))
     if llm_enabled is not None:
         set_llm_enabled(db, bool(llm_enabled))
+    if checklist_ai_scan is not None:
+        set_checklist_ai_scan(db, bool(checklist_ai_scan))
     return _build_out(db)
 
 
