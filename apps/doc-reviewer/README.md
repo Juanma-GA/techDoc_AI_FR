@@ -47,9 +47,11 @@ Run `bash start.sh`.
 pnpm --filter @apps/doc-reviewer-frontend dev
 ```
 
-The Vite proxy targets `http://127.0.0.1:8003`. The production UI is built
-with `pnpm --filter @apps/doc-reviewer-frontend build` and served by FastAPI
-from `frontend/dist/`.
+The Vite proxy probes the default backend port and the following ports up to
+`8023`, selecting the first Doc Reviewer backend that answers `/api/v1/health`.
+Set `VITE_BACKEND_PORT` when the port must be explicit. The production UI is
+built with `pnpm --filter @apps/doc-reviewer-frontend build` and served by
+FastAPI from `frontend/dist/`.
 
 ## Served Interface
 

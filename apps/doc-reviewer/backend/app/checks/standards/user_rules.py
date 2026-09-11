@@ -36,6 +36,7 @@ _TP1_MARKER_PATTERN = re.compile(r"\bTP\s*1\b", re.IGNORECASE)
 _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
+_DECIMAL_COMMA_PATTERN = r"(?<!\d)(\d+),(\d+)(?!\d)"
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
 _REVISION_DATE_PATTERN = (
     r"(?:"
@@ -166,6 +167,7 @@ def _regex_rule(
     *,
     operator: Literal["regex", "regex_exists"] = "regex",
     severity: Literal["info", "warning", "error"] = "warning",
+    replacement: str | None = None,
 ) -> CompiledRule:
     return CompiledRule(
         id=code,
@@ -173,7 +175,14 @@ def _regex_rule(
         severity=severity,
         execution="deterministic",
         target=_TARGET,
-        checks=[Check(field="text", operator=operator, expected=pattern)],
+        checks=[
+            Check(
+                field="text",
+                operator=operator,
+                expected=pattern,
+                replacement=replacement,
+            )
+        ],
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:{code}",
     )
@@ -276,6 +285,13 @@ _RULES_V1 = [
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:CUSTOM_TP1_THALES_ADDRESS",
     ),
+    _regex_rule(
+        "CUSTOM_DECIMAL_COMMA",
+        "Valeurs decimales doivent etre separees par un point",
+        _DECIMAL_COMMA_PATTERN,
+        severity="error",
+        replacement=r"\1.\2",
+    ),
 ]
 
 
@@ -325,6 +341,15 @@ RULE_METADATA["CUSTOM_TP1_THALES_ADDRESS"] = {
     "kind": "field_required",
     "severity": "error",
     "message": "L'adresse THALES de la page TP1 est absente ou incorrecte.",
+}
+RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
+    "description": (
+        "Les valeurs numeriques decimales des pages modifiees doivent utiliser "
+        "un point comme separateur decimal, et non une virgule."
+    ),
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "Une valeur decimale utilise une virgule au lieu d'un point.",
 }
 
 
