@@ -10,13 +10,15 @@ import {
   useDeleteVersion,
   useStandardVersionDetail,
   useStandards,
+  useToggleCatalogRule,
 } from "../hooks/useStandards";
 import type { Standard } from "../types/domain";
 
 /**
  * Administration des normes : liste des normes (built-in + custom), versions,
- * et **catalogue de regles en lecture seule** par version. Les regles custom se
- * gerent desormais dans la carte « Regles custom » dediee (retirees d'ici).
+ * et catalogue par version. Le contenu des règles built-in reste en lecture
+ * seule, mais leur activation est configurable règle par règle. Les règles
+ * custom se gèrent dans la carte « Règles custom » dédiée.
  */
 export function Standards(): JSX.Element {
   const { t } = useTranslation();
@@ -25,6 +27,7 @@ export function Standards(): JSX.Element {
   const createVer = useCreateVersion();
   const deleteStd = useDeleteStandard();
   const deleteVer = useDeleteVersion();
+  const toggleCatalogRule = useToggleCatalogRule();
 
   const items: Standard[] = standards.data ?? [];
 
@@ -232,6 +235,23 @@ export function Standards(): JSX.Element {
                           <p className="row">
                             <span className="item-name label grow">{c.code}</span>
                             <span className="badge default">{c.kind} · {c.severity}</span>
+                            <label className="row" style={{ gap: "0.4rem" }}>
+                              <input
+                                type="checkbox"
+                                checked={!detail.data.disabled_rule_codes.includes(c.code)}
+                                disabled={toggleCatalogRule.isPending}
+                                onChange={(event) => {
+                                  if (!current || !activeVersion) return;
+                                  toggleCatalogRule.mutate({
+                                    standardId: current.id,
+                                    versionId: activeVersion.id,
+                                    code: c.code,
+                                    enabled: event.target.checked,
+                                  });
+                                }}
+                              />
+                              <span>{t("standards.ruleEnabled")}</span>
+                            </label>
                           </p>
                           <p className="item-name">{c.title}</p>
                           <p className="item-meta">{c.description}</p>

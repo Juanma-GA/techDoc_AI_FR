@@ -188,7 +188,6 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
       </div>
 
       <SuggestionPanel
-        documentId={documentId}
         suggestions={suggestions.data ?? []}
         selectedId={selectedId}
         onSelect={setSelected}

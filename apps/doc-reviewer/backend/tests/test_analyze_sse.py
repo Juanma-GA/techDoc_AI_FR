@@ -91,11 +91,11 @@ def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) ->
     pdf_bytes = pdf.tobytes()
     pdf.close()
 
-    # La classification TP1 est portee par le standard ATEXIS-CUSTOM (voir
+    # La classification TP1 est portee par le standard THALES-CUSTOM (voir
     # `PAGE_CLASSIFIERS`) : elle ne s'execute que si ce standard est
     # selectionne pour le document, pas pour tout PDF sans distinction.
     standards = client.get("/api/v1/standards")
-    custom = next(item for item in standards.json() if item["code"] == "ATEXIS-CUSTOM")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
     version_id = custom["versions"][0]["id"]
 
     upload = client.post(

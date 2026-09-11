@@ -107,6 +107,8 @@ export type CompiledRuleSummary = {
   execution: "deterministic" | "semantic" | "manual" | "unsupported";
   active: boolean;
   source: "standard_rule" | "user_checklist";
+  standard_id: string | null;
+  standard_version_id: string | null;
   origin_ref: string | null;
   semantic_instruction: string | null;
   manual_instruction: string | null;

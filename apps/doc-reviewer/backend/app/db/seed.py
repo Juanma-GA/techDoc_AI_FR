@@ -100,6 +100,12 @@ def sync_user_standard(db: Session) -> int:
     spec = user_rules.USER_STANDARD_SPEC
     code = user_rules.STANDARD_CODE
     standard = db.scalar(select(Standard).where(Standard.code == code))
+    if standard is None:
+        standard = db.scalar(
+            select(Standard).where(Standard.code == "ATEXIS-CUSTOM")
+        )
+        if standard is not None:
+            standard.code = code
     now = datetime.now(timezone.utc)
     if standard is None:
         standard = Standard(
@@ -110,6 +116,9 @@ def sync_user_standard(db: Session) -> int:
         )
         db.add(standard)
         db.flush()
+    else:
+        standard.label = user_rules.STANDARD_LABEL
+        standard.description = user_rules.STANDARD_DESCRIPTION
 
     changed = 0
     for label in user_rules.CATALOG:

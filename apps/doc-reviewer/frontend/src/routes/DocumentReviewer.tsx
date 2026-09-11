@@ -192,7 +192,6 @@ export function DocumentReviewer() {
       </div>
 
       <SuggestionPanel
-        documentId={documentId}
         suggestions={suggestions.data ?? []}
         selectedId={selectedId}
         onSelect={(id) => {

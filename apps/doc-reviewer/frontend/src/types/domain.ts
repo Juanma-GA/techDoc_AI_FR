@@ -203,6 +203,7 @@ export type CatalogRule = {
 export type StandardVersionDetail = StandardVersion & {
   catalog: CatalogRule[];
   custom_rules: Rule[];
+  disabled_rule_codes: string[];
 };
 
 export type SuggestionApplyResult = {

@@ -295,6 +295,8 @@ def _compiled_summary(row: CompiledRuleVersion) -> CompiledRuleSummary:
         execution=rule.execution,
         active=row.active,
         source=rule.source,
+        standard_id=None,
+        standard_version_id=None,
         origin_ref=rule.origin_ref,
         semantic_instruction=rule.semantic_instruction,
         manual_instruction=rule.manual_instruction,
@@ -328,8 +330,7 @@ def list_compiled_rules(
         except (TypeError, ValueError):
             catalog = []
         for source in catalog if isinstance(catalog, list) else []:
-            if str(source.get("code") or "") in disabled_codes:
-                continue
+            code = str(source.get("code") or "")
             rule = compile_standard_rule(
                 source,
                 f"{version.standard.code}:{version.label}:{source.get('code', '')}",
@@ -340,8 +341,10 @@ def list_compiled_rules(
                     topic=rule.topic,
                     severity=rule.severity,
                     execution=rule.execution,
-                    active=True,
+                    active=code not in disabled_codes,
                     source=rule.source,
+                    standard_id=version.standard_id,
+                    standard_version_id=version.id,
                     origin_ref=rule.origin_ref,
                     semantic_instruction=rule.semantic_instruction,
                     detail=describe_compiled_rule(rule),

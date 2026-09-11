@@ -67,3 +67,30 @@ export function useDeleteVersion() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["standards"] }),
   });
 }
+
+export function useToggleCatalogRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      standardId,
+      versionId,
+      code,
+      enabled,
+    }: {
+      standardId: string;
+      versionId: string;
+      code: string;
+      enabled: boolean;
+    }) =>
+      api.post<StandardVersionDetail>(
+        `/standards/${standardId}/versions/${versionId}/rules/toggle`,
+        { code, enabled },
+      ),
+    onSuccess: (_detail, variables) => {
+      qc.invalidateQueries({
+        queryKey: ["standard-version", variables.standardId, variables.versionId],
+      });
+      qc.invalidateQueries({ queryKey: ["compiled-rules"] });
+    },
+  });
+}

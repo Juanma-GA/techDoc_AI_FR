@@ -12,7 +12,7 @@ def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     codes = {s["code"] for s in body}
     # Les normes purement XML/données (S1000D, ATA2200, S2000M) ont été
     # retirées du catalogue — seules restent les normes texte/rendu.
-    assert codes == {"ASD-STE100", "MAT10000", "ATA100", "ATEXIS-CUSTOM"}
+    assert codes == {"ASD-STE100", "MAT10000", "ATA100", "THALES-CUSTOM"}
     for std in body:
         assert std["builtin"] is True
         assert len(std["versions"]) >= 1
@@ -72,7 +72,7 @@ def test_compiled_rules_include_tp1_address_when_custom_standard_is_selected(
     client: TestClient,
 ) -> None:
     standards = client.get("/api/v1/standards")
-    custom = next(item for item in standards.json() if item["code"] == "ATEXIS-CUSTOM")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
     version_id = custom["versions"][0]["id"]
 
     response = client.get(f"/api/v1/compiled-rules?standard_version_id={version_id}")
@@ -88,3 +88,34 @@ def test_create_duplicate_code_returns_409(client: TestClient) -> None:
     )
     assert second.status_code == 409
     assert second.json()["code"] == "STANDARD_CODE_TAKEN"
+
+
+def test_toggle_thales_catalog_rule_individually(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = custom["versions"][0]
+    detail_url = f"/api/v1/standards/{custom['id']}/versions/{version['id']}"
+    code = "CUSTOM_CMM_NUMBER"
+
+    disabled = client.post(
+        f"{detail_url}/rules/toggle",
+        json={"code": code, "enabled": False},
+    )
+    assert disabled.status_code == 200
+    assert code in disabled.json()["disabled_rule_codes"]
+
+    compiled = client.get(
+        f"/api/v1/compiled-rules?standard_version_id={version['id']}"
+    )
+    assert compiled.status_code == 200
+    compiled_rule = next(item for item in compiled.json() if item["id"] == code)
+    assert compiled_rule["active"] is False
+    assert compiled_rule["standard_id"] == custom["id"]
+    assert compiled_rule["standard_version_id"] == version["id"]
+
+    enabled = client.post(
+        f"{detail_url}/rules/toggle",
+        json={"code": code, "enabled": True},
+    )
+    assert enabled.status_code == 200
+    assert code not in enabled.json()["disabled_rule_codes"]

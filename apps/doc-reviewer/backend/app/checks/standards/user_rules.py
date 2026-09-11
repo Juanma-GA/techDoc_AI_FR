@@ -14,8 +14,8 @@ from app.core.logging import get_logger
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 
-STANDARD_CODE = "ATEXIS-CUSTOM"
-STANDARD_LABEL = "ATEXIS - Regles utilisateur"
+STANDARD_CODE = "THALES-CUSTOM"
+STANDARD_LABEL = "THALES - Regles utilisateur"
 STANDARD_DESCRIPTION = (
     "Regles locales editables pour tester des controles sur les documents."
 )

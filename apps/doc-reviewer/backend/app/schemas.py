@@ -269,6 +269,8 @@ class CompiledRuleSummary(BaseModel):
     execution: Literal["deterministic", "semantic", "manual", "unsupported"]
     active: bool
     source: Literal["standard_rule", "user_checklist"]
+    standard_id: Optional[uuid.UUID] = None
+    standard_version_id: Optional[uuid.UUID] = None
     origin_ref: Optional[str] = None
     semantic_instruction: Optional[str] = None
     manual_instruction: Optional[str] = None

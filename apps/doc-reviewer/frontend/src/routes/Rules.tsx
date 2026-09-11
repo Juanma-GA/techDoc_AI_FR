@@ -13,7 +13,7 @@ import {
   useValidateAllRules,
   type RuleInput,
 } from "../hooks/useRules";
-import { useStandards } from "../hooks/useStandards";
+import { useStandards, useToggleCatalogRule } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
 import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
@@ -28,6 +28,7 @@ export function Rules() {
   const patch = usePatchRule();
   const remove = useDeleteRule();
   const validateAll = useValidateAllRules();
+  const toggleCatalogRule = useToggleCatalogRule();
 
   const [confirmDelete, setConfirmDelete] = useState<Rule | null>(null);
 
@@ -69,7 +70,27 @@ export function Rules() {
               {compiledRules.data?.map((rule) => (
                 <tr key={rule.id} style={rule.active ? undefined : { opacity: 0.7 }}>
                   <td>
-                    {rule.source === "user_checklist" ? (
+                    {rule.source === "standard_rule" && rule.standard_id && rule.standard_version_id ? (
+                      <label
+                        className="switch"
+                        title={rule.active ? t("rules.disable") : t("rules.enable")}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={rule.active}
+                          onChange={(event) =>
+                            toggleCatalogRule.mutate({
+                              standardId: rule.standard_id as string,
+                              versionId: rule.standard_version_id as string,
+                              code: rule.id,
+                              enabled: event.target.checked,
+                            })
+                          }
+                          disabled={toggleCatalogRule.isPending}
+                        />
+                        <span className="track" />
+                      </label>
+                    ) : rule.source === "user_checklist" ? (
                       <label
                         className="switch"
                         title={rule.active ? t("rules.disable") : t("rules.enable")}
