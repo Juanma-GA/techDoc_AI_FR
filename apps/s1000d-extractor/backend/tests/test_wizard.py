@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 
 from app.core import xml_safe
+from app.core.ir import IRNode, to_dict
+from app.db.session import SessionLocal
 
 
 def _upload(client, data: bytes) -> str:
@@ -64,6 +66,52 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     z = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
     assert z.status_code == 200
     assert z.headers["content-type"] == "application/zip"
+
+
+def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
+    from app.db.models import Document
+
+    with SessionLocal() as db:
+        doc = Document(
+            filename="manual.pdf",
+            source_format="pdf",
+            storage_path="unused.pdf",
+            dms_json=json.dumps([
+                {
+                    "dm_id": "dm1",
+                    "title": "First",
+                    "dm_type": "descriptive",
+                    "tree": to_dict(IRNode(
+                        id="r1",
+                        kind="section",
+                        children=[IRNode(id="f1", kind="figure", text="Figure 1 First")],
+                    )),
+                },
+                {
+                    "dm_id": "dm2",
+                    "title": "Second",
+                    "dm_type": "descriptive",
+                    "tree": to_dict(IRNode(
+                        id="r2",
+                        kind="section",
+                        children=[
+                            IRNode(id="f2", kind="figure", text="Figure 2 Second"),
+                            IRNode(id="t2", kind="table", table_rows=[["A"]]),
+                        ],
+                    )),
+                },
+            ]),
+        )
+        db.add(doc)
+        db.commit()
+        doc_id = doc.id
+
+    first = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm1/xml")
+    second = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm2/xml")
+
+    assert 'id="fig-0001"' in first.text
+    assert 'id="fig-0002"' in second.text
+    assert 'id="tbl-0001"' in second.text
 
 
 def _split_state(client, doc_id):

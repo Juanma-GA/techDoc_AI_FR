@@ -85,6 +85,28 @@ def test_figure_icn_referenced() -> None:
     assert "ICN-TODO" not in xml
 
 
+def test_figures_and_tables_have_incremental_ids() -> None:
+    root = IRNode(id="r", kind="section", level=0)
+    root.children = [
+        IRNode(id="f1", kind="figure", text="Figure 1 First"),
+        IRNode(id="t1", kind="table", table_rows=[["A"]]),
+        IRNode(id="f2", kind="figure", text="Figure 2 Second"),
+        IRNode(id="t2", kind="table", table_rows=[["B"]]),
+    ]
+    xml = serialize(
+        root,
+        issue="5.0",
+        dm_type="descriptive",
+        figure_offset=4,
+        table_offset=7,
+    )
+
+    assert '<figure id="fig-0005">' in xml
+    assert '<figure id="fig-0006">' in xml
+    assert '<table id="tbl-0008">' in xml
+    assert '<table id="tbl-0009">' in xml
+
+
 def test_final_titles_drop_editorial_numbering() -> None:
     root = IRNode(id="r", kind="section", level=0)
     root.children = [

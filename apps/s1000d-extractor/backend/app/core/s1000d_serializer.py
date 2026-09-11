@@ -143,7 +143,7 @@ def _emit_row(parent: etree._Element, cells: list[str]) -> None:
         _para(entry, cell)
 
 
-def _emit_table(parent: etree._Element, node: IRNode) -> None:
+def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None:
     """Modele CALS S1000D : table > (title?) > tgroup > colspec* > thead? > tbody.
 
     Une ligne d'entete detectee (`table_header`) devient un vrai `<thead>` ; les
@@ -155,7 +155,7 @@ def _emit_table(parent: etree._Element, node: IRNode) -> None:
     if header and rows and rows[0] == header:
         body_rows = rows[1:]          # evite de repeter l'entete dans le corps
     ncols = max([len(r) for r in rows] + ([len(header)] if header else []), default=1)
-    table = etree.SubElement(parent, "table")
+    table = etree.SubElement(parent, "table", id=f"tbl-{table_number:04d}")
     if node.text:
         etree.SubElement(table, "title").text = clean_title(node.text)
     tgroup = etree.SubElement(table, "tgroup", cols=str(ncols))
@@ -169,8 +169,8 @@ def _emit_table(parent: etree._Element, node: IRNode) -> None:
         _emit_row(tbody, row)
 
 
-def _emit_figure(parent: etree._Element, node: IRNode) -> None:
-    fig = etree.SubElement(parent, "figure")
+def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> None:
+    fig = etree.SubElement(parent, "figure", id=f"fig-{figure_number:04d}")
     title = etree.SubElement(fig, "title")
     title.text = clean_title(node.text) or "Figure"
     if node.icn:
@@ -206,7 +206,11 @@ def _emit_list(parent: etree._Element, node: IRNode) -> None:
         _emit_refs(li, item)
 
 
-def _emit_node(parent: etree._Element, node: IRNode) -> None:
+def _emit_node(
+    parent: etree._Element,
+    node: IRNode,
+    counters: dict[str, int],
+) -> None:
     alt = _alt_comment(node)
     if alt:
         parent.append(etree.Comment(alt))
@@ -215,10 +219,12 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
         _emit_admonition(parent, node)
         _emit_refs(parent, node)
     elif node.kind == "figure":
-        _emit_figure(parent, node)
+        counters["figure"] += 1
+        _emit_figure(parent, node, counters["figure"])
         _emit_refs(parent, node)
     elif node.kind == "table":
-        _emit_table(parent, node)
+        counters["table"] += 1
+        _emit_table(parent, node, counters["table"])
     elif node.kind == "item-sequence":
         _emit_list(parent, node)
     elif node.kind == "paragraph":
@@ -237,10 +243,14 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
             title = etree.SubElement(sect, "title")  # optionnel mais conventionnel
             title.text = clean_title(node.text)
         for child in node.children:
-            _emit_node(sect, child)
+            _emit_node(sect, child, counters)
 
 
-def _build_content(root: IRNode, dm_type: str) -> etree._Element:
+def _build_content(
+    root: IRNode,
+    dm_type: str,
+    counters: dict[str, int],
+) -> etree._Element:
     content = etree.Element("content")
     if dm_type == "procedural":
         proc = etree.SubElement(content, "procedure")
@@ -248,7 +258,7 @@ def _build_content(root: IRNode, dm_type: str) -> etree._Element:
         etree.SubElement(proc, "preliminaryRqmts")
         main = etree.SubElement(proc, "mainProcedure")
         for child in root.children:
-            _emit_node(main, child)
+            _emit_node(main, child, counters)
         etree.SubElement(proc, "closeRqmts")
     else:
         desc = etree.SubElement(content, "description")
@@ -257,12 +267,21 @@ def _build_content(root: IRNode, dm_type: str) -> etree._Element:
                 " TODO: catalogue de pieces (IPD/IPC) - structurer en catalogSeqNumber/itemSeqNumber "
             ))
         for child in root.children:
-            _emit_node(desc, child)
+            _emit_node(desc, child, counters)
     return content
 
 
-def serialize(root: IRNode, *, issue: str, dm_type: str, title: str = "") -> str:
+def serialize(
+    root: IRNode,
+    *,
+    issue: str,
+    dm_type: str,
+    title: str = "",
+    figure_offset: int = 0,
+    table_offset: int = 0,
+) -> str:
     """Construit le squelette XML S1000D complet (string UTF-8 indentee)."""
+    counters = {"figure": figure_offset, "table": table_offset}
     dmodule = etree.Element("dmodule")
     dmodule.addprevious(etree.Comment(_BANNER))
     dmodule.set("s1000dExtractorIssue", issue)
@@ -276,7 +295,7 @@ def serialize(root: IRNode, *, issue: str, dm_type: str, title: str = "") -> str
     status.append(etree.Comment(" TODO: brexDmRef vers le BREX projet + security + applic "))
     etree.SubElement(status, "brexDmRef")
 
-    dmodule.append(_build_content(root, dm_type))
+    dmodule.append(_build_content(root, dm_type, counters))
 
     tree = dmodule.getroottree()
     return etree.tostring(

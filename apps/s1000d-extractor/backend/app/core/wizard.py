@@ -334,11 +334,22 @@ def _generate_all(db: Session, doc: Document) -> None:
         document_id=doc.id,
         dm_count=len(dms),
     )
+    figure_offset = 0
+    table_offset = 0
     for dm in dms:
         try:
             enriched, extra = wres.apply_resources(dm, res)
             root = ir_mod.from_dict(enriched["tree"])
-            xml = serialize(root, issue=doc.s1000d_issue, dm_type=dm["dm_type"], title=dm["title"])
+            xml = serialize(
+                root,
+                issue=doc.s1000d_issue,
+                dm_type=dm["dm_type"],
+                title=dm["title"],
+                figure_offset=figure_offset,
+                table_offset=table_offset,
+            )
+            figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
+            table_offset += sum(1 for node in root.walk() if node.kind == "table")
             # `content_html`/`content_xml` ne sont pas persistes : ce sont des
             # rendus derives du tree, ils doubleraient inutilement le JSON.
             dm.update({
@@ -421,6 +432,8 @@ def _resources_state(doc: Document) -> dict:
 
 def dm_xml(doc: Document, dm_id: str) -> str:
     dms = ws.load_dms(doc)
+    figure_offset = 0
+    table_offset = 0
     for dm in dms:
         if dm["dm_id"] == dm_id:
             if not dm.get("tree"):
@@ -432,8 +445,14 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 issue=doc.s1000d_issue,
                 dm_type=dm["dm_type"],
                 title=dm["title"],
+                figure_offset=figure_offset,
+                table_offset=table_offset,
             )
             dm["xml"] = xml
             ws.save_dms(doc, dms)
             return xml
+        root = ir_mod.from_dict(dm["tree"]) if dm.get("tree") else None
+        if root is not None:
+            figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
+            table_offset += sum(1 for node in root.walk() if node.kind == "table")
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)
