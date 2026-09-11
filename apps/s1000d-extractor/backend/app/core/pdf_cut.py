@@ -113,27 +113,40 @@ def preview_page(doc: Document, page_number: int) -> bytes:
         source.close()
 
 
-def cut_from_page(doc: Document, page_number: int) -> str:
+def cut_from_page(doc: Document, start_page: int, end_page: int | None = None) -> str:
     path = Path(doc.storage_path)
     source = fitz.open(str(path))
     total_pages = source.page_count
     try:
-        if not 1 <= page_number <= total_pages:
-            raise AppError("PDF_PAGE_INVALID", "Numero de page invalide.", 422)
+        if not 1 <= start_page <= total_pages:
+            raise AppError("PDF_PAGE_INVALID", "Numero de page de debut invalide.", 422)
+        selected_end_page = total_pages if end_page is None else end_page
+        if not 1 <= selected_end_page <= total_pages or start_page > selected_end_page:
+            raise AppError("PDF_PAGE_INVALID", "La plage de pages est invalide.", 422)
         output = Path(settings.storage_dir) / f"document_{doc.id}_cut.pdf"
         output.parent.mkdir(parents=True, exist_ok=True)
         cut = fitz.open()
         try:
-            cut.insert_pdf(source, from_page=page_number - 1, to_page=total_pages - 1)
+            cut.insert_pdf(source, from_page=start_page - 1, to_page=selected_end_page - 1)
             cut.save(str(output))
         finally:
             cut.close()
     finally:
         source.close()
     doc.pdf_cut_path = str(output)
-    doc.pdf_cut_start_page = page_number
-    doc.page_count = total_pages - page_number + 1
+    doc.pdf_cut_start_page = start_page
+    doc.pdf_cut_end_page = selected_end_page
+    doc.page_count = selected_end_page - start_page + 1
     return str(output)
+
+
+def total_pages(doc: Document) -> int:
+    path = Path(doc.storage_path)
+    source = fitz.open(str(path))
+    try:
+        return source.page_count
+    finally:
+        source.close()
 
 
 def prepare_source(
@@ -142,6 +155,7 @@ def prepare_source(
     *,
     cut_pdf: bool = True,
     start_page: int | None = None,
+    end_page: int | None = None,
 ) -> str:
     """Retourne le PDF a analyser, en le coupant si demande par l'API."""
     if doc.source_format != "pdf":
@@ -149,10 +163,13 @@ def prepare_source(
     if not cut_pdf:
         return doc.storage_path
     if doc.pdf_cut_path and Path(doc.pdf_cut_path).exists():
-        if start_page is None or start_page == doc.pdf_cut_start_page:
+        if (
+            (start_page is None or start_page == doc.pdf_cut_start_page)
+            and (end_page is None or end_page == doc.pdf_cut_end_page)
+        ):
             return doc.pdf_cut_path
     if start_page is not None:
-        cut_from_page(doc, start_page)
+        cut_from_page(doc, start_page, end_page)
         db.flush()
         return doc.pdf_cut_path or doc.storage_path
     candidates = detect_start_pages(doc)
@@ -162,6 +179,6 @@ def prepare_source(
             "Validez la page de debut du chapitre avant de lancer l'analyse.",
             409,
         )
-    cut_from_page(doc, int(candidates[0]["page"]))
+    cut_from_page(doc, int(candidates[0]["page"]), end_page)
     db.flush()
     return doc.pdf_cut_path or doc.storage_path

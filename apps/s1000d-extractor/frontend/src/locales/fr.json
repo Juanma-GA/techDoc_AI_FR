@@ -52,11 +52,13 @@
       "start": "Démarrer l'assistant",
       "noFile": "Choisis un fichier PDF ou Word.",
       "pdfCut": {
-        "title": "Valider la page de début du chapitre",
-        "help": "Sélectionne la première page du chapitre à analyser avant de lancer l'extraction.",
-        "page": "Page de début",
+        "title": "Définir la plage de pages à analyser",
+        "help": "La sélection proposée commence au premier chapitre détecté et va jusqu'à la dernière page.",
+        "startPage": "De la page",
+        "endPage": "À la page",
         "candidate": "Page {{page}} — score {{score}}",
-        "validate": "Valider la page et lancer l'analyse",
+        "invalidRange": "La page de début doit être antérieure ou égale à la page de fin.",
+        "validate": "Valider la plage et lancer l'analyse",
         "previewAlt": "Aperçu de la page {{page}}"
       }
     },

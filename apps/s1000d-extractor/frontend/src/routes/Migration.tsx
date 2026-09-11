@@ -173,7 +173,8 @@ export function Migration() {
   const [pdfCut, setPdfCut] = useState<{
     docId: string;
     detection: PdfCutDetection;
-    page: number | null;
+    startPage: number | null;
+    endPage: number | null;
   } | null>(null);
   const [pdfCutBusy, setPdfCutBusy] = useState(false);
 
@@ -227,11 +228,15 @@ export function Migration() {
     setStarting({ pct: 5, label: t("migration.start.starting") });
     if (sourceFormat === "pdf") {
       const detection = await pdfCutApi.detect(id);
-      if (detection.validation_required && detection.selected_page == null) {
+      if (
+        detection.validation_required &&
+        (detection.selected_page == null || detection.selected_end_page == null)
+      ) {
         setPdfCut({
           docId: id,
           detection,
-          page: detection.candidates[0]?.page ?? null,
+          startPage: detection.selected_page ?? detection.default_start_page,
+          endPage: detection.selected_end_page ?? detection.total_pages,
         });
         setStarting(null);
         refreshDocs();
@@ -299,14 +304,18 @@ export function Migration() {
   };
 
   const confirmPdfCut = async () => {
-    if (!pdfCut || pdfCut.page == null) return;
+    if (!pdfCut || pdfCut.startPage == null || pdfCut.endPage == null) return;
     const pending = pdfCut;
-    const page = pending.page;
-    if (page == null) return;
+    const startPage = pending.startPage;
+    const endPage = pending.endPage;
+    if (startPage > endPage) {
+      setLoadError(t("migration.upload.pdfCut.invalidRange"));
+      return;
+    }
     setPdfCutBusy(true);
     setLoadError(null);
     try {
-      await pdfCutApi.confirm(pending.docId, page);
+      await pdfCutApi.confirm(pending.docId, startPage, endPage);
       setPdfCut(null);
       await startAnalysis(pending.docId);
     } catch (e) {
@@ -477,39 +486,55 @@ export function Migration() {
           <p className="label">{t("migration.upload.pdfCut.help")}</p>
           <div className="row" style={{ alignItems: "end" }}>
             <label>
-              <div className="label">{t("migration.upload.pdfCut.page")}</div>
-              <select
-                value={pdfCut.page ?? ""}
+              <div className="label">{t("migration.upload.pdfCut.startPage")}</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={pdfCut.detection.total_pages}
+                value={pdfCut.startPage ?? ""}
                 disabled={pdfCutBusy}
                 onChange={(e) =>
                   setPdfCut((current) =>
-                    current ? { ...current, page: Number(e.target.value) || null } : current,
+                    current ? { ...current, startPage: Number(e.target.value) || null } : current,
                   )
                 }
-              >
-                {pdfCut.detection.candidates.map((candidate) => (
-                  <option key={candidate.page} value={candidate.page}>
-                    {t("migration.upload.pdfCut.candidate", {
-                      page: candidate.page,
-                      score: candidate.score,
-                    })}
-                  </option>
-                ))}
-              </select>
+              />
+            </label>
+            <label>
+              <div className="label">{t("migration.upload.pdfCut.endPage")}</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={pdfCut.detection.total_pages}
+                value={pdfCut.endPage ?? ""}
+                disabled={pdfCutBusy}
+                onChange={(e) =>
+                  setPdfCut((current) =>
+                    current ? { ...current, endPage: Number(e.target.value) || null } : current,
+                  )
+                }
+              />
             </label>
             <button
               type="button"
               className="btn primary"
-              disabled={pdfCutBusy || pdfCut.page == null}
+              disabled={
+                pdfCutBusy ||
+                pdfCut.startPage == null ||
+                pdfCut.endPage == null ||
+                pdfCut.startPage > pdfCut.endPage
+              }
               onClick={() => void confirmPdfCut()}
             >
               {t("migration.upload.pdfCut.validate")}
             </button>
           </div>
-          {pdfCut.page != null ? (
+          {pdfCut.startPage != null ? (
             <img
-              src={pdfCutApi.previewUrl(pdfCut.docId, pdfCut.page)}
-              alt={t("migration.upload.pdfCut.previewAlt", { page: pdfCut.page })}
+              src={pdfCutApi.previewUrl(pdfCut.docId, pdfCut.startPage)}
+              alt={t("migration.upload.pdfCut.previewAlt", { page: pdfCut.startPage })}
               style={{
                 display: "block",
                 maxWidth: "100%",

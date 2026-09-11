@@ -1,4 +1,4 @@
-"""Routes de detection, apercu et validation du debut de chapitre PDF."""
+"""Routes de detection, apercu et validation de la plage PDF a analyser."""
 
 from __future__ import annotations
 
@@ -26,9 +26,13 @@ def _require(db: Session, doc_id: str) -> Document:
 def detect_pdf_start(doc_id: str, db: Session = Depends(get_db)) -> dict:
     doc = _require(db, doc_id)
     candidates = pdf_cut.detect_start_pages(doc)
+    total_pages = pdf_cut.total_pages(doc)
     return {
         "validation_required": settings.pdf_cut_requires_validation,
         "selected_page": doc.pdf_cut_start_page,
+        "selected_end_page": doc.pdf_cut_end_page,
+        "default_start_page": candidates[0]["page"] if candidates else 1,
+        "total_pages": total_pages,
         "candidates": candidates[:10],
     }
 
@@ -46,13 +50,18 @@ def confirm_pdf_start(
     db: Session = Depends(get_db),
 ) -> dict:
     doc = _require(db, doc_id)
-    page_number = params.get("page")
-    if isinstance(page_number, bool) or not isinstance(page_number, int):
-        raise AppError("PDF_PAGE_INVALID", "Le champ page doit etre un entier.", 422)
-    pdf_cut.cut_from_page(doc, page_number)
+    start_page = params.get("start_page", params.get("page"))
+    end_page = params.get("end_page")
+    if isinstance(start_page, bool) or not isinstance(start_page, int):
+        raise AppError("PDF_PAGE_INVALID", "Le champ start_page doit etre un entier.", 422)
+    if end_page is not None and (isinstance(end_page, bool) or not isinstance(end_page, int)):
+        raise AppError("PDF_PAGE_INVALID", "Le champ end_page doit etre un entier.", 422)
+    pdf_cut.cut_from_page(doc, start_page, end_page)
     db.commit()
     return {
-        "page": page_number,
+        "page": start_page,
+        "start_page": start_page,
+        "end_page": doc.pdf_cut_end_page,
         "page_count": doc.page_count,
         "status": "ready",
     }

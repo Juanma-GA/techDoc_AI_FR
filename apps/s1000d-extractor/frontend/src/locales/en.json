@@ -52,11 +52,13 @@
       "start": "Start the assistant",
       "noFile": "Pick a PDF or Word file.",
       "pdfCut": {
-        "title": "Validate the chapter start page",
-        "help": "Select the first chapter page to analyse before starting extraction.",
-        "page": "Start page",
+        "title": "Set the page range to analyse",
+        "help": "The suggested range starts at the first detected chapter and ends at the last page.",
+        "startPage": "From page",
+        "endPage": "To page",
         "candidate": "Page {{page}} — score {{score}}",
-        "validate": "Validate page and start analysis",
+        "invalidRange": "The start page must be before or equal to the end page.",
+        "validate": "Validate the range and start analysis",
         "previewAlt": "Preview of page {{page}}"
       }
     },

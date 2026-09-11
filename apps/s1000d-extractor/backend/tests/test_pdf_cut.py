@@ -43,6 +43,8 @@ def test_pdf_cut_can_preview_and_confirm_page(client, pdf_bytes_headers, monkeyp
     detection = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
     assert detection.status_code == 200
     assert detection.json()["candidates"]
+    assert detection.json()["total_pages"] == 3
+    assert detection.json()["default_start_page"] == 1
 
     preview = client.get(f"/api/v1/documents/{doc_id}/pdf-cut/preview/2")
     assert preview.status_code == 200
@@ -52,8 +54,13 @@ def test_pdf_cut_can_preview_and_confirm_page(client, pdf_bytes_headers, monkeyp
     assert blocked.status_code == 409
     assert blocked.json()["code"] == "PDF_CUT_VALIDATION_REQUIRED"
 
-    confirmed = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/confirm", json={"page": 2})
+    confirmed = client.post(
+        f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+        json={"start_page": 2, "end_page": 3},
+    )
     assert confirmed.status_code == 200
+    assert confirmed.json()["start_page"] == 2
+    assert confirmed.json()["end_page"] == 3
     assert confirmed.json()["page_count"] == 2
 
     started = client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": True})

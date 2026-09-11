@@ -116,6 +116,7 @@ def start(
     *,
     cut_pdf: bool = True,
     start_page: int | None = None,
+    end_page: int | None = None,
 ) -> dict:
     """Parse le document, construit l'IR, propose un decoupage par defaut.
 
@@ -135,8 +136,15 @@ def start(
         previous_dm_count=previous_dm_count,
         cut_pdf=cut_pdf,
         start_page=start_page,
+        end_page=end_page,
     )
-    source_path = prepare_source(doc, db, cut_pdf=cut_pdf, start_page=start_page)
+    source_path = prepare_source(
+        doc,
+        db,
+        cut_pdf=cut_pdf,
+        start_page=start_page,
+        end_page=end_page,
+    )
     progress_cb("parse", 10)
     blocks = ingest.extract_blocks(
         source_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
