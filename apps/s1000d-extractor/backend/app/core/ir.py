@@ -116,6 +116,7 @@ class IRNode:
     table_rows: list[list[str]] | None = None
     table_header: list[str] | None = None      # ligne d'entete (-> thead CALS)
     icn: str | None = None                     # nom de fichier illustration associee
+    icns: list[str] = field(default_factory=list)  # plusieurs fichiers pour une figure composee
     refs: list[dict] | None = None             # renvois/hyperliens (-> internalRef...)
 
     def walk(self) -> list[IRNode]:
@@ -151,6 +152,7 @@ def from_dict(data: dict) -> IRNode:
         table_rows=data.get("table_rows"),
         table_header=data.get("table_header"),
         icn=data.get("icn"),
+        icns=list(data.get("icns", [])),
         refs=data.get("refs"),
     )
 
@@ -182,6 +184,7 @@ def to_dict(node: IRNode) -> dict:
         "table_rows": node.table_rows,
         "table_header": node.table_header,
         "icn": node.icn,
+        "icns": node.icns,
         "refs": node.refs,
         "children": [to_dict(c) for c in node.children],
     }

@@ -85,6 +85,28 @@ def test_figure_icn_referenced() -> None:
     assert "ICN-TODO" not in xml
 
 
+def test_composite_figure_references_all_graphics() -> None:
+    from app.core.ir import IRNode
+    from app.core.s1000d_serializer import serialize
+
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[IRNode(
+            id="f",
+            kind="figure",
+            text="Figure 5.4 Composite",
+            icns=["figure-5-4-composite.jpg", "figure-5-4-composite-2.jpg"],
+        )],
+    )
+
+    xml = serialize(root, issue="5.0", dm_type="description")
+
+    assert xml.count("<graphic ") == 2
+    assert 'infoEntityIdent="figure-5-4-composite"' in xml
+    assert 'infoEntityIdent="figure-5-4-composite-2"' in xml
+
+
 def test_figures_and_tables_have_incremental_ids() -> None:
     root = IRNode(id="r", kind="section", level=0)
     root.children = [

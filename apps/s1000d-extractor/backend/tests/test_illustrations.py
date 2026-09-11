@@ -116,6 +116,40 @@ def test_two_figures_on_one_line_keep_image_alignment(tmp_path) -> None:
     ]
 
 
+def test_one_figure_can_keep_multiple_embedded_images(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "composite-figure.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+    for x, color in zip((72, 220, 320), colors):
+        image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+        image.set_rect(image.irect, color)
+        page.insert_image(fitz.Rect(x, 90, x + 80, 180), pixmap=image)
+    page.insert_text((72, 205), "Figure 5.3 First panel", fontsize=11)
+    page.insert_text((220, 205), "Figure 5.4 Composite panel", fontsize=11)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    figures = [
+        IRNode(id="f1", kind="figure", text="Figure 5.3 First panel", page=1),
+        IRNode(id="f2", kind="figure", text="Figure 5.4 Composite panel", page=1),
+    ]
+    root = IRNode(id="root", kind="section", children=figures)
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 3
+    assert figures[0].icns == ["figure-5-3-first-panel.jpg"]
+    assert figures[1].icns == [
+        "figure-5-4-composite-panel.jpg",
+        "figure-5-4-composite-panel-2.jpg",
+    ]
+
+
 def test_vector_figure_is_rasterized_when_pdf_has_no_embedded_image(tmp_path) -> None:
     import fitz
 

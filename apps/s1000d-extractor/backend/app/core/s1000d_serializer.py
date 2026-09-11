@@ -72,23 +72,31 @@ def _graphic_ident(icn: str) -> str:
     return _GRAPHIC_EXTENSION.sub("", xml_text(icn))
 
 
+def _figure_icns(node: IRNode) -> list[str]:
+    names = list(node.icns)
+    if node.icn and node.icn not in names:
+        names.insert(0, node.icn)
+    return names
+
+
 def _doctype(root: IRNode) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
     declared: set[str] = set()
     for node in root.walk():
-        if node.kind != "figure" or not node.icn:
+        if node.kind != "figure":
             continue
-        filename = xml_text(node.icn)
-        ident = _graphic_ident(filename)
-        if not filename or ident in declared or not _NCNAME.fullmatch(ident):
-            continue
-        declared.add(ident)
-        suffix = re.search(r"\.[^.]+$", filename)
-        notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "jpg") if suffix else "jpg"
-        declarations.append(
-            f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
-        )
+        for icn in _figure_icns(node):
+            filename = xml_text(icn)
+            ident = _graphic_ident(filename)
+            if not filename or ident in declared or not _NCNAME.fullmatch(ident):
+                continue
+            declared.add(ident)
+            suffix = re.search(r"\.[^.]+$", filename)
+            notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "jpg") if suffix else "jpg"
+            declarations.append(
+                f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
+            )
     declarations.extend((
         '<!ENTITY % ISOEntities PUBLIC '
         '"ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" '
@@ -173,9 +181,10 @@ def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> No
     fig = etree.SubElement(parent, "figure", id=f"fig-{figure_number:04d}")
     title = etree.SubElement(fig, "title")
     title.text = clean_title(node.text) or "Figure"
-    if node.icn:
+    if _figure_icns(node):
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
-        etree.SubElement(fig, "graphic", infoEntityIdent=_graphic_ident(node.icn))
+        for icn in _figure_icns(node):
+            etree.SubElement(fig, "graphic", infoEntityIdent=_graphic_ident(icn))
     else:
         fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
         etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")

@@ -71,6 +71,60 @@ def _caption_rect(page, caption: str):
     return matches[0] if matches else None
 
 
+def _figure_caption_rect(page, caption: str):
+    """Return the rectangle of this caption, not a merged text block."""
+    matches = page.search_for(caption)
+    if matches:
+        return matches[0]
+    return _caption_rect(page, caption)
+
+
+def _image_records(page):
+    """Return unique page image resources with their displayed rectangles."""
+    import fitz
+
+    records = []
+    seen: set[int] = set()
+    try:
+        infos = page.get_image_info(xrefs=True)
+    except Exception:
+        infos = []
+    for info in infos:
+        xref = int(info.get("xref", 0))
+        if not xref or xref in seen:
+            continue
+        seen.add(xref)
+        records.append((xref, fitz.Rect(info["bbox"])))
+    if records:
+        return records
+    return [(int(img[0]), None) for img in page.get_images(full=True)]
+
+
+def _match_figure(image_rect, figures, page_width: float, page_height: float):
+    if image_rect is None:
+        return None
+    candidates = []
+    image_center_x = (image_rect.x0 + image_rect.x1) / 2
+    for figure, caption_rect in figures:
+        if caption_rect is None or caption_rect.y0 < image_rect.y1 - 8:
+            continue
+        caption_center_x = (caption_rect.x0 + caption_rect.x1) / 2
+        vertical_gap = max(0.0, caption_rect.y0 - image_rect.y1)
+        score = (
+            abs(image_center_x - caption_center_x) / page_width
+            + vertical_gap / page_height
+        )
+        candidates.append((score, figure))
+    return min(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
+def _set_figure_icn(figure: IRNode, name: str) -> None:
+    if name not in figure.icns:
+        figure.icns.append(name)
+    if figure.icn is None:
+        figure.icn = name
+
+
 def _vector_rects(page, caption_rect):
     import fitz
 
@@ -186,8 +240,11 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
     try:
         for pidx, page in enumerate(doc, start=1):
             figs = list(figs_by_page.get(pidx, []))
-            for img in page.get_images(full=True):
-                xref = int(img[0])
+            figure_anchors = [
+                (figure, _figure_caption_rect(page, figure.text))
+                for figure in figs
+            ]
+            for xref, image_rect in _image_records(page):
                 if xref in seen:
                     continue
                 seen.add(xref)
@@ -196,19 +253,26 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
                     continue
                 if digest is not None:
                     seen_digests.add(digest)
-                fig = figs.pop(0) if figs else None
+                fig = _match_figure(
+                    image_rect,
+                    figure_anchors,
+                    float(page.rect.width),
+                    float(page.rect.height),
+                )
                 base = slugify(fig.text) if fig and fig.text else f"illustration-{doc_id[:8]}-p{pidx}-{xref}"
                 name = _unique_name(out_dir, base)
                 if _save_pixmap(doc, xref, out_dir / name):
                     saved += 1
                     if fig is not None:
-                        fig.icn = name
+                        _set_figure_icn(fig, name)
             for fig in figs:
+                if fig.icn:
+                    continue
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
                 if _save_vector_figure(page, fig.text, out_dir / name):
                     saved += 1
-                    fig.icn = name
+                    _set_figure_icn(fig, name)
         return saved
     finally:
         doc.close()
