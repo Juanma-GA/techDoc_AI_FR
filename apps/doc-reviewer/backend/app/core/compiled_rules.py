@@ -43,6 +43,7 @@ DocumentMetaField = Literal[
 class RuleTarget(StrictModel):
     page: str
     region: Literal["full_page", "header", "body", "footer"]
+    page_type: str | None = None
 
 
 class FieldRef(StrictModel):

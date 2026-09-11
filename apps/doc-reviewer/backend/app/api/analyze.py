@@ -256,6 +256,10 @@ def analyze_stream(
             else:
                 parsed = await asyncio.to_thread(parse_pdf, src_path)
                 parsed = filter_pdf(parsed, first_page_value, last_page_value)
+            # `page.page_type` (le cas echeant) n'est peuple qu'une fois les
+            # standards selectionnes connus : voir le classifieur invoque par
+            # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
+            page_types: dict[str, str | None] = {}
             if is_docx_value:
                 parsed_page_summaries = [
                     {
@@ -276,6 +280,7 @@ def analyze_stream(
                         "text_chars": len(page.text or ""),
                         "text_preview": _text_preview(page.text or ""),
                         "span_count": len(page.spans),
+                        "page_type": page.page_type,
                     }
                     for page in parsed.pages
                 ]
@@ -291,6 +296,7 @@ def analyze_stream(
                 text_chars=parsed_text_chars,
                 span_count=span_count,
                 pages=parsed_page_summaries,
+                page_types=page_types,
             )
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
 
@@ -389,6 +395,25 @@ def analyze_stream(
                     raws = await task
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
+                    # A ce stade, un classifieur de standard (cf. PAGE_CLASSIFIERS,
+                    # invoque par `run_all`) a pu peupler `page.page_type` — on ne
+                    # le sait qu'apres coup, d'ou la capture ici plutot qu'au parse.
+                    page_types = {str(page.page): page.page_type for page in parsed.pages}
+
+                run_row = scoped_session.get(AnalysisRun, run_id_value)
+                if run_row is not None:
+                    try:
+                        context_payload = json.loads(run_row.context_snapshot_json or "{}")
+                    except (TypeError, ValueError):
+                        context_payload = {}
+                    context_payload["page_types"] = page_types
+                    run_row.context_snapshot_json = json.dumps(
+                        context_payload,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    scoped_session.commit()
 
                 if run_warnings:
                     yield {"event": "warning", "data": json.dumps({"messages": run_warnings})}

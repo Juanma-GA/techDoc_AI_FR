@@ -48,69 +48,69 @@ export function Rules() {
 
       <RulesSuggestPanel />
 
-      {(compiledRules.data?.length ?? 0) > 0 ? (
-        <div>
-          <div className="rules-section-title">
-            {t("rules.compiled.title")} · {compiledRules.data?.length ?? 0}
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table className="rules-table">
-              <thead>
-                <tr>
-                  <th>{t("rules.form.enabled")}</th>
-                  <th>{t("rules.compiled.status")}</th>
-                  <th>{t("rules.form.name")}</th>
-                  <th>{t("rules.compiled.detail")}</th>
-                  <th>{t("rules.form.scope")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {compiledRules.data?.map((rule) => (
-                  <tr key={rule.id} style={rule.active ? undefined : { opacity: 0.7 }}>
-                    <td>
-                      {rule.source === "user_checklist" ? (
-                        <label
-                          className="switch"
-                          title={rule.active ? t("rules.disable") : t("rules.enable")}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={rule.active}
-                            onChange={(event) =>
-                              patchCompiled.mutate({ id: rule.id, active: event.target.checked })
-                            }
-                            disabled={patchCompiled.isPending}
-                          />
-                          <span className="track" />
-                        </label>
-                      ) : (
-                        <span className="badge success">{t("rules.compiled.standardActive")}</span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          rule.execution === "deterministic" || rule.execution === "semantic"
-                            ? "success"
-                            : "default"
-                        }`}
+      <div className="rules-section-title">
+        {t("rules.compiled.title")} · {compiledRules.data?.length ?? 0}
+      </div>
+      {activeStandardVersionIds.length === 0 ? (
+        <p className="banner warn">{t("rules.compiled.noActiveStandard")}</p>
+      ) : (compiledRules.data?.length ?? 0) > 0 ? (
+        <div style={{ overflowX: "auto" }}>
+          <table className="rules-table">
+            <thead>
+              <tr>
+                <th>{t("rules.form.enabled")}</th>
+                <th>{t("rules.compiled.status")}</th>
+                <th>{t("rules.form.name")}</th>
+                <th>{t("rules.compiled.detail")}</th>
+                <th>{t("rules.form.scope")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {compiledRules.data?.map((rule) => (
+                <tr key={rule.id} style={rule.active ? undefined : { opacity: 0.7 }}>
+                  <td>
+                    {rule.source === "user_checklist" ? (
+                      <label
+                        className="switch"
+                        title={rule.active ? t("rules.disable") : t("rules.enable")}
                       >
-                        {t(`rules.compiled.${rule.execution}`)}
-                      </span>
-                      <span className="label" style={{ marginLeft: 6 }}>
-                        {rule.severity}
-                      </span>
-                    </td>
-                    <td>{rule.topic}</td>
-                    <td>
-                      {rule.detail ?? t("rules.compiled.activeImmediately")}
-                    </td>
-                    <td><span className="label">{rule.origin_ref ?? t("standards.transverse")}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        <input
+                          type="checkbox"
+                          checked={rule.active}
+                          onChange={(event) =>
+                            patchCompiled.mutate({ id: rule.id, active: event.target.checked })
+                          }
+                          disabled={patchCompiled.isPending}
+                        />
+                        <span className="track" />
+                      </label>
+                    ) : (
+                      <span className="badge success">{t("rules.compiled.standardActive")}</span>
+                    )}
+                  </td>
+                  <td>
+                    <span
+                      className={`badge ${
+                        rule.execution === "deterministic" || rule.execution === "semantic"
+                          ? "success"
+                          : "default"
+                      }`}
+                    >
+                      {t(`rules.compiled.${rule.execution}`)}
+                    </span>
+                    <span className="label" style={{ marginLeft: 6 }}>
+                      {rule.severity}
+                    </span>
+                  </td>
+                  <td>{rule.topic}</td>
+                  <td>
+                    {rule.detail ?? t("rules.compiled.activeImmediately")}
+                  </td>
+                  <td><span className="label">{rule.origin_ref ?? t("standards.transverse")}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : null}
 

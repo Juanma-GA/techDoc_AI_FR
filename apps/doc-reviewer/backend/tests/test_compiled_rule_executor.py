@@ -403,7 +403,7 @@ def test_missing_document_meta_does_not_use_checklist_context(monkeypatch) -> No
     assert raws == []
 
 
-def test_missing_required_pattern_does_not_create_a_regex_patch() -> None:
+def test_missing_required_pattern_flags_a_comment_without_a_fake_patch() -> None:
     parsed = ParsedPdf(
         page_count=1,
         pages=[ParsedPage(page=1, text="No copyright notice on this page.")],
@@ -415,7 +415,12 @@ def test_missing_required_pattern_does_not_create_a_regex_patch() -> None:
     results, raws = execute_pdf_rules(parsed, [rule])
 
     assert results[0].status == "FAIL"
-    assert raws == []
+    # Pas de proposition de remplacement inventee (rien a "corriger" quand le
+    # contenu est absent), mais le FAIL doit rester visible via un commentaire.
+    assert len(raws) == 1
+    assert raws[0].original == ""
+    assert raws[0].proposed == ""
+    assert raws[0].page == 1
 
 
 def test_only_if_skips_rule_when_condition_is_not_met() -> None:

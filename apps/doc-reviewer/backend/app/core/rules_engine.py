@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.checks import catalog_runner, custom_rules, layout_checks, units_check, vision_checks
 from app.checks.raw import RawSuggestion
+from app.checks.standards import PAGE_CLASSIFIERS
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import (
     CompiledRule,
@@ -115,6 +116,13 @@ def run_all(
         vision_override=vision_enabled_override,
     )
     versions = standard_versions or []
+    # Chaque standard selectionne peut classer les pages (`page.page_type`)
+    # avant l'execution des regles compilees qui en dependent (RuleTarget.
+    # page_type) — remplace un appel en dur depuis la route d'analyse.
+    for version in versions:
+        classifier = PAGE_CLASSIFIERS.get(version.standard.code)
+        if classifier is not None:
+            classifier(parsed, document)
     execution_context = RuleExecutionContext.from_document(document, layout_enabled=layout_enabled)
     raw_target = document.target_unit_system
     target = raw_target if raw_target in {"metric", "imperial", "auto"} else "none"
@@ -767,17 +775,27 @@ def materialize(
                 continue
 
             rect: tuple[float, float, float, float] | None = None
-            # Controles geometriques (layout) : bbox deja connue en points ->
-            # on l'utilise telle quelle, pas de search_for.
-            if getattr(raw, "bbox", None) is not None:
-                rect = raw.bbox
-            if rect is None and fitz_doc is not None and raw.original:
+            # Les controles geometriques fournissent une bbox sans texte a
+            # rechercher. Pour toute suggestion textuelle, privilegier la
+            # localisation du PDF courant : c'est le meme repere que le PNG
+            # du viewer et que l'editeur.
+            if fitz_doc is not None and raw.original:
                 fitz_page = fitz_doc.load_page(raw.page - 1)
                 # span_index for *this* raw is computed below; we need a
                 # stable in-page index of identical occurrences, so build
                 # it incrementally via `counters`.
                 idx_in_page = counters[(raw.page, raw.original)]
-                rect = locate_with_search_for(fitz_page, raw.original, idx_in_page)
+                rect = locate_with_search_for(
+                    fitz_page,
+                    raw.original,
+                    idx_in_page,
+                    reference_bbox=getattr(raw, "bbox", None),
+                )
+
+            # Fallback for text that cannot be found by search_for, and for
+            # detection-only geometric findings which carry no original text.
+            if rect is None and getattr(raw, "bbox", None) is not None:
+                rect = raw.bbox
 
             if rect is None and not raw.original:
                 # Legacy fallback only for structural rules without an

@@ -294,6 +294,7 @@
     "active": "Règles actives",
     "activeEmpty": "Aucune règle active.",
     "compiled.title": "Règles compilées",
+    "compiled.noActiveStandard": "Aucune version de norme active. Active ATEXIS-CUSTOM v1 dans les normes cibles pour charger et appliquer ses contrôles.",
     "compiled.status": "Statut",
     "compiled.detail": "Détail",
     "compiled.deterministic": "Déterministe",

@@ -7,12 +7,17 @@ returns text/event-stream content and that suggestions are persisted.
 from __future__ import annotations
 
 import io
+import json
+import uuid
 
 from openpyxl import Workbook
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.api import rules as rules_api
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
+from app.db.models import AnalysisRun
+from app.db.session import SessionLocal
 
 
 def _set_document_context(client: TestClient, document_id: str) -> None:
@@ -73,6 +78,50 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     # At least one units suggestion should pop up because the fixture pdf
     # contains both "12 cm" and "5 in".
     assert any(r["rule_kind"] == "units" for r in rows)
+
+
+def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    page = pdf.new_page(width=400, height=300)
+    page.insert_text((40, 100), "Title page body", fontname="helv", fontsize=12)
+    page.insert_text((40, 240), "Revision: JUL 27/26", fontname="helv", fontsize=8)
+    page.insert_text((40, 252), "TP 1", fontname="helv", fontsize=8)
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    # La classification TP1 est portee par le standard ATEXIS-CUSTOM (voir
+    # `PAGE_CLASSIFIERS`) : elle ne s'execute que si ce standard est
+    # selectionne pour le document, pas pour tout PDF sans distinction.
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "ATEXIS-CUSTOM")
+    version_id = custom["versions"][0]["id"]
+
+    upload = client.post(
+        f"/api/v1/documents?target=imperial&standard_version_ids={version_id}",
+        files={"file": ("tp1.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    doc_id = upload.json()["id"]
+    _set_document_context(client, doc_id)
+
+    with client.stream("POST", f"/api/v1/documents/{doc_id}/analyze") as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes())
+    assert b"done" in body
+
+    with SessionLocal() as session:
+        run = session.scalar(
+            select(AnalysisRun)
+            .where(AnalysisRun.document_id == uuid.UUID(doc_id))
+            .order_by(AnalysisRun.started_at.desc())
+            .limit(1)
+        )
+        assert run is not None
+        snapshot = json.loads(run.context_snapshot_json)
+
+    assert snapshot["page_types"] == {"1": "TP1"}
 
 
 def test_imported_compiled_rule_comments_matching_pdf_text(

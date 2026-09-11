@@ -36,12 +36,33 @@ describe("bboxToPercentRect", () => {
       y1: 100,
       page_w: 600,
       page_h: 400,
-      page_rotation: 90,
+      page_rotation: 0,
     });
 
     expect(rect?.left).toBeCloseTo(100 / 6);
     expect(rect?.top).toBeCloseTo(12.5);
     expect(rect?.width).toBeCloseTo(100 / 6);
     expect(rect?.height).toBeCloseTo(12.5);
+  });
+
+  it.each([
+    [90, { left: 594 / 800 * 100, top: 100 / 600 * 100, width: 27.5 / 800 * 100, height: 81.12 / 600 * 100 }],
+    [180, { left: 418.88 / 600 * 100, top: 594 / 800 * 100, width: 81.12 / 600 * 100, height: 27.48 / 800 * 100 }],
+    [270, { left: 178.5 / 800 * 100, top: 418.88 / 600 * 100, width: 27.48 / 800 * 100, height: 81.12 / 600 * 100 }],
+  ])("maps a PDF bbox into the %s-degree displayed page", (rotation, expected) => {
+    const rect = bboxToPercentRect({
+      x0: 100,
+      y0: 178.5,
+      x1: 181.12,
+      y1: 205.98,
+      page_w: rotation === 90 || rotation === 270 ? 800 : 600,
+      page_h: rotation === 90 || rotation === 270 ? 600 : 800,
+      page_rotation: rotation,
+    });
+
+    expect(rect?.left).toBeCloseTo(expected.left);
+    expect(rect?.top).toBeCloseTo(expected.top);
+    expect(rect?.width).toBeCloseTo(expected.width);
+    expect(rect?.height).toBeCloseTo(expected.height);
   });
 });

@@ -294,6 +294,7 @@
     "active": "Active rules",
     "activeEmpty": "No active rule.",
     "compiled.title": "Compiled rules",
+    "compiled.noActiveStandard": "No active standard version. Activate ATEXIS-CUSTOM v1 in the target standards to load and apply its controls.",
     "compiled.status": "Status",
     "compiled.detail": "Detail",
     "compiled.deterministic": "Deterministic",

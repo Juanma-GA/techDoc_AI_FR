@@ -28,9 +28,9 @@ export type CssRect = { left: number; top: number; width: number; height: number
 export type PercentRect = { left: number; top: number; width: number; height: number };
 
 /**
- * Positionne une bbox en POURCENTAGES de la page, comme l'ancien preview.html.
- * Le facteur de zoom eventuel est applique au conteneur image dans le viewer,
- * pas a la bbox PDF : les pourcentages restent donc valables a toute echelle.
+ * Positionne une bbox en POURCENTAGES de l'image PNG rendue par PyMuPDF.
+ * Les coordonnees de `search_for` restent dans le repere PDF non tourne, alors
+ * que `get_pixmap` affiche la page dans son orientation (`page_rotation`).
  */
 export function bboxToPercentRect(bbox: Bbox): PercentRect | null {
   if (!hasValidBbox(bbox)) return null;
@@ -41,11 +41,41 @@ export function bboxToPercentRect(bbox: Bbox): PercentRect | null {
   const y0 = bbox.y0 as number;
   const x1 = bbox.x1 as number;
   const y1 = bbox.y1 as number;
+  const minX = Math.min(x0, x1);
+  const minY = Math.min(y0, y1);
+  const maxX = Math.max(x0, x1);
+  const maxY = Math.max(y0, y1);
+  const rotation = ((bbox.page_rotation ?? 0) % 360 + 360) % 360;
+
+  // For 90/270 degrees, page_w/page_h are already swapped by PyMuPDF's
+  // displayed page rect, so recover the unrotated dimensions from them.
+  const sourceWidth = rotation === 90 || rotation === 270 ? ph : pw;
+  const sourceHeight = rotation === 90 || rotation === 270 ? pw : ph;
+  let left = minX;
+  let top = minY;
+  let width = maxX - minX;
+  let height = maxY - minY;
+
+  if (rotation === 90) {
+    left = sourceHeight - maxY;
+    top = minX;
+    width = maxY - minY;
+    height = maxX - minX;
+  } else if (rotation === 180) {
+    left = sourceWidth - maxX;
+    top = sourceHeight - maxY;
+  } else if (rotation === 270) {
+    left = minY;
+    top = sourceWidth - maxX;
+    width = maxY - minY;
+    height = maxX - minX;
+  }
+
   return {
-    left: (Math.min(x0, x1) / pw) * 100,
-    top: (Math.min(y0, y1) / ph) * 100,
-    width: (Math.abs(x1 - x0) / pw) * 100,
-    height: (Math.abs(y1 - y0) / ph) * 100,
+    left: (left / pw) * 100,
+    top: (top / ph) * 100,
+    width: (width / pw) * 100,
+    height: (height / ph) * 100,
   };
 }
 

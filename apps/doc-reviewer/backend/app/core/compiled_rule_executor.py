@@ -52,6 +52,7 @@ class _TextTarget:
     page: str
     text: str
     raw_page: int
+    page_type: str | None = None
     bbox: tuple[float, float, float, float] | None = None
     target_id: str | None = None
     span_ranges: tuple[_SpanRange, ...] = ()
@@ -96,6 +97,7 @@ def execute_pdf_rules(
             page=str(page.page),
             text=page.text,
             raw_page=page.page,
+            page_type=page.page_type,
             span_ranges=_page_span_ranges(page),
         )
         for page in parsed.pages
@@ -205,6 +207,14 @@ def _execute(
             _log_rule_finished(rule.id, result, 0)
             continue
         if scoped is None or not scoped:
+            if rule.target.page_type is not None:
+                _logger.info(
+                    "compiled_rule_skipped",
+                    rule_id=rule.id,
+                    reason="target_page_type_not_found",
+                    page_type=rule.target.page_type,
+                )
+                continue
             evidence = _evidence(targets[0] if targets else None, None, None, is_docx, pdf_pages)
             result = RuleResult(rule_id=rule.id, status="INCONCLUSIVE", evidence=evidence)
             results.append(result)
@@ -229,6 +239,8 @@ def _scope_targets(
     pdf_pages: list[ParsedPage] | None,
 ) -> list[_TextTarget] | None:
     scoped = targets if target_spec.page == "all" else [target for target in targets if target.page == target_spec.page]
+    if target_spec.page_type is not None:
+        scoped = [target for target in scoped if target.page_type == target_spec.page_type]
     if target_spec.region == "full_page":
         return scoped
     if is_docx:
@@ -692,10 +704,31 @@ def _deterministic_suggestions(
         )
         return suggestions
 
-    # A missing required value has no document span to patch. Never turn the
-    # expected literal or regex into a fake replacement proposal.
     if not result.evidence.observed_value:
-        return []
+        # Rien a remplacer (le contenu attendu est absent, pas seulement
+        # incorrect) : sans ce commentaire, le FAIL resterait invisible pour
+        # le relecteur (aucune suggestion cliquable sur la page). On pose donc
+        # un commentaire informatif ancre au debut de la zone ciblee plutot
+        # qu'une proposition de remplacement inventee.
+        fallback_target = next(
+            (target for target in targets if target.page == result.evidence.page),
+            targets[0],
+        )
+        expected = result.evidence.expected_value
+        detail = f" (element attendu : {expected})" if expected else " (element attendu absent de la page)"
+        return [
+            RawSuggestion(
+                rule_kind=rule_kind,
+                rule_code=rule.id,
+                severity=rule.severity,
+                message=f"{message}{detail}",
+                original="",
+                proposed="",
+                page=fallback_target.raw_page,
+                span=(0, 0),
+                bbox=_first_bbox(fallback_target),
+            )
+        ]
 
     fallback_target = next(
         (target.raw_page for target in targets if target.page == result.evidence.page),
@@ -1066,6 +1099,14 @@ def _suggestion_bbox(
 ) -> _BBox | None:
     bbox = _observed_bbox(target, observed, pdf_pages, span_start=span_start)
     return bbox if _is_nonzero_bbox(bbox) else None
+
+
+def _first_bbox(target: _TextTarget) -> _BBox:
+    """Anchor for a comment that has no specific match: first span on the
+    scoped target, so it lands somewhere visible on the right page/region."""
+    if target.span_ranges:
+        return target.span_ranges[0][2]
+    return (0.0, 0.0, 0.0, 0.0)
 
 
 def _union_bboxes(bboxes: list[_BBox]) -> _BBox:

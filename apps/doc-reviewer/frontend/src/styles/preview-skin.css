@@ -248,7 +248,7 @@ table.tbl tr:hover td { background: var(--bg-2); }
 
 /* PDF page + calque de surlignage */
 .pdf-page-wrap { position: relative; display: inline-block; box-shadow: var(--shadow-card); }
-.pdf-highlight { position: absolute; border: 2px solid var(--warning); background: rgba(217, 119, 6, 0.12); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
+.pdf-highlight { position: absolute; box-sizing: border-box; min-width: 0; min-height: 0; margin: 0; padding: 0; line-height: 0; appearance: none; border: 2px solid var(--warning); background: rgba(217, 119, 6, 0.12); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
 .pdf-highlight:hover, .pdf-highlight.active { background: rgba(37, 99, 235, 0.2); border-color: var(--brand); }
 .pdf-highlight.error { border-color: var(--danger); background: rgba(220, 38, 38, 0.12); }
 

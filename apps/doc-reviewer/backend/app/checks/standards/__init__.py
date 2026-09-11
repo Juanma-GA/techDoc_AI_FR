@@ -9,9 +9,12 @@ from the DB so the user can clone/override built-in catalogs.
 
 from __future__ import annotations
 
+from typing import Any, Callable
+
 from app.checks.standards import ata100, mat10000, ste100, user_rules
 from app.checks.standards._catalog import serialize_compiled_rule
 from app.core.compiled_rules import CompiledRule
+from app.parsers.pdf_parser import ParsedPdf
 
 
 # Le Doc Reviewer analyse le **rendu PDF** publié, jamais la source. Les
@@ -62,6 +65,16 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
     },
     user_rules.USER_STANDARD_SPEC,
 ]
+
+# Optionnel par standard : classe les pages du PDF parse (`page.page_type`) en
+# fonction du contexte document, AVANT l'execution des regles compilees, pour
+# les standards dont des regles ciblent un `page_type` (cf. RuleTarget). Cle
+# = `code` du standard (voir chaque spec ci-dessus) : le pipeline generique
+# (`rules_engine.run_all`) n'a donc jamais besoin d'importer un module de
+# standard particulier par son nom.
+PAGE_CLASSIFIERS: dict[str, Callable[[ParsedPdf, Any], None]] = {
+    user_rules.STANDARD_CODE: user_rules.classify_pages,
+}
 
 
 def serialize_builtin_version(spec: dict[str, object], label: str) -> list[dict[str, object]]:

@@ -68,6 +68,19 @@ def test_version_detail_returns_catalog(client: TestClient) -> None:
     assert "MAT_STEP_VERB" in catalog_codes
 
 
+def test_compiled_rules_include_tp1_address_when_custom_standard_is_selected(
+    client: TestClient,
+) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "ATEXIS-CUSTOM")
+    version_id = custom["versions"][0]["id"]
+
+    response = client.get(f"/api/v1/compiled-rules?standard_version_id={version_id}")
+
+    assert response.status_code == 200
+    assert "CUSTOM_TP1_THALES_ADDRESS" in {item["id"] for item in response.json()}
+
+
 def test_create_duplicate_code_returns_409(client: TestClient) -> None:
     client.post("/api/v1/standards", json={"code": "UNIQ-A", "label": "A"})
     second = client.post(

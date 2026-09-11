@@ -25,3 +25,5 @@ JUL 27/26
 79-30-02
 JUL 1966
 Rev. 01
+
+- Rajouter point --> virgule

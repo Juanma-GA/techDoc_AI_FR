@@ -88,6 +88,8 @@ def test_compiled_catalog_rule_does_not_fall_through_to_legacy_or_ai(monkeypatch
     session = SessionLocal()
     try:
         custom_version = _get_version(session, "ATEXIS-CUSTOM")
+        compiled = load_compiled_rules(session, [custom_version], checklist_enabled=False)
+        assert "CUSTOM_TP1_THALES_ADDRESS" in {rule.id for rule in compiled}
         for rule in session.query(Rule):
             rule.enabled = False
 
