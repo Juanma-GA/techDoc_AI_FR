@@ -293,6 +293,8 @@
     "pendingHint": "Imported rules, disabled. Enable the ones to evaluate (or « Enable all » above).",
     "active": "Active rules",
     "activeEmpty": "No active rule.",
+    "inactive": "Inactive rules",
+    "inactiveEmpty": "No inactive rule.",
     "compiled.title": "Active rules",
     "compiled.noActiveStandard": "No active standard version. Activate THALES-CUSTOM v1 in the target standards to load and apply its controls.",
     "compiled.status": "Status",

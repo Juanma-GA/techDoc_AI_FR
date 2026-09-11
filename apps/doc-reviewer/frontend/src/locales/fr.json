@@ -293,6 +293,8 @@
     "pendingHint": "Règles importées, désactivées. Activez celles à évaluer (ou « Tout activer » ci-dessus).",
     "active": "Règles actives",
     "activeEmpty": "Aucune règle active.",
+    "inactive": "Règles inactives",
+    "inactiveEmpty": "Aucune règle inactive.",
     "compiled.title": "Règles actives",
     "compiled.noActiveStandard": "Aucune version de norme active. Active THALES-CUSTOM v1 dans les normes cibles pour charger et appliquer ses contrôles.",
     "compiled.status": "Statut",
