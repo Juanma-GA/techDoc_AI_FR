@@ -308,6 +308,7 @@ export function Migration() {
     const pending = pdfCut;
     const startPage = pending.startPage;
     const endPage = pending.endPage;
+    if (startPage == null || endPage == null) return;
     if (startPage > endPage) {
       setLoadError(t("migration.upload.pdfCut.invalidRange"));
       return;
@@ -475,6 +476,26 @@ export function Migration() {
             >
               {t("migration.upload.start")}
             </button>
+            {starting ? (
+              <div style={{ minWidth: 240, flex: "1 1 280px" }}>
+                <div
+                  className="label"
+                  style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+                >
+                  <span>{starting.label}</span>
+                  <span>{starting.pct}%</span>
+                </div>
+                <div
+                  className="progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={starting.pct}
+                >
+                  <span style={{ width: `${starting.pct}%` }} />
+                </div>
+              </div>
+            ) : null}
             {loadError ? <span className="error grow">{loadError}</span> : null}
           </div>
         </div>
@@ -592,18 +613,6 @@ export function Migration() {
 
       {/* Assistant */}
       <div ref={wizRef}>
-        {starting ? (
-          <div className="card">
-            <h2 className="card-title">{t("migration.start.title")}</h2>
-            <div className="label" style={{ marginBottom: 6 }}>
-              {starting.label}
-            </div>
-            <div className="progress">
-              <span style={{ width: `${starting.pct}%` }} />
-            </div>
-          </div>
-        ) : null}
-
         {wizError ? <div className="card"><div className="error">{wizError}</div></div> : null}
 
         {wiz?.resources?.errors?.length ? (
@@ -629,13 +638,23 @@ export function Migration() {
                   </span>
                 ))}
                 {wiz.resources?.dmrl_count && docId ? (
-                  <a
-                    className="btn secondary small"
-                    style={{ marginLeft: "auto" }}
-                    href={resourcesApi.pmcUrl(docId)}
-                  >
-                    {t("migration.generate.pmc")}
-                  </a>
+                  <>
+                    <a
+                      className="btn secondary small"
+                      style={{ marginLeft: "auto" }}
+                      href={resourcesApi.pmcUrl(docId)}
+                    >
+                      {t("migration.generate.pmc")}
+                    </a>
+                    {wiz.step === "generate" ? (
+                      <a
+                        className="btn primary small"
+                        href={wizardApi.zipUrl(docId)}
+                      >
+                        {t("migration.generate.zip")}
+                      </a>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             </div>
