@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from lxml import etree
+from app.core import xml_safe
 
 
 def _upload(client, data: bytes) -> str:
@@ -54,7 +54,7 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     proc_found = False
     for d in st["dms"]:
         xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{d['dm_id']}/xml").text
-        etree.fromstring(xml.encode("utf-8"))
+        xml_safe.fromstring(xml, allow_internal_dtd=True)
         if d["dm_type"] == "procedural":
             assert "<procedure>" in xml
             proc_found = True

@@ -165,6 +165,7 @@ def wizard_back(doc_id: str, db: Session = Depends(get_db)) -> dict:
 def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Response:
     doc = _require(db, doc_id)
     xml = wizard.dm_xml(doc, dm_id)
+    db.commit()
     dms = json.loads(doc.dms_json) if doc.dms_json else []
     dm = next((item for item in dms if item.get("dm_id") == dm_id), {"dm_id": dm_id})
     return Response(
@@ -204,9 +205,10 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
-            zf.writestr(_dm_filename(d), d["xml"])
+            zf.writestr(_dm_filename(d), wizard.dm_xml(doc, d["dm_id"]))
         for img in _image_paths(doc_id):
             zf.write(img, f"illustrations/{img.name}")
+    db.commit()
     return Response(
         content=buf.getvalue(), media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{doc.id}_dms.zip"'},

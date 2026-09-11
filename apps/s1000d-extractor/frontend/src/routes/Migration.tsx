@@ -203,6 +203,18 @@ export function Migration() {
     }
   }, [wiz?.step]);
 
+  useEffect(() => {
+    const onDocumentsReset = () => {
+      setDocId(null);
+      setWiz(null);
+      setStarting(null);
+      setPdfCut(null);
+      setWizError(null);
+    };
+    window.addEventListener("s1000d-documents-reset", onDocumentsReset);
+    return () => window.removeEventListener("s1000d-documents-reset", onDocumentsReset);
+  }, []);
+
   const refreshDocs = () => void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
 
   const startAnalysis = async (id: string) => {
@@ -276,7 +288,6 @@ export function Migration() {
       const st = await wizardApi.get(id);
       setWiz(st);
     } catch {
-      // Pas encore démarré : lance le stream de démarrage.
       try {
         const doc = await documentsApi.get(id);
         await startDocument(id, doc.source_format);
@@ -290,10 +301,12 @@ export function Migration() {
   const confirmPdfCut = async () => {
     if (!pdfCut || pdfCut.page == null) return;
     const pending = pdfCut;
+    const page = pending.page;
+    if (page == null) return;
     setPdfCutBusy(true);
     setLoadError(null);
     try {
-      await pdfCutApi.confirm(pending.docId, pending.page);
+      await pdfCutApi.confirm(pending.docId, page);
       setPdfCut(null);
       await startAnalysis(pending.docId);
     } catch (e) {

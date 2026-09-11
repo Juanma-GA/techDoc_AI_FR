@@ -18,9 +18,9 @@ merge / split / masquage entetes-pieds / undo / apercu) vit dans `wizard_split`.
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.core import context_classifier, ingest, resolver, splitter, structure_infer
@@ -39,7 +39,7 @@ STEPS = ("split", "type", "structure", "generate")
 STEPS_WITH_DMRL = ("dmrl", *STEPS)
 _DEFAULT_LEVEL = "section"
 
-log = logging.getLogger("s1000d_extractor.wizard")
+log = structlog.get_logger("s1000d_extractor.wizard")
 
 
 def steps_for(doc: Document) -> tuple[str, ...]:
@@ -124,10 +124,28 @@ def start(
     """
     from app.core.pdf_cut import prepare_source
 
+    previous_dm_count = len(ws.load_dms(doc))
+    doc.dms_json = "[]"
+    doc.dms_history_json = None
+    log.info(
+        "wizard_rebuild_started",
+        document_id=doc.id,
+        filename=doc.filename,
+        source_format=doc.source_format,
+        previous_dm_count=previous_dm_count,
+        cut_pdf=cut_pdf,
+        start_page=start_page,
+    )
     source_path = prepare_source(doc, db, cut_pdf=cut_pdf, start_page=start_page)
     progress_cb("parse", 10)
     blocks = ingest.extract_blocks(
         source_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
+    )
+    log.info(
+        "wizard_source_parsed",
+        document_id=doc.id,
+        filename=doc.filename,
+        block_count=len(blocks),
     )
     progress_cb("infer", 40)
     root = structure_infer.build_ir(blocks)
@@ -137,8 +155,23 @@ def start(
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
     _resplit(db, doc, _DEFAULT_LEVEL, progress_cb=progress_cb)
+    rebuilt_dms = ws.load_dms(doc)
+    log.info(
+        "wizard_split_completed",
+        document_id=doc.id,
+        filename=doc.filename,
+        new_dm_count=len(rebuilt_dms),
+        dm_ids=[dm["dm_id"] for dm in rebuilt_dms[:5]],
+    )
     doc.wizard_step = steps_for(doc)[0]
     doc.status = "wizard"
+    log.info(
+        "wizard_started",
+        document_id=doc.id,
+        filename=doc.filename,
+        dm_count=len(ws.load_dms(doc)),
+        step=doc.wizard_step,
+    )
     progress_cb("done", 100)
     db.commit()
     return state(doc)
@@ -288,6 +321,11 @@ def _generate_all(db: Session, doc: Document) -> None:
     dms = ws.load_dms(doc)
     brex_xml = _brex_xml(db, doc.brex_id)
     res = wres.load_resources(doc)
+    log.info(
+        "wizard_generation_started",
+        document_id=doc.id,
+        dm_count=len(dms),
+    )
     for dm in dms:
         try:
             enriched, extra = wres.apply_resources(dm, res)
@@ -304,8 +342,16 @@ def _generate_all(db: Session, doc: Document) -> None:
                 xml, issue=doc.s1000d_issue, brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
             ) + extra
+            log.info(
+                "dm_generated",
+                document_id=doc.id,
+                dm_id=dm["dm_id"],
+                icn_count=sum(1 for node in root.walk() if node.kind == "figure" and node.icn),
+                has_doctype="<!DOCTYPE dmodule [" in xml,
+                xml_length=len(xml),
+            )
         except Exception as exc:
-            log.exception("generation du DM %s echouee", dm.get("dm_id"))
+            log.exception("dm_generation_failed", document_id=doc.id, dm_id=dm.get("dm_id"))
             dm["xml"] = None
             dm["violations"] = [{
                 "severity": "error", "rule": "GENERATE",
@@ -366,9 +412,20 @@ def _resources_state(doc: Document) -> dict:
 
 
 def dm_xml(doc: Document, dm_id: str) -> str:
-    for dm in ws.load_dms(doc):
+    dms = ws.load_dms(doc)
+    for dm in dms:
         if dm["dm_id"] == dm_id:
-            if not dm.get("xml"):
+            if not dm.get("tree"):
                 raise AppError("NO_XML", "XML non genere : termine l'etape Generation.", 409)
-            return dm["xml"]
+            # Le tree est la source de verite : un XML persiste peut provenir
+            # d'une generation precedente ou d'un serializer ancien.
+            xml = serialize(
+                ir_mod.from_dict(dm["tree"]),
+                issue=doc.s1000d_issue,
+                dm_type=dm["dm_type"],
+                title=dm["title"],
+            )
+            dm["xml"] = xml
+            ws.save_dms(doc, dms)
+            return xml
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)

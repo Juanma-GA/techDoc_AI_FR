@@ -36,6 +36,7 @@ _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD
 # Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
 _GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
+_GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
 
 
 def xml_text(value: str | None) -> str:
@@ -54,6 +55,32 @@ def _top_element(node: IRNode, fallback: str) -> str:
 
 def _graphic_ident(icn: str) -> str:
     return _GRAPHIC_EXTENSION.sub("", xml_text(icn))
+
+
+def _doctype(root: IRNode) -> str:
+    """Construit la DTD interne qui declare les fichiers graphiques du DM."""
+    declarations: list[str] = []
+    declared: set[str] = set()
+    for node in root.walk():
+        if node.kind != "figure" or not node.icn:
+            continue
+        filename = xml_text(node.icn)
+        ident = _graphic_ident(filename)
+        if not filename or ident in declared or not _NCNAME.fullmatch(ident):
+            continue
+        declared.add(ident)
+        suffix = re.search(r"\.[^.]+$", filename)
+        notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "jpg") if suffix else "jpg"
+        declarations.append(
+            f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
+        )
+    declarations.extend((
+        '<!ENTITY % ISOEntities PUBLIC '
+        '"ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" '
+        '"ent/ISOEntities">',
+        "%ISOEntities;",
+    ))
+    return "<!DOCTYPE dmodule [\n" + "\n".join(declarations) + "\n]>"
 
 
 def _alt_comment(node: IRNode) -> str | None:
@@ -238,5 +265,6 @@ def serialize(root: IRNode, *, issue: str, dm_type: str, title: str = "") -> str
 
     tree = dmodule.getroottree()
     return etree.tostring(
-        tree, pretty_print=True, xml_declaration=True, encoding="UTF-8"
+        tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",
+        doctype=_doctype(root),
     ).decode("utf-8")

@@ -181,6 +181,7 @@ def test_figure_icn_in_generated_xml(client, pdf_bytes_image) -> None:
     found = False
     for d in st["dms"]:
         xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{d['dm_id']}/xml").text
-        if 'infoEntityIdent="figure-1' in xml and ".jpg" not in xml:
+        graphic_lines = [line for line in xml.splitlines() if "<graphic " in line]
+        if any('infoEntityIdent="figure-1' in line and ".jpg" not in line for line in graphic_lines):
             found = True
     assert found, "l'ICN de la figure n'est pas referencee dans le XML"

@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from lxml import etree
-
+from app.core import xml_safe
 from app.core.ir import IRNode
 from app.core.resolver import resolve
 from app.core.s1000d_serializer import serialize
@@ -26,9 +25,13 @@ def _doc(dm_type: str = "descriptive") -> str:
     return serialize(root, issue="5.0", dm_type=dm_type)
 
 
+def _parse(xml: str):
+    return xml_safe.fromstring(xml, allow_internal_dtd=True)
+
+
 def test_descriptive_elements_present() -> None:
     xml = _doc("descriptive")
-    doc = etree.fromstring(xml.encode("utf-8"))
+    doc = _parse(xml)
     tags = {el.tag for el in doc.iter()}
     for expected in ("description", "levelledPara", "para", "warning",
                      "warningAndCautionPara", "note", "notePara",
@@ -38,7 +41,7 @@ def test_descriptive_elements_present() -> None:
 
 def test_procedural_wraps_in_mainprocedure() -> None:
     xml = _doc("procedural")
-    doc = etree.fromstring(xml.encode("utf-8"))
+    doc = _parse(xml)
     tags = {el.tag for el in doc.iter()}
     assert "procedure" in tags and "mainProcedure" in tags
 
@@ -51,7 +54,7 @@ def test_banner_and_todo_placeholders() -> None:
 
 
 def test_output_is_wellformed() -> None:
-    etree.fromstring(_doc().encode("utf-8"))  # ne leve pas
+    _parse(_doc())  # ne leve pas
 
 
 def test_table_header_becomes_thead_and_colspec() -> None:
@@ -63,7 +66,7 @@ def test_table_header_becomes_thead_and_colspec() -> None:
     )]
     resolve(root)
     xml = serialize(root, issue="5.0", dm_type="descriptive")
-    doc = etree.fromstring(xml.encode("utf-8"))
+    doc = _parse(xml)
     tags = {el.tag for el in doc.iter()}
     assert "thead" in tags and "tbody" in tags and "colspec" in tags
     # L'entete ne doit pas etre repetee dans le corps.
@@ -82,6 +85,22 @@ def test_figure_icn_referenced() -> None:
     assert "ICN-TODO" not in xml
 
 
+def test_figure_icns_are_declared_in_doctype() -> None:
+    root = IRNode(id="r", kind="section", level=0)
+    root.children = [
+        IRNode(id="f1", kind="figure", form="caption", icn="ICN-ONE.JPG"),
+        IRNode(id="f2", kind="figure", form="caption", icn="ICN-TWO.png"),
+    ]
+    resolve(root)
+    xml = serialize(root, issue="5.0", dm_type="descriptive")
+
+    assert '<!DOCTYPE dmodule [' in xml
+    assert '<!ENTITY ICN-ONE SYSTEM "ICN-ONE.JPG" NDATA jpg>' in xml
+    assert '<!ENTITY ICN-TWO SYSTEM "ICN-TWO.png" NDATA png>' in xml
+    assert "%ISOEntities;" in xml
+    assert xml.index("<!DOCTYPE") < xml.index("<dmodule")
+
+
 def test_internal_ref_emitted() -> None:
     root = IRNode(id="r", kind="section", level=0)
     root.children = [IRNode(
@@ -93,7 +112,7 @@ def test_internal_ref_emitted() -> None:
     resolve(root)
     xml = serialize(root, issue="5.0", dm_type="descriptive")
     assert "internalRef" in xml
-    doc = etree.fromstring(xml.encode("utf-8"))
+    doc = _parse(xml)
     ref = doc.find(".//internalRef")
     assert ref is not None
     assert ref.get("internalRefTargetType") == "figure"

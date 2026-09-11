@@ -23,7 +23,7 @@ from app.core.errors import AppError
 from app.core.s1000d_schema import SUPPORTED_ISSUES
 from app.core.s1000d_serializer import serialize
 from app.core.validator import validate_document
-from app.db.models import BrexProfile, Document, DmDocumentLink, DmVersion
+from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import SessionLocal, get_db
 from app.parsers import detect_format
 from app.parsers.pdf_parser import pdf_page_count
@@ -192,6 +192,10 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
+    if "<!DOCTYPE dmodule [" not in xml and doc.ir_json:
+        root = ir_mod.from_dict(json.loads(doc.ir_json))
+        xml = serialize(root, issue=doc.s1000d_issue, dm_type=doc.dm_type or "descriptive")
+        Path(doc.xml_path).write_text(xml, encoding="utf-8")
     return Response(
         content=xml, media_type="application/xml",
         headers={"Content-Disposition": f'attachment; filename="{doc.id}.xml"'},
