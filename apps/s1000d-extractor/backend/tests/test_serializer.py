@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.core import xml_safe
 from app.core.ir import IRNode
 from app.core.resolver import resolve
-from app.core.s1000d_serializer import serialize
+from app.core.s1000d_serializer import clean_title, serialize
 
 
 def _doc(dm_type: str = "descriptive") -> str:
@@ -83,6 +83,28 @@ def test_figure_icn_referenced() -> None:
     xml = serialize(root, issue="5.0", dm_type="descriptive")
     assert 'infoEntityIdent="figure-1-pump"' in xml
     assert "ICN-TODO" not in xml
+
+
+def test_final_titles_drop_editorial_numbering() -> None:
+    root = IRNode(id="r", kind="section", level=0)
+    root.children = [
+        IRNode(
+            id="s1",
+            kind="section",
+            text="4.1. LEVAGE",
+            children=[IRNode(
+                id="f", kind="figure",
+                text="Figure 4.1 \u2013 Serrage correct de l\u2019anneau de levage",
+            )],
+        ),
+    ]
+    xml = serialize(root, issue="5.0", dm_type="descriptive", title="4.1. LEVAGE")
+    doc = _parse(xml)
+
+    assert clean_title("4.1. LEVAGE") == "LEVAGE"
+    assert doc.findtext(".//levelledPara/title") == "LEVAGE"
+    assert doc.findtext(".//figure/title") == "Serrage correct de l\u2019anneau de levage"
+    assert "Figure 4.1" not in xml
 
 
 def test_figure_icns_are_declared_in_doctype() -> None:
