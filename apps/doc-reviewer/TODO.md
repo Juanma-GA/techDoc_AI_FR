@@ -7,6 +7,7 @@ FRONT :
 - Ajouter un bouton pour supprimer toutes les règles non compilées si il y en a
 Détecter les colonnes auto uniquement, on fera en sorte que les colonnes excel suivantes : topic / rules 
 Peut etre même sup tout la partie review du tableau pas forcément utile, juste on importe la checklist et hop ça part
+- Supprimer tout ce qui est inutile
 
 BACK :
 
@@ -27,3 +28,5 @@ JUL 1966
 Rev. 01
 
 - Rajouter point --> virgule
+
+- Renommer CUSTOM_AVS les user_rules
