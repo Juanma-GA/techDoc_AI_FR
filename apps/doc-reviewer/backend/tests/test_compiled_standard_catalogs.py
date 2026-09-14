@@ -5,7 +5,12 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
-from app.checks.standards.thales_custom import TP1_PAGE_TYPE, identify_tp1_pages
+from app.checks.standards.thales_custom import (
+    HIGHLIGHTS_PAGE_TYPE,
+    TP1_PAGE_TYPE,
+    classify_pages,
+    identify_tp1_pages,
+)
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
@@ -104,7 +109,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 43
+    assert total == 44
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -381,6 +386,63 @@ def test_tp1_first_issue_date_matches_document_context_value() -> None:
     )
     assert not_tp1 == []
     assert not_tp1_suggestions == []
+
+
+def test_highlights_revision_header_matches_mapping() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_REVISION_HEADER")
+    document = SimpleNamespace(
+        meta_revision_number="04",
+        meta_revision_date="JUL 27/26",
+    )
+
+    valid = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(
+                1, ["Highlights page 1", "REVISION No. 04 DATED JUL 27/26"]
+            )
+        ],
+        full_text="",
+        is_signed=False,
+    )
+    classify_pages(valid, document)
+    valid_results, valid_suggestions = execute_pdf_rules(valid, [rule], document=document)
+
+    invalid = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(
+                1, ["Highlights page 1", "REVISION No. 05 DATED JUL 27/26"]
+            )
+        ],
+        full_text="",
+        is_signed=False,
+    )
+    classify_pages(invalid, document)
+    invalid_results, invalid_suggestions = execute_pdf_rules(
+        invalid, [rule], document=document
+    )
+
+    missing = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(1, ["Highlights page 1", "Revision date: JUL 27/26"])
+        ],
+        full_text="",
+        is_signed=False,
+    )
+    classify_pages(missing, document)
+    missing_results, _ = execute_pdf_rules(missing, [rule], document=document)
+
+    assert valid.pages[0].page_type == HIGHLIGHTS_PAGE_TYPE
+    assert valid_results[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid_results[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == "REVISION No. 05 DATED JUL 27/26"
+    assert invalid_suggestions[0].proposed == "REVISION No. 04 DATED JUL 27/26"
+    assert invalid_suggestions[0].bbox == (40.0, 756.0, 300.0, 766.0)
+    assert missing_results[0].status == "FAIL"
 
 
 def _page_with_footer_lines(page_number: int, footer_lines: list[str]) -> ParsedPage:

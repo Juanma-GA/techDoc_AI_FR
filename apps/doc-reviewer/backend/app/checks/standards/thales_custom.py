@@ -33,7 +33,7 @@ _TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
 _TP1_ADDRESS_TARGET = RuleTarget(page="all", region="full_page", page_type="TP1")
 _ORIGIN = f"{STANDARD_CODE}:v1"
 TP1_PAGE_TYPE = "TP1"
-_TP1_MARKER_PATTERN = re.compile(r"\bTP\s*1\b", re.IGNORECASE)
+HIGHLIGHTS_PAGE_TYPE = "HIGHLIGHTS"
 _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
@@ -45,6 +45,7 @@ _EXPECTED_TP1_REVISION_NUMBER_PATTERN = (
 _EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
     r"(?i)(?<!\w)First\s+issue\s*:\s*{{meta_first_issue_date}}(?!\w)"
 )
+_EXPECTED_HIGHLIGHTS_REVISION_PATTERN = r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+{{meta_revision_date}}(?!\w)"
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
 _EXPECTED_REVISION_DATE_PATTERN = r"(?<!\w){{meta_revision_date}}(?!\w)"
 _COPYRIGHT_START_YEAR = "1966"
@@ -88,13 +89,13 @@ def _footer_lines(page: ParsedPage) -> list[str]:
     return [_normalized_line(" ".join(parts)) for _center_y, parts in groups]
 
 
-def identify_tp1_pages(
+def identify_page_type(
     parsed: ParsedPdf,
+    page_name: str,
     revision_date: str | None,
     cmm_number: str | None = None,
 ) -> dict[str, str | None]:
-    """Mark pages whose footer band carries both the CMM/revision anchor and
-    a TP1 marker.
+    """Mark pages whose footer carries the anchors and the requested name.
 
     Originally required the TP1 marker on the footer line immediately below
     the anchor line, but real footers lay the CMM number, "First issue:",
@@ -109,6 +110,8 @@ def identify_tp1_pages(
         _normalized_line(cmm_number or "").casefold(),
         _normalized_line(revision_date or "").casefold(),
     ]
+    page_marker = r"\s*".join(re.escape(character) for character in page_name)
+    page_marker_pattern = re.compile(rf"\b{page_marker}\b", re.IGNORECASE)
     expected_anchors = [anchor for anchor in expected_anchors if anchor]
     if not expected_anchors:
         _logger.warning(
@@ -117,16 +120,19 @@ def identify_tp1_pages(
         )
     page_types: dict[str, str | None] = {}
     for page in parsed.pages:
-        page_type: str | None = None
         lines: list[str] = []
         if expected_anchors:
             lines = _footer_lines(page)
             footer_text = " ".join(lines).casefold()
             has_anchor = any(anchor in footer_text for anchor in expected_anchors)
-            has_marker = bool(_TP1_MARKER_PATTERN.search(footer_text))
+            has_marker = bool(page_marker_pattern.search(footer_text))
             if has_anchor and has_marker:
-                page_type = TP1_PAGE_TYPE
-        if expected_anchors and page_type is None:
+                page.page_type = page_name
+            elif page.page_type == page_name:
+                page.page_type = None
+        elif page.page_type == page_name:
+            page.page_type = None
+        if expected_anchors and page.page_type != page_name:
             # Aide au diagnostic : si zero page n'est jamais classee TP1,
             # compare `footer_lines` a la mise en page reelle du pied de
             # page (anchor et/ou marqueur absents du bandeau detecte).
@@ -136,9 +142,17 @@ def identify_tp1_pages(
                 expected_anchors=expected_anchors,
                 footer_lines=lines,
             )
-        page.page_type = page_type
-        page_types[str(page.page)] = page_type
+        page_types[str(page.page)] = page.page_type
     return page_types
+
+
+def identify_tp1_pages(
+    parsed: ParsedPdf,
+    revision_date: str | None,
+    cmm_number: str | None = None,
+) -> dict[str, str | None]:
+    """Backward-compatible wrapper for TP1 page classification."""
+    return identify_page_type(parsed, TP1_PAGE_TYPE, revision_date, cmm_number)
 
 
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
@@ -147,6 +161,12 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
     what this standard needs to classify a page."""
     identify_tp1_pages(
         parsed,
+        getattr(document, "meta_revision_date", None),
+        getattr(document, "meta_cmm_number", None),
+    )
+    identify_page_type(
+        parsed,
+        HIGHLIGHTS_PAGE_TYPE,
         getattr(document, "meta_revision_date", None),
         getattr(document, "meta_cmm_number", None),
     )
@@ -200,6 +220,7 @@ def _required_text_check(
     pattern: str,
     *,
     display: str | None = None,
+    suggestion_mode: Literal["fuzzy", "single"] = "fuzzy",
     anchor: str | None = None,
     anchor_position: Literal["above", "below"] = "above",
 ) -> Check:
@@ -209,6 +230,7 @@ def _required_text_check(
         expected=pattern,
         require_all=True,
         expected_display=display,
+        suggestion_mode=suggestion_mode,
         missing_anchor=anchor,
         missing_anchor_position=anchor_position,
     )
@@ -298,6 +320,26 @@ _RULES_V1 = [
                 display="First issue: {{meta_first_issue_date}}",
                 anchor=r"(?i)Revision\s+No\.?\s*\d{2}",
                 anchor_position="below",
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_HIGHLIGHTS_REVISION_HEADER",
+        "En-tete de revision present au-dessus du tableau Highlights",
+        failure_message="En-tete de revision Highlights non conforme.",
+        target=RuleTarget(
+            page="all",
+            region="full_page",
+            page_type=HIGHLIGHTS_PAGE_TYPE,
+        ),
+        severity="error",
+        checks=[
+            _required_text_check(
+                _EXPECTED_HIGHLIGHTS_REVISION_PATTERN,
+                display="REVISION No. {{meta_revision_number}} DATED {{meta_revision_date}}",
+                suggestion_mode="single",
+                anchor=r"(?i)\bHighlights\b",
+                anchor_position="above",
             ),
         ],
     ),
@@ -403,6 +445,18 @@ RULE_METADATA["CUSTOM_TP1_FIRST_ISSUE_DATE"] = {
     "message": (
         "La date de premiere issue du footer TP1 est absente ou ne correspond "
         "pas au mapping."
+    ),
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_REVISION_HEADER"] = {
+    "description": (
+        "La page dont le nom contient Highlights doit afficher au-dessus du "
+        "tableau l'en-tete REVISION No. avec le numero et la date du mapping."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": (
+        "L'en-tete de revision Highlights est absent, incorrect ou place "
+        "apres le tableau."
     ),
 }
 RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {

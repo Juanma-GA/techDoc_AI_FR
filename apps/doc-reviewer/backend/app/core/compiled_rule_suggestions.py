@@ -211,6 +211,29 @@ def fuzzy_required_suggestions(
             continue
         scored.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
         _ratio, candidate, start, end = scored[0]
+        if check.suggestion_mode == "single":
+            candidate = candidate.strip()
+            leading_whitespace = len(scored[0][1]) - len(scored[0][1].lstrip())
+            candidate_start = start + leading_whitespace
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule.id,
+                    severity=rule.severity,
+                    message=message,
+                    original=candidate,
+                    proposed=expected,
+                    page=target.raw_page,
+                    span=(candidate_start, candidate_start + len(candidate)),
+                    bbox=suggestion_bbox(
+                        target,
+                        candidate,
+                        ctx.pdf_pages,
+                        span_start=candidate_start,
+                    ),
+                )
+            )
+            continue
         suggestions.extend(
             minimal_diff_suggestions(
                 rule,

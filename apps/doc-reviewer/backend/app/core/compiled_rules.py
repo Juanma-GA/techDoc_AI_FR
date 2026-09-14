@@ -129,6 +129,7 @@ class Check(StrictModel):
     expected: str | int | list[str] | None = None
     require_all: bool = False
     expected_display: str | None = None
+    suggestion_mode: Literal["fuzzy", "single"] = "fuzzy"
     missing_anchor: str | None = None
     missing_anchor_position: Literal["above", "below"] = "above"
     normalization: list[NormalizationStep] | None = None
