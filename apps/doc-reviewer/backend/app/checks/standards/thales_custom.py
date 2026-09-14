@@ -42,6 +42,9 @@ _EXPECTED_TP1_REVISION_NUMBER_PATTERN = (
     r"(?i)(?<!\w)Revision\s+No\.?\s*{{meta_revision_number}}(?!\w)"
     r"(?=[\s\S]*\bFirst\s+Issue\b)"
 )
+_EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
+    r"(?i)(?<!\w)First\s+issue\s*:\s*{{meta_first_issue_date}}(?!\w)"
+)
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
 _REVISION_DATE_PATTERN = (
     r"(?:"
@@ -322,6 +325,33 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_TP1_FIRST_ISSUE_DATE",
+        "Date de premiere issue du footer TP1 conforme au mapping",
+        failure_message="date de premiere issue non conforme.",
+        target=_TP1_REVISION_TARGET,
+        severity="error",
+        checks=[
+            _required_text_check(
+                _EXPECTED_TP1_FIRST_ISSUE_PATTERN,
+                display="First issue: {{meta_first_issue_date}}",
+                anchor=r"(?i)Revision\s+No\.?\s*\d{2}",
+                anchor_position="below",
+            ),
+            Check(
+                field="text",
+                operator="regex",
+                expected=(
+                    r"(?i)(?<!\w)First\s+issue\s*:\s*"
+                    r"(?!{{meta_first_issue_date}}(?!\w))"
+                    + _REVISION_DATE_PATTERN
+                    + r"(?!\w)"
+                ),
+                replacement="First issue: {{meta_first_issue_date}}",
+                expected_display="First issue: {{meta_first_issue_date}}",
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_TP1_THALES_ADDRESS",
         "Adresse THALES exacte sur les pages TP1",
         failure_message="adresse THALES non conforme.",
@@ -410,6 +440,18 @@ RULE_METADATA["CUSTOM_TP1_REVISION_NUMBER"] = {
     "severity": "error",
     "message": (
         "Le numero de revision du footer TP1 est absent ou ne correspond "
+        "pas au mapping."
+    ),
+}
+RULE_METADATA["CUSTOM_TP1_FIRST_ISSUE_DATE"] = {
+    "description": (
+        "Chaque page TP1 doit contenir dans son footer 'First Issue: date' "
+        "avec une date egale a la date de premiere issue saisie dans le mapping."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": (
+        "La date de premiere issue du footer TP1 est absente ou ne correspond "
         "pas au mapping."
     ),
 }

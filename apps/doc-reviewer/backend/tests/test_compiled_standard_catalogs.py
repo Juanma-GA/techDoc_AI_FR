@@ -104,7 +104,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 42
+    assert total == 43
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -255,6 +255,52 @@ def test_tp1_revision_number_matches_document_context_value() -> None:
     assert missing_suggestions[0].message == (
         "Règle non satisfaite : numéro de revision non conforme. "
         "Element attendu : Revision No.04"
+    )
+    assert not_tp1 == []
+    assert not_tp1_suggestions == []
+
+
+def test_tp1_first_issue_date_matches_document_context_value() -> None:
+    rule = _rule("CUSTOM_TP1_FIRST_ISSUE_DATE")
+    document = SimpleNamespace(meta_first_issue_date="JUL 27/26")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No.04\nFirst Issue: JUL 27/26"),
+        [rule],
+        document=document,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No.04\nFirst Issue: JUL 27/25"),
+        [rule],
+        document=document,
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No.04"),
+        [rule],
+        document=document,
+    )
+    not_tp1, not_tp1_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf(
+            "Revision No.04\nFirst Issue: JUL 27/26",
+            page_type=None,
+        ),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("First Issue: JUL 27/25", "First Issue: JUL 27/26")
+    ]
+    assert missing[0].status == "FAIL"
+    assert len(missing_suggestions) == 1
+    assert missing_suggestions[0].original == ""
+    assert missing_suggestions[0].proposed == "First Issue: JUL 27/26"
+    assert missing_suggestions[0].message == (
+        "Règle non satisfaite : date de premiere issue non conforme. "
+        "Element attendu : First Issue: JUL 27/26"
     )
     assert not_tp1 == []
     assert not_tp1_suggestions == []
