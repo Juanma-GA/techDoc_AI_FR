@@ -142,13 +142,14 @@ def execute_conversion(run_id: uuid.UUID, body: ConversionExecIn, db: Session = 
     imp = db.get(StructureImport, run.import_id)
     if imp is None:
         raise AppError("IMPORT_NOT_FOUND", "Import introuvable.", status_code=404)
-    # Les chemins du plan sont relatifs au dossier source scanne (sur disque).
-    base = imp.source_ref if imp.source_mode == "folder" else ""
+    # Les chemins du plan sont relatifs a la racine locale conservee par les
+    # imports de dossier et de selection.
+    base = imp.source_ref if imp.source_mode in {"folder", "selection"} else ""
     if not body.dry_run and (not base or not os.path.isdir(base)):
         raise AppError(
             "EXEC_SOURCE_NOT_ON_DISK",
-            "Execution reelle : la source doit etre un dossier local scanne "
-            "(un .zip doit d'abord etre extrait sur disque).",
+            "Execution reelle : utilisez un dossier local ou une selection "
+            "sous la racine configuree (un .zip doit d'abord etre extrait).",
             status_code=400,
         )
 

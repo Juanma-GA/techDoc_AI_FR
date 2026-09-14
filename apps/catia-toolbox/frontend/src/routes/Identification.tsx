@@ -221,7 +221,8 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   // l'onglet (plus de selecteur de colonne dedie).
   const identityCol = preview?.columns_map?.[identityField];
   const canAnalyze = !!path.trim() && identityCol !== undefined && firstSlotCol !== undefined;
-  const slotCount = result ? result.items.reduce((m, i) => Math.max(m, i.slots.length), 0) : 0;
+  const monoItems = result?.items.filter((item) => item.mono_body) ?? [];
+  const slotCount = monoItems.reduce((m, item) => Math.max(m, item.slots.length), 0);
   // Indices des colonnes slots reellement comparees (renseignes par le backend),
   // pour libeller les entetes du tableau resultat.
   const resultSlotCols = Array.isArray(result?.summary.slot_cols)
@@ -235,7 +236,6 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   return (
     <article className="card">
       <h2 className="card-title">{t("identification.monoTitle")}</h2>
-      <p className="banner info">{t("identification.monoBanner")}</p>
 
       <div className="field">
         <label className="label">{t("identification.nomenFileLabel")}</label>
@@ -341,10 +341,6 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
             </div>
           </div>
 
-          <p className="banner info" style={{ marginTop: 12 }}>
-            {t("identification.monoSlotsFromHint")}
-          </p>
-
           <div className="row" style={{ marginTop: 12 }}>
             <button
               type="button"
@@ -369,7 +365,7 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                   })}
                 </span>
               </div>
-              {result.items.length ? (
+              {monoItems.length ? (
                 <div style={{ maxHeight: "30rem", overflow: "auto" }}>
                   <table className="tbl" style={{ whiteSpace: "nowrap" }}>
                     <thead>
@@ -393,8 +389,8 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {result.items.map((it, ri) => (
-                        <tr key={ri}>
+                      {monoItems.map((it, ri) => (
+                        <tr key={`${it.identity}-${ri}`}>
                           <td>{it.identity}</td>
                           {Array.from({ length: slotCount }, (_v, i) => (
                             <td key={i} style={{ textAlign: "center" }}>{it.slots[i] ?? ""}</td>
@@ -444,7 +440,7 @@ export function Identification() {
   const [resultColumns, setResultColumns] = useState<string[]>([]);
   // Filtres d'affichage : "Pieces remplacees" par defaut (champ de filtre choisi
   // via une liste deroulante), + avec couleur / toutes.
-  type ItemFilter = "all" | "replaced" | "color";
+  type ItemFilter = "all" | "replaced" | "monoBody" | "color";
   const [filter, setFilter] = useState<ItemFilter>("replaced");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -458,6 +454,7 @@ export function Identification() {
     queryFn: () =>
       identificationApi.items(resultRunId!, {
         replaced: filter === "replaced" ? true : undefined,
+        monoBody: filter === "monoBody" ? true : undefined,
         hasColor: filter === "color" ? true : undefined,
       }),
     enabled: !!resultRunId,
@@ -569,7 +566,6 @@ export function Identification() {
       {/* ---- Carte 1 : analyse de la nomenclature .xlsm -------------------- */}
       <article className="card">
         <h2 className="card-title">{t("identification.nomenTitle")}</h2>
-        <p className="banner info">{t("identification.nomenBanner")}</p>
 
         <div className="flex flex-col gap-3">
           <div>
@@ -735,6 +731,7 @@ export function Identification() {
                     {canFilterReplaced(resultColumns) ? (
                       <option value="replaced">{t("identification.replacedOnly")}</option>
                     ) : null}
+                    <option value="monoBody">{t("identification.monoBodyOnly")}</option>
                     {resultColumns.includes("color") ? (
                       <option value="color">{t("identification.withColor")}</option>
                     ) : null}
@@ -743,7 +740,11 @@ export function Identification() {
                 <a
                   href={exportUrl.identificationCsv(
                     resultRunId,
-                    filter === "replaced" ? { replaced: true } : undefined,
+                    filter === "replaced"
+                      ? { replaced: true }
+                      : filter === "monoBody"
+                        ? { monoBody: true }
+                        : undefined,
                   )}
                 >
                   {t("common.exportCsv")}

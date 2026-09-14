@@ -127,8 +127,7 @@ def select_import(payload: SelectImportIn, db: Session = Depends(get_db)) -> Imp
         raise AppError("SELECT_EMPTY", "Selection vide ou hors racine.", status_code=400)
 
     n = len(payload.paths)
-    source_ref = confined[0] if n == 1 else f"{n} elements sous {root}"
-    imp = _persist_tree(db, tree, source_mode="selection", source_ref=source_ref)
+    imp = _persist_tree(db, tree, source_mode="selection", source_ref=str(root))
     log.info("select import %s : %d noeuds (%d selectionnes)", imp.id, imp.node_count, n)
     return _to_out(imp)
 

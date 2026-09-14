@@ -64,6 +64,32 @@ def test_tree(client, tmp_path):
     assert all(c["kind"] == "file" for c in root["children"])
 
 
+def test_tree_keeps_deepest_chain_from_last_clitserver(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    content = (
+        "<Document>"
+        '<Node name="ClitServer-old"><Leaf name="old" /></Node>'
+        '<Node name="ClitServer-current">'
+        '<Branch name="short" />'
+        '<Branch name="deep"><Level name="one"><Leaf name="target" /></Level></Branch>'
+        '<Branch name="also-deep"><Level name="two"><Leaf name="last" /></Level></Branch>'
+        "</Node>"
+        "</Document>"
+    )
+    smg = tmp_path / "focused.smgxml"
+    smg.write_text(content, encoding="utf-8")
+
+    r = client.post("/api/v1/smgxml/tree", json={"scope": "input", "path": str(smg)})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["node_count"] == 4
+    root = body["nodes"][0]
+    assert root["name"] == "Node (ClitServer-current)"
+    branch = root["children"][0]
+    assert branch["name"] == "Branch (also-deep)"
+    assert branch["children"][0]["children"][0]["name"] == "Leaf (last)"
+
+
 def test_recolor_dryrun_then_apply(client, tmp_path):
     _set_input_root(client, str(tmp_path))
     smg = _make_smgxml(tmp_path)

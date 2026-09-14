@@ -84,14 +84,55 @@ def _parse(path: str) -> ET.Element:
 
 
 def parse_tree(path: str, max_nodes: int = 20000) -> dict:
-    """Arbre XML brut du SMGXML : chaque balise devient un noeud (tag + attribut
-    de nom quand present), imbrique selon la hierarchie du fichier.
+    """Arbre XML du SMGXML, focalise sur la derniere branche ClitServer.
 
     Retour compatible avec le composant Arborescence : {root_label, node_count,
     nodes} ou chaque noeud porte {id, rel_path, name, ext, kind, depth, size,
-    mtime, children}. `max_nodes` borne le parcours (fichiers volumineux).
+    mtime, children}. Si un element nomme ClitServer... existe, le dernier dans
+    l'ordre XML devient la racine et seule sa branche descendante la plus
+    profonde est conservee. Sans ClitServer, l'arbre brut reste disponible.
+    `max_nodes` borne le parcours (fichiers volumineux).
     """
     root = _parse(path)
+    clitserver = None
+    for elem in root.iter():
+        label = _name_of(elem) or _local(elem.tag)
+        if label.casefold().startswith("clitserver"):
+            clitserver = elem
+
+    def deepest_chain(elem: ET.Element) -> list[ET.Element]:
+        parents: dict[ET.Element, Optional[ET.Element]] = {elem: None}
+        depths = {elem: 0}
+        stack = [elem]
+        deepest = elem
+        visited = 0
+        while stack:
+            current = stack.pop()
+            visited += 1
+            if visited > max_nodes:
+                raise AppError(
+                    "SMGXML_TOO_LARGE",
+                    f"Arborescence SMGXML limitee a {max_nodes} noeuds.",
+                    status_code=400,
+                )
+            if depths[current] >= depths[deepest]:
+                deepest = current
+            children = list(current)
+            for child in reversed(children):
+                parents[child] = current
+                depths[child] = depths[current] + 1
+                stack.append(child)
+
+        chain: list[ET.Element] = []
+        current: Optional[ET.Element] = deepest
+        while current is not None:
+            chain.append(current)
+            current = parents[current]
+        chain.reverse()
+        return chain
+
+    chain = deepest_chain(clitserver) if clitserver is not None else None
+    allowed = set(chain) if chain is not None else None
     count = 0
 
     def build(elem: ET.Element, depth: int, idpath: str, rel: str) -> Optional[dict]:
@@ -105,6 +146,8 @@ def parse_tree(path: str, max_nodes: int = 20000) -> dict:
         rel_path = f"{rel}/{tag}" if rel else tag
         children: list[dict] = []
         for i, child in enumerate(list(elem)):
+            if allowed is not None and child not in allowed:
+                continue
             node = build(child, depth + 1, f"{idpath}.{i}", rel_path)
             if node is None:
                 break  # plafond atteint
@@ -121,7 +164,32 @@ def parse_tree(path: str, max_nodes: int = 20000) -> dict:
             "children": children,
         }
 
-    tree = build(root, 0, "0", "")
+    if chain is not None:
+        rel_parts: list[str] = []
+        metadata: list[tuple[ET.Element, int, str]] = []
+        for depth, elem in enumerate(chain):
+            tag = _local(elem.tag)
+            rel_parts.append(tag)
+            metadata.append((elem, depth, "/".join(rel_parts)))
+
+        tree: Optional[dict] = None
+        for elem, depth, rel_path in reversed(metadata):
+            tag = _local(elem.tag)
+            name_attr = _name_of(elem)
+            tree = {
+                "id": f"0.{depth}",
+                "rel_path": rel_path,
+                "name": f"{tag} ({name_attr})" if name_attr else tag,
+                "ext": "",
+                "kind": "folder" if tree else "file",
+                "depth": depth,
+                "size": 0,
+                "mtime": None,
+                "children": [tree] if tree else [],
+            }
+        count = len(chain)
+    else:
+        tree = build(root, 0, "0", "")
     return {
         "root_label": path.replace("\\", "/").rsplit("/", 1)[-1],
         "node_count": count,

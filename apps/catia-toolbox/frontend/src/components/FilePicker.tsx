@@ -167,16 +167,20 @@ function FolderPicker({ scope = "input", value, onChange, label }: FolderProps) 
               <div className="item-list" style={{ maxHeight: "15rem", overflow: "auto" }}>
                 {folders.length ? (
                   folders.map((e) => (
-                    <div key={e.path} className="item-row">
-                      <div className="item-actions">
-                        <button type="button" className="btn ghost small" onClick={() => setPath(e.path)}>
-                          {t("picker.open")}
-                        </button>
-                      </div>
-                      <div className="item-main">
+                    <button
+                      key={e.path}
+                      type="button"
+                      className="item-row"
+                      style={{ width: "100%", textAlign: "left" }}
+                      onClick={() => setPath(e.path)}
+                    >
+                      <span className="item-actions">
+                        <span className="btn ghost small">{t("picker.open")}</span>
+                      </span>
+                      <span className="item-main">
                         <span className="item-name">{e.name}/</span>
-                      </div>
-                    </div>
+                      </span>
+                    </button>
                   ))
                 ) : (
                   <p className="hint" style={{ textAlign: "center" }}>
@@ -264,40 +268,44 @@ function SingleFilePicker({ exts, scope = "input", value, onChange, label, sheet
                   entries.map((e) => {
                     if (e.kind === "folder") {
                       return (
-                        <div key={e.path} className="item-row">
-                          <div className="item-actions">
-                            <button type="button" className="btn ghost small" onClick={() => setPath(e.path)}>
-                              {t("picker.open")}
-                            </button>
-                          </div>
-                          <div className="item-main">
+                        <button
+                          key={e.path}
+                          type="button"
+                          className="item-row"
+                          style={{ width: "100%", textAlign: "left" }}
+                          onClick={() => setPath(e.path)}
+                        >
+                          <span className="item-actions">
+                            <span className="btn ghost small">{t("picker.open")}</span>
+                          </span>
+                          <span className="item-main">
                             <span className="item-name">{e.name}/</span>
-                          </div>
-                        </div>
+                          </span>
+                        </button>
                       );
                     }
                     // Fichier : selectionnable seulement si l'extension correspond.
                     const selectable = matchesExts(e.name, exts);
                     return (
-                      <div key={e.path} className="item-row" style={selectable ? undefined : { opacity: 0.5 }}>
-                        <div className="item-actions">
-                          <button
-                            type="button"
-                            className="btn secondary small"
-                            disabled={!selectable}
-                            onClick={() => {
-                              onChange(e.path);
-                              setOpen(false);
-                            }}
-                          >
-                            {t("picker.choose")}
-                          </button>
-                        </div>
-                        <div className="item-main">
+                      <button
+                        key={e.path}
+                        type="button"
+                        className="item-row"
+                        disabled={!selectable}
+                        style={{ width: "100%", textAlign: "left", ...(selectable ? {} : { opacity: 0.5 }) }}
+                        onClick={() => {
+                          onChange(e.path);
+                          setOpen(false);
+                        }}
+                      >
+                        <span className="item-actions">
+                          <span className="btn secondary small">{t("picker.choose")}</span>
+                        </span>
+                        <span className="item-main">
                           <span className="item-name">{e.name}</span>
                           <span className="item-meta">{fmtBytes(e.size)}</span>
-                        </div>
-                      </div>
+                        </span>
+                      </button>
                     );
                   })
                 ) : (
@@ -424,28 +432,30 @@ function MultiFilePicker({ exts, scope = "input", value, onChange, onFolderChang
           visibleItems.map((e) => {
             const checked = selection.has(e.path);
             return (
-              <li key={e.path} className={checked ? "item-row clickable" : "item-row"}>
+              <li
+                key={e.path}
+                className={checked ? "item-row clickable" : "item-row"}
+              >
                 <Checkbox checked={checked} onCheckedChange={() => toggle(e.path)} aria-label={e.name} />
-                {!recursive && e.kind === "folder" ? (
-                  <button
-                    type="button"
-                    className="item-main"
-                    style={{ textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
-                    onClick={() => openFolder(e.path)}
-                  >
+                <button
+                  type="button"
+                  className="item-main grow"
+                  style={{ textAlign: "left", background: "none", border: "none", cursor: "pointer" }}
+                  onClick={() => (e.kind === "folder" && !recursive ? openFolder(e.path) : toggle(e.path))}
+                >
+                  {!recursive && e.kind === "folder" ? (
                     <span className="item-name">{e.name}/</span>
-                  </button>
-                ) : (
-                  <span className="item-main">
-                    <FileIcon className="h-4 w-4 shrink-0" />
-                    <span className="item-name">{recursive ? e.rel ?? e.name : e.name}</span>
-                  </span>
-                )}
+                  ) : (
+                    <>
+                      <FileIcon className="h-4 w-4 shrink-0" />
+                      <span className="item-name">{recursive ? e.rel ?? e.name : e.name}</span>
+                      <span className="item-meta">{fmtBytes(e.size)}</span>
+                    </>
+                  )}
+                </button>
                 {!recursive && e.kind === "folder" ? (
                   <span className="badge default">{t("picker.folder")}</span>
-                ) : (
-                  <span className="item-meta">{fmtBytes(e.size)}</span>
-                )}
+                ) : null}
               </li>
             );
           })

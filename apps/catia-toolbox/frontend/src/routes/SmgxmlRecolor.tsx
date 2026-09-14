@@ -48,7 +48,6 @@ function TextureConfigCard() {
   return (
     <article className="card">
       <h2 className="card-title">{t("smgxmlRecolor.textureTitle")}</h2>
-      <p className="banner info">{t("smgxmlRecolor.textureBanner")}</p>
       <div className="row" style={{ alignItems: "flex-end" }}>
         <div className="grow field">
           <label htmlFor="tex-library" className="field-label">

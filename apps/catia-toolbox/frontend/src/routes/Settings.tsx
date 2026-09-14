@@ -228,7 +228,6 @@ export function Settings() {
 
       <article className="card">
         <h2 className="card-title">{t("settings.onedriveTitle")}</h2>
-        <p className="banner info">{t("settings.onedriveNotice")}</p>
         <div className="form">
           <div className="field">
             <label htmlFor="od_input" className="field-label">
@@ -287,7 +286,6 @@ export function Settings() {
 
       <article className="card">
         <h2 className="card-title">{t("settings.composerTitle")}</h2>
-        <p className="banner info">{t("settings.composerNotice")}</p>
         <div className="form">
           <div className="field">
             <label htmlFor="lic_server" className="field-label">

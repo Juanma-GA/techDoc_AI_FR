@@ -255,20 +255,23 @@ def test_compare_nomenclatures(client, tmp_path):
     body = r.json()
     assert {e["sin"] for e in body["added_sin"]} == {"SIN-003"}
     assert {e["sin"] for e in body["removed_sin"]} == {"SIN-002"}
+    assert body["added_sin"][0]["new_pn"] == "P3.CATPart"
+    assert body["removed_sin"][0]["old_pn"] == "P2.CATPart"
     changed = {e["sin"]: e for e in body["changed_pn"]}
     # Seul un changement de PN est reporte (SIN-001). SIN-004 garde le meme PN
     # (seule la revision change) -> non reporte par la comparaison.
     assert set(changed) == {"SIN-001"}
-    # Seul l'OLD PN (PN de V0) est expose ; pas de NEW PN / revisions.
+    # OLD PN de V0 et NEW PN de V1 sont exposes ; les revisions restent exclues.
     assert changed["SIN-001"]["old_pn"] == "P1.CATPart"
-    assert "new_pn" not in changed["SIN-001"] and "old_rev" not in changed["SIN-001"]
+    assert changed["SIN-001"]["new_pn"] == "P1B.CATPart"
+    assert "old_rev" not in changed["SIN-001"]
 
     csv = client.get(
         "/api/v1/identification/compare/export.csv",
         params={"base_run_id": run_a, "other_run_id": run_b},
     )
     assert csv.status_code == 200
-    assert csv.text.splitlines()[0] == "type;sin;old_pn;designation"
+    assert csv.text.splitlines()[0] == "type;sin;old_pn;new_pn;designation"
     assert "SIN-003" in csv.text and "SIN-002" in csv.text
     assert "modifie" in csv.text
 
@@ -301,9 +304,17 @@ def test_compare_old_new_pn_columns(client, tmp_path):
     ).json()
     changed = {e["sin"]: e for e in body["changed_pn"]}
     assert set(changed) == {"SIN-001", "SIN-002"}
-    # OLD PN de V0 reporte (a rechercher / remplacer).
+    # OLD PN de V0 et NEW PN de V1 reportes.
     assert changed["SIN-001"]["old_pn"] == "A1"
+    assert changed["SIN-001"]["new_pn"] == "A2"
     assert changed["SIN-002"]["old_pn"] == "B1"
+    assert changed["SIN-002"]["new_pn"] == "B2"
+
+    same = client.post(
+        "/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_a}
+    )
+    assert same.status_code == 400
+    assert same.json()["code"] == "COMPARE_SAME_RUN"
 
 
 def test_mono_body_from_materiaux_sheet(client, tmp_path):

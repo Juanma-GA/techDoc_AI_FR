@@ -39,7 +39,6 @@ function ComposerLicenseCard() {
   return (
     <article className="card">
       <h2 className="card-title">{t("settings.composerTitle")}</h2>
-      <p className="banner info">{t("settings.composerNotice")}</p>
       <div className="row" style={{ alignItems: "flex-end" }}>
         <div className="grow field">
           <label htmlFor="conv-lic" className="field-label">
@@ -145,6 +144,10 @@ export function Conversion() {
   const executeMutation = useMutation({
     mutationFn: ({ dryRun, confirm }: { dryRun: boolean; confirm: boolean }) =>
       conversionApi.execute(run!.id, dryRun, confirm),
+    onMutate: () => {
+      setError(null);
+      setExecOut(null);
+    },
     onSuccess: (out) => {
       disarm();
       setError(null);
@@ -156,12 +159,13 @@ export function Conversion() {
     },
   });
 
-  const onExecuteReal = () => {
-    if (!execArmed) {
-      setExecArmed(true);
-      armTimer.current = setTimeout(() => setExecArmed(false), 3000);
-      return;
-    }
+  const armExecuteReal = () => {
+    setExecArmed(true);
+    armTimer.current = setTimeout(disarm, 3000);
+  };
+
+  const confirmExecuteReal = () => {
+    disarm();
     executeMutation.mutate({ dryRun: false, confirm: true });
   };
 
@@ -192,28 +196,12 @@ export function Conversion() {
 
   return (
     <div className="grow form" style={{ maxWidth: "56rem" }}>
-      {/* ---- 0. Workflow ---- */}
-      <article className="card">
-        <h2 className="card-title">{t("conversion.workflowTitle")}</h2>
-        <ol style={{ margin: 0, paddingLeft: "1.2rem", lineHeight: 1.7 }}>
-          <li>{t("conversion.workflow1")}</li>
-          <li>{t("conversion.workflow2")}</li>
-          <li>{t("conversion.workflow3")}</li>
-          <li>{t("conversion.workflow4")}</li>
-          <li>{t("conversion.workflow5")}</li>
-        </ol>
-        <p className="banner warn" style={{ marginTop: "0.75rem" }}>
-          {t("conversion.workflowScriptNote")}
-        </p>
-      </article>
-
       {/* ---- Licence Composer (injectee dans le script genere) ---- */}
       <ComposerLicenseCard />
 
       {/* ---- 1. Source a convertir : dossier ou zip ---- */}
       <article className="card">
         <h2 className="card-title">{t("conversion.sourceTitle")}</h2>
-        <p className="banner info">{t("conversion.sourceBanner")}</p>
 
         <div className="field">
           <label className="field-label">{t("conversion.folderLabel")}</label>
@@ -302,7 +290,7 @@ export function Conversion() {
       {run ? (
         <article className="card">
           <h2 className="card-title">{t("conversion.resultTitle", { count: items.length })}</h2>
-          {outputDir ? <p className="banner info">{t("conversion.outputFolder", { name: outputDir })}</p> : null}
+          {outputDir ? <p className="hint">{t("conversion.outputFolder", { name: outputDir })}</p> : null}
 
           <div className="row" style={{ margin: "0.5rem 0" }}>
             <button type="button" className="btn ghost small" onClick={() => setAll(true)}>
@@ -372,14 +360,26 @@ export function Conversion() {
                 {executeMutation.isPending ? <span className="spinner" /> : null}
                 <span>{t("conversion.execDry")}</span>
               </button>
-              <button
-                type="button"
-                className="btn danger small"
-                onClick={onExecuteReal}
-                disabled={executeMutation.isPending || selectedCount === 0}
-              >
-                <span>{execArmed ? t("conversion.execConfirm") : t("conversion.execReal")}</span>
-              </button>
+              {execArmed ? (
+                <button
+                  type="button"
+                  className="btn danger small"
+                  onClick={confirmExecuteReal}
+                  disabled={executeMutation.isPending || selectedCount === 0}
+                >
+                  <span>{t("conversion.execConfirm")}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn danger small"
+                  onClick={armExecuteReal}
+                  disabled={executeMutation.isPending || selectedCount === 0}
+                >
+                  {executeMutation.isPending ? <span className="spinner" /> : null}
+                  <span>{t("conversion.execReal")}</span>
+                </button>
+              )}
             </div>
 
             {execOut ? (

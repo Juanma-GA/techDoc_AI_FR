@@ -109,6 +109,7 @@ def test_select_mixed_file_and_folder(client, synthetic_tree) -> None:
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["source_mode"] == "selection"
+    assert body["source_ref"] == str(synthetic_tree)
     assert body["node_count"] >= 3  # le fichier + dossier BREL + ses 2 fichiers
 
 

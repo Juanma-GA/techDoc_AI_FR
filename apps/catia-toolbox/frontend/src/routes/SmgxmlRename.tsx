@@ -84,7 +84,6 @@ function BatchRenameCard() {
   return (
     <article className="card">
       <h2 className="card-title">{t("smgxmlRename.batchTitle")}</h2>
-      <p className="banner info">{t("smgxmlRename.batchBanner")}</p>
 
       <div className="form">
         <div className="field">

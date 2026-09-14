@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+from app.api import conversion
+
 
 def _scan(client, path: str) -> str:
     r = client.post("/api/v1/imports/scan", json={"path": path})
@@ -72,6 +76,37 @@ def test_conversion_execute_dry_run(client, synthetic_tree) -> None:
     ko = client.post(f"/api/v1/conversions/{run_id}/execute", json={"dry_run": False, "confirm": False})
     assert ko.status_code == 400
     assert ko.json()["code"] == "EXEC_CONFIRM_REQUIRED"
+
+
+def test_conversion_executes_selection_from_configured_root(client, synthetic_tree, monkeypatch) -> None:
+    assert client.post(
+        "/api/v1/settings", json={"onedrive_input_root": str(synthetic_tree)}
+    ).status_code == 200
+    selected = synthetic_tree / "Assemblage Principal.CATProduct"
+    imported = client.post(
+        "/api/v1/imports/select",
+        json={"scope": "input", "paths": [str(selected)]},
+    )
+    assert imported.status_code == 200, imported.text
+    run_id = client.post(
+        f"/api/v1/imports/{imported.json()['id']}/conversion", json={}
+    ).json()["id"]
+
+    captured: dict[str, object] = {}
+
+    def fake_run(command, *, capture_output, text, timeout, env):
+        captured.update(command=command, env=env)
+        return SimpleNamespace(returncode=0, stdout="selection executee", stderr="")
+
+    monkeypatch.setattr(conversion.subprocess, "run", fake_run)
+    response = client.post(
+        f"/api/v1/conversions/{run_id}/execute",
+        json={"dry_run": False, "confirm": True},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["base"] == str(synthetic_tree)
+    assert captured["env"]["CATIA_CONVERT_BASE"] == str(synthetic_tree)
 
 
 def test_conversion_license_server_injected(client, synthetic_tree) -> None:

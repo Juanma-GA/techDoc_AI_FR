@@ -11,8 +11,8 @@ et **NEW P/N entre elles** d'une version a l'autre. Un SIN est « modifie » des
 que l'OLD *ou* le NEW change. Quand la nomenclature n'a pas de colonne P/N
 dediee, le **CATPart** de la ligne fait office de P/N (fallback).
 
-Seule l'information **OLD PN** (le PN de la piece dans V0, a rechercher /
-remplacer) est reportee par la comparaison.
+Les informations **OLD PN** de V0 et **NEW PN** de V1 sont reportees pour
+rendre le remplacement directement exploitable.
 
 Deterministe, sans DB : opere sur des dicts {sin, catpart, old_pn, new_pn, ...}.
 """
@@ -20,13 +20,6 @@ Deterministe, sans DB : opere sur des dicts {sin, catpart, old_pn, new_pn, ...}.
 from __future__ import annotations
 
 from typing import Iterable
-
-
-def _pn_of(item: dict) -> str:
-    """PN effectif d'une ligne = CATPart de la version (fallback new/old PN)."""
-    return str(
-        item.get("catpart") or item.get("new_pn") or item.get("old_pn") or ""
-    ).strip()
 
 
 def _old_pn_of(item: dict) -> str:
@@ -56,19 +49,30 @@ def _by_sin(items: Iterable[dict]) -> dict[str, dict]:
 def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
     """Compare deux nomenclatures (A = V0 base, B = V1 nouvelle) par SIN.
 
-    Retour : {added_sin[], removed_sin[], changed_pn[]}. Chaque entree ne porte
-    que le SIN, l'OLD PN et la designation (pas de NEW PN / revisions).
+    Retour : {added_sin[], removed_sin[], changed_pn[]}. Chaque changement porte
+    le SIN, l'OLD PN de la base, le NEW PN de la nouvelle version et la
+    designation (pas de revisions).
     """
     a = _by_sin(items_a)
     b = _by_sin(items_b)
 
     added_sin = [
-        {"sin": sin, "pn": _pn_of(b[sin]), "designation": _designation_of(b[sin])}
+        {
+            "sin": sin,
+            "old_pn": "",
+            "new_pn": _new_pn_of(b[sin]),
+            "designation": _designation_of(b[sin]),
+        }
         for sin in b
         if sin not in a
     ]
     removed_sin = [
-        {"sin": sin, "pn": _pn_of(a[sin]), "designation": _designation_of(a[sin])}
+        {
+            "sin": sin,
+            "old_pn": _old_pn_of(a[sin]),
+            "new_pn": "",
+            "designation": _designation_of(a[sin]),
+        }
         for sin in a
         if sin not in b
     ]
@@ -77,13 +81,17 @@ def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
         if sin not in b:
             continue
         # Changement de PN = OLD(V0) != OLD(V1) *ou* NEW(V0) != NEW(V1) (colonnes
-        # OLD comparees entre elles, NEW entre elles). Seul l'OLD PN de V0 est
-        # reporte (a rechercher / remplacer).
+        # OLD comparees entre elles, NEW entre elles).
         old_changed = _old_pn_of(a[sin]) != _old_pn_of(b[sin])
         new_changed = _new_pn_of(a[sin]) != _new_pn_of(b[sin])
         if old_changed or new_changed:
             changed_pn.append(
-                {"sin": sin, "old_pn": _old_pn_of(a[sin]), "designation": _designation_of(a[sin])}
+                {
+                    "sin": sin,
+                    "old_pn": _old_pn_of(a[sin]),
+                    "new_pn": _new_pn_of(b[sin]),
+                    "designation": _designation_of(b[sin]) or _designation_of(a[sin]),
+                }
             )
 
     added_sin.sort(key=lambda e: e["sin"])

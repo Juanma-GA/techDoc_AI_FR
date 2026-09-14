@@ -221,7 +221,8 @@ function NomenclatureDiff() {
             <thead>
               <tr>
                 <th>{t("diff.colSin")}</th>
-                <th>{t("diff.colPn")}</th>
+                <th>{t("diff.colOldPn")}</th>
+                <th>{t("diff.colNewPn")}</th>
                 <th>{t("diff.colDesignation")}</th>
               </tr>
             </thead>
@@ -229,7 +230,8 @@ function NomenclatureDiff() {
               {result.added_sin.map((e) => (
                 <tr key={`a-${e.sin}`}>
                   <td>{e.sin}</td>
-                  <td>{e.pn}</td>
+                  <td>{e.old_pn}</td>
+                  <td>{e.new_pn}</td>
                   <td>{e.designation}</td>
                 </tr>
               ))}
@@ -241,7 +243,8 @@ function NomenclatureDiff() {
             <thead>
               <tr>
                 <th>{t("diff.colSin")}</th>
-                <th>{t("diff.colPn")}</th>
+                <th>{t("diff.colOldPn")}</th>
+                <th>{t("diff.colNewPn")}</th>
                 <th>{t("diff.colDesignation")}</th>
               </tr>
             </thead>
@@ -249,7 +252,8 @@ function NomenclatureDiff() {
               {result.removed_sin.map((e) => (
                 <tr key={`r-${e.sin}`}>
                   <td>{e.sin}</td>
-                  <td>{e.pn}</td>
+                  <td>{e.old_pn}</td>
+                  <td>{e.new_pn}</td>
                   <td>{e.designation}</td>
                 </tr>
               ))}
@@ -262,6 +266,7 @@ function NomenclatureDiff() {
               <tr>
                 <th>{t("diff.colSin")}</th>
                 <th>{t("diff.colOldPn")}</th>
+                <th>{t("diff.colNewPn")}</th>
                 <th>{t("diff.colDesignation")}</th>
               </tr>
             </thead>
@@ -270,6 +275,7 @@ function NomenclatureDiff() {
                 <tr key={`c-${e.sin}`}>
                   <td>{e.sin}</td>
                   <td>{e.old_pn}</td>
+                  <td>{e.new_pn}</td>
                   <td>{e.designation}</td>
                 </tr>
               ))}

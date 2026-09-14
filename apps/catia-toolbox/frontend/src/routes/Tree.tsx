@@ -17,8 +17,8 @@ function isSmgxml(name: string): boolean {
 
 /**
  * Onglet Arborescence : tout part du DOSSIER choisi. On liste ses fichiers
- * SMGXML ; un clic affiche l'arbre XML brut du fichier (lecture seule). Aucune
- * autre source (import, fichier isole) n'intervient.
+ * SMGXML ; un clic affiche la branche la plus profonde du dernier ClitServer
+ * du fichier (lecture seule). Aucune autre source n'intervient.
  */
 export function Tree() {
   const { t } = useTranslation();
@@ -45,7 +45,6 @@ export function Tree() {
     <div className="flex max-w-4xl flex-col gap-4">
       <article className="card">
         <h2 className="card-title">{t("tree.folderTitle")}</h2>
-        <p className="banner info">{t("tree.folderBanner")}</p>
 
         <div className="field">
           <label className="label">{t("tree.folderLabel")}</label>
@@ -73,19 +72,22 @@ export function Tree() {
             <p className="hint" style={{ marginTop: 8 }}>{t("tree.folderCount", { count: files.length })}</p>
             <ul className="item-list" style={{ maxHeight: "18rem", overflow: "auto" }}>
               {files.map((f) => (
-                <li key={f.path} className={selected === f.path ? "item-row clickable" : "item-row"}>
-                  <div className="item-actions">
-                    <button
-                      type="button"
-                      className={selected === f.path ? "btn primary small" : "btn secondary small"}
-                      onClick={() => setSelected(f.path)}
-                    >
-                      {t("tree.view")}
-                    </button>
-                  </div>
-                  <div className="item-main">
-                    <span className="item-name">{f.name}</span>
-                  </div>
+                <li key={f.path}>
+                  <button
+                    type="button"
+                    className={selected === f.path ? "item-row clickable" : "item-row"}
+                    style={{ width: "100%", textAlign: "left" }}
+                    onClick={() => setSelected(f.path)}
+                  >
+                    <span className="item-actions">
+                      <span className={selected === f.path ? "btn primary small" : "btn secondary small"}>
+                        {t("tree.view")}
+                      </span>
+                    </span>
+                    <span className="item-main">
+                      <span className="item-name">{f.name}</span>
+                    </span>
+                  </button>
                 </li>
               ))}
             </ul>

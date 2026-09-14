@@ -188,6 +188,12 @@ def _load_compare(db: Session, base_run_id: uuid.UUID, other_run_id: uuid.UUID) 
 
 @router.post("/compare", response_model=NomenclatureCompareOut)
 def compare_route(payload: NomenclatureCompareIn, db: Session = Depends(get_db)) -> NomenclatureCompareOut:
+    if payload.base_run_id == payload.other_run_id:
+        raise AppError(
+            "COMPARE_SAME_RUN",
+            "Selectionnez deux nomenclatures differentes.",
+            status_code=400,
+        )
     diff = _load_compare(db, payload.base_run_id, payload.other_run_id)
     return NomenclatureCompareOut(
         base_run_id=payload.base_run_id,
@@ -203,18 +209,22 @@ def compare_export_csv(
     other_run_id: uuid.UUID = Query(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    if base_run_id == other_run_id:
+        raise AppError(
+            "COMPARE_SAME_RUN",
+            "Selectionnez deux nomenclatures differentes.",
+            status_code=400,
+        )
     diff = _load_compare(db, base_run_id, other_run_id)
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    # Seul l'OLD PN est utile en comparaison (NEW PN / revisions restent dans
-    # l'analyse de nomenclature pour l'etape de remplacement).
-    w.writerow(["type", "sin", "old_pn", "designation"])
+    w.writerow(["type", "sin", "old_pn", "new_pn", "designation"])
     for e in diff["added_sin"]:
-        w.writerow(["ajoute", e["sin"], e["pn"], e["designation"]])
+        w.writerow(["ajoute", e["sin"], e["old_pn"], e["new_pn"], e["designation"]])
     for e in diff["removed_sin"]:
-        w.writerow(["supprime", e["sin"], e["pn"], e["designation"]])
+        w.writerow(["supprime", e["sin"], e["old_pn"], e["new_pn"], e["designation"]])
     for e in diff["changed_pn"]:
-        w.writerow(["modifie", e["sin"], e["old_pn"], e["designation"]])
+        w.writerow(["modifie", e["sin"], e["old_pn"], e["new_pn"], e["designation"]])
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv; charset=utf-8",
