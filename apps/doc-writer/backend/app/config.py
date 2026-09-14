@@ -50,13 +50,29 @@ class Settings(BaseSettings):
     ]
     max_upload_size_mb: int = 50
 
-    # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
-    # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit
-    # via .env — la generer avec app.core.encryption.generate_key() (cf. .env.example).
+    # Cle de chiffrement AES-256-GCM (base64, >=32 chars) pour la cle Mistral stockee
+    # dans AppConfig. Vide en local (tier1) : une cle est alors auto-provisionnee
+    # sur disque (cf. `encryption_key_path` / F-05, mistral_client._get_secret_manager)
+    # -> le stockage en clair n'est plus le comportement par defaut. En prod, l'IT
+    # fournit explicitement une cle via .env, generee avec
+    # app.core.encryption.generate_key() (cf. .env.example).
     encryption_key: str = ""
+    # Emplacement de la cle auto-provisionnee quand `encryption_key` est vide
+    # (F-05). A cote de la DB par defaut (deja gitignore, cf. `database_url`).
+    encryption_key_path: str = str(BASE_DIR / "data" / ".encryption_key")
 
     mistral_api_key: str = ""
-    mistral_base_url: str = "https://api.mistral.ai"
+    # Endpoint Mistral APPROUVE (doc politique 159 "Secure/Approved AI Tools") :
+    # environnement enterprise dedie, pas l'API publique api.mistral.ai. Tout
+    # changement de base_url (via Parametres) est verifie contre
+    # `mistral_allowed_base_urls` (cf. mistral_client.save_settings) -> F-01.
+    mistral_base_url: str = "https://api.2a91ec1812a1.dc.mistral.ai"
+    # Allow-list des base_url autorisees pour le routage IA (F-01). CSV via
+    # .env pour ajouter d'autres endpoints approuves ; NoDecode meme raison
+    # que `cors_origins` ci-dessus (CSV, pas JSON).
+    mistral_allowed_base_urls: Annotated[list[str], NoDecode] = [
+        "https://api.2a91ec1812a1.dc.mistral.ai",
+    ]
     mistral_chat_model: str = "mistral-small-latest"
     mistral_embed_model: str = "mistral-embed"
     # Lecture des PDF par Mistral (des qu'une cle API est configuree), en 3
@@ -87,9 +103,9 @@ class Settings(BaseSettings):
     pdf_ocr_dpi: int = 300
     pdf_ocr_tessdata: str = ""
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "mistral_allowed_base_urls", mode="before")
     @classmethod
-    def _parse_cors_origins(cls, v: object) -> object:
+    def _parse_csv_list(cls, v: object) -> object:
         if isinstance(v, str):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v
@@ -104,7 +120,7 @@ class Settings(BaseSettings):
 
     @property
     def encryption_configured(self) -> bool:
-        """Cle de chiffrement presente et assez longue pour Fernet."""
+        """Cle de chiffrement presente et assez longue pour AES-256-GCM."""
         return bool(self.encryption_key and len(self.encryption_key) >= 32)
 
 

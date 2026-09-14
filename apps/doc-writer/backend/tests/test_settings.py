@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from app.config import settings
+
+# Endpoint approuve (allow-list F-01) — seul base_url accepte par save_settings.
+APPROVED_BASE_URL = settings.mistral_allowed_base_urls[0]
+
 
 def test_read_settings_defaults(client) -> None:
     r = client.get("/api/v1/settings")
@@ -18,7 +23,7 @@ def test_write_then_read_settings(client) -> None:
         "/api/v1/settings",
         json={
             "api_key": "test-key",
-            "base_url": "https://api.mistral.ai",
+            "base_url": APPROVED_BASE_URL,
             "chat_model": "mistral-small-latest",
             "embed_model": "mistral-embed",
         },
@@ -27,6 +32,18 @@ def test_write_then_read_settings(client) -> None:
     body = r.json()
     assert body["api_key_set"] is True
     assert body["chat_model"] == "mistral-small-latest"
+
+
+def test_write_settings_rejects_non_approved_base_url(client) -> None:
+    # F-01 : un endpoint hors allow-list est refuse (pas de routage silencieux
+    # de documents internes vers un service IA non approuve).
+    r = client.post(
+        "/api/v1/settings",
+        json={"api_key": "test-key", "base_url": "https://api.mistral.ai"},
+    )
+    assert r.status_code == 400, r.text
+    body = r.json()
+    assert body["code"] == "BASE_URL_NOT_ALLOWED"
 
 
 def test_test_connection_without_key(client) -> None:
@@ -43,16 +60,17 @@ def test_test_connection_without_key(client) -> None:
 
 
 def _set_config(key: str, value: str) -> None:
-    from app.db import models
+    """Ecrit une cle `app_config` via `_write_config` (pas un insert ORM brut) :
+    depuis F-05, les cles sensibles (ex. MISTRAL_API_KEY) sont TOUJOURS
+    chiffrees au repos (cle auto-provisionnee si ENCRYPTION_KEY est vide) —
+    un insert direct du `value` en clair casserait la lecture (`_read_config`
+    tenterait de dechiffrer une valeur qui ne l'est pas)."""
+    from app.core.mistral_client import _write_config
     from app.db.session import SessionLocal
 
     db = SessionLocal()
     try:
-        row = db.get(models.AppConfig, key)
-        if row is None:
-            db.add(models.AppConfig(key=key, value=value))
-        else:
-            row.value = value
+        _write_config(db, key, value)
         db.commit()
     finally:
         db.close()
@@ -195,12 +213,12 @@ def test_transcribe_client_falls_back_to_main_key_without_dedicated() -> None:
 
     db = SessionLocal()
     try:
-        save_settings(db, {"api_key": "sk-main", "base_url": "https://api.mistral.ai"})
+        save_settings(db, {"api_key": "sk-main", "base_url": APPROVED_BASE_URL})
         c = MistralClient.from_db(db)
     finally:
         db.close()
     assert c.transcribe_api_key == "sk-main"
-    assert c.transcribe_base_url == "https://api.mistral.ai"
+    assert c.transcribe_base_url == APPROVED_BASE_URL
     assert c.transcribe_dedicated is False
 
 
@@ -214,7 +232,7 @@ def test_transcribe_client_uses_dedicated_voxtral_key() -> None:
             db,
             {
                 "api_key": "sk-main",
-                "base_url": "https://api.mistral.ai",
+                "base_url": APPROVED_BASE_URL,
                 "voxtral_api_key": "vx-dedicated",
                 "voxtral_base_url": "https://voxtral.example.com",
             },
@@ -227,7 +245,7 @@ def test_transcribe_client_uses_dedicated_voxtral_key() -> None:
     assert c.transcribe_dedicated is True
     # Le reste (chat/embed/vision) reste sur la cle/URL principale.
     assert c.api_key == "sk-main"
-    assert c.base_url == "https://api.mistral.ai"
+    assert c.base_url == APPROVED_BASE_URL
 
 
 def test_transcribe_client_normalizes_full_endpoint_url() -> None:

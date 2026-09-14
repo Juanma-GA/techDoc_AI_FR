@@ -238,12 +238,13 @@
     "totalSize": "Total size",
     "statsUnavailable": "Stats unavailable.",
     "resetTitle": "Reset",
-    "resetWarn": "All these operations are irreversible. The Mistral configuration (app_config table) is preserved.",
+    "resetWarn": "These operations are not meant to be used casually. A backup of the database is taken first and removed files are moved to a local trash folder, but there is no automatic restore. The Mistral configuration (app_config table) is preserved.",
     "resetDocuments": "Reset documents",
     "resetSessions": "Reset sessions",
     "resetAll": "Delete everything",
     "confirmAgain": "Click again to confirm",
-    "resetOk": "Reset OK ({{items}})."
+    "resetOk": "Reset OK ({{items}}).",
+    "resetBackup": "Backup saved to {{path}}."
   },
   "template": {
     "fill": {

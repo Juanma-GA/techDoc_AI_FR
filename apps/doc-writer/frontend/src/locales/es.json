@@ -238,12 +238,13 @@
     "totalSize": "Tamaño total",
     "statsUnavailable": "Estadísticas no disponibles.",
     "resetTitle": "Reiniciar",
-    "resetWarn": "Todas estas operaciones son irreversibles. La configuración Mistral (tabla app_config) se conserva.",
+    "resetWarn": "Estas operaciones no son triviales. Se guarda un backup de la base de datos antes, y los archivos eliminados se mueven a una papelera local — pero no hay restauración automática. La configuración Mistral (tabla app_config) se conserva.",
     "resetDocuments": "Reiniciar documentos",
     "resetSessions": "Reiniciar sesiones",
     "resetAll": "Eliminar todo",
     "confirmAgain": "Haz clic de nuevo para confirmar",
-    "resetOk": "Reinicio OK ({{items}})."
+    "resetOk": "Reinicio OK ({{items}}).",
+    "resetBackup": "Backup guardado en {{path}}."
   },
   "template": {
     "fill": {

@@ -378,9 +378,20 @@ class AdminStatsOut(BaseModel):
     total_size_bytes: int
 
 
+class AdminResetIn(BaseModel):
+    """F-06 : jeton de confirmation explicite cote serveur (au-dela du
+    double-clic client, bypassable). Doit correspondre exactement au scope
+    cible (ex. "documents", "sessions", "all")."""
+
+    confirm: str
+
+
 class AdminResetOut(BaseModel):
     scope: str
     deleted: dict[str, int]
+    # F-06 : chemin du backup SQLite pre-reset (best-effort). None si la DB
+    # n'est pas SQLite ou si le backup a echoue (le reset n'est jamais bloque).
+    backup_path: str | None = None
 
 
 class TranscriptionOut(BaseModel):

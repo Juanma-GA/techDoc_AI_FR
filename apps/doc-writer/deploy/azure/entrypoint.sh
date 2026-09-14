@@ -18,5 +18,9 @@ echo "[entrypoint] Police Inter (best-effort)..."
 python -c "from app.core.fonts import ensure_inter; ensure_inter()" 2>/dev/null \
     || echo "[entrypoint] Inter non telechargee, exports PDF en Helvetica."
 
+# F-02 (hardening) : `app.main` fail-fast (RuntimeError) tant qu'aucune auth
+# middleware n'est cablee pour TIER_MODE=tier2 (voir README ## Auth). uvicorn
+# va donc crasher au boot ici jusqu'a ce que l'auth soit implementee -- c'est
+# volontaire, pas une regression.
 echo "[entrypoint] uvicorn 0.0.0.0:${PORT}"
 exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT"
