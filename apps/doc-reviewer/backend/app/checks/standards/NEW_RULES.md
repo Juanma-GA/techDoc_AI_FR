@@ -16,14 +16,16 @@ synchronise leur catalogue en base au démarrage du backend.
 
 ### Règle simple : motif interdit
 
-Utiliser `_regex_rule` lorsqu’un motif trouvé constitue une erreur. Le moteur
-signale chaque occurrence et peut proposer un remplacement avec `\1`, `\2`, etc.
+Utiliser `_rule` avec `pattern` lorsqu’un motif trouvé constitue une erreur. Le
+moteur signale chaque occurrence et peut proposer un remplacement avec `\1`,
+`\2`, etc. Pour une règle composée, passer directement `checks=[...]` à ce
+même helper.
 
 ```python
-_regex_rule(
+_rule(
     "CUSTOM_DECIMAL_COMMA",
     "Les décimales doivent utiliser un point",
-    r"(?<!\d)(\d+),(\d+)(?!\d)",
+    pattern=r"(?<!\d)(\d+),(\d+)(?!\d)",
     severity="error",
     replacement=r"\1.\2",
 )
@@ -45,12 +47,11 @@ Les placeholders comme `{{meta_revision_number}}` sont résolus depuis le
 mapping du document dans `expected_display` et `replacement`.
 
 ```python
-CompiledRule(
-    id="CUSTOM_TP1_REVISION_NUMBER",
-    topic="Numéro de révision TP1",
+_rule(
+    "CUSTOM_TP1_REVISION_NUMBER",
+    "Numéro de révision TP1",
     failure_message="numéro de révision non conforme.",
     severity="error",
-    execution="deterministic",
     target=RuleTarget(page="all", region="footer", page_type="TP1"),
     checks=[
         Check(
@@ -61,8 +62,6 @@ CompiledRule(
             missing_anchor=r"(?i)\bFirst\s+Issue\b",
         ),
     ],
-    source="standard_rule",
-    origin_ref="THALES-CUSTOM:v1:CUSTOM_TP1_REVISION_NUMBER",
 )
 ```
 

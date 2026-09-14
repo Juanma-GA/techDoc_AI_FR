@@ -157,29 +157,45 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
     )
 
 
-def _regex_rule(
+def _rule(
     code: str,
     topic: str,
-    pattern: str,
     *,
+    pattern: str | None = None,
+    checks: list[Check] | None = None,
+    target: RuleTarget = _TARGET,
     operator: Literal["regex", "regex_exists"] = "regex",
     severity: Literal["info", "warning", "error"] = "warning",
+    failure_message: str | None = None,
+    expected_display: str | None = None,
+    missing_anchor: str | None = None,
+    missing_anchor_position: Literal["above", "below"] = "above",
     replacement: str | None = None,
 ) -> CompiledRule:
-    return CompiledRule(
-        id=code,
-        topic=topic,
-        severity=severity,
-        execution="deterministic",
-        target=_TARGET,
-        checks=[
+    if pattern is not None and checks is not None:
+        raise ValueError("_rule accepte soit pattern, soit checks, pas les deux")
+    if checks is None:
+        if pattern is None:
+            raise ValueError("_rule exige pattern ou checks")
+        checks = [
             Check(
                 field="text",
                 operator=operator,
                 expected=pattern,
+                expected_display=expected_display,
+                missing_anchor=missing_anchor,
+                missing_anchor_position=missing_anchor_position,
                 replacement=replacement,
             )
-        ],
+        ]
+    return CompiledRule(
+        id=code,
+        topic=topic,
+        failure_message=failure_message,
+        severity=severity,
+        execution="deterministic",
+        target=target,
+        checks=checks,
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:{code}",
     )
@@ -203,13 +219,12 @@ def _required_text_check(
 
 
 _RULES_V1 = [
-    CompiledRule(
-        id="CUSTOM_CMM_NUMBER",
-        topic="Numero CMM conforme au contexte du document",
+    _rule(
+        "CUSTOM_CMM_NUMBER",
+        "Numero CMM conforme au contexte du document",
         failure_message="Numero CMM non conforme",
-        severity="error",
-        execution="deterministic",
         target=_FOOTER_TARGET,
+        severity="error",
         checks=[
             _required_text_check(
                 _EXPECTED_CMM_PATTERN,
@@ -227,16 +242,13 @@ _RULES_V1 = [
                 replacement="{{meta_cmm_number}}",
             ),
         ],
-        source="standard_rule",
-        origin_ref=f"{_ORIGIN}:CUSTOM_CMM_NUMBER",
     ),
-    CompiledRule(
-        id="CUSTOM_TITLE_PAGE_COPYRIGHT",
-        topic="Copyright du footer conforme a l'annee de revision",
+    _rule(
+        "CUSTOM_TITLE_PAGE_COPYRIGHT",
+        "Copyright du footer conforme a l'annee de revision",
         failure_message="Copyright du footer non conforme",
-        severity="error",
-        execution="deterministic",
         target=_FOOTER_TARGET,
+        severity="error",
         checks=[
             Check(
                 field="text",
@@ -259,16 +271,13 @@ _RULES_V1 = [
                 ),
             ),
         ],
-        source="standard_rule",
-        origin_ref=f"{_ORIGIN}:CUSTOM_TITLE_PAGE_COPYRIGHT",
     ),
-    CompiledRule(
-        id="CUSTOM_REVISION_DATE",
-        topic="Date de revision du footer conforme au mapping",
+    _rule(
+        "CUSTOM_REVISION_DATE",
+        "Date de revision du footer conforme au mapping",
         failure_message="Date de revision du footer non conforme",
-        severity="error",
-        execution="deterministic",
         target=_FOOTER_TARGET,
+        severity="error",
         checks=[
             _required_text_check(
                 _EXPECTED_REVISION_DATE_PATTERN,
@@ -286,16 +295,13 @@ _RULES_V1 = [
                 replacement="{{meta_revision_date}}",
             ),
         ],
-        source="standard_rule",
-        origin_ref=f"{_ORIGIN}:CUSTOM_REVISION_DATE",
     ),
-    CompiledRule(
-        id="CUSTOM_TP1_REVISION_NUMBER",
-        topic="Numero de revision du footer TP1 conforme au mapping",
+    _rule(
+        "CUSTOM_TP1_REVISION_NUMBER",
+        "Numero de revision du footer TP1 conforme au mapping",
         failure_message="numéro de revision non conforme.",
-        severity="error",
-        execution="deterministic",
         target=_TP1_REVISION_TARGET,
+        severity="error",
         checks=[
             _required_text_check(
                 _EXPECTED_TP1_REVISION_NUMBER_PATTERN,
@@ -314,16 +320,13 @@ _RULES_V1 = [
                 expected_display="Revision No.{{meta_revision_number}}",
             ),
         ],
-        source="standard_rule",
-        origin_ref=f"{_ORIGIN}:CUSTOM_TP1_REVISION_NUMBER",
     ),
-    CompiledRule(
-        id="CUSTOM_TP1_THALES_ADDRESS",
-        topic="Adresse THALES exacte sur les pages TP1",
+    _rule(
+        "CUSTOM_TP1_THALES_ADDRESS",
+        "Adresse THALES exacte sur les pages TP1",
         failure_message="adresse THALES non conforme.",
-        severity="error",
-        execution="deterministic",
         target=_TP1_ADDRESS_TARGET,
+        severity="error",
         checks=[
             _required_text_check(
                 pattern,
@@ -339,13 +342,11 @@ _RULES_V1 = [
             )
             for index, (pattern, display) in enumerate(_THALES_TP1_ADDRESS_ELEMENTS)
         ],
-        source="standard_rule",
-        origin_ref=f"{_ORIGIN}:CUSTOM_TP1_THALES_ADDRESS",
     ),
-    _regex_rule(
+    _rule(
         "CUSTOM_DECIMAL_COMMA",
         "Valeurs decimales doivent etre separees par un point",
-        _DECIMAL_COMMA_PATTERN,
+        pattern=_DECIMAL_COMMA_PATTERN,
         severity="error",
         replacement=r"\1.\2",
     ),
