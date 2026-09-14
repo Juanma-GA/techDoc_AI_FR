@@ -716,6 +716,7 @@ def _deterministic_suggestions(
         )
         expected = _expected_display(rule, result.evidence.expected_value, ctx.document)
         detail = f" Element attendu : {expected}" if expected else " Element attendu absent de la page"
+        missing_bbox = _missing_bbox(rule, fallback_target, expected, pdf_pages)
         return [
             RawSuggestion(
                 rule_kind=rule_kind,
@@ -723,10 +724,10 @@ def _deterministic_suggestions(
                 severity=rule.severity,
                 message=f"{message}{detail}",
                 original="",
-                proposed="",
+                proposed=expected or "",
                 page=fallback_target.raw_page,
                 span=(0, 0),
-                bbox=_first_bbox(fallback_target),
+                bbox=missing_bbox,
             )
         ]
 
@@ -765,7 +766,7 @@ def _expected_display(
             continue
         if expected is None or str(check.expected) == expected:
             return _resolve_display_template(check.expected_display, document)
-    return expected
+    return None
 
 
 def _resolve_display_template(template: str, document: Any | None) -> str:
@@ -775,6 +776,47 @@ def _resolve_display_template(template: str, document: Any | None) -> str:
         return metadata.get(match.group(1), match.group(0))
 
     return _CONTEXT_TOKEN_RE.sub(replace_token, template)
+
+
+def _missing_bbox(
+    rule: CompiledRule,
+    target: _TextTarget,
+    expected: str | None,
+    pdf_pages: list[ParsedPage] | None,
+) -> _BBox:
+    """Place an absent item near its declared neighbouring anchor."""
+    for check in rule.checks:
+        if not check.missing_anchor:
+            continue
+        try:
+            match = re.search(check.missing_anchor, target.text)
+        except re.error:
+            match = None
+        if match is None:
+            continue
+        anchor = _observed_bbox(
+            target,
+            match.group(0),
+            pdf_pages,
+            span_start=match.start(),
+        )
+        if not _is_nonzero_bbox(anchor):
+            continue
+        height = max(anchor[3] - anchor[1], 1.0)
+        width = max(anchor[2] - anchor[0], height * max(len(expected or ""), 4) * 0.45)
+        if check.missing_anchor_position == "below":
+            top = anchor[3] + height * 0.15
+            bottom = anchor[3] + height * 1.35
+        else:
+            top = max(0.0, anchor[1] - height * 1.35)
+            bottom = max(0.0, anchor[1] - height * 0.15)
+        return (
+            anchor[0],
+            top,
+            anchor[0] + width,
+            bottom,
+        )
+    return _first_bbox(target)
 
 
 def _normalized_equals_suggestions(

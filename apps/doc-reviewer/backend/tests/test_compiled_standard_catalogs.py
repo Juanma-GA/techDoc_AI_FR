@@ -189,13 +189,23 @@ def _tp1_revision_footer_pdf(
 ) -> ParsedPdf:
     body = "Title page body."
     text = f"{body}\n{footer}"
+    footer_lines = footer.splitlines()
     page = ParsedPage(
         page=1,
         text=text,
         page_type=page_type,
         spans=[
             Span(text=body, bbox=(40.0, 100.0, 200.0, 120.0), page=1, font="Arial", size=10.0),
-            Span(text=footer, bbox=(40.0, 760.0, 300.0, 780.0), page=1, font="Arial", size=8.0),
+            *[
+                Span(
+                    text=line,
+                    bbox=(40.0, 760.0 + index * 16.0, 300.0, 770.0 + index * 16.0),
+                    page=1,
+                    font="Arial",
+                    size=8.0,
+                )
+                for index, line in enumerate(footer_lines)
+            ],
         ],
     )
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
@@ -210,7 +220,7 @@ def test_tp1_revision_number_matches_document_context_value() -> None:
         [rule],
         document=document,
     )
-    invalid, _invalid_suggestions = execute_pdf_rules(
+    invalid, invalid_suggestions = execute_pdf_rules(
         _tp1_revision_footer_pdf("Revision No. 01\nFirst Issue: JUL 27/26"),
         [rule],
         document=document,
@@ -232,10 +242,16 @@ def test_tp1_revision_number_matches_document_context_value() -> None:
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
     assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("Revision No. 01", "Revision No.04")
+    ]
     assert missing[0].status == "FAIL"
     assert len(missing_suggestions) == 1
     assert missing_suggestions[0].original == ""
+    assert missing_suggestions[0].proposed == "Revision No.04"
     assert missing_suggestions[0].page == 1
+    assert missing_suggestions[0].bbox is not None
+    assert missing_suggestions[0].bbox[3] <= 760.0
     assert missing_suggestions[0].message == (
         "Règle non satisfaite : numéro de revision non conforme. "
         "Element attendu : Revision No.04"

@@ -128,6 +128,8 @@ class Check(StrictModel):
     ]
     expected: str | int | list[str] | None = None
     expected_display: str | None = None
+    missing_anchor: str | None = None
+    missing_anchor_position: Literal["above", "below"] = "above"
     normalization: list[NormalizationStep] | None = None
     # Auto-fix proposals for deterministic FAILs, mirroring the legacy
     # regex_replace/term_replace custom-rule kinds — kept optional because
@@ -162,6 +164,11 @@ class Check(StrictModel):
                 re.compile(self.expected)
             except re.error as exc:
                 raise ValueError(f"regex invalide: {exc.msg}") from exc
+        if self.missing_anchor is not None:
+            try:
+                re.compile(self.missing_anchor)
+            except re.error as exc:
+                raise ValueError(f"missing_anchor invalide: {exc.msg}") from exc
         if self.operator not in {"normalized_equals", "equals_field"} and self.normalization is not None:
             raise ValueError("normalization is only allowed with normalized_equals or equals_field")
         if self.replacement is not None and self.operator not in {"regex", "not_exists", "contains_none"}:

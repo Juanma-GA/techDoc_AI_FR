@@ -1,7 +1,7 @@
-"""Local rules maintained for Doc Reviewer experiments.
+"""THALES-specific compiled rules.
 
-Add or remove ``_regex_rule(...)`` entries in ``_RULES_V1`` and restart the
-backend. The catalog is synchronized into the local database at startup.
+Add rules to ``_RULES_V1`` and restart the backend. The catalog is synchronized
+into the local database at startup.
 """
 
 from __future__ import annotations
@@ -38,10 +38,6 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
 _DECIMAL_COMMA_PATTERN = r"(?<!\d)(\d+),(\d+)(?!\d)"
-_TP1_REVISION_NUMBER_PATTERN = (
-    r"(?i)(?<!\w)Revision\s+No\.?\s*\d{2}(?!\w)"
-    r"(?=[\s\S]*\bFirst\s+Issue\b)"
-)
 _EXPECTED_TP1_REVISION_NUMBER_PATTERN = (
     r"(?i)(?<!\w)Revision\s+No\.?\s*{{meta_revision_number}}(?!\w)"
     r"(?=[\s\S]*\bFirst\s+Issue\b)"
@@ -65,23 +61,15 @@ _COPYRIGHT_PATTERN = (
     r"They\s+cannot\s+be\s+reproduced,\s+disclosed\s+or\s+used\s+"
     r"without\s+the\s+company's\s+prior\s+written\s+approval\.?"
 )
-_THALES_TP1_ADDRESS_PATTERN = (
-    r"\(F9111\)\s+"
-    r"75-77\s+Avenue\s+Marcel\s+Dassault\s+"
-    r"33700\s+M\u00e9rignac\s+-\s+France\s+"
-    r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40\s+"
-    r"www\.thalesgroup\.com"
-)  # reference : les elements ci-dessous, mis bout a bout dans l'ordre attendu
-# Un element par ligne (au lieu d'un seul bloc a tout-ou-rien) : un FAIL
-# pointe alors sur l'element precis manquant/incorrect (ex: le code CAGE
-# absent) au lieu de "l'adresse entiere ne correspond pas".
-_THALES_TP1_ADDRESS_ELEMENTS: list[str] = [
-    r"\(F9111\)",
-    r"75-77\s+Avenue\s+Marcel\s+Dassault",
-    r"33700\s+M\u00e9rignac\s+-\s+France",
-    r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40",
-    r"www\.thalesgroup\.com",
-]
+# One check per line keeps the reported missing element precise instead of
+# returning one opaque failure for the whole address block.
+_THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
+    (r"\(F9111\)", "(F9111)"),
+    (r"75-77\s+Avenue\s+Marcel\s+Dassault", "75-77 Avenue Marcel Dassault"),
+    (r"33700\s+M\u00e9rignac\s+-\s+France", "33700 Mérignac - France"),
+    (r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40", "Tel : +33 (0)5 24 44 77 40"),
+    (r"www\.thalesgroup\.com", "www.thalesgroup.com"),
+)
 
 
 def _normalized_line(value: str) -> str:
@@ -197,6 +185,23 @@ def _regex_rule(
     )
 
 
+def _required_text_check(
+    pattern: str,
+    *,
+    display: str | None = None,
+    anchor: str | None = None,
+    anchor_position: Literal["above", "below"] = "above",
+) -> Check:
+    return Check(
+        field="text",
+        operator="regex_exists",
+        expected=pattern,
+        expected_display=display,
+        missing_anchor=anchor,
+        missing_anchor_position=anchor_position,
+    )
+
+
 _RULES_V1 = [
     CompiledRule(
         id="CUSTOM_CMM_NUMBER",
@@ -206,10 +211,10 @@ _RULES_V1 = [
         execution="deterministic",
         target=_FOOTER_TARGET,
         checks=[
-            Check(
-                field="text",
-                operator="regex_exists",
-                expected=_EXPECTED_CMM_PATTERN,
+            _required_text_check(
+                _EXPECTED_CMM_PATTERN,
+                display="{{meta_cmm_number}}",
+                anchor=r"(?i)\bFirst\s+Issue\b",
             ),
             Check(
                 field="text",
@@ -265,10 +270,10 @@ _RULES_V1 = [
         execution="deterministic",
         target=_FOOTER_TARGET,
         checks=[
-            Check(
-                field="text",
-                operator="regex_exists",
-                expected=_EXPECTED_REVISION_DATE_PATTERN,
+            _required_text_check(
+                _EXPECTED_REVISION_DATE_PATTERN,
+                display="{{meta_revision_date}}",
+                anchor=r"(?i)\bFirst\s+Issue\b",
             ),
             Check(
                 field="text",
@@ -292,11 +297,10 @@ _RULES_V1 = [
         execution="deterministic",
         target=_TP1_REVISION_TARGET,
         checks=[
-            Check(
-                field="text",
-                operator="regex_exists",
-                expected=_EXPECTED_TP1_REVISION_NUMBER_PATTERN,
-                expected_display="Revision No.{{meta_revision_number}}",
+            _required_text_check(
+                _EXPECTED_TP1_REVISION_NUMBER_PATTERN,
+                display="Revision No.{{meta_revision_number}}",
+                anchor=r"(?i)\bFirst\s+Issue\b",
             ),
             Check(
                 field="text",
@@ -306,6 +310,7 @@ _RULES_V1 = [
                     r"(?!{{meta_revision_number}}(?!\w))\d{2}(?!\w)"
                     r"(?=[\s\S]*\bFirst\s+Issue\b)"
                 ),
+                replacement="Revision No.{{meta_revision_number}}",
                 expected_display="Revision No.{{meta_revision_number}}",
             ),
         ],
@@ -320,23 +325,19 @@ _RULES_V1 = [
         execution="deterministic",
         target=_TP1_ADDRESS_TARGET,
         checks=[
-            Check(
-                field="text",
-                operator="regex_exists",
-                expected=pattern,
-                expected_display=display,
+            _required_text_check(
+                pattern,
+                display=display,
+                anchor=(
+                    _THALES_TP1_ADDRESS_ELEMENTS[index + 1][0]
+                    if index + 1 < len(_THALES_TP1_ADDRESS_ELEMENTS)
+                    else _THALES_TP1_ADDRESS_ELEMENTS[index - 1][0]
+                ),
+                anchor_position=(
+                    "above" if index + 1 < len(_THALES_TP1_ADDRESS_ELEMENTS) else "below"
+                ),
             )
-            for pattern, display in zip(
-                _THALES_TP1_ADDRESS_ELEMENTS,
-                [
-                    "(F9111)",
-                    "75-77 Avenue Marcel Dassault",
-                    "33700 Mérignac - France",
-                    "Tel : +33 (0)5 24 44 77 40",
-                    "www.thalesgroup.com",
-                ],
-                strict=True,
-            )
+            for index, (pattern, display) in enumerate(_THALES_TP1_ADDRESS_ELEMENTS)
         ],
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:CUSTOM_TP1_THALES_ADDRESS",
