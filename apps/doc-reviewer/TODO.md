@@ -1,15 +1,12 @@
 FRONT :
 
-
-- Est ce qu'on laisse le "Prompt IA Custom" (je pense pas)
 - Trop d'infos sur les input dans les paramètre pour la checklist
 - DocumentReviewer.tsx utilise encore des caractères Unicode ◀ et ▶, en contradiction avec la règle locale interdisant les icônes Unicode.
 - Ajouter un bouton pour supprimer toutes les règles non compilées si il y en a
 Détecter les colonnes auto uniquement, on fera en sorte que les colonnes excel suivantes : topic / rules 
 Peut etre même sup tout la partie review du tableau pas forcément utile, juste on importe la checklist et hop ça part
-- Supprimer tout ce qui est inutile : Est ce que le "Tableau de bord" est utile ? Est ce le la catégorie "Données" est utile ? on peut juste déplacer le truc pour reinitialiser dans les parmaètres
-- Pour l'export il faudrait que quand le user passe la souris sur le bouton download ça propose les possibilités d'export (PDF commenté, PDF original, DOCX, etc....), puis quand il choisit ça télécharge. Et donc enlever le mini menu à gauche du bouton où il faut choisir le doc à download ça serait un doublon
-- Enlever la colonne "détail" dans les règles actives
+- Est ce que le "Tableau de bord" est utile ?
+
 
 BACK :
 

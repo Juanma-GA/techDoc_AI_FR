@@ -1,26 +1,29 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import {
-  useAiPrompt,
   useMistralSettings,
   useReliability,
   useTestMistralConnection,
   useToggleLlm,
-  useUpdateAiPrompt,
   useUpdateMistralSettings,
   useUpdateReliability,
 } from "../hooks/useMistralSettings";
+import { api } from "../lib/api";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
+import type { ResetAllResult, WipeSuggestionsResult } from "../types/domain";
 
 import { Rules } from "./Rules";
 import { Standards } from "./Standards";
 
 export function Settings() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const targetUnits = useFiltersStore((s) => s.targetUnits);
   const toggleTargetUnit = useFiltersStore((s) => s.toggleTargetUnit);
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
@@ -48,18 +51,17 @@ export function Settings() {
   const updateMistral = useUpdateMistralSettings();
   const testMistral = useTestMistralConnection();
   const toggleLlm = useToggleLlm();
-  const aiPrompt = useAiPrompt();
-  const updateAiPrompt = useUpdateAiPrompt();
   const reliability = useReliability();
   const updateReliability = useUpdateReliability();
+  const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
 
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
   const [modelDraft, setModelDraft] = useState("");
   const [visionModelDraft, setVisionModelDraft] = useState("");
-  const [promptDraft, setPromptDraft] = useState<string | null>(null);
-
-  const effectivePrompt = promptDraft ?? aiPrompt.data?.prompt ?? "";
+  const [resetDialog, setResetDialog] = useState<"sugs" | "all" | null>(null);
+  const [resetFeedback, setResetFeedback] = useState<string | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
 
   const submitMistral = (): void => {
     updateMistral.mutate(
@@ -230,49 +232,6 @@ export function Settings() {
                     </div>
                   </div>
                 ) : null}
-              </div>
-            )}
-          </Card>
-
-          <Card
-            title={t("settings.aiPrompt.title")}
-            description={t("settings.aiPrompt.description")}
-          >
-            {aiPrompt.isLoading ? (
-              <p className="hint">{t("common.loading")}</p>
-            ) : (
-              <div className="form">
-                <textarea
-                  rows={6}
-                  value={effectivePrompt}
-                  onChange={(e) => setPromptDraft(e.target.value)}
-                  placeholder={t("settings.aiPrompt.placeholder")}
-                  className="input mono"
-                />
-                <div className="row">
-                  <button
-                    type="button"
-                    className="btn primary"
-                    onClick={() => {
-                      if (promptDraft === null) return;
-                      updateAiPrompt.mutate(promptDraft, {
-                        onSuccess: () => setPromptDraft(null),
-                      });
-                    }}
-                    disabled={promptDraft === null || updateAiPrompt.isPending}
-                  >
-                    {t("common.save")}
-                  </button>
-                  {promptDraft !== null ? (
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      onClick={() => setPromptDraft(null)}
-                    >
-                      {t("common.cancel")}
-                    </button>
-                  ) : null}
-                </div>
               </div>
             )}
           </Card>
@@ -493,7 +452,86 @@ export function Settings() {
             </span>
           </div>
         </Card>
+
+        <Card title={t("data.reset")}>
+          <div className="banner warn">{t("data.resetWarn")}</div>
+          <div className="row">
+            <button
+              type="button"
+              disabled={resetBusy}
+              onClick={() => setResetDialog("sugs")}
+              className="btn secondary"
+            >
+              {t("data.resetSugs")}
+            </button>
+            <button
+              type="button"
+              disabled={resetBusy}
+              onClick={() => setResetDialog("all")}
+              className="btn danger"
+            >
+              {t("data.resetAll")}
+            </button>
+            {resetFeedback ? <span className="hint">{resetFeedback}</span> : null}
+          </div>
+        </Card>
       </section>
+
+      <ConfirmDialog
+        open={resetDialog === "sugs"}
+        onOpenChange={(open) => setResetDialog(open ? "sugs" : null)}
+        title={t("data.resetSugs")}
+        description={t("data.confirmSugs")}
+        confirmLabel={t("data.resetSugs")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setResetBusy(true);
+          setResetFeedback(null);
+          void api
+            .post<WipeSuggestionsResult>("/admin/wipe-suggestions")
+            .then((result) => {
+              setResetFeedback(t("data.wipedSugs", { count: result.deleted }));
+              return queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+            })
+            .catch((error: unknown) => {
+              setResetFeedback(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => setResetBusy(false));
+        }}
+      />
+      <ConfirmDialog
+        open={resetDialog === "all"}
+        onOpenChange={(open) => setResetDialog(open ? "all" : null)}
+        title={t("data.resetAll")}
+        description={t("data.confirmAll")}
+        confirmLabel={t("data.resetAll")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setResetBusy(true);
+          setResetFeedback(null);
+          void api
+            .post<ResetAllResult>("/admin/reset")
+            .then((result) => {
+              clearActiveStandards();
+              setChecklistActive(false);
+              const folders = result.storage_folders_cleaned + result.orphan_folders_cleaned;
+              setResetFeedback(
+                t("data.resetDone", {
+                  docs: result.documents_deleted,
+                  rules: result.rules_deleted + result.checklist_rules_deleted,
+                  folders,
+                }),
+              );
+              return queryClient.invalidateQueries();
+            })
+            .catch((error: unknown) => {
+              setResetFeedback(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => setResetBusy(false));
+        }}
+      />
     </div>
   );
 }

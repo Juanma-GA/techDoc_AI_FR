@@ -78,7 +78,6 @@ export function Rules() {
                   <th>{t("rules.form.enabled")}</th>
                   <th>{t("rules.compiled.status")}</th>
                   <th>{t("rules.form.name")}</th>
-                  <th>{t("rules.compiled.detail")}</th>
                   <th>{t("rules.form.scope")}</th>
                 </tr>
               </thead>
@@ -138,7 +137,6 @@ export function Rules() {
                       </span>
                     </td>
                     <td>{rule.topic}</td>
-                    <td>{rule.detail ?? t("rules.compiled.activeImmediately")}</td>
                     <td>
                       <span className="label">{rule.origin_ref ?? t("standards.transverse")}</span>
                     </td>

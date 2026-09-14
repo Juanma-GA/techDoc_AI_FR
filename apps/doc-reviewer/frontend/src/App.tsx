@@ -10,9 +10,6 @@ import i18n from "./i18n";
 const Dashboard = lazy(async () => ({
   default: (await import("./routes/Dashboard")).Dashboard,
 }));
-const Data = lazy(async () => ({
-  default: (await import("./routes/Data")).Data,
-}));
 const DocumentReviewer = lazy(async () => ({
   default: (await import("./routes/DocumentReviewer")).DocumentReviewer,
 }));
@@ -31,14 +28,13 @@ function RouteFallback() {
   );
 }
 
-// Coquille pixel-coherente avec le preview.html : 5 onglets (Tableau de bord /
-// Documents / Architecture / Donnees / Parametres). Normes + Regles vivent
+// Coquille pixel-coherente avec le preview.html : 4 onglets (Tableau de bord /
+// Documents / Parametres). Normes + Regles vivent
 // DANS Parametres (cartes), le reviewer est embarque dans le detail Documents
 // (la sidebar reste visible) — parite 1:1 avec preview.html.
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
-  { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
@@ -112,7 +108,6 @@ export function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/documents" element={<DocumentsList />} />
-                <Route path="/data" element={<Data />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>
