@@ -127,6 +127,7 @@ class Check(StrictModel):
         "regex_exists",
     ]
     expected: str | int | list[str] | None = None
+    require_all: bool = False
     expected_display: str | None = None
     missing_anchor: str | None = None
     missing_anchor_position: Literal["above", "below"] = "above"

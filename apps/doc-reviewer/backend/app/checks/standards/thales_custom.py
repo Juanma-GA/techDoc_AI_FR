@@ -46,14 +46,6 @@ _EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
     r"(?i)(?<!\w)First\s+issue\s*:\s*{{meta_first_issue_date}}(?!\w)"
 )
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
-_REVISION_DATE_PATTERN = (
-    r"(?:"
-    r"\d{4}[-/]\d{1,2}[-/]\d{1,2}"
-    r"|\d{1,2}/\d{1,2}/\d{2,4}"
-    r"|(?i:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)"
-    r"\s+\d{1,2}/\d{2,4}"
-    r")"
-)
 _EXPECTED_REVISION_DATE_PATTERN = r"(?<!\w){{meta_revision_date}}(?!\w)"
 _COPYRIGHT_START_YEAR = "1966"
 _COPYRIGHT_PATTERN = (
@@ -215,6 +207,7 @@ def _required_text_check(
         field="text",
         operator="regex_exists",
         expected=pattern,
+        require_all=True,
         expected_display=display,
         missing_anchor=anchor,
         missing_anchor_position=anchor_position,
@@ -233,16 +226,6 @@ _RULES_V1 = [
                 _EXPECTED_CMM_PATTERN,
                 display="{{meta_cmm_number}}",
                 anchor=r"(?i)\bFirst\s+Issue\b",
-            ),
-            Check(
-                field="text",
-                operator="regex",
-                expected=(
-                    r"(?<!\w)(?!{{meta_cmm_number}}(?!\w))"
-                    + _CMM_NUMBER_PATTERN
-                    + r"(?!\w)"
-                ),
-                replacement="{{meta_cmm_number}}",
             ),
         ],
     ),
@@ -287,16 +270,6 @@ _RULES_V1 = [
                 display="{{meta_revision_date}}",
                 anchor=r"(?i)\bFirst\s+Issue\b",
             ),
-            Check(
-                field="text",
-                operator="regex",
-                expected=(
-                    r"(?<!\w)(?!{{meta_revision_date}}(?!\w))"
-                    + _REVISION_DATE_PATTERN
-                    + r"(?!\w)"
-                ),
-                replacement="{{meta_revision_date}}",
-            ),
         ],
     ),
     _rule(
@@ -308,19 +281,8 @@ _RULES_V1 = [
         checks=[
             _required_text_check(
                 _EXPECTED_TP1_REVISION_NUMBER_PATTERN,
-                display="Revision No.{{meta_revision_number}}",
+                display="Revision No. {{meta_revision_number}}",
                 anchor=r"(?i)\bFirst\s+Issue\b",
-            ),
-            Check(
-                field="text",
-                operator="regex",
-                expected=(
-                    r"(?i)(?<!\w)Revision\s+No\.?\s*"
-                    r"(?!{{meta_revision_number}}(?!\w))\d{2}(?!\w)"
-                    r"(?=[\s\S]*\bFirst\s+Issue\b)"
-                ),
-                replacement="Revision No.{{meta_revision_number}}",
-                expected_display="Revision No.{{meta_revision_number}}",
             ),
         ],
     ),
@@ -336,18 +298,6 @@ _RULES_V1 = [
                 display="First issue: {{meta_first_issue_date}}",
                 anchor=r"(?i)Revision\s+No\.?\s*\d{2}",
                 anchor_position="below",
-            ),
-            Check(
-                field="text",
-                operator="regex",
-                expected=(
-                    r"(?i)(?<!\w)First\s+issue\s*:\s*"
-                    r"(?!{{meta_first_issue_date}}(?!\w))"
-                    + _REVISION_DATE_PATTERN
-                    + r"(?!\w)"
-                ),
-                replacement="First issue: {{meta_first_issue_date}}",
-                expected_display="First issue: {{meta_first_issue_date}}",
             ),
         ],
     ),

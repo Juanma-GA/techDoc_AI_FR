@@ -40,11 +40,22 @@ obtenir une suggestion compréhensible :
 - `expected_display` contient le texte attendu affiché à l’utilisateur ;
 - `failure_message` contient la formulation négative affichée dans la suggestion ;
 - `replacement` permet de corriger un élément présent mais incorrect ;
+- `require_all=True` impose la présence du motif sur chaque cible (utile pour
+    un footer répété sur plusieurs pages) ;
 - `missing_anchor` indique un texte voisin auquel accrocher un élément absent ;
 - `missing_anchor_position` vaut `"above"` ou `"below"` selon la mise en page.
 
 Les placeholders comme `{{meta_revision_number}}` sont résolus depuis le
 mapping du document dans `expected_display` et `replacement`.
+
+Pour une règle obligatoire corrigible, `expected_display` sert aussi de forme
+canonique pour le diagnostic après un `FAIL`. Le moteur cherche alors une ligne
+ou une fenêtre de mots proche et produit les différences minimales : caractère
+ou mot corrigé, valeur manquante insérée, ou valeur incorrecte remplacée. Il
+ne faut donc pas ajouter un second `operator="regex"` pour détecter chaque
+valeur incorrecte. Si aucun candidat suffisamment proche n'est trouvé, le
+moteur conserve le commentaire d'élément attendu absent et utilise
+`missing_anchor` pour le positionner.
 
 ```python
 _rule(

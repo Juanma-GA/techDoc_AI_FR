@@ -129,7 +129,7 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
     assert valid[0].status == "PASS"
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("79-33-02", "79-30-02")
+        ("3", "0")
     ]
     assert missing[0].status == "FAIL"
 
@@ -172,7 +172,7 @@ def test_revision_date_footer_matches_document_context_value() -> None:
     assert valid_suggestions == []
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("JUL 27/25", "JUL 27/26")
+        ("5", "6")
     ]
     assert missing[0].status == "FAIL"
     # Date entierement absente (pas seulement erronee) : pas de span a
@@ -180,6 +180,64 @@ def test_revision_date_footer_matches_document_context_value() -> None:
     assert len(missing_suggestions) == 1
     assert missing_suggestions[0].original == ""
     assert missing_suggestions[0].page == 1
+
+
+def test_footer_required_values_are_checked_on_each_page() -> None:
+    pages = []
+    for page_number, footer in enumerate(
+        ("Revision: JUL 27/26\n79-30-02", "Revision: JAN 27/26\n79-30-01"),
+        start=1,
+    ):
+        body = f"Title page body {page_number}."
+        pages.append(
+            ParsedPage(
+                page=page_number,
+                text=f"{body}\n{footer}",
+                spans=[
+                    Span(
+                        text=body,
+                        bbox=(40.0, 100.0, 200.0, 120.0),
+                        page=page_number,
+                        font="Arial",
+                        size=10.0,
+                    ),
+                    Span(
+                        text=footer,
+                        bbox=(40.0, 760.0, 300.0, 780.0),
+                        page=page_number,
+                        font="Arial",
+                        size=8.0,
+                    ),
+                ],
+            )
+        )
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=pages,
+        full_text="\n".join(page.text for page in pages),
+        is_signed=False,
+    )
+    document = SimpleNamespace(meta_cmm_number="79-30-02", meta_revision_date="JUL 27/26")
+
+    cmm_results, cmm_suggestions = execute_pdf_rules(
+        parsed,
+        [_rule("CUSTOM_CMM_NUMBER")],
+        document=document,
+    )
+    revision_results, revision_suggestions = execute_pdf_rules(
+        parsed,
+        [_rule("CUSTOM_REVISION_DATE")],
+        document=document,
+    )
+
+    assert cmm_results[0].status == "FAIL"
+    assert [(item.page, item.original, item.proposed) for item in cmm_suggestions] == [
+        (2, "1", "2")
+    ]
+    assert revision_results[0].status == "FAIL"
+    assert [
+        (item.page, item.original, item.proposed) for item in revision_suggestions
+    ] == [(2, "JAN", "JUL")]
 
 
 def _tp1_revision_footer_pdf(
@@ -243,18 +301,18 @@ def test_tp1_revision_number_matches_document_context_value() -> None:
     assert valid_suggestions == []
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("Revision No. 01", "Revision No.04")
+        ("1", "4")
     ]
     assert missing[0].status == "FAIL"
     assert len(missing_suggestions) == 1
     assert missing_suggestions[0].original == ""
-    assert missing_suggestions[0].proposed == "Revision No.04"
+    assert missing_suggestions[0].proposed == "Revision No. 04"
     assert missing_suggestions[0].page == 1
     assert missing_suggestions[0].bbox is not None
     assert missing_suggestions[0].bbox[3] <= 760.0
     assert missing_suggestions[0].message == (
         "Règle non satisfaite : numéro de revision non conforme. "
-        "Element attendu : Revision No.04"
+        "Element attendu : Revision No. 04"
     )
     assert not_tp1 == []
     assert not_tp1_suggestions == []
@@ -271,6 +329,16 @@ def test_tp1_first_issue_date_matches_document_context_value() -> None:
     )
     invalid, invalid_suggestions = execute_pdf_rules(
         _tp1_revision_footer_pdf("Revision No.04\nFirst Issue: JUL 27/25"),
+        [rule],
+        document=document,
+    )
+    partial, partial_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No.04\nFirst issue:"),
+        [rule],
+        document=document,
+    )
+    typo, typo_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No.04\nFisrt iss: JUL 27/26"),
         [rule],
         document=document,
     )
@@ -292,15 +360,24 @@ def test_tp1_first_issue_date_matches_document_context_value() -> None:
     assert valid_suggestions == []
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("First Issue: JUL 27/25", "First Issue: JUL 27/26")
+        ("5", "6")
+    ]
+    assert partial[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in partial_suggestions] == [
+        ("", " JUL 27/26")
+    ]
+    assert typo[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in typo_suggestions] == [
+        ("Fisrt", "First"),
+        ("iss", "issue"),
     ]
     assert missing[0].status == "FAIL"
     assert len(missing_suggestions) == 1
     assert missing_suggestions[0].original == ""
-    assert missing_suggestions[0].proposed == "First Issue: JUL 27/26"
+    assert missing_suggestions[0].proposed == "First issue: JUL 27/26"
     assert missing_suggestions[0].message == (
         "Règle non satisfaite : date de premiere issue non conforme. "
-        "Element attendu : First Issue: JUL 27/26"
+        "Element attendu : First issue: JUL 27/26"
     )
     assert not_tp1 == []
     assert not_tp1_suggestions == []
