@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
-from app.checks.standards.user_rules import TP1_PAGE_TYPE, identify_tp1_pages
+from app.checks.standards.thales_custom import TP1_PAGE_TYPE, identify_tp1_pages
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
@@ -104,7 +104,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 40
+    assert total == 42
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -180,6 +180,68 @@ def test_revision_date_footer_matches_document_context_value() -> None:
     assert len(missing_suggestions) == 1
     assert missing_suggestions[0].original == ""
     assert missing_suggestions[0].page == 1
+
+
+def _tp1_revision_footer_pdf(
+    footer: str,
+    *,
+    page_type: str | None = TP1_PAGE_TYPE,
+) -> ParsedPdf:
+    body = "Title page body."
+    text = f"{body}\n{footer}"
+    page = ParsedPage(
+        page=1,
+        text=text,
+        page_type=page_type,
+        spans=[
+            Span(text=body, bbox=(40.0, 100.0, 200.0, 120.0), page=1, font="Arial", size=10.0),
+            Span(text=footer, bbox=(40.0, 760.0, 300.0, 780.0), page=1, font="Arial", size=8.0),
+        ],
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def test_tp1_revision_number_matches_document_context_value() -> None:
+    rule = _rule("CUSTOM_TP1_REVISION_NUMBER")
+    document = SimpleNamespace(meta_revision_number="04")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No.04\nFirst Issue: JUL 27/26"),
+        [rule],
+        document=document,
+    )
+    invalid, _invalid_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("Revision No. 01\nFirst Issue: JUL 27/26"),
+        [rule],
+        document=document,
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf("First Issue: JUL 27/26"),
+        [rule],
+        document=document,
+    )
+    not_tp1, not_tp1_suggestions = execute_pdf_rules(
+        _tp1_revision_footer_pdf(
+            "Revision No. 04\nFirst Issue: JUL 27/26",
+            page_type=None,
+        ),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert missing[0].status == "FAIL"
+    assert len(missing_suggestions) == 1
+    assert missing_suggestions[0].original == ""
+    assert missing_suggestions[0].page == 1
+    assert missing_suggestions[0].message == (
+        "Règle non satisfaite : numéro de revision non conforme. "
+        "Element attendu : Revision No.04"
+    )
+    assert not_tp1 == []
+    assert not_tp1_suggestions == []
 
 
 def _page_with_footer_lines(page_number: int, footer_lines: list[str]) -> ParsedPage:
@@ -302,6 +364,10 @@ def test_tp1_address_rule_requires_the_exact_thales_address() -> None:
     assert len(missing_element_suggestions) == 1
     assert missing_element_suggestions[0].page == 1
     assert "F9111" in missing_element_suggestions[0].message
+    assert missing_element_suggestions[0].message == (
+        "Règle non satisfaite : adresse THALES non conforme. "
+        "Element attendu : (F9111)"
+    )
 
     assert not_tp1 == []
     assert not_tp1_suggestions == []

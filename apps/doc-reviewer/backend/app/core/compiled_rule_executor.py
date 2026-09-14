@@ -653,7 +653,7 @@ def _deterministic_suggestions(
     ctx: _EvalContext,
 ) -> list[RawSuggestion]:
     rule_kind = "compiled_standard" if rule.source == "standard_rule" else "compiled_checklist"
-    message = f"Règle compilée non satisfaite: {rule.topic}"
+    message = f"Règle non satisfaite : {rule.failure_message or rule.topic}"
     suggestions: list[RawSuggestion] = []
     for check in rule.checks:
         if check.operator == "regex" and check.expected is not None:
@@ -714,8 +714,8 @@ def _deterministic_suggestions(
             (target for target in targets if target.page == result.evidence.page),
             targets[0],
         )
-        expected = result.evidence.expected_value
-        detail = f" (element attendu : {expected})" if expected else " (element attendu absent de la page)"
+        expected = _expected_display(rule, result.evidence.expected_value, ctx.document)
+        detail = f" Element attendu : {expected}" if expected else " Element attendu absent de la page"
         return [
             RawSuggestion(
                 rule_kind=rule_kind,
@@ -752,6 +752,29 @@ def _deterministic_suggestions(
             bbox=_suggestion_bbox(fallback_target, observed, pdf_pages),
         )
     ]
+
+
+def _expected_display(
+    rule: CompiledRule,
+    expected: str | None,
+    document: Any | None,
+) -> str | None:
+    """Return a human-readable expected value for an absent required check."""
+    for check in rule.checks:
+        if check.expected_display is None:
+            continue
+        if expected is None or str(check.expected) == expected:
+            return _resolve_display_template(check.expected_display, document)
+    return expected
+
+
+def _resolve_display_template(template: str, document: Any | None) -> str:
+    metadata = _document_metadata(document)
+
+    def replace_token(match: re.Match[str]) -> str:
+        return metadata.get(match.group(1), match.group(0))
+
+    return _CONTEXT_TOKEN_RE.sub(replace_token, template)
 
 
 def _normalized_equals_suggestions(

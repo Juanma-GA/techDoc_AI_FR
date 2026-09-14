@@ -127,6 +127,7 @@ class Check(StrictModel):
         "regex_exists",
     ]
     expected: str | int | list[str] | None = None
+    expected_display: str | None = None
     normalization: list[NormalizationStep] | None = None
     # Auto-fix proposals for deterministic FAILs, mirroring the legacy
     # regex_replace/term_replace custom-rule kinds — kept optional because
@@ -198,6 +199,7 @@ class Evidence(StrictModel):
 class CompiledRule(StrictModel):
     id: str = Field(min_length=1, max_length=120)
     topic: str
+    failure_message: str | None = None
     severity: Literal["info", "warning", "error"] = "warning"
     execution: Literal["deterministic", "semantic", "manual", "unsupported"]
     target: RuleTarget

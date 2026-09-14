@@ -24,6 +24,7 @@ _logger = get_logger(__name__)
 
 _TARGET = RuleTarget(page="all", region="full_page")
 _FOOTER_TARGET = RuleTarget(page="all", region="footer")
+_TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
 # full_page (et non footer) : sur ce standard, le bloc adresse THALES est
 # positionne hors du bandeau bas-de-page a 25% calcule par `_scope_targets`
 # (verifie en prod : le scope "footer" ne recupere qu'une partie du texte
@@ -37,6 +38,14 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
 _DECIMAL_COMMA_PATTERN = r"(?<!\d)(\d+),(\d+)(?!\d)"
+_TP1_REVISION_NUMBER_PATTERN = (
+    r"(?i)(?<!\w)Revision\s+No\.?\s*\d{2}(?!\w)"
+    r"(?=[\s\S]*\bFirst\s+Issue\b)"
+)
+_EXPECTED_TP1_REVISION_NUMBER_PATTERN = (
+    r"(?i)(?<!\w)Revision\s+No\.?\s*{{meta_revision_number}}(?!\w)"
+    r"(?=[\s\S]*\bFirst\s+Issue\b)"
+)
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
 _REVISION_DATE_PATTERN = (
     r"(?:"
@@ -192,6 +201,7 @@ _RULES_V1 = [
     CompiledRule(
         id="CUSTOM_CMM_NUMBER",
         topic="Numero CMM conforme au contexte du document",
+        failure_message="Numero CMM non conforme",
         severity="error",
         execution="deterministic",
         target=_FOOTER_TARGET,
@@ -218,6 +228,7 @@ _RULES_V1 = [
     CompiledRule(
         id="CUSTOM_TITLE_PAGE_COPYRIGHT",
         topic="Copyright du footer conforme a l'annee de revision",
+        failure_message="Copyright du footer non conforme",
         severity="error",
         execution="deterministic",
         target=_FOOTER_TARGET,
@@ -249,6 +260,7 @@ _RULES_V1 = [
     CompiledRule(
         id="CUSTOM_REVISION_DATE",
         topic="Date de revision du footer conforme au mapping",
+        failure_message="Date de revision du footer non conforme",
         severity="error",
         execution="deterministic",
         target=_FOOTER_TARGET,
@@ -273,14 +285,58 @@ _RULES_V1 = [
         origin_ref=f"{_ORIGIN}:CUSTOM_REVISION_DATE",
     ),
     CompiledRule(
+        id="CUSTOM_TP1_REVISION_NUMBER",
+        topic="Numero de revision du footer TP1 conforme au mapping",
+        failure_message="numéro de revision non conforme.",
+        severity="error",
+        execution="deterministic",
+        target=_TP1_REVISION_TARGET,
+        checks=[
+            Check(
+                field="text",
+                operator="regex_exists",
+                expected=_EXPECTED_TP1_REVISION_NUMBER_PATTERN,
+                expected_display="Revision No.{{meta_revision_number}}",
+            ),
+            Check(
+                field="text",
+                operator="regex",
+                expected=(
+                    r"(?i)(?<!\w)Revision\s+No\.?\s*"
+                    r"(?!{{meta_revision_number}}(?!\w))\d{2}(?!\w)"
+                    r"(?=[\s\S]*\bFirst\s+Issue\b)"
+                ),
+                expected_display="Revision No.{{meta_revision_number}}",
+            ),
+        ],
+        source="standard_rule",
+        origin_ref=f"{_ORIGIN}:CUSTOM_TP1_REVISION_NUMBER",
+    ),
+    CompiledRule(
         id="CUSTOM_TP1_THALES_ADDRESS",
         topic="Adresse THALES exacte sur les pages TP1",
+        failure_message="adresse THALES non conforme.",
         severity="error",
         execution="deterministic",
         target=_TP1_ADDRESS_TARGET,
         checks=[
-            Check(field="text", operator="regex_exists", expected=pattern)
-            for pattern in _THALES_TP1_ADDRESS_ELEMENTS
+            Check(
+                field="text",
+                operator="regex_exists",
+                expected=pattern,
+                expected_display=display,
+            )
+            for pattern, display in zip(
+                _THALES_TP1_ADDRESS_ELEMENTS,
+                [
+                    "(F9111)",
+                    "75-77 Avenue Marcel Dassault",
+                    "33700 Mérignac - France",
+                    "Tel : +33 (0)5 24 44 77 40",
+                    "www.thalesgroup.com",
+                ],
+                strict=True,
+            )
         ],
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:CUSTOM_TP1_THALES_ADDRESS",
@@ -342,6 +398,19 @@ RULE_METADATA["CUSTOM_TP1_THALES_ADDRESS"] = {
     "severity": "error",
     "message": "L'adresse THALES de la page TP1 est absente ou incorrecte.",
 }
+RULE_METADATA["CUSTOM_TP1_REVISION_NUMBER"] = {
+    "description": (
+        "Chaque page TP1 doit contenir dans son footer 'Revision No. 0X' "
+        "au-dessus de 'First Issue', avec 0X egal au numero de revision "
+        "saisi dans le mapping (sans le prefixe 'Rev.')."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": (
+        "Le numero de revision du footer TP1 est absent ou ne correspond "
+        "pas au mapping."
+    ),
+}
 RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
     "description": (
         "Les valeurs numeriques decimales des pages modifiees doivent utiliser "
@@ -356,7 +425,7 @@ RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
 CATALOG: dict[str, list[CompiledRule]] = {"v1": _RULES_V1}
 
 
-USER_STANDARD_SPEC: dict[str, object] = {
+STANDARD_SPEC: dict[str, object] = {
     "code": STANDARD_CODE,
     "label": STANDARD_LABEL,
     "description": STANDARD_DESCRIPTION,

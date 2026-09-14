@@ -19,7 +19,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.checks.standards import serialize_builtin_version, user_rules
+from app.checks.standards import CUSTOM_STANDARD_SPECS, serialize_builtin_version
 from app.db.models import Rule, Standard, StandardVersion
 
 logger = structlog.get_logger(__name__)
@@ -89,65 +89,73 @@ def seed_default_rules(db: Session) -> int:
     return len(_DEFAULTS)
 
 
-def sync_user_standard(db: Session) -> int:
-    """Create and refresh the file-backed local standard catalog.
+def sync_custom_standards(db: Session) -> int:
+    """Create and refresh all file-backed client standard catalogs.
 
     The published built-in catalogs remain database-owned after their Alembic
-    migrations. This one catalog is intentionally sourced from
-    ``standards/user_rules.py`` so local experiments can be edited and tested
-    after a backend restart without a new migration for every rule change.
+    migrations. Client catalogs are sourced from the discovered ``*_custom``
+    modules so they can be edited and tested after a backend restart without a
+    new migration for every rule change.
     """
-    spec = user_rules.USER_STANDARD_SPEC
-    code = user_rules.STANDARD_CODE
-    standard = db.scalar(select(Standard).where(Standard.code == code))
-    if standard is None:
-        standard = db.scalar(
-            select(Standard).where(Standard.code == "ATEXIS-CUSTOM")
-        )
-        if standard is not None:
-            standard.code = code
     now = datetime.now(timezone.utc)
-    if standard is None:
-        standard = Standard(
-            code=code,
-            label=user_rules.STANDARD_LABEL,
-            description=user_rules.STANDARD_DESCRIPTION,
-            builtin=True,
-        )
-        db.add(standard)
-        db.flush()
-    else:
-        standard.label = user_rules.STANDARD_LABEL
-        standard.description = user_rules.STANDARD_DESCRIPTION
-
     changed = 0
-    for label in user_rules.CATALOG:
-        payload = json.dumps(
-            serialize_builtin_version(spec, label),
-            ensure_ascii=False,
-        )
-        version = db.scalar(
-            select(StandardVersion).where(
-                StandardVersion.standard_id == standard.id,
-                StandardVersion.label == label,
+    for spec in CUSTOM_STANDARD_SPECS:
+        code = str(spec["code"])
+        label = str(spec["label"])
+        description = str(spec["description"])
+        standard = db.scalar(select(Standard).where(Standard.code == code))
+        if standard is None and code == "THALES-CUSTOM":
+            standard = db.scalar(
+                select(Standard).where(Standard.code == "ATEXIS-CUSTOM")
             )
-        )
-        if version is None:
-            db.add(
-                StandardVersion(
-                    standard_id=standard.id,
-                    label=label,
-                    builtin=True,
-                    catalog_json=payload,
+            if standard is not None:
+                standard.code = code
+        if standard is None:
+            standard = Standard(
+                code=code,
+                label=label,
+                description=description,
+                builtin=True,
+            )
+            db.add(standard)
+            db.flush()
+        else:
+            standard.label = label
+            standard.description = description
+
+        versions = spec["versions"]
+        for version_label in versions:
+            payload = json.dumps(
+                serialize_builtin_version(spec, version_label),
+                ensure_ascii=False,
+            )
+            version = db.scalar(
+                select(StandardVersion).where(
+                    StandardVersion.standard_id == standard.id,
+                    StandardVersion.label == version_label,
                 )
             )
-            changed += 1
-        elif version.catalog_json != payload:
-            version.catalog_json = payload
-            version.updated_at = now
-            changed += 1
+            if version is None:
+                db.add(
+                    StandardVersion(
+                        standard_id=standard.id,
+                        label=version_label,
+                        builtin=True,
+                        catalog_json=payload,
+                    )
+                )
+                changed += 1
+            elif version.catalog_json != payload:
+                version.catalog_json = payload
+                version.updated_at = now
+                changed += 1
 
     db.commit()
     if changed:
-        logger.info("user_standard_synced", code=code, changed_versions=changed)
+        logger.info("custom_standards_synced", changed_versions=changed)
     return changed
+
+
+def sync_user_standard(db: Session) -> int:
+    """Backward-compatible alias for the generic client catalog sync."""
+    return sync_custom_standards(db)
