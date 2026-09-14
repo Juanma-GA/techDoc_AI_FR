@@ -534,12 +534,20 @@ export type AdminStatsDto = {
 
 export type AdminResetScope = "documents" | "sessions" | "all";
 
-export type AdminResetDto = { deleted: Record<string, number> };
+export type AdminResetDto = {
+  deleted: Record<string, number>;
+  backup_path: string | null;
+};
 
 export const adminApi = {
   stats: () => request<AdminStatsDto>("/admin/stats"),
   reset: (scope: AdminResetScope) =>
-    request<AdminResetDto>(`/admin/reset/${scope}`, { method: "POST" }),
+    request<AdminResetDto>(`/admin/reset/${scope}`, {
+      method: "POST",
+      // F-06 : jeton de confirmation cote serveur (au-dela du double-clic
+      // client), attendu = le scope lui-meme.
+      body: JSON.stringify({ confirm: scope }),
+    }),
 };
 
 export const settingsApi = {

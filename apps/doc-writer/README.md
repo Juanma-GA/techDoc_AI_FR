@@ -18,7 +18,9 @@ Generate technical content from selected source documents with retrieval-augment
 
 ## Auth
 
-**Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication by default. A separately configured tier-2 mode has additional security requirements.
+**Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication by default (the only tier covered by the monorepo standard, CLAUDE.md rule #8).
+
+**Écart documenté :** the codebase also contains a `TIER_MODE=tier2` / Azure deployment path (`deploy/azure/`), which is out of the POC standard's scope (palier 2/3). No auth middleware is implemented for it. `_validate_security_posture()` in `backend/app/main.py` deliberately refuses to start (fail-fast `RuntimeError`) whenever `TIER_MODE=tier2` or `BIND_HOST` is not `127.0.0.1`/`localhost`/`::1`, so the app can never serve requests over an exposed bind while claiming auth is enforced. Wiring real SSO/OIDC before any exposed deployment is a prerequisite not covered by this fix.
 
 ## Port
 

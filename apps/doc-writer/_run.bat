@@ -93,9 +93,18 @@ if "%USE_EMBED%"=="0" (
 if not exist "%INSTALLED_MARK%" (
     echo [setup] Installation des deps Python en cours - 1 a 3 min...
     "%PYTHON%" -m pip install --upgrade pip >nul
-    "%PYTHON%" -m pip install -e .
+    REM F-07 (hardening) : installe depuis le lock hash-verifie (versions
+    REM exactes) plutot que de re-resoudre les bornes larges de pyproject.toml
+    REM a chaque poste, pour un build reproductible. --no-deps ensuite : le
+    REM paquet local seul, les deps sont deja posees par le lock ci-dessus.
+    "%PYTHON%" -m pip install -r requirements.lock.txt
     if errorlevel 1 (
-        echo [erreur] Echec installation des deps.
+        echo [erreur] Echec installation des deps verrouillees ^(requirements.lock.txt^).
+        exit /b 1
+    )
+    "%PYTHON%" -m pip install -e . --no-deps
+    if errorlevel 1 (
+        echo [erreur] Echec installation du paquet local.
         exit /b 1
     )
     type nul > "%INSTALLED_MARK%"

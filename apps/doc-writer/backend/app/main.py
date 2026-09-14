@@ -2,12 +2,17 @@
 
 **Tier Modes (AACF HR8 — Configuration)**
 
-- **Tier 1 (local-only)** : development, bind 127.0.0.1, no auth required (default).
-  Set `TIER_MODE=tier1` in `.env`. Encryption and strict CORS are optional.
-  
-- **Tier 2 (cloud)** : production/Azure, bind 0.0.0.0, auth middleware required.
-  Set `TIER_MODE=tier2` in `.env`. Encryption (ENCRYPTION_KEY) and strict CORS
-  become MANDATORY. App fails to start if security requirements are not met.
+- **Tier 1 (local-only)** : development, bind 127.0.0.1, no auth required (default,
+  the ONLY tier supported by the monorepo standard — CLAUDE.md rule #8 /
+  STANDARD_POC.md §3.5: "Tout POC est local seul"). Set `TIER_MODE=tier1` in
+  `.env`. Encryption and strict CORS are optional.
+
+- **Tier 2 (cloud / exposed bind)** : out of the POC standard's scope. No auth
+  middleware is implemented in this app. `_validate_security_posture()`
+  therefore refuses to start (fail-fast `RuntimeError`) whenever `TIER_MODE=tier2`
+  or `BIND_HOST` is not a local host — this is a deliberate hard stop, not a
+  TODO, so the app can never claim "auth required" while serving requests
+  unauthenticated. See `README.md` (`## Auth`) for the documented écart.
 
 The tier mode is validated at startup via `_validate_security_posture()`.
 """
@@ -51,8 +56,13 @@ def _is_local_origin(origin: str) -> bool:
 def _validate_security_posture() -> None:
     """Refuse de demarrer en posture deploiement (bind expose) si les protections
     sensibles ne sont pas configurees. Inerte en local (bind 127.0.0.1).
-    
-    En tier2, les verifications sont toujours appliquees (bind expose + auth obligatoire).
+
+    F-02 (hardening 2026-09-14) : palier 2/3 est hors perimetre du standard POC
+    (CLAUDE.md regle #8 / STANDARD_POC.md §3.5) et AUCUN middleware d'auth
+    n'existe dans cette app. Avant ce fix, TIER_MODE=tier2 pretendait "auth
+    middleware required" (docstring) sans jamais le verifier -> promesse non
+    tenue. Desormais, tier2 (ou tout bind non-local) bloque TOUJOURS le
+    demarrage : fail-fast explicite plutot qu'une fausse posture de securite.
     """
     # Tier1 (local) : skip security checks.
     if settings.tier_mode.lower() == "tier1" and _is_local_bind():
@@ -60,7 +70,16 @@ def _validate_security_posture() -> None:
 
     # Tier2 (cloud) ou bind expose : validation stricte.
     problems: list[str] = []
-    
+
+    # Aucun middleware d'auth n'est implemente (F-02) : bloquant, quelle que
+    # soit la config chiffrement/CORS ci-dessous.
+    problems.append(
+        "Aucun middleware d'authentification n'est implemente dans cette app "
+        "(palier 2/3 hors perimetre du standard POC, CLAUDE.md regle #8). "
+        "TIER_MODE=tier2 / un bind non-local ne peuvent pas demarrer tant "
+        "qu'aucune auth (SSO/OIDC) n'est cablee. Voir README.md ## Auth."
+    )
+
     # Tier2 specific : auth/encryption/CORS strictes sont OBLIGATOIRES.
     if settings.tier_mode.lower() == "tier2":
         if not settings.encryption_configured:

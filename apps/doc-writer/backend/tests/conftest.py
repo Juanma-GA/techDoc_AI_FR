@@ -16,6 +16,13 @@ _TMP_DB = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _TMP_DB.close()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB.name}"
 os.environ.setdefault("STORAGE_DIR", tempfile.mkdtemp(prefix="doc-writer-storage-"))
+# F-05 : isole la cle auto-provisionnee (cf. mistral_client._get_secret_manager)
+# dans un tmp dir dedie, pour ne pas ecrire dans apps/doc-writer/backend/data/
+# (donnee locale reelle) pendant les tests.
+os.environ.setdefault(
+    "ENCRYPTION_KEY_PATH",
+    os.path.join(tempfile.mkdtemp(prefix="doc-writer-enckey-"), ".encryption_key"),
+)
 
 
 @pytest.fixture(scope="session", autouse=True)
