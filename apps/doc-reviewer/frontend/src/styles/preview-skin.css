@@ -313,15 +313,27 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .suggestion-msg { font-size: 0.88rem; margin-bottom: 6px; }
 .suggestion-actions { display: flex; gap: 6px; margin-top: 8px; }
 
-/* Groupe d'occurrences (meme regle + meme texte detecte), depliable. */
+/* Groupe d'occurrences par regle, depliable. */
 .suggestion-bucket { display: flex; flex-direction: column; gap: 8px; }
+.suggestion-bucket.expanded {
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-hover);
+}
 .suggestion-bucket-head {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
-  background: var(--bg-2); cursor: pointer; color: var(--fg); text-align: left;
+  display: flex; align-items: stretch; gap: 8px; width: 100%;
+  border: 1px solid var(--border); border-radius: 8px; padding: 0 10px;
+  background: var(--bg-2); color: var(--fg); text-align: left;
   transition: border-color 0.12s, background 0.12s;
 }
 .suggestion-bucket-head:hover { border-color: var(--border-bright); background: var(--card-hover); }
+.suggestion-bucket-toggle {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+  border: 0; padding: 8px 0; background: transparent; color: inherit;
+  cursor: pointer; text-align: left;
+}
+.suggestion-bucket-toggle .suggestion-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .suggestion-bucket .suggestion { margin-left: 18px; }
 .input.small { padding: 3px 8px; font-size: 0.8rem; width: auto; }
 

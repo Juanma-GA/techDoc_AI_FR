@@ -5,7 +5,7 @@ FRONT :
 - Ajouter un bouton pour supprimer toutes les règles non compilées si il y en a
 Détecter les colonnes auto uniquement, on fera en sorte que les colonnes excel suivantes : topic / rules 
 Peut etre même sup tout la partie review du tableau pas forcément utile, juste on importe la checklist et hop ça part
-- Quand il y a plusieurs occurences il ne faut pas que quand on déplie ça déroule direct jusqu'en pas des X occurences / actuellement ça bug quand on est sur une des occurence on ne peut pas replier, faut changer ça pour qu'on puisse replier meme si on est sur une des occurences / Le bouton "corriger les X occurences" ne doit pas apparaitre sur chaque X occurence mais sur le truc de base là où on plis déplis
+
 
 
 BACK :

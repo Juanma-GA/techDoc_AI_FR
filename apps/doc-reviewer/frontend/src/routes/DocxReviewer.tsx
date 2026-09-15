@@ -10,7 +10,6 @@ import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
-  useApplyGroup,
   useApplySuggestion,
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
@@ -33,7 +32,6 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
   const suggestions = useSuggestions(documentId);
   const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
-  const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
 
@@ -84,9 +82,6 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
       { id, status: "edited", proposedText: newProposed },
       { onSuccess: () => apply.mutate(id) },
     );
-  };
-  const handleApplyGroup = (id: string): void => {
-    applyGroup.mutate(id);
   };
   const handleUndo = (id: string): void => {
     revert.mutate(id);
@@ -196,7 +191,6 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}
-        onApplyGroup={handleApplyGroup}
         onUndo={handleUndo}
       />
     </div>

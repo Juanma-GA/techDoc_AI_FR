@@ -15,23 +15,14 @@ type Props = {
   onSaveEdit: (id: string, newProposed: string) => void;
   onSaveFeedback: (id: string, feedback: string) => void;
   onUnreject: (id: string) => void;
-  onApplyGroup: (id: string) => void;
   onUndo: (id: string) => void;
 };
 
-/** Identity of a "same error": rule + detected text + proposed fix. */
-function groupKey(s: Suggestion): string {
-  return `${s.rule_code}${s.original_text}${s.proposed_text}`;
-}
-
-/** Broader identity used to bucket occurrences of the same anomaly (rule +
- * detected text) under one collapsible entry in the panel, independent of
- * the exact proposed fix (which can differ slightly per occurrence). */
+/** Visual identity: every occurrence reported by one rule belongs together. */
 function occurrenceKey(s: Suggestion): string {
-  return `${s.rule_code}\u0000${s.original_text}`;
+  return s.rule_code;
 }
 
-const PENDING_STATUSES = new Set(["open", "accepted", "edited"]);
 const SOURCE_KINDS: SourceKind[] = ["norme", "checklist", "regle", "transverse"];
 
 export function SuggestionPanel({
@@ -43,7 +34,6 @@ export function SuggestionPanel({
   onSaveEdit,
   onSaveFeedback,
   onUnreject,
-  onApplyGroup,
   onUndo,
 }: Props) {
   const { t } = useTranslation();
@@ -54,9 +44,11 @@ export function SuggestionPanel({
   const ruleCodeFilter = useFiltersStore((s) => s.ruleCodeFilter);
   const setRuleCodeFilter = useFiltersStore((s) => s.setRuleCodeFilter);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Groupes replies par defaut (cle = occurrenceKey) ; un groupe explicitement
-  // deplie par l'utilisateur reste ouvert tant qu'il ne le referme pas.
+  // Groupes replies par defaut ; un groupe explicitement deplie par
+  // l'utilisateur reste ouvert tant qu'il ne le referme pas.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const lastSelectedId = useRef<string | null>(null);
+  const pendingScrollId = useRef<string | null>(null);
 
   const ruleCodes = useMemo(() => {
     const set = new Set(suggestions.map((s) => s.rule_code));
@@ -73,24 +65,8 @@ export function SuggestionPanel({
     });
   }, [suggestions, showUnits, hideAccepted, sourceKindFilter, ruleCodeFilter]);
 
-  // Map each group key to its still-pending occurrences so an item can
-  // tell when the same anomaly recurs across several pages.
-  const groups = useMemo(() => {
-    const map = new Map<string, Suggestion[]>();
-    for (const s of suggestions) {
-      if (!PENDING_STATUSES.has(s.status)) continue;
-      if (!s.proposed_text || s.proposed_text === s.original_text) continue;
-      const key = groupKey(s);
-      const arr = map.get(key);
-      if (arr) arr.push(s);
-      else map.set(key, [s]);
-    }
-    return map;
-  }, [suggestions]);
-
-  // Bucket the *visible* list by occurrence identity, preserving first-seen
-  // order, so the panel shows one collapsible row per distinct anomaly
-  // instead of every occurrence flattened out.
+  // Bucket the *visible* list by rule, preserving first-seen order, so the
+  // panel shows one collapsible row per rule instead of every occurrence.
   const buckets = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, Suggestion[]>();
@@ -115,20 +91,40 @@ export function SuggestionPanel({
     });
   }
 
-  // Scroll selected item into view when picked from the PDF. A selection
-  // hiding inside a collapsed bucket is expanded first so it can be reached.
+  // A new selection from the PDF may need its rule bucket opened once. The
+  // selected id is tracked separately so collapsing that bucket manually
+  // never reopens it on the next render.
   useEffect(() => {
-    if (!selectedId || !containerRef.current) return;
+    if (!selectedId) {
+      lastSelectedId.current = null;
+      pendingScrollId.current = null;
+      return;
+    }
+    if (lastSelectedId.current === selectedId) return;
+    lastSelectedId.current = selectedId;
     const bucket = buckets.find((b) => b.items.some((x) => x.id === selectedId));
     if (bucket && bucket.items.length > 1 && !expanded.has(bucket.key)) {
+      pendingScrollId.current = selectedId;
       setExpanded((prev) => new Set(prev).add(bucket.key));
       return;
     }
-    const el = containerRef.current.querySelector<HTMLElement>(
-      `[data-suggestion-id="${selectedId}"]`,
-    );
-    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+    pendingScrollId.current = selectedId;
   }, [selectedId, buckets, expanded]);
+
+  // Scroll only for a newly selected occurrence, never as a side effect of a
+  // manual expand/collapse click.
+  useEffect(() => {
+    const id = pendingScrollId.current;
+    if (!id || !containerRef.current) return;
+    const bucket = buckets.find((b) => b.items.some((x) => x.id === id));
+    if (bucket && bucket.items.length > 1 && !expanded.has(bucket.key)) return;
+    const el = containerRef.current.querySelector<HTMLElement>(
+      `[data-suggestion-id="${id}"]`,
+    );
+    if (!el) return;
+    pendingScrollId.current = null;
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [buckets, expanded]);
 
   return (
     <aside className="reviewer-panel">
@@ -177,42 +173,43 @@ export function SuggestionPanel({
             const isExpanded = !isCollapsible || expanded.has(key);
             const head = items[0]!;
             return (
-              <div key={key} className="suggestion-bucket">
+              <div
+                key={key}
+                className={isExpanded && isCollapsible ? "suggestion-bucket expanded" : "suggestion-bucket"}
+              >
                 {isCollapsible ? (
-                  <button
-                    type="button"
-                    className="suggestion-bucket-head"
-                    onClick={() => toggleExpanded(key)}
-                    title={t("reviewer.panel.group.toggle")}
-                  >
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    <span className="suggestion-loc">{head.rule_code}</span>
-                    <span className="suggestion-msg" style={{ flex: 1, textAlign: "left" }}>
-                      {head.message}
-                    </span>
+                  <div className="suggestion-bucket-head">
+                    <button
+                      type="button"
+                      className="suggestion-bucket-toggle"
+                      onClick={() => toggleExpanded(key)}
+                      title={t("reviewer.panel.group.toggle")}
+                      aria-expanded={isExpanded}
+                    >
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span className="suggestion-loc">{head.rule_code}</span>
+                      <span className="suggestion-msg" style={{ flex: 1, textAlign: "left" }}>
+                        {head.message}
+                      </span>
+                    </button>
                     <span className="badge default">
                       {t("reviewer.panel.group.occurrences", { count: items.length })}
                     </span>
-                  </button>
+                  </div>
                 ) : null}
                 {isExpanded
                   ? items.map((s) => {
-                      const siblings = groups.get(groupKey(s)) ?? [];
-                      const groupPages = new Set(siblings.map((x) => x.page)).size;
                       return (
                         <SuggestionItem
                           key={s.id}
                           suggestion={s}
                           isSelected={s.id === selectedId}
-                          groupPages={groupPages}
-                          groupOccurrences={siblings.length}
                           onSelect={() => onSelect(s.id)}
                           onAccept={() => onAccept(s.id)}
                           onReject={() => onReject(s.id)}
                           onSaveEdit={(text) => onSaveEdit(s.id, text)}
                           onSaveFeedback={(fb) => onSaveFeedback(s.id, fb)}
                           onUnreject={() => onUnreject(s.id)}
-                          onApplyGroup={() => onApplyGroup(s.id)}
                           onUndo={() => onUndo(s.id)}
                         />
                       );

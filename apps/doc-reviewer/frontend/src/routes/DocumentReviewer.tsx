@@ -12,7 +12,6 @@ import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { DocxReviewer } from "./DocxReviewer";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
-  useApplyGroup,
   useApplySuggestion,
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
@@ -31,7 +30,6 @@ export function DocumentReviewer() {
   const suggestions = useSuggestions(documentId);
   const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
-  const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
 
@@ -96,12 +94,6 @@ export function DocumentReviewer() {
         onSuccess: () => apply.mutate(id),
       },
     );
-  };
-
-  // Apply the same anomaly across every page where it recurs. The
-  // backend resolves the group and patches each page in one pass.
-  const handleApplyGroup = (id: string): void => {
-    applyGroup.mutate(id);
   };
 
   // Annule une suggestion deja appliquee (revert backend -> version PDF
@@ -204,7 +196,6 @@ export function DocumentReviewer() {
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}
-        onApplyGroup={handleApplyGroup}
         onUndo={handleUndo}
       />
     </div>
