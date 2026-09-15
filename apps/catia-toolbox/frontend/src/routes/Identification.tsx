@@ -127,6 +127,14 @@ function colLabel(preview: NomenclaturePreviewDto, idx: number, headerRow: numbe
   return colLetter(idx) + (name ? ` - ${name}` : "");
 }
 
+function normalizedLabel(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 /** Pastille de couleur affichee uniquement pour les pieces mono-couleur. */
 function ColorDot({ item }: { item: NomenclatureItemDto }) {
   if (!item.mono_color) return null;
@@ -170,7 +178,7 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   const [sheet, setSheet] = useState("");
   const [headerRow, setHeaderRow] = useState(1);
   const [identityField, setIdentityField] =
-    useState<"catpart" | "sin" | "old_pn" | "new_pn">("catpart");
+    useState<"catpart" | "sin" | "old_pn" | "new_pn">("sin");
   // 1re colonne Slot : comparee a toutes les colonnes suivantes.
   const [firstSlotCol, setFirstSlotCol] = useState<number | undefined>(undefined);
   const [result, setResult] = useState<MonoCorpsResultDto | null>(null);
@@ -178,14 +186,38 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const previewMutation = useMutation({
-    mutationFn: (s?: string) =>
-      identificationApi.preview({ scope: "input", path: path.trim(), sheet: s, rows: 20 }),
+    mutationFn: async (s?: string) => {
+      if (s) {
+        return identificationApi.preview({ scope: "input", path: path.trim(), sheet: s, rows: 20 });
+      }
+      const initial = await identificationApi.preview({
+        scope: "input",
+        path: path.trim(),
+        rows: 20,
+      });
+      const materialsSheet = initial.sheets.find(
+        (candidate) => normalizedLabel(candidate) === "materiaux",
+      );
+      return materialsSheet && materialsSheet !== initial.sheet
+        ? identificationApi.preview({
+            scope: "input",
+            path: path.trim(),
+            sheet: materialsSheet,
+            rows: 20,
+          })
+        : initial;
+    },
     onSuccess: (data) => {
       setError(null);
       setNotice(null);
       setPreview(data);
       setSheet(data.sheet);
-      setHeaderRow(data.header_row_detected > 0 ? data.header_row_detected : 1);
+      const detectedHeaderRow = data.header_row_detected > 0 ? data.header_row_detected : 1;
+      setHeaderRow(detectedHeaderRow);
+      setIdentityField("sin");
+      const header = data.rows[detectedHeaderRow - 1] ?? [];
+      const slotOne = header.findIndex((cell) => /^slot\s*1$/.test(normalizedLabel(cell)));
+      setFirstSlotCol(slotOne >= 0 ? slotOne : header.length > 2 ? 2 : undefined);
     },
     onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
   });
