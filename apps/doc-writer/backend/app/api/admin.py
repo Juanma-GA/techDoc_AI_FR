@@ -8,11 +8,18 @@ pas touches.
 F-06 (hardening 2026-09-14) : les resets etaient irreversibles, non confirmes
 cote serveur (le double-clic frontend est bypassable, ex. curl direct — prouve
 par DAST : reset/all a rendu 200 et tout efface sans rien envoyer) et sans
-auth. Une auth reelle reste hors perimetre du standard POC local-first (meme
-raisonnement que F-02) ; a la place : (1) un jeton de confirmation explicite
-est desormais requis dans le corps de la requete, (2) la DB SQLite est
-sauvegardee avant toute suppression, (3) les fichiers de storage sont
-deplaces vers une corbeille horodatee plutot que rmtree definitivement.
+auth. A l'epoque, une auth reelle etait hors perimetre du standard POC
+local-first (meme raisonnement que F-02) ; le filet de securite pose alors
+reste : (1) un jeton de confirmation explicite dans le corps de la requete,
+(2) la DB SQLite sauvegardee avant toute suppression, (3) les fichiers de
+storage deplaces vers une corbeille horodatee plutot que rmtree definitif.
+
+MFA pilot (R1, §3, 2026-09-14) : maintenant qu'une auth reelle existe,
+`reset/*` (destructeur, GLOBAL a tous les utilisateurs -- il n'y a pas de
+notion de "reset MES documents seulement") exige en plus le role `admin`.
+`stats` reste accessible a tout utilisateur authentifie (compteurs agreges,
+pas de contenu). No-op (comportement tier1 inchange) tant que
+`auth_enabled=False`, cf. app.core.auth.require_admin.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.auth import AuthenticatedUser, require_admin
 from app.core.errors import AppError
 from app.db.models import Document, DocumentChunk, Message
 from app.db.models import Session as SessionRow
@@ -112,7 +120,11 @@ def _purge_storage(subdir: str) -> int:
 
 
 @router.post("/reset/documents", response_model=AdminResetOut)
-def reset_documents(payload: AdminResetIn, db: Session = Depends(get_db)) -> AdminResetOut:
+def reset_documents(
+    payload: AdminResetIn,
+    db: Session = Depends(get_db),
+    _admin: AuthenticatedUser | None = Depends(require_admin),
+) -> AdminResetOut:
     """Supprime tous les documents (chunks en cascade) + fichiers disque."""
     _require_confirmation(payload, "documents")
     backup_path = _backup_sqlite_db("documents")
@@ -131,7 +143,11 @@ def reset_documents(payload: AdminResetIn, db: Session = Depends(get_db)) -> Adm
 
 
 @router.post("/reset/sessions", response_model=AdminResetOut)
-def reset_sessions(payload: AdminResetIn, db: Session = Depends(get_db)) -> AdminResetOut:
+def reset_sessions(
+    payload: AdminResetIn,
+    db: Session = Depends(get_db),
+    _admin: AuthenticatedUser | None = Depends(require_admin),
+) -> AdminResetOut:
     """Supprime toutes les sessions + messages."""
     _require_confirmation(payload, "sessions")
     backup_path = _backup_sqlite_db("sessions")
@@ -154,7 +170,11 @@ def reset_sessions(payload: AdminResetIn, db: Session = Depends(get_db)) -> Admi
 
 
 @router.post("/reset/all", response_model=AdminResetOut)
-def reset_all(payload: AdminResetIn, db: Session = Depends(get_db)) -> AdminResetOut:
+def reset_all(
+    payload: AdminResetIn,
+    db: Session = Depends(get_db),
+    _admin: AuthenticatedUser | None = Depends(require_admin),
+) -> AdminResetOut:
     """Supprime tout sauf la config Mistral (table app_config preservee)."""
     _require_confirmation(payload, "all")
     backup_path = _backup_sqlite_db("all")
