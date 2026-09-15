@@ -40,6 +40,63 @@ def test_rename_illustration_to_icn_png(tmp_path) -> None:
     assert (tmp_path / name).read_bytes().startswith(b"\x89PNG")
 
 
+def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import _save_pixmap
+
+    source_path = tmp_path / "source.jpg"
+    source_pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 32, 24))
+    source_pixmap.set_rect(source_pixmap.irect, (25, 120, 220))
+    source_pixmap.save(str(source_path), jpg_quality=70)
+    source_bytes = source_path.read_bytes()
+
+    pdf_path = tmp_path / "embedded-jpeg.pdf"
+    doc = fitz.open()
+    doc.new_page().insert_image(fitz.Rect(72, 72, 200, 168), stream=source_bytes)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    embedded = fitz.open(str(pdf_path))
+    xref = embedded[0].get_image_info(xrefs=True)[0]["xref"]
+    extracted = embedded.extract_image(xref)
+    destination = tmp_path / "output.jpg"
+
+    assert _save_pixmap(embedded, xref, destination) is True
+    assert extracted["ext"] in {"jpg", "jpeg"}
+    assert destination.read_bytes() == extracted["image"]
+    embedded.close()
+
+
+def test_small_page_icon_does_not_replace_real_figure_image(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "figure-with-page-icon.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    icon = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 32, 32))
+    icon.set_rect(icon.irect, (255, 220, 0))
+    image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 120, 90))
+    image.set_rect(image.irect, (0, 120, 220))
+    page.insert_image(fitz.Rect(72, 40, 120, 88), pixmap=icon)
+    page.insert_image(fitz.Rect(72, 120, 312, 300), pixmap=image)
+    page.insert_text((72, 320), "Figure 6.2 Real figure", fontsize=11)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    figure = IRNode(id="figure", kind="figure", text="Figure 6.2 Real figure", page=1)
+    root = IRNode(id="root", kind="section", children=[figure])
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert figure.is_pictogram is False
+    assert figure.icn == "figure-6-2-real-figure.jpg"
+    assert len(list(out_dir.glob("*.jpg"))) == 1
+
+
 def test_multiple_dmrl_icns_are_applied_in_figure_order(tmp_path) -> None:
     from app.core.dmrl import DmrlEntry
     from app.core.illustrations import rename_illustration
@@ -148,6 +205,40 @@ def test_two_figures_on_one_line_keep_image_alignment(tmp_path) -> None:
     ]
 
 
+def test_caption_overlap_does_not_assign_image_to_next_figure(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "caption-overlap.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    first = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
+    first.set_rect(first.irect, (255, 0, 0))
+    second = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
+    second.set_rect(second.irect, (0, 0, 255))
+    page.insert_image(fitz.Rect(72, 90, 168, 186), pixmap=first)
+    page.insert_image(fitz.Rect(220, 90, 316, 186), pixmap=second)
+    page.insert_text((72, 194), "Figure 4.10 First image", fontsize=11)
+    page.insert_text((220, 194), "Figure 4.11 Second image", fontsize=11)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    figures = [
+        IRNode(id="f1", kind="figure", text="Figure 4.10 First image", page=1),
+        IRNode(id="f2", kind="figure", text="Figure 4.11 Second image", page=1),
+    ]
+    root = IRNode(id="root", kind="section", children=figures)
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 2
+    assert [figure.icn for figure in figures] == [
+        "figure-4-10-first-image.jpg",
+        "figure-4-11-second-image.jpg",
+    ]
+
+
 def test_one_figure_can_keep_multiple_embedded_images(tmp_path) -> None:
     import fitz
 
@@ -162,6 +253,8 @@ def test_one_figure_can_keep_multiple_embedded_images(tmp_path) -> None:
         image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
         image.set_rect(image.irect, color)
         page.insert_image(fitz.Rect(x, 90, x + 80, 180), pixmap=image)
+    page.draw_line((225, 95), (305, 175), color=(1, 0, 0), width=3)
+    page.insert_text((302, 130), "Panel label", fontsize=8)
     page.insert_text((72, 205), "Figure 5.3 First panel", fontsize=11)
     page.insert_text((220, 205), "Figure 5.4 Composite panel", fontsize=11)
     doc.save(str(pdf_path))
@@ -174,12 +267,19 @@ def test_one_figure_can_keep_multiple_embedded_images(tmp_path) -> None:
     root = IRNode(id="root", kind="section", children=figures)
     out_dir = tmp_path / "images"
 
-    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 3
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 2
     assert figures[0].icns == ["figure-5-3-first-panel.jpg"]
     assert figures[1].icns == [
         "figure-5-4-composite-panel.jpg",
-        "figure-5-4-composite-panel-2.jpg",
     ]
+    composite = fitz.Pixmap(str(out_dir / figures[1].icn))
+    assert composite.width > 220
+    assert any(
+        red > 180 and green < 120 and blue < 120
+        for x in range(composite.width)
+        for y in range(composite.height)
+        for red, green, blue in [composite.pixel(x, y)]
+    )
 
 
 def test_vector_figure_is_rasterized_when_pdf_has_no_embedded_image(tmp_path) -> None:
