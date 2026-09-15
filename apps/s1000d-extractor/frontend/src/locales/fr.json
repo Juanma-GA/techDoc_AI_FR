@@ -49,6 +49,7 @@
       "dmrl": "DMRL (xlsx / csv / json) — pilote le découpage + la PMC",
       "cir": "CIR (xml) — contenus partagés",
       "rules": "Règles client (json)",
+      "dmHeader": "En-tête DM client (json / xml)",
       "start": "Démarrer l'assistant",
       "noFile": "Choisis un fichier PDF ou Word.",
       "pdfCut": {
@@ -81,7 +82,9 @@
       "fallback": "Traitement…"
     },
     "resource": {
-      "notApplied": "Ressource attachée mais NON APPLIQUÉE — {{detail}}"
+      "notApplied": "Ressource attachée mais NON APPLIQUÉE — {{detail}}",
+      "headerLoaded": "Profil d’en-tête chargé",
+      "headerLoadedHelp": "Il sera appliqué aux XML lors de l’étape Génération."
     },
     "step": {
       "dmrl": "DMRL",

@@ -94,7 +94,7 @@ export const settingsApi = {
 
 // ----- Domain types ---------------------------------------------------------
 
-export type S1000dIssue = "4.2" | "5.0";
+export type S1000dIssue = "4.1" | "4.2" | "5.0";
 export type ContextHint = "mixed" | "descriptive" | "procedural";
 
 export type BrexProfile = {
@@ -200,6 +200,7 @@ export type WizardResources = {
   dmrl_count: number;
   has_cir: boolean;
   has_brex_rules: boolean;
+  has_dm_header: boolean;
   errors?: string[];
 };
 
@@ -274,10 +275,10 @@ export const pdfCutApi = {
     `${API_BASE}/documents/${docId}/pdf-cut/preview/${page}`,
 };
 
-export type ResourceKind = "dmrl" | "cir" | "brex_rules";
+export type ResourceKind = "dmrl" | "cir" | "brex_rules" | "dm_header";
 export type ResourceUploadDto = { kind: ResourceKind; count: number };
 
-// Ressources client optionnelles : DMRL (decoupage + PMC), CIR, regles BREX JSON.
+// Ressources client optionnelles : DMRL, CIR, regles BREX et template d'en-tete.
 export const resourcesApi = {
   upload: async (docId: string, kind: ResourceKind, file: File): Promise<ResourceUploadDto> => {
     const fd = new FormData();

@@ -49,6 +49,7 @@
       "dmrl": "DMRL (xlsx / csv / json) — drives the split + the PMC",
       "cir": "CIR (xml) — shared content",
       "rules": "Client rules (json)",
+      "dmHeader": "Client DM header (json / xml)",
       "start": "Start the assistant",
       "noFile": "Pick a PDF or Word file.",
       "pdfCut": {
@@ -81,7 +82,9 @@
       "fallback": "Processing…"
     },
     "resource": {
-      "notApplied": "Resource attached but NOT APPLIED — {{detail}}"
+      "notApplied": "Resource attached but NOT APPLIED — {{detail}}",
+      "headerLoaded": "Header profile loaded",
+      "headerLoadedHelp": "It will be applied to the XML files during the Generation step."
     },
     "step": {
       "dmrl": "DMRL",

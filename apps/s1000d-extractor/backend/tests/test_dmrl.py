@@ -62,6 +62,31 @@ def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
     assert entries[0].dm_type == "descriptive"
 
 
+def test_load_dmrl_splits_ssc_into_subsystem_components(tmp_path):
+    path = tmp_path / "dmrl.json"
+    path.write_text(
+        json.dumps([{
+            "MIC": "BRAKE",
+            "SDC": "A",
+            "SC": "00",
+            "SSC": "12",
+            "AC": "00",
+            "DC": "00",
+            "DCV": "A",
+            "IC": "040",
+            "ICV": "A",
+            "ILC": "D",
+            "Titre": "Description",
+        }]),
+        encoding="utf-8",
+    )
+
+    entry = load_dmrl(path)[0]
+
+    assert entry.sub_system_code == "1"
+    assert entry.sub_sub_system_code == "2"
+
+
 def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
     path = tmp_path / "dmrl.json"
     icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"

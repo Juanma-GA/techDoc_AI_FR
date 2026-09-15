@@ -411,6 +411,7 @@ export function Migration() {
               <div className="label">{t("migration.upload.issue")}</div>
               <select value={issue} onChange={(e) => setIssue(e.target.value as S1000dIssue)}>
                 <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
+                <option value="4.1">{t("migration.upload.issueValue", { issue: "4.1" })}</option>
                 <option value="4.2">{t("migration.upload.issueValue", { issue: "4.2" })}</option>
               </select>
             </label>
@@ -463,6 +464,17 @@ export function Migration() {
                 accept=".json"
                 onChange={(e) =>
                   setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }))
+                }
+              />
+            </label>
+            <label className="grow">
+              <div className="label">{t("migration.upload.dmHeader")}</div>
+              <input
+                className="input"
+                type="file"
+                accept=".json,.xml"
+                onChange={(e) =>
+                  setResourceFiles((p) => ({ ...p, dm_header: e.target.files?.[0] }))
                 }
               />
             </label>
@@ -622,6 +634,13 @@ export function Migration() {
                 {t("migration.resource.notApplied", { detail: e })}
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {wiz?.resources?.has_dm_header ? (
+          <div className="card">
+            <span className="badge ok">{t("migration.resource.headerLoaded")}</span>{" "}
+            <span className="label">{t("migration.resource.headerLoadedHelp")}</span>
           </div>
         ) : null}
 

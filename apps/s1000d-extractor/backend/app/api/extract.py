@@ -19,6 +19,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.config import settings
 from app.core import ir as ir_mod
 from app.core import pipeline
+from app.core import wizard_resources as wres
 from app.core.errors import AppError
 from app.core.s1000d_schema import SUPPORTED_ISSUES
 from app.core.s1000d_serializer import serialize
@@ -194,7 +195,16 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
     if "<!DOCTYPE dmodule [" not in xml and doc.ir_json:
         root = ir_mod.from_dict(json.loads(doc.ir_json))
-        xml = serialize(root, issue=doc.s1000d_issue, dm_type=doc.dm_type or "descriptive")
+        resources = wres.load_resources(doc)
+        entries = wres.dmrl_entries(doc)
+        metadata = entries[0].to_dict() if entries else None
+        xml = serialize(
+            root,
+            issue=doc.s1000d_issue,
+            dm_type=doc.dm_type or "descriptive",
+            dm_metadata=metadata,
+            header_template=resources.header_template,
+        )
         Path(doc.xml_path).write_text(xml, encoding="utf-8")
     return Response(
         content=xml, media_type="application/xml",
@@ -219,7 +229,16 @@ def override_node(
     node.candidates = [chosen] + [c for c in node.candidates if c.element != body.element]
     node.confidence = 1.0
 
-    xml = serialize(root, issue=doc.s1000d_issue, dm_type=doc.dm_type or "descriptive")
+    resources = wres.load_resources(doc)
+    entries = wres.dmrl_entries(doc)
+    metadata = entries[0].to_dict() if entries else None
+    xml = serialize(
+        root,
+        issue=doc.s1000d_issue,
+        dm_type=doc.dm_type or "descriptive",
+        dm_metadata=metadata,
+        header_template=resources.header_template,
+    )
     brex_xml = _brex_xml(db, doc.brex_id)
     violations = validate_document(xml, issue=doc.s1000d_issue, brex_xml=brex_xml)
     Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
@@ -263,7 +282,10 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         try:
             result = pipeline.run(
                 doc.storage_path, fmt=doc.source_format, issue=doc.s1000d_issue,
-                hint=doc.context_hint, db=db, brex_xml=brex_xml, progress_cb=cb,
+                hint=doc.context_hint, db=db, brex_xml=brex_xml,
+                dm_metadata=(wres.dmrl_entries(doc)[0].to_dict() if wres.dmrl_entries(doc) else None),
+                header_template=wres.load_resources(doc).header_template,
+                progress_cb=cb,
             )
         except Exception:
             doc.status = "extract_failed"

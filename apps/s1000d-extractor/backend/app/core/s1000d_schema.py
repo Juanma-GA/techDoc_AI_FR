@@ -18,7 +18,7 @@ from lxml import etree
 
 from app.core import xml_safe
 
-SUPPORTED_ISSUES = ("4.2", "5.0")
+SUPPORTED_ISSUES = ("4.1", "4.2", "5.0")
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
 
 # Vocabulaire d'elements legaux par contexte (sous-ensemble structurel v1).

@@ -5,7 +5,7 @@ PAS un Data Module valide. Les metadonnees non recuperables d'un PDF/Word
 (DMC, SNS, applicabilite, securite, ICN des graphics) sont des placeholders
 marques `<!-- TODO ... -->` a completer par un humain.
 
-Noms d'elements conformes Issue 4.2 / 5.0 (stables entre les deux) :
+Noms d'elements conformes Issue 4.1 / 4.2 / 5.0 (stables entre les trois) :
 - bloc d'identification : `identAndStatusSection` (`dmAddress` + `dmStatus`,
   le `brexDmRef` vit dans `dmStatus`) ;
 - listes : `randomList`/`sequentialList` > `listItem` > `para` ;
@@ -17,11 +17,15 @@ Noms d'elements conformes Issue 4.2 / 5.0 (stables entre les deux) :
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from datetime import UTC, datetime
 import re
 
 from lxml import etree
 
+from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
 from app.core.ir import IRNode
+from app.core.pmc import parse_dmc
 
 _BANNER = (
     " Squelette structurel best-effort genere par s1000d extractor. "
@@ -45,6 +49,43 @@ _FIGURE_TITLE_PREFIX = re.compile(
 _NUMBERED_TITLE_PREFIX = re.compile(
     r"^\s*\d+(?:\.\d+)*(?:\s*[.)\-\u2013\u2014:]\s*|\s+)",
 )
+_XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+_XLINK_NS = "http://www.w3.org/1999/xlink"
+_RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+_DC_NS = "http://www.purl.org/dc/elements/1.1/"
+_SCHEMA_NAMES = {
+    "descriptive": "descript.xsd",
+    "description": "descript.xsd",
+    "procedural": "proced.xsd",
+    "procedure": "proced.xsd",
+    "ipd": "ipd.xsd",
+}
+_DM_CODE_DEFAULTS = {
+    "assyCode": "00",
+    "disassyCode": "00",
+    "disassyCodeVariant": "A",
+    "infoCode": "040",
+    "infoCodeVariant": "A",
+    "itemLocationCode": "D",
+    "modelIdentCode": "TODO",
+    "subSubSystemCode": "0",
+    "subSystemCode": "0",
+    "systemCode": "00",
+    "systemDiffCode": "A",
+}
+_DM_FIELD_NAMES = {
+    "modelIdentCode": "model_ident_code",
+    "systemDiffCode": "system_diff_code",
+    "systemCode": "system_code",
+    "subSystemCode": "sub_system_code",
+    "subSubSystemCode": "sub_sub_system_code",
+    "assyCode": "assy_code",
+    "disassyCode": "disassy_code",
+    "disassyCodeVariant": "disassy_code_variant",
+    "infoCode": "info_code",
+    "infoCodeVariant": "info_code_variant",
+    "itemLocationCode": "item_location_code",
+}
 
 
 def xml_text(value: str | None) -> str:
@@ -104,6 +145,118 @@ def _doctype(root: IRNode) -> str:
         "%ISOEntities;",
     ))
     return "<!DOCTYPE dmodule [\n" + "\n".join(declarations) + "\n]>"
+
+
+def _schema_location(issue: str, dm_type: str) -> str:
+    issue_path = xml_text(issue).replace(".", "-")
+    schema_name = _SCHEMA_NAMES.get((dm_type or "descriptive").lower(), "descript.xsd")
+    return f"http://www.s1000d.org/S1000D_{issue_path}/xml_schema_flat/{schema_name}"
+
+
+def _dm_code(metadata: Mapping[str, object] | None, dm_type: str) -> dict[str, str]:
+    data = metadata or {}
+    values = dict(_DM_CODE_DEFAULTS)
+    parsed = parse_dmc(str(data.get("dmc") or ""))
+    if parsed:
+        values.update(parsed)
+    for xml_name, field_name in _DM_FIELD_NAMES.items():
+        value = data.get(field_name)
+        if value:
+            values[xml_name] = str(value).strip()
+    if not parsed and not data.get("info_code"):
+        values["infoCode"] = {"procedural": "520", "ipd": "941"}.get(dm_type, "040")
+    return {key: xml_text(value) for key, value in values.items()}
+
+
+def _text(value: object, fallback: str = "") -> str:
+    return xml_text(str(value)) if value is not None else fallback
+
+
+def _company(parent: etree._Element, name: str, data: Mapping[str, object]) -> None:
+    company = etree.SubElement(parent, name, enterpriseCode=_text(data.get("enterpriseCode"), "EX"))
+    etree.SubElement(company, "enterpriseName").text = _text(
+        data.get("enterpriseName"), "EXAMPLE ORGANIZATION"
+    )
+
+
+def _emit_data_restrictions(parent: etree._Element, template: Mapping[str, object]) -> None:
+    restrictions = etree.SubElement(parent, "dataRestrictions")
+    instructions = template.get("restrictionInstructions") or {}
+    instruction_el = etree.SubElement(restrictions, "restrictionInstructions")
+    etree.SubElement(instruction_el, "dataDistribution").text = _text(
+        instructions.get("dataDistribution")
+    )
+    export = instructions.get("exportControl") or {}
+    statement = (export.get("exportRegistrationStmt") or {}) if isinstance(export, dict) else {}
+    statement_el = etree.SubElement(etree.SubElement(instruction_el, "exportControl"), "exportRegistrationStmt")
+    etree.SubElement(statement_el, "simplePara").text = _text(statement.get("simplePara"))
+    for field in ("dataHandling", "dataDestruction", "dataDisclosure"):
+        etree.SubElement(instruction_el, field).text = _text(instructions.get(field))
+
+    info = template.get("restrictionInfo") or {}
+    info_el = etree.SubElement(restrictions, "restrictionInfo")
+    copyright_data = info.get("copyright") or {}
+    copyright_el = etree.SubElement(info_el, "copyright")
+    paragraphs = copyright_data.get("copyrightPara") or []
+    if isinstance(paragraphs, str):
+        paragraphs = [paragraphs]
+    for paragraph in paragraphs:
+        etree.SubElement(copyright_el, "copyrightPara").text = _text(paragraph)
+    etree.SubElement(info_el, "dataConds").text = _text(info.get("dataConds"))
+
+
+def _emit_dm_status(parent: etree._Element, template: Mapping[str, object]) -> None:
+    status = etree.SubElement(parent, "dmStatus", issueType="new")
+    security = template.get("security") or {}
+    etree.SubElement(status, "security", securityClassification=_text(
+        security.get("securityClassification"), "02"
+    ))
+    _emit_data_restrictions(status, template.get("dataRestrictions") or {})
+    _company(status, "responsiblePartnerCompany", template.get("responsiblePartnerCompany") or {})
+    _company(status, "originator", template.get("originator") or {})
+    applic = etree.SubElement(status, "applic")
+    display = etree.SubElement(applic, "displayText")
+    etree.SubElement(display, "simplePara").text = _text(template.get("applicability"), "All")
+
+    brex = etree.SubElement(status, "brexDmRef")
+    dm_ref = etree.SubElement(brex, "dmRef")
+    dm_ref_ident = etree.SubElement(dm_ref, "dmRefIdent")
+    brex_data = template.get("brexDmRef") or {}
+    brex_code = brex_data.get("dmCode") if isinstance(brex_data, dict) else {}
+    etree.SubElement(dm_ref_ident, "dmCode", **{
+        str(key): _text(value) for key, value in (brex_code or {}).items()
+        if _NCNAME.fullmatch(str(key))
+    })
+    assurance_name = _safe_element(_text(template.get("qualityAssurance"), "unverified"), "unverified")
+    etree.SubElement(etree.SubElement(status, "qualityAssurance"), assurance_name)
+
+
+def _emit_header(
+    dmodule: etree._Element,
+    *,
+    issue: str,
+    dm_type: str,
+    title: str,
+    dm_metadata: Mapping[str, object] | None,
+    header_template: Mapping[str, object] | None,
+    created_at: datetime | None,
+) -> None:
+    metadata = dm_metadata or {}
+    template = header_template or DEFAULT_HEADER_TEMPLATE
+    ident = etree.SubElement(dmodule, "identAndStatusSection")
+    address = etree.SubElement(ident, "dmAddress")
+    dm_ident = etree.SubElement(address, "dmIdent")
+    etree.SubElement(dm_ident, "dmCode", **_dm_code(metadata, dm_type))
+    language = template.get("language") or {}
+    etree.SubElement(dm_ident, "language", countryIsoCode=_text(language.get("countryIsoCode"), "FR"), languageIsoCode=_text(language.get("languageIsoCode"), "fr"))
+    etree.SubElement(dm_ident, "issueInfo", inWork="00", issueNumber="001")
+    items = etree.SubElement(address, "dmAddressItems")
+    now = created_at or datetime.now(UTC)
+    etree.SubElement(items, "issueDate", day=f"{now.day:02d}", month=f"{now.month:02d}", year=str(now.year))
+    dm_title = etree.SubElement(items, "dmTitle")
+    etree.SubElement(dm_title, "techName").text = _text(metadata.get("tech_name"), _text(title, "Data Module"))
+    etree.SubElement(dm_title, "infoName").text = _text(metadata.get("info_name"), _text(title, "Data Module"))
+    _emit_dm_status(ident, template)
 
 
 def _alt_comment(node: IRNode) -> str | None:
@@ -288,21 +441,29 @@ def serialize(
     title: str = "",
     figure_offset: int = 0,
     table_offset: int = 0,
+    dm_metadata: Mapping[str, object] | None = None,
+    header_template: Mapping[str, object] | None = None,
+    created_at: datetime | None = None,
 ) -> str:
     """Construit le squelette XML S1000D complet (string UTF-8 indentee)."""
     counters = {"figure": figure_offset, "table": table_offset}
-    dmodule = etree.Element("dmodule")
+    dmodule = etree.Element("dmodule", nsmap={
+        "xsi": _XSI_NS,
+        "xlink": _XLINK_NS,
+        "rdf": _RDF_NS,
+        "dc": _DC_NS,
+    })
     dmodule.addprevious(etree.Comment(_BANNER))
-    dmodule.set("s1000dExtractorIssue", issue)
-
-    ident = etree.SubElement(dmodule, "identAndStatusSection")
-    if title:
-        ident.append(etree.Comment(f" dmTitle (detecte) : {clean_title(title).replace('--', '- -')} "))
-    ident.append(etree.Comment(" TODO: dmAddress (DMC, langue, issueInfo, dmTitle) a completer "))
-    etree.SubElement(ident, "dmAddress")
-    status = etree.SubElement(ident, "dmStatus")
-    status.append(etree.Comment(" TODO: brexDmRef vers le BREX projet + security + applic "))
-    etree.SubElement(status, "brexDmRef")
+    dmodule.set(f"{{{_XSI_NS}}}noNamespaceSchemaLocation", _schema_location(issue, dm_type))
+    _emit_header(
+        dmodule,
+        issue=issue,
+        dm_type=dm_type,
+        title=title,
+        dm_metadata=dm_metadata,
+        header_template=header_template,
+        created_at=created_at,
+    )
 
     dmodule.append(_build_content(root, dm_type, counters))
 

@@ -1,0 +1,56 @@
+{
+  "language": {
+    "countryIsoCode": "FR",
+    "languageIsoCode": "fr"
+  },
+  "security": {
+    "securityClassification": "02"
+  },
+  "dataRestrictions": {
+    "restrictionInstructions": {
+      "dataDistribution": "To be made available to all users.",
+      "exportControl": {
+        "exportRegistrationStmt": {
+          "simplePara": "Export and storage of this module is at the discretion of Example Aero Systems."
+        }
+      },
+      "dataHandling": "There are no specific handling instructions for this module.",
+      "dataDestruction": "Users may destroy this module in accordance with their local procedures.",
+      "dataDisclosure": "There are no dissemination limitations that apply to this module."
+    },
+    "restrictionInfo": {
+      "copyright": {
+        "copyrightPara": [
+          "Copyright Example Aero Systems 2026",
+          "The information in this module is the property of Example Aero Systems. The information may not be copied, communicated to a third party, or used for any purpose other than its intended purpose without prior written consent of Example Aero Systems."
+        ]
+      },
+      "dataConds": "There are no known conditions that would change the data restrictions for, or security classification of, this module."
+    }
+  },
+  "responsiblePartnerCompany": {
+    "enterpriseCode": "EAS",
+    "enterpriseName": "EXAMPLE AERO SYSTEMS"
+  },
+  "originator": {
+    "enterpriseCode": "EAS",
+    "enterpriseName": "EXAMPLE AERO SYSTEMS"
+  },
+  "applicability": "All",
+  "brexDmRef": {
+    "dmCode": {
+      "assyCode": "0301",
+      "disassyCode": "00",
+      "disassyCodeVariant": "A",
+      "infoCode": "022",
+      "infoCodeVariant": "A",
+      "itemLocationCode": "D",
+      "modelIdentCode": "S1000D",
+      "subSubSystemCode": "0",
+      "subSystemCode": "1",
+      "systemCode": "04",
+      "systemDiffCode": "E"
+    }
+  },
+  "qualityAssurance": "unverified"
+}

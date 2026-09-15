@@ -96,11 +96,13 @@ def _apply_dmrl_icns(
             continue
         figures = [node for node in unit.root.walk() if node.kind == "figure"]
         for figure, icn_name in zip(figures, icn_names, strict=False):
-            if not figure.icn:
+            current_name = figure.icn or (figure.icns[0] if figure.icns else None)
+            if not current_name:
                 continue
-            renamed = illustrations.rename_illustration(out_dir, figure.icn, icn_name)
+            renamed = illustrations.rename_illustration(out_dir, current_name, icn_name)
             if renamed:
                 figure.icn = renamed
+                figure.icns = [renamed]
 
 
 # --- transitions -------------------------------------------------------------
@@ -329,6 +331,7 @@ def _generate_all(db: Session, doc: Document) -> None:
     dms = ws.load_dms(doc)
     brex_xml = _brex_xml(db, doc.brex_id)
     res = wres.load_resources(doc)
+    dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     log.info(
         "wizard_generation_started",
         document_id=doc.id,
@@ -347,6 +350,8 @@ def _generate_all(db: Session, doc: Document) -> None:
                 title=dm["title"],
                 figure_offset=figure_offset,
                 table_offset=table_offset,
+                dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+                header_template=res.header_template,
             )
             figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
             table_offset += sum(1 for node in root.walk() if node.kind == "table")
@@ -421,11 +426,12 @@ def state(doc: Document) -> dict:
 def _resources_state(doc: Document) -> dict:
     """Etat REEL des ressources : une ressource attachee mais illisible ne doit
     pas s'afficher comme active."""
-    res = wres.load_resources(doc) if (doc.cir_path or doc.brex_rules_path) else None
+    res = wres.load_resources(doc) if (doc.cir_path or doc.brex_rules_path or doc.dm_header_json) else None
     return {
         "dmrl_count": len(wres.dmrl_entries(doc)),
         "has_cir": bool(res and res.cir),
         "has_brex_rules": bool(res and res.brex_rules),
+        "has_dm_header": bool(res and res.header_template),
         "errors": list(res.errors) if res else [],
     }
 
@@ -434,6 +440,8 @@ def dm_xml(doc: Document, dm_id: str) -> str:
     dms = ws.load_dms(doc)
     figure_offset = 0
     table_offset = 0
+    res = wres.load_resources(doc)
+    dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     for dm in dms:
         if dm["dm_id"] == dm_id:
             if not dm.get("tree"):
@@ -447,6 +455,8 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 title=dm["title"],
                 figure_offset=figure_offset,
                 table_offset=table_offset,
+                dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+                header_template=res.header_template,
             )
             dm["xml"] = xml
             ws.save_dms(doc, dms)

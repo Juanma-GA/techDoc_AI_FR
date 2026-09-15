@@ -199,8 +199,39 @@ def test_cir_and_brex_rules_upload(client, pdf_bytes) -> None:
     assert _upload_resource(client, doc_id, "brex_rules", "rules.json", rules).status_code == 200
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
     assert state["resources"] == {
-        "dmrl_count": 0, "has_cir": True, "has_brex_rules": True, "errors": []
+        "dmrl_count": 0, "has_cir": True, "has_brex_rules": True,
+        "has_dm_header": False, "errors": []
     }
+
+
+def test_client_dm_header_template_is_applied(client, pdf_bytes) -> None:
+    doc_id = _upload_doc(client, pdf_bytes)
+    template = {
+        "security": {"securityClassification": "04"},
+        "responsiblePartnerCompany": {
+            "enterpriseCode": "TST",
+            "enterpriseName": "TEST COMPANY",
+        },
+        "originator": {
+            "enterpriseCode": "TST",
+            "enterpriseName": "TEST COMPANY",
+        },
+    }
+    response = _upload_resource(
+        client, doc_id, "dm_header", "header.json", json.dumps(template).encode()
+    )
+    assert response.status_code == 200, response.text
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/start", json={"start_page": 1}
+    ).json()
+    assert state["resources"]["has_dm_header"] is True
+    for payload in ({}, {"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    xml = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
+    ).text
+    assert 'securityClassification="04"' in xml
+    assert "TEST COMPANY" in xml
 
 
 def test_unreadable_resource_is_reported_not_swallowed(client, pdf_bytes, tmp_path) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.core import xml_safe
+from app.core.dmrl import DmrlEntry
 from app.core.ir import IRNode
 from app.core.resolver import resolve
 from app.core.s1000d_serializer import clean_title, serialize
@@ -55,6 +56,29 @@ def test_banner_and_todo_placeholders() -> None:
 
 def test_output_is_wellformed() -> None:
     _parse(_doc())  # ne leve pas
+
+
+def test_header_is_completed_from_dmrl_metadata() -> None:
+    entry = DmrlEntry(
+        dmc="DMC-WEG-A-00-00-00-00A-001A-A",
+        title="Moteur electrique",
+        tech_name="Moteur electrique",
+        info_name="Description",
+        dm_type="procedural",
+    )
+    xml = serialize(
+        IRNode(id="r", kind="section"),
+        issue="4.1",
+        dm_type=entry.dm_type,
+        title=entry.title,
+        dm_metadata=entry.to_dict(),
+    )
+    assert "S1000D_4-1/xml_schema_flat/proced.xsd" in xml
+    assert 'modelIdentCode="WEG"' in xml
+    assert "<techName>Moteur electrique</techName>" in xml
+    assert "<infoName>Description</infoName>" in xml
+    assert "<dmStatus issueType=\"new\">" in xml
+    assert xml.index("</identAndStatusSection>") < xml.index("<content>")
 
 
 def test_table_header_becomes_thead_and_colspec() -> None:

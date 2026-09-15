@@ -11,6 +11,7 @@ Toutes sont facultatives : sans elles, l'assistant fonctionne comme avant.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core import dmrl as dmrl_mod
+from app.core import dm_header as dm_header_mod
 from app.core import wizard_resources as wres
 from app.core.brex_rules import load_brex_rules
 from app.core.cir import load_cir
@@ -32,6 +34,7 @@ _KINDS = {
     "dmrl": {".xlsx", ".xlsm", ".csv", ".json"},
     "cir": {".xml"},
     "brex_rules": {".json"},
+    "dm_header": {".json", ".xml"},
 }
 
 
@@ -77,10 +80,14 @@ async def upload_resource(
         entries_cir = load_cir(path)
         doc.cir_path = str(path)
         result = {"kind": kind, "count": len(entries_cir)}
-    else:
+    elif kind == "brex_rules":
         rules = load_brex_rules(path)
         doc.brex_rules_path = str(path)
         result = {"kind": kind, "count": len(rules)}
+    else:
+        template = dm_header_mod.load_header_template(path)
+        doc.dm_header_json = json.dumps(template, ensure_ascii=False)
+        result = {"kind": kind, "count": 1}
     db.commit()
     return result
 

@@ -77,6 +77,38 @@ def test_multiple_dmrl_icns_are_applied_in_figure_order(tmp_path) -> None:
     ) == "ICN-WEG-AA0004-00001-A-02.jpg"
 
 
+def test_dmrl_icn_replaces_generated_figure_name(tmp_path) -> None:
+    from app.core.dmrl import DmrlEntry
+    from app.core.ir import IRNode
+    from app.core.splitter import DmUnit
+    from app.core.wizard import _apply_dmrl_icns
+
+    figure = IRNode(
+        id="f1",
+        kind="figure",
+        icn="figure-4-1-serrage-correct.jpg",
+        icns=["figure-4-1-serrage-correct.jpg"],
+    )
+    (tmp_path / figure.icn).write_bytes(b"image")
+    unit = DmUnit(
+        dm_id="dm1",
+        title="Description",
+        root=IRNode(id="root", kind="section", children=[figure]),
+        dmrl_index=0,
+    )
+
+    _apply_dmrl_icns(
+        [unit],
+        [DmrlEntry(icn="ICN-WEG-AA0007-00001-A-02.jpg")],
+        tmp_path,
+    )
+
+    assert figure.icn == "ICN-WEG-AA0007-00001-A-02.jpg"
+    assert figure.icns == ["ICN-WEG-AA0007-00001-A-02.jpg"]
+    assert (tmp_path / figure.icn).exists()
+    assert not (tmp_path / "figure-4-1-serrage-correct.jpg").exists()
+
+
 def test_two_figures_on_one_line_keep_image_alignment(tmp_path) -> None:
     import fitz
 

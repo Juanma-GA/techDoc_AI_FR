@@ -17,6 +17,7 @@ from pathlib import Path
 
 from app.core import brex_rules as brex_rules_mod
 from app.core import cir as cir_mod
+from app.core import dm_header as dm_header_mod
 from app.core import dm_templates
 from app.core.dmrl import DmrlEntry, entry_from_dict
 from app.db.models import Document
@@ -29,6 +30,7 @@ class Resources:
     templates: dict[str, dict]
     cir: dict[str, dict]
     brex_rules: dict
+    header_template: dict
     # Ressource attachee mais illisible : l'utilisateur doit le savoir, sinon il
     # livre des DM en croyant que ses regles/son CIR ont ete appliques.
     errors: list[str]
@@ -54,7 +56,21 @@ def load_resources(doc: Document) -> Resources:
         _safe(lambda: brex_rules_mod.load_brex_rules(doc.brex_rules_path), {}, "regles client", errors)
         if doc.brex_rules_path else {}
     )
-    return Resources(templates=templates, cir=cir, brex_rules=rules, errors=errors)
+    header_template = {}
+    if doc.dm_header_json:
+        header_template = _safe(
+            lambda: dm_header_mod.merge_header_template(json.loads(doc.dm_header_json)),
+            {},
+            "template d'en-tete",
+            errors,
+        )
+    return Resources(
+        templates=templates,
+        cir=cir,
+        brex_rules=rules,
+        header_template=header_template,
+        errors=errors,
+    )
 
 
 def _safe(fn, default, label: str, errors: list[str]):
