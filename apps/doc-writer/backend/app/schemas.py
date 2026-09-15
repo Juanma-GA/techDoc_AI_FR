@@ -394,6 +394,52 @@ class AdminResetOut(BaseModel):
     backup_path: str | None = None
 
 
+# ----- Auth (MFA pilot, R1) ---------------------------------------------------
+
+
+class AuthStartIn(BaseModel):
+    email: str
+
+
+class AuthStartOut(BaseModel):
+    auth_id: str
+    login_page_url: str | None = None
+
+
+class AuthSessionOut(BaseModel):
+    enabled: bool
+    authenticated: bool
+    email: str | None = None
+    display_name: str | None = None
+    role: str | None = None
+    disabled_reason: str | None = None
+
+
+class AuthMeOut(BaseModel):
+    email: str
+    display_name: str
+    role: str
+
+
+class AuthUserIn(BaseModel):
+    """Body admin pour créer/mettre à jour un utilisateur AUTHDB."""
+
+    email: str
+    role: str
+
+
+class AuthUserOut(BaseModel):
+    id: int
+    email: str
+    display_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: datetime | None = None
+    added_by: str
+
+
 class TranscriptionOut(BaseModel):
     """Resultat d'une dictee vocale (Voxtral). `llm_used=False` = LLM desactive
     (fallback gracieux, texte vide)."""

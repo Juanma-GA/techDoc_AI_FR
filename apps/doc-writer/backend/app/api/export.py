@@ -23,10 +23,12 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import AuthenticatedUser, require_authenticated
 from app.core.errors import AppError
 from app.core.experience import format_years, years_from_periods
 from app.core.fonts import ensure_inter
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
+from app.core.ownership import get_owned_session
 from app.core.pptx_llm_analysis import split_zones
 from app.core.pptx_template import Zone
 from app.core.template_format import TemplateEngine, is_supported_template
@@ -53,6 +55,19 @@ MEDIA_TYPES = {
     "pdf":  "application/pdf",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
+
+
+def _require_owned_session(db: Session, session_id: uuid.UUID, user: AuthenticatedUser | None) -> None:
+    """§3 (MFA pilot) : les 4 routes d'export en aval (`_last_assistant_content`,
+    `_resolve_template_target`, `_session_template_out_ext`) recuperent la
+    session par id sans verification de proprietaire -- ce garde-fou, appele
+    en tout premier dans chaque route, evite qu'un utilisateur exporte/consulte
+    le contenu genere d'une session appartenant a quelqu'un d'autre."""
+    if get_owned_session(db, session_id, user) is None:
+        raise AppError(
+            "SESSION_NOT_FOUND", "Session introuvable.", status_code=404,
+            detail={"id": str(session_id)},
+        )
 
 
 def _safe_filename(title: str, ext: str) -> str:
@@ -898,10 +913,12 @@ def _session_template_out_ext(db: Session, session_id: uuid.UUID) -> Optional[st
 def preview_pptx(
     session_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> PptxPreviewOut:
     """Construit (zones + mapping Mistral) sans ecrire le fichier. Le client UI
     affiche dans une modal, permet l'edition zone par zone, puis envoie le
     mapping edite a POST /render-pptx."""
+    _require_owned_session(db, session_id, user)
     _title, content = _last_assistant_content(db, session_id)
     if not content:
         raise AppError(
@@ -941,12 +958,14 @@ def refill_zones(
     session_id: uuid.UUID,
     payload: RefillZonesIn,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> RefillZonesOut:
     """Re-genere via Mistral le contenu d'un sous-ensemble de zones.
     `force=true` ajoute une instruction qui relache la regle de pertinence
     pour combler des zones que Mistral a juge non pertinentes au premier
     passage. Renvoie uniquement le mapping pour les zones demandees ; le
     client fait le merge avec l'etat actuel de la modal."""
+    _require_owned_session(db, session_id, user)
     _title, content = _last_assistant_content(db, session_id)
     if not content:
         raise AppError(
@@ -981,10 +1000,12 @@ def render_pptx(
     session_id: uuid.UUID,
     payload: PptxRenderIn,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> StreamingResponse:
     """Genere le fichier final (pptx ou docx selon le template) avec un mapping
     potentiellement edite par l'UI. Filename : payload.filename ou titre de
     session ; l'extension suit le format du template."""
+    _require_owned_session(db, session_id, user)
     title, _content = _last_assistant_content(db, session_id)
     session, _template, zones, engine, working_path = _resolve_template_target(
         db, session_id,
@@ -1024,6 +1045,7 @@ def export_session(
     format: str = Query(default="md"),
     filename: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> Response:
     """Export du dernier message assistant.
 
@@ -1039,6 +1061,7 @@ def export_session(
             detail={"format": format},
         )
 
+    _require_owned_session(db, session_id, user)
     title, content = _last_assistant_content(db, session_id)
     if not content.strip():
         raise AppError(

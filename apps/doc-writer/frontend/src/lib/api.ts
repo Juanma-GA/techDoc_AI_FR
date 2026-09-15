@@ -3,7 +3,7 @@
  * du backend `{code, message, detail, request_id}`.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
+export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
 export type ApiError = {
   code: string;
@@ -702,3 +702,26 @@ function processChunk(chunk: string, handlers: StreamHandlers) {
     handlers.onError?.(msg);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Auth (SSO portal, option A) — doc-writer ne fait QUE lire/fermer la session
+// partagee. Le LOGIN (start/poll/ws MFA) vit dans le portal atexispocs, pas
+// ici (cf. deploy/portal/portal-auth.js).
+// ---------------------------------------------------------------------------
+
+export type AuthSessionDto = {
+  enabled: boolean;
+  authenticated: boolean;
+  email: string | null;
+  display_name: string | null;
+  role: string | null;
+  disabled_reason: string | null;
+};
+
+export type AuthMeDto = { email: string; display_name: string; role: string };
+
+export const authApi = {
+  session: () => request<AuthSessionDto>("/auth/session"),
+  logout: () => request<{ status: string }>("/auth/logout", { method: "POST" }),
+  me: () => request<AuthMeDto>("/auth/me"),
+};

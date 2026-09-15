@@ -34,6 +34,12 @@ dependencies = [
     "python-pptx>=1.0",
     "reportlab>=4.0",
     "markdown>=3.5",
+    # MFA pilot (R1) : client MCP vers le service d'identite MS365 corporatif
+    # + AUTHDB Postgres dediee. Versions exactes alignees sur KleamPy (meme
+    # service d'identite, meme lock).
+    "mcp>=1.30",
+    "websockets>=15.0",
+    "psycopg[binary]>=3.3",
 ]
 
 [project.optional-dependencies]

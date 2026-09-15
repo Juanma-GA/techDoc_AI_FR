@@ -153,9 +153,187 @@
         color: var(--dim);
         font-size: 13px;
       }
+
+      /* ---- SSO login gate (portal-auth.js) ---- */
+      .hidden { display: none !important; }
+      .login-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        /* var(--bg) n'existe pas dans portal.css (seul --bg-base existe) ->
+           CSS invalide -> fond transparent -> la grille d'apps restait
+           visible derriere l'overlay. On reprend le MEME fond que <body>
+           (gradient + --portal-bg) pour un recouvrement plein-page, comme
+           l'ecran de login IPMS/KleamPy/elecgraph. */
+        background:
+          linear-gradient(145deg, color-mix(in srgb, var(--portal-brand) 8%, transparent), transparent 38%),
+          var(--bg-base);
+      }
+      .login-box {
+        width: 100%;
+        max-width: 420px;
+        box-sizing: border-box;
+        padding: 32px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        text-align: center;
+      }
+      .login-brand {
+        font-family: "Orbitron", sans-serif;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--brand-light, var(--brand));
+      }
+      .login-box h1 { font-size: 22px; margin: 10px 0 6px; color: var(--text); }
+      .login-sub { color: var(--dim); font-size: 14px; margin: 0 0 18px; }
+      /* Encart d'info corporate (meme intention que IPMS/KleamPy/elecgraph :
+         rappeler que le compte doit etre @atexis.com et comment la MFA se
+         deroule, avant que l'utilisateur ne saisisse quoi que ce soit). */
+      .login-info {
+        margin: 0 0 18px;
+        padding: 12px 14px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--brand) 8%, var(--card-hover, var(--card)));
+        border: 1px solid color-mix(in srgb, var(--brand) 25%, var(--border));
+        color: var(--dim);
+        font-size: 13px;
+        line-height: 1.5;
+        text-align: left;
+      }
+      .login-form { display: flex; flex-direction: column; text-align: left; gap: 6px; }
+      .login-form label { font-size: 13px; font-weight: 600; color: var(--text); margin-top: 8px; }
+      .login-form input, .login-mfa-code-group input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1px solid var(--border-md, var(--border));
+        border-radius: 8px;
+        background: var(--card-hover, var(--card));
+        color: var(--text);
+        font: inherit;
+      }
+      .login-form input:focus, .login-mfa-code-group input:focus {
+        outline: none;
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 25%, transparent);
+      }
+      .login-submit {
+        margin-top: 14px;
+        padding: 11px 16px;
+        border: none;
+        border-radius: 8px;
+        background: var(--brand);
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .login-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+      .login-error {
+        margin-top: 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        color: #fca5a5;
+        background: rgba(239, 68, 68, 0.12);
+        border: 1px solid rgba(239, 68, 68, 0.35);
+      }
+      .login-mfa { text-align: center; }
+      .login-mfa-status { color: var(--dim); font-size: 14px; margin-bottom: 12px; min-height: 1.2em; }
+      .login-mfa-number {
+        width: 92px; height: 92px; margin: 8px auto 14px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 16px; background: var(--brand); color: #fff;
+        font-size: 34px; font-weight: 800;
+      }
+      .login-mfa-code-group { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+      .login-mfa-code-group input { max-width: 220px; text-align: center; font-size: 20px; letter-spacing: 0.3em; }
+      .login-mfa-choose { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+      .login-choose-option {
+        padding: 10px 12px; text-align: left;
+        border: 1px solid var(--border-md, var(--border)); border-radius: 8px;
+        background: var(--card-hover, var(--card)); color: var(--text); cursor: pointer;
+      }
+      .login-choose-option:hover { border-color: var(--brand); }
+      .login-link {
+        margin-top: 10px; background: none; border: none;
+        color: var(--dim); text-decoration: underline; cursor: pointer; font: inherit;
+      }
+      /* Badge utilisateur : flottant en coin haut-droit (position fixed),
+         au-dessus de la ligne du header (top assez petit pour rester dans
+         le padding-top du body, avant que .portal-topbar ne commence) ->
+         ne chevauche plus le nav/FR-EN. Boite fermee (fond + bordure
+         arrondie) avec texte centre, pour rester lisible quel que soit ce
+         qu'il y a derriere. */
+      .portal-user-badge {
+        position: fixed;
+        top: 8px;
+        right: 20px;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        font-size: 12px;
+        color: var(--dim);
+        text-align: center;
+        white-space: nowrap;
+      }
+      /* #portal-logout reutilise .login-link (bouton du formulaire de login),
+         dont le `margin-top: 10px` decalait "Log out" plus bas que le nom a
+         cote -> desalignement vertical dans la pilule. Reset ici. */
+      .portal-user-badge .login-link {
+        margin-top: 0;
+      }
     </style>
   </head>
   <body>
+    <!-- SSO login gate (option A). Visible par defaut : le lanceur n'est jamais
+         montre avant que la session soit verifiee. portal-auth.js le masque
+         quand authentifie. -->
+    <div id="login-overlay" class="login-overlay hidden">
+      <div class="login-box">
+        <span class="login-brand">AI4TECHDOC</span>
+        <h1 id="login-title"></h1>
+        <p id="login-sub" class="login-sub"></p>
+        <p id="login-info" class="login-info hidden"></p>
+
+        <form id="login-form" class="login-form hidden">
+          <label id="login-email-label" for="login-email"></label>
+          <input id="login-email" type="email" placeholder="name@atexis.com" autocomplete="username" required />
+          <label id="login-password-label" for="login-password"></label>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+          <button type="submit" id="login-submit" class="login-submit"></button>
+          <p id="login-email-error" class="login-error hidden"></p>
+        </form>
+
+        <div id="login-mfa" class="login-mfa hidden">
+          <p id="login-mfa-status" class="login-mfa-status"></p>
+          <div id="login-mfa-number" class="login-mfa-number hidden"></div>
+          <div id="login-mfa-code-group" class="login-mfa-code-group hidden">
+            <input id="login-mfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" />
+            <button type="button" id="login-mfa-submit" class="login-submit"></button>
+          </div>
+          <div id="login-mfa-choose" class="login-mfa-choose hidden"></div>
+          <button type="button" id="login-cancel" class="login-link hidden"></button>
+          <p id="login-mfa-error" class="login-error hidden"></p>
+        </div>
+      </div>
+    </div>
+
+    <div id="portal-user-badge" class="portal-user-badge hidden">
+      <span id="portal-user-name"></span>
+      <button type="button" id="portal-logout" class="login-link"></button>
+    </div>
+
     <div class="portal-page">
       <div id="portal-header"></div>
 
@@ -164,6 +342,7 @@
       <footer id="footer"></footer>
     </div>
 
+    <script src="portal-auth.js"></script>
     <script src="portal.js"></script>
     <script>
       PortalUI.mountHeader({

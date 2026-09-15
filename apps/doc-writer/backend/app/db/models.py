@@ -21,6 +21,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -48,7 +49,11 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(500), nullable=False)
     mime_type: Mapped[str] = mapped_column(String(120), default="", server_default="")
     size: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True, unique=True)
+    # MFA pilot (R1, §3) : plus `unique=True` a elle seule -- deux utilisateurs
+    # differents peuvent uploader le meme contenu (meme sha256) sans collision.
+    # L'unicite devient composite (user_email, sha256), cf. __table_args__.
+    # Index simple conserve pour les lookups (dedup scope par utilisateur).
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     extracted_text: Mapped[str] = mapped_column(Text, default="", server_default="")
     chunk_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
@@ -56,7 +61,17 @@ class Document(Base):
     # source = contenu input pour RAG ; template = structure {{placeholders}} a remplir ;
     # style = exemple de syntaxe / ton a reproduire.
     kind: Mapped[str] = mapped_column(String(16), default="source", server_default="source", nullable=False)
+    # MFA pilot (R1, §3) : proprietaire du document, email normalise (minuscules)
+    # -- cle de jointure avec AUTHDB (app.core.auth_db.normalize_email). Nullable
+    # tant que auth_enabled=False (tier1 local, mono-utilisateur implicite) ;
+    # backfille vers `settings.legacy_user_email` par la migration 0003 sur une
+    # base existante.
+    user_email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True, index=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_local)
+
+    __table_args__ = (
+        UniqueConstraint("user_email", "sha256", name="uq_documents_user_email_sha256"),
+    )
 
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         back_populates="document",
@@ -99,6 +114,11 @@ class Session(Base):
     style_doc_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
+    # MFA pilot (R1, §3) : meme raisonnement que Document.user_email.
+    # `Message` n'a PAS sa propre colonne : un message appartient a une
+    # session, donc herite de son proprietaire via session_id -- pas de
+    # redondance a synchroniser.
+    user_email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now_local)
 
     messages: Mapped[list["Message"]] = relationship(

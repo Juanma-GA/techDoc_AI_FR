@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
+from app.core.auth import AuthenticatedUser, require_authenticated
 from app.core.errors import AppError
 from app.core.mistral_client import (
     REALTIME_TRANSCRIBE_MODEL,
@@ -20,8 +21,9 @@ from app.core.mistral_client import (
     MistralError,
     get_llm_enabled,
 )
+from app.core.ownership import get_owned_session
 from app.core.writer_engine import ensure_session_title, stream_answer
-from app.db.models import Message
+from app.db.models import Document, Message
 from app.db.models import Session as SessionRow
 from app.db.session import SessionLocal, get_db
 from app.schemas import (
@@ -182,13 +184,56 @@ async def transcribe_stream(file: UploadFile = File(...), db: Session = Depends(
     return EventSourceResponse(event_gen())
 
 
+def _require_owned_doc_ids(
+    db: Session, doc_ids: list[uuid.UUID], user: AuthenticatedUser | None
+) -> None:
+    """§3 (MFA pilot) : `scope_doc_ids`/`template_doc_id`/`style_doc_id`
+    pointent directement vers du contenu de document que writer_engine.py lit
+    par id sans autre verification -- sans ce garde-fou, une session pourrait
+    referencer le document d'un AUTRE utilisateur et faire fuiter son contenu
+    dans la generation. 400, pas 404 : la ref vient du corps de la requete
+    de l'appelant lui-meme, ce n'est pas une navigation d'URL."""
+    if user is None or not doc_ids:
+        return
+    owned = set(
+        db.scalars(
+            select(Document.id).where(Document.id.in_(doc_ids), Document.user_email == user.email)
+        )
+    )
+    unauthorized = [str(d) for d in doc_ids if d not in owned]
+    if unauthorized:
+        raise AppError(
+            "DOCUMENT_NOT_OWNED",
+            "Un ou plusieurs documents referencs n'appartiennent pas a l'utilisateur courant.",
+            status_code=400,
+            detail={"document_ids": unauthorized},
+        )
+
+
 @router.get("", response_model=list[SessionOut])
-def list_sessions(db: Session = Depends(get_db)) -> list[SessionRow]:
-    return list(db.scalars(select(SessionRow).order_by(SessionRow.created_at.desc())))
+def list_sessions(
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
+) -> list[SessionRow]:
+    stmt = select(SessionRow).order_by(SessionRow.created_at.desc())
+    if user is not None:
+        stmt = stmt.where(SessionRow.user_email == user.email)
+    return list(db.scalars(stmt))
 
 
 @router.post("", response_model=SessionOut)
-def create_session(payload: SessionCreateIn, db: Session = Depends(get_db)) -> SessionRow:
+def create_session(
+    payload: SessionCreateIn,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
+) -> SessionRow:
+    all_referenced = list(payload.scope_doc_ids)
+    if payload.template_doc_id is not None:
+        all_referenced.append(payload.template_doc_id)
+    if payload.style_doc_id is not None:
+        all_referenced.append(payload.style_doc_id)
+    _require_owned_doc_ids(db, all_referenced, user)
+
     scope_json = json.dumps([str(d) for d in payload.scope_doc_ids])
     session = SessionRow(
         title=payload.title or "",
@@ -199,6 +244,7 @@ def create_session(payload: SessionCreateIn, db: Session = Depends(get_db)) -> S
         tone=payload.tone or "professional",
         template_doc_id=payload.template_doc_id,
         style_doc_id=payload.style_doc_id,
+        user_email=user.email if user else None,
     )
     db.add(session)
     db.commit()
@@ -207,8 +253,12 @@ def create_session(payload: SessionCreateIn, db: Session = Depends(get_db)) -> S
 
 
 @router.delete("/{session_id}", status_code=204)
-def delete_session(session_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
-    s = db.get(SessionRow, session_id)
+def delete_session(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
+) -> None:
+    s = get_owned_session(db, session_id, user)
     if s is None:
         raise AppError(
             "SESSION_NOT_FOUND", "Session introuvable.", status_code=404,
@@ -219,8 +269,12 @@ def delete_session(session_id: uuid.UUID, db: Session = Depends(get_db)) -> None
 
 
 @router.get("/{session_id}/messages", response_model=list[MessageOut])
-def list_messages(session_id: uuid.UUID, db: Session = Depends(get_db)) -> list[Message]:
-    s = db.get(SessionRow, session_id)
+def list_messages(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
+) -> list[Message]:
+    s = get_owned_session(db, session_id, user)
     if s is None:
         raise AppError(
             "SESSION_NOT_FOUND", "Session introuvable.", status_code=404,
@@ -230,8 +284,13 @@ def list_messages(session_id: uuid.UUID, db: Session = Depends(get_db)) -> list[
 
 
 @router.post("/{session_id}/ask")
-async def ask(session_id: uuid.UUID, body: AskIn, db: Session = Depends(get_db)):
-    session = db.get(SessionRow, session_id)
+async def ask(
+    session_id: uuid.UUID,
+    body: AskIn,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
+):
+    session = get_owned_session(db, session_id, user)
     if session is None:
         raise AppError(
             "SESSION_NOT_FOUND", "Session introuvable.", status_code=404,
