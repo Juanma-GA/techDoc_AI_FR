@@ -4,7 +4,11 @@ import { useFiltersStore } from "./filtersStore";
 
 describe("filtersStore — standard selection", () => {
   beforeEach(() => {
-    useFiltersStore.setState({ lastStandardId: null, lastStandardVersionId: null });
+    useFiltersStore.setState({
+      lastStandardId: null,
+      lastStandardVersionId: null,
+      activeStandardVersionIds: [],
+    });
   });
 
   it("persists the last (standard, version) chosen at upload", () => {
@@ -18,5 +22,16 @@ describe("filtersStore — standard selection", () => {
     useFiltersStore.getState().setLastStandard(null, null);
     expect(useFiltersStore.getState().lastStandardId).toBeNull();
     expect(useFiltersStore.getState().lastStandardVersionId).toBeNull();
+  });
+
+  it("removes active versions that are absent from the current database", () => {
+    useFiltersStore.setState({ activeStandardVersionIds: ["current", "stale", "current-2"] });
+
+    useFiltersStore.getState().reconcileActiveStandardVersions(["current", "current-2"]);
+
+    expect(useFiltersStore.getState().activeStandardVersionIds).toEqual([
+      "current",
+      "current-2",
+    ]);
   });
 });

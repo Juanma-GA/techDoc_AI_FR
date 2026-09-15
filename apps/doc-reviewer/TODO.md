@@ -18,7 +18,7 @@ BACK :
 
 OTHER :
 
-- Résoudre les fails ds tests
+- Enlever les règles qui sont je ne sais pas où (maybe dans la DB alembic) : Pas d'oubli d'espace après ponctuation / Pas de mot en MAJUSCULES / Pas d'oubli d'accent (mots FR fréquents)
 
 JUL 27/26
 79-30-02

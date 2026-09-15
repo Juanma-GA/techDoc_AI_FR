@@ -31,6 +31,7 @@ type FiltersState = {
   setChecklistActive: (v: boolean) => void;
   setLastStandard: (standardId: string | null, versionId: string | null) => void;
   toggleActiveStandardVersion: (versionId: string) => void;
+  reconcileActiveStandardVersions: (validVersionIds: string[]) => void;
   clearActiveStandards: () => void;
   setSourceKindFilter: (v: SourceKind | null) => void;
   setRuleCodeFilter: (v: string | null) => void;
@@ -81,6 +82,15 @@ export const useFiltersStore = create<FiltersState>()(
           activeStandardVersionIds: get().activeStandardVersionIds.includes(versionId)
             ? get().activeStandardVersionIds.filter((x) => x !== versionId)
             : [...get().activeStandardVersionIds, versionId],
+        }),
+      reconcileActiveStandardVersions: (validVersionIds) =>
+        set((state) => {
+          const validIds = new Set(validVersionIds);
+          const activeIds = state.activeStandardVersionIds.filter((id) => validIds.has(id));
+          const unchanged =
+            activeIds.length === state.activeStandardVersionIds.length &&
+            activeIds.every((id, index) => id === state.activeStandardVersionIds[index]);
+          return unchanged ? {} : { activeStandardVersionIds: activeIds };
         }),
       clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
       setSourceKindFilter: (v) => set({ sourceKindFilter: v }),

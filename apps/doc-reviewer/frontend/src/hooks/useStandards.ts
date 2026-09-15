@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { api } from "../lib/api";
+import { useFiltersStore } from "../stores/filtersStore";
 import type { CatalogRule, Standard, StandardVersion, StandardVersionDetail } from "../types/domain";
 
 export type CreateStandardInput = {
@@ -16,10 +18,23 @@ export type CreateVersionInput = {
 };
 
 export function useStandards() {
-  return useQuery({
+  const reconcileActiveStandardVersions = useFiltersStore(
+    (state) => state.reconcileActiveStandardVersions,
+  );
+  const standards = useQuery({
     queryKey: ["standards"],
     queryFn: () => api.get<Standard[]>("/standards"),
   });
+
+  useEffect(() => {
+    if (!standards.data) return;
+    const validVersionIds = standards.data.flatMap((standard) =>
+      standard.versions.map((version) => version.id),
+    );
+    reconcileActiveStandardVersions(validVersionIds);
+  }, [standards.data, reconcileActiveStandardVersions]);
+
+  return standards;
 }
 
 export function useStandardVersionDetail(standardId: string | null, versionId: string | null) {
