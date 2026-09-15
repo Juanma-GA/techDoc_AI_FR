@@ -7,8 +7,12 @@ from types import SimpleNamespace
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 from app.checks.standards.thales_custom import (
     HIGHLIGHTS_PAGE_TYPE,
+    REPAIR_PAGE_TYPE,
+    STORAGE_PAGE_TYPE,
+    TESTING_PAGE_TYPE,
     TP1_PAGE_TYPE,
     classify_pages,
+    identify_note_pages,
     identify_tp1_pages,
 )
 
@@ -109,7 +113,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 50
+    assert total == 53
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -886,6 +890,136 @@ def test_tp1_page_type_is_read_from_anywhere_in_the_footer_band() -> None:
     assert page_types == {"1": "TP1", "2": "TP1"}
     assert parsed.pages[0].page_type == TP1_PAGE_TYPE
     assert parsed.pages[1].page_type == TP1_PAGE_TYPE
+
+
+def test_repair_testing_storage_page_types_require_standalone_headings() -> None:
+    parsed = ParsedPdf(
+        page_count=4,
+        pages=[
+            ParsedPage(page=1, text="REPAIR\nNOTE\nPressure:"),
+            ParsedPage(page=2, text="TESTING\nNOTE\nTemperature:"),
+            ParsedPage(page=3, text="STORAGE\nNOTE\nPressure:"),
+            ParsedPage(
+                page=4,
+                text=(
+                    "NOTE\nRelative humidity: Refer to Standard Practices "
+                    "Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-812A-A "
+                    "- Storage and Transportation of Assemblies."
+                ),
+            ),
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    page_types = identify_note_pages(parsed)
+
+    assert page_types == {
+        "1": REPAIR_PAGE_TYPE,
+        "2": TESTING_PAGE_TYPE,
+        "3": STORAGE_PAGE_TYPE,
+        "4": None,
+    }
+
+
+def test_note_page_classifier_does_not_misclassify_contents_or_override_highlights() -> None:
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=[
+            ParsedPage(
+                page=1,
+                text="Highlights Page 1\nRepair\nTesting\nStorage\nPRESSURE",
+            ),
+            ParsedPage(
+                page=2,
+                text="Highlights Page 2\nRepair\nTesting\nStorage",
+                page_type=HIGHLIGHTS_PAGE_TYPE,
+            ),
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    page_types = identify_note_pages(parsed)
+
+    assert page_types == {"1": None, "2": HIGHLIGHTS_PAGE_TYPE}
+
+
+def _note_page_pdf(text: str, page_type: str) -> ParsedPdf:
+    page = ParsedPage(page=1, text=text, page_type=page_type)
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def test_note_page_rules_require_categories_inside_note_and_exact_values() -> None:
+    repair_rh = (
+        "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
+    )
+    storage_temperature = (
+        "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
+    )
+
+    repair_rule = _rule("CUSTOM_REPAIR_NOTE")
+    repair_valid, _ = execute_pdf_rules(
+        _note_page_pdf(f"REPAIR\nNOTE\nPressure: 1 bar\n{repair_rh}", REPAIR_PAGE_TYPE),
+        [repair_rule],
+    )
+    repair_outside_note, _ = execute_pdf_rules(
+        _note_page_pdf(f"REPAIR\nPressure: 1 bar\nNOTE\n{repair_rh}", REPAIR_PAGE_TYPE),
+        [repair_rule],
+    )
+    repair_uppercase, _ = execute_pdf_rules(
+        _note_page_pdf(f"REPAIR\nNOTE\nPRESSURE: 1 bar\n{repair_rh}", REPAIR_PAGE_TYPE),
+        [repair_rule],
+    )
+    repair_outside_page, repair_outside_page_suggestions = execute_pdf_rules(
+        _note_page_pdf(f"OTHER\nNOTE\nPRESSURE: 1 bar\n{repair_rh}", "OTHER"),
+        [repair_rule],
+    )
+
+    testing_rule = _rule("CUSTOM_TESTING_NOTE")
+    testing_valid, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"TESTING\nNOTE\nPressure: 1 bar\n{repair_rh}\nTemperature: 20 deg. C",
+            TESTING_PAGE_TYPE,
+        ),
+        [testing_rule],
+    )
+    testing_wrong_rh, _ = execute_pdf_rules(
+        _note_page_pdf(
+            "TESTING\nNOTE\nPressure: 1 bar\n"
+            "Relative humidity: 50%\nTemperature: 20 deg. C",
+            TESTING_PAGE_TYPE,
+        ),
+        [testing_rule],
+    )
+
+    storage_rule = _rule("CUSTOM_STORAGE_NOTE")
+    storage_valid, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"STORAGE\nNOTE\nPressure: 1 bar\n{repair_rh}\n{storage_temperature}",
+            STORAGE_PAGE_TYPE,
+        ),
+        [storage_rule],
+    )
+    storage_wrong_temperature, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"STORAGE\nNOTE\nPressure: 1 bar\n{repair_rh}\nTemperature: 20 deg. C",
+            STORAGE_PAGE_TYPE,
+        ),
+        [storage_rule],
+    )
+
+    assert repair_valid[0].status == "PASS"
+    assert repair_outside_note[0].status == "FAIL"
+    assert repair_uppercase[0].status == "FAIL"
+    assert repair_outside_page == []
+    assert repair_outside_page_suggestions == []
+    assert testing_valid[0].status == "PASS"
+    assert testing_wrong_rh[0].status == "FAIL"
+    assert storage_valid[0].status == "PASS"
+    assert storage_wrong_temperature[0].status == "FAIL"
 
 
 def test_tp1_page_type_requires_both_anchor_and_marker_in_the_footer() -> None:

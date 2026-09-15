@@ -34,6 +34,14 @@ _TP1_ADDRESS_TARGET = RuleTarget(page="all", region="full_page", page_type="TP1"
 _ORIGIN = f"{STANDARD_CODE}:v1"
 TP1_PAGE_TYPE = "TP1"
 HIGHLIGHTS_PAGE_TYPE = "HIGHLIGHTS"
+REPAIR_PAGE_TYPE = "REPAIR"
+TESTING_PAGE_TYPE = "TESTING"
+STORAGE_PAGE_TYPE = "STORAGE"
+_NOTE_PAGE_TYPES = (REPAIR_PAGE_TYPE, TESTING_PAGE_TYPE, STORAGE_PAGE_TYPE)
+_PAGE_TYPE_MARKERS = {
+    page_type: re.compile(rf"(?im)^\s*{page_type}\s*$")
+    for page_type in _NOTE_PAGE_TYPES
+}
 _HIGHLIGHTS_TARGET = RuleTarget(
     page="all",
     region="full_page",
@@ -104,6 +112,24 @@ _THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
     (r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40", "Tel : +33 (0)5 24 44 77 40"),
     (r"www\.thalesgroup\.com", "www.thalesgroup.com"),
 )
+_REPAIR_RELATIVE_HUMIDITY = (
+    "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
+    "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
+)
+_STORAGE_TEMPERATURE = (
+    "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
+    "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
+)
+
+
+def _exact_text_pattern(value: str) -> str:
+    """Keep wording and punctuation exact while tolerating PDF whitespace."""
+    return re.escape(value).replace(r"\ ", r"\s+")
+
+
+_REPAIR_RELATIVE_HUMIDITY_PATTERN = _exact_text_pattern(_REPAIR_RELATIVE_HUMIDITY)
+_STORAGE_TEMPERATURE_PATTERN = _exact_text_pattern(_STORAGE_TEMPERATURE)
+_NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
 
 
 def _normalized_line(value: str) -> str:
@@ -193,6 +219,26 @@ def identify_tp1_pages(
     return identify_page_type(parsed, TP1_PAGE_TYPE, revision_date, cmm_number)
 
 
+def identify_note_pages(parsed: ParsedPdf) -> dict[str, str | None]:
+    """Classify NOTE pages from a standalone REPAIR/TESTING/STORAGE heading."""
+    page_types: dict[str, str | None] = {}
+    for page in parsed.pages:
+        detected_types = [
+            page_type
+            for page_type, marker in _PAGE_TYPE_MARKERS.items()
+            if marker.search(page.text)
+        ]
+        detected_type = detected_types[0] if len(detected_types) == 1 else None
+        if detected_type is not None and (
+            page.page_type is None or page.page_type in _NOTE_PAGE_TYPES
+        ):
+            page.page_type = detected_type
+        elif page.page_type in _NOTE_PAGE_TYPES:
+            page.page_type = None
+        page_types[str(page.page)] = page.page_type
+    return page_types
+
+
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
     """`PAGE_CLASSIFIERS` entry point (see `app.checks.standards`): reads the
     anchors off `document` itself so the generic pipeline never has to know
@@ -208,6 +254,7 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
         getattr(document, "meta_revision_date", None),
         getattr(document, "meta_cmm_number", None),
     )
+    identify_note_pages(parsed)
 
 
 def _rule(
@@ -273,6 +320,21 @@ def _required_text_check(
         suggestion_mode=suggestion_mode,
         missing_anchor=anchor,
         missing_anchor_position=anchor_position,
+    )
+
+
+_NOTE_CONTENT_PATTERN = r"(?is:\bNOTE\b(?:(?!\bNOTE\b).)*?)"
+
+
+def _required_note_check(
+    content_pattern: str,
+    *,
+    display: str,
+) -> Check:
+    return _required_text_check(
+        _NOTE_CONTENT_PATTERN + content_pattern,
+        display=display,
+        suggestion_mode="single",
     )
 
 
@@ -413,6 +475,53 @@ _RULES_V1 = [
         only_if=Condition(field="meta_pnr_number", state="present"),
         pattern=_UNEXPECTED_PNR_PATTERN,
         replacement="{{meta_pnr_number}}",
+    ),
+    _rule(
+        "CUSTOM_REPAIR_NOTE",
+        "Categories obligatoires dans les NOTE des pages REPAIR",
+        failure_message="categories NOTE REPAIR non conformes.",
+        target=RuleTarget(page="all", region="full_page", page_type=REPAIR_PAGE_TYPE),
+        severity="error",
+        checks=[
+            _required_note_check(_NOTE_PRESSURE_PATTERN, display="Pressure:"),
+            _required_note_check(
+                _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+                display=_REPAIR_RELATIVE_HUMIDITY,
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_TESTING_NOTE",
+        "Categories obligatoires dans les NOTE des pages TESTING",
+        failure_message="categories NOTE TESTING non conformes.",
+        target=RuleTarget(page="all", region="full_page", page_type=TESTING_PAGE_TYPE),
+        severity="error",
+        checks=[
+            _required_note_check(_NOTE_PRESSURE_PATTERN, display="Pressure:"),
+            _required_note_check(
+                _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+                display=_REPAIR_RELATIVE_HUMIDITY,
+            ),
+            _required_note_check(r"\bTemperature\b", display="Temperature"),
+        ],
+    ),
+    _rule(
+        "CUSTOM_STORAGE_NOTE",
+        "Categories obligatoires dans les NOTE des pages STORAGE",
+        failure_message="categories NOTE STORAGE non conformes.",
+        target=RuleTarget(page="all", region="full_page", page_type=STORAGE_PAGE_TYPE),
+        severity="error",
+        checks=[
+            _required_note_check(_NOTE_PRESSURE_PATTERN, display="Pressure:"),
+            _required_note_check(
+                _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+                display=_REPAIR_RELATIVE_HUMIDITY,
+            ),
+            _required_note_check(
+                _STORAGE_TEMPERATURE_PATTERN,
+                display=_STORAGE_TEMPERATURE,
+            ),
+        ],
     ),
     _rule(
         "CUSTOM_TP1_THALES_ADDRESS",
@@ -622,4 +731,31 @@ STANDARD_SPEC: dict[str, object] = {
     "description": STANDARD_DESCRIPTION,
     "versions": CATALOG,
     "metadata": RULE_METADATA,
+}
+RULE_METADATA["CUSTOM_REPAIR_NOTE"] = {
+    "description": (
+        "Chaque page REPAIR doit contenir dans une NOTE les categories "
+        "Pressure et Relative humidity avec la valeur de reference."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Les categories NOTE de la page REPAIR sont absentes ou incorrectes.",
+}
+RULE_METADATA["CUSTOM_TESTING_NOTE"] = {
+    "description": (
+        "Chaque page TESTING doit contenir dans une NOTE les categories "
+        "Pressure, Relative humidity et Temperature."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Les categories NOTE de la page TESTING sont absentes ou incorrectes.",
+}
+RULE_METADATA["CUSTOM_STORAGE_NOTE"] = {
+    "description": (
+        "Chaque page STORAGE doit contenir dans une NOTE les categories "
+        "Pressure, Relative humidity et Temperature avec les valeurs de reference."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Les categories NOTE de la page STORAGE sont absentes ou incorrectes.",
 }
