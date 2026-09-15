@@ -54,6 +54,8 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
 _DECIMAL_COMMA_PATTERN = r"(?<!\d)(\d+),(\d+)(?!\d)"
+_DEGREE_C_PATTERN = r"(?i)°\s*C\b"
+_DEGREE_F_PATTERN = r"(?i)°\s*F\b"
 _TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN = (
     r"(?i)(?<!\w)(?:temperature\s*:\s*)?"
     r"[+-]?\d+(?:[.,]\d+)?"
@@ -445,6 +447,22 @@ _RULES_V1 = [
         severity="error",
         replacement="{{temperature_fahrenheit}}",
     ),
+    _rule(
+        "CUSTOM_NO_DEGREE_C_SYMBOL",
+        "Unite de temperature C ecrite au format deg. C",
+        failure_message="unite °C interdite, utiliser deg. C.",
+        pattern=_DEGREE_C_PATTERN,
+        severity="error",
+        replacement="deg. C",
+    ),
+    _rule(
+        "CUSTOM_NO_DEGREE_F_SYMBOL",
+        "Unite de temperature F ecrite au format deg. F",
+        failure_message="unite °F interdite, utiliser deg. F.",
+        pattern=_DEGREE_F_PATTERN,
+        severity="error",
+        replacement="deg. F",
+    ),
 ]
 
 
@@ -576,6 +594,18 @@ RULE_METADATA["CUSTOM_TEMPERATURE_FAHRENHEIT"] = {
     "kind": "regex_flag",
     "severity": "error",
     "message": "La temperature en deg. C doit etre suivie de sa conversion en deg. F.",
+}
+RULE_METADATA["CUSTOM_NO_DEGREE_C_SYMBOL"] = {
+    "description": "Le symbole °C doit etre ecrit sous la forme deg. C.",
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "Le symbole °C est interdit : utiliser deg. C.",
+}
+RULE_METADATA["CUSTOM_NO_DEGREE_F_SYMBOL"] = {
+    "description": "Le symbole °F doit etre ecrit sous la forme deg. F.",
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "Le symbole °F est interdit : utiliser deg. F.",
 }
 
 

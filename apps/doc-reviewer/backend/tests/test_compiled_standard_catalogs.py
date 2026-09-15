@@ -109,7 +109,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 48
+    assert total == 50
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -928,6 +928,28 @@ def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion()
     assert misplaced_suggestions[0].proposed == (
         "Temperature: 15 to 35 deg. C (59 to 95 deg. F)"
     )
+
+
+def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:
+    celsius_rule = _rule("CUSTOM_NO_DEGREE_C_SYMBOL")
+    fahrenheit_rule = _rule("CUSTOM_NO_DEGREE_F_SYMBOL")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 deg. C (59 to 95 deg. F)"),
+        [celsius_rule, fahrenheit_rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 °C (59 to 95 °F)"),
+        [celsius_rule, fahrenheit_rule],
+    )
+
+    assert [result.status for result in valid] == ["PASS", "PASS"]
+    assert valid_suggestions == []
+    assert [result.status for result in invalid] == ["FAIL", "FAIL"]
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("°C", "deg. C"),
+        ("°F", "deg. F"),
+    ]
 
 
 def test_title_page_copyright_matches_revision_year_in_footer() -> None:
