@@ -54,6 +54,13 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
 _DECIMAL_COMMA_PATTERN = r"(?<!\d)(\d+),(\d+)(?!\d)"
+_TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN = (
+    r"(?i)(?<!\w)(?:temperature\s*:\s*)?"
+    r"[+-]?\d+(?:[.,]\d+)?"
+    r"(?:\s+to\s+[+-]?\d+(?:[.,]\d+)?)?\s+deg\.\s*C\b"
+    r"(?!\s*\(\s*[+-]?\d+(?:[.,]\d+)?"
+    r"(?:\s+to\s+[+-]?\d+(?:[.,]\d+)?)?\s+deg\.\s*F\s*\))"
+)
 _EXPECTED_TP1_REVISION_NUMBER_PATTERN = (
     r"(?i)(?<!\w)Revision\s+No\.?\s*{{meta_revision_number}}(?!\w)"
     r"(?=[\s\S]*\bFirst\s+Issue\b)"
@@ -430,6 +437,14 @@ _RULES_V1 = [
         severity="error",
         replacement=r"\1.\2",
     ),
+    _rule(
+        "CUSTOM_TEMPERATURE_FAHRENHEIT",
+        "Temperature en deg. C accompagnee de sa conversion en deg. F",
+        failure_message="conversion Fahrenheit absente pour la temperature.",
+        pattern=_TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN,
+        severity="error",
+        replacement="{{temperature_fahrenheit}}",
+    ),
 ]
 
 
@@ -552,6 +567,15 @@ RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
     "kind": "regex_flag",
     "severity": "error",
     "message": "Une valeur decimale utilise une virgule au lieu d'un point.",
+}
+RULE_METADATA["CUSTOM_TEMPERATURE_FAHRENHEIT"] = {
+    "description": (
+        "Toute temperature exprimee en deg. C doit etre suivie de sa "
+        "conversion numerique en deg. F entre parentheses."
+    ),
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "La temperature en deg. C doit etre suivie de sa conversion en deg. F.",
 }
 
 

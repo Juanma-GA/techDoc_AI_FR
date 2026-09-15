@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import re
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
 
 from app.checks.raw import RawSuggestion
@@ -28,6 +29,15 @@ from app.core.compiled_rule_operators import (
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
+)
+
+
+_TEMPERATURE_FAHRENHEIT_REPLACEMENT = "{{temperature_fahrenheit}}"
+_TEMPERATURE_CELSIUS_MATCH = re.compile(
+    r"(?i)^(?P<prefix>temperature\s*:\s*)?"
+    r"(?P<first>[+-]?\d+(?:[.,]\d+)?)"
+    r"(?:\s+to\s+(?P<second>[+-]?\d+(?:[.,]\d+)?))?"
+    r"\s+deg\.\s*C$"
 )
 
 
@@ -680,10 +690,13 @@ def regex_suggestions(
         original = match.group(0)
         proposed = ""
         if replacement is not None:
-            try:
-                proposed = match.expand(replacement)
-            except re.error:
-                proposed = replacement
+            if replacement == _TEMPERATURE_FAHRENHEIT_REPLACEMENT:
+                proposed = _temperature_fahrenheit_replacement(original)
+            else:
+                try:
+                    proposed = match.expand(replacement)
+                except re.error:
+                    proposed = replacement
         suggestions.append(
             RawSuggestion(
                 rule_kind=rule_kind,
@@ -703,6 +716,29 @@ def regex_suggestions(
             )
         )
     return suggestions
+
+
+def _temperature_fahrenheit_replacement(original: str) -> str:
+    match = _TEMPERATURE_CELSIUS_MATCH.fullmatch(original)
+    if match is None:
+        return ""
+
+    def convert(value: str) -> str:
+        celsius = Decimal(value.replace(",", "."))
+        fahrenheit = (celsius * Decimal(9) / Decimal(5) + Decimal(32)).quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        if fahrenheit == fahrenheit.to_integral():
+            return str(int(fahrenheit))
+        return format(fahrenheit, "f").rstrip("0").rstrip(".")
+
+    try:
+        first = convert(match.group("first"))
+        second_value = match.group("second")
+        second = f" to {convert(second_value)}" if second_value else ""
+    except (InvalidOperation, ValueError):
+        return ""
+    return f"{original} ({first}{second} deg. F)"
 
 
 def term_search_suggestions(

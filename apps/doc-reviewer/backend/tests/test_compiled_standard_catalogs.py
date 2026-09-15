@@ -109,7 +109,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 47
+    assert total == 48
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -899,6 +899,35 @@ def test_tp1_address_rule_requires_the_exact_thales_address() -> None:
 
     assert not_tp1 == []
     assert not_tp1_suggestions == []
+
+
+def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion() -> None:
+    rule = _rule("CUSTOM_TEMPERATURE_FAHRENHEIT")
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 deg. C (59 to 95 deg. F)"),
+        [rule],
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 deg. C"),
+        [rule],
+    )
+    misplaced, misplaced_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 deg. C; equivalent to 59 to 95 deg. F"),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert missing[0].status == "FAIL"
+    assert missing_suggestions[0].original == "Temperature: 15 to 35 deg. C"
+    assert missing_suggestions[0].proposed == (
+        "Temperature: 15 to 35 deg. C (59 to 95 deg. F)"
+    )
+    assert misplaced[0].status == "FAIL"
+    assert misplaced_suggestions[0].original == "Temperature: 15 to 35 deg. C"
+    assert misplaced_suggestions[0].proposed == (
+        "Temperature: 15 to 35 deg. C (59 to 95 deg. F)"
+    )
 
 
 def test_title_page_copyright_matches_revision_year_in_footer() -> None:
