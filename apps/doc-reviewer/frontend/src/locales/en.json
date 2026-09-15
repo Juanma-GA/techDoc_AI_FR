@@ -182,6 +182,8 @@
     "meta.firstIssueDatePlaceholder": "e.g. JUL 1966",
     "meta.revisionNumber": "Revision number",
     "meta.revisionNumberPlaceholder": "e.g. 01",
+    "meta.pnrNumber": "PNR number",
+    "meta.pnrNumberPlaceholder": "e.g. 1-879-SB",
     "meta.documentLanguage": "Document language",
     "meta.languageUnset": "Select a language",
     "meta.languageFr": "French",

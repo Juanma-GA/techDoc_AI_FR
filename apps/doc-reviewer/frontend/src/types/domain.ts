@@ -122,6 +122,7 @@ export type Document = {
   meta_cmm_number: string | null;
   meta_first_issue_date: string | null;
   meta_revision_number: string | null;
+  meta_pnr_number: string | null;
   document_language: "fr" | "en" | null;
   created_at: string;
 };

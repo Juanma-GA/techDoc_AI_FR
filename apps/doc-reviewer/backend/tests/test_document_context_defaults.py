@@ -22,6 +22,7 @@ def test_document_context_is_reused_for_next_upload(
         "meta_cmm_number": "79-30-02",
         "meta_first_issue_date": "JUL 1966",
         "meta_revision_number": "Rev. 01",
+        "meta_pnr_number": "1-879-SB",
         "document_language": "en",
     }
     patched = client.patch(

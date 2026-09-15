@@ -291,6 +291,7 @@ def evaluate_regex(
                     "meta_cmm_number",
                     "meta_first_issue_date",
                     "meta_revision_number",
+                    "meta_pnr_number",
                     "document_language",
                 )
                 if (raw := getattr(ctx.document, field, None)) is not None and str(raw).strip()

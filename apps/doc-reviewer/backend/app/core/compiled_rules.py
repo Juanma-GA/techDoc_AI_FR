@@ -36,6 +36,7 @@ DocumentMetaField = Literal[
     "meta_cmm_number",
     "meta_first_issue_date",
     "meta_revision_number",
+    "meta_pnr_number",
     "document_language",
 ]
 
@@ -44,6 +45,7 @@ class RuleTarget(StrictModel):
     page: str
     region: Literal["full_page", "header", "body", "footer"]
     page_type: str | None = None
+    page_types: list[str] | None = None
 
 
 class FieldRef(StrictModel):
@@ -129,7 +131,7 @@ class Check(StrictModel):
     expected: str | int | list[str] | None = None
     require_all: bool = False
     expected_display: str | None = None
-    suggestion_mode: Literal["fuzzy", "single"] = "fuzzy"
+    suggestion_mode: Literal["fuzzy", "single", "all"] = "fuzzy"
     missing_anchor: str | None = None
     missing_anchor_position: Literal["above", "below"] = "above"
     normalization: list[NormalizationStep] | None = None

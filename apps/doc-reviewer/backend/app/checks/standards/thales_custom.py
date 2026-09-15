@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from app.core.compiled_rules import Check, CompiledRule, FieldRef, RuleTarget
+from app.core.compiled_rules import Check, CompiledRule, Condition, FieldRef, RuleTarget
 from app.core.logging import get_logger
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
@@ -34,6 +34,22 @@ _TP1_ADDRESS_TARGET = RuleTarget(page="all", region="full_page", page_type="TP1"
 _ORIGIN = f"{STANDARD_CODE}:v1"
 TP1_PAGE_TYPE = "TP1"
 HIGHLIGHTS_PAGE_TYPE = "HIGHLIGHTS"
+_HIGHLIGHTS_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_type=HIGHLIGHTS_PAGE_TYPE,
+)
+_HEADER_TARGET = RuleTarget(page="all", region="header")
+_HIGHLIGHTS_PNR_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_type=HIGHLIGHTS_PAGE_TYPE,
+)
+_TP1_PNR_TARGET = RuleTarget(
+    page="all",
+    region="body",
+    page_type=TP1_PAGE_TYPE,
+)
 _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
@@ -46,6 +62,15 @@ _EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
     r"(?i)(?<!\w)First\s+issue\s*:\s*{{meta_first_issue_date}}(?!\w)"
 )
 _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+{{meta_revision_date}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_pnr_number}}(?!\w)"
+_UNEXPECTED_PNR_PATTERN = (
+    r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
+    r"\d+-\d{3}-[A-Z]{2}(?!\w)"
+)
+_UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
+    r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
+    r"\d+-\d{3}-[A-Z]{2}(?!\w)"
+)
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
 _EXPECTED_REVISION_DATE_PATTERN = r"(?<!\w){{meta_revision_date}}(?!\w)"
 _COPYRIGHT_START_YEAR = "1966"
@@ -186,6 +211,7 @@ def _rule(
     missing_anchor: str | None = None,
     missing_anchor_position: Literal["above", "below"] = "above",
     replacement: str | None = None,
+    only_if: Condition | None = None,
 ) -> CompiledRule:
     if pattern is not None and checks is not None:
         raise ValueError("_rule accepte soit pattern, soit checks, pas les deux")
@@ -213,6 +239,7 @@ def _rule(
         checks=checks,
         source="standard_rule",
         origin_ref=f"{_ORIGIN}:{code}",
+        only_if=only_if,
     )
 
 
@@ -220,7 +247,7 @@ def _required_text_check(
     pattern: str,
     *,
     display: str | None = None,
-    suggestion_mode: Literal["fuzzy", "single"] = "fuzzy",
+    suggestion_mode: Literal["fuzzy", "single", "all"] = "fuzzy",
     anchor: str | None = None,
     anchor_position: Literal["above", "below"] = "above",
 ) -> Check:
@@ -327,11 +354,7 @@ _RULES_V1 = [
         "CUSTOM_HIGHLIGHTS_REVISION_HEADER",
         "En-tete de revision present au-dessus du tableau Highlights",
         failure_message="En-tete de revision Highlights non conforme.",
-        target=RuleTarget(
-            page="all",
-            region="full_page",
-            page_type=HIGHLIGHTS_PAGE_TYPE,
-        ),
+        target=_HIGHLIGHTS_TARGET,
         severity="error",
         checks=[
             _required_text_check(
@@ -342,6 +365,41 @@ _RULES_V1 = [
                 anchor_position="above",
             ),
         ],
+    ),
+    _rule(
+        "CUSTOM_HIGHLIGHTS_PNR_HEADER",
+        "Numero PNR present et conforme dans l'en-tete des pages",
+        failure_message="Numero PNR de l'en-tete non conforme.",
+        target=_HEADER_TARGET,
+        severity="error",
+        only_if=Condition(field="meta_pnr_number", state="present"),
+        checks=[
+            _required_text_check(
+                _EXPECTED_HIGHLIGHTS_PNR_PATTERN,
+                display="{{meta_pnr_number}}",
+                suggestion_mode="all",
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_PNR_PAGE_VALUE",
+        "Numero PNR present dans la page conforme au mapping",
+        failure_message="Numero PNR present dans la page non conforme.",
+        target=_HIGHLIGHTS_PNR_TARGET,
+        severity="error",
+        only_if=Condition(field="meta_pnr_number", state="present"),
+        pattern=_UNEXPECTED_HIGHLIGHTS_PNR_PATTERN,
+        replacement="{{meta_pnr_number}}",
+    ),
+    _rule(
+        "CUSTOM_TP1_PNR_PAGE_VALUE",
+        "Numero PNR present dans la page TP1 conforme au mapping",
+        failure_message="Numero PNR present dans la page TP1 non conforme.",
+        target=_TP1_PNR_TARGET,
+        severity="error",
+        only_if=Condition(field="meta_pnr_number", state="present"),
+        pattern=_UNEXPECTED_PNR_PATTERN,
+        replacement="{{meta_pnr_number}}",
     ),
     _rule(
         "CUSTOM_TP1_THALES_ADDRESS",
@@ -458,6 +516,33 @@ RULE_METADATA["CUSTOM_HIGHLIGHTS_REVISION_HEADER"] = {
         "L'en-tete de revision Highlights est absent, incorrect ou place "
         "apres le tableau."
     ),
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_PNR_HEADER"] = {
+    "description": (
+        "L'en-tete de chaque page doit contenir le numero PNR correspondant "
+        "au mapping du document."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le numero PNR de l'en-tete est absent ou incorrect.",
+}
+RULE_METADATA["CUSTOM_PNR_PAGE_VALUE"] = {
+    "description": (
+        "Le numero apres 'PNR:' sur la page Highlights doit correspondre au "
+        "mapping du document."
+    ),
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "Le numero PNR de la page Highlights ne correspond pas au mapping.",
+}
+RULE_METADATA["CUSTOM_TP1_PNR_PAGE_VALUE"] = {
+    "description": (
+        "Tout numero PNR explicitement present dans le corps d'une page TP1 "
+        "doit correspondre au mapping du document."
+    ),
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "Le numero PNR de la page TP1 ne correspond pas au mapping.",
 }
 RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
     "description": (

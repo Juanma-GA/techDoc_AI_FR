@@ -109,7 +109,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 44
+    assert total == 47
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -443,6 +443,333 @@ def test_highlights_revision_header_matches_mapping() -> None:
     assert invalid_suggestions[0].proposed == "REVISION No. 04 DATED JUL 27/26"
     assert invalid_suggestions[0].bbox == (40.0, 756.0, 300.0, 766.0)
     assert missing_results[0].status == "FAIL"
+
+
+def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    document = SimpleNamespace(meta_pnr_number="1-879-SB")
+
+    page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+        text="1-879-SB\nHighlights page 1",
+        spans=[
+            Span(
+                text="1-879-SB",
+                bbox=(40.0, 100.0, 180.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Highlights page 1",
+                bbox=(40.0, 756.0, 220.0, 766.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+    valid, valid_suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+        document=document,
+    )
+
+    invalid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+        text="PNR: 1-878-SB\nHighlights page 1",
+        spans=[
+            Span(
+                text="PNR: 1-878-SB",
+                bbox=(40.0, 100.0, 180.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Highlights page 1",
+                bbox=(40.0, 756.0, 220.0, 766.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[invalid_page], full_text=invalid_page.text, is_signed=False),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == "1-878-SB"
+    assert invalid_suggestions[0].proposed == "1-879-SB"
+    assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
+
+
+def test_pnr_header_reports_each_invalid_page() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    document = SimpleNamespace(meta_pnr_number="1-879-SB")
+
+    pages = [
+        ParsedPage(
+            page=page_number,
+            page_type=None,
+            text=f"PNR: {pnr}\nHighlights page {page_number}",
+            spans=[
+                Span(
+                    text=f"PNR: {pnr}",
+                    bbox=(40.0, 100.0, 180.0, 110.0),
+                    page=page_number,
+                    font="Arial",
+                    size=8.0,
+                ),
+                Span(
+                    text=f"Highlights page {page_number}",
+                    bbox=(40.0, 756.0, 220.0, 766.0),
+                    page=page_number,
+                    font="Arial",
+                    size=8.0,
+                ),
+            ],
+        )
+        for page_number, pnr in ((1, "1-878-SB"), (2, "1-877-SB"))
+    ]
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=2, pages=pages, full_text="\n".join(page.text for page in pages), is_signed=False),
+        [rule],
+        document=document,
+    )
+
+    assert results[0].status == "FAIL"
+    assert [(suggestion.page, suggestion.original) for suggestion in suggestions] == [
+        (1, "1-878-SB"),
+        (2, "1-877-SB"),
+    ]
+
+
+def test_pnr_header_reports_each_invalid_occurrence() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    document = SimpleNamespace(meta_pnr_number="1-879-SB")
+    page = ParsedPage(
+        page=1,
+        page_type=None,
+        text="PNR: 1-878-SB | PNR: 1-877-SB\nHighlights page 1",
+        spans=[
+            Span(
+                text="PNR: 1-878-SB | PNR: 1-877-SB",
+                bbox=(40.0, 100.0, 300.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Highlights page 1",
+                bbox=(40.0, 756.0, 220.0, 766.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+        document=document,
+    )
+
+    assert results[0].status == "FAIL"
+    assert [suggestion.original for suggestion in suggestions] == [
+        "1-878-SB",
+        "1-877-SB",
+    ]
+
+
+def test_pnr_in_page_is_checked_when_present_but_not_required() -> None:
+    rule = _rule("CUSTOM_TP1_PNR_PAGE_VALUE")
+    document = SimpleNamespace(meta_pnr_number="1-879-SB")
+
+    valid_page = ParsedPage(
+        page=1,
+        page_type=TP1_PAGE_TYPE,
+        text="PNR: 1-878-SB\nDocument body without a PNR.",
+        spans=[
+            Span(
+                text="PNR: 1-878-SB",
+                bbox=(40.0, 100.0, 300.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Document body without a PNR.",
+                bbox=(40.0, 400.0, 300.0, 410.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Footer",
+                bbox=(40.0, 760.0, 100.0, 770.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+    invalid_page = ParsedPage(
+        page=2,
+        page_type=TP1_PAGE_TYPE,
+        text="PNR: 1-878-SB\nDocument body - 1-878-SB",
+        spans=[
+            Span(
+                text="PNR: 1-878-SB",
+                bbox=(40.0, 100.0, 300.0, 110.0),
+                page=2,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Document body - 1-878-SB",
+                bbox=(40.0, 400.0, 300.0, 410.0),
+                page=2,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Footer",
+                bbox=(40.0, 760.0, 100.0, 770.0),
+                page=2,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+    generic_page = ParsedPage(
+        page=3,
+        text="Generic page body - 1-878-SB",
+        spans=[
+            Span(
+                text="Generic page body - 1-878-SB",
+                bbox=(40.0, 400.0, 300.0, 410.0),
+                page=3,
+                font="Arial",
+                size=8.0,
+            )
+        ],
+    )
+
+    valid, valid_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [valid_page], valid_page.text, False),
+        [rule],
+        document=document,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [invalid_page], invalid_page.text, False),
+        [rule],
+        document=document,
+    )
+    ignored, ignored_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [generic_page], generic_page.text, False),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("1-878-SB", "1-879-SB")
+    ]
+    assert ignored == []
+    assert ignored_suggestions == []
+
+
+def test_highlights_pnr_label_is_checked_without_rechecking_the_header() -> None:
+    rule = _rule("CUSTOM_PNR_PAGE_VALUE")
+    document = SimpleNamespace(meta_pnr_number="1-879-SB")
+
+    valid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+        text="1-878-SB\nPNR: 1-879-SB\nHighlights page 1",
+        spans=[
+            Span(
+                text="1-878-SB",
+                bbox=(40.0, 100.0, 180.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="PNR: 1-879-SB",
+                bbox=(40.0, 300.0, 180.0, 310.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Highlights page 1",
+                bbox=(40.0, 756.0, 220.0, 766.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+    invalid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+        text="1-878-SB\nPNR: 1-878-SB\nHighlights page 1",
+        spans=[
+            Span(
+                text="1-878-SB",
+                bbox=(40.0, 100.0, 180.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="PNR: 1-878-SB",
+                bbox=(40.0, 300.0, 180.0, 310.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Highlights page 1",
+                bbox=(40.0, 756.0, 220.0, 766.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+
+    valid, valid_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [valid_page], valid_page.text, False),
+        [rule],
+        document=document,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [invalid_page], invalid_page.text, False),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("1-878-SB", "1-879-SB")
+    ]
 
 
 def _page_with_footer_lines(page_number: int, footer_lines: list[str]) -> ParsedPage:

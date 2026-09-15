@@ -17,6 +17,7 @@ REQUIRED_DOCUMENT_CONTEXT_FIELDS = (
     "meta_revision_number",
     "document_language",
 )
+DOCUMENT_CONTEXT_FIELDS = REQUIRED_DOCUMENT_CONTEXT_FIELDS + ("meta_pnr_number",)
 
 _DOCUMENT_CONTEXT_DEFAULTS_KEY = "document.context_defaults"
 
@@ -34,7 +35,7 @@ def get_document_context_defaults(db: Session) -> dict[str, str | None]:
     """Return the context copied onto newly imported documents."""
     row = db.get(AppConfig, _DOCUMENT_CONTEXT_DEFAULTS_KEY)
     if row is None or not row.value:
-        return {field: None for field in REQUIRED_DOCUMENT_CONTEXT_FIELDS}
+        return {field: None for field in DOCUMENT_CONTEXT_FIELDS}
     try:
         raw = json.loads(row.value)
     except (TypeError, ValueError):
@@ -43,7 +44,7 @@ def get_document_context_defaults(db: Session) -> dict[str, str | None]:
         raw = {}
     return {
         field: str(raw[field]).strip() if raw.get(field) not in (None, "") else None
-        for field in REQUIRED_DOCUMENT_CONTEXT_FIELDS
+        for field in DOCUMENT_CONTEXT_FIELDS
     }
 
 
@@ -53,7 +54,7 @@ def save_document_context_defaults(
 ) -> None:
     """Remember the explicitly patched values for the next document import."""
     current = get_document_context_defaults(db)
-    for field in REQUIRED_DOCUMENT_CONTEXT_FIELDS:
+    for field in DOCUMENT_CONTEXT_FIELDS:
         if field not in values:
             continue
         value = values[field]

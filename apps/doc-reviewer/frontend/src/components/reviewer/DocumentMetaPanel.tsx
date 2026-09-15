@@ -15,6 +15,7 @@ type DocumentMetaDraft = {
   cmmNumber: string;
   firstIssueDate: string;
   revisionNumber: string;
+  pnrNumber: string;
   documentLanguage: string;
 };
 
@@ -24,6 +25,7 @@ function draftFromDocument(document: Document): DocumentMetaDraft {
     cmmNumber: document.meta_cmm_number ?? "",
     firstIssueDate: document.meta_first_issue_date ?? "",
     revisionNumber: document.meta_revision_number ?? "",
+    pnrNumber: document.meta_pnr_number ?? "",
     documentLanguage: document.document_language ?? "",
   };
 }
@@ -76,6 +78,7 @@ export function DocumentMetaPanel({ document }: Props) {
         meta_cmm_number: draft.cmmNumber.trim() || null,
         meta_first_issue_date: draft.firstIssueDate.trim() || null,
         meta_revision_number: draft.revisionNumber.trim() || null,
+        meta_pnr_number: draft.pnrNumber.trim() || null,
         document_language:
           draft.documentLanguage === "fr" || draft.documentLanguage === "en"
             ? draft.documentLanguage
@@ -174,6 +177,15 @@ export function DocumentMetaPanel({ document }: Props) {
           value={draft.revisionNumber}
           onChange={(e) => updateField("revisionNumber", e.target.value)}
           placeholder={t("reviewer.meta.revisionNumberPlaceholder")}
+        />
+      </label>
+      <label className="field">
+        <span className="field-label">{t("reviewer.meta.pnrNumber")}</span>
+        <input
+          className="input"
+          value={draft.pnrNumber}
+          onChange={(e) => updateField("pnrNumber", e.target.value)}
+          placeholder={t("reviewer.meta.pnrNumberPlaceholder")}
         />
       </label>
       <label className="field">

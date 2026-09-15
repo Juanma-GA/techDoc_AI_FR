@@ -195,6 +195,8 @@ def fuzzy_required_suggestions(
             if not candidate_compact:
                 continue
             candidate_folded = candidate_compact.casefold()
+            if check.suggestion_mode == "all" and expected_folded in candidate_folded:
+                continue
             ratio = difflib.SequenceMatcher(
                 None,
                 candidate_folded,
@@ -210,6 +212,37 @@ def fuzzy_required_suggestions(
         if not scored:
             continue
         scored.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
+        if check.suggestion_mode == "all":
+            selected: list[tuple[float, str, int, int]] = []
+            for candidate in scored:
+                _ratio, _text, start, end = candidate
+                if any(start < selected_end and end > selected_start for _, _, selected_start, selected_end in selected):
+                    continue
+                selected.append(candidate)
+            for _ratio, candidate, start, end in sorted(selected, key=lambda item: item[2]):
+                raw_candidate = candidate
+                candidate = candidate.strip()
+                leading_whitespace = len(raw_candidate) - len(raw_candidate.lstrip())
+                candidate_start = start + leading_whitespace
+                suggestions.append(
+                    RawSuggestion(
+                        rule_kind=rule_kind,
+                        rule_code=rule.id,
+                        severity=rule.severity,
+                        message=message,
+                        original=candidate,
+                        proposed=expected,
+                        page=target.raw_page,
+                        span=(candidate_start, candidate_start + len(candidate)),
+                        bbox=suggestion_bbox(
+                            target,
+                            candidate,
+                            ctx.pdf_pages,
+                            span_start=candidate_start,
+                        ),
+                    )
+                )
+            continue
         _ratio, candidate, start, end = scored[0]
         if check.suggestion_mode == "single":
             candidate = candidate.strip()

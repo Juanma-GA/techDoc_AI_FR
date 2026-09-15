@@ -112,6 +112,7 @@ def analyze_stream(
             "meta_cmm_number": doc.meta_cmm_number,
             "meta_first_issue_date": doc.meta_first_issue_date,
             "meta_revision_number": doc.meta_revision_number,
+            "meta_pnr_number": doc.meta_pnr_number,
             "document_language": doc.document_language,
         },
     )
@@ -222,6 +223,7 @@ def analyze_stream(
     meta_cmm_number_value = doc.meta_cmm_number
     meta_first_issue_date_value = doc.meta_first_issue_date
     meta_revision_number_value = doc.meta_revision_number
+    meta_pnr_number_value = doc.meta_pnr_number
     document_language_value = doc.document_language
     first_page_value = resolved_first_page
     last_page_value = resolved_last_page
@@ -308,6 +310,7 @@ def analyze_stream(
                 meta_cmm_number = meta_cmm_number_value
                 meta_first_issue_date = meta_first_issue_date_value
                 meta_revision_number = meta_revision_number_value
+                meta_pnr_number = meta_pnr_number_value
                 document_language = document_language_value
 
             scoped_session: Session = SessionLocal()

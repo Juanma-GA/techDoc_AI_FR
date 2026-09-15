@@ -34,10 +34,11 @@ _DOCUMENT_METADATA_FIELDS = (
     "meta_cmm_number",
     "meta_first_issue_date",
     "meta_revision_number",
+    "meta_pnr_number",
     "document_language",
 )
 _CONTEXT_TOKEN_RE = re.compile(
-    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_revision_number|document_language)\}\}"
+    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_revision_number|meta_pnr_number|document_language)\}\}"
 )
 
 
@@ -98,8 +99,11 @@ def scope_targets(
     pdf_pages: list[ParsedPage] | None,
 ) -> list[_TextTarget] | None:
     scoped = targets if target_spec.page == "all" else [target for target in targets if target.page == target_spec.page]
+    allowed_page_types = target_spec.page_types
     if target_spec.page_type is not None:
-        scoped = [target for target in scoped if target.page_type == target_spec.page_type]
+        allowed_page_types = [target_spec.page_type]
+    if allowed_page_types is not None:
+        scoped = [target for target in scoped if target.page_type in allowed_page_types]
     if target_spec.region == "full_page":
         return scoped
     if is_docx:
