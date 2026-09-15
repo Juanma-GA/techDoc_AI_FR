@@ -151,13 +151,18 @@ def _execute(
             _log_rule_finished(rule.id, result, 0)
             continue
         if scoped is None or not scoped:
-            if rule.target.page_type is not None or rule.target.page_types is not None:
+            if (
+                rule.target.page_type is not None
+                or rule.target.page_types is not None
+                or rule.target.excluded_page_types is not None
+            ):
                 _logger.info(
                     "compiled_rule_skipped",
                     rule_id=rule.id,
                     reason="target_page_type_not_found",
                     page_type=rule.target.page_type,
                     page_types=rule.target.page_types,
+                    excluded_page_types=rule.target.excluded_page_types,
                 )
                 continue
             result = RuleResult(

@@ -104,6 +104,12 @@ def scope_targets(
         allowed_page_types = [target_spec.page_type]
     if allowed_page_types is not None:
         scoped = [target for target in scoped if target.page_type in allowed_page_types]
+    if target_spec.excluded_page_types is not None:
+        scoped = [
+            target
+            for target in scoped
+            if target.page_type not in target_spec.excluded_page_types
+        ]
     if target_spec.region == "full_page":
         return scoped
     if is_docx:

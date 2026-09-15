@@ -592,6 +592,71 @@ def test_pnr_header_reports_each_invalid_occurrence() -> None:
     ]
 
 
+def test_pnr_header_is_not_checked_on_tp1_pages() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    document = SimpleNamespace(meta_pnr_number="1-879-SB")
+    tp1_page = ParsedPage(
+        page=1,
+        page_type=TP1_PAGE_TYPE,
+        text="PNR: 1-878-SB\nTP1 page 1",
+        spans=[
+            Span(
+                text="PNR: 1-878-SB",
+                bbox=(40.0, 100.0, 180.0, 110.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="TP1 page 1",
+                bbox=(40.0, 756.0, 180.0, 766.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+    non_tp1_page = ParsedPage(
+        page=2,
+        page_type=None,
+        text="PNR: 1-878-SB\nRegular page 2",
+        spans=[
+            Span(
+                text="PNR: 1-878-SB",
+                bbox=(40.0, 100.0, 180.0, 110.0),
+                page=2,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="Regular page 2",
+                bbox=(40.0, 756.0, 180.0, 766.0),
+                page=2,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+
+    tp1_results, tp1_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [tp1_page], tp1_page.text, False),
+        [rule],
+        document=document,
+    )
+    non_tp1_results, non_tp1_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [non_tp1_page], non_tp1_page.text, False),
+        [rule],
+        document=document,
+    )
+
+    assert tp1_results == []
+    assert tp1_suggestions == []
+    assert non_tp1_results[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in non_tp1_suggestions] == [
+        ("1-878-SB", "1-879-SB")
+    ]
+
+
 def test_pnr_in_page_is_checked_when_present_but_not_required() -> None:
     rule = _rule("CUSTOM_TP1_PNR_PAGE_VALUE")
     document = SimpleNamespace(meta_pnr_number="1-879-SB")

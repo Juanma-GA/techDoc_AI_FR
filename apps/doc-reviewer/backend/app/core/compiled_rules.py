@@ -46,6 +46,7 @@ class RuleTarget(StrictModel):
     region: Literal["full_page", "header", "body", "footer"]
     page_type: str | None = None
     page_types: list[str] | None = None
+    excluded_page_types: list[str] | None = None
 
 
 class FieldRef(StrictModel):

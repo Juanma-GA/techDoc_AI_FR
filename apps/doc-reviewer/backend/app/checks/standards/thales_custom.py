@@ -39,7 +39,11 @@ _HIGHLIGHTS_TARGET = RuleTarget(
     region="full_page",
     page_type=HIGHLIGHTS_PAGE_TYPE,
 )
-_HEADER_TARGET = RuleTarget(page="all", region="header")
+_HEADER_TARGET = RuleTarget(
+    page="all",
+    region="header",
+    excluded_page_types=[TP1_PAGE_TYPE],
+)
 _HIGHLIGHTS_PNR_TARGET = RuleTarget(
     page="all",
     region="full_page",
