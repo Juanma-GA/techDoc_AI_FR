@@ -75,7 +75,11 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
                 if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
                     old.unlink(missing_ok=True)
         illustrations.attach_illustrations(
-            root, pdf_path=doc.pdf_cut_path or doc.storage_path, out_dir=out_dir, doc_id=doc.id
+            root,
+            pdf_path=doc.pdf_cut_path or doc.storage_path,
+            out_dir=out_dir,
+            doc_id=doc.id,
+            dm_level=splitter.level_of(_DEFAULT_LEVEL),
         )
     except Exception:  # jamais bloquant : le squelette reste generable sans images
         pass
@@ -94,7 +98,10 @@ def _apply_dmrl_icns(
         icn_names = dmrl_mod.extract_icn_filenames(entries[unit.dmrl_index].icn)
         if not icn_names:
             continue
-        figures = [node for node in unit.root.walk() if node.kind == "figure"]
+        figures = [
+            node for node in unit.root.walk()
+            if node.kind == "figure" and not node.is_pictogram
+        ]
         for figure, icn_name in zip(figures, icn_names, strict=False):
             current_name = figure.icn or (figure.icns[0] if figure.icns else None)
             if not current_name:

@@ -119,9 +119,9 @@ def test_two_figures_on_one_line_keep_image_alignment(tmp_path) -> None:
     pdf_path = tmp_path / "two-figures.pdf"
     doc = fitz.open()
     page = doc.new_page()
-    first = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+    first = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
     first.set_rect(first.irect, (255, 0, 0))
-    second = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+    second = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
     second.set_rect(second.irect, (0, 0, 255))
     page.insert_image(fitz.Rect(72, 90, 168, 186), pixmap=first)
     page.insert_image(fitz.Rect(220, 90, 316, 186), pixmap=second)
@@ -159,7 +159,7 @@ def test_one_figure_can_keep_multiple_embedded_images(tmp_path) -> None:
     page = doc.new_page()
     colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
     for x, color in zip((72, 220, 320), colors):
-        image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+        image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
         image.set_rect(image.irect, color)
         page.insert_image(fitz.Rect(x, 90, x + 80, 180), pixmap=image)
     page.insert_text((72, 205), "Figure 5.3 First panel", fontsize=11)
@@ -215,6 +215,119 @@ def test_vector_figure_is_rasterized_when_pdf_has_no_embedded_image(tmp_path) ->
     image = fitz.Pixmap(str(out_dir / figure.icn))
     assert image.width > 100
     assert image.height > 200
+
+
+def test_large_pictogram_without_caption_is_attached_to_chapter(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "pictogram.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 60), "6 Description", fontsize=18, fontname="hebo")
+    pictogram = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 64, 64))
+    pictogram.set_rect(pictogram.irect, (255, 220, 0))
+    for coordinate in range(20, 44):
+        pictogram.set_pixel(coordinate, coordinate, (0, 0, 0))
+        pictogram.set_pixel(coordinate, 63 - coordinate, (0, 0, 0))
+    page.insert_image(fitz.Rect(72, 100, 232, 260), pixmap=pictogram)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    chapter = IRNode(id="chapter", kind="section", text="6 Description", page=1)
+    root = IRNode(id="root", kind="section", children=[chapter])
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    pictos = [node for node in root.walk() if node.is_pictogram]
+    assert len(pictos) == 1
+    assert pictos[0].text == "Picto chapitre 6"
+    assert pictos[0].icn == "picto_chapitre_6.jpg"
+    assert (out_dir / pictos[0].icn).exists()
+
+    from app.core.ir import from_dict, to_dict
+
+    restored = from_dict(to_dict(root))
+    assert next(node for node in restored.walk() if node.is_pictogram).icn == pictos[0].icn
+
+
+def test_pictogram_replaces_unmatched_figure_caption(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "pictogram-caption.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 60), "6 Description", fontsize=18, fontname="hebo")
+    pictogram = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 64, 64))
+    pictogram.set_rect(pictogram.irect, (255, 220, 0))
+    for coordinate in range(20, 44):
+        pictogram.set_pixel(coordinate, coordinate, (0, 0, 0))
+    page.insert_image(fitz.Rect(72, 100, 232, 260), pixmap=pictogram)
+    page.insert_text((72, 280), "Figure 6.2 Attention", fontsize=11)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    figure = IRNode(id="figure", kind="figure", text="Figure 6.2 Attention", page=1)
+    chapter = IRNode(id="chapter", kind="section", text="6 Description", page=1, children=[figure])
+    root = IRNode(id="root", kind="section", children=[chapter])
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert figure.is_pictogram is True
+    assert figure.text == "Picto chapitre 6"
+    assert figure.icn == "picto_chapitre_6.jpg"
+    assert len([node for node in root.walk() if node.kind == "figure"]) == 1
+
+
+def test_pictogram_uses_dm_root_instead_of_nested_subsection(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "nested-pictogram.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    pictogram = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 64, 64))
+    pictogram.set_rect(pictogram.irect, (255, 220, 0))
+    for coordinate in range(20, 44):
+        pictogram.set_pixel(coordinate, coordinate, (0, 0, 0))
+    page.insert_image(fitz.Rect(72, 100, 232, 260), pixmap=pictogram)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    subsection = IRNode(id="subsection", kind="section", text="6.1.1 Details", level=3, page=1)
+    dm_section = IRNode(
+        id="dm-section",
+        kind="section",
+        text="6.1 Description",
+        level=2,
+        page=1,
+        children=[subsection],
+    )
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[IRNode(id="chapter", kind="section", text="6 Chapter", level=1, children=[dm_section])],
+    )
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(
+        root,
+        pdf_path=str(pdf_path),
+        out_dir=out_dir,
+        doc_id="doc",
+        dm_level=2,
+    ) == 1
+    picto = next(node for node in root.walk() if node.is_pictogram)
+    assert picto.text == "Picto chapitre 6_1"
+    assert picto in dm_section.children
+    assert picto not in subsection.children
 
 
 def test_images_extracted_and_served(client, pdf_bytes_image) -> None:

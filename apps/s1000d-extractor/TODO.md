@@ -2,5 +2,4 @@
 - Pourquoi PMC que 5 parties
 - les pictogrammes ne sont pas sur les images type les croix rouges X ou les check vert 
 - Enlever l'onglet "Versions" ??
-- S'occuper de l'en-tete 
-
+- Pour les images : detecter quand c'est un pictogramme et pas une image + detecter quand on à plusieurs images sur une seule figure (exemple fig 6.1)

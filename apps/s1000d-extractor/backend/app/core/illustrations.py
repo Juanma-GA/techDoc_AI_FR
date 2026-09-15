@@ -20,6 +20,8 @@ from pathlib import Path
 from app.core.ir import IRNode
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+_CHAPTER_NUMBER_RE = re.compile(r"^\s*(\d+(?:\s*[._-]\s*\d+)*)\b")
+_PICTOGRAM_MAX_PIXELS = 65
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 
@@ -98,6 +100,52 @@ def _image_records(page):
     if records:
         return records
     return [(int(img[0]), None) for img in page.get_images(full=True)]
+
+
+def _looks_like_pictogram(doc, xref: int) -> bool:
+    """Detecte exclusivement les images dont les pixels source font au plus 65x65."""
+    import fitz
+
+    try:
+        pix = fitz.Pixmap(doc, xref)
+        if pix.n != 3 or pix.alpha:
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+        return pix.width <= _PICTOGRAM_MAX_PIXELS and pix.height <= _PICTOGRAM_MAX_PIXELS
+    except Exception:
+        return False
+
+
+def _chapter_key(dm_section: IRNode | None, page_number: int) -> str:
+    if dm_section is not None:
+        match = _CHAPTER_NUMBER_RE.match(dm_section.text or "")
+        if match:
+            return re.sub(r"\s*[._-]\s*", "_", match.group(1))
+    return f"p{page_number}"
+
+
+def _dm_sections(root: IRNode, dm_level: int | None) -> list[IRNode]:
+    """Retourne les sections racines des DM au niveau de decoupage choisi."""
+    if dm_level is None:
+        return [n for n in root.walk() if n.kind == "section" and n is not root]
+
+    sections: list[IRNode] = []
+
+    def collect(node: IRNode) -> None:
+        for child in node.children:
+            if child.kind != "section":
+                continue
+            if child.level is not None and child.level >= dm_level:
+                sections.append(child)
+            else:
+                collect(child)
+
+    collect(root)
+    return sections
+
+
+def _dm_for_page(dm_sections: list[IRNode], page_number: int) -> IRNode | None:
+    candidates = [section for section in dm_sections if section.page is not None and section.page <= page_number]
+    return candidates[-1] if candidates else None
 
 
 def _match_figure(image_rect, figures, page_width: float, page_height: float):
@@ -211,7 +259,14 @@ def _save_vector_figure(page, caption: str, dest: Path) -> bool:
         return False
 
 
-def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: str) -> int:
+def attach_illustrations(
+    root: IRNode,
+    *,
+    pdf_path: str,
+    out_dir: Path,
+    doc_id: str,
+    dm_level: int | None = None,
+) -> int:
     """Extrait les images du PDF, les enregistre en JPG et pose l'ICN sur les
     figures de l'IR (appariement par page + ordre de lecture). Renvoie le nombre
     d'images enregistrees. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
@@ -226,6 +281,7 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
 
     # Figures de l'IR par page (dans l'ordre), pour le nommage.
     figs_by_page: dict[int, list[IRNode]] = {}
+    dm_sections = _dm_sections(root, dm_level)
     for n in root.walk():
         if n.kind == "figure" and n.page is not None:
             figs_by_page.setdefault(n.page, []).append(n)
@@ -253,6 +309,36 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
                     continue
                 if digest is not None:
                     seen_digests.add(digest)
+                if _looks_like_pictogram(doc, xref):
+                    dm_section = _dm_for_page(dm_sections, pidx)
+                    chapter = _chapter_key(dm_section, pidx)
+                    name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
+                    if _save_pixmap(doc, xref, out_dir / name):
+                        saved += 1
+                        figure = _match_figure(
+                            image_rect,
+                            figure_anchors,
+                            float(page.rect.width),
+                            float(page.rect.height),
+                        )
+                        if figure is not None and not figure.icn:
+                            figure.text = f"Picto chapitre {chapter}"
+                            figure.icn = name
+                            figure.icns = [name]
+                            figure.is_pictogram = True
+                        else:
+                            pictogram = IRNode(
+                                id=f"picto-{pidx}-{xref}",
+                                kind="figure",
+                                form="caption",
+                                text=f"Picto chapitre {chapter}",
+                                page=pidx,
+                                icn=name,
+                                icns=[name],
+                                is_pictogram=True,
+                            )
+                            (dm_section or root).children.append(pictogram)
+                    continue
                 fig = _match_figure(
                     image_rect,
                     figure_anchors,
