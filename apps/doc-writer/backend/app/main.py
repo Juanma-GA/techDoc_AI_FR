@@ -2,19 +2,29 @@
 
 **Tier Modes (AACF HR8 — Configuration)**
 
-- **Tier 1 (local-only)** : development, bind 127.0.0.1, no auth required (default).
-  Set `TIER_MODE=tier1` in `.env`. Encryption and strict CORS are optional.
-  
-- **Tier 2 (cloud)** : production/Azure, bind 0.0.0.0, auth middleware required.
-  Set `TIER_MODE=tier2` in `.env`. Encryption (ENCRYPTION_KEY) and strict CORS
-  become MANDATORY. App fails to start if security requirements are not met.
+- **Tier 1 (local-only)** : development, bind 127.0.0.1, no auth required (default,
+  the ONLY tier supported by the monorepo standard — CLAUDE.md rule #8 /
+  STANDARD_POC.md §3.5: "Tout POC est local seul"). Set `TIER_MODE=tier1` in
+  `.env`. Encryption and strict CORS are optional.
+
+- **Tier 2 (cloud / exposed bind)** : out of the POC standard's scope. An
+  MFA pilot (R1, `settings.auth_enabled`) now exists: `_validate_security_posture()`
+  allows a non-local bind **only if** `settings.auth_fully_configured` is
+  true (AUTHDB + MS365 identity endpoint + CA bundle all wired) — otherwise
+  it still refuses to start (fail-fast `RuntimeError`), exactly as before the
+  pilot. See `README.md` (`## Auth`) and
+  `MFA_PILOT_CHECKLIST_DOC-WRITER_2026-09-14.md` for the documented écart and
+  scope.
 
 The tier mode is validated at startup via `_validate_security_posture()`.
 """
 
 from __future__ import annotations
 
+import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,8 +32,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import admin, documents, export, health, sessions
+from app.api import auth as auth_route
 from app.api import settings as settings_route
 from app.config import settings
+from app.core.auth_middleware import AuthMiddleware
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
@@ -40,6 +52,12 @@ _LOCAL_BIND_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def _is_local_bind() -> bool:
+    # `exposed_behind_proxy` : uvicorn ecoute bien sur 127.0.0.1, mais un
+    # reverse-proxy rend l'app joignable de l'exterieur -> traiter comme
+    # NON-local pour la posture de securite (sinon F-02 laisserait passer un
+    # deploiement expose sans auth). Le flag doit donc "gagner" sur le bind.
+    if settings.exposed_behind_proxy:
+        return False
     return settings.bind_host.strip().lower() in _LOCAL_BIND_HOSTS
 
 
@@ -51,8 +69,18 @@ def _is_local_origin(origin: str) -> bool:
 def _validate_security_posture() -> None:
     """Refuse de demarrer en posture deploiement (bind expose) si les protections
     sensibles ne sont pas configurees. Inerte en local (bind 127.0.0.1).
-    
-    En tier2, les verifications sont toujours appliquees (bind expose + auth obligatoire).
+
+    F-02 (hardening 2026-09-14) : palier 2/3 est hors perimetre du standard POC
+    (CLAUDE.md regle #8 / STANDARD_POC.md §3.5). A l'origine, AUCUN middleware
+    d'auth n'existait dans cette app et tout bind non-local etait bloque
+    inconditionnellement.
+
+    MFA pilot (R1, 2026-09-14, cf. MFA_PILOT_CHECKLIST_DOC-WRITER_2026-09-14.md) :
+    un middleware d'auth deleguee (service MCP d'identite MS365 + AUTHDB
+    Postgres dediee) existe desormais. Un bind non-local n'est autorise QUE si
+    `settings.auth_fully_configured` est vrai (AUTHDB + endpoint MS365 + CA
+    bundle si https, TOUS configures) ; sinon le comportement reste
+    IDENTIQUE a avant ce pilote : blocage inconditionnel, fail-fast.
     """
     # Tier1 (local) : skip security checks.
     if settings.tier_mode.lower() == "tier1" and _is_local_bind():
@@ -60,7 +88,19 @@ def _validate_security_posture() -> None:
 
     # Tier2 (cloud) ou bind expose : validation stricte.
     problems: list[str] = []
-    
+
+    # Auth reelle presente uniquement si TOUT le bloc MFA pilot est configure
+    # (settings.auth_fully_configured) ; sinon, meme blocage qu'avant ce pilote.
+    if not settings.auth_fully_configured:
+        problems.append(
+            "Aucune authentification pleinement configuree pour cette app "
+            "(palier 2/3 hors perimetre du standard POC, CLAUDE.md regle #8). "
+            "TIER_MODE=tier2 / un bind non-local ne peuvent pas demarrer tant "
+            "que auth_enabled + AUTHDB + ms365_mcp_endpoint (+ ms365_ca_bundle "
+            "si https) ne sont pas TOUS configures. Voir README.md ## Auth et "
+            "MFA_PILOT_CHECKLIST_DOC-WRITER_2026-09-14.md."
+        )
+
     # Tier2 specific : auth/encryption/CORS strictes sont OBLIGATOIRES.
     if settings.tier_mode.lower() == "tier2":
         if not settings.encryption_configured:
@@ -97,6 +137,22 @@ def _validate_security_posture() -> None:
         )
 
 
+logger = logging.getLogger("doc_writer.main")
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """MFA pilot (R1) : initialise l'AUTHDB Postgres dediee au demarrage,
+    fail-closed (une erreur ici interrompt le demarrage, jamais de repli
+    "continue sans auth") — inerte tant que `auth_enabled=False`."""
+    if settings.auth_enabled:
+        from app.core.auth_db import get_auth_db_service
+
+        get_auth_db_service().initialize()
+        logger.info("MFA pilot: AUTHDB initialized")
+    yield
+
+
 def create_app() -> FastAPI:
     configure_logging(settings.log_level)
     _validate_security_posture()
@@ -108,6 +164,7 @@ def create_app() -> FastAPI:
         docs_url="/api/v1/docs",
         redoc_url="/api/v1/redoc",
         openapi_url="/api/v1/openapi.json",
+        lifespan=_lifespan,
     )
 
     app.add_middleware(
@@ -119,6 +176,9 @@ def create_app() -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(RequestIdMiddleware)
+    # MFA pilot (R1) : peuple request.state.user sur chaque requete HTTP ;
+    # no-op tant que auth_enabled=False (cf. app.core.auth_middleware).
+    app.add_middleware(AuthMiddleware)
 
     register_error_handlers(app)
 
@@ -129,6 +189,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(settings_route.router)
     api_v1.include_router(admin.router)
     api_v1.include_router(export.router)
+    api_v1.include_router(auth_route.router)
     app.include_router(api_v1)
 
     _mount_frontend(app)

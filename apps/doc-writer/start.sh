@@ -34,7 +34,12 @@ source .venv/bin/activate
 if [[ ! -f .venv/.installed ]]; then
     echo "[setup] Installation des deps Python..."
     pip install --upgrade pip >/dev/null
-    pip install -e .
+    # F-07 (hardening) : installe depuis le lock hash-verifie (versions
+    # exactes) plutot que de re-resoudre les bornes ">=" de pyproject.toml a
+    # chaque poste -> build reproductible. --no-deps ensuite : le paquet local
+    # seul, les deps sont deja posees par le lock ci-dessus.
+    pip install -r requirements.lock.txt
+    pip install -e . --no-deps
     touch .venv/.installed
 fi
 

@@ -87,7 +87,7 @@ APP_FQDN="${APP_NAME}.${DEFAULT_DOMAIN}"
 # sinon l'app crashe au boot (SettingsError sur cors_origins).
 CORS_ORIGINS="[\"https://${APP_FQDN}\"]"
 
-# Cle Fernet (stdlib pure : format identique a app.core.encryption.generate_key).
+# Cle AES-256-GCM (stdlib pure : format identique a app.core.encryption.generate_key).
 ENCRYPTION_KEY="$(python -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())' 2>/dev/null \
   || python3 -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')"
 
@@ -153,11 +153,22 @@ else
   az containerapp create -g "$RG" -n "$APP_NAME" --yaml "$YAML" --only-show-errors -o none
 fi
 
+# F-03 (hardening) : ne JAMAIS echo la cle de chiffrement dans le terminal (scrollback,
+# logs CI, historique shell = fuite). Elle est deja injectee comme secret
+# Container Apps ('encryption-key') ; on l'ecrit aussi dans un fichier local
+# ignore par git (meme regle que containerapp.generated.yaml) pour permettre
+# un backup manuel hors-terminal, puis on invite a le deplacer/supprimer.
+KEY_FILE="$SCRIPT_DIR/.encryption-key.generated"
+umask 077
+printf '%s\n' "$ENCRYPTION_KEY" > "$KEY_FILE"
+chmod 600 "$KEY_FILE" 2>/dev/null || true
+
 say "TERMINE"
 echo "  URL       : https://${APP_FQDN}"
-echo "  Cle Fernet: $ENCRYPTION_KEY"
-echo "             (deja injectee comme secret 'encryption-key' ; garde-la pour"
-echo "              pouvoir dechiffrer la cle Mistral si tu recrees l'app)"
+echo "  Cle chiffrement (AES-256): ecrite dans $KEY_FILE (PAS affichee ici, cf. F-03 hardening)."
+echo "             Deja injectee comme secret Container Apps 'encryption-key'."
+echo "             Necessaire pour dechiffrer la cle Mistral si tu recrees l'app :"
+echo "             deplace ce fichier vers un coffre-fort de secrets puis supprime-le."
 echo
 echo "  Prochaine etape : ouvre l'URL -> onglet Parametres -> saisis la cle"
 echo "  Mistral (stockee chiffree en DB, sur le volume persistant) -> Test."

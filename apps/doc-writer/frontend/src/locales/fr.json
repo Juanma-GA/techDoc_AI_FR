@@ -238,12 +238,13 @@
     "totalSize": "Taille totale",
     "statsUnavailable": "Stats indisponibles.",
     "resetTitle": "Réinitialiser",
-    "resetWarn": "Toutes ces opérations sont irréversibles. La configuration Mistral (table app_config) est préservée.",
+    "resetWarn": "Ces opérations ne sont pas anodines. Un backup de la base est pris avant, et les fichiers supprimés sont déplacés vers une corbeille locale — mais il n'y a pas de restauration automatique. La configuration Mistral (table app_config) est préservée.",
     "resetDocuments": "Réinit documents",
     "resetSessions": "Réinit sessions",
     "resetAll": "Tout supprimer",
     "confirmAgain": "Cliquer encore pour confirmer",
-    "resetOk": "Reset OK ({{items}})."
+    "resetOk": "Reset OK ({{items}}).",
+    "resetBackup": "Backup enregistré dans {{path}}."
   },
   "template": {
     "fill": {
@@ -351,5 +352,39 @@
   "errors": {
     "generic": "Une erreur est survenue.",
     "noMistral": "Mistral n'est pas configuré. Renseigne ta clé dans Paramètres."
+  },
+  "auth": {
+    "welcome": "Content de te revoir",
+    "subtitle": "Connecte-toi à doc-writer",
+    "blurb": "doc-writer nécessite un compte Microsoft 365 professionnel. Connecte-toi avec ton email et ton mot de passe, puis confirme avec ta méthode de vérification habituelle — l'application Authenticator, un SMS ou un appel. Si tu ne peux pas te connecter, contacte le support IT.",
+    "emailLabel": "Email professionnel",
+    "passwordLabel": "Mot de passe",
+    "signIn": "Se connecter",
+    "signingIn": "Connexion en cours…",
+    "startFailed": "Impossible de démarrer la connexion. Vérifie ton adresse email et réessaie.",
+    "waiting": "Contact de ton organisation…",
+    "verifying": "Vérification…",
+    "mfaNumberTitle": "Ouvre Microsoft Authenticator et appuie sur ce nombre :",
+    "codeLabelTotp": "Code Authenticator",
+    "codeLabelSms": "Code SMS",
+    "codeLabelVoice": "Code lu à voix haute",
+    "awaitingCodeTotp": "Saisis le code à 6 chiffres de ton application Authenticator.",
+    "awaitingCodeSms": "Nous t'avons envoyé un code par SMS{{suffix}}. Saisis-le ci-dessous.",
+    "awaitingCodeVoice": "Nous te lisons un code par téléphone{{suffix}}. Saisis-le ci-dessous.",
+    "endingIn": "se terminant par {{destination}}",
+    "awaitingCall": "Microsoft appelle ton téléphone{{suffix}}. Réponds à l'appel et appuie sur #.",
+    "callFailed": "La vérification par appel téléphonique n'a pas abouti comme prévu.",
+    "chooseMethod": "Choisis comment vérifier que c'est bien toi :",
+    "codeRejected": "Ce code n'a pas été accepté.",
+    "cancelled": "Connexion annulée.",
+    "cancel": "Annuler",
+    "verify": "Vérifier",
+    "useOtherMethod": "Utiliser une autre méthode",
+    "timedOut": "La demande de connexion a expiré.",
+    "expired": "La demande de connexion a expiré. Réessaie.",
+    "providerError": "Échec de la connexion.",
+    "notReachable": "Impossible de joindre le service d'identité. La connexion se termine côté serveur…",
+    "genericError": "Une erreur est survenue. Réessaie.",
+    "logout": "Se déconnecter"
   }
 }

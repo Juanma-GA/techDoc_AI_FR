@@ -16,6 +16,22 @@ _TMP_DB = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _TMP_DB.close()
 os.environ["DATABASE_URL"] = f"sqlite:///{_TMP_DB.name}"
 os.environ.setdefault("STORAGE_DIR", tempfile.mkdtemp(prefix="doc-writer-storage-"))
+# F-05 : isole la cle auto-provisionnee (cf. mistral_client._get_secret_manager)
+# dans un tmp dir dedie, pour ne pas ecrire dans apps/doc-writer/backend/data/
+# (donnee locale reelle) pendant les tests.
+os.environ.setdefault(
+    "ENCRYPTION_KEY_PATH",
+    os.path.join(tempfile.mkdtemp(prefix="doc-writer-enckey-"), ".encryption_key"),
+)
+# MFA pilot (R1) : neutralise toute config AUTHDB/MFA reelle d'un .env local
+# de dev (ex. AUTHDB_HOST pointant sur le tunnel SSH vers le Postgres partage
+# is-team-dev-1-jjm) -- les tests doivent rester hermetiques et partir d'un
+# etat "rien configure", quel que soit ce que le developpeur a dans son .env.
+# os.environ (pas juste .env) a la priorite dans pydantic-settings, donc ceci
+# ecrase bien le fichier local.
+os.environ["AUTH_ENABLED"] = "false"
+for _var in ("AUTHDB_HOST", "AUTHDB_DATABASE", "AUTHDB_USER", "AUTHDB_PASSWORD"):
+    os.environ[_var] = ""
 
 
 @pytest.fixture(scope="session", autouse=True)

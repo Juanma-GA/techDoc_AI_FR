@@ -1,3 +1,10 @@
+# F-07 (hardening 2026-09-14) : les bornes `>=` ci-dessous restent volontairement
+# larges (compat editable install / dev), mais le build/deploiement REPRODUCTIBLE
+# passe par `requirements.lock.txt` (versions exactes + hashes sha256), genere
+# via pip-tools :
+#   pip install -e ".[dev]"
+#   python -m piptools compile --generate-hashes --output-file=requirements.lock.txt pyproject.toml
+# Installer depuis le lock (verifie les hashes) : pip install -r requirements.lock.txt
 [project]
 name = "doc-writer-backend"
 version = "0.1.0"
@@ -27,6 +34,12 @@ dependencies = [
     "python-pptx>=1.0",
     "reportlab>=4.0",
     "markdown>=3.5",
+    # MFA pilot (R1) : client MCP vers le service d'identite MS365 corporatif
+    # + AUTHDB Postgres dediee. Versions exactes alignees sur KleamPy (meme
+    # service d'identite, meme lock).
+    "mcp>=1.30",
+    "websockets>=15.0",
+    "psycopg[binary]>=3.3",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +49,7 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.6",
     "mypy>=1.10",
+    "pip-tools>=7.6",
 ]
 
 [build-system]
