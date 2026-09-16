@@ -66,6 +66,7 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 _FOOTER_LINE_TOLERANCE = 3.0
 _CMM_NUMBER_PATTERN = r"\d{2}-\d{2}-\d{2}"
 _DECIMAL_COMMA_PATTERN = r"(?<!\d)(\d+),(\d+)(?!\d)"
+_FORBIDDEN_CONSUMABLES = ["Silica gel", "dessicant bag"]
 _DEGREE_C_PATTERN = r"(?i)°\s*C\b"
 _DEGREE_F_PATTERN = r"(?i)°\s*F\b"
 _TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN = (
@@ -576,6 +577,20 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_FORBIDDEN_CONSUMABLES",
+        "Consommables a supprimer",
+        failure_message="consommable a supprimer.",
+        severity="error",
+        checks=[
+            Check(
+                field="text",
+                operator="contains_none",
+                expected=_FORBIDDEN_CONSUMABLES,
+                replacement="",
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_NO_DEGREE_C_SYMBOL",
         "Unite de temperature C ecrite au format deg. C",
         failure_message="unite °C interdite, utiliser deg. C.",
@@ -731,6 +746,14 @@ RULE_METADATA["CUSTOM_BAR_PSI_CONVERSION"] = {
     "kind": "field_required",
     "severity": "error",
     "message": "La pression en bar doit etre suivie de sa conversion en p.s.i.",
+}
+RULE_METADATA["CUSTOM_FORBIDDEN_CONSUMABLES"] = {
+    "description": (
+        "Les references aux consommables interdits doivent etre supprimees."
+    ),
+    "kind": "regex_flag",
+    "severity": "error",
+    "message": "Consommable a supprimer.",
 }
 RULE_METADATA["CUSTOM_NO_DEGREE_C_SYMBOL"] = {
     "description": "Le symbole °C doit etre ecrit sous la forme deg. C.",

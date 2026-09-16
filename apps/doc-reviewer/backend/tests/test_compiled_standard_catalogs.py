@@ -113,7 +113,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 54
+    assert total == 55
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -1159,6 +1159,31 @@ def test_bar_pressure_requires_a_parenthesized_psi_conversion() -> None:
     assert wrong_value[0].status == "FAIL"
     assert wrong_value_suggestions[0].original == "0.7 bar (10.25 p.s.i.)"
     assert wrong_value_suggestions[0].proposed == "0.7 bar (10.15 p.s.i.)"
+
+
+def test_forbidden_consumables_are_reported_by_one_rule() -> None:
+    rule = _rule("CUSTOM_FORBIDDEN_CONSUMABLES")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Use approved packaging."),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _pdf("Use Silica gel and dessicant bag."),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert {item.original for item in invalid_suggestions} == {
+        "Silica gel",
+        "dessicant bag",
+    }
+    assert {item.proposed for item in invalid_suggestions} == {""}
+    assert {item.rule_code for item in invalid_suggestions} == {
+        "CUSTOM_FORBIDDEN_CONSUMABLES"
+    }
 
 
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:
