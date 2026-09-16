@@ -399,10 +399,13 @@ def attach_illustrations(
 
     # Figures de l'IR par page (dans l'ordre), pour le nommage.
     figs_by_page: dict[int, list[IRNode]] = {}
+    pictogram_callouts_by_page: dict[int, list[IRNode]] = {}
     dm_sections = _dm_sections(root, dm_level)
     for n in root.walk():
         if n.kind == "figure" and n.page is not None:
             figs_by_page.setdefault(n.page, []).append(n)
+        if n.kind == "admonition" and n.is_pictogram and n.page is not None:
+            pictogram_callouts_by_page.setdefault(n.page, []).append(n)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
@@ -455,6 +458,8 @@ def attach_illustrations(
                     name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
                     if _save_pixmap(doc, xref, out_dir / name):
                         saved += 1
+                        if pictogram_callouts_by_page.get(pidx):
+                            continue
                         if figure is not None and not figure.icn:
                             figure.text = f"Picto chapitre {chapter}"
                             figure.icn = name

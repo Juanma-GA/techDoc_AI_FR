@@ -104,6 +104,31 @@ def _block_is_bold(spans: list[dict]) -> bool:
     return False
 
 
+def _pictogram_rects(page: fitz.Page) -> list[fitz.Rect]:
+    """Retourne les occurrences d'images assez petites pour etre des pictos."""
+    try:
+        infos = page.get_image_info(xrefs=True)
+    except Exception:
+        return []
+    return [
+        fitz.Rect(info["bbox"])
+        for info in infos
+        if int(info.get("width", 0)) <= 65 and int(info.get("height", 0)) <= 65
+    ]
+
+
+def _block_has_pictogram(bbox: tuple, pictograms: list[fitz.Rect]) -> bool:
+    if not pictograms or bbox[0] is None or bbox[1] is None:
+        return False
+    block_rect = fitz.Rect(bbox)
+    return any(
+        pictogram.y1 >= block_rect.y0 - 4
+        and pictogram.y0 <= block_rect.y1 + 4
+        and pictogram.x1 <= block_rect.x0 + 30
+        for pictogram in pictograms
+    )
+
+
 def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
     data = page.get_text("dict")
     blocks: list[RawBlock] = []
@@ -112,6 +137,7 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
     # est faux -> on neutralise la geometrie (page_height=None) et zone reste body.
     rotated = int(page.rotation) != 0
     page_height = None if rotated else round(float(page.rect.height), 1)
+    pictograms = _pictogram_rects(page)
     for block in data.get("blocks", []):
         lines = block.get("lines", [])
         if not lines:
@@ -145,6 +171,7 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
                 y0=None if rotated or bbox[1] is None else round(float(bbox[1]), 1),
                 y1=None if rotated or bbox[3] is None else round(float(bbox[3]), 1),
                 page_height=page_height,
+                is_pictogram=_block_has_pictogram(bbox, pictograms),
             )
         )
     return blocks

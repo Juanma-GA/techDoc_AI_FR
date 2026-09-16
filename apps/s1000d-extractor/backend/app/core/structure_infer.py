@@ -94,6 +94,8 @@ def _merge_touching_continuation(blocks: list[RawBlock]) -> list[RawBlock]:
 def _is_touching_continuation(previous: RawBlock, current: RawBlock) -> bool:
     if previous.page != current.page or previous.is_table or current.is_table:
         return False
+    if previous.zone != current.zone or previous.zone != "body":
+        return False
     if previous.y1 is None or current.y0 is None:
         return False
     if current.y0 - previous.y1 > 2.0:
@@ -108,9 +110,9 @@ def _is_touching_continuation(previous: RawBlock, current: RawBlock) -> bool:
 
 def build_ir(blocks: list[RawBlock]) -> IRNode:
     """Transforme une liste de blocs bruts en un arbre IR a racine unique."""
+    zone_classifier.classify_zones(blocks)   # tague les zones avant toute fusion
     blocks = _merge_touching_continuation(blocks)
     ids = _Ids()
-    zone_classifier.classify_zones(blocks)   # tague entetes/pieds (PDF)
     body_size = heur.body_font_size(blocks)
     root = IRNode(id=ids.next(), kind="section", text="", level=0)
 
@@ -167,13 +169,19 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
 
         # 3) Admonition (warning / caution / note) ------------------------
         adm = heur.detect_admonition(text)
+        confidence = 0.85
+        rationale = "Marqueur textuel d'admonition detecte."
+        if adm is None and block.is_pictogram:
+            adm, confidence, rationale = heur.classify_callout(text, pictogram=True)
         if adm is not None:
             close_list()
             current().children.append(
                 IRNode(id=ids.next(), kind="admonition", admonition=adm,
                        form="plain", text=text, page=block.page, zone=block.zone,
-                      refs=heur.detect_refs(text) or None, confidence=0.85,
-                      inline_runs=_inline_runs_for_text(block.inline_runs, block.text, text))
+                       refs=heur.detect_refs(text) or None, confidence=confidence,
+                       admonition_rationale=rationale,
+                       is_pictogram=block.is_pictogram,
+                       inline_runs=_inline_runs_for_text(block.inline_runs, block.text, text))
             )
             continue
 

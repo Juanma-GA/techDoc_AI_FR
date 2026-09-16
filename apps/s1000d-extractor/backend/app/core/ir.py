@@ -83,6 +83,7 @@ class RawBlock:
     font_size: float | None = None
     bold: bool = False
     inline_runs: list[InlineRun] = field(default_factory=list)
+    is_pictogram: bool = False
     heading_level: int | None = None    # 1..n si connu par l'adapter
     list_kind: Literal["bullet", "ordered"] | None = None
     list_level: int = 0
@@ -134,6 +135,7 @@ class IRNode:
     page: int | None = None
     zone: Zone = "body"
     confidence: float = 1.0
+    admonition_rationale: str = ""
     candidates: list[Candidate] = field(default_factory=_empty_candidates)
     children: list[IRNode] = field(default_factory=_empty_children)
     table_rows: list[list[str]] | None = None
@@ -169,6 +171,7 @@ def from_dict(data: dict) -> IRNode:
         page=data.get("page"),
         zone=data.get("zone", "body"),
         confidence=data.get("confidence", 1.0),
+        admonition_rationale=str(data.get("admonition_rationale") or ""),
         candidates=[
             Candidate(c["element"], c.get("score", 0.0), c.get("rationale", ""))
             for c in data.get("candidates", [])
@@ -215,6 +218,7 @@ def to_dict(node: IRNode) -> dict:
         "page": node.page,
         "zone": node.zone,
         "confidence": round(node.confidence, 3),
+        "admonition_rationale": node.admonition_rationale,
         "candidates": [
             {"element": c.element, "score": round(c.score, 3), "rationale": c.rationale}
             for c in node.candidates

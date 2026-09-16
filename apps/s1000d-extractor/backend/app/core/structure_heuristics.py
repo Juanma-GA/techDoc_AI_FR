@@ -13,7 +13,7 @@ import re
 import statistics
 
 from app.core.ir import RawBlock
-from app.core.notes_detector import detect_note_kind
+from app.core.notes_detector import classify_admonition, detect_note_kind
 
 # --- Formes de liste ---------------------------------------------------------
 
@@ -118,6 +118,11 @@ def detect_admonition(text: str) -> str | None:
         if pat.match(text):
             return kind
     return detect_note_kind(text)
+
+
+def classify_callout(text: str, *, pictogram: bool = False) -> tuple[str | None, float, str]:
+    """Retourne le type, la confiance et la justification d'un callout."""
+    return classify_admonition(text, pictogram=pictogram)
 
 
 def is_caption(text: str) -> bool:
