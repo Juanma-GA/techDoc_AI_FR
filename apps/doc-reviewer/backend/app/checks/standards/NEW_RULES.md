@@ -43,7 +43,8 @@ obtenir une suggestion compréhensible :
 - `require_all=True` impose la présence du motif sur chaque cible (utile pour
     un footer répété sur plusieurs pages) ;
 - `missing_anchor` indique un texte voisin auquel accrocher un élément absent ;
-- `missing_anchor_position` vaut `"above"` ou `"below"` selon la mise en page.
+- `missing_anchor_position` vaut `"above"`, `"below"` ou `"same"` selon la
+    mise en page. `"same"` pose la bbox directement sur l'ancre existante.
 
 Les placeholders comme `{{meta_revision_number}}` sont résolus depuis le
 mapping du document dans `expected_display` et `replacement`.

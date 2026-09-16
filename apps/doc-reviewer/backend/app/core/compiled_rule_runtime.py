@@ -76,17 +76,27 @@ def document_metadata(document: Any | None) -> dict[str, str]:
 
 
 def page_span_ranges(page: ParsedPage) -> tuple[_SpanRange, ...]:
+    page_text = page.text or ""
     ranges: list[_SpanRange] = []
     cursor = 0
     for span in page.spans:
-        text = span.text.strip()
-        if not text:
+        span_text = span.text.strip()
+        if not span_text:
             continue
-        if ranges:
-            cursor += 1
-        start = cursor
-        cursor += len(text)
-        ranges.append((start, cursor, span.bbox))
+        start = page_text.find(span_text, cursor)
+        if start < 0:
+            whitespace_pattern = r"\s+".join(
+                re.escape(part) for part in span_text.split()
+            )
+            match = re.search(whitespace_pattern, page_text[cursor:])
+            if match is None:
+                continue
+            start = cursor + match.start()
+            end = cursor + match.end()
+        else:
+            end = start + len(span_text)
+        ranges.append((start, end, span.bbox))
+        cursor = end
     return tuple(ranges)
 
 

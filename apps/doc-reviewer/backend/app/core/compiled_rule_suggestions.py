@@ -580,6 +580,8 @@ def missing_item_bbox(
         )
         if not is_nonzero_bbox(anchor):
             continue
+        if check.missing_anchor_position == "same":
+            return anchor
         height = max(anchor[3] - anchor[1], 1.0)
         width = max(anchor[2] - anchor[0], height * max(len(expected or ""), 4) * 0.45)
         if check.missing_anchor_position == "below":

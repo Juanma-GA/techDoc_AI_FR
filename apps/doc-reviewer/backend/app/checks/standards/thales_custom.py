@@ -34,6 +34,7 @@ _TP1_ADDRESS_TARGET = RuleTarget(page="all", region="full_page", page_type="TP1"
 _ORIGIN = f"{STANDARD_CODE}:v1"
 TP1_PAGE_TYPE = "TP1"
 HIGHLIGHTS_PAGE_TYPE = "HIGHLIGHTS"
+HIGHLIGHTS_FIRST_PAGE_TYPE = "HIGHLIGHTS_PAGE_1"
 REPAIR_PAGE_TYPE = "REPAIR"
 TESTING_PAGE_TYPE = "TESTING"
 STORAGE_PAGE_TYPE = "STORAGE"
@@ -42,10 +43,17 @@ _PAGE_TYPE_MARKERS = {
     page_type: re.compile(rf"(?im)^\s*{page_type}\s*$")
     for page_type in _NOTE_PAGE_TYPES
 }
+_HIGHLIGHTS_PAGE_1_MARKER = re.compile(r"(?i)\bHighlights\s+Page\s+1\b")
+_HIGHLIGHTS_PAGE_TYPES = [HIGHLIGHTS_PAGE_TYPE, HIGHLIGHTS_FIRST_PAGE_TYPE]
 _HIGHLIGHTS_TARGET = RuleTarget(
     page="all",
     region="full_page",
-    page_type=HIGHLIGHTS_PAGE_TYPE,
+    page_types=_HIGHLIGHTS_PAGE_TYPES,
+)
+_HIGHLIGHTS_FIRST_PAGE_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
 )
 _HEADER_TARGET = RuleTarget(
     page="all",
@@ -55,7 +63,7 @@ _HEADER_TARGET = RuleTarget(
 _HIGHLIGHTS_PNR_TARGET = RuleTarget(
     page="all",
     region="full_page",
-    page_type=HIGHLIGHTS_PAGE_TYPE,
+    page_types=_HIGHLIGHTS_PAGE_TYPES,
 )
 _TP1_PNR_TARGET = RuleTarget(
     page="all",
@@ -84,6 +92,7 @@ _EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
     r"(?i)(?<!\w)First\s+issue\s*:\s*{{meta_first_issue_date}}(?!\w)"
 )
 _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+{{meta_revision_date}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
 _EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_pnr_number}}(?!\w)"
 _UNEXPECTED_PNR_PATTERN = (
     r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
@@ -193,7 +202,15 @@ def identify_page_type(
             has_marker = bool(page_marker_pattern.search(footer_text))
             if has_anchor and has_marker:
                 page.page_type = page_name
-            elif page.page_type == page_name:
+                if (
+                    page_name == HIGHLIGHTS_PAGE_TYPE
+                    and _HIGHLIGHTS_PAGE_1_MARKER.search(page.text)
+                ):
+                    page.page_type = HIGHLIGHTS_FIRST_PAGE_TYPE
+            elif page.page_type == page_name or (
+                page_name == HIGHLIGHTS_PAGE_TYPE
+                and page.page_type in _HIGHLIGHTS_PAGE_TYPES
+            ):
                 page.page_type = None
         elif page.page_type == page_name:
             page.page_type = None
@@ -270,7 +287,7 @@ def _rule(
     failure_message: str | None = None,
     expected_display: str | None = None,
     missing_anchor: str | None = None,
-    missing_anchor_position: Literal["above", "below"] = "above",
+    missing_anchor_position: Literal["above", "below", "same"] = "above",
     replacement: str | None = None,
     only_if: Condition | None = None,
 ) -> CompiledRule:
@@ -310,7 +327,7 @@ def _required_text_check(
     display: str | None = None,
     suggestion_mode: Literal["fuzzy", "single", "all"] = "fuzzy",
     anchor: str | None = None,
-    anchor_position: Literal["above", "below"] = "above",
+    anchor_position: Literal["above", "below", "same"] = "above",
 ) -> Check:
     return Check(
         field="text",
@@ -421,8 +438,8 @@ _RULES_V1 = [
             _required_text_check(
                 _EXPECTED_TP1_FIRST_ISSUE_PATTERN,
                 display="First issue: {{meta_first_issue_date}}",
-                anchor=r"(?i)Revision\s+No\.?\s*\d{2}",
-                anchor_position="below",
+                anchor=r"(?i)\bFirst\s+issue\s*:",
+                anchor_position="same",
             ),
         ],
     ),
@@ -439,6 +456,23 @@ _RULES_V1 = [
                 suggestion_mode="single",
                 anchor=r"(?i)\bHighlights\b",
                 anchor_position="above",
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_HIGHLIGHTS_ATA_NUMBER",
+        "Numero ATA present sur la premiere page Highlights",
+        failure_message="numero ATA Highlights absent ou non conforme.",
+        target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+        severity="error",
+        only_if=Condition(field="meta_cmm_number", state="present"),
+        checks=[
+            _required_text_check(
+                _EXPECTED_HIGHLIGHTS_ATA_PATTERN,
+                display="ATA No {{meta_cmm_number}}",
+                suggestion_mode="single",
+                anchor=r"(?i)\bATA\s+No\b",
+                anchor_position="same",
             ),
         ],
     ),
@@ -692,6 +726,15 @@ RULE_METADATA["CUSTOM_HIGHLIGHTS_REVISION_HEADER"] = {
         "L'en-tete de revision Highlights est absent, incorrect ou place "
         "apres le tableau."
     ),
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_ATA_NUMBER"] = {
+    "description": (
+        "La premiere page Highlights doit contenir le numero ATA correspondant "
+        "au numero CMM du mapping du document."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le numero ATA de la premiere page Highlights est absent ou incorrect.",
 }
 RULE_METADATA["CUSTOM_HIGHLIGHTS_PNR_HEADER"] = {
     "description": (

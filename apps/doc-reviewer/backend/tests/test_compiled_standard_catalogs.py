@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 from app.checks.standards.thales_custom import (
     HIGHLIGHTS_PAGE_TYPE,
+    HIGHLIGHTS_FIRST_PAGE_TYPE,
     REPAIR_PAGE_TYPE,
     STORAGE_PAGE_TYPE,
     TESTING_PAGE_TYPE,
@@ -113,7 +114,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 55
+    assert total == 56
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -438,7 +439,7 @@ def test_highlights_revision_header_matches_mapping() -> None:
     classify_pages(missing, document)
     missing_results, _ = execute_pdf_rules(missing, [rule], document=document)
 
-    assert valid.pages[0].page_type == HIGHLIGHTS_PAGE_TYPE
+    assert valid.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
     assert valid_results[0].status == "PASS"
     assert valid_suggestions == []
     assert invalid_results[0].status == "FAIL"
@@ -447,6 +448,136 @@ def test_highlights_revision_header_matches_mapping() -> None:
     assert invalid_suggestions[0].proposed == "REVISION No. 04 DATED JUL 27/26"
     assert invalid_suggestions[0].bbox == (40.0, 756.0, 300.0, 766.0)
     assert missing_results[0].status == "FAIL"
+
+
+def test_first_highlights_page_contains_the_mapped_ata_number() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ATA_NUMBER")
+    document = SimpleNamespace(
+        meta_cmm_number="23-56-25",
+        meta_revision_date="JUL 27/26",
+    )
+
+    valid_pages = [
+        _page_with_footer_lines(
+            7,
+            [
+                "CMM: 23-56-25",
+                "JUL 27/26",
+                "Highlights Page 1",
+                "ATA No 23-56-25",
+            ],
+        ),
+        _page_with_footer_lines(
+            8,
+            ["CMM: 23-56-25", "JUL 27/26", "Highlights Page 2"],
+        ),
+    ]
+    valid_parsed = ParsedPdf(
+        page_count=8,
+        pages=valid_pages,
+        full_text="\n".join(page.text for page in valid_pages),
+        is_signed=False,
+    )
+    classify_pages(valid_parsed, document)
+    valid, valid_suggestions = execute_pdf_rules(
+        valid_parsed,
+        [rule],
+        document=document,
+    )
+
+    invalid_page = _page_with_footer_lines(
+        7,
+        [
+            "CMM: 23-56-25",
+            "JUL 27/26",
+            "Highlights Page 1",
+            "ATA No 23-56-24",
+        ],
+    )
+    invalid_parsed = ParsedPdf(
+        page_count=7,
+        pages=[invalid_page],
+        full_text=invalid_page.text,
+        is_signed=False,
+    )
+    classify_pages(invalid_parsed, document)
+    invalid, invalid_suggestions = execute_pdf_rules(
+        invalid_parsed,
+        [rule],
+        document=document,
+    )
+
+    missing_page = _page_with_footer_lines(
+        7,
+        ["CMM: 23-56-25", "JUL 27/26", "Highlights Page 1"],
+    )
+    missing_parsed = ParsedPdf(
+        page_count=7,
+        pages=[missing_page],
+        full_text=missing_page.text,
+        is_signed=False,
+    )
+    classify_pages(missing_parsed, document)
+    missing, missing_suggestions = execute_pdf_rules(
+        missing_parsed,
+        [rule],
+        document=document,
+    )
+
+    assert valid_pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
+    assert valid_pages[1].page_type == HIGHLIGHTS_PAGE_TYPE
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert invalid_suggestions[0].proposed == "ATA No 23-56-25"
+    assert missing[0].status == "FAIL"
+    assert missing_suggestions[0].proposed == "ATA No 23-56-25"
+
+
+def test_missing_highlights_ata_number_anchors_the_comment_on_ata_label() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ATA_NUMBER")
+    document = SimpleNamespace(
+        meta_cmm_number="23-56-25",
+        meta_revision_date="JUL 27/26",
+    )
+    page = ParsedPage(
+        page=7,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="Manual header\n\nATA No  HIGHLIGHTS\nHighlights Page 1",
+        spans=[
+            Span(
+                text="Manual header",
+                bbox=(86.0, 80.0, 180.0, 95.0),
+                page=7,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="ATA No  ",
+                bbox=(86.0, 116.0, 134.0, 131.0),
+                page=7,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="HIGHLIGHTS",
+                bbox=(86.0, 140.0, 180.0, 155.0),
+                page=7,
+                font="Arial",
+                size=10.0,
+            ),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=7, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+        document=document,
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].bbox == (86.0, 116.0, 134.0, 131.0)
 
 
 def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> None:

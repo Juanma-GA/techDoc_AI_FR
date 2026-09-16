@@ -135,7 +135,7 @@ class Check(StrictModel):
     expected_display: str | None = None
     suggestion_mode: Literal["fuzzy", "single", "all"] = "fuzzy"
     missing_anchor: str | None = None
-    missing_anchor_position: Literal["above", "below"] = "above"
+    missing_anchor_position: Literal["above", "below", "same"] = "above"
     normalization: list[NormalizationStep] | None = None
     # Auto-fix proposals for deterministic FAILs, mirroring the legacy
     # regex_replace/term_replace custom-rule kinds — kept optional because
