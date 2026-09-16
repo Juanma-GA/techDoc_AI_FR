@@ -113,7 +113,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 53
+    assert total == 54
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -1127,6 +1127,38 @@ def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion()
     assert misplaced_suggestions[0].proposed == (
         "Temperature: 15 to 35 deg. C (59 to 95 deg. F)"
     )
+
+
+def test_bar_pressure_requires_a_parenthesized_psi_conversion() -> None:
+    rule = _rule("CUSTOM_BAR_PSI_CONVERSION")
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Pressure: 0.7 bar (10.15 p.s.i.)"),
+        [rule],
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        _pdf("Pressure: 0.7 bar"),
+        [rule],
+    )
+    wrong_unit, wrong_unit_suggestions = execute_pdf_rules(
+        _pdf("Pressure: 0.7 bar (20.67 inHg)"),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert missing[0].status == "FAIL"
+    assert missing_suggestions[0].original == "0.7 bar"
+    assert missing_suggestions[0].proposed == "0.7 bar (10.15 p.s.i.)"
+    wrong_value, wrong_value_suggestions = execute_pdf_rules(
+        _pdf("Pressure: 0.7 bar (10.25 p.s.i.)"),
+        [rule],
+    )
+    assert wrong_unit[0].status == "FAIL"
+    assert wrong_unit_suggestions[0].original == "0.7 bar (20.67 inHg)"
+    assert wrong_unit_suggestions[0].proposed == "0.7 bar (10.15 p.s.i.)"
+    assert wrong_value[0].status == "FAIL"
+    assert wrong_value_suggestions[0].original == "0.7 bar (10.25 p.s.i.)"
+    assert wrong_value_suggestions[0].proposed == "0.7 bar (10.15 p.s.i.)"
 
 
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:

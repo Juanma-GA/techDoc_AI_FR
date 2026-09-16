@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Literal
 
-from app.core.compiled_rules import Check, Condition, CompiledRule, FieldRef, RuleResult
+from app.core.compiled_rules import (
+    Check,
+    Condition,
+    CompiledRule,
+    FieldRef,
+    RuleResult,
+    RuleTarget,
+)
 from app.parsers.pdf_parser import ParsedPage
 from app.core.logging import get_logger
 
@@ -19,6 +28,86 @@ from app.core.compiled_rule_runtime import (
 )
 
 _logger = get_logger(__name__)
+
+
+_PRESSURE_VALUE_PATTERN = r"[+-]?\d+(?:[.,]\d+)?"
+_BAR_PRESSURE_RE = re.compile(
+    rf"(?P<value>{_PRESSURE_VALUE_PATTERN})\s*bar\b",
+    re.IGNORECASE,
+)
+_BAR_PSI_CONVERSION_RE = re.compile(
+    rf"[ \t]*\(\s*(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?:psi|p\s*\.?\s*s\s*\.?\s*i\s*\.?)\s*\)",
+    re.IGNORECASE,
+)
+_PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
+_BAR_TO_PSI = Decimal("14.5037738")
+_PRESSURE_DISPLAY_TOLERANCE = Decimal("0.005")
+
+
+@dataclass(frozen=True)
+class PressureConversionIssue:
+    original: str
+    proposed: str
+    expected: str
+    span: tuple[int, int]
+
+
+def _format_psi(value: Decimal) -> str:
+    rounded = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return f"{rounded:.2f}"
+
+
+def pressure_conversion_issues(
+    text: str,
+    policy: str = "bar_to_psi",
+) -> list[PressureConversionIssue]:
+    """Return bar values missing or carrying an incorrect psi conversion."""
+    if policy != "bar_to_psi":
+        return []
+
+    issues: list[PressureConversionIssue] = []
+    for source_match in _BAR_PRESSURE_RE.finditer(text):
+        try:
+            bar_value = Decimal(source_match.group("value").replace(",", "."))
+        except InvalidOperation:
+            continue
+
+        expected_value = bar_value * _BAR_TO_PSI
+        expected_conversion = f"({_format_psi(expected_value)} p.s.i.)"
+        conversion_match = _BAR_PSI_CONVERSION_RE.match(text, source_match.end())
+        original_end = source_match.end()
+        valid_conversion = False
+        if conversion_match is not None:
+            original_end = conversion_match.end()
+            try:
+                observed_value = Decimal(
+                    conversion_match.group("value").replace(",", ".")
+                )
+            except InvalidOperation:
+                observed_value = None
+            if observed_value is not None:
+                valid_conversion = (
+                    abs(observed_value - expected_value)
+                    <= _PRESSURE_DISPLAY_TOLERANCE
+                )
+        else:
+            parenthesized = _PARENTHESIZED_VALUE_RE.match(text, source_match.end())
+            if parenthesized is not None:
+                original_end = parenthesized.end()
+
+        if valid_conversion:
+            continue
+        source = source_match.group(0)
+        issues.append(
+            PressureConversionIssue(
+                original=text[source_match.start() : original_end],
+                proposed=f"{source} {expected_conversion}",
+                expected=expected_conversion,
+                span=(source_match.start(), original_end),
+            )
+        )
+    return issues
 
 
 def evaluate_rule(
@@ -86,6 +175,14 @@ def evaluate_check(
         return ("PASS" if match is None else "FAIL"), target, observed, expected
     if check.operator in {"regex", "regex_exists"}:
         return evaluate_regex(check, values, rule_id, ctx)
+    if check.operator == "pressure_conversion":
+        policy = str(check.expected)
+        for target, value in values:
+            issues = pressure_conversion_issues(value or "", policy)
+            if issues:
+                issue = issues[0]
+                return "FAIL", target, issue.original, issue.expected
+        return "PASS", values[0][0], None, policy
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)

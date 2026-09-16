@@ -561,6 +561,21 @@ _RULES_V1 = [
         replacement="{{temperature_fahrenheit}}",
     ),
     _rule(
+        "CUSTOM_BAR_PSI_CONVERSION",
+        "Pression en bar accompagnee de sa conversion en p.s.i.",
+        failure_message=(
+            "conversion p.s.i. absente ou incorrecte pour une pression en bar."
+        ),
+        severity="error",
+        checks=[
+            Check(
+                field="text",
+                operator="pressure_conversion",
+                expected="bar_to_psi",
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_NO_DEGREE_C_SYMBOL",
         "Unite de temperature C ecrite au format deg. C",
         failure_message="unite °C interdite, utiliser deg. C.",
@@ -707,6 +722,15 @@ RULE_METADATA["CUSTOM_TEMPERATURE_FAHRENHEIT"] = {
     "kind": "regex_flag",
     "severity": "error",
     "message": "La temperature en deg. C doit etre suivie de sa conversion en deg. F.",
+}
+RULE_METADATA["CUSTOM_BAR_PSI_CONVERSION"] = {
+    "description": (
+        "Toute pression exprimee en bar doit etre suivie entre parentheses "
+        "de sa conversion numerique en p.s.i."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "La pression en bar doit etre suivie de sa conversion en p.s.i.",
 }
 RULE_METADATA["CUSTOM_NO_DEGREE_C_SYMBOL"] = {
     "description": "Le symbole °C doit etre ecrit sous la forme deg. C.",

@@ -128,6 +128,7 @@ class Check(StrictModel):
         # Compiling "this text must be present" as `regex` inverts the
         # intent and flags the correct text as a violation every time.
         "regex_exists",
+        "pressure_conversion",
     ]
     expected: str | int | list[str] | None = None
     require_all: bool = False
@@ -169,6 +170,8 @@ class Check(StrictModel):
                 re.compile(self.expected)
             except re.error as exc:
                 raise ValueError(f"regex invalide: {exc.msg}") from exc
+        if self.operator == "pressure_conversion" and self.expected != "bar_to_psi":
+            raise ValueError("pressure_conversion requires expected='bar_to_psi'")
         if self.missing_anchor is not None:
             try:
                 re.compile(self.missing_anchor)
@@ -354,6 +357,11 @@ def _describe_check(check: Check) -> str:
         return f'{text} (remplacement propose : "{check.replacement}")' if check.replacement else text
     if check.operator == "regex_exists":
         return f"{check.field} doit correspondre a /{check.expected}/ (motif obligatoire)"
+    if check.operator == "pressure_conversion":
+        return (
+            f"{check.field} doit contenir chaque pression en bar suivie de sa "
+            "conversion numerique en p.s.i. entre parentheses"
+        )
     if check.operator in {"contains_any", "contains_all", "contains_none"}:
         verb = {
             "contains_any": "contient au moins un de",

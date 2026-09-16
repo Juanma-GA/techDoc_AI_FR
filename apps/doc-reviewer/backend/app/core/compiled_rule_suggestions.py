@@ -26,6 +26,7 @@ from app.core.compiled_rule_operators import (
     evaluate_check,
     field_value,
     normalize,
+    pressure_conversion_issues,
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
@@ -70,6 +71,17 @@ def deterministic_suggestions(
     for check in rule.checks:
         if check.operator == "regex" and check.expected is not None:
             suggestions.extend(regex_suggestions(rule, check, targets, rule_kind, message, ctx))
+        elif check.operator == "pressure_conversion":
+            suggestions.extend(
+                pressure_conversion_suggestions(
+                    rule,
+                    check,
+                    targets,
+                    rule_kind,
+                    message,
+                    ctx.pdf_pages,
+                )
+            )
         elif check.operator == "regex_exists" and check.expected_display is not None:
             check_status, _target, _observed, _expected = evaluate_check(
                 check, targets, ctx, rule.id
@@ -739,6 +751,38 @@ def _temperature_fahrenheit_replacement(original: str) -> str:
     except (InvalidOperation, ValueError):
         return ""
     return f"{original} ({first}{second} deg. F)"
+
+
+def pressure_conversion_suggestions(
+    rule: CompiledRule,
+    check: Check,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+    pdf_pages: list[ParsedPage] | None,
+) -> list[RawSuggestion]:
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        for issue in pressure_conversion_issues(target.text, str(check.expected)):
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule.id,
+                    severity=rule.severity,
+                    message=message,
+                    original=issue.original,
+                    proposed=issue.proposed,
+                    page=target.raw_page,
+                    span=issue.span,
+                    bbox=suggestion_bbox(
+                        target,
+                        issue.original,
+                        pdf_pages,
+                        span_start=issue.span[0],
+                    ),
+                )
+            )
+    return suggestions
 
 
 def term_search_suggestions(
