@@ -24,8 +24,9 @@ import re
 from lxml import etree
 
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
-from app.core.ir import IRNode
+from app.core.ir import IRNode, InlineRun
 from app.core.pmc import parse_dmc
+from app.core.s1000d_codes import emphasis_code_for_style, get_code
 
 _BANNER = (
     " Squelette structurel best-effort genere par s1000d extractor. "
@@ -292,9 +293,59 @@ def _emit_refs(parent: etree._Element, node: IRNode) -> None:
             )
 
 
-def _para(parent: etree._Element, text: str) -> None:
+def _run_value(run: InlineRun | dict, name: str, default: object = "") -> object:
+    if isinstance(run, dict):
+        return run.get(name, default)
+    return getattr(run, name, default)
+
+
+def _run_emphasis_code(run: InlineRun | dict) -> str | None:
+    if not str(_run_value(run, "text", "")).strip():
+        return None
+    for style in ("bold", "italic", "underline", "overline", "strikethrough"):
+        if not bool(_run_value(run, style, False)):
+            continue
+        code = emphasis_code_for_style(style)
+        if code and get_code("emphasisType", code):
+            return code
+    return None
+
+
+def _append_inline_text(parent: etree._Element, text: str) -> None:
+    safe_text = xml_text(text)
+    if not safe_text:
+        return
+    if len(parent):
+        last = parent[-1]
+        last.tail = (last.tail or "") + safe_text
+    else:
+        parent.text = (parent.text or "") + safe_text
+
+
+def _inline_content(
+    parent: etree._Element,
+    text: str,
+    runs: list[InlineRun] | None = None,
+) -> None:
+    usable_runs = runs or []
+    if usable_runs and "".join(str(_run_value(run, "text", "")) for run in usable_runs) != text:
+        usable_runs = []
+    if not usable_runs:
+        _append_inline_text(parent, text)
+        return
+    for run in usable_runs:
+        run_text = str(_run_value(run, "text", ""))
+        code = _run_emphasis_code(run)
+        if code:
+            emphasis = etree.SubElement(parent, "emphasis", emphasisType=code)
+            emphasis.text = xml_text(run_text)
+        else:
+            _append_inline_text(parent, run_text)
+
+
+def _para(parent: etree._Element, text: str, runs: list[InlineRun] | None = None) -> None:
     el = etree.SubElement(parent, "para")
-    el.text = xml_text(text)
+    _inline_content(el, text, runs)
 
 
 def _emit_row(parent: etree._Element, cells: list[str]) -> None:
@@ -350,7 +401,7 @@ def _emit_admonition(parent: etree._Element, node: IRNode) -> None:
     el = etree.SubElement(parent, element)
     child = "notePara" if node.admonition == "note" else "warningAndCautionPara"
     para = etree.SubElement(el, child)
-    para.text = xml_text(node.text)
+    _inline_content(para, node.text, node.inline_runs)
 
 
 def _emit_list(parent: etree._Element, node: IRNode) -> None:
@@ -359,12 +410,12 @@ def _emit_list(parent: etree._Element, node: IRNode) -> None:
         # En procedure, chaque item devient une etape independante.
         for item in node.children:
             step = etree.SubElement(parent, "proceduralStep")
-            _para(step, item.text)
+            _para(step, item.text, item.inline_runs)
         return
     list_el = etree.SubElement(parent, top)
     for item in node.children:
         li = etree.SubElement(list_el, "listItem")
-        _para(li, item.text)
+        _para(li, item.text, item.inline_runs)
         _emit_refs(li, item)
 
 
@@ -393,10 +444,10 @@ def _emit_node(
         top = _top_element(node, "para")
         if top == "proceduralStep":
             step = etree.SubElement(parent, "proceduralStep")
-            _para(step, node.text)
+            _para(step, node.text, node.inline_runs)
             _emit_refs(step, node)
         else:
-            _para(parent, node.text)
+            _para(parent, node.text, node.inline_runs)
             _emit_refs(parent, node)
     elif node.kind == "section":
         top = _top_element(node, "levelledPara")

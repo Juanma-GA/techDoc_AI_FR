@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.core import xml_safe
 from app.core.dmrl import DmrlEntry
-from app.core.ir import IRNode
+from app.core.ir import IRNode, InlineRun, from_dict, to_dict
 from app.core.resolver import resolve
 from app.core.s1000d_serializer import clean_title, serialize
 
@@ -56,6 +56,44 @@ def test_banner_and_todo_placeholders() -> None:
 
 def test_output_is_wellformed() -> None:
     _parse(_doc())  # ne leve pas
+
+
+def test_inline_bold_uses_normalized_emphasis_code() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(
+            id="p",
+            kind="paragraph",
+            text="Texte normal mot important.",
+            context="descriptive",
+            inline_runs=[
+                InlineRun("Texte normal "),
+                InlineRun("mot important", bold=True),
+                InlineRun("."),
+            ],
+        ),
+    ])
+    resolve(root)
+    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    doc = _parse(xml)
+    emphasis = doc.find(".//para/emphasis")
+
+    assert emphasis is not None
+    assert emphasis.get("emphasisType") == "em01"
+    assert "".join(doc.find(".//para").itertext()) == "Texte normal mot important."
+
+
+def test_inline_runs_survive_ir_json_round_trip() -> None:
+    node = IRNode(
+        id="p",
+        kind="paragraph",
+        text="Texte gras",
+        inline_runs=[InlineRun("Texte "), InlineRun("gras", bold=True)],
+    )
+
+    restored = from_dict(to_dict(node))
+
+    assert restored.inline_runs[1].text == "gras"
+    assert restored.inline_runs[1].bold is True
 
 
 def test_header_is_completed_from_dmrl_metadata() -> None:

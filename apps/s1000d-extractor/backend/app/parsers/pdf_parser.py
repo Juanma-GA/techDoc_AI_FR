@@ -13,13 +13,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 
 import fitz  # PyMuPDF
 
-from app.core.ir import RawBlock
+from app.core.ir import InlineRun, RawBlock
 
 # Bit 2^4 (=16) du flag span PyMuPDF = gras ; on detecte aussi via le nom.
 _BOLD_FLAG = 1 << 4
+_ITALIC_FLAG = 1 << 1
+_MEDIUM_OR_BOLD_FONT = re.compile(r"(?:^|[-_])(?:md|bd)(?:it)?$")
+_ITALIC_FONT = re.compile(r"(?:^|[-_])(?:lt|md|bd)?it$")
 # En-dessous de ce nombre de caracteres, on considere la page non lisible
 # (scannee) et on la bascule vers l'OCR.
 _MIN_TEXT_CHARS = 16
@@ -30,6 +34,65 @@ class PageParse:
     index: int                                   # 1-indexe
     blocks: list[RawBlock] = field(default_factory=list)
     has_text: bool = False
+
+def _line_text(spans: list[dict]) -> str:
+    """Normalise les puces encodees par un glyphe Webdings/Wingdings."""
+    return "".join(run.text for run in _line_runs(spans))
+
+
+def _add_run(runs: list[InlineRun], run: InlineRun) -> None:
+    if not run.text:
+        return
+    if not run.text.strip():
+        run = InlineRun(run.text)
+    same_style = (
+        runs
+        and runs[-1].bold == run.bold
+        and runs[-1].italic == run.italic
+        and runs[-1].underline == run.underline
+        and runs[-1].overline == run.overline
+        and runs[-1].strikethrough == run.strikethrough
+    )
+    if same_style:
+        runs[-1].text += run.text
+        return
+    runs.append(run)
+
+
+def _span_run(span: dict, text: str) -> InlineRun:
+    font = str(span.get("font", "")).lower()
+    flags = int(span.get("flags", 0))
+    return InlineRun(
+        text=text,
+        bold=bool(flags & _BOLD_FLAG) or "bold" in font or bool(_MEDIUM_OR_BOLD_FONT.search(font)),
+        italic=bool(flags & _ITALIC_FLAG) or "italic" in font or "oblique" in font
+        or bool(_ITALIC_FONT.search(font)),
+    )
+
+
+def _line_runs(spans: list[dict]) -> list[InlineRun]:
+    """Conserve les styles des spans PDF au lieu de les aplatir en texte."""
+    first = next((span for span in spans if str(span.get("text", "")).strip()), None)
+    font = str(first.get("font", "")).lower() if first else ""
+    marker = str(first.get("text", "")).strip() if first else ""
+    if marker == "g" and ("webdings" in font or "wingdings" in font):
+        runs = [InlineRun("• ")]
+        skip_marker_padding = True
+        for span in spans:
+            if span is first:
+                continue
+            text = str(span.get("text", ""))
+            if skip_marker_padding:
+                text = text.lstrip(" \x07")
+                if not text:
+                    continue
+                skip_marker_padding = False
+            _add_run(runs, _span_run(span, text))
+        return runs
+    runs: list[InlineRun] = []
+    for span in spans:
+        _add_run(runs, _span_run(span, str(span.get("text", ""))))
+    return runs
 
 
 def _block_is_bold(spans: list[dict]) -> bool:
@@ -54,14 +117,18 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
         if not lines:
             continue
         parts: list[str] = []
+        inline_runs: list[InlineRun] = []
         spans_all: list[dict] = []
         max_size = 0.0
         for line in lines:
             line_spans = line.get("spans", [])
             spans_all.extend(line_spans)
-            line_text = "".join(s.get("text", "") for s in line_spans)
+            line_text = _line_text(line_spans)
             if line_text.strip():
                 parts.append(line_text)
+            if inline_runs and line_text:
+                inline_runs.append(InlineRun("\n"))
+            inline_runs.extend(_line_runs(line_spans))
             for s in line_spans:
                 max_size = max(max_size, float(s.get("size", 0.0)))
         text = "\n".join(parts).strip()
@@ -74,6 +141,7 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
                 page=page_idx,
                 font_size=round(max_size, 1) or None,
                 bold=_block_is_bold(spans_all),
+                inline_runs=inline_runs,
                 y0=None if rotated or bbox[1] is None else round(float(bbox[1]), 1),
                 y1=None if rotated or bbox[3] is None else round(float(bbox[3]), 1),
                 page_height=page_height,

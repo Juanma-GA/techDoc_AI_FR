@@ -60,6 +60,8 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
         if d["dm_type"] == "procedural":
             assert "<procedure>" in xml
             proc_found = True
+        else:
+            assert "<levelledPara>" in xml
     assert proc_found, types
 
     # ZIP de tous les DMs
@@ -330,3 +332,30 @@ def test_wizard_type_override(client, pdf_bytes) -> None:
     client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []})
     xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm0}/xml").text
     assert "<procedure>" in xml
+
+
+def test_manual_dm_type_is_applied_before_resolution() -> None:
+    from app.core import ir as ir_mod
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[IRNode(id="p1", kind="paragraph", text="Check the pump.")],
+    )
+    doc = Document(dms_json=json.dumps([{
+        "dm_id": "dm1",
+        "title": "Pump",
+        "dm_type": "descriptive",
+        "tree": to_dict(root),
+    }]))
+
+    wizard_core._apply_types(doc, {"dm1": "procedural"})
+    wizard_core._resolve_all(doc)
+
+    tree = ir_mod.from_dict(json.loads(doc.dms_json)[0]["tree"])
+    paragraph = ir_mod.find_node(tree, "p1")
+    assert paragraph is not None
+    assert paragraph.context == "procedural"
+    assert paragraph.candidates[0].element == "proceduralStep"

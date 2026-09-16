@@ -23,12 +23,14 @@ def test_chapter_level_two_dms() -> None:
     dms = split_into_dms(_doc(), "chapter")
     assert len(dms) == 2
     assert dms[0].title == "0 Description"
+    assert dms[0].root.children[0].text == "0 Description"
 
 
 def test_section_level_three_dms() -> None:
     dms = split_into_dms(_doc(), "section")
     assert len(dms) == 3
     assert {d.title for d in dms} == {"0.1 Function", "0.2 Brake", "1.1 Clean"}
+    assert all(d.root.children[0].kind == "section" for d in dms)
 
 
 def test_no_section_fallback_single_dm() -> None:

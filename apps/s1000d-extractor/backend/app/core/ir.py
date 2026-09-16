@@ -47,6 +47,28 @@ Admonition = Literal["warning", "caution", "note"]
 
 
 @dataclass
+class InlineRun:
+    """Segment de texte avec son style source, avant mapping S1000D."""
+
+    text: str
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    overline: bool = False
+    strikethrough: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "text": self.text,
+            "bold": self.bold,
+            "italic": self.italic,
+            "underline": self.underline,
+            "overline": self.overline,
+            "strikethrough": self.strikethrough,
+        }
+
+
+@dataclass
 class RawBlock:
     """Bloc brut normalise par un adapter (pdf_parser / docx_parser).
 
@@ -60,6 +82,7 @@ class RawBlock:
     style_name: str | None = None       # ex. "Heading 1", "List Paragraph"
     font_size: float | None = None
     bold: bool = False
+    inline_runs: list[InlineRun] = field(default_factory=list)
     heading_level: int | None = None    # 1..n si connu par l'adapter
     list_kind: Literal["bullet", "ordered"] | None = None
     list_level: int = 0
@@ -119,6 +142,7 @@ class IRNode:
     icns: list[str] = field(default_factory=list)  # plusieurs fichiers pour une figure composee
     is_pictogram: bool = False                 # image-signaleur sans legende de figure
     refs: list[dict] | None = None             # renvois/hyperliens (-> internalRef...)
+    inline_runs: list[InlineRun] = field(default_factory=list)
 
     def walk(self) -> list[IRNode]:
         """Parcours prefixe (self puis enfants) - pratique pour stats/tests."""
@@ -156,6 +180,18 @@ def from_dict(data: dict) -> IRNode:
         icns=list(data.get("icns", [])),
         is_pictogram=bool(data.get("is_pictogram", False)),
         refs=data.get("refs"),
+        inline_runs=[
+            InlineRun(
+                text=str(run.get("text") or ""),
+                bold=bool(run.get("bold")),
+                italic=bool(run.get("italic")),
+                underline=bool(run.get("underline")),
+                overline=bool(run.get("overline")),
+                strikethrough=bool(run.get("strikethrough")),
+            )
+            for run in data.get("inline_runs", [])
+            if isinstance(run, dict) and run.get("text") is not None
+        ],
     )
 
 
@@ -189,5 +225,6 @@ def to_dict(node: IRNode) -> dict:
         "icns": node.icns,
         "is_pictogram": node.is_pictogram,
         "refs": node.refs,
+        "inline_runs": [run.to_dict() for run in node.inline_runs],
         "children": [to_dict(c) for c in node.children],
     }

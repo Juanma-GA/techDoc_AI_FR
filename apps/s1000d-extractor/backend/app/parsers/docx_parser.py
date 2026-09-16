@@ -17,7 +17,7 @@ from docx.oxml.ns import qn
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from app.core.ir import RawBlock
+from app.core.ir import InlineRun, RawBlock
 
 _HEADING_RE = re.compile(r"^heading\s+(\d+)$", re.IGNORECASE)
 
@@ -108,6 +108,21 @@ def _table_to_block(tbl: Table) -> RawBlock:
     return RawBlock(text=flat, is_table=True, table_rows=rows)
 
 
+def _inline_runs(paragraph: Paragraph) -> list[InlineRun]:
+    runs: list[InlineRun] = []
+    for run in paragraph.runs:
+        if not run.text:
+            continue
+        runs.append(InlineRun(
+            text=run.text,
+            bold=bool(run.bold),
+            italic=bool(run.italic),
+            underline=bool(run.underline),
+            strikethrough=bool(run.font.strike),
+        ))
+    return runs
+
+
 def parse_docx(path: str | Path) -> list[RawBlock]:
     doc = Document(str(path))
     numbering = _numbering_map(doc)
@@ -134,6 +149,7 @@ def parse_docx(path: str | Path) -> list[RawBlock]:
                     list_kind=list_kind,  # type: ignore[arg-type]
                     list_level=list_level,
                     bold=bool(p.runs and all(r.bold for r in p.runs if r.text.strip())),
+                    inline_runs=_inline_runs(p),
                 )
             )
         elif tag == qn("w:tbl"):

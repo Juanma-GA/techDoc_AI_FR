@@ -91,6 +91,7 @@ def detect_refs(text: str) -> list[dict]:
 # est un item de liste ordonnee, pas un titre. Les titres de niveau 1 ("1
 # Description") sont detectes par la taille de police, pas par ce regex.
 _NUMBERED_HEADING_RE = re.compile(r"^\s*(\d{1,2}(?:\.\d{1,2})+)\.?\s+\S")
+_DEFINITION_RE = re.compile(r"^\s*[^:\n]{2,80}:\s+\S")
 
 
 def detect_list_kind(text: str) -> str | None:
@@ -176,6 +177,11 @@ def infer_heading_level(block: RawBlock, body_size: float) -> int | None:
     depth = numbered_heading_depth(block.text)
     if depth is not None and len(block.text) < 200:
         return depth
+
+    # Les pages de glossaire utilisent souvent le gras pour le terme avant
+    # deux-points. Ce n'est pas un titre de section, meme si le bloc est court.
+    if _DEFINITION_RE.match(block.text):
+        return None
 
     if body_size and block.font_size:
         ratio = block.font_size / body_size

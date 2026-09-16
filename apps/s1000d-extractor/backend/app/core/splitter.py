@@ -70,7 +70,7 @@ def split_into_dms(root: IRNode, split_level: str) -> list[DmUnit]:
     dms: list[DmUnit] = []
     for i, sec in enumerate(sections, start=1):
         dm_id = f"dm{i}"
-        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=list(sec.children))
+        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[sec])
         dms.append(DmUnit(
             dm_id=dm_id,
             title=sec.text or f"Data Module {i}",
@@ -105,6 +105,7 @@ def _flat_nodes(root: IRNode) -> list[IRNode]:
                     id=child.id, kind="section", text=child.text, level=child.level,
                     form=child.form, page=child.page, zone=child.zone,
                     context=child.context, confidence=child.confidence,
+                    inline_runs=list(child.inline_runs),
                 ))
                 walk(child)
             else:
@@ -182,8 +183,9 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
     for i, (idx, dmrl_index, entry) in enumerate(anchors):
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(nodes)
         dm_id = f"dm{len(dms) + 1}"
-        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0,
-                     children=list(nodes[idx + 1:end]))
+        section = nodes[idx]
+        section.children = list(nodes[idx + 1:end])
+        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[section])
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title or f"Data Module {i + 1}",
             root=syn, page=nodes[idx].page, node_count=len(syn.walk()), dmc=entry.dmc,

@@ -298,6 +298,9 @@ def _apply_types(doc: Document, types: dict) -> None:
     for dm in dms:
         if dm["dm_id"] in types and types[dm["dm_id"]] in context_classifier.DM_TYPES:
             dm["dm_type"] = types[dm["dm_id"]]
+        root = ir_mod.from_dict(dm["tree"])
+        context_classifier.apply_dm_type(root, dm["dm_type"])
+        dm["tree"] = ir_mod.to_dict(root)
     ws.save_dms(doc, dms)
 
 

@@ -191,6 +191,8 @@ def test_split_by_dmrl_uses_dmrl_titles():
     contents = {u.title: splitter.ir_to_text(u.root) for u in units}
     assert "Le frein comporte deux etriers." in contents["Description generale"]
     assert "Deposer les vis." in contents["Depose du frein"]
+    assert units[0].root.children[0].text == "Description generale"
+    assert units[1].root.children[0].text == "Depose du frein"
 
 
 def test_split_by_dmrl_keeps_missing_entry_as_empty_dm():
