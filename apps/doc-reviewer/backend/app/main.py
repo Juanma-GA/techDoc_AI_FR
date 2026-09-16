@@ -25,7 +25,7 @@ from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
-from app.db.seed import seed_default_rules, sync_user_standard
+from app.db.seed import sync_user_standard
 from app.db.session import SessionLocal
 
 
@@ -109,17 +109,16 @@ def create_app() -> FastAPI:
     api_v1.include_router(admin.router)
     app.include_router(api_v1)
 
-    _seed_defaults()
+    _sync_standard_catalogs()
     _mount_frontend(app)
 
     return app
 
 
-def _seed_defaults() -> None:
-    """Seed demo rules and synchronize the editable local standard."""
+def _sync_standard_catalogs() -> None:
+    """Synchronize the editable local standard."""
     db = SessionLocal()
     try:
-        seed_default_rules(db)
         sync_user_standard(db)
     except Exception:  # noqa: BLE001 — seed must never block startup
         pass

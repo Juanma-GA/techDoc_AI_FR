@@ -17,8 +17,6 @@ BACK :
 
 OTHER :
 
-- Enlever les règles qui sont je ne sais pas où (maybe dans la DB alembic) : Pas d'oubli d'espace après ponctuation / Pas de mot en MAJUSCULES / Pas d'oubli d'accent (mots FR fréquents)
-
 - Attention y'a plein de fichiers modifié pour changer le mapping en dehors de user_rules(analyze; document_context; documents; compiled_rule_operators/runtime;compiled_rules;rules_engine;models;schémas; domaisns.ts;usedocuments.ts;DocumentMetaPanel.tsx; et les en.json et fr.json) mais l'objectif c'est qu'on puisse facilement modifier en fonction du client donc avoir des mapping différents. il faudrait donc regrouper ça dans un fichier spécifique au client et que tous les fichiers cités soient eux généraux et récupère en fonction du client. PAreil pour la règle des fareneit y'a eu une modif dans compiled_rule_suggestion qui doit plutot être dans un fichier unique au client (maybe c'est tout ce fichier enfait suggestion qui est unique au client) 
 
 Page dans les Highlight marqué par un R LEP ... 
@@ -38,7 +36,7 @@ Higltght + LEP + pied de page
 
 Pied de page : Il faudra vérifier les pieds de pages seulements des pages mentionnées en LEP/Highlights des pages modifiées, vérifier donc que la date est bien  la bonne et dasn l'autre sens vérifier toutes les autres pour savoir si la date est bien celle de derniere révision ou premiere issue, et sinon alors la flag et vérifier peut etre qu'elle manque au LEP et HIGHLIGHTS. 
 
-60/62/67
+60/62/67 : il doit rester un peu petu être de vérifier que la note du debut est bien exactement "NOTE: During storage operations, make sure that the environmental conditions are as follows:", faut juste demander si c'est vraiment écrit ça à chaque fois sur les 3 REPAIR/TESTINGG/STORAGE
 
 
 

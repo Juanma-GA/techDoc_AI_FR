@@ -7,6 +7,20 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 
+def test_legacy_demo_rules_are_not_seeded(client: TestClient) -> None:
+    response = client.get("/api/v1/rules")
+
+    assert response.status_code == 200
+    names = {rule["name"] for rule in response.json()}
+    assert names.isdisjoint(
+        {
+            "Pas d'oubli d'espace après ponctuation",
+            "Pas de mot en MAJUSCULES",
+            "Pas d'oubli d'accent (mots FR fréquents)",
+        }
+    )
+
+
 def test_create_and_list_rule(client: TestClient) -> None:
     create = client.post(
         "/api/v1/rules",
