@@ -18,6 +18,7 @@ from app.parsers.docx_parser import Block
 from app.parsers.pdf_parser import ParsedPage, find_span_bbox
 
 _ENTITY_PATTERNS = {
+    "cmm_number": re.compile(r"(?<!\w)(\d{2}-\d{2}-\d{2})(?!\w)"),
     "revision_number": re.compile(
         r"(?i)\b(?:rev(?:ision)?\s*(?:no\.?|number|n°)?\s*[:#-]?\s*)([^\n|]+)"
     ),
@@ -28,7 +29,7 @@ _ENTITY_PATTERNS = {
 }
 
 _BBox = tuple[float, float, float, float]
-_SpanRange = tuple[int, int, _BBox]
+_SpanRange = tuple[int, int, _BBox, float]
 _DOCUMENT_METADATA_FIELDS = (
     "meta_revision_date",
     "meta_cmm_number",
@@ -95,7 +96,7 @@ def page_span_ranges(page: ParsedPage) -> tuple[_SpanRange, ...]:
             end = cursor + match.end()
         else:
             end = start + len(span_text)
-        ranges.append((start, end, span.bbox))
+        ranges.append((start, end, span.bbox, float(span.size)))
         cursor = end
     return tuple(ranges)
 
@@ -164,7 +165,7 @@ def scope_targets(
                 start = cursor
                 cursor += len(part)
                 text_parts.append(part)
-                span_ranges.append((start, cursor, span.bbox))
+                span_ranges.append((start, cursor, span.bbox, float(span.size)))
             selected.append(replace(target, text=" ".join(text_parts), span_ranges=tuple(span_ranges)))
     return selected or None
 
@@ -198,7 +199,11 @@ def observed_bbox(
     span_start: int = 0,
 ) -> _BBox:
     span_end = span_start + len(observed)
-    overlaps = [bbox for start, end, bbox in target.span_ranges if end > span_start and start < span_end]
+    overlaps = [
+        bbox
+        for start, end, bbox, _size in target.span_ranges
+        if end > span_start and start < span_end
+    ]
     if overlaps:
         return union_bboxes(overlaps)
     if target.bbox is not None:

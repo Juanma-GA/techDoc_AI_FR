@@ -43,6 +43,7 @@ _BAR_PSI_CONVERSION_RE = re.compile(
 _PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
 _BAR_TO_PSI = Decimal("14.5037738")
 _PRESSURE_DISPLAY_TOLERANCE = Decimal("0.005")
+FONT_SIZE_TOLERANCE = 0.1
 
 
 @dataclass(frozen=True)
@@ -175,6 +176,8 @@ def evaluate_check(
         return ("PASS" if match is None else "FAIL"), target, observed, expected
     if check.operator in {"regex", "regex_exists"}:
         return evaluate_regex(check, values, rule_id, ctx)
+    if check.operator == "font_size_equals":
+        return evaluate_font_size(check, targets, ctx)
     if check.operator == "pressure_conversion":
         policy = str(check.expected)
         for target, value in values:
@@ -293,6 +296,49 @@ def field_value(field: str, text: str, page: str) -> str | None:
     pattern = _ENTITY_PATTERNS.get(field)
     match = pattern.search(text) if pattern else None
     return match.group(1).strip() if match else None
+
+
+def evaluate_font_size(
+    check: Check,
+    targets: list[_TextTarget],
+    ctx: _EvalContext,
+) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
+    """Compare the font size of spans matching the requested entity field."""
+    if ctx.is_docx or not ctx.pdf_pages:
+        return "INCONCLUSIVE", targets[0], None, f"{check.expected} pt"
+
+    expected_size = float(check.expected)
+    first_missing: _TextTarget | None = None
+    first_mismatch: tuple[_TextTarget, float] | None = None
+    last_match: tuple[_TextTarget, float] | None = None
+
+    for target in targets:
+        matching_sizes = [
+            (target.text[start:end], size)
+            for start, end, _bbox, size in target.span_ranges
+            if field_value(check.field, target.text[start:end], target.page) is not None
+        ]
+        if not matching_sizes:
+            if first_missing is None:
+                first_missing = target
+            continue
+        for _observed_text, observed_size in matching_sizes:
+            if abs(observed_size - expected_size) > FONT_SIZE_TOLERANCE:
+                if first_mismatch is None:
+                    first_mismatch = (target, observed_size)
+            else:
+                last_match = (target, observed_size)
+
+    expected_display = f"{expected_size:g} pt"
+    if first_mismatch is not None:
+        target, observed_size = first_mismatch
+        return "FAIL", target, f"{observed_size:.0f} pt", expected_display
+    if first_missing is not None:
+        return "INCONCLUSIVE", first_missing, None, expected_display
+    if last_match is not None:
+        target, observed_size = last_match
+        return "PASS", target, f"{observed_size:.0f} pt", expected_display
+    return "INCONCLUSIVE", targets[0], None, expected_display
 
 
 def extract_year(value: str) -> str:

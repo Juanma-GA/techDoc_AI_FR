@@ -372,6 +372,22 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_CMM_NUMBER_FONT_SIZE",
+        "Taille de police du numero CMM (ATA)",
+        failure_message="taille de police du numero CMM non conforme.",
+        target=_FOOTER_TARGET,
+        severity="warning",
+        only_if=Condition(field="meta_cmm_number", state="present"),
+        checks=[
+            Check(
+                field="cmm_number",
+                operator="font_size_equals",
+                expected=23,
+                require_all=True,
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_TITLE_PAGE_COPYRIGHT",
         "Copyright du footer conforme a l'annee de revision",
         failure_message="Copyright du footer non conforme",
@@ -848,4 +864,13 @@ RULE_METADATA["CUSTOM_STORAGE_NOTE"] = {
     "kind": "field_required",
     "severity": "error",
     "message": "Les categories NOTE de la page STORAGE sont absentes ou incorrectes.",
+}
+RULE_METADATA["CUSTOM_CMM_NUMBER_FONT_SIZE"] = {
+    "description": (
+        "Le numero CMM (ATA) present dans le footer doit utiliser une taille "
+        "de police de 23 pt."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "La taille de police du numero CMM (ATA) n'est pas 23 pt.",
 }

@@ -122,6 +122,16 @@ def test_regex_checks_are_compiled_at_validation_time() -> None:
         Check(field="text", operator="regex_exists", expected="[")
 
 
+def test_font_size_operator_requires_a_positive_numeric_expected_value() -> None:
+    Check(field="cmm_number", operator="font_size_equals", expected=23)
+    Check(field="cmm_number", operator="font_size_equals", expected=23.0)
+
+    with pytest.raises(ValidationError, match="numeric expected value"):
+        Check(field="cmm_number", operator="font_size_equals", expected="23")
+    with pytest.raises(ValidationError, match="positive expected value"):
+        Check(field="cmm_number", operator="font_size_equals", expected=0)
+
+
 def test_contains_operators_require_a_non_empty_list() -> None:
     Check(field="text", operator="contains_none", expected=["obsolete", "deprecated"])
 

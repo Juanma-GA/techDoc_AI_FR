@@ -23,6 +23,7 @@ from app.core.compiled_rule_runtime import (
     suggestion_bbox,
 )
 from app.core.compiled_rule_operators import (
+    FONT_SIZE_TOLERANCE,
     evaluate_check,
     field_value,
     normalize,
@@ -68,6 +69,7 @@ def deterministic_suggestions(
     rule_kind = "compiled_standard" if rule.source == "standard_rule" else "compiled_checklist"
     message = f"Règle non satisfaite : {rule.failure_message or rule.topic}"
     suggestions: list[RawSuggestion] = []
+    has_non_repairable_check = False
     for check in rule.checks:
         if check.operator == "regex" and check.expected is not None:
             suggestions.extend(regex_suggestions(rule, check, targets, rule_kind, message, ctx))
@@ -135,6 +137,17 @@ def deterministic_suggestions(
                     ctx.pdf_pages,
                 )
             )
+        elif check.operator == "font_size_equals":
+            suggestions.extend(
+                font_size_suggestions(
+                    rule,
+                    check,
+                    targets,
+                    rule_kind,
+                    message,
+                )
+            )
+            has_non_repairable_check = True
 
     if suggestions:
         target_order = {target.raw_page: index for index, target in enumerate(targets)}
@@ -142,6 +155,9 @@ def deterministic_suggestions(
             key=lambda item: (target_order.get(item.page, len(targets)), item.span[0])
         )
         return suggestions
+
+    if has_non_repairable_check:
+        return []
 
     if not result.evidence.observed_value:
         fallback_target = next(
@@ -183,10 +199,46 @@ def deterministic_suggestions(
             original=observed,
             proposed=result.evidence.expected_value or "",
             page=fallback_target.raw_page,
-            span=(0, len(observed)),
-                    bbox=suggestion_bbox(fallback_target, observed, pdf_pages),
+                span=(0, len(observed)),
+                bbox=suggestion_bbox(fallback_target, observed, pdf_pages),
         )
     ]
+
+
+def font_size_suggestions(
+    rule: CompiledRule,
+    check: Check,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+) -> list[RawSuggestion]:
+    """Emit a localized detection-only finding for each wrong font size."""
+    expected_size = float(check.expected)
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        for start, end, bbox, observed_size in target.span_ranges:
+            original = target.text[start:end]
+            if field_value(check.field, original, target.page) is None:
+                continue
+            if abs(observed_size - expected_size) <= FONT_SIZE_TOLERANCE:
+                continue
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule.id,
+                    severity=rule.severity,
+                    message=(
+                        f"{message} Taille detectee : {observed_size:.0f} pt. "
+                        f"Taille attendue : {expected_size:g} pt."
+                    ),
+                    original=original,
+                    proposed="",
+                    page=target.raw_page,
+                    span=(start, end),
+                    bbox=bbox,
+                )
+            )
+    return suggestions
 
 
 def fuzzy_required_suggestions(
@@ -317,7 +369,7 @@ def candidate_ranges(target: _TextTarget) -> list[tuple[str, int, int]]:
     line_ranges: list[tuple[str, int, int]]
     if target.span_ranges:
         grouped: list[tuple[int, int, float]] = []
-        for start, end, bbox in sorted(target.span_ranges, key=lambda item: item[0]):
+        for start, end, bbox, _size in sorted(target.span_ranges, key=lambda item: item[0]):
             center_y = (bbox[1] + bbox[3]) / 2
             if grouped and abs(center_y - grouped[-1][2]) <= 3.0:
                 grouped[-1] = (grouped[-1][0], end, grouped[-1][2])

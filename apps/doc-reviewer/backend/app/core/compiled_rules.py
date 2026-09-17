@@ -22,6 +22,7 @@ NormalizationStep = Literal["unicode", "trim", "spaces", "line_breaks", "extract
 
 EntityField = Literal[
     "text",
+    "cmm_number",
     "page_number",
     "revision_number",
     "revision_date",
@@ -129,8 +130,9 @@ class Check(StrictModel):
         # intent and flags the correct text as a violation every time.
         "regex_exists",
         "pressure_conversion",
+        "font_size_equals",
     ]
-    expected: str | int | list[str] | None = None
+    expected: str | int | float | list[str] | None = None
     require_all: bool = False
     expected_display: str | None = None
     suggestion_mode: Literal["fuzzy", "single", "all"] = "fuzzy"
@@ -172,6 +174,11 @@ class Check(StrictModel):
                 raise ValueError(f"regex invalide: {exc.msg}") from exc
         if self.operator == "pressure_conversion" and self.expected != "bar_to_psi":
             raise ValueError("pressure_conversion requires expected='bar_to_psi'")
+        if self.operator == "font_size_equals":
+            if isinstance(self.expected, bool) or not isinstance(self.expected, (int, float)):
+                raise ValueError("font_size_equals requires a numeric expected value")
+            if self.expected <= 0:
+                raise ValueError("font_size_equals requires a positive expected value")
         if self.missing_anchor is not None:
             try:
                 re.compile(self.missing_anchor)
@@ -362,6 +369,8 @@ def _describe_check(check: Check) -> str:
             f"{check.field} doit contenir chaque pression en bar suivie de sa "
             "conversion numerique en p.s.i. entre parentheses"
         )
+    if check.operator == "font_size_equals":
+        return f"{check.field} doit avoir une taille de police de {check.expected} pt"
     if check.operator in {"contains_any", "contains_all", "contains_none"}:
         verb = {
             "contains_any": "contient au moins un de",

@@ -38,7 +38,7 @@ def _pdf(text: str) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
-def _cmm_footer_pdf(footer: str) -> ParsedPdf:
+def _cmm_footer_pdf(footer: str, *, cmm_size: float = 8.0) -> ParsedPdf:
     body = "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00."
     text = f"{body}\n{footer}"
     page = ParsedPage(
@@ -46,7 +46,7 @@ def _cmm_footer_pdf(footer: str) -> ParsedPdf:
         text=text,
         spans=[
             Span(text=body, bbox=(40.0, 100.0, 500.0, 120.0), page=1, font="Arial", size=10.0),
-            Span(text=footer, bbox=(40.0, 760.0, 200.0, 780.0), page=1, font="Arial", size=8.0),
+            Span(text=footer, bbox=(40.0, 760.0, 200.0, 780.0), page=1, font="Arial", size=cmm_size),
         ],
     )
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
@@ -114,7 +114,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 56
+    assert total == 57
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -142,6 +142,34 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
         ("3", "0")
     ]
     assert missing[0].status == "FAIL"
+
+
+def test_user_cmm_font_size_rule_accepts_pdf_rounding_and_rejects_wrong_size() -> None:
+    rule = _rule("CUSTOM_CMM_NUMBER_FONT_SIZE")
+    document = SimpleNamespace(meta_cmm_number="79-30-02")
+
+    valid, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02", cmm_size=23.03),
+        [rule],
+        document=document,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02", cmm_size=20.03),
+        [rule],
+        document=document,
+    )
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert invalid[0].evidence is not None
+    assert invalid[0].evidence.observed_value == "20 pt"
+    assert invalid[0].evidence.expected_value == "23 pt"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == "79-30-02"
+    assert invalid_suggestions[0].proposed == ""
+    assert invalid_suggestions[0].bbox == (40.0, 760.0, 200.0, 780.0)
+    assert "20 pt" in invalid_suggestions[0].message
+    assert "23 pt" in invalid_suggestions[0].message
 
 
 def _revision_date_footer_pdf(footer: str) -> ParsedPdf:

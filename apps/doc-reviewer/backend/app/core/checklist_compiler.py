@@ -39,10 +39,10 @@ zones, présence conditionnelle) SONT déterministes : ne bascule pas en semanti
 Utilise uniquement ces valeurs :
 execution: deterministic | semantic | manual | unsupported
 field (pour un check normal et pour compare_to.field quand compare_to.source=document_text):
-  text | page_number | revision_number | revision_date | first_issue_date | copyright_start_year |
+    text | cmm_number | page_number | revision_number | revision_date | first_issue_date | copyright_start_year |
   copyright_end_year | document_type
-operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field
-expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals,
+operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field | font_size_equals
+expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals, un nombre de points pour font_size_equals,
   une LISTE de chaînes pour contains_any/contains_all/contains_none, absent (null) pour equals_field.
   N'utilise jamais la clé `value`.
 
@@ -60,6 +60,7 @@ Vocabulaire déterministe disponible (choisis l'opérateur le plus proche du bes
 - Liste de termes interdits (aucun de ces mots ne doit apparaître) -> operator=contains_none, expected=["terme1","terme2",...].
 - Liste de synonymes acceptés (au moins un doit apparaître) -> operator=contains_any, expected=["terme1","terme2",...].
 - Plusieurs mentions toutes obligatoires -> operator=contains_all, expected=["mention1","mention2",...].
+- Taille de police d'un numero CMM/ATA -> field=cmm_number, operator=font_size_equals, expected=23 (en points).
 - Toute valeur introduite par « ex: », « exemple » ou entre parenthèses est une illustration, pas une
     valeur littérale. Déduis la structure invariante de la règle et écris dans `expected` le regex complet,
     avec les séparateurs, espaces optionnels et parties variables nécessaires. Le backend n'élargit ni ne
