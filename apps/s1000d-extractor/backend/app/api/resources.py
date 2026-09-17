@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core import dmrl as dmrl_mod
 from app.core import dm_header as dm_header_mod
+from app.core import migration_inputs
 from app.core import wizard_resources as wres
 from app.core.brex_rules import load_brex_rules
 from app.core.cir import load_cir
@@ -60,7 +61,8 @@ async def upload_resource(
     if kind not in _KINDS:
         raise AppError("BAD_RESOURCE", f"Ressource inconnue : {kind}", 422)
     doc = _require(db, doc_id)
-    suffix = Path(file.filename or "").suffix.lower()
+    original_filename = file.filename or "resource"
+    suffix = Path(original_filename).suffix.lower()
     if suffix not in _KINDS[kind]:
         raise AppError(
             "BAD_RESOURCE_FORMAT",
@@ -75,6 +77,7 @@ async def upload_resource(
     if kind == "dmrl":
         entries = dmrl_mod.load_dmrl(path)      # valide le contenu (leve si invalide)
         wres.save_dmrl(doc, entries)
+        doc.dmrl_path = str(path)
         result = {"kind": kind, "count": len(entries)}
     elif kind == "cir":
         entries_cir = load_cir(path)
@@ -87,7 +90,13 @@ async def upload_resource(
     else:
         template = dm_header_mod.load_header_template(path)
         doc.dm_header_json = json.dumps(template, ensure_ascii=False)
+        doc.dm_header_path = str(path)
         result = {"kind": kind, "count": 1}
+    migration_inputs.save_document(
+        db,
+        doc,
+        resource_filename=(kind, original_filename),
+    )
     db.commit()
     return result
 

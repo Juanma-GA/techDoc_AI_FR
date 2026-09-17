@@ -18,6 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
 from app.core import ir as ir_mod
+from app.core import migration_inputs
 from app.core import pipeline
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
@@ -81,7 +82,8 @@ def delete_document(
     from app.core.wizard import images_dir
 
     for path in (
-        doc.storage_path, doc.pdf_cut_path, doc.xml_path, doc.cir_path, doc.brex_rules_path
+        doc.storage_path, doc.pdf_cut_path, doc.xml_path, doc.dmrl_path,
+        doc.dm_header_path, doc.cir_path, doc.brex_rules_path,
     ):
         if path:
             Path(path).unlink(missing_ok=True)
@@ -96,7 +98,7 @@ def delete_document(
 @router.post("", response_model=DocumentOut, status_code=201)
 async def upload_document(
     file: UploadFile = File(...),
-    s1000d_issue: str = Form("5.0"),
+    s1000d_issue: str = Form("4.2"),
     context_hint: str = Form("mixed"),
     brex_id: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -127,6 +129,7 @@ async def upload_document(
             doc.page_count = pdf_page_count(path)
         except Exception:
             doc.page_count = None
+    migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
     db.commit()
     return _to_out(doc)
 

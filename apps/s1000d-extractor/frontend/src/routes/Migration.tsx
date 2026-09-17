@@ -7,12 +7,14 @@ import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../component
 import {
   brexApi,
   documentsApi,
+  migrationInputsApi,
   pdfCutApi,
   resourcesApi,
   startWizardStream,
   wizardApi,
   type ContextHint,
   type DmrlRow,
+  type MigrationInputKind,
   type PdfCutDetection,
   type ResourceKind,
   type S1000dIssue,
@@ -157,7 +159,7 @@ export function Migration() {
 
   // Formulaire de chargement.
   const [file, setFile] = useState<File | null>(null);
-  const [issue, setIssue] = useState<S1000dIssue>("5.0");
+  const [issue, setIssue] = useState<S1000dIssue>("4.2");
   const [hint, setHint] = useState<ContextHint>("mixed");
   const [brexId, setBrexId] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -187,6 +189,58 @@ export function Migration() {
   const [splitLevel, setSplitLevel] = useState("section");
   const [splitMsg, setSplitMsg] = useState<string | null>(null);
   const wizRef = useRef<HTMLDivElement>(null);
+  const inputRefs = useRef<Partial<Record<MigrationInputKind, HTMLInputElement | null>>>({});
+  const mappingTouched = useRef(false);
+
+  const restoreFileInput = (kind: MigrationInputKind, fileToRestore: File) => {
+    const input = inputRefs.current[kind];
+    if (!input || typeof DataTransfer === "undefined") return;
+    const transfer = new DataTransfer();
+    transfer.items.add(fileToRestore);
+    input.files = transfer.files;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSavedInputs = async () => {
+      try {
+        const mapping = await migrationInputsApi.read();
+        if (cancelled || mappingTouched.current) return;
+        setIssue(mapping.issue);
+        setHint(mapping.context_hint);
+        setBrexId(mapping.brex_id ?? "");
+        const entries = Object.entries(mapping.files) as [
+          MigrationInputKind,
+          { filename: string },
+        ][];
+        const loaded = await Promise.all(
+          entries.map(async ([kind, metadata]) => {
+            try {
+              return [kind, await migrationInputsApi.file(kind, metadata.filename)] as const;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        if (cancelled || mappingTouched.current) return;
+        const restoredResources: Partial<Record<ResourceKind, File>> = {};
+        for (const item of loaded) {
+          if (!item) continue;
+          const [kind, restoredFile] = item;
+          restoreFileInput(kind, restoredFile);
+          if (kind === "document") setFile(restoredFile);
+          else restoredResources[kind] = restoredFile;
+        }
+        setResourceFiles(restoredResources);
+      } catch {
+        // No mapping exists on a fresh installation.
+      }
+    };
+    void loadSavedInputs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSelected(new Set());
@@ -402,22 +456,40 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".pdf,.docx"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                ref={(element) => {
+                  inputRefs.current.document = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setFile(e.target.files?.[0] ?? null);
+                }}
               />
             </label>
           </div>
           <div className="row">
             <label className="grow">
               <div className="label">{t("migration.upload.issue")}</div>
-              <select value={issue} onChange={(e) => setIssue(e.target.value as S1000dIssue)}>
-                <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
-                <option value="4.1">{t("migration.upload.issueValue", { issue: "4.1" })}</option>
+              <select
+                value={issue}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setIssue(e.target.value as S1000dIssue);
+                }}
+              >
                 <option value="4.2">{t("migration.upload.issueValue", { issue: "4.2" })}</option>
+                <option value="4.1">{t("migration.upload.issueValue", { issue: "4.1" })}</option>
+                <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
               </select>
             </label>
             <label className="grow">
               <div className="label">{t("migration.upload.hint")}</div>
-              <select value={hint} onChange={(e) => setHint(e.target.value as ContextHint)}>
+              <select
+                value={hint}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setHint(e.target.value as ContextHint);
+                }}
+              >
                 <option value="mixed">{t("migration.upload.hintMixed")}</option>
                 <option value="descriptive">{t("dmType.descriptive")}</option>
                 <option value="procedural">{t("dmType.procedural")}</option>
@@ -425,7 +497,13 @@ export function Migration() {
             </label>
             <label className="grow">
               <div className="label">{t("migration.upload.brex")}</div>
-              <select value={brexId} onChange={(e) => setBrexId(e.target.value)}>
+              <select
+                value={brexId}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setBrexId(e.target.value);
+                }}
+              >
                 <option value="">{t("migration.upload.brexNone")}</option>
                 {brex.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -442,9 +520,13 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".xlsx,.xlsm,.csv,.json"
-                onChange={(e) =>
-                  setResourceFiles((p) => ({ ...p, dmrl: e.target.files?.[0] }))
-                }
+                ref={(element) => {
+                  inputRefs.current.dmrl = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, dmrl: e.target.files?.[0] }));
+                }}
               />
             </label>
             <label className="grow">
@@ -453,7 +535,13 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".xml"
-                onChange={(e) => setResourceFiles((p) => ({ ...p, cir: e.target.files?.[0] }))}
+                ref={(element) => {
+                  inputRefs.current.cir = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, cir: e.target.files?.[0] }));
+                }}
               />
             </label>
             <label className="grow">
@@ -462,9 +550,13 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".json"
-                onChange={(e) =>
-                  setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }))
-                }
+                ref={(element) => {
+                  inputRefs.current.brex_rules = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }));
+                }}
               />
             </label>
             <label className="grow">
@@ -473,9 +565,13 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".json,.xml"
-                onChange={(e) =>
-                  setResourceFiles((p) => ({ ...p, dm_header: e.target.files?.[0] }))
-                }
+                ref={(element) => {
+                  inputRefs.current.dm_header = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, dm_header: e.target.files?.[0] }));
+                }}
               />
             </label>
           </div>

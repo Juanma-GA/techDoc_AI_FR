@@ -277,6 +277,26 @@ export const pdfCutApi = {
 
 export type ResourceKind = "dmrl" | "cir" | "brex_rules" | "dm_header";
 export type ResourceUploadDto = { kind: ResourceKind; count: number };
+export type MigrationInputKind = "document" | ResourceKind;
+export type MigrationInputMapping = {
+  issue: S1000dIssue;
+  context_hint: ContextHint;
+  brex_id: string | null;
+  files: Partial<Record<MigrationInputKind, { filename: string }>>;
+};
+
+export const migrationInputsApi = {
+  read: () => api<MigrationInputMapping>("/migration-inputs"),
+  file: async (kind: MigrationInputKind, filename: string): Promise<File> => {
+    const res = await fetch(`${API_BASE}/migration-inputs/${kind}`);
+    if (!res.ok) {
+      const e = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(e?.message || res.statusText);
+    }
+    const blob = await res.blob();
+    return new File([blob], filename, { type: blob.type });
+  },
+};
 
 // Ressources client optionnelles : DMRL, CIR, regles BREX et template d'en-tete.
 export const resourcesApi = {

@@ -51,7 +51,7 @@ class Document(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     filename: Mapped[str] = mapped_column(String(500))
     source_format: Mapped[str] = mapped_column(String(10))          # "pdf" | "docx"
-    s1000d_issue: Mapped[str] = mapped_column(String(10), default="5.0")
+    s1000d_issue: Mapped[str] = mapped_column(String(10), default="4.2")
     context_hint: Mapped[str] = mapped_column(String(20), default="mixed")
     brex_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("brex_profiles.id", ondelete="SET NULL"), nullable=True
@@ -76,7 +76,9 @@ class Document(Base):
     # Ressources client optionnelles : DMRL (decoupage impose + PMC), CIR
     # (contenus partages), regles client BREX JSON.
     dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dmrl_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     dm_header_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dm_header_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     cir_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     brex_rules_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

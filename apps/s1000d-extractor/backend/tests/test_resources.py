@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from lxml import etree
 
@@ -62,6 +63,38 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Le type declare dans la DMRL fait foi.
     assert [d["dm_type"] for d in state["dms"]] == ["descriptive", "procedural"]
     assert state["resources"]["dmrl_count"] == 2
+
+
+def test_document_defaults_to_issue_4_2(client, pdf_bytes) -> None:
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("manual.pdf", pdf_bytes)},
+        data={"context_hint": "mixed"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["s1000d_issue"] == "4.2"
+
+
+def test_migration_input_mapping_persists_last_files(client, pdf_bytes) -> None:
+    doc_id = _upload_doc(client, pdf_bytes)
+    dmrl_payload = json.dumps(_DMRL).encode()
+    header_payload = b'{"security":{"securityClassification":"04"}}'
+    assert _upload_resource(client, doc_id, "dmrl", "client-dmrl.json", dmrl_payload).status_code == 200
+    assert _upload_resource(client, doc_id, "dm_header", "client-header.json", header_payload).status_code == 200
+
+    mapping = client.get("/api/v1/migration-inputs")
+    assert mapping.status_code == 200, mapping.text
+    body = mapping.json()
+    assert body["issue"] == "5.0"
+    assert body["context_hint"] == "mixed"
+    assert body["files"]["document"]["filename"] == "manual.pdf"
+    assert body["files"]["dmrl"]["filename"] == "client-dmrl.json"
+    assert body["files"]["dm_header"]["filename"] == "client-header.json"
+
+    assert client.get("/api/v1/migration-inputs/document").content == pdf_bytes
+    assert client.get("/api/v1/migration-inputs/dmrl").content == dmrl_payload
+    assert client.get("/api/v1/migration-inputs/dm_header").content == header_payload
 
 
 def test_dmrl_icn_renames_image_and_xml_omits_extension(client, pdf_bytes_image) -> None:
@@ -232,6 +265,31 @@ def test_client_dm_header_template_is_applied(client, pdf_bytes) -> None:
     ).text
     assert 'securityClassification="04"' in xml
     assert "TEST COMPANY" in xml
+
+
+def test_imported_resource_paths_are_persisted(client, pdf_bytes) -> None:
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload_doc(client, pdf_bytes)
+    assert _upload_resource(
+        client, doc_id, "dmrl", "client-dmrl.json", json.dumps(_DMRL).encode()
+    ).status_code == 200
+    assert _upload_resource(
+        client, doc_id, "dm_header", "client-header.json", b"{}"
+    ).status_code == 200
+
+    db = SessionLocal()
+    try:
+        document = db.get(Document, doc_id)
+        assert document is not None
+        assert Path(document.storage_path).exists()
+        assert Path(document.dmrl_path).name == f"document_{doc_id}_dmrl.json"
+        assert Path(document.dmrl_path).exists()
+        assert Path(document.dm_header_path).name == f"document_{doc_id}_dm_header.json"
+        assert Path(document.dm_header_path).exists()
+    finally:
+        db.close()
 
 
 def test_unreadable_resource_is_reported_not_swallowed(client, pdf_bytes, tmp_path) -> None:
