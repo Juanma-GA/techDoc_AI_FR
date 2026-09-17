@@ -34,7 +34,9 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "arbo": ("arbo", "arborescence", "hierarchie", "niveau", "level", "position", "index"),
     "dmc": ("dmc", "data module code", "code dm", "dm code", "code"),
     "title": ("title", "titre", "dmtitle", "titre dm", "libelle", "designation"),
-    "dm_type": ("dm type", "type dm", "type", "nature", "info type", "categorie"),
+    "dm_type": (
+        "dm type", "type dm", "type de dm", "type", "nature", "info type", "categorie",
+    ),
     "info_code": ("info code", "infocode", "ic", "code information"),
     "tech_name": ("tech name", "techname", "nom technique", "technical name"),
     "info_name": ("info name", "infoname", "nom information", "information name"),

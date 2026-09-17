@@ -51,6 +51,19 @@ def test_load_dmrl_json_maps_columns(dmrl_json):
     assert entries[1].arbo == "1.1"
 
 
+def test_load_dmrl_prefers_explicit_type_de_dm_over_dmc(tmp_path):
+    path = tmp_path / "dmrl.json"
+    path.write_text(json.dumps([
+        {"DMC": "DMC-BRAKE-A-00-00-00-00A-040A-D", "Titre": "Procedure", "Type de DM": "PROCED"},
+        {"DMC": "DMC-BRAKE-A-00-00-00-00A-520A-D", "Titre": "Description", "Type de DM": "DESCR"},
+        {"DMC": "DMC-BRAKE-A-00-00-00-00A-941A-D", "Titre": "Parts", "Type de DM": "IPD"},
+    ]), encoding="utf-8")
+
+    assert [entry.dm_type for entry in load_dmrl(path)] == [
+        "procedural", "descriptive", "ipd"
+    ]
+
+
 def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
     path = tmp_path / "dmrl.csv"
     path.write_text(
@@ -162,6 +175,21 @@ def test_generate_pmc_hierarchy(dmrl_json):
     assert nested[0].findtext("pmEntryTitle") == "Depose du frein"
     assert root.find(".//dmCode").get("modelIdentCode") == "BRAKE"
     assert root.findtext("./identAndStatusSection/pmAddress/pmTitle") == "Frein"
+
+
+def test_generate_pmc_keeps_entries_sharing_arbo():
+    entries = [
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-040A-D", title="Description"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-520A-D", title="Removal"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-941A-D", title="Parts"),
+    ]
+
+    root = etree.fromstring(generate_pmc(entries).encode("utf-8"))
+
+    assert len(root.findall(".//dmRef")) == len(entries)
+    assert [ref.findtext("./dmRefAddressItems/dmTitle/techName") for ref in root.findall(".//dmRef")] == [
+        "Description", "Removal", "Parts"
+    ]
 
 
 def _ir_with_sections() -> IRNode:

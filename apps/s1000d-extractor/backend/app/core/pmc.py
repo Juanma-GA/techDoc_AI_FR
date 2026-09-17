@@ -77,11 +77,11 @@ def _emit_dm_ref(parent: etree._Element, entry: DmrlEntry) -> None:
 
 
 def _emit_entry(parent: etree._Element, node: dict) -> None:
-    entry: DmrlEntry | None = node["entry"]
+    entries: list[DmrlEntry] = node["entries"]
     el = etree.SubElement(parent, "pmEntry")
-    label = entry.title if entry else node["key"]
+    label = entries[0].title if entries else node["key"]
     etree.SubElement(el, "pmEntryTitle").text = label
-    if entry is not None:
+    for entry in entries:
         _emit_dm_ref(el, entry)
     for child in node["children"]:
         _emit_entry(el, child)
@@ -98,7 +98,7 @@ def _build_tree(entries: list[DmrlEntry]) -> list[dict]:
     for entry in entries:
         parts = _arbo_parts(entry.arbo)
         if not parts:
-            roots.append({"key": entry.title, "entry": entry, "children": []})
+            roots.append({"key": entry.title, "entries": [entry], "children": []})
             continue
         path = ""
         parent_children = roots
@@ -106,11 +106,11 @@ def _build_tree(entries: list[DmrlEntry]) -> list[dict]:
             path = f"{path}.{part}" if path else part
             node = index.get(path)
             if node is None:
-                node = {"key": path, "entry": None, "children": []}
+                node = {"key": path, "entries": [], "children": []}
                 index[path] = node
                 parent_children.append(node)
             if i == len(parts) - 1:
-                node["entry"] = entry
+                node["entries"].append(entry)
             parent_children = node["children"]
     return roots
 
