@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 
 export function Settings() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -36,7 +38,7 @@ export function Settings() {
       }),
     onSuccess: () => {
       setApiKey("");
-      setFeedback({ kind: "ok", text: "Paramètres enregistrés." });
+      setFeedback({ kind: "ok", text: t("settings.saved") });
       void qc.invalidateQueries({ queryKey: ["settings"] });
       void qc.invalidateQueries({ queryKey: ["health"] });
     },
@@ -48,8 +50,8 @@ export function Settings() {
     onSuccess: (r: TestConnectionDto) => {
       setFeedback(
         r.ok
-          ? { kind: "ok", text: `Connexion OK (${r.models.length} modèles disponibles).` }
-          : { kind: "error", text: `Échec : ${r.error ?? ""}` },
+          ? { kind: "ok", text: t("settings.connectionOk", { count: r.models.length }) }
+          : { kind: "error", text: t("settings.connectionFailed", { message: r.error ?? "" }) },
       );
       void qc.invalidateQueries({ queryKey: ["health"] });
     },
@@ -71,18 +73,17 @@ export function Settings() {
   return (
     <>
       <div className="page-header">
-        <h1>Paramètres</h1>
-        <p>Clé API Mistral et modèles utilisés.</p>
+        <h1>{t("settings.title")}</h1>
+        <p>{t("settings.subtitle")}</p>
       </div>
 
       <div className="card">
-        <h2 className="card-title">Intelligence artificielle</h2>
+        <h2 className="card-title">{t("settings.aiTitle")}</h2>
         <div className="switch-row">
           <div>
-            <div className="label">LLM activé</div>
+            <div className="label">{t("settings.llmEnabled")}</div>
             <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
-              Désactiver coupe les tâches confiées à l'IA (OCR scans, classification,
-              découpage). La clé Mistral est conservée.
+              {t("settings.llmHelp")}
             </small>
           </div>
           <label className="switch">
@@ -100,17 +101,17 @@ export function Settings() {
       <div className="card">
         <h2 className="card-title">
           <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-            Configuration Mistral
+            {t("settings.configuration")}
             {apiKeySet ? (
-              <span className="badge ok">CONFIGURED</span>
+              <span className="badge ok">{t("settings.configured")}</span>
             ) : (
-              <span className="badge warn">NOT CONFIGURED</span>
+              <span className="badge warn">{t("settings.notConfigured")}</span>
             )}
           </span>
         </h2>
         <div className="form">
           <label>
-            <div className="label">Clé API Mistral</div>
+            <div className="label">{t("settings.apiKey")}</div>
             <input
               className="input"
               type="password"
@@ -121,12 +122,12 @@ export function Settings() {
             />
             {apiKeySet ? (
               <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
-                Une clé est déjà enregistrée (laisser vide pour la conserver).
+                {t("settings.apiKeyKeep")}
               </small>
             ) : null}
           </label>
           <label>
-            <div className="label">Base URL</div>
+            <div className="label">{t("settings.baseUrl")}</div>
             <input
               className="input"
               type="url"
@@ -136,7 +137,7 @@ export function Settings() {
           </label>
           <div className="row">
             <label className="grow">
-              <div className="label">Modèle chat</div>
+              <div className="label">{t("settings.chatModel")}</div>
               <input
                 className="input"
                 value={chatModel}
@@ -144,7 +145,7 @@ export function Settings() {
               />
             </label>
             <label className="grow">
-              <div className="label">Modèle embeddings</div>
+              <div className="label">{t("settings.embedModel")}</div>
               <input
                 className="input"
                 value={embedModel}
@@ -162,7 +163,7 @@ export function Settings() {
                 saveMutation.mutate();
               }}
             >
-              Enregistrer
+              {t("settings.save")}
             </button>
             <button
               type="button"
@@ -173,7 +174,7 @@ export function Settings() {
                 testMutation.mutate();
               }}
             >
-              Tester la connexion
+              {t("settings.testConnection")}
             </button>
           </div>
           {feedback ? (
