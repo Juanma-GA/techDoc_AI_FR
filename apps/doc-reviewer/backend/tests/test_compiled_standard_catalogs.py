@@ -1258,6 +1258,22 @@ def _note_page_pdf(text: str, page_type: str) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
+def _note_page_pdf_with_lines(lines: list[str], page_type: str) -> ParsedPdf:
+    text = "\n".join(lines)
+    spans = [
+        Span(
+            text=line,
+            bbox=(40.0, 100.0 + index * 20.0, 500.0, 112.0 + index * 20.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        )
+        for index, line in enumerate(lines)
+    ]
+    page = ParsedPage(page=1, text=text, spans=spans, page_type=page_type)
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
 def test_note_page_rules_require_categories_inside_note_and_exact_values() -> None:
     repair_rh = (
         "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
@@ -1318,7 +1334,7 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     testing_rule = _rule("CUSTOM_TESTING_NOTE")
     testing_valid, _ = execute_pdf_rules(
         _note_page_pdf(
-            f"TESTING\n{testing_note_intro}\nPressure: 1 bar\n{repair_rh}\n"
+            f"TESTING\n{testing_note_intro}\nPressure: 1 bar\n- {repair_rh}\n"
             "Temperature: 20 deg. C",
             TESTING_PAGE_TYPE,
         ),
@@ -1362,6 +1378,131 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     assert testing_wrong_rh[0].status == "FAIL"
     assert storage_valid[0].status == "PASS"
     assert storage_wrong_temperature[0].status == "FAIL"
+
+
+def test_note_suggestions_ignore_list_markers_and_anchor_missing_storage_paragraph() -> None:
+    repair_rh = (
+        "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
+    )
+    testing_intro = (
+        "NOTE: During testing operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
+    storage_intro = (
+        "NOTE: During storage operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
+    storage_temperature = (
+        "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
+    )
+
+    testing_prefix = "- Relative humidity: "
+    testing_error = "DMC"
+    testing_suffix = (
+        "Refer to Standard Practices Manual ATA No. 20-02-00, "
+        "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
+    )
+    testing_lines = [
+        "TESTING",
+        testing_intro,
+        "Pressure: 1 bar",
+        testing_prefix + testing_error + " " + testing_suffix,
+        "Temperature: 20 deg. C",
+    ]
+    testing_text = "\n".join(testing_lines)
+    testing_spans = [
+        Span(
+            text=testing_lines[0],
+            bbox=(40.0, 100.0, 500.0, 112.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+        Span(
+            text=testing_lines[1],
+            bbox=(40.0, 120.0, 500.0, 132.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+        Span(
+            text=testing_lines[2],
+            bbox=(40.0, 140.0, 500.0, 152.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+        Span(
+            text=testing_prefix,
+            bbox=(40.0, 160.0, 170.0, 172.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+        Span(
+            text=testing_error,
+            bbox=(170.0, 160.0, 195.0, 172.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+        Span(
+            text=testing_suffix,
+            bbox=(195.0, 160.0, 500.0, 172.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+        Span(
+            text=testing_lines[4],
+            bbox=(40.0, 180.0, 500.0, 192.0),
+            page=1,
+            font="Arial",
+            size=10.0,
+        ),
+    ]
+    testing_page = ParsedPage(
+        page=1,
+        text=testing_text,
+        spans=testing_spans,
+        page_type=TESTING_PAGE_TYPE,
+    )
+    testing_results, testing_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[testing_page],
+            full_text=testing_text,
+            is_signed=False,
+        ),
+        [_rule("CUSTOM_TESTING_NOTE")],
+    )
+
+    storage_lines = [
+        "STORAGE",
+        storage_intro,
+        "Pressure: 1 bar",
+        repair_rh,
+    ]
+    storage_results, storage_suggestions = execute_pdf_rules(
+        _note_page_pdf_with_lines(storage_lines, STORAGE_PAGE_TYPE),
+        [_rule("CUSTOM_STORAGE_NOTE")],
+    )
+
+    assert testing_results[0].status == "FAIL"
+    assert len(testing_suggestions) == 1
+    assert testing_suggestions[0].original == testing_error
+    assert testing_suggestions[0].proposed == ""
+    assert testing_suggestions[0].bbox == (170.0, 160.0, 195.0, 172.0)
+
+    assert storage_results[0].status == "FAIL"
+    assert len(storage_suggestions) == 1
+    assert storage_suggestions[0].original == ""
+    assert storage_suggestions[0].proposed == storage_temperature
+    assert storage_suggestions[0].bbox is not None
+    assert storage_suggestions[0].bbox[1] > 172.0
+    assert storage_suggestions[0].bbox[2] <= 500.0
 
 
 def test_tp1_page_type_requires_both_anchor_and_marker_in_the_footer() -> None:

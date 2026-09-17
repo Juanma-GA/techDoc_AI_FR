@@ -400,6 +400,8 @@ def _required_note_check(
     *,
     display: str,
     page_type: str,
+    anchor: str | None = None,
+    anchor_position: Literal["above", "below", "same"] = "above",
 ) -> Check:
     introduction_pattern = _exact_text_pattern(_NOTE_INTRODUCTION_TEXT[page_type])
     return _required_text_check(
@@ -409,7 +411,9 @@ def _required_note_check(
             + content_pattern
         ),
         display=display,
-        suggestion_mode="single",
+        suggestion_mode="fuzzy",
+        anchor=anchor,
+        anchor_position=anchor_position,
     )
 
 
@@ -693,6 +697,8 @@ _RULES_V1 = [
                 _STORAGE_TEMPERATURE_PATTERN,
                 display=_STORAGE_TEMPERATURE,
                 page_type=STORAGE_PAGE_TYPE,
+                anchor=r"(?i)\bRelative\s+humidity\s*:",
+                anchor_position="below",
             ),
         ],
     ),

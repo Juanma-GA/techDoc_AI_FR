@@ -269,13 +269,18 @@ def fuzzy_required_suggestions(
         if not candidates:
             continue
         scored = []
-        for candidate, start, end in candidates:
+        for raw_candidate, raw_start, _raw_end in candidates:
+            candidate, start = _candidate_content(raw_candidate, raw_start)
             candidate_compact = " ".join(candidate.split())
             if not candidate_compact:
                 continue
             candidate_folded = candidate_compact.casefold()
             if check.suggestion_mode == "all" and expected_folded in candidate_folded:
                 continue
+            if check.missing_anchor_position == "below":
+                expected_label = expected_compact.split(":", 1)[0].strip()
+                if expected_label and not candidate_folded.startswith(expected_label.casefold()):
+                    continue
             ratio = difflib.SequenceMatcher(
                 None,
                 candidate_folded,
@@ -287,7 +292,7 @@ def fuzzy_required_suggestions(
                 continue
             if is_expected_prefix and len(candidate_compact) < max(8, len(expected_compact) // 3):
                 continue
-            scored.append((ratio, candidate, start, end))
+            scored.append((ratio, candidate, start, start + len(candidate)))
         if not scored:
             continue
         scored.sort(key=lambda item: (item[0], len(item[1])), reverse=True)
@@ -408,6 +413,17 @@ def candidate_ranges(target: _TextTarget) -> list[tuple[str, int, int]]:
                 if candidate and (candidate, start, end) not in candidates:
                     candidates.append((candidate, start, end))
     return candidates
+
+
+def _candidate_content(candidate: str, start: int) -> tuple[str, int]:
+    leading_whitespace = len(candidate) - len(candidate.lstrip())
+    start += leading_whitespace
+    candidate = candidate[leading_whitespace:]
+    marker = re.match(r"[-*]\s+", candidate)
+    if marker is not None:
+        start += marker.end()
+        candidate = candidate[marker.end() :]
+    return candidate.rstrip(), start
 
 
 def minimal_diff_suggestions(
@@ -641,6 +657,16 @@ def missing_item_bbox(
             return anchor
         height = max(anchor[3] - anchor[1], 1.0)
         width = max(anchor[2] - anchor[0], height * max(len(expected or ""), 4) * 0.45)
+        right_edges = [anchor[2]]
+        if target.bbox is not None:
+            right_edges.append(target.bbox[2])
+        right_edges.extend(bbox[2] for _start, _end, bbox, _size, _font in target.span_ranges)
+        if pdf_pages is not None:
+            page = next((item for item in pdf_pages if item.page == target.raw_page), None)
+            if page is not None:
+                right_edges.extend(span.bbox[2] for span in page.spans)
+        max_right = max(right_edges)
+        width = min(width, max(max_right - anchor[0], anchor[2] - anchor[0]))
         if check.missing_anchor_position == "below":
             top = anchor[3] + height * 0.15
             bottom = anchor[3] + height * 1.35
