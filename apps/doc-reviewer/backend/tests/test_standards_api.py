@@ -68,6 +68,43 @@ def test_version_detail_returns_catalog(client: TestClient) -> None:
     assert "MAT_STEP_VERB" in catalog_codes
 
 
+def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version_id = custom["versions"][0]["id"]
+
+    response = client.get(
+        f"/api/v1/standards/{custom['id']}/versions/{version_id}"
+    )
+
+    assert response.status_code == 200
+    severities = {
+        item["code"]: item["severity"] for item in response.json()["catalog"]
+    }
+    assert severities == {
+        "CUSTOM_CMM_NUMBER": "error",
+        "CUSTOM_TITLE_PAGE_COPYRIGHT": "warning",
+        "CUSTOM_REVISION_DATE": "error",
+        "CUSTOM_TP1_REVISION_NUMBER": "error",
+        "CUSTOM_TP1_FIRST_ISSUE_DATE": "warning",
+        "CUSTOM_HIGHLIGHTS_REVISION_HEADER": "warning",
+        "CUSTOM_HIGHLIGHTS_ATA_NUMBER": "error",
+        "CUSTOM_HIGHLIGHTS_PNR_HEADER": "error",
+        "CUSTOM_PNR_PAGE_VALUE": "error",
+        "CUSTOM_TP1_PNR_PAGE_VALUE": "error",
+        "CUSTOM_REPAIR_NOTE": "error",
+        "CUSTOM_TESTING_NOTE": "error",
+        "CUSTOM_STORAGE_NOTE": "error",
+        "CUSTOM_TP1_THALES_ADDRESS": "warning",
+        "CUSTOM_DECIMAL_COMMA": "warning",
+        "CUSTOM_TEMPERATURE_FAHRENHEIT": "error",
+        "CUSTOM_BAR_PSI_CONVERSION": "error",
+        "CUSTOM_FORBIDDEN_CONSUMABLES": "error",
+        "CUSTOM_NO_DEGREE_C_SYMBOL": "info",
+        "CUSTOM_NO_DEGREE_F_SYMBOL": "info",
+    }
+
+
 def test_compiled_rules_include_tp1_address_when_custom_standard_is_selected(
     client: TestClient,
 ) -> None:

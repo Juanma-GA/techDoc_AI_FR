@@ -376,7 +376,7 @@ _RULES_V1 = [
         "Copyright du footer conforme a l'annee de revision",
         failure_message="Copyright du footer non conforme",
         target=_FOOTER_TARGET,
-        severity="error",
+        severity="warning",
         checks=[
             Check(
                 field="text",
@@ -433,7 +433,7 @@ _RULES_V1 = [
         "Date de premiere issue du footer TP1 conforme au mapping",
         failure_message="date de premiere issue non conforme.",
         target=_TP1_REVISION_TARGET,
-        severity="error",
+        severity="warning",
         checks=[
             _required_text_check(
                 _EXPECTED_TP1_FIRST_ISSUE_PATTERN,
@@ -448,7 +448,7 @@ _RULES_V1 = [
         "En-tete de revision present au-dessus du tableau Highlights",
         failure_message="En-tete de revision Highlights non conforme.",
         target=_HIGHLIGHTS_TARGET,
-        severity="error",
+        severity="warning",
         checks=[
             _required_text_check(
                 _EXPECTED_HIGHLIGHTS_REVISION_PATTERN,
@@ -563,7 +563,7 @@ _RULES_V1 = [
         "Adresse THALES exacte sur les pages TP1",
         failure_message="adresse THALES non conforme.",
         target=_TP1_ADDRESS_TARGET,
-        severity="error",
+        severity="warning",
         checks=[
             _required_text_check(
                 pattern,
@@ -584,7 +584,7 @@ _RULES_V1 = [
         "CUSTOM_DECIMAL_COMMA",
         "Valeurs decimales doivent etre separees par un point",
         pattern=_DECIMAL_COMMA_PATTERN,
-        severity="error",
+        severity="warning",
         replacement=r"\1.\2",
     ),
     _rule(
@@ -629,7 +629,7 @@ _RULES_V1 = [
         "Unite de temperature C ecrite au format deg. C",
         failure_message="unite °C interdite, utiliser deg. C.",
         pattern=_DEGREE_C_PATTERN,
-        severity="error",
+        severity="info",
         replacement="deg. C",
     ),
     _rule(
@@ -637,7 +637,7 @@ _RULES_V1 = [
         "Unite de temperature F ecrite au format deg. F",
         failure_message="unite °F interdite, utiliser deg. F.",
         pattern=_DEGREE_F_PATTERN,
-        severity="error",
+        severity="info",
         replacement="deg. F",
     ),
 ]
@@ -669,7 +669,7 @@ RULE_METADATA["CUSTOM_TITLE_PAGE_COPYRIGHT"] = {
         "l'annee de debut 1966 et l'annee de revision du document."
     ),
     "kind": "field_required",
-    "severity": "error",
+    "severity": "warning",
     "message": "Le copyright du footer est absent ou une annee est incorrecte.",
 }
 RULE_METADATA["CUSTOM_REVISION_DATE"] = {
@@ -687,7 +687,7 @@ RULE_METADATA["CUSTOM_TP1_THALES_ADDRESS"] = {
         "de reference."
     ),
     "kind": "field_required",
-    "severity": "error",
+    "severity": "warning",
     "message": "L'adresse THALES de la page TP1 est absente ou incorrecte.",
 }
 RULE_METADATA["CUSTOM_TP1_REVISION_NUMBER"] = {
@@ -709,7 +709,7 @@ RULE_METADATA["CUSTOM_TP1_FIRST_ISSUE_DATE"] = {
         "avec une date egale a la date de premiere issue saisie dans le mapping."
     ),
     "kind": "field_required",
-    "severity": "error",
+    "severity": "warning",
     "message": (
         "La date de premiere issue du footer TP1 est absente ou ne correspond "
         "pas au mapping."
@@ -721,7 +721,7 @@ RULE_METADATA["CUSTOM_HIGHLIGHTS_REVISION_HEADER"] = {
         "tableau l'en-tete REVISION No. avec le numero et la date du mapping."
     ),
     "kind": "field_required",
-    "severity": "error",
+    "severity": "warning",
     "message": (
         "L'en-tete de revision Highlights est absent, incorrect ou place "
         "apres le tableau."
@@ -769,7 +769,7 @@ RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
         "un point comme separateur decimal, et non une virgule."
     ),
     "kind": "regex_flag",
-    "severity": "error",
+    "severity": "warning",
     "message": "Une valeur decimale utilise une virgule au lieu d'un point.",
 }
 RULE_METADATA["CUSTOM_TEMPERATURE_FAHRENHEIT"] = {
@@ -801,13 +801,13 @@ RULE_METADATA["CUSTOM_FORBIDDEN_CONSUMABLES"] = {
 RULE_METADATA["CUSTOM_NO_DEGREE_C_SYMBOL"] = {
     "description": "Le symbole °C doit etre ecrit sous la forme deg. C.",
     "kind": "regex_flag",
-    "severity": "error",
+    "severity": "info",
     "message": "Le symbole °C est interdit : utiliser deg. C.",
 }
 RULE_METADATA["CUSTOM_NO_DEGREE_F_SYMBOL"] = {
     "description": "Le symbole °F doit etre ecrit sous la forme deg. F.",
     "kind": "regex_flag",
-    "severity": "error",
+    "severity": "info",
     "message": "Le symbole °F est interdit : utiliser deg. F.",
 }
 

@@ -17,6 +17,8 @@ BACK :
 
 OTHER :
 
+
+
 - Attention y'a plein de fichiers modifié pour changer le mapping en dehors de user_rules(analyze; document_context; documents; compiled_rule_operators/runtime;compiled_rules;rules_engine;models;schémas; domaisns.ts;usedocuments.ts;DocumentMetaPanel.tsx; et les en.json et fr.json) mais l'objectif c'est qu'on puisse facilement modifier en fonction du client donc avoir des mapping différents. il faudrait donc regrouper ça dans un fichier spécifique au client et que tous les fichiers cités soient eux généraux et récupère en fonction du client. PAreil pour la règle des fareneit y'a eu une modif dans compiled_rule_suggestion qui doit plutot être dans un fichier unique au client (maybe c'est tout ce fichier enfait suggestion qui est unique au client)  
 
 Page dans les Highlight marqué par un R LEP ... 

@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../components/PageHeader";
 import { RejectionsSummaryCard } from "../components/RejectionsSummaryCard";
+import { SeverityBadge } from "../components/SeverityBadge";
 import { useDocuments } from "../hooks/useDocuments";
 import { api } from "../lib/api";
 import type { Severity, Suggestion } from "../types/domain";
@@ -33,6 +35,13 @@ const SEV_FILL: Record<Severity, string> = {
 };
 
 type BarRow = { label: string; count: number; fill: string };
+
+type FrequentError = {
+  ruleCode: string;
+  message: string;
+  severity: Severity;
+  count: number;
+};
 
 export function Dashboard(): JSX.Element {
   const { t } = useTranslation();
@@ -83,6 +92,25 @@ export function Dashboard(): JSX.Element {
     .slice(0, 5)
     .map(([id, count]) => ({ label: docName(id), count, fill: "var(--warning)" }));
 
+  const errorsByRule = new Map<string, FrequentError>();
+  for (const s of sugList) {
+    const ruleCode = s.rule_code || "?";
+    const existing = errorsByRule.get(ruleCode);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      errorsByRule.set(ruleCode, {
+        ruleCode,
+        message: s.message || ruleCode,
+        severity: s.severity,
+        count: 1,
+      });
+    }
+  }
+  const frequentErrors = [...errorsByRule.values()]
+    .sort((a, b) => b.count - a.count || a.ruleCode.localeCompare(b.ruleCode))
+    .slice(0, 10);
+
   return (
     <div>
       <PageHeader title={t("dashboard.title")} subtitle={t("dashboard.subtitle")} />
@@ -123,6 +151,49 @@ export function Dashboard(): JSX.Element {
           />
         ) : (
           <p className="hint">{t("dashboard.noOpen")}</p>
+        )}
+      </Card>
+
+      <Card title={t("dashboard.frequentErrors")}>
+        {isLoading ? (
+          <p className="hint">{t("common.loading")}</p>
+        ) : frequentErrors.length === 0 ? (
+          <p className="hint">{t("dashboard.frequentErrorsEmpty")}</p>
+        ) : (
+          <details className="collapsible">
+            <summary
+              className="collapsible-summary"
+              style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+              <span>{t("dashboard.frequentErrorsSummary", { count: frequentErrors.length })}</span>
+            </summary>
+            <ol style={{ margin: "12px 0 0", paddingLeft: 24 }}>
+              {frequentErrors.map((error) => (
+                <li key={error.ruleCode} style={{ padding: "8px 0 8px 4px" }}>
+                  <div className="row" style={{ alignItems: "flex-start" }}>
+                    <div className="grow" style={{ minWidth: 0 }}>
+                      <div className="row" style={{ gap: 8 }}>
+                        <strong
+                          title={error.ruleCode}
+                          style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                        >
+                          {error.ruleCode}
+                        </strong>
+                        <SeverityBadge severity={error.severity} />
+                      </div>
+                      <div style={{ color: "var(--fg-dim)", overflowWrap: "anywhere" }}>
+                        {error.message}
+                      </div>
+                    </div>
+                    <span className="label" style={{ whiteSpace: "nowrap" }}>
+                      {error.count}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </details>
         )}
       </Card>
 
