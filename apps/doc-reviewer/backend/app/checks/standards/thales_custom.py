@@ -61,6 +61,20 @@ _PAGE_TYPE_MARKERS = {
 }
 _HIGHLIGHTS_PAGE_1_MARKER = re.compile(r"(?i)\bHighlights\s+Page\s+1\b")
 _HIGHLIGHTS_PAGE_TYPES = [HIGHLIGHTS_PAGE_TYPE, HIGHLIGHTS_FIRST_PAGE_TYPE]
+_NOTE_INTRODUCTION_TEXT = {
+    REPAIR_PAGE_TYPE: (
+        "During repair operations, make sure that the environmental conditions "
+        "are as follows:"
+    ),
+    TESTING_PAGE_TYPE: (
+        "During testing operations, make sure that the environmental conditions "
+        "are as follows:"
+    ),
+    STORAGE_PAGE_TYPE: (
+        "During storage operations, make sure that the environmental conditions "
+        "are as follows:"
+    ),
+}
 _HIGHLIGHTS_TARGET = RuleTarget(
     page="all",
     region="full_page",
@@ -381,16 +395,19 @@ def _required_text_check(
     )
 
 
-_NOTE_CONTENT_PATTERN = r"(?is:\bNOTE\b(?:(?!\bNOTE\b).)*?)"
-
-
 def _required_note_check(
     content_pattern: str,
     *,
     display: str,
+    page_type: str,
 ) -> Check:
+    introduction_pattern = _exact_text_pattern(_NOTE_INTRODUCTION_TEXT[page_type])
     return _required_text_check(
-        _NOTE_CONTENT_PATTERN + content_pattern,
+        (
+            rf"(?i:\bNOTE\b)\s*:\s*{introduction_pattern}"
+            r"(?is:(?:(?!\bNOTE\b).)*?)"
+            + content_pattern
+        ),
         display=display,
         suggestion_mode="single",
     )
@@ -614,48 +631,68 @@ _RULES_V1 = [
     ),
     _rule(
         "CUSTOM_REPAIR_NOTE",
-        "Categories obligatoires dans les NOTE des pages REPAIR",
-        failure_message="categories NOTE REPAIR non conformes.",
+        "Introduction et categories obligatoires dans les NOTE des pages REPAIR",
+        failure_message="introduction ou categories NOTE REPAIR non conformes.",
         target=RuleTarget(page="all", region="full_page", page_type=REPAIR_PAGE_TYPE),
         severity="error",
         checks=[
-            _required_note_check(_NOTE_PRESSURE_PATTERN, display="Pressure:"),
+            _required_note_check(
+                _NOTE_PRESSURE_PATTERN,
+                display="Pressure:",
+                page_type=REPAIR_PAGE_TYPE,
+            ),
             _required_note_check(
                 _REPAIR_RELATIVE_HUMIDITY_PATTERN,
                 display=_REPAIR_RELATIVE_HUMIDITY,
+                page_type=REPAIR_PAGE_TYPE,
             ),
         ],
     ),
     _rule(
         "CUSTOM_TESTING_NOTE",
-        "Categories obligatoires dans les NOTE des pages TESTING",
-        failure_message="categories NOTE TESTING non conformes.",
+        "Introduction et categories obligatoires dans les NOTE des pages TESTING",
+        failure_message="introduction ou categories NOTE TESTING non conformes.",
         target=RuleTarget(page="all", region="full_page", page_type=TESTING_PAGE_TYPE),
         severity="error",
         checks=[
-            _required_note_check(_NOTE_PRESSURE_PATTERN, display="Pressure:"),
+            _required_note_check(
+                _NOTE_PRESSURE_PATTERN,
+                display="Pressure:",
+                page_type=TESTING_PAGE_TYPE,
+            ),
             _required_note_check(
                 _REPAIR_RELATIVE_HUMIDITY_PATTERN,
                 display=_REPAIR_RELATIVE_HUMIDITY,
+                page_type=TESTING_PAGE_TYPE,
             ),
-            _required_note_check(r"\bTemperature\b", display="Temperature"),
+            _required_note_check(
+                r"\bTemperature\b",
+                display="Temperature",
+                page_type=TESTING_PAGE_TYPE,
+            ),
         ],
     ),
     _rule(
         "CUSTOM_STORAGE_NOTE",
-        "Categories obligatoires dans les NOTE des pages STORAGE",
-        failure_message="categories NOTE STORAGE non conformes.",
+        "Introduction et categories obligatoires dans les NOTE des pages STORAGE",
+        failure_message="introduction ou categories NOTE STORAGE non conformes.",
         target=RuleTarget(page="all", region="full_page", page_type=STORAGE_PAGE_TYPE),
         severity="error",
         checks=[
-            _required_note_check(_NOTE_PRESSURE_PATTERN, display="Pressure:"),
+            _required_note_check(
+                _NOTE_PRESSURE_PATTERN,
+                display="Pressure:",
+                page_type=STORAGE_PAGE_TYPE,
+            ),
             _required_note_check(
                 _REPAIR_RELATIVE_HUMIDITY_PATTERN,
                 display=_REPAIR_RELATIVE_HUMIDITY,
+                page_type=STORAGE_PAGE_TYPE,
             ),
             _required_note_check(
                 _STORAGE_TEMPERATURE_PATTERN,
                 display=_STORAGE_TEMPERATURE,
+                page_type=STORAGE_PAGE_TYPE,
             ),
         ],
     ),
@@ -925,30 +962,42 @@ STANDARD_SPEC: dict[str, object] = {
 }
 RULE_METADATA["CUSTOM_REPAIR_NOTE"] = {
     "description": (
-        "Chaque page REPAIR doit contenir dans une NOTE les categories "
-        "Pressure et Relative humidity avec la valeur de reference."
+        "Chaque page REPAIR doit commencer sa NOTE par l'introduction "
+        "operationnelle attendue et contenir les categories Pressure et "
+        "Relative humidity avec la valeur de reference."
     ),
     "kind": "field_required",
     "severity": "error",
-    "message": "Les categories NOTE de la page REPAIR sont absentes ou incorrectes.",
+    "message": (
+        "L'introduction ou les categories NOTE de la page REPAIR sont absentes "
+        "ou incorrectes."
+    ),
 }
 RULE_METADATA["CUSTOM_TESTING_NOTE"] = {
     "description": (
-        "Chaque page TESTING doit contenir dans une NOTE les categories "
-        "Pressure, Relative humidity et Temperature."
+        "Chaque page TESTING doit commencer sa NOTE par l'introduction "
+        "operationnelle attendue et contenir les categories Pressure, Relative "
+        "humidity et Temperature."
     ),
     "kind": "field_required",
     "severity": "error",
-    "message": "Les categories NOTE de la page TESTING sont absentes ou incorrectes.",
+    "message": (
+        "L'introduction ou les categories NOTE de la page TESTING sont absentes "
+        "ou incorrectes."
+    ),
 }
 RULE_METADATA["CUSTOM_STORAGE_NOTE"] = {
     "description": (
-        "Chaque page STORAGE doit contenir dans une NOTE les categories "
-        "Pressure, Relative humidity et Temperature avec les valeurs de reference."
+        "Chaque page STORAGE doit commencer sa NOTE par l'introduction "
+        "operationnelle attendue et contenir les categories Pressure, Relative "
+        "humidity et Temperature avec les valeurs de reference."
     ),
     "kind": "field_required",
     "severity": "error",
-    "message": "Les categories NOTE de la page STORAGE sont absentes ou incorrectes.",
+    "message": (
+        "L'introduction ou les categories NOTE de la page STORAGE sont absentes "
+        "ou incorrectes."
+    ),
 }
 RULE_METADATA["CUSTOM_CMM_NUMBER_FONT_SIZE"] = {
     "description": (

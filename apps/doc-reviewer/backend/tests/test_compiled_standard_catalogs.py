@@ -1267,10 +1267,25 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
         "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
         "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
     )
+    repair_note_intro = (
+        "NOTE: During repair operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
+    testing_note_intro = (
+        "NOTE: During testing operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
+    storage_note_intro = (
+        "NOTE: During storage operations, make sure that the environmental "
+        "conditions are as follows:"
+    )
 
     repair_rule = _rule("CUSTOM_REPAIR_NOTE")
     repair_valid, _ = execute_pdf_rules(
-        _note_page_pdf(f"REPAIR\nNOTE\nPressure: 1 bar\n{repair_rh}", REPAIR_PAGE_TYPE),
+        _note_page_pdf(
+            f"REPAIR\n{repair_note_intro}\nPressure: 1 bar\n{repair_rh}",
+            REPAIR_PAGE_TYPE,
+        ),
         [repair_rule],
     )
     repair_outside_note, _ = execute_pdf_rules(
@@ -1278,7 +1293,21 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
         [repair_rule],
     )
     repair_uppercase, _ = execute_pdf_rules(
-        _note_page_pdf(f"REPAIR\nNOTE\nPRESSURE: 1 bar\n{repair_rh}", REPAIR_PAGE_TYPE),
+        _note_page_pdf(
+            f"REPAIR\n{repair_note_intro}\nPRESSURE: 1 bar\n{repair_rh}",
+            REPAIR_PAGE_TYPE,
+        ),
+        [repair_rule],
+    )
+    repair_missing_intro, _ = execute_pdf_rules(
+        _note_page_pdf(f"REPAIR\nNOTE\nPressure: 1 bar\n{repair_rh}", REPAIR_PAGE_TYPE),
+        [repair_rule],
+    )
+    repair_wrong_intro, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"REPAIR\n{testing_note_intro}\nPressure: 1 bar\n{repair_rh}",
+            REPAIR_PAGE_TYPE,
+        ),
         [repair_rule],
     )
     repair_outside_page, repair_outside_page_suggestions = execute_pdf_rules(
@@ -1289,14 +1318,15 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     testing_rule = _rule("CUSTOM_TESTING_NOTE")
     testing_valid, _ = execute_pdf_rules(
         _note_page_pdf(
-            f"TESTING\nNOTE\nPressure: 1 bar\n{repair_rh}\nTemperature: 20 deg. C",
+            f"TESTING\n{testing_note_intro}\nPressure: 1 bar\n{repair_rh}\n"
+            "Temperature: 20 deg. C",
             TESTING_PAGE_TYPE,
         ),
         [testing_rule],
     )
     testing_wrong_rh, _ = execute_pdf_rules(
         _note_page_pdf(
-            "TESTING\nNOTE\nPressure: 1 bar\n"
+            f"TESTING\n{testing_note_intro}\nPressure: 1 bar\n"
             "Relative humidity: 50%\nTemperature: 20 deg. C",
             TESTING_PAGE_TYPE,
         ),
@@ -1306,14 +1336,16 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     storage_rule = _rule("CUSTOM_STORAGE_NOTE")
     storage_valid, _ = execute_pdf_rules(
         _note_page_pdf(
-            f"STORAGE\nNOTE\nPressure: 1 bar\n{repair_rh}\n{storage_temperature}",
+            f"STORAGE\n{storage_note_intro}\nPressure: 1 bar\n{repair_rh}\n"
+            f"{storage_temperature}",
             STORAGE_PAGE_TYPE,
         ),
         [storage_rule],
     )
     storage_wrong_temperature, _ = execute_pdf_rules(
         _note_page_pdf(
-            f"STORAGE\nNOTE\nPressure: 1 bar\n{repair_rh}\nTemperature: 20 deg. C",
+            f"STORAGE\n{storage_note_intro}\nPressure: 1 bar\n{repair_rh}\n"
+            "Temperature: 20 deg. C",
             STORAGE_PAGE_TYPE,
         ),
         [storage_rule],
@@ -1322,6 +1354,8 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     assert repair_valid[0].status == "PASS"
     assert repair_outside_note[0].status == "FAIL"
     assert repair_uppercase[0].status == "FAIL"
+    assert repair_missing_intro[0].status == "FAIL"
+    assert repair_wrong_intro[0].status == "FAIL"
     assert repair_outside_page == []
     assert repair_outside_page_suggestions == []
     assert testing_valid[0].status == "PASS"
