@@ -8,10 +8,12 @@ from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 from app.checks.standards.thales_custom import (
     HIGHLIGHTS_PAGE_TYPE,
     HIGHLIGHTS_FIRST_PAGE_TYPE,
+    TP2_PAGE_TYPE,
     REPAIR_PAGE_TYPE,
     STORAGE_PAGE_TYPE,
     TESTING_PAGE_TYPE,
     TP1_PAGE_TYPE,
+    _IMPORTANT_NOTICE_TEXT,
     classify_pages,
     identify_note_pages,
     identify_tp1_pages,
@@ -47,6 +49,33 @@ def _cmm_footer_pdf(footer: str, *, cmm_size: float = 8.0) -> ParsedPdf:
         spans=[
             Span(text=body, bbox=(40.0, 100.0, 500.0, 120.0), page=1, font="Arial", size=10.0),
             Span(text=footer, bbox=(40.0, 760.0, 200.0, 780.0), page=1, font="Arial", size=cmm_size),
+        ],
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def _tp2_notice_pdf(notice: str, *, page_type: str | None = TP2_PAGE_TYPE) -> ParsedPdf:
+    footer = "79-30-01\nTP 2\nJUL 27/26"
+    text = f"{notice}\n{footer}"
+    page = ParsedPage(
+        page=1,
+        text=text,
+        page_type=page_type,
+        spans=[
+            Span(
+                text=notice,
+                bbox=(50.0, 120.0, 530.0, 648.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text=footer,
+                bbox=(40.0, 752.0, 580.0, 780.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
         ],
     )
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
@@ -148,7 +177,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 59
+    assert total == 60
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -249,6 +278,47 @@ def test_thales_logo_font_size_rules_split_normal_pages_from_tp1() -> None:
     assert tp1_invalid[0].status == "FAIL"
     assert len(tp1_invalid_suggestions) == 1
     assert "31 pt" in tp1_invalid_suggestions[0].message
+
+
+def test_tp2_important_notice_matches_the_exact_ata100_model() -> None:
+    rule = _rule("CUSTOM_TP2_IMPORTANT_NOTICE")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _tp2_notice_pdf(_IMPORTANT_NOTICE_TEXT),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _tp2_notice_pdf(_IMPORTANT_NOTICE_TEXT.replace("sole property", "sole propriety", 1)),
+        [rule],
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        _tp2_notice_pdf("TP2 notice missing", page_type=TP2_PAGE_TYPE),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].proposed == "property"
+    assert "Texte attendu" in invalid_suggestions[0].message
+    assert "sole propriety" in invalid_suggestions[0].original
+    assert missing[0].status == "FAIL"
+    assert len(missing_suggestions) == 1
+    assert missing_suggestions[0].original == ""
+
+
+def test_classify_pages_identifies_tp2_from_footer_marker() -> None:
+    parsed = _tp2_notice_pdf(_IMPORTANT_NOTICE_TEXT, page_type=None)
+    classify_pages(
+        parsed,
+        SimpleNamespace(
+            meta_revision_date="JUL 27/26",
+            meta_cmm_number="79-30-02",
+        ),
+    )
+
+    assert parsed.pages[0].page_type == TP2_PAGE_TYPE
 
 
 def _revision_date_footer_pdf(footer: str) -> ParsedPdf:

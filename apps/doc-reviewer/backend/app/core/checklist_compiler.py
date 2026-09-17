@@ -39,7 +39,7 @@ zones, présence conditionnelle) SONT déterministes : ne bascule pas en semanti
 Utilise uniquement ces valeurs :
 execution: deterministic | semantic | manual | unsupported
 field (pour un check normal et pour compare_to.field quand compare_to.source=document_text):
-    text | cmm_number | thales_logo_t | page_number | revision_number | revision_date | first_issue_date | copyright_start_year |
+    text | cmm_number | thales_logo_t | important_notice | page_number | revision_number | revision_date | first_issue_date | copyright_start_year |
   copyright_end_year | document_type
 operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field | font_size_equals
 expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals, un nombre de points pour font_size_equals,

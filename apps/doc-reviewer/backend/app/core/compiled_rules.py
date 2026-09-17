@@ -24,6 +24,7 @@ EntityField = Literal[
     "text",
     "cmm_number",
     "thales_logo_t",
+    "important_notice",
     "page_number",
     "revision_number",
     "revision_date",

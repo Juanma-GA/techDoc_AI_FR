@@ -101,11 +101,18 @@ def deterministic_suggestions(
                     )
                 )
         elif check.operator == "normalized_equals":
-            suggestions.extend(
-                normalized_equals_suggestions(
-                    check, targets, rule.id, rule.severity, rule_kind, message, ctx.pdf_pages
+            if check.field == "important_notice":
+                suggestions.extend(
+                    important_notice_suggestions(
+                        check, targets, rule.id, rule.severity, rule_kind, message, ctx.pdf_pages
+                    )
                 )
-            )
+            else:
+                suggestions.extend(
+                    normalized_equals_suggestions(
+                        check, targets, rule.id, rule.severity, rule_kind, message, ctx.pdf_pages
+                    )
+                )
         elif check.operator == "equals_field":
             suggestions.extend(
                 equals_field_suggestions(
@@ -682,6 +689,152 @@ def normalized_equals_suggestions(
             )
         )
     return suggestions
+
+
+def important_notice_suggestions(
+    check: Check,
+    targets: list[_TextTarget],
+    rule_id: str,
+    severity: str,
+    rule_kind: str,
+    message: str,
+    pdf_pages: list[ParsedPage] | None,
+) -> list[RawSuggestion]:
+    """Emit paragraph-level suggestions for an incorrect legal notice."""
+    expected = normalize(
+        str(check.expected) if check.expected is not None else "",
+        check.normalization,
+    )
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        raw_value = field_value(check.field, target.text, target.page)
+        observed = normalize(raw_value, check.normalization) if raw_value else ""
+        if observed == expected:
+            continue
+        if not raw_value:
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule_id,
+                    severity=severity,
+                    message=f"{message} Texte attendu absent : {expected}",
+                    original="",
+                    proposed=expected,
+                    page=target.raw_page,
+                    span=(0, 0),
+                    bbox=first_bbox(target),
+                )
+            )
+            continue
+
+        suggestions.extend(
+            _important_notice_diff_suggestions(
+                expected,
+                raw_value,
+                target,
+                rule_id,
+                severity,
+                rule_kind,
+                message,
+                pdf_pages,
+            )
+        )
+    return suggestions
+
+
+def _important_notice_diff_suggestions(
+    expected: str,
+    raw_value: str,
+    target: _TextTarget,
+    rule_id: str,
+    severity: str,
+    rule_kind: str,
+    message: str,
+    pdf_pages: list[ParsedPage] | None,
+) -> list[RawSuggestion]:
+    expected_tokens = expected.split()
+    observed_tokens = raw_value.split()
+    raw_token_matches = list(re.finditer(r"\S+", raw_value))
+    raw_start = target.text.find(raw_value)
+    if raw_start < 0:
+        raw_start = 0
+    matcher = difflib.SequenceMatcher(
+        None,
+        observed_tokens,
+        expected_tokens,
+        autojunk=False,
+    )
+    suggestions: list[RawSuggestion] = []
+    for tag, observed_start, observed_end, expected_start, expected_end in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        expected_fragment = " ".join(expected_tokens[expected_start:expected_end])
+        if observed_start < observed_end and raw_token_matches:
+            raw_fragment_start = raw_token_matches[min(observed_start, len(raw_token_matches) - 1)].start()
+            raw_fragment_end = raw_token_matches[observed_end - 1].end()
+            original = raw_value[raw_fragment_start:raw_fragment_end]
+            absolute_start = raw_start + raw_fragment_start
+            bbox = suggestion_bbox(
+                target,
+                original,
+                pdf_pages,
+                span_start=absolute_start,
+            )
+        else:
+            original = ""
+            absolute_start = raw_start + (
+                raw_token_matches[observed_start].start()
+                if observed_start < len(raw_token_matches)
+                else len(raw_value)
+            )
+            bbox = _insertion_bbox(target, absolute_start)
+
+        if tag == "insert":
+            detail = f"Texte manquant : {expected_fragment}"
+            proposed = expected_fragment
+        elif tag == "replace":
+            detail = f"Texte attendu : {expected_fragment}"
+            proposed = expected_fragment
+        else:
+            detail = f"Texte en trop : {original}"
+            proposed = ""
+        suggestions.append(
+            RawSuggestion(
+                rule_kind=rule_kind,
+                rule_code=rule_id,
+                severity=severity,
+                message=f"{message} {detail}",
+                original=original,
+                proposed=proposed,
+                page=target.raw_page,
+                span=(absolute_start, absolute_start + len(original)),
+                bbox=bbox,
+            )
+        )
+    return suggestions
+
+
+def _insertion_bbox(target: _TextTarget, offset: int) -> _BBox:
+    """Return the whitespace gap around a missing text insertion when possible."""
+    previous = [item for item in target.span_ranges if item[1] <= offset]
+    following = [item for item in target.span_ranges if item[0] >= offset]
+    previous_item = previous[-1] if previous else None
+    following_item = following[0] if following else None
+    if previous_item is not None and following_item is not None:
+        previous_bbox = previous_item[2]
+        following_bbox = following_item[2]
+        if following_bbox[1] >= previous_bbox[3]:
+            return (
+                min(previous_bbox[0], following_bbox[0]),
+                previous_bbox[3],
+                max(previous_bbox[2], following_bbox[2]),
+                following_bbox[1],
+            )
+    if following_item is not None:
+        return following_item[2]
+    if previous_item is not None:
+        return previous_item[2]
+    return first_bbox(target)
 
 
 def equals_field_suggestions(

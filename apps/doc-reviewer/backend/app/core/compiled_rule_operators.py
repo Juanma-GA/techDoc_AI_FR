@@ -44,6 +44,10 @@ _PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
 _BAR_TO_PSI = Decimal("14.5037738")
 _PRESSURE_DISPLAY_TOLERANCE = Decimal("0.005")
 FONT_SIZE_TOLERANCE = 0.1
+_IMPORTANT_NOTICE_START_RE = re.compile(r"(?im)^\s*IMPORTANT NOTICE\s*$")
+_IMPORTANT_NOTICE_END_RE = re.compile(
+    r"(?im)^\s*https://www\.thalesgroup\.com/customer-online\s*$"
+)
 
 
 @dataclass(frozen=True)
@@ -272,7 +276,10 @@ def evaluate_check(
             return "FAIL", target, observed, expected_value
         if first_missing is not None:
             target = first_missing[0]
-            return "INCONCLUSIVE", target, None, expected_value
+            status: Literal["FAIL", "INCONCLUSIVE"] = (
+                "FAIL" if check.field == "important_notice" else "INCONCLUSIVE"
+            )
+            return status, target, None, expected_value
         if last_match is not None:
             target, observed = last_match
             return "PASS", target, observed, expected_value
@@ -293,6 +300,14 @@ def field_value(field: str, text: str, page: str) -> str | None:
     if field == "document_type":
         match = re.search(r"(?i)\b(CMM|AMM|SRM|IPC|TSM|WDM|FIM)\b", text)
         return match.group(1).upper() if match else None
+    if field == "important_notice":
+        start = _IMPORTANT_NOTICE_START_RE.search(text)
+        if start is None:
+            return None
+        end = _IMPORTANT_NOTICE_END_RE.search(text, start.end())
+        if end is None:
+            return None
+        return text[start.start() : end.end()].strip()
     pattern = _ENTITY_PATTERNS.get(field)
     match = pattern.search(text) if pattern else None
     return match.group(1).strip() if match else None

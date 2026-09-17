@@ -33,6 +33,12 @@ _TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
 _TP1_ADDRESS_TARGET = RuleTarget(page="all", region="full_page", page_type="TP1")
 _ORIGIN = f"{STANDARD_CODE}:v1"
 TP1_PAGE_TYPE = "TP1"
+TP2_PAGE_TYPE = "TP2"
+_TP2_IMPORTANT_NOTICE_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_type=TP2_PAGE_TYPE,
+)
 _THALES_LOGO_TARGET = RuleTarget(
     page="all",
     region="full_page",
@@ -140,6 +146,24 @@ _STORAGE_TEMPERATURE = (
     "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
     "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
 )
+_IMPORTANT_NOTICE_TEXT = """IMPORTANT NOTICE
+This document and any information contained herein are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
+In particular, they shall not be used in the creation, manufacture, development or derivation of any repairs, modifications, spare parts, design, or configuration changes or to obtain EASA, FAA or any other government or regulatory approval to do so.
+Should THALES AVS FRANCE SAS consent be given for reproduction in whole or in part, this notice and the notice set forth on each page of this document shall appear in any such reproduction in whole or in part.
+The recipient shall not use this document for any purpose other than the one stated in the relevant applicable License agreement under which it has been disclosed and it shall be returned to THALES AVS FRANCE SAS immediately upon request.
+TO BE CONSIDERED VALID FOR PART 145 REQUIREMENTS, ALL MAINTENANCE DOCUMENTATION HAS TO BE IDENTIFIED ON EACH PAGE WITH A WATERMARK AUTHORIZING ITS USE BY THE END USER COMPANY. SUCH WATERMARK MIGHT BE AS FOLLOWS:
+\u201cProvided to [USER_ID] for [COMPANY_NAME] only under license agreement [LICENSE_NUMBER] for year [YEAR] only\u201d
+Users are kindly requested to notify THALES AVS FRANCE SAS of any discrepancy, omission or error found in this manual.
+Please send your comments to:
+THALES AVS FRANCE SAS
+Technical Publications Department
+AGS, Campus Thales Bordeaux
+75-77 Avenue Marcel Dassault
+33700 Merignac
+France
+E-mail: techpubs.frontoffice@fr.thalesgroup.com
+If you do not yet have access to our website, you can apply through the following address:
+https://www.thalesgroup.com/customer-online"""
 
 
 def _exact_text_pattern(value: str) -> str:
@@ -273,6 +297,12 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
     what this standard needs to classify a page."""
     identify_tp1_pages(
         parsed,
+        getattr(document, "meta_revision_date", None),
+        getattr(document, "meta_cmm_number", None),
+    )
+    identify_page_type(
+        parsed,
+        TP2_PAGE_TYPE,
         getattr(document, "meta_revision_date", None),
         getattr(document, "meta_cmm_number", None),
     )
@@ -424,6 +454,21 @@ _RULES_V1 = [
                 operator="font_size_equals",
                 expected=36,
                 require_all=True,
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_TP2_IMPORTANT_NOTICE",
+        "Important Notice TP2 conforme au modele ATA100",
+        failure_message="Important Notice TP2 non conforme au modele ATA100.",
+        target=_TP2_IMPORTANT_NOTICE_TARGET,
+        severity="error",
+        checks=[
+            Check(
+                field="important_notice",
+                operator="normalized_equals",
+                expected=_IMPORTANT_NOTICE_TEXT,
+                normalization=["unicode", "spaces", "line_breaks", "trim"],
             ),
         ],
     ),
@@ -931,4 +976,13 @@ RULE_METADATA["CUSTOM_TP1_THALES_LOGO_FONT_SIZE"] = {
     "kind": "field_required",
     "severity": "warning",
     "message": "La taille du logo THALES sur TP1 n'est pas 36 pt.",
+}
+RULE_METADATA["CUSTOM_TP2_IMPORTANT_NOTICE"] = {
+    "description": (
+        "Le bloc IMPORTANT NOTICE de la page TP2 doit correspondre exactement "
+        "au modele ATA100, hors differences de retours a la ligne et d'espaces."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "L'Important Notice de la page TP2 n'est pas conforme au modele ATA100.",
 }
