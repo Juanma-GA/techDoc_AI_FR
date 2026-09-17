@@ -13,7 +13,9 @@ from __future__ import annotations
 import json
 
 from app.core import context_classifier
+from app.core import dmrl
 from app.core import ir as ir_mod
+from app.core.dmrl import DmrlEntry, entry_from_dict
 from app.db.models import Document
 
 _HISTORY_MAX = 20   # profondeur max de la pile d'annulation
@@ -133,6 +135,45 @@ def _retype(dm: dict) -> str:
     return context_classifier.guess_dm_type(dm["title"], root)
 
 
+def _dmc_for_title(title: str, entries: list[DmrlEntry], used: set[str]) -> str:
+    """Associe un titre edite au DMC DMRL encore disponible."""
+    needle = dmrl.normalize(title)
+    if not needle:
+        return ""
+    matches: list[tuple[int, str]] = []
+    for entry in entries:
+        candidate = dmrl.normalize(entry.title)
+        if candidate == needle:
+            rank = 3
+        elif candidate.startswith(needle):
+            rank = 2
+        elif needle in candidate:
+            rank = 1
+        else:
+            continue
+        if entry.dmc and entry.dmc not in used:
+            matches.append((rank, entry.dmc))
+    if not matches:
+        return ""
+    best_rank = max(rank for rank, _dmc in matches)
+    best = {dmc for rank, dmc in matches if rank == best_rank}
+    return next(iter(best)) if len(best) == 1 else ""
+
+
+def sync_dmcs(dms: list[dict], doc: Document) -> None:
+    """Complete les DMC manquants sans jamais conserver un doublon."""
+    entries = [entry_from_dict(item) for item in (json.loads(doc.dmrl_json) if doc.dmrl_json else [])]
+    used: set[str] = set()
+    for dm in dms:
+        dmc = str(dm.get("dmc") or "")
+        if dmc and dmc not in used:
+            used.add(dmc)
+        else:
+            dm["dmc"] = _dmc_for_title(dm.get("title", ""), entries, used)
+            if dm["dmc"]:
+                used.add(dm["dmc"])
+
+
 def split_one(dm: dict) -> list[dict]:
     """Scinde un DM en sous-DMs (1 par section enfant). Renvoie [dm] si on ne
     peut pas le scinder (aucune section enfant)."""
@@ -150,7 +191,7 @@ def split_one(dm: dict) -> list[dict]:
     parts: list[tuple] = []
     if lead:
         lead_root = ir_mod.IRNode(id="x", kind="section", level=0, children=lead)
-        parts.append((f"{dm['title']} (general)", lead_root))
+        parts.append((dm["title"], lead_root))
     parts.extend((t, s) for t, s in units)
     if len(parts) < 2:
         return [dm]
@@ -169,6 +210,7 @@ def apply_split_op(doc: Document, params: dict) -> None:
         for d in dms:
             if d["dm_id"] == params.get("id") and title:
                 d["title"] = title
+                d["dmc"] = ""
     elif op == "exclude":
         dms = _renumber([d for d in dms if d["dm_id"] != params.get("id")])
     elif op == "merge":
@@ -181,6 +223,7 @@ def apply_split_op(doc: Document, params: dict) -> None:
                 children.extend(d["tree"].get("children", []))
             first["tree"]["children"] = children
             first["dm_type"] = _retype(first)
+            first["dmc"] = ""
             dms = _renumber([d for d in dms if d["dm_id"] == first["dm_id"] or d["dm_id"] not in ids])
     elif op == "split":
         target = next((d for d in dms if d["dm_id"] == params.get("id")), None)
@@ -189,4 +232,5 @@ def apply_split_op(doc: Document, params: dict) -> None:
             if len(subs) >= 2:
                 pos = dms.index(target)
                 dms = _renumber(dms[:pos] + subs + dms[pos + 1:])
+    sync_dmcs(dms, doc)
     save_dms(doc, dms)

@@ -69,7 +69,9 @@ def _child_attr(parent: etree._Element, local: str, attr: str) -> str:
     return ""
 
 
-def validate_brex(xml: str, rules: list[BrexRule]) -> list[dict]:
+def validate_brex(
+    xml: str, rules: list[BrexRule], *, allow_internal_dtd: bool = False
+) -> list[dict]:
     """Confronte le XML produit aux regles BREX (best-effort XPath).
 
     Regle `allowedObjectFlag="0"` dont l'`objectPath` matche des noeuds -> une
@@ -80,7 +82,7 @@ def validate_brex(xml: str, rules: list[BrexRule]) -> list[dict]:
     if not rules:
         return []
     try:
-        doc = xml_safe.fromstring(xml)
+        doc = xml_safe.fromstring(xml, allow_internal_dtd=allow_internal_dtd)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "BREX", f"XML mal forme : {exc}", "/")]
 

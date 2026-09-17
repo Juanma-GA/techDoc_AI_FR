@@ -60,6 +60,8 @@ export function Data() {
           .join(", ") || "(rien à supprimer)";
       setFeedback({ kind: "ok", text: `Reset OK (${items}).` });
       void qc.invalidateQueries({ queryKey: ["admin", "stats"] });
+      void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
+      window.dispatchEvent(new Event("s1000d-documents-reset"));
     } catch (e) {
       setFeedback({ kind: "error", text: e instanceof Error ? e.message : String(e) });
     }

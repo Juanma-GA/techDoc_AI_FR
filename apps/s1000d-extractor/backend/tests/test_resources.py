@@ -19,6 +19,14 @@ _CIR = (
     "</commonRepository>"
 )
 
+_DMRL_WITH_ICN = [{
+    "Arbo": "1",
+    "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+    "Titre": "Description",
+    "Type": "Descriptif",
+    "ICN": "ICN-WEG-AA0004-00001-A-02.png",
+}]
+
 
 def _upload_doc(client, data: bytes) -> str:
     r = client.post(
@@ -54,6 +62,62 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Le type declare dans la DMRL fait foi.
     assert [d["dm_type"] for d in state["dms"]] == ["descriptive", "procedural"]
     assert state["resources"]["dmrl_count"] == 2
+
+
+def test_dmrl_icn_renames_image_and_xml_omits_extension(client, pdf_bytes_image) -> None:
+    doc_id = _upload_doc(client, pdf_bytes_image)
+    _upload_resource(client, doc_id, "dmrl", "DMRL.json", json.dumps(_DMRL_WITH_ICN).encode())
+
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/start",
+        json={"start_page": 1},
+    ).json()
+    assert state["dmrl"][0]["icn"] == "ICN-WEG-AA0004-00001-A-02.png"
+
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    names = client.get(f"/api/v1/documents/{doc_id}/wizard/images").json()
+    assert names == ["ICN-WEG-AA0004-00001-A-02.png"]
+    image = client.get(f"/api/v1/documents/{doc_id}/wizard/images/{names[0]}")
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+
+    for payload in ({"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    xml = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
+    ).text
+    assert "<!DOCTYPE dmodule [" in xml
+    assert (
+        '<!ENTITY ICN-WEG-AA0004-00001-A-02 SYSTEM '
+        '"ICN-WEG-AA0004-00001-A-02.png" NDATA png>' in xml
+    )
+    assert 'infoEntityIdent="ICN-WEG-AA0004-00001-A-02"' in xml
+    assert 'infoEntityIdent="ICN-WEG-AA0004-00001-A-02.png"' not in xml
+
+
+def test_existing_dm_without_doctype_is_upgraded_on_download(client, pdf_bytes_image) -> None:
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload_doc(client, pdf_bytes_image)
+    client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"start_page": 1})
+    for payload in ({}, {"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    dm_id = state["dms"][0]["dm_id"]
+
+    db = SessionLocal()
+    try:
+        document = db.get(Document, doc_id)
+        dms = json.loads(document.dms_json)
+        dms[0]["xml"] = dms[0]["xml"].split("<!DOCTYPE dmodule [", 1)[0] + dms[0]["xml"].split("]>\n", 1)[1]
+        document.dms_json = json.dumps(dms, ensure_ascii=False)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm_id}/xml")
+    assert response.status_code == 200
+    assert "<!DOCTYPE dmodule [" in response.text
 
 
 def test_dmrl_step_reports_unmatched_entry(client, pdf_bytes) -> None:

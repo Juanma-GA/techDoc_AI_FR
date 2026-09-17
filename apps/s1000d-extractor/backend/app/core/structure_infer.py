@@ -77,11 +77,12 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         # 2) Legende de figure --------------------------------------------
         if heur.is_caption(text):
             close_list()
-            current().children.append(
-                IRNode(id=ids.next(), kind="figure", form="caption",
-                       text=text, page=block.page, zone=block.zone,
-                       refs=heur.detect_refs(text) or None, confidence=0.7)
-            )
+            for caption in heur.split_captions(text):
+                current().children.append(
+                    IRNode(id=ids.next(), kind="figure", form="caption",
+                           text=caption, page=block.page, zone=block.zone,
+                           refs=heur.detect_refs(caption) or None, confidence=0.7)
+                )
             continue
 
         # 3) Admonition (warning / caution / note) ------------------------

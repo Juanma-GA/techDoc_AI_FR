@@ -19,27 +19,27 @@ def safe_parser() -> etree.XMLParser:
     )
 
 
-def _reject_dtd(tree: etree._ElementTree) -> None:
+def _reject_dtd(tree: etree._ElementTree, *, allow_internal_dtd: bool = False) -> None:
     """Refuse toute DTD : le parseur ne resout deja plus les entites, mais un
     document qui en declare est suspect (XXE / bombe d'entites) et doit etre
     signale a l'utilisateur plutot que traite a moitie."""
     info = tree.docinfo
-    if info.internalDTD is not None or info.externalDTD is not None:
+    if info.externalDTD is not None or (info.internalDTD is not None and not allow_internal_dtd):
         raise etree.XMLSyntaxError(
             "DTD interdite (risque XXE / bombe d'entites) : retire le <!DOCTYPE>.", 0, 0, 0
         )
 
 
-def fromstring(data: bytes | str) -> etree._Element:
+def fromstring(data: bytes | str, *, allow_internal_dtd: bool = False) -> etree._Element:
     """`etree.fromstring` durci. Leve `etree.XMLSyntaxError` comme l'original."""
     raw = data.encode("utf-8") if isinstance(data, str) else data
     root = etree.fromstring(raw, safe_parser())
-    _reject_dtd(root.getroottree())
+    _reject_dtd(root.getroottree(), allow_internal_dtd=allow_internal_dtd)
     return root
 
 
-def parse(source: str) -> etree._ElementTree:
+def parse(source: str, *, allow_internal_dtd: bool = False) -> etree._ElementTree:
     """`etree.parse` durci (schemas XSD deposes localement)."""
     tree = etree.parse(source, safe_parser())
-    _reject_dtd(tree)
+    _reject_dtd(tree, allow_internal_dtd=allow_internal_dtd)
     return tree

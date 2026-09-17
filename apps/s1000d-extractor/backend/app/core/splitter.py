@@ -37,6 +37,8 @@ class DmUnit:
     root: IRNode                       # racine synthetique : children = contenu du DM
     page: int | None = None
     node_count: int = 0
+    dmc: str = ""
+    dmrl_index: int | None = None
     # Contenu du document non couvert par la DMRL : le libelle est rendu cote UI
     # (pas de chaine d'affichage en dur dans le moteur).
     is_orphan: bool = False
@@ -160,13 +162,13 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
     nodes = _flat_nodes(root)
     matches = match_dmrl(root, dmrl_data)
 
-    anchors: list[tuple[int, DmrlEntry]] = []
-    missing: list[DmrlEntry] = []
-    for entry, (idx, _rank) in zip(dmrl_data, matches, strict=True):
+    anchors: list[tuple[int, int, DmrlEntry]] = []
+    missing: list[tuple[int, DmrlEntry]] = []
+    for dmrl_index, (entry, (idx, _rank)) in enumerate(zip(dmrl_data, matches, strict=True)):
         if idx is None:
-            missing.append(entry)
+            missing.append((dmrl_index, entry))
         else:
-            anchors.append((idx, entry))
+            anchors.append((idx, dmrl_index, entry))
     anchors.sort(key=lambda t: t[0])
 
     dms: list[DmUnit] = []
@@ -177,19 +179,20 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
             node_count=len(syn.walk()), is_orphan=True,
         ))
 
-    for i, (idx, entry) in enumerate(anchors):
+    for i, (idx, dmrl_index, entry) in enumerate(anchors):
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(nodes)
         dm_id = f"dm{len(dms) + 1}"
         syn = IRNode(id=f"{dm_id}-root", kind="section", level=0,
                      children=list(nodes[idx + 1:end]))
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title or f"Data Module {i + 1}",
-            root=syn, page=nodes[idx].page, node_count=len(syn.walk()),
+            root=syn, page=nodes[idx].page, node_count=len(syn.walk()), dmc=entry.dmc,
+            dmrl_index=dmrl_index,
         ))
-    for entry in missing:
+    for dmrl_index, entry in missing:
         dm_id = f"dm{len(dms) + 1}"
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title, root=IRNode(id=f"{dm_id}-root", kind="section", level=0),
-            node_count=1,
+            node_count=1, dmc=entry.dmc, dmrl_index=dmrl_index,
         ))
     return dms

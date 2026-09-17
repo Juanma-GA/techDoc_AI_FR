@@ -50,7 +50,17 @@
       "cir": "CIR (xml) — contenus partagés",
       "rules": "Règles client (json)",
       "start": "Démarrer l'assistant",
-      "noFile": "Choisis un fichier PDF ou Word."
+      "noFile": "Choisis un fichier PDF ou Word.",
+      "pdfCut": {
+        "title": "Définir la plage de pages à analyser",
+        "help": "La sélection proposée commence au premier chapitre détecté et va jusqu'à la dernière page.",
+        "startPage": "De la page",
+        "endPage": "À la page",
+        "candidate": "Page {{page}} — score {{score}}",
+        "invalidRange": "La page de début doit être antérieure ou égale à la page de fin.",
+        "validate": "Valider la plage et lancer l'analyse",
+        "previewAlt": "Aperçu de la page {{page}}"
+      }
     },
     "docs": {
       "title": "Documents",
@@ -95,6 +105,7 @@
       "counts": "{{missing}} non localisé(s), {{uncertain}} à vérifier.",
       "pmc": "Télécharger la PMC",
       "validate": "Valider la DMRL →",
+      "icn": "ICN",
       "rename": "Renommer",
       "exclude": "Exclure"
     },

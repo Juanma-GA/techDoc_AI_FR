@@ -11,7 +11,14 @@ import pytest
 from lxml import etree
 
 from app.core import splitter
-from app.core.dmrl import DmrlEntry, find_dm_boundaries, generate_pmc, load_dmrl
+from app.core.dmrl import (
+    DmrlEntry,
+    entry_from_dict,
+    extract_icn_filenames,
+    find_dm_boundaries,
+    generate_pmc,
+    load_dmrl,
+)
 from app.core.errors import AppError
 from app.core.ir import IRNode
 from app.core.pmc import parse_dmc
@@ -53,6 +60,20 @@ def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
     entries = load_dmrl(path)
     assert entries[0].title == "Présentation"
     assert entries[0].dm_type == "descriptive"
+
+
+def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
+    path = tmp_path / "dmrl.json"
+    icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"
+    path.write_text(json.dumps([{"Titre": "Description", "ICN": icn_cell}]), encoding="utf-8")
+
+    entry = load_dmrl(path)[0]
+
+    assert extract_icn_filenames(entry.icn) == [
+        "ICN-WEG-AA0004-00001-A-02.jpg",
+        "ICN-WEG-AA0004-00002-A-02.png",
+    ]
+    assert entry_from_dict(entry.to_dict()).icn == icn_cell
 
 
 def test_load_dmrl_rejects_unknown_format(tmp_path):
@@ -131,10 +152,17 @@ def _ir_with_sections() -> IRNode:
 
 
 def test_split_by_dmrl_uses_dmrl_titles():
-    entries = [DmrlEntry(title="Depose du frein"), DmrlEntry(title="Description generale")]
+    entries = [
+        DmrlEntry(dmc="DMC-BRAKE-A-00-00-00-00A-520A-D", title="Depose du frein"),
+        DmrlEntry(dmc="DMC-BRAKE-A-00-00-00-00A-040A-D", title="Description generale"),
+    ]
     units = splitter.split_by_dmrl(_ir_with_sections(), entries)
     titles = [u.title for u in units]
     assert set(titles) == {"Description generale", "Depose du frein"}
+    assert {u.title: u.dmc for u in units} == {
+        "Description generale": "DMC-BRAKE-A-00-00-00-00A-040A-D",
+        "Depose du frein": "DMC-BRAKE-A-00-00-00-00A-520A-D",
+    }
     contents = {u.title: splitter.ir_to_text(u.root) for u in units}
     assert "Le frein comporte deux etriers." in contents["Description generale"]
     assert "Deposer les vis." in contents["Depose du frein"]
