@@ -115,6 +115,23 @@ def _flat_nodes(root: IRNode) -> list[IRNode]:
     return out
 
 
+def _find_section_title(
+    nodes: list[IRNode], needle: str, from_idx: int
+) -> tuple[int | None, str]:
+    section_positions = [
+        position for position, node in enumerate(nodes) if node.kind == "section"
+    ]
+    if not section_positions:
+        return None, ""
+
+    section_texts = [dmrl.normalize(nodes[position].text) for position in section_positions]
+    section_cursor = sum(position < from_idx for position in section_positions)
+    section_idx, rank = dmrl.find_title(section_texts, needle, section_cursor)
+    if section_idx is None:
+        return None, ""
+    return section_positions[section_idx], rank
+
+
 def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | None, str]]:
     """Pour chaque entree DMRL : index du noeud-titre apparie + rang d'appariement.
 
@@ -126,7 +143,10 @@ def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | Non
     out: list[tuple[int | None, str]] = []
     cursor = 0
     for entry in dmrl_data:
-        idx, rank = dmrl.find_title(norm_nodes, dmrl.normalize(entry.title), cursor)
+        needle = dmrl.normalize(entry.title)
+        idx, rank = _find_section_title(nodes, needle, cursor)
+        if idx is None:
+            idx, rank = dmrl.find_title(norm_nodes, needle, cursor)
         out.append((idx, rank))
         if idx is not None:
             cursor = idx + 1

@@ -223,6 +223,42 @@ def test_split_by_dmrl_uses_dmrl_titles():
     assert units[1].root.children[0].text == "Depose du frein"
 
 
+def test_split_by_dmrl_prefers_section_title_over_body_contains():
+    root = IRNode(id="root", kind="section", level=0, children=[
+        IRNode(
+            id="transport",
+            kind="section",
+            level=1,
+            text="4. MANUTENTION ET TRANSPORT",
+            children=[
+                IRNode(
+                    id="transport-p",
+                    kind="paragraph",
+                    text="Utilisez des appareils de levage adaptes.",
+                ),
+                IRNode(
+                    id="lifting",
+                    kind="section",
+                    level=2,
+                    text="4.1. LEVAGE",
+                    children=[IRNode(id="lifting-p", kind="paragraph", text="Soulevez le moteur.")],
+                ),
+            ],
+        ),
+    ])
+    entries = [
+        DmrlEntry(title="Manutention et transport"),
+        DmrlEntry(title="Levage"),
+    ]
+
+    units = splitter.split_by_dmrl(root, entries)
+    contents = {unit.title: splitter.ir_to_text(unit.root) for unit in units}
+
+    assert "Utilisez des appareils de levage adaptes." in contents["Manutention et transport"]
+    assert "Utilisez des appareils de levage adaptes." not in contents["Levage"]
+    assert "Soulevez le moteur." in contents["Levage"]
+
+
 def test_split_by_dmrl_keeps_missing_entry_as_empty_dm():
     entries = [DmrlEntry(title="Description generale"), DmrlEntry(title="Chapitre absent")]
     units = splitter.split_by_dmrl(_ir_with_sections(), entries)
