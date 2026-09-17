@@ -26,6 +26,7 @@ from app.core.compiled_rule_operators import (
     FONT_SIZE_TOLERANCE,
     evaluate_check,
     field_value,
+    matching_font_spans,
     normalize,
     pressure_conversion_issues,
     resolve_field_ref,
@@ -216,10 +217,7 @@ def font_size_suggestions(
     expected_size = float(check.expected)
     suggestions: list[RawSuggestion] = []
     for target in targets:
-        for start, end, bbox, observed_size in target.span_ranges:
-            original = target.text[start:end]
-            if field_value(check.field, original, target.page) is None:
-                continue
+        for start, end, original, bbox, observed_size, _font in matching_font_spans(check, target):
             if abs(observed_size - expected_size) <= FONT_SIZE_TOLERANCE:
                 continue
             suggestions.append(
@@ -369,7 +367,7 @@ def candidate_ranges(target: _TextTarget) -> list[tuple[str, int, int]]:
     line_ranges: list[tuple[str, int, int]]
     if target.span_ranges:
         grouped: list[tuple[int, int, float]] = []
-        for start, end, bbox, _size in sorted(target.span_ranges, key=lambda item: item[0]):
+        for start, end, bbox, _size, _font in sorted(target.span_ranges, key=lambda item: item[0]):
             center_y = (bbox[1] + bbox[3]) / 2
             if grouped and abs(center_y - grouped[-1][2]) <= 3.0:
                 grouped[-1] = (grouped[-1][0], end, grouped[-1][2])

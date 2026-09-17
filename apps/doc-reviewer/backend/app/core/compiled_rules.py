@@ -23,6 +23,7 @@ NormalizationStep = Literal["unicode", "trim", "spaces", "line_breaks", "extract
 EntityField = Literal[
     "text",
     "cmm_number",
+    "thales_logo_t",
     "page_number",
     "revision_number",
     "revision_date",

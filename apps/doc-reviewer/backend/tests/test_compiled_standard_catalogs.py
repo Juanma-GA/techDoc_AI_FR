@@ -52,6 +52,40 @@ def _cmm_footer_pdf(footer: str, *, cmm_size: float = 8.0) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
+def _logo_pdf(
+    size: float,
+    *,
+    page_type: str | None = None,
+    font: str = "Thales Plain",
+    page_number: int = 1,
+) -> ParsedPdf:
+    logo = "T"
+    body = "Document body."
+    text = f"{logo}\n{body}"
+    page = ParsedPage(
+        page=page_number,
+        text=text,
+        page_type=page_type,
+        spans=[
+            Span(
+                text=logo,
+                bbox=(200.0, 10.0, 300.0, 40.0),
+                page=page_number,
+                font=font,
+                size=size,
+            ),
+            Span(
+                text=body,
+                bbox=(40.0, 100.0, 200.0, 120.0),
+                page=page_number,
+                font="Arial",
+                size=10.0,
+            ),
+        ],
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
 def _title_page_copyright_pdf(footer: str) -> ParsedPdf:
     body = "Title page body."
     text = f"{body}\n{footer}"
@@ -114,7 +148,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 57
+    assert total == 59
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -170,6 +204,51 @@ def test_user_cmm_font_size_rule_accepts_pdf_rounding_and_rejects_wrong_size() -
     assert invalid_suggestions[0].bbox == (40.0, 760.0, 200.0, 780.0)
     assert "20 pt" in invalid_suggestions[0].message
     assert "23 pt" in invalid_suggestions[0].message
+
+
+def test_thales_logo_font_size_rules_split_normal_pages_from_tp1() -> None:
+    normal_rule = _rule("CUSTOM_THALES_LOGO_FONT_SIZE")
+    tp1_rule = _rule("CUSTOM_TP1_THALES_LOGO_FONT_SIZE")
+
+    normal_valid, normal_valid_suggestions = execute_pdf_rules(
+        _logo_pdf(30.96),
+        [normal_rule],
+    )
+    normal_invalid, normal_invalid_suggestions = execute_pdf_rules(
+        _logo_pdf(30.0),
+        [normal_rule],
+    )
+    non_thales, _ = execute_pdf_rules(
+        _logo_pdf(31.0, font="Arial"),
+        [normal_rule],
+    )
+    normal_on_tp1, _ = execute_pdf_rules(
+        _logo_pdf(30.96, page_type="TP1"),
+        [normal_rule],
+    )
+    tp1_valid, tp1_valid_suggestions = execute_pdf_rules(
+        _logo_pdf(36.03, page_type="TP1"),
+        [tp1_rule],
+    )
+    tp1_invalid, tp1_invalid_suggestions = execute_pdf_rules(
+        _logo_pdf(30.96, page_type="TP1"),
+        [tp1_rule],
+    )
+
+    assert normal_valid[0].status == "PASS"
+    assert normal_valid_suggestions == []
+    assert normal_invalid[0].status == "FAIL"
+    assert len(normal_invalid_suggestions) == 1
+    assert normal_invalid_suggestions[0].original == "T"
+    assert normal_invalid_suggestions[0].proposed == ""
+    assert "30 pt" in normal_invalid_suggestions[0].message
+    assert non_thales[0].status == "FAIL"
+    assert normal_on_tp1 == []
+    assert tp1_valid[0].status == "PASS"
+    assert tp1_valid_suggestions == []
+    assert tp1_invalid[0].status == "FAIL"
+    assert len(tp1_invalid_suggestions) == 1
+    assert "31 pt" in tp1_invalid_suggestions[0].message
 
 
 def _revision_date_footer_pdf(footer: str) -> ParsedPdf:

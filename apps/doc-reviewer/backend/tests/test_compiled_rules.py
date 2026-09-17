@@ -124,6 +124,7 @@ def test_regex_checks_are_compiled_at_validation_time() -> None:
 
 def test_font_size_operator_requires_a_positive_numeric_expected_value() -> None:
     Check(field="cmm_number", operator="font_size_equals", expected=23)
+    Check(field="thales_logo_t", operator="font_size_equals", expected=31)
     Check(field="cmm_number", operator="font_size_equals", expected=23.0)
 
     with pytest.raises(ValidationError, match="numeric expected value"):

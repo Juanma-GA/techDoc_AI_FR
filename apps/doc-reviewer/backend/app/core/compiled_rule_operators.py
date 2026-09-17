@@ -298,6 +298,23 @@ def field_value(field: str, text: str, page: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+def matching_font_spans(
+    check: Check,
+    target: _TextTarget,
+) -> list[tuple[int, int, str, tuple[float, float, float, float], float, str]]:
+    """Return spans matching the entity and any logo-specific identity rules."""
+    matches: list[tuple[int, int, str, tuple[float, float, float, float], float, str]] = []
+    for start, end, bbox, size, font in target.span_ranges:
+        original = target.text[start:end]
+        if field_value(check.field, original, target.page) is None:
+            continue
+        if check.field == "thales_logo_t":
+            if start != 0 or original.strip() != "T" or "thales" not in font.casefold():
+                continue
+        matches.append((start, end, original, bbox, size, font))
+    return matches
+
+
 def evaluate_font_size(
     check: Check,
     targets: list[_TextTarget],
@@ -314,9 +331,8 @@ def evaluate_font_size(
 
     for target in targets:
         matching_sizes = [
-            (target.text[start:end], size)
-            for start, end, _bbox, size in target.span_ranges
-            if field_value(check.field, target.text[start:end], target.page) is not None
+            (original, size)
+            for _start, _end, original, _bbox, size, _font in matching_font_spans(check, target)
         ]
         if not matching_sizes:
             if first_missing is None:
@@ -334,7 +350,10 @@ def evaluate_font_size(
         target, observed_size = first_mismatch
         return "FAIL", target, f"{observed_size:.0f} pt", expected_display
     if first_missing is not None:
-        return "INCONCLUSIVE", first_missing, None, expected_display
+        status: Literal["FAIL", "INCONCLUSIVE"] = (
+            "FAIL" if check.field == "thales_logo_t" else "INCONCLUSIVE"
+        )
+        return status, first_missing, None, expected_display
     if last_match is not None:
         target, observed_size = last_match
         return "PASS", target, f"{observed_size:.0f} pt", expected_display

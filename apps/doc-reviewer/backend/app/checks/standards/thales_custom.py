@@ -33,6 +33,16 @@ _TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
 _TP1_ADDRESS_TARGET = RuleTarget(page="all", region="full_page", page_type="TP1")
 _ORIGIN = f"{STANDARD_CODE}:v1"
 TP1_PAGE_TYPE = "TP1"
+_THALES_LOGO_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    excluded_page_types=[TP1_PAGE_TYPE],
+)
+_TP1_THALES_LOGO_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_type=TP1_PAGE_TYPE,
+)
 HIGHLIGHTS_PAGE_TYPE = "HIGHLIGHTS"
 HIGHLIGHTS_FIRST_PAGE_TYPE = "HIGHLIGHTS_PAGE_1"
 REPAIR_PAGE_TYPE = "REPAIR"
@@ -383,6 +393,36 @@ _RULES_V1 = [
                 field="cmm_number",
                 operator="font_size_equals",
                 expected=23,
+                require_all=True,
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_THALES_LOGO_FONT_SIZE",
+        "Taille du logo THALES sur les pages hors TP1",
+        failure_message="taille du logo THALES non conforme hors TP1.",
+        target=_THALES_LOGO_TARGET,
+        severity="warning",
+        checks=[
+            Check(
+                field="thales_logo_t",
+                operator="font_size_equals",
+                expected=31,
+                require_all=True,
+            ),
+        ],
+    ),
+    _rule(
+        "CUSTOM_TP1_THALES_LOGO_FONT_SIZE",
+        "Taille du logo THALES sur les pages TP1",
+        failure_message="taille du logo THALES non conforme sur TP1.",
+        target=_TP1_THALES_LOGO_TARGET,
+        severity="warning",
+        checks=[
+            Check(
+                field="thales_logo_t",
+                operator="font_size_equals",
+                expected=36,
                 require_all=True,
             ),
         ],
@@ -873,4 +913,22 @@ RULE_METADATA["CUSTOM_CMM_NUMBER_FONT_SIZE"] = {
     "kind": "field_required",
     "severity": "error",
     "message": "La taille de police du numero CMM (ATA) n'est pas 23 pt.",
+}
+RULE_METADATA["CUSTOM_THALES_LOGO_FONT_SIZE"] = {
+    "description": (
+        "Le T de la police Thales en debut de page doit avoir une taille "
+        "de 31 pt hors pages TP1."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "La taille du logo THALES hors TP1 n'est pas 31 pt.",
+}
+RULE_METADATA["CUSTOM_TP1_THALES_LOGO_FONT_SIZE"] = {
+    "description": (
+        "Le T de la police Thales en debut de page TP1 doit avoir une taille "
+        "de 36 pt."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "La taille du logo THALES sur TP1 n'est pas 36 pt.",
 }
