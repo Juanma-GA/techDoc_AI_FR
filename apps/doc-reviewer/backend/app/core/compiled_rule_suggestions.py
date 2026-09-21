@@ -435,6 +435,13 @@ def candidate_ranges(target: _TextTarget) -> list[tuple[str, int, int]]:
                 line_ranges.append((line, start, end))
 
     candidates = list(line_ranges)
+    for window_size in range(2, min(4, len(line_ranges)) + 1):
+        for index in range(len(line_ranges) - window_size + 1):
+            start = line_ranges[index][1]
+            end = line_ranges[index + window_size - 1][2]
+            candidate = target.text[start:end]
+            if candidate and (candidate, start, end) not in candidates:
+                candidates.append((candidate, start, end))
     for line, line_start, _line_end in line_ranges:
         words = list(re.finditer(r"\S+", line))
         for window_size in range(1, min(6, len(words)) + 1):

@@ -1447,6 +1447,28 @@ def test_note_suggestions_ignore_list_markers_and_anchor_missing_storage_paragra
     assert storage_suggestions[0].bbox[2] <= 500.0
 
 
+def test_repair_note_typo_split_across_pdf_lines_emits_one_local_suggestion() -> None:
+    lines = [
+        "REPAIR",
+        "NOTE: During repair operations, make sure that the environmental conditions",
+        "are as follows:",
+        "- Pressure: No specific environmental level other than the ambient pressure level",
+        "is necessary.",
+        "- Relative humidity: Refer to Standard Practices Manual ATA No.",
+        "20-00-02, F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure.",
+    ]
+
+    results, suggestions = execute_pdf_rules(
+        _note_page_pdf_with_lines(lines, REPAIR_PAGE_TYPE),
+        [_rule("CUSTOM_REPAIR_NOTE")],
+    )
+
+    assert results[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in suggestions] == [
+        ("0-02", "2-00")
+    ]
+
+
 def test_tp1_page_type_requires_both_anchor_and_marker_in_the_footer() -> None:
     parsed = ParsedPdf(
         page_count=2,
