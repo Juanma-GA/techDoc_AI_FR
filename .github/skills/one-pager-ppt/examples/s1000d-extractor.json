@@ -1,0 +1,56 @@
+{
+  "fr": {
+    "main_title": "TRANSFORMATION DE CONTENU STRUCTURÉ",
+    "section_title": "Du contenu legacy vers S1000D",
+    "application_name": "S1000D Extractor",
+    "status": "PROTOTYPE",
+    "challenge": "Transformer des documents PDF et Word historiques en contenu S1000D structuré exige une analyse approfondie, une segmentation et un mapping manuel. Les structures sources sont souvent hétérogènes et les règles projet doivent être prises en compte.",
+    "solution": "S1000D Extractor propose un parcours guidé pour analyser les documents sources, répartir leur contenu en Data Modules candidats, classifier chaque module et générer des squelettes XML S1000D à valider par un expert.",
+    "features": [
+      "Importer des documents sources PDF et Word",
+      "Utiliser des ressources DMRL, BREX, CIR et règles client optionnelles",
+      "Répartir le contenu en Data Modules candidats",
+      "Valider les limites, les titres et les types de modules",
+      "Générer des squelettes XML, des PMC et des packages téléchargeables"
+    ],
+    "callouts": [
+      "Parcours guidé du legacy vers S1000D",
+      "Validation humaine du découpage et de la classification",
+      "Génération des XML, PMC et du package ZIP"
+    ],
+    "security": {
+      "local": "Application locale\nPour les cas d'usage individuels sensibles. Les sources, ressources projet et résultats générés restent sur le poste de travail.",
+      "shared": "Application partagée on-premise\nPour les projets de migration collaboratifs intégrés à votre infrastructure. L'authentification et les droits peuvent être adaptés avec votre équipe IT."
+    },
+    "footnote": "Squelette S1000D best-effort : validation experte requise."
+  },
+  "en": {
+    "main_title": "STRUCTURED CONTENT TRANSFORMATION",
+    "section_title": "Legacy Content to S1000D",
+    "application_name": "S1000D Extractor",
+    "status": "PROTOTYPE",
+    "challenge": "Transforming legacy PDF and Word documentation into structured S1000D content requires extensive document analysis, segmentation and manual mapping. Source structures are often inconsistent and project-specific rules must be considered.",
+    "solution": "S1000D Extractor provides a guided workflow to analyse source documents, split their content into candidate Data Modules, classify each module and generate best-effort S1000D XML skeletons for expert validation.",
+    "features": [
+      "Import PDF and Word source documents",
+      "Use optional DMRL, BREX, CIR and client-rule resources",
+      "Split content into candidate Data Modules",
+      "Review module boundaries, titles and content types",
+      "Generate XML skeletons, PMC files and downloadable packages"
+    ],
+    "callouts": [
+      "Guided legacy-to-S1000D workflow",
+      "Human validation of Data Module split and classification",
+      "XML, PMC and complete ZIP package generation"
+    ],
+    "security": {
+      "local": "Local application\nFor sensitive individual use cases. Source documents, project resources and generated outputs remain on the workstation.",
+      "shared": "Shared on-premise application\nFor collaborative migration projects, integrated with your internal infrastructure. Authentication and access rights can be adapted with your IT team."
+    },
+    "footnote": "Best-effort S1000D skeleton: expert validation required."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}
