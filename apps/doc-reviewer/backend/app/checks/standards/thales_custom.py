@@ -73,6 +73,9 @@ _PAGE_TYPE_MARKERS = {
     for page_type in _NOTE_PAGE_TYPES
 }
 _HIGHLIGHTS_PAGE_1_MARKER = re.compile(r"(?i)\bHighlights\s+Page\s+1\b")
+_HIGHLIGHTS_CONTENT_MARKER = re.compile(r"(?im)^\s*HIGHLIGHTS\s*$")
+_HIGHLIGHTS_HOLDER_RE = re.compile(r"(?i)^TO\s*:\s*HOLDER\s+OF\s+")
+_TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_PAGE_TYPES = [HIGHLIGHTS_PAGE_TYPE, HIGHLIGHTS_FIRST_PAGE_TYPE]
 _INTRODUCTION_PAGE_MARKER = re.compile(r"(?m)^\s*INTRODUCTION\s*$")
 _TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
@@ -138,6 +141,7 @@ _EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
 )
 _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+{{meta_revision_date}}(?!\w)"
 _EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
+HIGHLIGHTS_HOLDER_PREFIX = "TO: HOLDER OF "
 _EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_pnr_number}}(?!\w)"
 _UNEXPECTED_PNR_PATTERN = (
     r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
@@ -367,6 +371,69 @@ def shop_verification_matches(text: str, expected: str) -> bool:
     observed = " ".join(shop_verification_section(text).split()).casefold()
     expected_normalized = " ".join(expected.split()).casefold()
     return bool(observed) and expected_normalized in observed
+
+
+def highlights_content(text: str) -> str:
+    marker = _HIGHLIGHTS_CONTENT_MARKER.search(text)
+    return text[marker.end() :].lstrip() if marker is not None else ""
+
+
+def tp1_title(parsed: ParsedPdf | None) -> str | None:
+    if parsed is None:
+        return None
+    for page in parsed.pages:
+        if page.page_type != TP1_PAGE_TYPE:
+            continue
+        part_number = next(
+            (
+                span
+                for span in page.spans
+                if _TP1_PART_NUMBER_RE.match(" ".join(span.text.split()))
+            ),
+            None,
+        )
+        if part_number is None:
+            continue
+        part_center = (part_number.bbox[0] + part_number.bbox[2]) / 2
+        candidates = [
+            span
+            for span in page.spans
+            if span.bbox[3] <= part_number.bbox[1]
+            and len(span.text.strip()) > 2
+            and ("bold" in span.font.casefold() or span.size >= 16.0)
+            and span.text.strip().casefold() not in {"t", "tp 1", "tp1"}
+        ]
+        if not candidates:
+            continue
+        title_span = max(
+            candidates,
+            key=lambda span: (
+                float(span.size),
+                -abs((span.bbox[0] + span.bbox[2]) / 2 - part_center),
+                span.bbox[3],
+            ),
+        )
+        return " ".join(title_span.text.split())
+    return None
+
+
+def highlights_holder_expected(parsed: ParsedPdf | None) -> str | None:
+    title = tp1_title(parsed)
+    if not title:
+        return None
+    return f"{HIGHLIGHTS_HOLDER_PREFIX}{title}"
+
+
+def highlights_holder_observed(text: str) -> str:
+    content = highlights_content(text)
+    first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
+    return first_line if _HIGHLIGHTS_HOLDER_RE.match(first_line) else ""
+
+
+def highlights_holder_matches(text: str, expected: str) -> bool:
+    observed = " ".join(highlights_content(text).split()).casefold()
+    expected_normalized = " ".join(expected.split()).casefold()
+    return bool(observed) and observed.startswith(expected_normalized)
 
 
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
@@ -775,6 +842,20 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_HIGHLIGHTS_HOLDER",
+        "Destinataire des Highlights conforme au titre TP1",
+        failure_message="La phrase TO: HOLDER OF des Highlights ne correspond pas au titre TP1.",
+        target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+        severity="error",
+        checks=[
+            Check(
+                field="text",
+                operator="highlights_holder",
+                expected="tp1_title",
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_HIGHLIGHTS_ATA_NUMBER",
         "Numero ATA present sur la premiere page Highlights",
         failure_message="numero ATA Highlights absent ou non conforme.",
@@ -1024,6 +1105,15 @@ RULE_METADATA["CUSTOM_INTRODUCTION_SHOP_VERIFICATION"] = {
     "kind": "field_required",
     "severity": "error",
     "message": "Le bloc Shop Verification de l'INTRODUCTION est absent ou incorrect.",
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_HOLDER"] = {
+    "description": (
+        "La premiere page Highlights doit commencer par la phrase « TO: HOLDER "
+        "OF <titre> », avec <titre> egal au titre en gras de la page TP1."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "La phrase TO: HOLDER OF des Highlights ne correspond pas au titre TP1.",
 }
 RULE_METADATA["CUSTOM_TP1_THALES_ADDRESS"] = {
     "description": (

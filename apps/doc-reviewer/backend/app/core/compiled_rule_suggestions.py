@@ -94,6 +94,10 @@ def deterministic_suggestions(
             suggestions.extend(
                 shop_verification_suggestions(rule, targets, rule_kind, message, ctx)
             )
+        elif check.operator == "highlights_holder":
+            suggestions.extend(
+                highlights_holder_suggestions(rule, targets, rule_kind, message, ctx)
+            )
         elif check.operator == "regex_exists" and check.expected_display is not None:
             check_status, _target, _observed, _expected = evaluate_check(
                 check, targets, ctx, rule.id
@@ -297,6 +301,81 @@ def shop_verification_suggestions(
             )
         )
     return suggestions
+
+
+def highlights_holder_suggestions(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+    ctx: _EvalContext,
+) -> list[RawSuggestion]:
+    from app.checks.standards import thales_custom
+
+    expected = thales_custom.highlights_holder_expected(ctx.parsed_pdf)
+    if expected is None:
+        return []
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        if thales_custom.highlights_holder_matches(target.text, expected):
+            continue
+        original = thales_custom.highlights_holder_observed(target.text)
+        start = target.text.find(original) if original else 0
+        bbox = (
+            suggestion_bbox(target, original, ctx.pdf_pages, span_start=start)
+            if original
+            else highlights_holder_bbox(target, ctx.pdf_pages)
+        )
+        suggestions.append(
+            RawSuggestion(
+                rule_kind=rule_kind,
+                rule_code=rule.id,
+                severity=rule.severity,
+                message=(
+                    f"{message} Le contenu doit commencer par « {expected} »."
+                ),
+                original=original,
+                proposed=expected,
+                page=target.raw_page,
+                span=(start, start + len(original)),
+                bbox=bbox,
+            )
+        )
+    return suggestions
+
+
+def highlights_holder_bbox(
+    target: _TextTarget,
+    pdf_pages: list[ParsedPage] | None,
+) -> _BBox:
+    """Place a missing holder line on the first left-aligned page content."""
+    if pdf_pages is None:
+        return first_bbox(target)
+    page = next((item for item in pdf_pages if item.page == target.raw_page), None)
+    if page is None or not page.spans:
+        return first_bbox(target)
+    marker = next(
+        (
+            span
+            for span in page.spans
+            if span.text.strip().casefold() == "highlights"
+        ),
+        None,
+    )
+    if marker is None:
+        return first_bbox(target)
+    left_edge = min(span.bbox[0] for span in page.spans)
+    candidates = [
+        span
+        for span in page.spans
+        if span.bbox[3] < marker.bbox[1]
+        and span.bbox[0] <= left_edge + 12.0
+        and span.text.strip()
+    ]
+    if not candidates:
+        return first_bbox(target)
+    first = min(candidates, key=lambda span: (span.bbox[1], span.bbox[0]))
+    return first.bbox
 
 
 def empty_middle_bbox(

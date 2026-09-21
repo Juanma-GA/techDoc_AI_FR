@@ -159,6 +159,7 @@ class Check(StrictModel):
         "revision_consistency",
         "font_size_equals",
         "shop_verification",
+        "highlights_holder",
     ]
     expected: str | int | float | list[str] | None = None
     require_all: bool = False
@@ -210,6 +211,10 @@ class Check(StrictModel):
         if self.operator == "shop_verification" and self.expected != "manufacturer_mapping":
             raise ValueError(
                 "shop_verification requires expected='manufacturer_mapping'"
+            )
+        if self.operator == "highlights_holder" and self.expected != "tp1_title":
+            raise ValueError(
+                "highlights_holder requires expected='tp1_title'"
             )
         if self.operator == "font_size_equals":
             if isinstance(self.expected, bool) or not isinstance(self.expected, (int, float)):
@@ -415,6 +420,8 @@ def _describe_check(check: Check) -> str:
         return f"{check.field} doit avoir une taille de police de {check.expected} pt"
     if check.operator == "shop_verification":
         return "shop verification conforme au constructeur saisi dans le mapping"
+    if check.operator == "highlights_holder":
+        return "la premiere ligne du contenu Highlights doit commencer par TO: HOLDER OF"
     if check.operator in {"contains_any", "contains_all", "contains_none"}:
         verb = {
             "contains_any": "contient au moins un de",

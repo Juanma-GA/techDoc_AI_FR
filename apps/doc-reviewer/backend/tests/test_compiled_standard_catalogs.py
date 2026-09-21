@@ -180,7 +180,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 70
+    assert total == 71
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -570,6 +570,137 @@ def test_highlights_revision_header_matches_mapping() -> None:
     assert invalid_suggestions[0].proposed == "REVISION No. 04 DATED JUL 27/26"
     assert invalid_suggestions[0].bbox == (40.0, 756.0, 300.0, 766.0)
     assert missing_results[0].status == "FAIL"
+
+
+def test_first_highlights_page_matches_the_tp1_holder_phrase() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_HOLDER")
+    tp1_page = ParsedPage(
+        page=2,
+        page_type=TP1_PAGE_TYPE,
+        text="PRESSURE TRANSMITTER\nPART NUMBER",
+        spans=[
+            Span(
+                text="PRESSURE TRANSMITTER",
+                bbox=(200.0, 200.0, 450.0, 220.0),
+                page=2,
+                font="Arial-BoldMT",
+                size=19.0,
+            ),
+            Span(
+                text="PART NUMBER",
+                bbox=(276.0, 345.0, 375.0, 364.0),
+                page=2,
+                font="ArialNarrow",
+                size=16.0,
+            ),
+        ],
+    )
+
+    valid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="HIGHLIGHTS\nTO: HOLDER OF PRESSURE TRANSMITTER\nRevision content",
+        spans=[
+            Span(
+                text="HIGHLIGHTS",
+                bbox=(86.0, 140.0, 180.0, 155.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="TO: HOLDER OF PRESSURE TRANSMITTER",
+                bbox=(86.0, 180.0, 320.0, 195.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+        ],
+    )
+    invalid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="HIGHLIGHTS\nTO: HOLDER OF OTHER MANUAL",
+        spans=[
+            Span(
+                text="HIGHLIGHTS",
+                bbox=(86.0, 140.0, 180.0, 155.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="TO: HOLDER OF OTHER MANUAL",
+                bbox=(86.0, 180.0, 320.0, 195.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+        ],
+    )
+
+    valid, valid_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=2,
+            pages=[valid_page, tp1_page],
+            full_text=valid_page.text + "\n" + tp1_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=2,
+            pages=[invalid_page, tp1_page],
+            full_text=invalid_page.text + "\n" + tp1_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == "TO: HOLDER OF OTHER MANUAL"
+    assert invalid_suggestions[0].proposed == "TO: HOLDER OF PRESSURE TRANSMITTER"
+
+    missing_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="HIGHLIGHTS\nPRESSURE TRANSMITTER\nRevision content",
+        spans=[
+            Span(
+                text="PRESSURE TRANSMITTER",
+                bbox=(86.0, 73.9, 212.4, 88.0),
+                page=1,
+                font="Arial",
+                size=12.0,
+            ),
+            Span(
+                text="HIGHLIGHTS",
+                bbox=(293.9, 130.4, 359.9, 144.8),
+                page=1,
+                font="Arial",
+                size=12.0,
+            ),
+        ],
+    )
+    missing, missing_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=2,
+            pages=[missing_page, tp1_page],
+            full_text=missing_page.text + "\n" + tp1_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert missing[0].status == "FAIL"
+    assert len(missing_suggestions) == 1
+    assert missing_suggestions[0].original == ""
+    assert missing_suggestions[0].proposed == "TO: HOLDER OF PRESSURE TRANSMITTER"
+    assert missing_suggestions[0].bbox == (86.0, 73.9, 212.4, 88.0)
 
 
 def test_first_highlights_page_contains_the_mapped_ata_number() -> None:

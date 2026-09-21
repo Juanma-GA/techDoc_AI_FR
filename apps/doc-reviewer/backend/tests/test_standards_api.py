@@ -90,6 +90,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_TITLE_PAGE_COPYRIGHT": "warning",
         "CUSTOM_FOOTER_PAGE_NUMBER": "error",
         "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": "error",
+        "CUSTOM_HIGHLIGHTS_HOLDER": "error",
         "CUSTOM_TP1_REVISION_NUMBER": "error",
         "CUSTOM_TP1_FIRST_ISSUE_DATE": "warning",
         "CUSTOM_HIGHLIGHTS_REVISION_HEADER": "warning",

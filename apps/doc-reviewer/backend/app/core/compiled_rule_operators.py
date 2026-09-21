@@ -194,6 +194,8 @@ def evaluate_check(
         return evaluate_revision_consistency(check, targets, ctx)
     if check.operator == "shop_verification":
         return evaluate_shop_verification(check, targets, ctx)
+    if check.operator == "highlights_holder":
+        return evaluate_highlights_holder(check, targets, ctx)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -431,6 +433,23 @@ def evaluate_shop_verification(
         return "PASS", targets[-1], expected, expected
     target, observed = first_failure
     return "FAIL", target, observed, expected
+
+
+def evaluate_highlights_holder(
+    check: Check,
+    targets: list[_TextTarget],
+    ctx: _EvalContext,
+) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
+    from app.checks.standards import thales_custom
+
+    expected = thales_custom.highlights_holder_expected(ctx.parsed_pdf)
+    if expected is None:
+        return "INCONCLUSIVE", targets[0], None, None
+    for target in targets:
+        if not thales_custom.highlights_holder_matches(target.text, expected):
+            observed = thales_custom.highlights_holder_observed(target.text)
+            return "FAIL", target, observed or None, expected
+    return "PASS", targets[-1], expected, expected
 
 
 def extract_year(value: str) -> str:
