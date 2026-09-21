@@ -183,6 +183,8 @@
     "meta.cmmNumberPlaceholder": "ex. 79-30-02",
     "meta.firstIssueDate": "Date de première issue",
     "meta.firstIssueDatePlaceholder": "ex. JUL 1966",
+    "meta.lastIssueDate": "Date de la révision précédente",
+    "meta.lastIssueDatePlaceholder": "ex. MAR 77 (optionnel)",
     "meta.revisionNumber": "Numéro de révision",
     "meta.revisionNumberPlaceholder": "ex. 01",
     "meta.pnrNumber": "Numéro PNR",

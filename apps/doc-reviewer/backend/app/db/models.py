@@ -119,6 +119,9 @@ class Document(Base):
     meta_revision_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_cmm_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     meta_first_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    # Date de la revision precedente : borne haute des dates portees par les
+    # pages que la revision courante ne touche pas.
+    meta_last_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_revision_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_pnr_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     document_language: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)

@@ -17,7 +17,12 @@ REQUIRED_DOCUMENT_CONTEXT_FIELDS = (
     "meta_revision_number",
     "document_language",
 )
-DOCUMENT_CONTEXT_FIELDS = REQUIRED_DOCUMENT_CONTEXT_FIELDS + ("meta_pnr_number",)
+# `meta_last_issue_date` (date de la revision precedente) reste optionnel :
+# une premiere revision n'en a pas.
+DOCUMENT_CONTEXT_FIELDS = REQUIRED_DOCUMENT_CONTEXT_FIELDS + (
+    "meta_pnr_number",
+    "meta_last_issue_date",
+)
 
 _DOCUMENT_CONTEXT_DEFAULTS_KEY = "document.context_defaults"
 

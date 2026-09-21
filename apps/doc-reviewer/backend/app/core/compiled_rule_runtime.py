@@ -15,7 +15,7 @@ from app.core.compiled_rules import (
     RuleTarget,
 )
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, find_span_bbox
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, find_span_bbox
 
 _ENTITY_PATTERNS = {
     "cmm_number": re.compile(r"(?<!\w)(\d{2}-\d{2}-\d{2})(?!\w)"),
@@ -35,12 +35,13 @@ _DOCUMENT_METADATA_FIELDS = (
     "meta_revision_date",
     "meta_cmm_number",
     "meta_first_issue_date",
+    "meta_last_issue_date",
     "meta_revision_number",
     "meta_pnr_number",
     "document_language",
 )
 _CONTEXT_TOKEN_RE = re.compile(
-    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_revision_number|meta_pnr_number|document_language)\}\}"
+    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_last_issue_date|meta_revision_number|meta_pnr_number|document_language)\}\}"
 )
 
 
@@ -50,6 +51,7 @@ class _TextTarget:
     text: str
     raw_page: int
     page_type: str | None = None
+    page_modified: bool | None = None
     bbox: _BBox | None = None
     target_id: str | None = None
     span_ranges: tuple[_SpanRange, ...] = ()
@@ -65,6 +67,9 @@ class _EvalContext:
     pdf_pages: list[ParsedPage] | None
     document: Any | None
     db: Session | None
+    # Required by the operators whose verdict spans the whole document
+    # (cross-page consistency); None on the docx pipeline.
+    parsed_pdf: ParsedPdf | None = None
 
 
 def document_metadata(document: Any | None) -> dict[str, str]:
@@ -121,6 +126,16 @@ def scope_targets(
             target
             for target in scoped
             if target.page_type not in target_spec.excluded_page_types
+        ]
+    if target_spec.page_state is not None:
+        # `None` means "undecided": the document does not declare which pages
+        # the revision touched, so the rule must keep its full coverage
+        # instead of silently vanishing.
+        expected = target_spec.page_state == "modified"
+        scoped = [
+            target
+            for target in scoped
+            if target.page_modified is None or target.page_modified is expected
         ]
     if target_spec.region == "full_page":
         return scoped

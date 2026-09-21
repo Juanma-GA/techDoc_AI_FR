@@ -111,6 +111,7 @@ def analyze_stream(
             "meta_revision_date": doc.meta_revision_date,
             "meta_cmm_number": doc.meta_cmm_number,
             "meta_first_issue_date": doc.meta_first_issue_date,
+            "meta_last_issue_date": doc.meta_last_issue_date,
             "meta_revision_number": doc.meta_revision_number,
             "meta_pnr_number": doc.meta_pnr_number,
             "document_language": doc.document_language,
@@ -178,6 +179,7 @@ def analyze_stream(
                 "meta_cmm_number": doc.meta_cmm_number,
                 "meta_revision_date": doc.meta_revision_date,
                 "meta_first_issue_date": doc.meta_first_issue_date,
+                "meta_last_issue_date": doc.meta_last_issue_date,
                 "meta_revision_number": doc.meta_revision_number,
                 "document_language": doc.document_language,
             }
@@ -222,6 +224,7 @@ def analyze_stream(
     meta_revision_date_value = doc.meta_revision_date
     meta_cmm_number_value = doc.meta_cmm_number
     meta_first_issue_date_value = doc.meta_first_issue_date
+    meta_last_issue_date_value = doc.meta_last_issue_date
     meta_revision_number_value = doc.meta_revision_number
     meta_pnr_number_value = doc.meta_pnr_number
     document_language_value = doc.document_language
@@ -309,6 +312,7 @@ def analyze_stream(
                 meta_revision_date = meta_revision_date_value
                 meta_cmm_number = meta_cmm_number_value
                 meta_first_issue_date = meta_first_issue_date_value
+                meta_last_issue_date = meta_last_issue_date_value
                 meta_revision_number = meta_revision_number_value
                 meta_pnr_number = meta_pnr_number_value
                 document_language = document_language_value

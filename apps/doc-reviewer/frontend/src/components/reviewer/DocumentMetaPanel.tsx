@@ -14,6 +14,7 @@ type DocumentMetaDraft = {
   revisionDate: string;
   cmmNumber: string;
   firstIssueDate: string;
+  lastIssueDate: string;
   revisionNumber: string;
   pnrNumber: string;
   documentLanguage: string;
@@ -24,6 +25,7 @@ function draftFromDocument(document: Document): DocumentMetaDraft {
     revisionDate: document.meta_revision_date ?? "",
     cmmNumber: document.meta_cmm_number ?? "",
     firstIssueDate: document.meta_first_issue_date ?? "",
+    lastIssueDate: document.meta_last_issue_date ?? "",
     revisionNumber: document.meta_revision_number ?? "",
     pnrNumber: document.meta_pnr_number ?? "",
     documentLanguage: document.document_language ?? "",
@@ -77,6 +79,7 @@ export function DocumentMetaPanel({ document }: Props) {
         meta_revision_date: draft.revisionDate.trim() || null,
         meta_cmm_number: draft.cmmNumber.trim() || null,
         meta_first_issue_date: draft.firstIssueDate.trim() || null,
+        meta_last_issue_date: draft.lastIssueDate.trim() || null,
         meta_revision_number: draft.revisionNumber.trim() || null,
         meta_pnr_number: draft.pnrNumber.trim() || null,
         document_language:
@@ -168,6 +171,15 @@ export function DocumentMetaPanel({ document }: Props) {
           value={draft.firstIssueDate}
           onChange={(e) => updateField("firstIssueDate", e.target.value)}
           placeholder={t("reviewer.meta.firstIssueDatePlaceholder")}
+        />
+      </label>
+      <label className="field">
+        <span className="field-label">{t("reviewer.meta.lastIssueDate")}</span>
+        <input
+          className="input"
+          value={draft.lastIssueDate}
+          onChange={(e) => updateField("lastIssueDate", e.target.value)}
+          placeholder={t("reviewer.meta.lastIssueDatePlaceholder")}
         />
       </label>
       <label className="field">

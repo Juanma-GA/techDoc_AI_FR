@@ -40,6 +40,7 @@ class DocumentOut(BaseModel):
     meta_revision_date: Optional[str] = None
     meta_cmm_number: Optional[str] = None
     meta_first_issue_date: Optional[str] = None
+    meta_last_issue_date: Optional[str] = None
     meta_revision_number: Optional[str] = None
     meta_pnr_number: Optional[str] = None
     document_language: Optional[Literal["fr", "en"]] = None
@@ -68,6 +69,7 @@ class DocumentMetaPatchIn(BaseModel):
     meta_revision_date: Optional[str] = Field(default=None, max_length=60)
     meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
     meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
+    meta_last_issue_date: Optional[str] = Field(default=None, max_length=60)
     meta_revision_number: Optional[str] = Field(default=None, max_length=60)
     meta_pnr_number: Optional[str] = Field(default=None, max_length=120)
     document_language: Optional[Literal["fr", "en"]] = None

@@ -83,6 +83,10 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
     }
     assert severities == {
         "CUSTOM_CMM_NUMBER": "error",
+        "CUSTOM_CMM_NUMBER_FONT_SIZE": "error",
+        "CUSTOM_THALES_LOGO_FONT_SIZE": "warning",
+        "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "warning",
+        "CUSTOM_TP2_IMPORTANT_NOTICE": "error",
         "CUSTOM_TITLE_PAGE_COPYRIGHT": "warning",
         "CUSTOM_REVISION_DATE": "error",
         "CUSTOM_TP1_REVISION_NUMBER": "error",
@@ -102,6 +106,15 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_FORBIDDEN_CONSUMABLES": "error",
         "CUSTOM_NO_DEGREE_C_SYMBOL": "info",
         "CUSTOM_NO_DEGREE_F_SYMBOL": "info",
+        "CUSTOM_REVISION_LEP_STAR": "error",
+        "CUSTOM_REVISION_UNDECLARED_STAR": "error",
+        "CUSTOM_REVISION_LEP_DATE": "error",
+        "CUSTOM_REVISION_FOOTER_DATE": "error",
+        "CUSTOM_REVISION_UNDECLARED_PAGE": "error",
+        "CUSTOM_REVISION_PAGE_NOT_IN_LEP": "warning",
+        "CUSTOM_REVISION_MODIFIED_PAGE_ABSENT": "warning",
+        "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "warning",
+        "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "warning",
     }
 
 

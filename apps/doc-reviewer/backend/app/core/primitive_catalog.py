@@ -98,6 +98,14 @@ REFERENCE_CATALOG: tuple[ReferenceDefinition, ...] = (
         description="Date de premiere issue saisie pour le document analyse.",
     ),
     ReferenceDefinition(
+        id="document.meta_last_issue_date",
+        field="meta_last_issue_date",
+        source="document",
+        value_type="date_text",
+        available_at="analysis",
+        description="Date de la revision precedente saisie pour le document analyse.",
+    ),
+    ReferenceDefinition(
         id="document.meta_revision_number",
         field="meta_revision_number",
         source="document",

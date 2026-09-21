@@ -190,6 +190,8 @@ def evaluate_check(
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected
         return "PASS", values[0][0], None, policy
+    if check.operator == "revision_consistency":
+        return evaluate_revision_consistency(check, targets, ctx)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -375,6 +377,39 @@ def evaluate_font_size(
     return "INCONCLUSIVE", targets[0], None, expected_display
 
 
+def revision_findings(check: Check, ctx: _EvalContext) -> list[Any]:
+    """Divergences between Highlights, LEP and footers for one control.
+
+    The state is built once per parsed document (and already by the page
+    classifier, before any rule runs) so the nine controls share a single
+    extraction pass.
+    """
+    if ctx.is_docx or ctx.parsed_pdf is None:
+        return []
+    from app.checks.standards import thales_custom
+
+    state = thales_custom.revision_state(ctx.parsed_pdf, ctx.document)
+    return thales_custom.revision.findings_for(state, str(check.expected))
+
+
+def evaluate_revision_consistency(
+    check: Check,
+    targets: list[_TextTarget],
+    ctx: _EvalContext,
+) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
+    if ctx.is_docx or ctx.parsed_pdf is None:
+        return "INCONCLUSIVE", targets[0], None, str(check.expected)
+    findings = revision_findings(check, ctx)
+    if not findings:
+        return "PASS", targets[0], None, str(check.expected)
+    finding = findings[0]
+    target = next(
+        (item for item in targets if item.raw_page == finding.page),
+        targets[0],
+    )
+    return "FAIL", target, finding.original or finding.message, finding.proposed or None
+
+
 def extract_year(value: str) -> str:
     """Extract the last year from a copyright or revision-date value."""
     four_digit = re.findall(r"\d{4}", value)
@@ -467,6 +502,7 @@ def evaluate_regex(
                     "meta_revision_date",
                     "meta_cmm_number",
                     "meta_first_issue_date",
+                    "meta_last_issue_date",
                     "meta_revision_number",
                     "meta_pnr_number",
                     "document_language",

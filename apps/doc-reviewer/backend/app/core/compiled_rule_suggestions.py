@@ -32,6 +32,7 @@ from app.core.compiled_rule_operators import (
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
+    revision_findings,
 )
 
 
@@ -84,6 +85,10 @@ def deterministic_suggestions(
                     message,
                     ctx.pdf_pages,
                 )
+            )
+        elif check.operator == "revision_consistency":
+            suggestions.extend(
+                revision_consistency_suggestions(rule, check, rule_kind, ctx)
             )
         elif check.operator == "regex_exists" and check.expected_display is not None:
             check_status, _target, _observed, _expected = evaluate_check(
@@ -211,6 +216,33 @@ def deterministic_suggestions(
                 bbox=suggestion_bbox(fallback_target, observed, pdf_pages),
         )
     ]
+
+
+def revision_consistency_suggestions(
+    rule: CompiledRule,
+    check: Check,
+    rule_kind: str,
+    ctx: _EvalContext,
+) -> list[RawSuggestion]:
+    """One suggestion per page/subject where the three sources diverge."""
+    text_by_page = {target.raw_page: target.text for target in ctx.all_targets}
+    suggestions: list[RawSuggestion] = []
+    for finding in revision_findings(check, ctx):
+        start = text_by_page.get(finding.page, "").find(finding.original)
+        suggestions.append(
+            RawSuggestion(
+                rule_kind=rule_kind,
+                rule_code=rule.id,
+                severity=rule.severity,
+                message=finding.message,
+                original=finding.original,
+                proposed=finding.proposed,
+                page=finding.page,
+                span=(start, start + len(finding.original)) if start >= 0 else (0, 0),
+                bbox=finding.bbox,
+            )
+        )
+    return suggestions
 
 
 def font_size_suggestions(

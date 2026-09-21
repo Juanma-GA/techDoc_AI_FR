@@ -38,9 +38,27 @@ DocumentMetaField = Literal[
     "meta_revision_date",
     "meta_cmm_number",
     "meta_first_issue_date",
+    "meta_last_issue_date",
     "meta_revision_number",
     "meta_pnr_number",
     "document_language",
+]
+
+
+# Cross-page consistency controls: the verdict for one page depends on two
+# tables printed elsewhere in the document (Highlights + List of Effective
+# Pages), so the operator reads the whole parsed document rather than the
+# scoped target. One control = one compiled rule.
+RevisionControl = Literal[
+    "lep_star",
+    "undeclared_star",
+    "lep_date",
+    "footer_date",
+    "undeclared_page",
+    "page_not_in_lep",
+    "modified_page_absent",
+    "highlights_pairing",
+    "highlights_page_label",
 ]
 
 
@@ -50,6 +68,10 @@ class RuleTarget(StrictModel):
     page_type: str | None = None
     page_types: list[str] | None = None
     excluded_page_types: list[str] | None = None
+    # Restricts the rule to the pages this revision touched (or explicitly
+    # left untouched). Pages whose state is undecided always match, so a
+    # document that does not declare its revised pages keeps full coverage.
+    page_state: Literal["modified", "unchanged"] | None = None
 
 
 class FieldRef(StrictModel):
@@ -132,6 +154,7 @@ class Check(StrictModel):
         # intent and flags the correct text as a violation every time.
         "regex_exists",
         "pressure_conversion",
+        "revision_consistency",
         "font_size_equals",
     ]
     expected: str | int | float | list[str] | None = None
@@ -176,6 +199,11 @@ class Check(StrictModel):
                 raise ValueError(f"regex invalide: {exc.msg}") from exc
         if self.operator == "pressure_conversion" and self.expected != "bar_to_psi":
             raise ValueError("pressure_conversion requires expected='bar_to_psi'")
+        if self.operator == "revision_consistency" and self.expected not in get_args(RevisionControl):
+            raise ValueError(
+                "revision_consistency requires expected in "
+                f"{', '.join(get_args(RevisionControl))}"
+            )
         if self.operator == "font_size_equals":
             if isinstance(self.expected, bool) or not isinstance(self.expected, (int, float)):
                 raise ValueError("font_size_equals requires a numeric expected value")
@@ -370,6 +398,11 @@ def _describe_check(check: Check) -> str:
         return (
             f"{check.field} doit contenir chaque pression en bar suivie de sa "
             "conversion numerique en p.s.i. entre parentheses"
+        )
+    if check.operator == "revision_consistency":
+        return (
+            "coherence Highlights / liste des pages effectives / pied de page "
+            f"pour le controle {check.expected}"
         )
     if check.operator == "font_size_equals":
         return f"{check.field} doit avoir une taille de police de {check.expected} pt"

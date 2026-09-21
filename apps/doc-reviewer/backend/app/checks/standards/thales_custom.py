@@ -9,7 +9,14 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from app.core.compiled_rules import Check, CompiledRule, Condition, FieldRef, RuleTarget
+from app.checks.standards import _thales_revision as revision
+from app.core.compiled_rules import (
+    Check,
+    CompiledRule,
+    Condition,
+    FieldRef,
+    RuleTarget,
+)
 from app.core.logging import get_logger
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
@@ -23,7 +30,12 @@ STANDARD_DESCRIPTION = (
 _logger = get_logger(__name__)
 
 _TARGET = RuleTarget(page="all", region="full_page")
+# Une page inchangee doit conserver sa date d'emission d'origine : corriger
+# son contenu obligerait a la redater, donc a la declarer revisee. Les regles
+# de contenu ne s'appliquent qu'aux pages que cette revision touche deja.
+_MODIFIED_TARGET = RuleTarget(page="all", region="full_page", page_state="modified")
 _FOOTER_TARGET = RuleTarget(page="all", region="footer")
+_MODIFIED_FOOTER_TARGET = RuleTarget(page="all", region="footer", page_state="modified")
 _TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
 # full_page (et non footer) : sur ce standard, le bloc adresse THALES est
 # positionne hors du bandeau bas-de-page a 25% calcule par `_scope_targets`
@@ -327,6 +339,32 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
         getattr(document, "meta_cmm_number", None),
     )
     identify_note_pages(parsed)
+    # En dernier : `page.is_modified` conditionne le perimetre des regles de
+    # contenu, il doit donc etre connu avant toute execution de regle.
+    revision_state(parsed, document)
+
+
+_REVISION_STATE_ATTR = "_thales_revision_state"
+
+
+def revision_state(parsed: ParsedPdf, document: object) -> revision.RevisionState:
+    """Build (once per parsed document) the cross-source revision state."""
+    cached = getattr(parsed, _REVISION_STATE_ATTR, None)
+    if cached is not None:
+        return cached
+    state = revision.build_revision_state(parsed, document)
+    setattr(parsed, _REVISION_STATE_ATTR, state)
+    _logger.info(
+        "thales_revision_state_built",
+        available=state.available,
+        highlights_pages=list(state.highlights_pages),
+        lep_pages=list(state.lep_pages),
+        highlights_entries=len(state.highlights),
+        lep_entries=len(state.lep),
+        footers=len(state.footers),
+        modified_pages=[page.page for page in parsed.pages if page.is_modified],
+    )
+    return state
 
 
 def _rule(
@@ -417,7 +455,97 @@ def _required_note_check(
     )
 
 
+def _revision_rule(
+    code: str,
+    topic: str,
+    control: str,
+    failure_message: str,
+    *,
+    severity: Literal["info", "warning", "error"] = "error",
+) -> CompiledRule:
+    return _rule(
+        code,
+        topic,
+        failure_message=failure_message,
+        severity=severity,
+        only_if=Condition(field="meta_revision_date", state="present"),
+        checks=[
+            Check(
+                field="text",
+                operator="revision_consistency",
+                expected=control,
+            ),
+        ],
+    )
+
+
+# Ces controles s'executent en premier : ils etablissent quelles pages la
+# revision touche (`page.is_modified`), perimetre dont dependent ensuite
+# toutes les regles ciblant `page_state="modified"`.
+_REVISION_RULES = [
+    _revision_rule(
+        "CUSTOM_REVISION_LEP_STAR",
+        "Etoile LEP presente pour chaque page revisee ou nouvelle",
+        revision.LEP_STAR,
+        "etoile absente dans la liste des pages effectives.",
+    ),
+    _revision_rule(
+        "CUSTOM_REVISION_UNDECLARED_STAR",
+        "Etoile LEP justifiee par un statut R ou N dans les Highlights",
+        revision.UNDECLARED_STAR,
+        "etoile LEP sans statut R ou N dans les Highlights.",
+    ),
+    _revision_rule(
+        "CUSTOM_REVISION_LEP_DATE",
+        "Date LEP conforme au statut de la page",
+        revision.LEP_DATE,
+        "date LEP incoherente avec le statut de la page.",
+    ),
+    _revision_rule(
+        "CUSTOM_REVISION_FOOTER_DATE",
+        "Date du pied de page conforme aux Highlights et a la LEP",
+        revision.FOOTER_DATE,
+        "date du pied de page incoherente avec les Highlights et la LEP.",
+    ),
+    _revision_rule(
+        "CUSTOM_REVISION_UNDECLARED_PAGE",
+        "Page datee de la revision declaree modifiee",
+        revision.UNDECLARED_PAGE,
+        "page datee de la revision courante sans declaration de modification.",
+    ),
+    _revision_rule(
+        "CUSTOM_REVISION_PAGE_NOT_IN_LEP",
+        "Page du document presente dans la liste des pages effectives",
+        revision.PAGE_NOT_IN_LEP,
+        "page du document absente de la liste des pages effectives.",
+        severity="warning",
+    ),
+    _revision_rule(
+        "CUSTOM_REVISION_MODIFIED_PAGE_ABSENT",
+        "Page declaree revisee presente dans le document",
+        revision.MODIFIED_PAGE_ABSENT,
+        "page declaree revisee introuvable dans le document.",
+        severity="warning",
+    ),
+    _revision_rule(
+        "CUSTOM_HIGHLIGHTS_PAGE_PAIRING",
+        "Pages Highlights declarees par couple impaire/paire",
+        revision.HIGHLIGHTS_PAIRING,
+        "page Highlights declaree sans sa page paire ou impaire associee.",
+        severity="warning",
+    ),
+    _revision_rule(
+        "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT",
+        "Libelle Page/Pages et alignement dans les Highlights",
+        revision.HIGHLIGHTS_PAGE_LABEL,
+        "libelle Page/Pages ou alignement non conforme dans les Highlights.",
+        severity="warning",
+    ),
+]
+
+
 _RULES_V1 = [
+    *_REVISION_RULES,
     _rule(
         "CUSTOM_CMM_NUMBER",
         "Numero CMM conforme au contexte du document",
@@ -497,7 +625,7 @@ _RULES_V1 = [
         "CUSTOM_TITLE_PAGE_COPYRIGHT",
         "Copyright du footer conforme a l'annee de revision",
         failure_message="Copyright du footer non conforme",
-        target=_FOOTER_TARGET,
+        target=_MODIFIED_FOOTER_TARGET,
         severity="warning",
         checks=[
             Check(
@@ -526,7 +654,7 @@ _RULES_V1 = [
         "CUSTOM_REVISION_DATE",
         "Date de revision du footer conforme au mapping",
         failure_message="Date de revision du footer non conforme",
-        target=_FOOTER_TARGET,
+        target=_MODIFIED_FOOTER_TARGET,
         severity="error",
         checks=[
             _required_text_check(
@@ -728,6 +856,7 @@ _RULES_V1 = [
         "CUSTOM_DECIMAL_COMMA",
         "Valeurs decimales doivent etre separees par un point",
         pattern=_DECIMAL_COMMA_PATTERN,
+        target=_MODIFIED_TARGET,
         severity="warning",
         replacement=r"\1.\2",
     ),
@@ -736,6 +865,7 @@ _RULES_V1 = [
         "Temperature en deg. C accompagnee de sa conversion en deg. F",
         failure_message="conversion Fahrenheit absente pour la temperature.",
         pattern=_TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN,
+        target=_MODIFIED_TARGET,
         severity="error",
         replacement="{{temperature_fahrenheit}}",
     ),
@@ -745,6 +875,7 @@ _RULES_V1 = [
         failure_message=(
             "conversion p.s.i. absente ou incorrecte pour une pression en bar."
         ),
+        target=_MODIFIED_TARGET,
         severity="error",
         checks=[
             Check(
@@ -758,6 +889,7 @@ _RULES_V1 = [
         "CUSTOM_FORBIDDEN_CONSUMABLES",
         "Consommables a supprimer",
         failure_message="consommable a supprimer.",
+        target=_MODIFIED_TARGET,
         severity="error",
         checks=[
             Check(
@@ -773,6 +905,7 @@ _RULES_V1 = [
         "Unite de temperature C ecrite au format deg. C",
         failure_message="unite °C interdite, utiliser deg. C.",
         pattern=_DEGREE_C_PATTERN,
+        target=_MODIFIED_TARGET,
         severity="info",
         replacement="deg. C",
     ),
@@ -781,6 +914,7 @@ _RULES_V1 = [
         "Unite de temperature F ecrite au format deg. F",
         failure_message="unite °F interdite, utiliser deg. F.",
         pattern=_DEGREE_F_PATTERN,
+        target=_MODIFIED_TARGET,
         severity="info",
         replacement="deg. F",
     ),
@@ -809,8 +943,9 @@ RULE_METADATA["CUSTOM_CMM_NUMBER"] = {
 }
 RULE_METADATA["CUSTOM_TITLE_PAGE_COPYRIGHT"] = {
     "description": (
-        "Le footer du document doit contenir le copyright THALES avec "
-        "l'annee de debut 1966 et l'annee de revision du document."
+        "Le footer des pages modifiees par la revision doit contenir le "
+        "copyright THALES avec l'annee de debut 1966 et l'annee de revision "
+        "du document."
     ),
     "kind": "field_required",
     "severity": "warning",
@@ -818,8 +953,10 @@ RULE_METADATA["CUSTOM_TITLE_PAGE_COPYRIGHT"] = {
 }
 RULE_METADATA["CUSTOM_REVISION_DATE"] = {
     "description": (
-        "La date de revision presente dans le footer doit correspondre a la "
-        "date de revision saisie dans le mapping du document."
+        "La date de revision presente dans le footer des pages modifiees par "
+        "la revision doit correspondre a la date de revision saisie dans le "
+        "mapping du document. Les pages inchangees conservent leur date "
+        "d'emission et sont verifiees par CUSTOM_REVISION_FOOTER_DATE."
     ),
     "kind": "field_required",
     "severity": "error",
@@ -953,6 +1090,92 @@ RULE_METADATA["CUSTOM_NO_DEGREE_F_SYMBOL"] = {
     "kind": "regex_flag",
     "severity": "info",
     "message": "Le symbole °F est interdit : utiliser deg. F.",
+}
+RULE_METADATA["CUSTOM_REVISION_LEP_STAR"] = {
+    "description": (
+        "Toute page declaree revisee (R) ou nouvelle (N) dans les Highlights "
+        "doit porter une etoile apres sa date dans la liste des pages "
+        "effectives."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Page revisee dans les Highlights sans etoile dans la LEP.",
+}
+RULE_METADATA["CUSTOM_REVISION_UNDECLARED_STAR"] = {
+    "description": (
+        "Une etoile dans la liste des pages effectives signale une page "
+        "modifiee : cette page doit etre declaree R ou N dans les Highlights."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Etoile LEP sur une page non declaree revisee dans les Highlights.",
+}
+RULE_METADATA["CUSTOM_REVISION_LEP_DATE"] = {
+    "description": (
+        "La date de la liste des pages effectives doit valoir la date de "
+        "revision du mapping pour une page revisee ou nouvelle, et rester la "
+        "derniere date d'emission connue pour une page inchangee."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Date LEP incoherente avec le statut de la page.",
+}
+RULE_METADATA["CUSTOM_REVISION_FOOTER_DATE"] = {
+    "description": (
+        "Le pied de page doit porter la date de revision du mapping pour une "
+        "page revisee ou nouvelle, et la date declaree dans la liste des pages "
+        "effectives pour une page inchangee."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Date du pied de page incoherente avec les Highlights et la LEP.",
+}
+RULE_METADATA["CUSTOM_REVISION_UNDECLARED_PAGE"] = {
+    "description": (
+        "Une page qui porte la date de la revision courante doit etre declaree "
+        "modifiee, dans les Highlights (R ou N) et par une etoile dans la LEP."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Page datee de la revision courante sans declaration de modification.",
+}
+RULE_METADATA["CUSTOM_REVISION_PAGE_NOT_IN_LEP"] = {
+    "description": (
+        "Toute page du document doit figurer dans la liste des pages "
+        "effectives."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "Page du document absente de la liste des pages effectives.",
+}
+RULE_METADATA["CUSTOM_REVISION_MODIFIED_PAGE_ABSENT"] = {
+    "description": (
+        "Toute page declaree revisee ou nouvelle dans les Highlights doit "
+        "exister dans le document et s'identifier dans son pied de page."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "Page declaree revisee introuvable dans le document.",
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_PAGE_PAIRING"] = {
+    "description": (
+        "Les Highlights declarent les pages par couple : une page impaire est "
+        "suivie de la page paire correspondante, et une page paire est "
+        "precedee de son impaire."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "Page Highlights declaree sans sa page paire ou impaire associee.",
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT"] = {
+    "description": (
+        "Une plage de pages s'ecrit « Pages 701 to 704 » et une page unique "
+        "« Page  401 », avec deux espaces pour conserver l'alignement des "
+        "numeros."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "Libelle Page/Pages ou alignement non conforme dans les Highlights.",
 }
 
 

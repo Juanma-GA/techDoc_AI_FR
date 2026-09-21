@@ -37,11 +37,20 @@ def execute_pdf_rules(
             text=page.text,
             raw_page=page.page,
             page_type=page.page_type,
+            page_modified=page.is_modified,
             span_ranges=page_span_ranges(page),
         )
         for page in parsed.pages
     ]
-    return _execute(rules, targets, parsed.pages, is_docx=False, db=db, document=document)
+    return _execute(
+        rules,
+        targets,
+        parsed.pages,
+        is_docx=False,
+        db=db,
+        document=document,
+        parsed_pdf=parsed,
+    )
 
 
 def execute_docx_rules(
@@ -71,6 +80,7 @@ def _execute(
     blocks: list[Block] | None = None,
     db: Session | None = None,
     document: Any | None = None,
+    parsed_pdf: ParsedPdf | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     from app.core.compiled_rule_operators import condition_met, evaluate_rule
 
@@ -83,6 +93,7 @@ def _execute(
         pdf_pages=pdf_pages,
         document=document,
         db=db,
+        parsed_pdf=parsed_pdf,
     )
     metadata = _document_metadata(document)
     _logger.info(

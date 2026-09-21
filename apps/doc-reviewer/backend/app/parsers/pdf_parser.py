@@ -34,6 +34,11 @@ class ParsedPage:
     spans: list[Span] = field(default_factory=list)
     has_text_layer: bool = True
     page_type: str | None = None
+    # Filled by a standard's page classifier when the document declares which
+    # pages the revision touched. None = undecided (no such declaration, or
+    # the page could not be matched), which every consumer must treat as
+    # "do not filter this page out".
+    is_modified: bool | None = None
 
 
 @dataclass
