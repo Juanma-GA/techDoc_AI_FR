@@ -115,6 +115,15 @@ def _flat_nodes(root: IRNode) -> list[IRNode]:
     return out
 
 
+def _dmrl_nodes(root: IRNode) -> list[IRNode]:
+    """Aplatit l'IR en excluant les entetes et pieds recurrents.
+
+    Ces zones sont du bruit de mise en page : elles ne doivent ni preceder le
+    premier ancrage DMRL ni etre rattachees au contenu d'un Data Module.
+    """
+    return [node for node in _flat_nodes(root) if node.zone not in {"header", "footer"}]
+
+
 def _find_section_title(
     nodes: list[IRNode], needle: str, from_idx: int
 ) -> tuple[int | None, str]:
@@ -138,7 +147,7 @@ def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | Non
     Sert AVANT le decoupage : l'utilisateur valide la DMRL en voyant ce qui a
     ete retrouve dans son document, et A QUEL POINT c'est sur.
     """
-    nodes = _flat_nodes(root)
+    nodes = _dmrl_nodes(root)
     norm_nodes = [dmrl.normalize(n.text) for n in nodes]
     out: list[tuple[int | None, str]] = []
     cursor = 0
@@ -155,7 +164,7 @@ def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | Non
 
 def match_report(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[dict]:
     """Rapport d'appariement DMRL <-> document : une ligne par entree."""
-    nodes = _flat_nodes(root)
+    nodes = _dmrl_nodes(root)
     matches = match_dmrl(root, dmrl_data)
     return [
         {
@@ -180,7 +189,7 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
     preface, avertissements) devient un DM marque `is_orphan`, et les entrees
     non retrouvees produisent un DM VIDE — l'humain voit ce qui reste a traiter.
     """
-    nodes = _flat_nodes(root)
+    nodes = _dmrl_nodes(root)
     matches = match_dmrl(root, dmrl_data)
 
     anchors: list[tuple[int, int, DmrlEntry]] = []

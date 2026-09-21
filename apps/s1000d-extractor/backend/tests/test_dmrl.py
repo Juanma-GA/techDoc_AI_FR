@@ -259,6 +259,25 @@ def test_split_by_dmrl_prefers_section_title_over_body_contains():
     assert "Soulevez le moteur." in contents["Levage"]
 
 
+def test_split_by_dmrl_ignores_running_header_before_first_dm():
+    root = IRNode(id="root", kind="section", level=0, children=[
+        IRNode(id="header", kind="paragraph", text="www.weg.net", zone="header"),
+        IRNode(
+            id="terminologie",
+            kind="section",
+            level=1,
+            text="1. TERMINOLOGIE",
+            children=[IRNode(id="body", kind="paragraph", text="Definitions.")],
+        ),
+    ])
+
+    units = splitter.split_by_dmrl(root, [DmrlEntry(title="Terminologie")])
+
+    assert len(units) == 1
+    assert units[0].is_orphan is False
+    assert splitter.ir_to_text(units[0].root) == "1. TERMINOLOGIE\nDefinitions."
+
+
 def test_split_by_dmrl_keeps_missing_entry_as_empty_dm():
     entries = [DmrlEntry(title="Description generale"), DmrlEntry(title="Chapitre absent")]
     units = splitter.split_by_dmrl(_ir_with_sections(), entries)
