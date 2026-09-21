@@ -548,6 +548,7 @@ def _doc_meta_block(document: object, global_context: dict[str, object] | None =
         ("meta_last_issue_date", "Date de la revision precedente", getattr(document, "meta_last_issue_date", None)),
         ("meta_revision_number", "Numero de revision", getattr(document, "meta_revision_number", None)),
         ("meta_pnr_number", "Numero PNR", getattr(document, "meta_pnr_number", None)),
+        ("meta_manufacturer", "Constructeur", getattr(document, "meta_manufacturer", None)),
         ("document_language", "Langue du document", getattr(document, "document_language", None)),
     ]
     lines = []

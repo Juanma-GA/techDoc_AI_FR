@@ -98,6 +98,14 @@ REFERENCE_CATALOG: tuple[ReferenceDefinition, ...] = (
         description="Date de premiere issue saisie pour le document analyse.",
     ),
     ReferenceDefinition(
+        id="document.meta_manufacturer",
+        field="meta_manufacturer",
+        source="document",
+        value_type="text",
+        available_at="analysis",
+        description="Constructeur choisi pour le document analyse (Airbus ou Boeing).",
+    ),
+    ReferenceDefinition(
         id="document.meta_last_issue_date",
         field="meta_last_issue_date",
         source="document",

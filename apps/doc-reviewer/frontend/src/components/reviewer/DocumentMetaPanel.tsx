@@ -17,6 +17,7 @@ type DocumentMetaDraft = {
   lastIssueDate: string;
   revisionNumber: string;
   pnrNumber: string;
+  manufacturer: "Airbus" | "Boeing";
   documentLanguage: string;
 };
 
@@ -28,6 +29,7 @@ function draftFromDocument(document: Document): DocumentMetaDraft {
     lastIssueDate: document.meta_last_issue_date ?? "",
     revisionNumber: document.meta_revision_number ?? "",
     pnrNumber: document.meta_pnr_number ?? "",
+    manufacturer: document.meta_manufacturer ?? "Airbus",
     documentLanguage: document.document_language ?? "",
   };
 }
@@ -38,6 +40,7 @@ function isDraftComplete(draft: DocumentMetaDraft): boolean {
     draft.cmmNumber,
     draft.firstIssueDate,
     draft.revisionNumber,
+    draft.manufacturer,
     draft.documentLanguage,
   ].every((value) => value.trim().length > 0);
 }
@@ -82,6 +85,7 @@ export function DocumentMetaPanel({ document }: Props) {
         meta_last_issue_date: draft.lastIssueDate.trim() || null,
         meta_revision_number: draft.revisionNumber.trim() || null,
         meta_pnr_number: draft.pnrNumber.trim() || null,
+        meta_manufacturer: draft.manufacturer,
         document_language:
           draft.documentLanguage === "fr" || draft.documentLanguage === "en"
             ? draft.documentLanguage
@@ -199,6 +203,17 @@ export function DocumentMetaPanel({ document }: Props) {
           onChange={(e) => updateField("pnrNumber", e.target.value)}
           placeholder={t("reviewer.meta.pnrNumberPlaceholder")}
         />
+      </label>
+      <label className="field">
+        <span className="field-label">{t("reviewer.meta.manufacturer")}</span>
+        <select
+          className="input"
+          value={draft.manufacturer}
+          onChange={(e) => updateField("manufacturer", e.target.value as "Airbus" | "Boeing")}
+        >
+          <option value="Airbus">{t("reviewer.meta.manufacturerAirbus")}</option>
+          <option value="Boeing">{t("reviewer.meta.manufacturerBoeing")}</option>
+        </select>
       </label>
       <label className="field">
         <span className="field-label">{t("reviewer.meta.documentLanguage")}</span>

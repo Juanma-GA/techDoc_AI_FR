@@ -38,10 +38,11 @@ _DOCUMENT_METADATA_FIELDS = (
     "meta_last_issue_date",
     "meta_revision_number",
     "meta_pnr_number",
+    "meta_manufacturer",
     "document_language",
 )
 _CONTEXT_TOKEN_RE = re.compile(
-    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_last_issue_date|meta_revision_number|meta_pnr_number|document_language)\}\}"
+    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_last_issue_date|meta_revision_number|meta_pnr_number|meta_manufacturer|document_language)\}\}"
 )
 
 

@@ -156,6 +156,7 @@ def _persist_pdf(
         meta_last_issue_date=context_defaults["meta_last_issue_date"],
         meta_revision_number=context_defaults["meta_revision_number"],
         meta_pnr_number=context_defaults["meta_pnr_number"],
+        meta_manufacturer=context_defaults["meta_manufacturer"],
         document_language=context_defaults["document_language"],
     )
     db.add(document)
@@ -286,6 +287,7 @@ def _persist_docx(
         meta_last_issue_date=context_defaults["meta_last_issue_date"],
         meta_revision_number=context_defaults["meta_revision_number"],
         meta_pnr_number=context_defaults["meta_pnr_number"],
+        meta_manufacturer=context_defaults["meta_manufacturer"],
         document_language=context_defaults["document_language"],
     )
     db.add(document)

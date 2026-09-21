@@ -43,6 +43,7 @@ class DocumentOut(BaseModel):
     meta_last_issue_date: Optional[str] = None
     meta_revision_number: Optional[str] = None
     meta_pnr_number: Optional[str] = None
+    meta_manufacturer: Literal["Airbus", "Boeing"] = "Airbus"
     document_language: Optional[Literal["fr", "en"]] = None
     created_at: datetime
 
@@ -72,6 +73,7 @@ class DocumentMetaPatchIn(BaseModel):
     meta_last_issue_date: Optional[str] = Field(default=None, max_length=60)
     meta_revision_number: Optional[str] = Field(default=None, max_length=60)
     meta_pnr_number: Optional[str] = Field(default=None, max_length=120)
+    meta_manufacturer: Literal["Airbus", "Boeing"] = "Airbus"
     document_language: Optional[Literal["fr", "en"]] = None
 
 

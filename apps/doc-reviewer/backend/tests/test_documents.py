@@ -62,6 +62,7 @@ def test_patch_document_context_validates_language(client: TestClient, sample_pd
             "meta_cmm_number": "24-09-06",
             "meta_revision_date": "MAR 18/26",
             "meta_revision_number": "04",
+            "meta_manufacturer": "Boeing",
             "document_language": "en",
         },
     )
@@ -69,12 +70,19 @@ def test_patch_document_context_validates_language(client: TestClient, sample_pd
     assert response.status_code == 200
     body = response.json()
     assert body["document_language"] == "en"
+    assert body["meta_manufacturer"] == "Boeing"
 
     invalid = client.patch(
         f"/api/v1/documents/{doc['id']}",
         json={"document_language": "de"},
     )
     assert invalid.status_code == 422
+
+    invalid_manufacturer = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"meta_manufacturer": "Embraer"},
+    )
+    assert invalid_manufacturer.status_code == 422
 
 
 def test_get_pdf_returns_v0_bytes(client: TestClient, sample_pdf_bytes: bytes) -> None:

@@ -192,6 +192,8 @@ def evaluate_check(
         return "PASS", values[0][0], None, policy
     if check.operator == "revision_consistency":
         return evaluate_revision_consistency(check, targets, ctx)
+    if check.operator == "shop_verification":
+        return evaluate_shop_verification(check, targets, ctx)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -410,6 +412,27 @@ def evaluate_revision_consistency(
     return "FAIL", target, finding.original or finding.message, finding.proposed or None
 
 
+def evaluate_shop_verification(
+    check: Check,
+    targets: list[_TextTarget],
+    ctx: _EvalContext,
+) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
+    from app.checks.standards import thales_custom
+
+    expected = thales_custom.shop_verification_text(ctx.document)
+    first_failure: tuple[_TextTarget, str | None] | None = None
+    for target in targets:
+        observed = thales_custom.shop_verification_section(target.text)
+        if thales_custom.shop_verification_matches(target.text, expected):
+            continue
+        if first_failure is None:
+            first_failure = (target, observed or None)
+    if first_failure is None:
+        return "PASS", targets[-1], expected, expected
+    target, observed = first_failure
+    return "FAIL", target, observed, expected
+
+
 def extract_year(value: str) -> str:
     """Extract the last year from a copyright or revision-date value."""
     four_digit = re.findall(r"\d{4}", value)
@@ -505,6 +528,7 @@ def evaluate_regex(
                     "meta_last_issue_date",
                     "meta_revision_number",
                     "meta_pnr_number",
+                    "meta_manufacturer",
                     "document_language",
                 )
                 if (raw := getattr(ctx.document, field, None)) is not None and str(raw).strip()

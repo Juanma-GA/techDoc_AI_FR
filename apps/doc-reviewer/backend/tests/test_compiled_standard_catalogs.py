@@ -8,6 +8,7 @@ from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 from app.checks.standards.thales_custom import (
     HIGHLIGHTS_PAGE_TYPE,
     HIGHLIGHTS_FIRST_PAGE_TYPE,
+    INTRODUCTION_PAGE_TYPE,
     TP2_PAGE_TYPE,
     REPAIR_PAGE_TYPE,
     STORAGE_PAGE_TYPE,
@@ -16,7 +17,9 @@ from app.checks.standards.thales_custom import (
     _IMPORTANT_NOTICE_TEXT,
     classify_pages,
     identify_note_pages,
+    identify_introduction_pages,
     identify_tp1_pages,
+    shop_verification_text,
 )
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules
@@ -177,7 +180,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 69
+    assert total == 70
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -1193,6 +1196,106 @@ def test_note_page_classifier_does_not_misclassify_contents_or_override_highligh
     page_types = identify_note_pages(parsed)
 
     assert page_types == {"1": None, "2": HIGHLIGHTS_PAGE_TYPE}
+
+
+def test_introduction_page_classifier_uses_the_standalone_heading() -> None:
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=[
+            ParsedPage(page=1, text="INTRODUCTION\nShop Verification:"),
+            ParsedPage(page=2, text="Introduction is mentioned in body text."),
+            ParsedPage(page=3, text="TABLE OF CONTENTS\nINTRODUCTION\nINTRO 1"),
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    page_types = identify_introduction_pages(parsed)
+
+    assert page_types == {"1": INTRODUCTION_PAGE_TYPE, "2": None, "3": None}
+
+
+def test_shop_verification_changes_with_the_mapping_manufacturer() -> None:
+    rule = _rule("CUSTOM_INTRODUCTION_SHOP_VERIFICATION")
+    airbus_text = shop_verification_text(SimpleNamespace(meta_manufacturer="Airbus"))
+    boeing_text = shop_verification_text(SimpleNamespace(meta_manufacturer="Boeing"))
+
+    airbus_results, airbus_suggestions = execute_pdf_rules(
+        _note_page_pdf(airbus_text, INTRODUCTION_PAGE_TYPE),
+        [rule],
+        document=SimpleNamespace(meta_manufacturer="Airbus"),
+    )
+    boeing_results, boeing_suggestions = execute_pdf_rules(
+        _note_page_pdf(boeing_text, INTRODUCTION_PAGE_TYPE),
+        [rule],
+        document=SimpleNamespace(meta_manufacturer="Boeing"),
+    )
+    invalid_results, invalid_suggestions = execute_pdf_rules(
+        _note_page_pdf(boeing_text, INTRODUCTION_PAGE_TYPE),
+        [rule],
+        document=SimpleNamespace(meta_manufacturer="Airbus"),
+    )
+
+    assert airbus_results[0].status == "PASS"
+    assert airbus_suggestions == []
+    assert boeing_results[0].status == "PASS"
+    assert boeing_suggestions == []
+    assert invalid_results[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].page == 1
+    assert invalid_suggestions[0].proposed == airbus_text
+    assert "Airbus" in invalid_suggestions[0].message
+
+
+def test_missing_shop_verification_uses_the_central_blank_area_for_its_bbox() -> None:
+    rule = _rule("CUSTOM_INTRODUCTION_SHOP_VERIFICATION")
+    page = ParsedPage(
+        page=1,
+        text="INTRODUCTION\n1. General\nExisting introduction text.",
+        page_type=INTRODUCTION_PAGE_TYPE,
+        spans=[
+            Span(
+                text="INTRODUCTION",
+                bbox=(220.0, 88.0, 360.0, 102.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="1. General",
+                bbox=(86.0, 116.0, 155.0, 130.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="Existing introduction text.",
+                bbox=(108.0, 145.0, 300.0, 159.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="Page 1\nJUL 27/26",
+                bbox=(40.0, 760.0, 300.0, 780.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+        document=SimpleNamespace(meta_manufacturer="Airbus"),
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].bbox is not None
+    assert suggestions[0].bbox[1] > 200.0
+    assert suggestions[0].bbox[3] < 700.0
 
 
 def _note_page_pdf(text: str, page_type: str) -> ParsedPdf:

@@ -90,6 +90,10 @@ def deterministic_suggestions(
             suggestions.extend(
                 revision_consistency_suggestions(rule, check, rule_kind, ctx)
             )
+        elif check.operator == "shop_verification":
+            suggestions.extend(
+                shop_verification_suggestions(rule, targets, rule_kind, message, ctx)
+            )
         elif check.operator == "regex_exists" and check.expected_display is not None:
             check_status, _target, _observed, _expected = evaluate_check(
                 check, targets, ctx, rule.id
@@ -243,6 +247,99 @@ def revision_consistency_suggestions(
             )
         )
     return suggestions
+
+
+def shop_verification_suggestions(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+    ctx: _EvalContext,
+) -> list[RawSuggestion]:
+    from app.checks.standards import thales_custom
+
+    expected = thales_custom.shop_verification_text(ctx.document)
+    manufacturer = getattr(ctx.document, "meta_manufacturer", "Airbus") or "Airbus"
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        observed = thales_custom.shop_verification_section(target.text)
+        if thales_custom.shop_verification_matches(target.text, expected):
+            continue
+        original = observed.strip()
+        start = target.text.find(observed) if observed else -1
+        if start < 0:
+            start = target.text.lower().find("shop verification")
+        if start < 0:
+            start = 0
+        bbox = (
+            empty_middle_bbox(target, ctx.pdf_pages)
+            if not original
+            else suggestion_bbox(
+                target,
+                original,
+                ctx.pdf_pages,
+                span_start=start,
+            )
+        )
+        suggestions.append(
+            RawSuggestion(
+                rule_kind=rule_kind,
+                rule_code=rule.id,
+                severity=rule.severity,
+                message=(
+                    f"{message} Texte attendu pour {manufacturer} : {expected}"
+                ),
+                original=original,
+                proposed=expected,
+                page=target.raw_page,
+                span=(start, start + len(original)),
+                bbox=bbox,
+            )
+        )
+    return suggestions
+
+
+def empty_middle_bbox(
+    target: _TextTarget,
+    pdf_pages: list[ParsedPage] | None,
+) -> _BBox:
+    """Place an insertion-only finding in the largest central blank area."""
+    if pdf_pages is None:
+        return first_bbox(target)
+    page = next((item for item in pdf_pages if item.page == target.raw_page), None)
+    if page is None or not page.spans:
+        return first_bbox(target)
+
+    min_y = min(span.bbox[1] for span in page.spans)
+    max_y = max(span.bbox[3] for span in page.spans)
+    height = max_y - min_y
+    if height <= 0:
+        return first_bbox(target)
+
+    body_top = min_y + height * 0.08
+    body_bottom = max_y - max(height * 0.18, 80.0)
+    body_spans = [
+        span
+        for span in page.spans
+        if span.bbox[1] >= body_top and span.bbox[3] <= body_bottom
+    ]
+    if not body_spans:
+        return first_bbox(target)
+
+    ordered = sorted(body_spans, key=lambda span: (span.bbox[1], span.bbox[0]))
+    gaps: list[tuple[float, float]] = [(body_top, ordered[0].bbox[1])]
+    for previous, current in zip(ordered, ordered[1:]):
+        gaps.append((previous.bbox[3], current.bbox[1]))
+    gaps.append((ordered[-1].bbox[3], body_bottom))
+    gap_start, gap_end = max(gaps, key=lambda gap: gap[1] - gap[0])
+    if gap_end <= gap_start:
+        return first_bbox(target)
+
+    center_y = (gap_start + gap_end) / 2
+    box_height = min(64.0, max(24.0, (gap_end - gap_start) * 0.35))
+    x0 = min(span.bbox[0] for span in body_spans)
+    x1 = max(span.bbox[2] for span in body_spans)
+    return (x0, center_y - box_height / 2, x1, center_y + box_height / 2)
 
 
 def font_size_suggestions(

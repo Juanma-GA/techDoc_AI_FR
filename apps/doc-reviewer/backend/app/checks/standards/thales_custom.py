@@ -63,6 +63,7 @@ _TP1_THALES_LOGO_TARGET = RuleTarget(
 )
 HIGHLIGHTS_PAGE_TYPE = "HIGHLIGHTS"
 HIGHLIGHTS_FIRST_PAGE_TYPE = "HIGHLIGHTS_PAGE_1"
+INTRODUCTION_PAGE_TYPE = "INTRODUCTION"
 REPAIR_PAGE_TYPE = "REPAIR"
 TESTING_PAGE_TYPE = "TESTING"
 STORAGE_PAGE_TYPE = "STORAGE"
@@ -73,6 +74,8 @@ _PAGE_TYPE_MARKERS = {
 }
 _HIGHLIGHTS_PAGE_1_MARKER = re.compile(r"(?i)\bHighlights\s+Page\s+1\b")
 _HIGHLIGHTS_PAGE_TYPES = [HIGHLIGHTS_PAGE_TYPE, HIGHLIGHTS_FIRST_PAGE_TYPE]
+_INTRODUCTION_PAGE_MARKER = re.compile(r"(?m)^\s*INTRODUCTION\s*$")
+_TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
 _NOTE_INTRODUCTION_TEXT = {
     REPAIR_PAGE_TYPE: (
         "During repair operations, make sure that the environmental conditions "
@@ -171,6 +174,16 @@ _STORAGE_TEMPERATURE = (
     "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
     "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
 )
+_SHOP_VERIFICATION_AIRBUS = """Shop Verification:
+
+A.  Verification of the procedures in this manual
+
+(1)  The shop verification will be done at the first repair of the equipment."""
+_SHOP_VERIFICATION_BOEING = """Shop Verification:
+
+A.  Verification of the procedures in this manual
+
+(1)  Testing and Fault Isolation: shop verification done JUN 24/88."""
 _IMPORTANT_NOTICE_TEXT = """IMPORTANT NOTICE
 This document and any information contained herein are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
 In particular, they shall not be used in the creation, manufacture, development or derivation of any repairs, modifications, spare parts, design, or configuration changes or to obtain EASA, FAA or any other government or regulatory approval to do so.
@@ -316,6 +329,46 @@ def identify_note_pages(parsed: ParsedPdf) -> dict[str, str | None]:
     return page_types
 
 
+def identify_introduction_pages(parsed: ParsedPdf) -> dict[str, str | None]:
+    """Classify pages carrying the standalone INTRODUCTION heading."""
+    page_types: dict[str, str | None] = {}
+    for page in parsed.pages:
+        if page.page_type is None or page.page_type == INTRODUCTION_PAGE_TYPE:
+            if (
+                _INTRODUCTION_PAGE_MARKER.search(page.text or "")
+                and _TABLE_OF_CONTENTS_MARKER.search(page.text or "") is None
+            ):
+                page.page_type = INTRODUCTION_PAGE_TYPE
+            elif page.page_type == INTRODUCTION_PAGE_TYPE:
+                page.page_type = None
+        page_types[str(page.page)] = page.page_type
+    return page_types
+
+
+def shop_verification_text(document: object | None) -> str:
+    manufacturer = str(getattr(document, "meta_manufacturer", "Airbus") or "Airbus")
+    return (
+        _SHOP_VERIFICATION_BOEING
+        if manufacturer.casefold() == "boeing"
+        else _SHOP_VERIFICATION_AIRBUS
+    )
+
+
+def shop_verification_section(text: str) -> str:
+    start_match = re.search(r"(?im)^\s*Shop\s+Verification\s*:\s*", text)
+    if start_match is None:
+        return ""
+    end_match = re.search(r"(?im)^\s*\d+\.\s+[A-Z]", text[start_match.end() :])
+    end = start_match.end() + end_match.start() if end_match is not None else len(text)
+    return text[start_match.start() : end].strip()
+
+
+def shop_verification_matches(text: str, expected: str) -> bool:
+    observed = " ".join(shop_verification_section(text).split()).casefold()
+    expected_normalized = " ".join(expected.split()).casefold()
+    return bool(observed) and expected_normalized in observed
+
+
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
     """`PAGE_CLASSIFIERS` entry point (see `app.checks.standards`): reads the
     anchors off `document` itself so the generic pipeline never has to know
@@ -338,6 +391,7 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
         getattr(document, "meta_cmm_number", None),
     )
     identify_note_pages(parsed)
+    identify_introduction_pages(parsed)
     # En dernier : `page.is_modified` conditionne le perimetre des regles de
     # contenu, il doit donc etre connu avant toute execution de regle.
     revision_state(parsed, document)
@@ -701,6 +755,26 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_INTRODUCTION_SHOP_VERIFICATION",
+        "Shop Verification conforme au constructeur du mapping",
+        failure_message="Shop Verification INTRODUCTION non conforme.",
+        target=RuleTarget(
+            page="all",
+            region="full_page",
+            page_type=INTRODUCTION_PAGE_TYPE,
+        ),
+        severity="error",
+        only_if=Condition(field="meta_manufacturer", state="present"),
+        checks=[
+            Check(
+                field="text",
+                operator="shop_verification",
+                expected="manufacturer_mapping",
+                require_all=True,
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_HIGHLIGHTS_ATA_NUMBER",
         "Numero ATA present sur la premiere page Highlights",
         failure_message="numero ATA Highlights absent ou non conforme.",
@@ -941,6 +1015,15 @@ RULE_METADATA["CUSTOM_TITLE_PAGE_COPYRIGHT"] = {
     "kind": "field_required",
     "severity": "warning",
     "message": "Le copyright du footer est absent ou une annee est incorrecte.",
+}
+RULE_METADATA["CUSTOM_INTRODUCTION_SHOP_VERIFICATION"] = {
+    "description": (
+        "La page INTRODUCTION doit contenir le bloc Shop Verification attendu "
+        "pour le constructeur choisi dans le mapping (Airbus ou Boeing)."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le bloc Shop Verification de l'INTRODUCTION est absent ou incorrect.",
 }
 RULE_METADATA["CUSTOM_TP1_THALES_ADDRESS"] = {
     "description": (

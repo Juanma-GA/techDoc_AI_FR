@@ -41,6 +41,7 @@ DocumentMetaField = Literal[
     "meta_last_issue_date",
     "meta_revision_number",
     "meta_pnr_number",
+    "meta_manufacturer",
     "document_language",
 ]
 
@@ -157,6 +158,7 @@ class Check(StrictModel):
         "pressure_conversion",
         "revision_consistency",
         "font_size_equals",
+        "shop_verification",
     ]
     expected: str | int | float | list[str] | None = None
     require_all: bool = False
@@ -204,6 +206,10 @@ class Check(StrictModel):
             raise ValueError(
                 "revision_consistency requires expected in "
                 f"{', '.join(get_args(RevisionControl))}"
+            )
+        if self.operator == "shop_verification" and self.expected != "manufacturer_mapping":
+            raise ValueError(
+                "shop_verification requires expected='manufacturer_mapping'"
             )
         if self.operator == "font_size_equals":
             if isinstance(self.expected, bool) or not isinstance(self.expected, (int, float)):
@@ -407,6 +413,8 @@ def _describe_check(check: Check) -> str:
         )
     if check.operator == "font_size_equals":
         return f"{check.field} doit avoir une taille de police de {check.expected} pt"
+    if check.operator == "shop_verification":
+        return "shop verification conforme au constructeur saisi dans le mapping"
     if check.operator in {"contains_any", "contains_all", "contains_none"}:
         verb = {
             "contains_any": "contient au moins un de",

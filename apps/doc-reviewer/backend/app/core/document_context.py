@@ -15,6 +15,7 @@ REQUIRED_DOCUMENT_CONTEXT_FIELDS = (
     "meta_cmm_number",
     "meta_first_issue_date",
     "meta_revision_number",
+    "meta_manufacturer",
     "document_language",
 )
 # `meta_last_issue_date` (date de la revision precedente) reste optionnel :
@@ -25,6 +26,8 @@ DOCUMENT_CONTEXT_FIELDS = REQUIRED_DOCUMENT_CONTEXT_FIELDS + (
 )
 
 _DOCUMENT_CONTEXT_DEFAULTS_KEY = "document.context_defaults"
+DOCUMENT_MANUFACTURERS = ("Airbus", "Boeing")
+DEFAULT_DOCUMENT_MANUFACTURER = "Airbus"
 
 
 def missing_document_context(document: Any) -> list[str]:
@@ -40,17 +43,32 @@ def get_document_context_defaults(db: Session) -> dict[str, str | None]:
     """Return the context copied onto newly imported documents."""
     row = db.get(AppConfig, _DOCUMENT_CONTEXT_DEFAULTS_KEY)
     if row is None or not row.value:
-        return {field: None for field in DOCUMENT_CONTEXT_FIELDS}
+        return {
+            field: (
+                DEFAULT_DOCUMENT_MANUFACTURER
+                if field == "meta_manufacturer"
+                else None
+            )
+            for field in DOCUMENT_CONTEXT_FIELDS
+        }
     try:
         raw = json.loads(row.value)
     except (TypeError, ValueError):
         raw = {}
     if not isinstance(raw, dict):
         raw = {}
-    return {
-        field: str(raw[field]).strip() if raw.get(field) not in (None, "") else None
-        for field in DOCUMENT_CONTEXT_FIELDS
-    }
+    defaults: dict[str, str | None] = {}
+    for field in DOCUMENT_CONTEXT_FIELDS:
+        value = raw.get(field)
+        if field == "meta_manufacturer":
+            defaults[field] = (
+                str(value).strip()
+                if value in DOCUMENT_MANUFACTURERS
+                else DEFAULT_DOCUMENT_MANUFACTURER
+            )
+        else:
+            defaults[field] = str(value).strip() if value not in (None, "") else None
+    return defaults
 
 
 def save_document_context_defaults(
@@ -63,7 +81,14 @@ def save_document_context_defaults(
         if field not in values:
             continue
         value = values[field]
-        current[field] = str(value).strip() if value not in (None, "") else None
+        if field == "meta_manufacturer":
+            current[field] = (
+                str(value).strip()
+                if value in DOCUMENT_MANUFACTURERS
+                else DEFAULT_DOCUMENT_MANUFACTURER
+            )
+        else:
+            current[field] = str(value).strip() if value not in (None, "") else None
     serialized = json.dumps(current, ensure_ascii=False, sort_keys=True)
     row = db.get(AppConfig, _DOCUMENT_CONTEXT_DEFAULTS_KEY)
     if row is None:

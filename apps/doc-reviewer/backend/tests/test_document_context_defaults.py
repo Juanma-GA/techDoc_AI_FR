@@ -16,6 +16,7 @@ def test_document_context_is_reused_for_next_upload(
     assert first.status_code == 201, first.text
     assert first.json()["meta_revision_date"] is None
     assert first.json()["document_language"] is None
+    assert first.json()["meta_manufacturer"] == "Airbus"
 
     context = {
         "meta_revision_date": "JUL 27/26",
@@ -23,6 +24,7 @@ def test_document_context_is_reused_for_next_upload(
         "meta_first_issue_date": "JUL 1966",
         "meta_revision_number": "Rev. 01",
         "meta_pnr_number": "1-879-SB",
+        "meta_manufacturer": "Boeing",
         "document_language": "en",
     }
     patched = client.patch(

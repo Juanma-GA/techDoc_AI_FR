@@ -124,6 +124,9 @@ class Document(Base):
     meta_last_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_revision_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_pnr_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    meta_manufacturer: Mapped[str] = mapped_column(
+        String(20), default="Airbus", server_default="Airbus", nullable=False
+    )
     document_language: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
