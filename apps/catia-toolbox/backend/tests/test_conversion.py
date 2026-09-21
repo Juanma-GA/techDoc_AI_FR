@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.api import conversion
+from app.core import composer_converter
 
 
 def _scan(client, path: str) -> str:
@@ -79,8 +79,18 @@ def test_conversion_execute_dry_run(client, synthetic_tree) -> None:
 
 
 def test_conversion_executes_selection_from_configured_root(client, synthetic_tree, monkeypatch) -> None:
+    converter = synthetic_tree / "ComposerConverter.exe"
+    converter.write_text("synthetic executable", encoding="utf-8")
+    profile = synthetic_tree / "conversion-settings.xml"
+    profile.write_text("<settings />", encoding="utf-8")
     assert client.post(
-        "/api/v1/settings", json={"onedrive_input_root": str(synthetic_tree)}
+        "/api/v1/settings",
+        json={
+            "onedrive_input_root": str(synthetic_tree),
+            "composer_converter_path": str(converter),
+            "composer_settings_path": str(profile),
+            "composer_license_server": "27000@license.test",
+        },
     ).status_code == 200
     selected = synthetic_tree / "Assemblage Principal.CATProduct"
     imported = client.post(
@@ -94,11 +104,12 @@ def test_conversion_executes_selection_from_configured_root(client, synthetic_tr
 
     captured: dict[str, object] = {}
 
-    def fake_run(command, *, capture_output, text, timeout, env):
-        captured.update(command=command, env=env)
+    def fake_run(command, *, capture_output, text, timeout, env, cwd):
+        captured.update(command=command, env=env, cwd=cwd)
+        selected.with_suffix(".smgXml").write_text("synthetic Composer output", encoding="utf-8")
         return SimpleNamespace(returncode=0, stdout="selection executee", stderr="")
 
-    monkeypatch.setattr(conversion.subprocess, "run", fake_run)
+    monkeypatch.setattr(composer_converter.subprocess, "run", fake_run)
     response = client.post(
         f"/api/v1/conversions/{run_id}/execute",
         json={"dry_run": False, "confirm": True},
@@ -106,7 +117,66 @@ def test_conversion_executes_selection_from_configured_root(client, synthetic_tr
 
     assert response.status_code == 200, response.text
     assert response.json()["base"] == str(synthetic_tree)
-    assert captured["env"]["CATIA_CONVERT_BASE"] == str(synthetic_tree)
+    assert response.json()["converted"] == 1
+    assert response.json()["failed"] == 0
+    assert captured["command"] == [str(converter), str(selected), str(profile)]
+    assert captured["env"]["LM_LICENSE_FILE"] == "27000@license.test"
+    assert list(synthetic_tree.glob("*_Converti/Assemblage Principal.smgxml"))
+
+
+def test_composer_status_reports_detected_install(client, monkeypatch, tmp_path) -> None:
+    converter = tmp_path / "CATIAComposer" / "7.11" / "Bin" / "ComposerConverter.exe"
+    converter.parent.mkdir(parents=True)
+    converter.write_text("synthetic executable", encoding="utf-8")
+    profile = tmp_path / "conversion-settings.xml"
+    profile.write_text("<settings />", encoding="utf-8")
+    assert client.post(
+        "/api/v1/settings", json={"composer_settings_path": str(profile)}
+    ).status_code == 200
+    monkeypatch.setattr(composer_converter, "detect_executable", lambda configured="": converter)
+
+    response = client.get("/api/v1/conversion/composer-status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "available": True,
+        "executable": str(converter),
+        "settings_file": str(profile),
+        "version": "7.11",
+        "message": "CATIA Composer Converter est pret.",
+    }
+
+
+def test_conversion_fails_when_converter_produces_no_file(client, synthetic_tree, monkeypatch) -> None:
+    converter = synthetic_tree / "ComposerConverter.exe"
+    converter.write_text("synthetic executable", encoding="utf-8")
+    profile = synthetic_tree / "conversion-settings.xml"
+    profile.write_text("<settings />", encoding="utf-8")
+    assert client.post(
+        "/api/v1/settings",
+        json={
+            "composer_converter_path": str(converter),
+            "composer_settings_path": str(profile),
+        },
+    ).status_code == 200
+    imp_id = _scan(client, str(synthetic_tree))
+    run_id = client.post(f"/api/v1/imports/{imp_id}/conversion", json={}).json()["id"]
+
+    monkeypatch.setattr(
+        composer_converter.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+    response = client.post(
+        f"/api/v1/conversions/{run_id}/execute",
+        json={"dry_run": False, "confirm": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["returncode"] == 1
+    assert response.json()["converted"] == 0
+    assert response.json()["failed"] >= 1
+    assert "aucun fichier" in response.json()["stderr"]
 
 
 def test_conversion_license_server_injected(client, synthetic_tree) -> None:

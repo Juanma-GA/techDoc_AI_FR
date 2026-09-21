@@ -8,7 +8,6 @@ import i18n from "./i18n";
 import { Checks } from "./routes/Checks";
 import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
-import { Data } from "./routes/Data";
 import { Diff } from "./routes/Diff";
 import { Export } from "./routes/Export";
 import { Identification } from "./routes/Identification";
@@ -65,10 +64,7 @@ const NAV: NavEntry[] = [
   },
   {
     groupKey: "nav.groups.outils",
-    items: [
-      { to: "/data", labelKey: "nav.data" },
-      { to: "/settings", labelKey: "nav.settings" },
-    ],
+    items: [{ to: "/settings", labelKey: "nav.settings" }],
   },
 ];
 
@@ -86,7 +82,6 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
   "/replacement": { titleKey: "page.replacement.title", subKey: "page.replacement.sub" },
   "/qc": { titleKey: "page.qc.title", subKey: "page.qc.sub" },
   "/checks": { titleKey: "page.checks.title", subKey: "page.checks.sub" },
-  "/data": { titleKey: "page.data.title", subKey: "page.data.sub" },
   "/settings": { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };
 
@@ -166,7 +161,6 @@ export function App() {
               <Route path="/replacement" element={<Replacement />} />
               <Route path="/qc" element={<Qc />} />
               <Route path="/checks" element={<Checks />} />
-              <Route path="/data" element={<Data />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </ErrorBoundary>

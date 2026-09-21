@@ -14,7 +14,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,12 +32,13 @@ from app.schemas import (
     NomenclatureCompareIn,
     NomenclatureCompareOut,
     NomenclatureItemOut,
+    NomenclatureMultiCompareIn,
+    NomenclatureMultiCompareOut,
     NomenclatureParseIn,
     NomenclaturePreviewIn,
     NomenclaturePreviewOut,
     NomenclatureRunOut,
 )
-
 
 log = logging.getLogger("catia_toolbox.identification")
 
@@ -177,13 +178,35 @@ def _item_dict(it: NomenclatureItem) -> dict:
     }
 
 
+def _load_run_items(db: Session, run_id: uuid.UUID) -> list[dict]:
+    if db.get(NomenclatureRun, run_id) is None:
+        raise AppError(
+            "RUN_NOT_FOUND",
+            "Run de nomenclature introuvable.",
+            status_code=404,
+            detail={"run_id": str(run_id)},
+        )
+    return [
+        _item_dict(item)
+        for item in db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == run_id))
+    ]
+
+
 def _load_compare(db: Session, base_run_id: uuid.UUID, other_run_id: uuid.UUID) -> dict:
-    for rid in (base_run_id, other_run_id):
-        if db.get(NomenclatureRun, rid) is None:
-            raise AppError("RUN_NOT_FOUND", "Run de nomenclature introuvable.", status_code=404, detail={"run_id": str(rid)})
-    a = [_item_dict(i) for i in db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == base_run_id))]
-    b = [_item_dict(i) for i in db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == other_run_id))]
-    return nomdiff.compare_runs(a, b)
+    return nomdiff.compare_runs(
+        _load_run_items(db, base_run_id),
+        _load_run_items(db, other_run_id),
+    )
+
+
+def _compare_out(db: Session, base_run_id: uuid.UUID, other_run_id: uuid.UUID) -> NomenclatureCompareOut:
+    diff = _load_compare(db, base_run_id, other_run_id)
+    return NomenclatureCompareOut(
+        base_run_id=base_run_id,
+        other_run_id=other_run_id,
+        summary=nomdiff.summarize(diff),
+        **diff,
+    )
 
 
 @router.post("/compare", response_model=NomenclatureCompareOut)
@@ -194,12 +217,57 @@ def compare_route(payload: NomenclatureCompareIn, db: Session = Depends(get_db))
             "Selectionnez deux nomenclatures differentes.",
             status_code=400,
         )
-    diff = _load_compare(db, payload.base_run_id, payload.other_run_id)
-    return NomenclatureCompareOut(
-        base_run_id=payload.base_run_id,
-        other_run_id=payload.other_run_id,
-        summary=nomdiff.summarize(diff),
-        **diff,
+    return _compare_out(db, payload.base_run_id, payload.other_run_id)
+
+
+@router.post("/compare/multi", response_model=NomenclatureMultiCompareOut)
+def compare_multi_route(
+    payload: NomenclatureMultiCompareIn,
+    db: Session = Depends(get_db),
+) -> NomenclatureMultiCompareOut:
+    try:
+        pairs = nomdiff.comparison_pairs(
+            payload.run_ids,
+            mode=payload.mode,
+            reference_run_id=payload.reference_run_id,
+        )
+    except ValueError as exc:
+        raise AppError("COMPARE_SELECTION_INVALID", str(exc), status_code=400) from exc
+
+    items_by_run = {run_id: _load_run_items(db, run_id) for run_id in payload.run_ids}
+    comparison_data = []
+    comparisons = []
+    for base_id, other_id in pairs:
+        diff = nomdiff.compare_runs(items_by_run[base_id], items_by_run[other_id])
+        comparison_data.append({"base_run_id": base_id, "other_run_id": other_id, "diff": diff})
+        comparisons.append(
+            NomenclatureCompareOut(
+                base_run_id=base_id,
+                other_run_id=other_id,
+                summary=nomdiff.summarize(diff),
+                **diff,
+            )
+        )
+    summary = {
+        "comparisons": len(comparisons),
+        "added": sum(int(item.summary.get("added", 0)) for item in comparisons),
+        "removed": sum(int(item.summary.get("removed", 0)) for item in comparisons),
+        "changed": sum(int(item.summary.get("changed", 0)) for item in comparisons),
+    }
+    summary["total"] = summary["added"] + summary["removed"] + summary["changed"]
+    return NomenclatureMultiCompareOut(
+        mode=payload.mode,
+        run_ids=payload.run_ids,
+        reference_run_id=payload.reference_run_id if payload.mode == "reference" else None,
+        comparisons=comparisons,
+        matrix=nomdiff.build_matrix(
+            payload.run_ids,
+            items_by_run,
+            comparison_data,
+            mode=payload.mode,
+            reference_run_id=payload.reference_run_id,
+        ),
+        summary=summary,
     )
 
 
@@ -315,10 +383,11 @@ def export_csv(
     )
 
 
-@router.delete("/{run_id}", status_code=204)
-def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/{run_id}", status_code=204, response_class=Response)
+def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     run = db.get(NomenclatureRun, run_id)
     if run is None:
         raise AppError("RUN_NOT_FOUND", "Run introuvable.", status_code=404)
     db.delete(run)
     db.commit()
+    return Response(status_code=204)

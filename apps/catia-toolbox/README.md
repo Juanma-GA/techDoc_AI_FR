@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Prepare reviewable plans and scripts for CATIA and Composer document-structure workflows without performing destructive source operations automatically.
+Prepare reviewable CATIA and Composer document-structure plans and run confirmed, non-destructive conversions through the locally installed CATIA Composer Converter.
 
 ## Maturity
 
@@ -11,8 +11,9 @@ Prepare reviewable plans and scripts for CATIA and Composer document-structure w
 ## Features
 
 - Identify parts from nomenclature and delivery inputs.
+- Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
-- Prepare CATPart-to-Composer conversion plans.
+- Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
 - Plan SMGXML colorization, tree optimization, and part replacement.
 - Produce CSV, script, macro, and visual simulation artifacts for user review.
 
@@ -26,7 +27,7 @@ The target default port is `8004`, followed by the next free port when needed. T
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is optional for optimization suggestions. CATIA, Composer, OneDrive, UNC shares, or local folders apply only to relevant workflows.
+Python 3.11+, Node 20, and pnpm 9. Mistral is optional for optimization suggestions. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
 
 ## Start On Windows
 
@@ -58,7 +59,7 @@ Use the backend pytest suite and frontend scripts declared in `frontend/package.
 
 ## Limitations
 
-Generated scripts and macros are dry-run or review artifacts; execution in CATIA or Composer is outside the automatic POC workflow.
+CATIA Toolbox auto-detects `ComposerConverter.exe` under the standard Dassault Systemes installation folder. A custom executable path and the required XML conversion profile can be configured on the Conversion screen. Real conversion requires a two-click confirmation, never modifies source CAD files, and reports a failure unless Composer creates or updates an expected `.smgXml` or `.smg` output. Generated macros and colorization scripts remain review artifacts.
 
 ## Standard Deviations
 

@@ -19,7 +19,10 @@ Deterministe, sans DB : opere sur des dicts {sin, catpart, old_pn, new_pn, ...}.
 
 from __future__ import annotations
 
-from typing import Iterable
+import uuid
+from collections.abc import Iterable
+from itertools import pairwise
+from typing import Literal
 
 
 def _old_pn_of(item: dict) -> str:
@@ -107,3 +110,75 @@ def summarize(diff: dict) -> dict[str, int]:
         "changed": len(diff["changed_pn"]),
         "total": len(diff["added_sin"]) + len(diff["removed_sin"]) + len(diff["changed_pn"]),
     }
+
+
+def comparison_pairs(
+    run_ids: list[uuid.UUID],
+    *,
+    mode: Literal["chronology", "reference"],
+    reference_run_id: uuid.UUID | None = None,
+) -> list[tuple[uuid.UUID, uuid.UUID]]:
+    """Construit les paires sans modifier le moteur historique a deux versions."""
+    if len(run_ids) < 2:
+        raise ValueError("Deux nomenclatures au minimum sont requises.")
+    if len(set(run_ids)) != len(run_ids):
+        raise ValueError("Chaque nomenclature ne peut etre selectionnee qu'une fois.")
+    if mode == "chronology":
+        return list(pairwise(run_ids))
+    reference = reference_run_id or run_ids[0]
+    if reference not in run_ids:
+        raise ValueError("La nomenclature de reference doit faire partie de la selection.")
+    return [(reference, run_id) for run_id in run_ids if run_id != reference]
+
+
+def build_matrix(
+    run_ids: list[uuid.UUID],
+    items_by_run: dict[uuid.UUID, list[dict]],
+    comparisons: list[dict],
+    *,
+    mode: Literal["chronology", "reference"],
+    reference_run_id: uuid.UUID | None = None,
+) -> list[dict]:
+    """Construit une ligne par SIN et une cellule par version selectionnee."""
+    indexed = {run_id: _by_sin(items_by_run[run_id]) for run_id in run_ids}
+    all_sins = sorted({sin for items in indexed.values() for sin in items})
+    state_by_cell: dict[tuple[uuid.UUID, str], str] = {}
+
+    if mode == "reference":
+        reference = reference_run_id or run_ids[0]
+        for sin in all_sins:
+            state_by_cell[(reference, sin)] = "reference"
+
+    for comparison in comparisons:
+        other_id = comparison["other_run_id"]
+        diff = comparison["diff"]
+        for entry in diff["added_sin"]:
+            state_by_cell[(other_id, entry["sin"])] = "added"
+        for entry in diff["removed_sin"]:
+            state_by_cell[(other_id, entry["sin"])] = "removed"
+        for entry in diff["changed_pn"]:
+            state_by_cell[(other_id, entry["sin"])] = "changed"
+
+    rows: list[dict] = []
+    for sin in all_sins:
+        designation = next(
+            (
+                _designation_of(indexed[run_id][sin])
+                for run_id in reversed(run_ids)
+                if sin in indexed[run_id] and _designation_of(indexed[run_id][sin])
+            ),
+            "",
+        )
+        cells = []
+        for run_id in run_ids:
+            item = indexed[run_id].get(sin)
+            cells.append(
+                {
+                    "run_id": run_id,
+                    "present": item is not None,
+                    "pn": _new_pn_of(item) if item else "",
+                    "state": state_by_cell.get((run_id, sin), "unchanged"),
+                }
+            )
+        rows.append({"sin": sin, "designation": designation, "cells": cells})
+    return rows

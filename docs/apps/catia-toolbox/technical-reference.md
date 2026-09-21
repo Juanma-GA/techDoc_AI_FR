@@ -10,11 +10,14 @@ produisant des **plans relisables** (dry-run) :
 1. **Arborescence** — optimisation d'une structure de fichiers desorganisee
    (heuristiques + Mistral) -> plan CSV + script `.bat` / `.sh`.
 2. **Comparaison** — detection des pieces ajoutees / supprimees / modifiees
-   entre deux imports.
+   entre deux imports, et comparaison de 2 a 10 nomenclatures par SIN. Avec
+   deux nomenclatures, le moteur historique reste utilise tel quel. Au-dela,
+   le mode chronologique compare les versions adjacentes et le mode reference
+   compare chaque version a une base choisie.
 3. **Verifications** — checks configurables (profondeur, nommage, extensions
    interdites, doublons, dossiers vides).
-4. **Conversion** — plan CATIA 3D -> Composer : mapping CSV + **script Python
-   `win32com` pilotant Composer** (DRY_RUN par defaut, a lancer par l'utilisateur).
+4. **Conversion** — plan CATIA 3D -> Composer : mapping CSV + execution locale
+   confirmee via l'interface officielle `ComposerConverter.exe <source> <profil.xml>`.
 5. **Remplacement** — plan de remplacement de pieces a partir d'un mapping
    (CSV/JSON) -> CSV + macro CATIA squelette.
 6. **Colorisation** — attribue une couleur RGB aux pieces selon une strategie
@@ -24,12 +27,13 @@ produisant des **plans relisables** (dry-run) :
    (grille de tuiles colorees dans l'UI + export SVG autonome). Couleurs en
    triplets RGB (jamais d'hexadecimal en dur).
 
-**Composer est dans le perimetre** : les scripts Composer sont de vrais scripts
-Python `win32com` (executables apres relecture, `DRY_RUN=True` par defaut). Le
-backend reste neanmoins plan-only (il genere les scripts, ne pilote pas Composer
-lui-meme). Les noms d'API Composer exacts (ProgID, `Open`/`SaveAs`, propriete
-couleur) sont parametres en tete de script avec des `TODO` a confirmer selon la
-version du SDK Composer.
+**Composer est dans le perimetre** : pour la conversion, le backend detecte
+`ComposerConverter.exe` dans l'installation locale Dassault Systemes ou utilise
+le chemin configure. L'execution reelle exige un profil XML exporte depuis
+Composer Converter et une confirmation double-clic. Chaque sortie est verifiee :
+un code retour nul sans fichier `.smgXml` ou `.smg` nouveau ou modifie est traite
+comme un echec. Les scripts de colorisation `win32com` restent des artefacts
+realisables et ne sont pas executes automatiquement.
 
 > **Le POC ne deplace, ne renomme, ne convertit, ne colorise et ne supprime
 > JAMAIS de
@@ -105,6 +109,7 @@ Conforme a [`STANDARD_POC.md`](../../../STANDARD_POC.md). Bootstrap depuis
 | POST | `/api/v1/runs/{id}/export/save` | Ecrire le plan/script dans le dossier de sortie |
 | POST | `/api/v1/identification/nomenclature` \| `/zip` | Etape 1 : parser la nomenclature `.xlsm` \| lister un `.zip` DE |
 | GET | `/api/v1/identification` \| `/{id}` \| `/{id}/items` \| `/{id}/export.csv` | Runs / lignes (filtre `to_treat`) / export CATPart |
+| POST | `/api/v1/identification/compare` \| `/compare/multi` | Comparer deux nomenclatures ou orchestrer 2 a 10 versions |
 | POST | `/api/v1/smgxml/inspect` \| `/recolor` \| `/rename` | Etapes 3 & 4 : inspecter / recolorer / renommer le SMGXML (dry-run par defaut, `apply` -> `.bak`) |
 | GET | `/api/v1/smgxml` \| `/{id}` \| `/{id}/changes` | Runs SMGXML / changements |
 | POST/GET | `/api/v1/qc/checklists` (+ `/{id}`, `/export.csv`) | Etape 5 : checklist QC (creation, consultation, export) |
@@ -121,7 +126,9 @@ Conforme a [`STANDARD_POC.md`](../../../STANDARD_POC.md). Bootstrap depuis
 | GET | `/api/v1/diff/{id}/entries` \| `/export.csv` | Entrees du diff / export |
 | POST | `/api/v1/imports/{id}/check` | Lancer les verifications |
 | GET | `/api/v1/checks/{id}/results` \| `/export.csv` | Resultats / export |
+| GET | `/api/v1/conversion/composer-status` | Detection de Composer Converter et validation du profil XML |
 | POST | `/api/v1/imports/{id}/conversion` | Plan de conversion Composer |
+| POST | `/api/v1/conversions/{id}/execute` | Test ou conversion confirmee via Composer Converter |
 | GET | `/api/v1/conversions/{id}/items` \| `/export.csv` \| `/export.script` | Items / CSV / script Composer (win32com .py) |
 | POST | `/api/v1/imports/{id}/replacement` | Plan de remplacement (upload mapping) |
 | GET | `/api/v1/replacements/{id}/items` \| `/export.csv` \| `/export.macro` | Items / CSV / macro CATIA |

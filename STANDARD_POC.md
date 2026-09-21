@@ -220,7 +220,7 @@ Au-delà de `/health`, tout POC déclarant le profil `llm` expose :
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Consommé par l'onglet Données de l'app React. |
+| `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Peut alimenter un onglet Données optionnel ou un autre écran d'administration. |
 | `POST /api/v1/admin/reset/all` | Vide les tables métier ; **préserve `app_config`** (clé Mistral). |
 | `POST /api/v1/admin/reset/<scope>` | Reset par scope (ex. `documents`, `sessions`). |
 | `GET /api/v1/settings` | Lit la config Mistral runtime (`api_key_set: bool`, `base_url`, `chat_model`, `embed_model`, `llm_enabled: bool`, `llm_tested: bool`). |
@@ -645,15 +645,15 @@ L'UI de chaque POC est l'**app React buildée** (`frontend/dist/`), servie par l
 
 > Historique : un « preview HTML autonome » (vanilla JS, sans Node) servait d’UI de repli. Il est **supprimé** du standard et ne doit plus être développé ni présenté comme mode supporté. Les références historiques sont conservées uniquement dans les ADRs marquées `Superseded`.
 
-### Onglets standards (minimum)
+### Navigation standard
 
-| Onglet | Contenu |
-|---|---|
-| **Home** | Page d'accueil sobre. Statut backend (`/health`) en badge. Pointe vers les fichiers à éditer pour personnaliser le POC. |
-| **Données** | KPI grid alimentée par `GET /api/v1/admin/stats` + bouton "Tout supprimer" avec pattern double-clic → `POST /api/v1/admin/reset/all`. |
-| **Paramètres** | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
+| Onglet | Statut | Contenu |
+|---|---|---|
+| **Home** | Optionnel | Si présent : page d'accueil sobre avec le statut backend (`/health`) en badge. |
+| **Données** | Optionnel | Si présent : KPI grid alimentée par `GET /api/v1/admin/stats` + bouton "Tout supprimer" avec pattern double-clic → `POST /api/v1/admin/reset/all`. |
+| **Paramètres** | Obligatoire pour le profil `llm` | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
 
-Le POC ajoute ses onglets métier.
+Le POC ajoute ses onglets métier. Les endpoints d'administration restent disponibles même si aucun onglet Données n'est exposé.
 
 ### Conventions visuelles
 
@@ -744,7 +744,7 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 2. **Ajouter la logique métier** dans `backend/app/api/<feature>.py` (+ register dans `main.py`) et `backend/app/db/models.py` (au-delà d'`AppConfig`).
 3. **Générer la migration métier** : `alembic revision -m "0002 <feature>"`. La migration `0001_initial` (table `AppConfig`) est déjà fournie par le template.
 4. **Adapter l'UI React** : `frontend/src/App.tsx` (brand + onglets) et la page `frontend/src/routes/Home.tsx`.
-5. **Implémenter les routes React** dans `frontend/src/routes/` (onglets métier au-delà des 4 standards) + remplir `locales/{fr,en}.json`.
+5. **Implémenter les routes React** dans `frontend/src/routes/` (onglets métier au-delà de la navigation standard) + remplir `locales/{fr,en}.json`.
 6. **Premier commit** : `feat(<slug>): bootstrap from template`.
 
 ### Méthode manuelle (fallback)

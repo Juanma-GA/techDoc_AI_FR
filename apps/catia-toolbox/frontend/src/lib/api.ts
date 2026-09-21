@@ -166,6 +166,8 @@ export type SettingsDto = {
   onedrive_input_root: string;
   onedrive_output_root: string;
   composer_license_server: string;
+  composer_converter_path: string;
+  composer_settings_path: string;
 };
 
 export type SettingsInput = {
@@ -177,6 +179,8 @@ export type SettingsInput = {
   onedrive_input_root?: string;
   onedrive_output_root?: string;
   composer_license_server?: string;
+  composer_converter_path?: string;
+  composer_settings_path?: string;
 };
 
 export type BrowseScope = "input" | "output";
@@ -277,6 +281,16 @@ export type ConversionExecDto = {
   stdout: string;
   stderr: string;
   base: string;
+  converted: number;
+  failed: number;
+};
+
+export type ComposerConverterStatusDto = {
+  available: boolean;
+  executable: string;
+  settings_file: string;
+  version: string;
+  message: string;
 };
 
 export type ReplacementRunDto = {
@@ -422,6 +436,26 @@ export type NomenclatureCompareDto = {
   added_sin: SinEntryDto[];
   removed_sin: SinEntryDto[];
   changed_pn: PnChangeDto[];
+  summary: Record<string, number>;
+};
+export type NomenclatureCompareMode = "chronology" | "reference";
+export type NomenclatureMatrixState = "unchanged" | "added" | "removed" | "changed" | "reference";
+export type NomenclatureMatrixRowDto = {
+  sin: string;
+  designation: string;
+  cells: Array<{
+    run_id: string;
+    present: boolean;
+    pn: string;
+    state: NomenclatureMatrixState;
+  }>;
+};
+export type NomenclatureMultiCompareDto = {
+  mode: NomenclatureCompareMode;
+  run_ids: string[];
+  reference_run_id: string | null;
+  comparisons: NomenclatureCompareDto[];
+  matrix: NomenclatureMatrixRowDto[];
   summary: Record<string, number>;
 };
 
@@ -605,6 +639,7 @@ export const checksApi = {
 };
 
 export const conversionApi = {
+  status: () => request<ComposerConverterStatusDto>("/conversion/composer-status"),
   run: (importId: string, config?: { target_dir?: string; target_ext?: string }) =>
     request<ConversionRunDto>(`/imports/${importId}/conversion`, {
       method: "POST",
@@ -714,6 +749,15 @@ export const identificationApi = {
     request<NomenclatureCompareDto>("/identification/compare", {
       method: "POST",
       body: JSON.stringify({ base_run_id: baseRunId, other_run_id: otherRunId }),
+    }),
+  compareMulti: (runIds: string[], mode: NomenclatureCompareMode, referenceRunId?: string) =>
+    request<NomenclatureMultiCompareDto>("/identification/compare/multi", {
+      method: "POST",
+      body: JSON.stringify({
+        run_ids: runIds,
+        mode,
+        reference_run_id: mode === "reference" ? referenceRunId : undefined,
+      }),
     }),
   /** Etape Mono-Corps : onglet Materiaux (identite + n colonnes slots).
    * Analyse autonome ; applique mono_body au run si `run_id` est fourni. */

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -39,6 +39,8 @@ class SettingsIn(BaseModel):
     onedrive_input_root: Optional[str] = None
     onedrive_output_root: Optional[str] = None
     composer_license_server: Optional[str] = None
+    composer_converter_path: Optional[str] = None
+    composer_settings_path: Optional[str] = None
 
 
 class SettingsOut(BaseModel):
@@ -51,6 +53,8 @@ class SettingsOut(BaseModel):
     onedrive_input_root: str = ""
     onedrive_output_root: str = ""
     composer_license_server: str = ""
+    composer_converter_path: str = ""
+    composer_settings_path: str = ""
 
 
 # ----- Navigation OneDrive (browse) -----------------------------------------
@@ -366,6 +370,16 @@ class ConversionExecOut(BaseModel):
     stdout: str = ""
     stderr: str = ""
     base: str = ""  # dossier racine utilise pour resoudre les chemins
+    converted: int = 0
+    failed: int = 0
+
+
+class ComposerConverterStatusOut(BaseModel):
+    available: bool
+    executable: str = ""
+    settings_file: str = ""
+    version: str = ""
+    message: str
 
 
 class ConversionItemOut(BaseModel):
@@ -603,6 +617,36 @@ class NomenclatureCompareOut(BaseModel):
     added_sin: list[SinEntryOut] = Field(default_factory=list)
     removed_sin: list[SinEntryOut] = Field(default_factory=list)
     changed_pn: list[PnChangeOut] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+
+
+class NomenclatureMultiCompareIn(BaseModel):
+    """Comparaison ordonnee de 2 a 10 runs de nomenclature."""
+
+    run_ids: list[uuid.UUID] = Field(..., min_length=2, max_length=10)
+    mode: Literal["chronology", "reference"] = "chronology"
+    reference_run_id: uuid.UUID | None = None
+
+
+class NomenclatureMatrixCellOut(BaseModel):
+    run_id: uuid.UUID
+    present: bool
+    pn: str = ""
+    state: Literal["unchanged", "added", "removed", "changed", "reference"] = "unchanged"
+
+
+class NomenclatureMatrixRowOut(BaseModel):
+    sin: str
+    designation: str = ""
+    cells: list[NomenclatureMatrixCellOut] = Field(default_factory=list)
+
+
+class NomenclatureMultiCompareOut(BaseModel):
+    mode: Literal["chronology", "reference"]
+    run_ids: list[uuid.UUID]
+    reference_run_id: uuid.UUID | None = None
+    comparisons: list[NomenclatureCompareOut] = Field(default_factory=list)
+    matrix: list[NomenclatureMatrixRowOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
 
 

@@ -276,6 +276,64 @@ def test_compare_nomenclatures(client, tmp_path):
     assert "modifie" in csv.text
 
 
+def test_compare_multiple_nomenclatures_preserves_pairwise_results(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+
+    def _make(name, rows):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["CATPart", "SIN"])
+        for row in rows:
+            ws.append(row)
+        path = tmp_path / name
+        wb.save(path)
+        response = client.post(
+            "/api/v1/identification/nomenclature",
+            json={"scope": "input", "path": str(path)},
+        )
+        return response.json()["id"]
+
+    v0 = _make("multi-v0.xlsx", [["P1.CATPart", "SIN-001"]])
+    v1 = _make("multi-v1.xlsx", [["P1B.CATPart", "SIN-001"], ["P2.CATPart", "SIN-002"]])
+    v2 = _make("multi-v2.xlsx", [["P1B.CATPart", "SIN-001"], ["P3.CATPart", "SIN-003"]])
+
+    chronology = client.post(
+        "/api/v1/identification/compare/multi",
+        json={"run_ids": [v0, v1, v2], "mode": "chronology"},
+    )
+    assert chronology.status_code == 200, chronology.text
+    body = chronology.json()
+    assert [(row["base_run_id"], row["other_run_id"]) for row in body["comparisons"]] == [
+        (v0, v1),
+        (v1, v2),
+    ]
+    pair = client.post(
+        "/api/v1/identification/compare",
+        json={"base_run_id": v0, "other_run_id": v1},
+    ).json()
+    assert body["comparisons"][0] == pair
+    matrix = {row["sin"]: row for row in body["matrix"]}
+    assert len(matrix["SIN-001"]["cells"]) == 3
+    assert [cell["pn"] for cell in matrix["SIN-001"]["cells"]] == [
+        "P1.CATPart",
+        "P1B.CATPart",
+        "P1B.CATPart",
+    ]
+    assert matrix["SIN-002"]["cells"][1]["state"] == "added"
+    assert matrix["SIN-002"]["cells"][2]["state"] == "removed"
+    assert matrix["SIN-003"]["cells"][2]["state"] == "added"
+
+    reference = client.post(
+        "/api/v1/identification/compare/multi",
+        json={"run_ids": [v0, v1, v2], "mode": "reference", "reference_run_id": v1},
+    )
+    assert reference.status_code == 200, reference.text
+    assert [
+        (row["base_run_id"], row["other_run_id"])
+        for row in reference.json()["comparisons"]
+    ] == [(v1, v0), (v1, v2)]
+
+
 def test_compare_old_new_pn_columns(client, tmp_path):
     """Comparaison via colonnes OLD/NEW P/N dediees : un SIN est modifie des que
     l'OLD *ou* le NEW P/N change d'une version a l'autre (colonnes OLD comparees

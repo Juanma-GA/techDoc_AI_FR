@@ -5,21 +5,20 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
-import tempfile
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import load_parsed_nodes
-from app.core import composer_license, conversion_planner
+from app.core import composer_converter, composer_license, conversion_planner
 from app.core.errors import AppError
 from app.db.models import ConversionItem, ConversionRun, StructureImport
 from app.db.session import get_db
 from app.schemas import (
+    ComposerConverterStatusOut,
     ConversionBulkStatusIn,
     ConversionExecIn,
     ConversionExecOut,
@@ -29,12 +28,16 @@ from app.schemas import (
     ConversionRunOut,
 )
 
-
 # Timeout d'execution du script de conversion (secondes).
 _EXEC_TIMEOUT = 900
 
 
 router = APIRouter(tags=["conversion"])
+
+
+@router.get("/conversion/composer-status", response_model=ComposerConverterStatusOut)
+def composer_status(db: Session = Depends(get_db)) -> ComposerConverterStatusOut:
+    return ComposerConverterStatusOut(**composer_converter.get_status(db).__dict__)
 
 
 @router.post("/imports/{import_id}/conversion", response_model=ConversionRunOut)
@@ -153,39 +156,42 @@ def execute_conversion(run_id: uuid.UUID, body: ConversionExecIn, db: Session = 
             status_code=400,
         )
 
-    license_server = composer_license.get_license_server(db)
-    script = conversion_planner.to_pyscript(run.items, dry_run=body.dry_run, license_server=license_server)
+    accepted_items = [item for item in run.items if item.status != "rejected"]
+    if not accepted_items:
+        raise AppError("EXEC_EMPTY_PLAN", "Aucun fichier selectionne pour la conversion.", status_code=400)
+
     env = dict(os.environ)
-    if base and os.path.isdir(base):
-        env["CATIA_CONVERT_BASE"] = base
+    license_server = composer_license.get_license_server(db)
     if license_server:
         env["COMPOSER_LICENSE_SERVER"] = license_server
+        for variable in ("LM_LICENSE_FILE", "DSLICSRV", "DS_LICENSE_SERVER", "LSERVRC"):
+            env.setdefault(variable, license_server)
 
-    tmp = tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8")
+    status = composer_converter.get_status(db)
+    if not body.dry_run and not status.available:
+        raise AppError("COMPOSER_NOT_READY", status.message, status_code=409)
+
     try:
-        tmp.write(script)
-        tmp.close()
-        proc = subprocess.run(
-            [sys.executable, tmp.name],
-            capture_output=True,
-            text=True,
-            timeout=_EXEC_TIMEOUT,
-            env=env,
-        )
-        return ConversionExecOut(
-            dry_run=body.dry_run,
-            returncode=proc.returncode,
-            stdout=proc.stdout[-20000:],
-            stderr=proc.stderr[-20000:],
+        result = composer_converter.execute_plan(
+            accepted_items,
             base=base,
+            status=status,
+            dry_run=body.dry_run,
+            env=env,
+            timeout=_EXEC_TIMEOUT,
         )
     except subprocess.TimeoutExpired as e:
         raise AppError("EXEC_TIMEOUT", f"Execution interrompue (> {_EXEC_TIMEOUT}s).", status_code=504) from e
-    finally:
-        try:
-            os.unlink(tmp.name)
-        except OSError:
-            pass
+
+    return ConversionExecOut(
+        dry_run=body.dry_run,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        base=base,
+        converted=result.converted,
+        failed=result.failed,
+    )
 
 
 @router.get("/conversions/{run_id}/export.csv")

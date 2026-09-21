@@ -2,13 +2,12 @@
 
 La conversion CATIA 3D -> Composer exige une licence Composer active. Ce module
 stocke, en config runtime (`app_config`, cle `composer_license_server`), le
-serveur de licence flottante (DSLS, format `port@hote`) que le script de
-conversion genere positionne dans l'environnement avant de piloter Composer.
+serveur de licence flottante (FlexNet/DSLS, format `port@hote`) que la
+conversion positionne dans l'environnement avant de lancer Composer Converter.
 
 Best-effort : la variable d'environnement exacte lue par Composer depend de
-l'edition (souvent `DSLICSRV` pour DSLS). Le script genere la pose avec un TODO
-a confirmer sur le poste de l'utilisateur ; sans serveur configure, il retombe
-sur la licence locale de l'utilisateur (comportement historique).
+l'edition (`LM_LICENSE_FILE` pour FlexNet, souvent `DSLICSRV` pour DSLS). Sans
+serveur configure, Composer utilise la configuration locale de l'utilisateur.
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.db.models import AppConfig
-
 
 _KEY = "composer_license_server"
 
