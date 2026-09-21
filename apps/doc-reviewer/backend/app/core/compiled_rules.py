@@ -59,6 +59,7 @@ RevisionControl = Literal[
     "modified_page_absent",
     "highlights_pairing",
     "highlights_page_label",
+    "footer_page_number",
 ]
 
 

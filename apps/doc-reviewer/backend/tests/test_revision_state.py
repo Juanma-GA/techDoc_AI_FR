@@ -256,6 +256,105 @@ def test_consistent_document_reports_nothing_and_marks_modified_pages() -> None:
     assert [page.is_modified for page in parsed.pages] == [None, True, True, True, False]
 
 
+def test_missing_lep_footer_page_number_is_reported() -> None:
+    parsed = _consistent_document()
+    second_lep = _lep_page(left=[], right=[], page=3)
+    second_lep.spans = [span for span in second_lep.spans if span.text != "LEP Page 1"]
+    second_lep.text = "\n".join(span.text for span in second_lep.spans)
+    parsed.pages.insert(2, second_lep)
+    for page_number, page in enumerate(parsed.pages, start=1):
+        page.page = page_number
+        for span in page.spans:
+            span.page = page_number
+    parsed.page_count = len(parsed.pages)
+
+    findings = _findings(parsed)
+    page_number_findings = [
+        finding for finding in findings if finding.control == revision.FOOTER_PAGE_NUMBER
+    ]
+
+    assert [(finding.page, finding.proposed) for finding in page_number_findings] == [
+        (3, "LEP Page 2")
+    ]
+    assert revision.MODIFIED_PAGE_ABSENT not in _codes(parsed)
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+
+    assert [
+        (raw.rule_code, raw.page, raw.original, raw.proposed)
+        for raw in raws
+        if raw.rule_code == "CUSTOM_FOOTER_PAGE_NUMBER"
+    ] == [("CUSTOM_FOOTER_PAGE_NUMBER", 3, "", "LEP Page 2")]
+
+
+def test_missing_tp1_footer_page_number_is_reported_on_the_title_page() -> None:
+    def title_page(page_number: int, marker: str | None) -> ParsedPage:
+        spans = [
+            _span("OVERHAUL MANUAL", 100.0, 120.0, page_number),
+            _span("PART NUMBER", 100.0, 140.0, page_number),
+            _span(_COPYRIGHT, 85.9, 756.0, page_number),
+            _span("JUL 27/26", 507.0, 772.0, page_number),
+        ]
+        if marker is not None:
+            spans.insert(2, _span(marker, 500.0, 756.0, page_number))
+        return _page(page_number, spans)
+
+    parsed = _consistent_document()
+    parsed.pages[0:0] = [title_page(1, None), title_page(2, "TP 2")]
+    for page_number, page in enumerate(parsed.pages, start=1):
+        page.page = page_number
+        for span in page.spans:
+            span.page = page_number
+    parsed.page_count = len(parsed.pages)
+
+    findings = _findings(parsed)
+
+    assert [
+        (finding.page, finding.proposed)
+        for finding in findings
+        if finding.control == revision.FOOTER_PAGE_NUMBER
+    ] == [(1, "TP 1")]
+
+
+def test_missing_highlights_and_ror_footer_numbers_follow_section_order() -> None:
+    def footer_without_label(page_number: int) -> list[Span]:
+        return [
+            _span(_COPYRIGHT, 85.9, 756.0, page_number),
+            _span(_REVISION_DATE, 507.0, 772.0, page_number),
+        ]
+
+    highlights_page_2 = _highlights_page([], page=2)
+    highlights_page_2.spans = [
+        span for span in highlights_page_2.spans if span.text != "Highlights Page 1"
+    ]
+    highlights_page_2.text = "\n".join(span.text for span in highlights_page_2.spans)
+    ror_page_1 = _page(
+        3,
+        [_span("RECORD OF REVISIONS", 100.0, 120.0, 3)]
+        + _footer(3, "ROR Page 1", _REVISION_DATE),
+    )
+    ror_page_2 = _page(
+        4,
+        [_span("RECORD OF REVISIONS", 100.0, 120.0, 4)]
+        + footer_without_label(4),
+    )
+    parsed = _consistent_document()
+    parsed.pages[1:1] = [highlights_page_2, ror_page_1, ror_page_2]
+    for page_number, page in enumerate(parsed.pages, start=1):
+        page.page = page_number
+        for span in page.spans:
+            span.page = page_number
+    parsed.page_count = len(parsed.pages)
+
+    findings = _findings(parsed)
+
+    assert [
+        (finding.page, finding.proposed)
+        for finding in findings
+        if finding.control == revision.FOOTER_PAGE_NUMBER
+    ] == [(2, "Highlights Page 2"), (4, "ROR Page 2")]
+
+
 def test_revised_page_without_star_in_the_lep_is_reported() -> None:
     parsed = _consistent_document()
     parsed.pages[1] = _lep_with(
@@ -397,11 +496,11 @@ def test_single_page_label_requires_two_spaces() -> None:
     assert findings[0].proposed == "Page  401"
 
 
-def test_revised_page_missing_from_the_document_is_reported() -> None:
+def test_revised_page_without_footer_number_is_reported() -> None:
     parsed = _consistent_document()
     parsed.pages[3] = _page(4, [_span("no footer", 90.0, 300.0, 4)])
 
-    assert _codes(parsed) == [revision.MODIFIED_PAGE_ABSENT]
+    assert _codes(parsed) == [revision.FOOTER_PAGE_NUMBER]
 
 
 def test_compiled_rules_emit_one_suggestion_per_divergence() -> None:

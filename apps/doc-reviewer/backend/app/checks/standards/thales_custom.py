@@ -507,6 +507,12 @@ _REVISION_RULES = [
         "date du pied de page incoherente avec les Highlights et la LEP.",
     ),
     _revision_rule(
+        "CUSTOM_FOOTER_PAGE_NUMBER",
+        "Numero de page present et conforme dans le pied de page",
+        revision.FOOTER_PAGE_NUMBER,
+        "numero de page absent ou incoherent dans le pied de page.",
+    ),
+    _revision_rule(
         "CUSTOM_REVISION_UNDECLARED_PAGE",
         "Page datee de la revision declaree modifiee",
         revision.UNDECLARED_PAGE,
@@ -1130,6 +1136,16 @@ RULE_METADATA["CUSTOM_REVISION_MODIFIED_PAGE_ABSENT"] = {
     "kind": "field_required",
     "severity": "warning",
     "message": "Page declaree revisee introuvable dans le document.",
+}
+RULE_METADATA["CUSTOM_FOOTER_PAGE_NUMBER"] = {
+    "description": (
+        "Chaque page doit afficher son numero dans le pied de page. Les pages "
+        "LEP, ROR, Highlights et Title Page sont verifiees contre leur prefixe "
+        "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.)."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le numero de page du pied de page est absent ou incorrect.",
 }
 RULE_METADATA["CUSTOM_HIGHLIGHTS_PAGE_PAIRING"] = {
     "description": (

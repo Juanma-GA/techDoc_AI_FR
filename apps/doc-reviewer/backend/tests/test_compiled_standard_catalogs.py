@@ -177,7 +177,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 68
+    assert total == 69
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:

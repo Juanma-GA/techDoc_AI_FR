@@ -67,6 +67,13 @@ _HIGHLIGHTS_HEADER_RE = re.compile(r"(?i)chapter\s*/\s*section")
 _DESIGNATION_HEADER_RE = re.compile(r"(?i)^designation$")
 _CHANGE_HEADER_RE = re.compile(r"(?i)^description\s+of\s+change$")
 _LEP_TITLE_RE = re.compile(r"(?i)\blist\s+of\s+effective\s+pages\b")
+_LEP_TITLE_LINE_RE = re.compile(r"(?im)^\s*list\s+of\s+effective\s+pages\s*$")
+_HIGHLIGHTS_TITLE_RE = re.compile(r"(?im)^\s*highlights\s*$")
+_ROR_TITLE_RE = re.compile(r"(?im)^\s*(?:record\s+of\s+revisions?|ror)\s*$")
+_TITLE_PAGE_RE = re.compile(r"(?im)^\s*overhaul\s+manual\s*$")
+_TITLE_PAGE_ANCHOR_RE = re.compile(
+    r"(?im)^\s*(?:first\s+issue\s*:|part\s+number|important\s+notice)\b"
+)
 _LEP_HEADER_CELLS = ("SUBJECT", "PAGE", "DATE")
 
 _COPYRIGHT_ANCHOR_RE = re.compile(r"(?i)THALES\s+AVS\s+FRANCE")
@@ -128,8 +135,10 @@ class LepEntry:
 @dataclass(frozen=True)
 class PageFooter:
     page: int
-    page_key: str
+    page_key: str | None
+    observed_page_key: str | None
     label_text: str
+    label_bbox: tuple[float, float, float, float] | None
     date: DocDate | None
     date_text: str
     date_bbox: tuple[float, float, float, float] | None
@@ -148,6 +157,8 @@ class RevisionState:
     highlights: list[HighlightsEntry] = field(default_factory=list)
     lep: list[LepEntry] = field(default_factory=list)
     footers: list[PageFooter] = field(default_factory=list)
+    expected_footer_keys: dict[int, str] = field(default_factory=dict)
+    missing_footer_pages: tuple[int, ...] = ()
     findings: list["RevisionFinding"] = field(default_factory=list)
 
     @property
@@ -174,7 +185,8 @@ class RevisionState:
     def footer_by_key(self) -> dict[str, PageFooter]:
         footers: dict[str, PageFooter] = {}
         for footer in self.footers:
-            footers.setdefault(footer.page_key, footer)
+            if footer.page_key is not None:
+                footers.setdefault(footer.page_key, footer)
         return footers
 
     def is_declared_modified(self, page_key: str) -> bool:
@@ -338,7 +350,9 @@ def page_number_of(page_key: str) -> int | None:
     return int(number) if number.isdigit() else None
 
 
-def page_key_prefix(page_key: str) -> str:
+def page_key_prefix(page_key: str | None) -> str:
+    if not page_key:
+        return ""
     prefix, _, _number = page_key.rpartition(" ")
     return prefix
 
@@ -597,16 +611,30 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
     """
     spans = _footer_block(page)
     if not spans:
-        return None
+        if fallback_key is None:
+            return None
+        return PageFooter(
+            page=page.page,
+            page_key=fallback_key,
+            observed_page_key=None,
+            label_text="",
+            label_bbox=None,
+            date=None,
+            date_text="",
+            date_bbox=None,
+        )
     page_width = max(span.bbox[2] for span in page.spans)
     label_span = next(
         (span for span in spans if normalize_page_key(span.text) is not None),
         None,
     )
-    page_key = normalize_page_key(label_span.text) if label_span else fallback_key
-    if page_key is None:
-        return None
-    label_text = " ".join(label_span.text.split()) if label_span else page_key
+    observed_page_key = normalize_page_key(label_span.text) if label_span else None
+    page_key = observed_page_key or fallback_key
+    label_text = (
+        " ".join(label_span.text.split())
+        if label_span is not None
+        else ""
+    )
 
     date_spans = [span for span in spans if parse_date(span.text) is not None]
     right_spans = [span for span in date_spans if span.bbox[0] > page_width / 2]
@@ -615,7 +643,9 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
     return PageFooter(
         page=page.page,
         page_key=page_key,
+        observed_page_key=observed_page_key,
         label_text=label_text,
+        label_bbox=label_span.bbox if label_span is not None else None,
         date=parse_date(date_span.text) if date_span is not None else None,
         date_text=" ".join(date_span.text.split()) if date_span is not None else "",
         date_bbox=date_span.bbox if date_span is not None else None,
@@ -628,13 +658,44 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
 
 
 def _is_highlights_page(page: ParsedPage) -> bool:
-    return _highlights_header(visual_rows(page.spans)) is not None
+    return (
+        _highlights_header(visual_rows(page.spans)) is not None
+        or _HIGHLIGHTS_TITLE_RE.search(page.text or "") is not None
+    )
 
 
 def _is_lep_page(page: ParsedPage) -> bool:
     if not _LEP_TITLE_RE.search(page.text or ""):
         return False
-    return _lep_header(visual_rows(page.spans)) is not None
+    return (
+        _lep_header(visual_rows(page.spans)) is not None
+        or _LEP_TITLE_LINE_RE.search(page.text or "") is not None
+    )
+
+
+def _is_ror_page(page: ParsedPage) -> bool:
+    return _ROR_TITLE_RE.search(page.text or "") is not None
+
+
+def _is_title_page(page: ParsedPage) -> bool:
+    text = page.text or ""
+    return (
+        _TITLE_PAGE_RE.search(text) is not None
+        and _TITLE_PAGE_ANCHOR_RE.search(text) is not None
+        and not _is_highlights_page(page)
+        and not _is_lep_page(page)
+        and not _is_ror_page(page)
+    )
+
+
+def _special_footer_section(page: ParsedPage) -> str | None:
+    if _is_highlights_page(page):
+        return HIGHLIGHTS_KEY_PREFIX
+    if _is_lep_page(page):
+        return "LEP"
+    if _is_ror_page(page):
+        return "ROR"
+    return None
 
 
 def build_revision_state(parsed: ParsedPdf, document: object) -> RevisionState:
@@ -644,6 +705,19 @@ def build_revision_state(parsed: ParsedPdf, document: object) -> RevisionState:
     itself) keep ``is_modified = None`` so rules scoped to modified pages
     still run on them instead of silently disappearing.
     """
+    expected_footer_keys: dict[int, str] = {}
+    section_numbers: dict[str, int] = {}
+    title_pages: list[int] = []
+    for page in parsed.pages:
+        section = _special_footer_section(page)
+        if section is not None:
+            section_numbers[section] = section_numbers.get(section, 0) + 1
+            expected_footer_keys[page.page] = f"{section} {section_numbers[section]}"
+        elif _is_title_page(page):
+            title_pages.append(page.page)
+    for number, page_number in enumerate(title_pages, start=1):
+        expected_footer_keys[page_number] = f"TP {number}"
+
     state = RevisionState(
         revision_date=parse_date(getattr(document, "meta_revision_date", None)),
         first_issue_date=parse_date(getattr(document, "meta_first_issue_date", None)),
@@ -654,26 +728,32 @@ def build_revision_state(parsed: ParsedPdf, document: object) -> RevisionState:
         full_document=bool(parsed.pages)
         and parsed.pages[0].page == 1
         and parsed.pages[-1].page == parsed.page_count,
+        expected_footer_keys=expected_footer_keys,
     )
     highlights_pages: list[int] = []
     lep_pages: list[int] = []
     subject = ""
     for page in parsed.pages:
-        fallback_key: str | None = None
+        fallback_key = expected_footer_keys.get(page.page)
         if _is_highlights_page(page):
             highlights_pages.append(page.page)
             state.highlights.extend(extract_highlights(page))
-            fallback_key = f"{HIGHLIGHTS_KEY_PREFIX} {len(highlights_pages)}"
         elif _is_lep_page(page):
             lep_pages.append(page.page)
             entries, subject = extract_lep(page, subject)
             state.lep.extend(entries)
-            fallback_key = f"LEP {len(lep_pages)}"
         footer = extract_footer(page, fallback_key)
         if footer is not None:
             state.footers.append(footer)
     state.highlights_pages = tuple(highlights_pages)
     state.lep_pages = tuple(lep_pages)
+    footer_pages = {footer.page for footer in state.footers}
+    state.missing_footer_pages = tuple(
+        page.page
+        for page in parsed.pages
+        if page.page not in footer_pages
+        and (bool(page.text.strip()) or page.page in expected_footer_keys)
+    )
 
     if state.available:
         _mark_modified_pages(parsed, state)
@@ -708,6 +788,7 @@ PAGE_NOT_IN_LEP = "page_not_in_lep"
 MODIFIED_PAGE_ABSENT = "modified_page_absent"
 HIGHLIGHTS_PAIRING = "highlights_pairing"
 HIGHLIGHTS_PAGE_LABEL = "highlights_page_label"
+FOOTER_PAGE_NUMBER = "footer_page_number"
 
 _PAGE_LABEL_RE = re.compile(r"(?i)^(?P<word>pages?)(?P<gap>\s+)(?P<rest>\S.*)$")
 
@@ -833,6 +914,8 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
     for footer in state.footers:
         if page_key_prefix(footer.page_key) == HIGHLIGHTS_KEY_PREFIX:
             continue
+        if footer.page_key is None:
+            continue
         entry = lep.get(footer.page_key)
         declared = state.is_declared_modified(footer.page_key)
 
@@ -895,11 +978,102 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
     return findings
 
 
+def _display_page_key(page_key: str) -> str:
+    prefix, _, number = page_key.partition(" ")
+    if prefix == "TP":
+        return f"TP {number}"
+    if prefix == "HIGHLIGHTS":
+        return f"Highlights Page {number}"
+    if prefix in {"LEP", "ROR"}:
+        return f"{prefix} Page {number}"
+    if prefix:
+        return f"{prefix.title()} Page {number}"
+    return f"Page {number}"
+
+
+def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
+    """Require a readable page identifier in every detected footer.
+
+    Section pages have a deterministic expected key from their title and
+    physical order. Title pages use the same order for TP 1 / TP 2 because
+    their visible heading is identical; the LEP then confirms those keys.
+    Other pages only need a parseable footer label here. Their exact
+    membership in the LEP remains the responsibility of PAGE_NOT_IN_LEP.
+    """
+    findings: list[RevisionFinding] = []
+    expected = state.expected_footer_keys
+
+    for page in state.missing_footer_pages:
+        expected_key = expected.get(page)
+        if expected_key is None:
+            message = f"La page {page} ne contient pas de pied de page identifiable."
+            proposed = ""
+        else:
+            display = _display_page_key(expected_key)
+            message = (
+                f"La page {page} ne contient pas le numero de page attendu "
+                f"« {display} » dans son pied de page."
+            )
+            proposed = display
+        findings.append(
+            RevisionFinding(
+                control=FOOTER_PAGE_NUMBER,
+                message=message,
+                original="",
+                proposed=proposed,
+                page=page,
+                bbox=None,
+            )
+        )
+
+    for footer in state.footers:
+        expected_key = expected.get(footer.page)
+        if expected_key is not None:
+            if footer.observed_page_key == expected_key:
+                continue
+            display = _display_page_key(expected_key)
+            findings.append(
+                RevisionFinding(
+                    control=FOOTER_PAGE_NUMBER,
+                    message=(
+                        f"Le pied de page de la page {footer.page} porte "
+                        f"« {footer.label_text or 'aucun numero'} » au lieu de "
+                        f"« {display} »."
+                    ),
+                    original=footer.label_text if footer.observed_page_key else "",
+                    proposed=display,
+                    page=footer.page,
+                    bbox=footer.label_bbox or footer.date_bbox,
+                )
+            )
+            continue
+        if footer.observed_page_key is None:
+            findings.append(
+                RevisionFinding(
+                    control=FOOTER_PAGE_NUMBER,
+                    message=(
+                        f"Le pied de page de la page {footer.page} ne contient "
+                        "aucun numero de page."
+                    ),
+                    original="",
+                    proposed="",
+                    page=footer.page,
+                    bbox=footer.date_bbox,
+                )
+            )
+
+    return findings
+
+
 def _missing_page_findings(state: RevisionState) -> list[RevisionFinding]:
     if not state.full_document:
         return []
     found = {footer.page_key for footer in state.footers}
     lep = state.lep_by_key
+    unlabeled_pages = {
+        footer.page for footer in state.footers if footer.observed_page_key is None
+    }
+    unlabeled_pages.update(state.missing_footer_pages)
     findings: list[RevisionFinding] = []
     for entry in state.highlights:
         if entry.status not in _MODIFIED_STATUSES:
@@ -909,6 +1083,12 @@ def _missing_page_findings(state: RevisionState) -> list[RevisionFinding]:
             for key in entry.page_keys
             if key not in found and not (key in lep and lep[key].is_blank)
         ]
+        if not missing:
+            continue
+        # A physical page with a footer block but no readable identifier is
+        # handled by FOOTER_PAGE_NUMBER, not reported again as absent.
+        if unlabeled_pages:
+            missing = missing[len(unlabeled_pages) :]
         if not missing:
             continue
         findings.append(
@@ -996,6 +1176,7 @@ def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     findings = (
         _lep_findings(state)
         + _footer_findings(state)
+        + _footer_page_number_findings(state)
         + _missing_page_findings(state)
         + _pairing_findings(state)
         + _page_label_findings(state)
