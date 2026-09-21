@@ -145,7 +145,6 @@ _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
 )
 _EXPECTED_CMM_PATTERN = r"(?<!\w){{meta_cmm_number}}(?!\w)"
-_EXPECTED_REVISION_DATE_PATTERN = r"(?<!\w){{meta_revision_date}}(?!\w)"
 _COPYRIGHT_START_YEAR = "1966"
 _COPYRIGHT_PATTERN = (
     r"\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
@@ -651,20 +650,6 @@ _RULES_V1 = [
         ],
     ),
     _rule(
-        "CUSTOM_REVISION_DATE",
-        "Date de revision du footer conforme au mapping",
-        failure_message="Date de revision du footer non conforme",
-        target=_MODIFIED_FOOTER_TARGET,
-        severity="error",
-        checks=[
-            _required_text_check(
-                _EXPECTED_REVISION_DATE_PATTERN,
-                display="{{meta_revision_date}}",
-                anchor=r"(?i)\bFirst\s+Issue\b",
-            ),
-        ],
-    ),
-    _rule(
         "CUSTOM_TP1_REVISION_NUMBER",
         "Numero de revision du footer TP1 conforme au mapping",
         failure_message="numéro de revision non conforme.",
@@ -950,17 +935,6 @@ RULE_METADATA["CUSTOM_TITLE_PAGE_COPYRIGHT"] = {
     "kind": "field_required",
     "severity": "warning",
     "message": "Le copyright du footer est absent ou une annee est incorrecte.",
-}
-RULE_METADATA["CUSTOM_REVISION_DATE"] = {
-    "description": (
-        "La date de revision presente dans le footer des pages modifiees par "
-        "la revision doit correspondre a la date de revision saisie dans le "
-        "mapping du document. Les pages inchangees conservent leur date "
-        "d'emission et sont verifiees par CUSTOM_REVISION_FOOTER_DATE."
-    ),
-    "kind": "field_required",
-    "severity": "error",
-    "message": "La date de revision du footer ne correspond pas au mapping.",
 }
 RULE_METADATA["CUSTOM_TP1_THALES_ADDRESS"] = {
     "description": (

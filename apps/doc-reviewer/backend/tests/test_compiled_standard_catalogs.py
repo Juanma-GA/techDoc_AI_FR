@@ -177,7 +177,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
                 assert metadata[compiled.id]["message"]
-    assert total == 69
+    assert total == 68
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -321,55 +321,7 @@ def test_classify_pages_identifies_tp2_from_footer_marker() -> None:
     assert parsed.pages[0].page_type == TP2_PAGE_TYPE
 
 
-def _revision_date_footer_pdf(footer: str) -> ParsedPdf:
-    body = "Title page body."
-    text = f"{body}\n{footer}"
-    page = ParsedPage(
-        page=1,
-        text=text,
-        spans=[
-            Span(text=body, bbox=(40.0, 100.0, 200.0, 120.0), page=1, font="Arial", size=10.0),
-            Span(text=footer, bbox=(40.0, 760.0, 300.0, 780.0), page=1, font="Arial", size=8.0),
-        ],
-    )
-    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
-
-
-def test_revision_date_footer_matches_document_context_value() -> None:
-    rule = _rule("CUSTOM_REVISION_DATE")
-    document = SimpleNamespace(meta_revision_date="JUL 27/26")
-
-    valid, valid_suggestions = execute_pdf_rules(
-        _revision_date_footer_pdf("Revision: JUL 27/26"),
-        [rule],
-        document=document,
-    )
-    invalid, invalid_suggestions = execute_pdf_rules(
-        _revision_date_footer_pdf("Revision: JUL 27/25"),
-        [rule],
-        document=document,
-    )
-    missing, missing_suggestions = execute_pdf_rules(
-        _revision_date_footer_pdf("Footer without a revision date"),
-        [rule],
-        document=document,
-    )
-
-    assert valid[0].status == "PASS"
-    assert valid_suggestions == []
-    assert invalid[0].status == "FAIL"
-    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("5", "6")
-    ]
-    assert missing[0].status == "FAIL"
-    # Date entierement absente (pas seulement erronee) : pas de span a
-    # remplacer, mais le FAIL doit rester visible via un commentaire.
-    assert len(missing_suggestions) == 1
-    assert missing_suggestions[0].original == ""
-    assert missing_suggestions[0].page == 1
-
-
-def test_footer_required_values_are_checked_on_each_page() -> None:
+def test_cmm_number_is_checked_on_each_page() -> None:
     pages = []
     for page_number, footer in enumerate(
         ("Revision: JUL 27/26\n79-30-02", "Revision: JAN 27/26\n79-30-01"),
@@ -411,20 +363,10 @@ def test_footer_required_values_are_checked_on_each_page() -> None:
         [_rule("CUSTOM_CMM_NUMBER")],
         document=document,
     )
-    revision_results, revision_suggestions = execute_pdf_rules(
-        parsed,
-        [_rule("CUSTOM_REVISION_DATE")],
-        document=document,
-    )
-
     assert cmm_results[0].status == "FAIL"
     assert [(item.page, item.original, item.proposed) for item in cmm_suggestions] == [
         (2, "1", "2")
     ]
-    assert revision_results[0].status == "FAIL"
-    assert [
-        (item.page, item.original, item.proposed) for item in revision_suggestions
-    ] == [(2, "JAN", "JUL")]
 
 
 def _tp1_revision_footer_pdf(

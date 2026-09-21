@@ -88,7 +88,6 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "warning",
         "CUSTOM_TP2_IMPORTANT_NOTICE": "error",
         "CUSTOM_TITLE_PAGE_COPYRIGHT": "warning",
-        "CUSTOM_REVISION_DATE": "error",
         "CUSTOM_TP1_REVISION_NUMBER": "error",
         "CUSTOM_TP1_FIRST_ISSUE_DATE": "warning",
         "CUSTOM_HIGHLIGHTS_REVISION_HEADER": "warning",

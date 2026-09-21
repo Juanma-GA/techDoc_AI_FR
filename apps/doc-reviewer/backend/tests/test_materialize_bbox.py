@@ -71,7 +71,7 @@ def test_materialize_replaces_precomputed_text_bbox_with_pdf_location(tmp_path) 
     raws = [
         RawSuggestion(
             rule_kind="compiled_standard",
-            rule_code="CUSTOM_REVISION_DATE",
+            rule_code="CUSTOM_FOOTER_RULE",
             severity="error",
             message="revision date mismatch",
             original="must",
