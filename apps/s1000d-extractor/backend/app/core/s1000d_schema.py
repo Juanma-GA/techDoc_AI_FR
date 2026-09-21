@@ -62,7 +62,7 @@ def _find_dm_xsd(issue: str) -> Path | None:
     return None
 
 
-def validate_xsd(xml: str, issue: str) -> list[dict]:
+def validate_xsd(xml: str, issue: str, *, allow_internal_dtd: bool = False) -> list[dict]:
     """Valide le XML contre le XSD officiel de l'Issue si installe.
 
     Renvoie une liste de violations `{severity, rule, message, path}`. Une
@@ -82,7 +82,7 @@ def validate_xsd(xml: str, issue: str) -> list[dict]:
         return [_v("info", "XSD", f"Aucun .xsd trouve pour l'Issue {issue}.", "/")]
     try:
         schema = etree.XMLSchema(xml_safe.parse(str(xsd_path)))
-        doc = xml_safe.fromstring(xml)
+        doc = xml_safe.fromstring(xml, allow_internal_dtd=allow_internal_dtd)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "XSD", f"XML mal forme : {exc}", "/")]
     except Exception as exc:

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from lxml import etree
+import json
+
+from app.core import xml_safe
+from app.core.ir import IRNode, to_dict
+from app.db.session import SessionLocal
 
 
 def _upload(client, data: bytes) -> str:
@@ -52,7 +56,7 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     proc_found = False
     for d in st["dms"]:
         xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{d['dm_id']}/xml").text
-        etree.fromstring(xml.encode("utf-8"))
+        xml_safe.fromstring(xml, allow_internal_dtd=True)
         if d["dm_type"] == "procedural":
             assert "<procedure>" in xml
             proc_found = True
@@ -62,6 +66,52 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     z = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
     assert z.status_code == 200
     assert z.headers["content-type"] == "application/zip"
+
+
+def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
+    from app.db.models import Document
+
+    with SessionLocal() as db:
+        doc = Document(
+            filename="manual.pdf",
+            source_format="pdf",
+            storage_path="unused.pdf",
+            dms_json=json.dumps([
+                {
+                    "dm_id": "dm1",
+                    "title": "First",
+                    "dm_type": "descriptive",
+                    "tree": to_dict(IRNode(
+                        id="r1",
+                        kind="section",
+                        children=[IRNode(id="f1", kind="figure", text="Figure 1 First")],
+                    )),
+                },
+                {
+                    "dm_id": "dm2",
+                    "title": "Second",
+                    "dm_type": "descriptive",
+                    "tree": to_dict(IRNode(
+                        id="r2",
+                        kind="section",
+                        children=[
+                            IRNode(id="f2", kind="figure", text="Figure 2 Second"),
+                            IRNode(id="t2", kind="table", table_rows=[["A"]]),
+                        ],
+                    )),
+                },
+            ]),
+        )
+        db.add(doc)
+        db.commit()
+        doc_id = doc.id
+
+    first = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm1/xml")
+    second = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm2/xml")
+
+    assert 'id="fig-0001"' in first.text
+    assert 'id="fig-0002"' in second.text
+    assert 'id="tbl-0001"' in second.text
 
 
 def _split_state(client, doc_id):
@@ -90,6 +140,51 @@ def test_split_rename_and_exclude(client, pdf_bytes) -> None:
         json={"op": "exclude", "id": first},
     ).json()
     assert len(st["dms"]) == 1
+
+
+def test_rename_reassociates_available_dmrl_dmc(client, pdf_bytes, tmp_path) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    dmrl = tmp_path / "dmrl.json"
+    dmrl.write_text(json.dumps([
+        {"DMC": "DMC-TEST-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-TEST-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]), encoding="utf-8")
+    with dmrl.open("rb") as stream:
+        response = client.post(
+            f"/api/v1/documents/{doc_id}/resources/dmrl",
+            files={"file": ("dmrl.json", stream, "application/json")},
+        )
+    assert response.status_code == 200, response.text
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    first = state["dms"][0]["dm_id"]
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/update",
+        json={"op": "rename", "id": first, "title": "Removal Procedure"},
+    ).json()
+    assert [dm["dmc"] for dm in state["dms"]].count("DMC-TEST-A-00-00-00-00A-520A-D") == 1
+
+
+def test_split_does_not_duplicate_dmrl_dmc(client, pdf_bytes, tmp_path) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    dmrl = tmp_path / "dmrl.json"
+    dmrl.write_text(json.dumps([
+        {"DMC": "DMC-TEST-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-TEST-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]), encoding="utf-8")
+    with dmrl.open("rb") as stream:
+        response = client.post(
+            f"/api/v1/documents/{doc_id}/resources/dmrl",
+            files={"file": ("dmrl.json", stream, "application/json")},
+        )
+    assert response.status_code == 200, response.text
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    target = state["dms"][0]["dm_id"]
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/update",
+        json={"op": "split", "id": target},
+    ).json()
+    dmcs = [dm["dmc"] for dm in state["dms"] if dm["dmc"]]
+    assert len(dmcs) == len(set(dmcs))
 
 
 def test_split_preserved_on_advance(client, pdf_bytes) -> None:

@@ -38,7 +38,9 @@ def test_stats_and_reset_preserve_brex(client, pdf_bytes, brex_xml) -> None:
     stats = client.get("/api/v1/admin/stats").json()
     assert stats["documents"] == 1 and stats["brex_profiles"] == 1
 
-    r = client.post("/api/v1/admin/reset/documents")
+    r = client.post(
+        "/api/v1/admin/reset/documents?confirm_token=test-reset-token",
+    )
     assert r.status_code == 200
     after = client.get("/api/v1/admin/stats").json()
     assert after["documents"] == 0

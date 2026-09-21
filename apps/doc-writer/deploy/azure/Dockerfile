@@ -12,7 +12,12 @@
 # ---------------------------------------------------------------------------
 
 # ==== Stage 1 : build du front React (Vite) ================================
-FROM node:22-bookworm-slim AS frontend
+# F-08 (hardening) : pin par digest (immuable) plutot que par tag seul (un tag
+# peut etre re-pousse vers une image differente en amont). Digest resout
+# `node:22-bookworm-slim` au moment ou ce commentaire a ete ecrit ; regenerer
+# via `docker buildx imagetools inspect node:22-bookworm-slim` si le tag doit
+# etre rafraichi (nouveau patch de securite en amont, par ex.).
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS frontend
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /repo
@@ -27,12 +32,19 @@ COPY apps/doc-writer/frontend ./apps/doc-writer/frontend
 
 # Install workspace (network propre dans ACR : pas de proxy TLS corporate,
 # donc pas de blocage "in 1 minute" - cf. CLAUDE.md regle #12).
-RUN pnpm install --no-frozen-lockfile
+# F-07 (hardening) : --frozen-lockfile (pas --no-frozen-lockfile) -> le build
+# echoue si pnpm-lock.yaml et les package.json divergent, au lieu de re-resoudre
+# silencieusement des versions differentes de celles verrouillees (build non
+# reproductible). Le lockfile est copie juste au-dessus (COPY ... pnpm-lock.yaml).
+RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @apps/doc-writer-frontend build
 # -> /repo/apps/doc-writer/frontend/dist
 
 # ==== Stage 2 : runtime Python =============================================
-FROM python:3.12-slim-bookworm AS runtime
+# F-08 (hardening) : pin par digest, meme raison que le stage frontend
+# ci-dessus. Regenerer via `docker buildx imagetools inspect
+# python:3.12-slim-bookworm` si le tag doit etre rafraichi.
+FROM python:3.12-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254 AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
@@ -50,7 +62,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # .dockerignore : on n'embarque JAMAIS les donnees utilisateur.
 WORKDIR /app/backend
 COPY apps/doc-writer/backend/ /app/backend/
-RUN pip install .
+# F-07 (hardening) : deps verrouillees + hash-verifiees (requirements.lock.txt)
+# au lieu de re-resoudre les bornes ">=" de pyproject.toml a chaque build ->
+# image reproductible. --no-deps ensuite : le paquet local seul.
+RUN pip install -r requirements.lock.txt && pip install . --no-deps
 
 # Front buildé, place la ou main.py le cherche :
 #   FRONTEND_DIST = <racine app>/frontend/dist  (=/app/frontend/dist)

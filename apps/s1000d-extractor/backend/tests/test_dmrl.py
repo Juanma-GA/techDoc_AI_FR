@@ -62,6 +62,7 @@ def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
     assert entries[0].dm_type == "descriptive"
 
 
+<<<<<<< HEAD
 def test_load_dmrl_maps_multiple_icns_and_ignores_non_icn_names(tmp_path):
     path = tmp_path / "dmrl.json"
     raw_icn = (
@@ -81,6 +82,20 @@ def test_load_dmrl_maps_multiple_icns_and_ignores_non_icn_names(tmp_path):
         "ICN-WEG-AA0004-00004-A-02.JPG",
     ]
     assert entry_from_dict(entry.to_dict()).icn == raw_icn
+=======
+def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
+    path = tmp_path / "dmrl.json"
+    icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"
+    path.write_text(json.dumps([{"Titre": "Description", "ICN": icn_cell}]), encoding="utf-8")
+
+    entry = load_dmrl(path)[0]
+
+    assert extract_icn_filenames(entry.icn) == [
+        "ICN-WEG-AA0004-00001-A-02.jpg",
+        "ICN-WEG-AA0004-00002-A-02.png",
+    ]
+    assert entry_from_dict(entry.to_dict()).icn == icn_cell
+>>>>>>> origin/main
 
 
 def test_load_dmrl_rejects_unknown_format(tmp_path):
@@ -159,10 +174,17 @@ def _ir_with_sections() -> IRNode:
 
 
 def test_split_by_dmrl_uses_dmrl_titles():
-    entries = [DmrlEntry(title="Depose du frein"), DmrlEntry(title="Description generale")]
+    entries = [
+        DmrlEntry(dmc="DMC-BRAKE-A-00-00-00-00A-520A-D", title="Depose du frein"),
+        DmrlEntry(dmc="DMC-BRAKE-A-00-00-00-00A-040A-D", title="Description generale"),
+    ]
     units = splitter.split_by_dmrl(_ir_with_sections(), entries)
     titles = [u.title for u in units]
     assert set(titles) == {"Description generale", "Depose du frein"}
+    assert {u.title: u.dmc for u in units} == {
+        "Description generale": "DMC-BRAKE-A-00-00-00-00A-040A-D",
+        "Depose du frein": "DMC-BRAKE-A-00-00-00-00A-520A-D",
+    }
     contents = {u.title: splitter.ir_to_text(u.root) for u in units}
     assert "Le frein comporte deux etriers." in contents["Description generale"]
     assert "Deposer les vis." in contents["Depose du frein"]

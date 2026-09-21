@@ -31,7 +31,15 @@ _ADMONITION_RES: list[tuple[str, re.Pattern[str]]] = [
 
 # --- Legende de figure -------------------------------------------------------
 
-_CAPTION_RE = re.compile(r"^\s*(?:figure|fig\.?|illustration)\s*\d+", re.IGNORECASE)
+_CAPTION_NUMBER = r"\d+(?:[.\-]\d+)*"
+_CAPTION_RE = re.compile(
+    rf"^\s*(?:figure|fig\.?|illustration)\s*{_CAPTION_NUMBER}(?=\s|$|[:.\-])",
+    re.IGNORECASE,
+)
+_CAPTION_START_RE = re.compile(
+    rf"(?<!\w)(?:figure|fig\.?|illustration)\s*{_CAPTION_NUMBER}(?=\s|$|[:.\-])",
+    re.IGNORECASE,
+)
 
 # --- Renvois / hyperliens (-> internalRef / externalPubRef / uri) ------------
 # Renvoi interne AVEC marqueur obligatoire (voir/see/cf/refer to) pour ne pas
@@ -113,6 +121,27 @@ def detect_admonition(text: str) -> str | None:
 
 def is_caption(text: str) -> bool:
     return bool(_CAPTION_RE.match(text))
+
+
+def split_captions(text: str) -> list[str]:
+    """Separe des legendes consecutives fusionnees dans un meme bloc PDF.
+
+    Le decoupage est volontairement reserve aux textes qui commencent par une
+    legende ; un paragraphe comme ``Voir Figure 4.1 et Figure 4.2`` reste donc
+    un paragraphe normal.
+    """
+    if not is_caption(text):
+        return [text.strip()]
+    matches = list(_CAPTION_START_RE.finditer(text))
+    if len(matches) < 2:
+        return [text.strip()]
+    parts = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        part = text[match.start():end].strip()
+        if part:
+            parts.append(part)
+    return parts or [text.strip()]
 
 
 def numbered_heading_depth(text: str) -> int | None:

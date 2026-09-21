@@ -7,6 +7,14 @@
 > `ENCRYPTION_KEY`. Le garde-fou [`app/main._validate_security_posture`](../../backend/app/main.py)
 > **refuse de démarrer** en bind exposé sans `ENCRYPTION_KEY` (≥32) ni `CORS_ORIGINS`
 > de prod — le script fournit les deux.
+>
+> **Bloqué (F-02, hardening 2026-09-14) : aucun middleware d'auth n'est implémenté.**
+> `_validate_security_posture` refuse désormais **systématiquement** de démarrer
+> en `TIER_MODE=tier2` / bind exposé, même avec `ENCRYPTION_KEY` et `CORS_ORIGINS`
+> corrects — le conteneur crashera au boot tant qu'aucune auth (SSO/OIDC) n'est
+> câblée. Ce dossier documente la procédure de provisioning Azure pour référence,
+> mais l'app ne servira aucune requête tant que F-02 n'est pas complètement résolu
+> (au-delà du fail-fast) — cf. `README.md` racine de l'app, section `## Auth`.
 
 ## Architecture cible
 
@@ -35,7 +43,7 @@ Internet ──HTTPS──> Container Apps (ingress externe, 1 replica)
    az account set --subscription "<nom ou id>"
    ```
 2. Un groupe de ressources **existant** (même vide).
-3. Python (déjà présent) pour générer la clé Fernet.
+3. Python (déjà présent) pour générer la clé de chiffrement AES-256.
 
 ## Étapes
 
@@ -62,6 +70,31 @@ Le script imprime l'URL finale : `https://doc-writer.<hash>.<region>.azurecontai
 ### 4. Configurer Mistral
 
 Onglet **Paramètres** → colle la clé Mistral → **Tester**. Le badge LLM passe au vert.
+
+### Clé de chiffrement AES-256 (F-03 : plus jamais affichée en console)
+
+Le script écrit la clé dans `deploy/azure/.encryption-key.generated` (gitignoré,
+`chmod 600`) au lieu de l'imprimer dans le terminal. Elle est nécessaire pour
+déchiffrer la clé Mistral stockée en DB si tu recrées l'app (elle est déjà
+injectée comme secret Container Apps `encryption-key`, mais Azure ne permet
+pas de relire un secret en clair après coup). **Déplace ce fichier vers un
+coffre-fort de secrets (pas un dépôt Git, pas un partage réseau) puis
+supprime-le du disque local.**
+
+## Images de base (F-08 : pinnées par digest)
+
+Le [`Dockerfile`](./Dockerfile) pin `node:22-bookworm-slim` et `python:3.12-slim-bookworm`
+par digest `@sha256:...` (immuable) plutôt que par tag seul. Pour rafraîchir
+volontairement (ex. patch de sécurité en amont) :
+
+```bash
+docker buildx imagetools inspect node:22-bookworm-slim
+docker buildx imagetools inspect python:3.12-slim-bookworm
+```
+
+... et remplace le digest dans le `FROM` correspondant. Les images restent
+tirées de Docker Hub public (registre approuvé non configuré à ce jour) — voir
+le hardening checklist (F-08) pour ce résidu.
 
 ## Mettre à jour l'app (nouveau code)
 

@@ -15,6 +15,7 @@ import httpx
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.errors import AppError
 from app.db.models import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -97,16 +98,57 @@ def _normalize_base_url(url: str) -> str:
     return normalized
 
 
-def _get_secret_manager():  # type: ignore[no-untyped-def]
-    """SecretManager configure depuis settings. Cle absente => chiffrement off
-    (valeurs lues/ecrites en clair, mode dev/local)."""
-    from app.config import settings
-    from app.core.encryption import SecretManager
+def _assert_base_url_allowed(url: str) -> None:
+    """Bloque le routage IA vers un endpoint non-approuve (F-01, doc 159).
 
-    if not settings.encryption_key:
-        logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
-        return SecretManager(None)
-    return SecretManager(settings.encryption_key)
+    Seuls les endpoints listes dans `settings.mistral_allowed_base_urls`
+    (defaut : l'environnement Mistral enterprise approuve) peuvent recevoir
+    du contenu de document. Comparaison sur la racine normalisee (insensible
+    au suffixe /v1, / final, casse du host).
+    """
+    from app.config import settings
+
+    if not url:
+        return
+    normalized = _normalize_base_url(url).lower()
+    allowed = {_normalize_base_url(u).lower() for u in settings.mistral_allowed_base_urls}
+    if normalized not in allowed:
+        raise AppError(
+            code="BASE_URL_NOT_ALLOWED",
+            message=(
+                "Endpoint IA non approuve. Seuls les endpoints de la liste "
+                "autorisee (mistral_allowed_base_urls) peuvent recevoir du "
+                "contenu de document."
+            ),
+            status_code=400,
+            detail={"base_url": url, "allowed": sorted(allowed)},
+        )
+
+
+def _get_secret_manager():  # type: ignore[no-untyped-def]
+    """SecretManager configure depuis settings.
+
+    F-05 (hardening 2026-09-14) : ENCRYPTION_KEY absente (defaut tier1 local)
+    ne degrade plus en clair. Une cle est auto-provisionnee a cote de la DB
+    (gitignoree, cf. `load_or_create_local_key`) et reutilisee a chaque appel,
+    de sorte que le secret Mistral soit TOUJOURS chiffre au repos, meme quand
+    l'operateur n'a rien configure explicitement. Le repli en clair ne survient
+    plus qu'en cas d'echec d'ecriture disque (filesystem read-only, etc.)."""
+    from pathlib import Path
+
+    from app.config import settings
+    from app.core.encryption import SecretManager, load_or_create_local_key
+
+    key = settings.encryption_key
+    if not key:
+        key_path = Path(settings.encryption_key_path)
+        try:
+            key = load_or_create_local_key(key_path)
+        except OSError as e:
+            logger.error("Local encryption key auto-provisioning failed (%s): %s", key_path, e)
+            logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
+            return SecretManager(None)
+    return SecretManager(key)
 
 
 def _read_config(db: Session, key: str, default: str = "") -> str:
@@ -164,6 +206,8 @@ def get_effective_settings(db: Session) -> dict[str, str]:
 
 
 def save_settings(db: Session, data: dict[str, Any]) -> None:
+    if data.get("base_url"):
+        _assert_base_url_allowed(str(data["base_url"]))
     invalidate_test = False
     for k, v in data.items():
         if k in CONFIG_KEYS and v is not None:

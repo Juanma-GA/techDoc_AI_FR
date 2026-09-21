@@ -1,2 +1,4 @@
 # Manifeste genere : contient des secrets (mot de passe ACR, cle Fernet). Ne pas committer.
 containerapp.generated.yaml
+# Backup local de la cle Fernet (F-03 : jamais echo en console). Ne pas committer.
+.encryption-key.generated

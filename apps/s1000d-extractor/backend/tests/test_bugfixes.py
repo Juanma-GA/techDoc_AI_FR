@@ -6,8 +6,9 @@ Bug 2 : duplication des illustrations.
 
 from __future__ import annotations
 
-from lxml import etree
+import json
 
+from app.core import xml_safe
 from app.core.ir import IRNode
 from app.core.s1000d_serializer import serialize
 from app.core.validator import validate_document
@@ -45,7 +46,7 @@ def test_serialize_strips_control_characters() -> None:
         IRNode(id="n2", kind="figure", text="Figure 1\x0b legende"),
     ])
     xml = serialize(root, issue="5.0", dm_type="descriptive", title="Titre\x0c")
-    etree.fromstring(xml.encode("utf-8"))
+    xml_safe.fromstring(xml, allow_internal_dtd=True)
     assert "\x0c" not in xml and "\x00" not in xml
 
 
@@ -65,7 +66,7 @@ def test_serialize_rejects_invalid_element_name() -> None:
                                       "rationale": ""})()]
     xml = serialize(IRNode(id="r", kind="section", level=0, children=[node]),
                     issue="5.0", dm_type="descriptive")
-    etree.fromstring(xml.encode("utf-8"))
+    xml_safe.fromstring(xml, allow_internal_dtd=True)
 
 
 def test_validate_document_never_raises_on_bad_brex() -> None:
@@ -79,6 +80,33 @@ def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> N
     state = _run_wizard(client, _upload(client, pdf_bytes))
     assert state["step"] == "generate"
     assert all(d["has_xml"] for d in state["dms"])
+
+
+def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
+    for params in ({}, {"types": {}}, {"overrides": []}, {}):
+        response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=params)
+        assert response.status_code == 200, response.text
+
+    dm_id = response.json()["dms"][0]["dm_id"]
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        document = db.get(Document, doc_id)
+        dms = json.loads(document.dms_json)
+        dms[0]["xml"] = "<dmodule><content>obsolete</content></dmodule>"
+        document.dms_json = json.dumps(dms, ensure_ascii=False)
+        db.commit()
+    finally:
+        db.close()
+
+    rebuilt = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm_id}/xml")
+    assert rebuilt.status_code == 200
+    assert "obsolete" not in rebuilt.text
+    assert "<!DOCTYPE dmodule [" in rebuilt.text
 
 
 # --- Bug 2 : plus de duplication d'illustrations ----------------------------
@@ -99,3 +127,19 @@ def test_restarting_wizard_does_not_pile_up_images(client, pdf_bytes_image) -> N
     again = client.get(f"/api/v1/documents/{doc_id}/wizard/images").json()
     assert again == first
     assert len(list(images_dir(doc_id).glob("*.jpg"))) == len(first)
+
+
+def test_multiple_figure_captions_on_one_line_create_separate_figures() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([RawBlock(
+        text="Figure 4.1 Serrage correct Figure 4.2 Serrage incorrect Figure 4.3 Detail",
+        page=1,
+    )])
+
+    assert [node.text for node in root.walk() if node.kind == "figure"] == [
+        "Figure 4.1 Serrage correct",
+        "Figure 4.2 Serrage incorrect",
+        "Figure 4.3 Detail",
+    ]

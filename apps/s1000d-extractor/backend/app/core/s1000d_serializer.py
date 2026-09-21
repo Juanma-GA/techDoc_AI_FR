@@ -36,11 +36,30 @@ _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD
 # Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
 _GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
+<<<<<<< HEAD
+=======
+_GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
+_FIGURE_TITLE_PREFIX = re.compile(
+    r"^\s*(?:figure|fig\.?|illustration)\s+\d+(?:[.\-]\d+)*"
+    r"(?:\s*[:.\-\u2013\u2014]\s*|\s+)",
+    re.IGNORECASE,
+)
+_NUMBERED_TITLE_PREFIX = re.compile(
+    r"^\s*\d+(?:\.\d+)*(?:\s*[.)\-\u2013\u2014:]\s*|\s+)",
+)
+>>>>>>> origin/main
 
 
 def xml_text(value: str | None) -> str:
     """Texte utilisable comme contenu XML (caracteres de controle retires)."""
     return _INVALID_XML_CHARS.sub("", value or "")
+
+
+def clean_title(value: str | None) -> str:
+    """Retire les numeros editoriaux des titres emis dans le DM final."""
+    title = xml_text(value).strip()
+    title = _FIGURE_TITLE_PREFIX.sub("", title)
+    return _NUMBERED_TITLE_PREFIX.sub("", title).strip()
 
 
 def _safe_element(name: str, fallback: str) -> str:
@@ -56,6 +75,35 @@ def _graphic_ident(icn: str) -> str:
     return _GRAPHIC_EXTENSION.sub("", xml_text(icn))
 
 
+<<<<<<< HEAD
+=======
+def _doctype(root: IRNode) -> str:
+    """Construit la DTD interne qui declare les fichiers graphiques du DM."""
+    declarations: list[str] = []
+    declared: set[str] = set()
+    for node in root.walk():
+        if node.kind != "figure" or not node.icn:
+            continue
+        filename = xml_text(node.icn)
+        ident = _graphic_ident(filename)
+        if not filename or ident in declared or not _NCNAME.fullmatch(ident):
+            continue
+        declared.add(ident)
+        suffix = re.search(r"\.[^.]+$", filename)
+        notation = _GRAPHIC_NOTATION.get(suffix.group(0).lower(), "jpg") if suffix else "jpg"
+        declarations.append(
+            f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
+        )
+    declarations.extend((
+        '<!ENTITY % ISOEntities PUBLIC '
+        '"ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" '
+        '"ent/ISOEntities">',
+        "%ISOEntities;",
+    ))
+    return "<!DOCTYPE dmodule [\n" + "\n".join(declarations) + "\n]>"
+
+
+>>>>>>> origin/main
 def _alt_comment(node: IRNode) -> str | None:
     if len(node.candidates) > 1:
         alts = ", ".join(f"{c.element}({c.score:.2f})" for c in node.candidates[1:])
@@ -101,7 +149,7 @@ def _emit_row(parent: etree._Element, cells: list[str]) -> None:
         _para(entry, cell)
 
 
-def _emit_table(parent: etree._Element, node: IRNode) -> None:
+def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None:
     """Modele CALS S1000D : table > (title?) > tgroup > colspec* > thead? > tbody.
 
     Une ligne d'entete detectee (`table_header`) devient un vrai `<thead>` ; les
@@ -113,9 +161,9 @@ def _emit_table(parent: etree._Element, node: IRNode) -> None:
     if header and rows and rows[0] == header:
         body_rows = rows[1:]          # evite de repeter l'entete dans le corps
     ncols = max([len(r) for r in rows] + ([len(header)] if header else []), default=1)
-    table = etree.SubElement(parent, "table")
+    table = etree.SubElement(parent, "table", id=f"tbl-{table_number:04d}")
     if node.text:
-        etree.SubElement(table, "title").text = xml_text(node.text)
+        etree.SubElement(table, "title").text = clean_title(node.text)
     tgroup = etree.SubElement(table, "tgroup", cols=str(ncols))
     for c in range(1, ncols + 1):
         etree.SubElement(tgroup, "colspec", colname=f"c{c}")
@@ -127,10 +175,10 @@ def _emit_table(parent: etree._Element, node: IRNode) -> None:
         _emit_row(tbody, row)
 
 
-def _emit_figure(parent: etree._Element, node: IRNode) -> None:
-    fig = etree.SubElement(parent, "figure")
+def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> None:
+    fig = etree.SubElement(parent, "figure", id=f"fig-{figure_number:04d}")
     title = etree.SubElement(fig, "title")
-    title.text = xml_text(node.text) or "Figure"
+    title.text = clean_title(node.text) or "Figure"
     if node.icn:
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
         etree.SubElement(fig, "graphic", infoEntityIdent=_graphic_ident(node.icn))
@@ -164,7 +212,11 @@ def _emit_list(parent: etree._Element, node: IRNode) -> None:
         _emit_refs(li, item)
 
 
-def _emit_node(parent: etree._Element, node: IRNode) -> None:
+def _emit_node(
+    parent: etree._Element,
+    node: IRNode,
+    counters: dict[str, int],
+) -> None:
     alt = _alt_comment(node)
     if alt:
         parent.append(etree.Comment(alt))
@@ -173,10 +225,12 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
         _emit_admonition(parent, node)
         _emit_refs(parent, node)
     elif node.kind == "figure":
-        _emit_figure(parent, node)
+        counters["figure"] += 1
+        _emit_figure(parent, node, counters["figure"])
         _emit_refs(parent, node)
     elif node.kind == "table":
-        _emit_table(parent, node)
+        counters["table"] += 1
+        _emit_table(parent, node, counters["table"])
     elif node.kind == "item-sequence":
         _emit_list(parent, node)
     elif node.kind == "paragraph":
@@ -193,12 +247,16 @@ def _emit_node(parent: etree._Element, node: IRNode) -> None:
         sect = etree.SubElement(parent, top)
         if node.text:
             title = etree.SubElement(sect, "title")  # optionnel mais conventionnel
-            title.text = xml_text(node.text)
+            title.text = clean_title(node.text)
         for child in node.children:
-            _emit_node(sect, child)
+            _emit_node(sect, child, counters)
 
 
-def _build_content(root: IRNode, dm_type: str) -> etree._Element:
+def _build_content(
+    root: IRNode,
+    dm_type: str,
+    counters: dict[str, int],
+) -> etree._Element:
     content = etree.Element("content")
     if dm_type == "procedural":
         proc = etree.SubElement(content, "procedure")
@@ -206,7 +264,7 @@ def _build_content(root: IRNode, dm_type: str) -> etree._Element:
         etree.SubElement(proc, "preliminaryRqmts")
         main = etree.SubElement(proc, "mainProcedure")
         for child in root.children:
-            _emit_node(main, child)
+            _emit_node(main, child, counters)
         etree.SubElement(proc, "closeRqmts")
     else:
         desc = etree.SubElement(content, "description")
@@ -215,28 +273,38 @@ def _build_content(root: IRNode, dm_type: str) -> etree._Element:
                 " TODO: catalogue de pieces (IPD/IPC) - structurer en catalogSeqNumber/itemSeqNumber "
             ))
         for child in root.children:
-            _emit_node(desc, child)
+            _emit_node(desc, child, counters)
     return content
 
 
-def serialize(root: IRNode, *, issue: str, dm_type: str, title: str = "") -> str:
+def serialize(
+    root: IRNode,
+    *,
+    issue: str,
+    dm_type: str,
+    title: str = "",
+    figure_offset: int = 0,
+    table_offset: int = 0,
+) -> str:
     """Construit le squelette XML S1000D complet (string UTF-8 indentee)."""
+    counters = {"figure": figure_offset, "table": table_offset}
     dmodule = etree.Element("dmodule")
     dmodule.addprevious(etree.Comment(_BANNER))
     dmodule.set("s1000dExtractorIssue", issue)
 
     ident = etree.SubElement(dmodule, "identAndStatusSection")
     if title:
-        ident.append(etree.Comment(f" dmTitle (detecte) : {xml_text(title).replace('--', '- -')} "))
+        ident.append(etree.Comment(f" dmTitle (detecte) : {clean_title(title).replace('--', '- -')} "))
     ident.append(etree.Comment(" TODO: dmAddress (DMC, langue, issueInfo, dmTitle) a completer "))
     etree.SubElement(ident, "dmAddress")
     status = etree.SubElement(ident, "dmStatus")
     status.append(etree.Comment(" TODO: brexDmRef vers le BREX projet + security + applic "))
     etree.SubElement(status, "brexDmRef")
 
-    dmodule.append(_build_content(root, dm_type))
+    dmodule.append(_build_content(root, dm_type, counters))
 
     tree = dmodule.getroottree()
     return etree.tostring(
-        tree, pretty_print=True, xml_declaration=True, encoding="UTF-8"
+        tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",
+        doctype=_doctype(root),
     ).decode("utf-8")

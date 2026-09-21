@@ -238,12 +238,13 @@
     "totalSize": "Tamaño total",
     "statsUnavailable": "Estadísticas no disponibles.",
     "resetTitle": "Reiniciar",
-    "resetWarn": "Todas estas operaciones son irreversibles. La configuración Mistral (tabla app_config) se conserva.",
+    "resetWarn": "Estas operaciones no son triviales. Se guarda un backup de la base de datos antes, y los archivos eliminados se mueven a una papelera local — pero no hay restauración automática. La configuración Mistral (tabla app_config) se conserva.",
     "resetDocuments": "Reiniciar documentos",
     "resetSessions": "Reiniciar sesiones",
     "resetAll": "Eliminar todo",
     "confirmAgain": "Haz clic de nuevo para confirmar",
-    "resetOk": "Reinicio OK ({{items}})."
+    "resetOk": "Reinicio OK ({{items}}).",
+    "resetBackup": "Backup guardado en {{path}}."
   },
   "template": {
     "fill": {
@@ -351,5 +352,39 @@
   "errors": {
     "generic": "Ha ocurrido un error.",
     "noMistral": "Mistral no está configurado. Configura tu clave en Ajustes."
+  },
+  "auth": {
+    "welcome": "Bienvenido de nuevo",
+    "subtitle": "Inicia sesión en doc-writer",
+    "blurb": "doc-writer requiere una cuenta corporativa de Microsoft 365. Inicia sesión con tu email y contraseña de trabajo, y confirma con el método de verificación que uses — la app Authenticator, un SMS o una llamada. Si no puedes acceder, contacta con soporte IT.",
+    "emailLabel": "Email corporativo",
+    "passwordLabel": "Contraseña",
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión…",
+    "startFailed": "No se pudo iniciar la conexión. Comprueba tu email e inténtalo de nuevo.",
+    "waiting": "Contactando con tu organización…",
+    "verifying": "Verificando…",
+    "mfaNumberTitle": "Abre Microsoft Authenticator y toca este número:",
+    "codeLabelTotp": "Código de Authenticator",
+    "codeLabelSms": "Código SMS",
+    "codeLabelVoice": "Código leído en voz alta",
+    "awaitingCodeTotp": "Introduce el código de 6 dígitos de tu app de autenticación.",
+    "awaitingCodeSms": "Te hemos enviado un código por SMS{{suffix}}. Introdúcelo abajo.",
+    "awaitingCodeVoice": "Te estamos leyendo un código por teléfono{{suffix}}. Introdúcelo abajo.",
+    "endingIn": "terminado en {{destination}}",
+    "awaitingCall": "Microsoft está llamando a tu teléfono{{suffix}}. Responde a la llamada y pulsa #.",
+    "callFailed": "La verificación por llamada telefónica no se completó como se esperaba.",
+    "chooseMethod": "Elige cómo quieres verificar que eres tú:",
+    "codeRejected": "Ese código no fue aceptado.",
+    "cancelled": "Inicio de sesión cancelado.",
+    "cancel": "Cancelar",
+    "verify": "Verificar",
+    "useOtherMethod": "Usar otro método",
+    "timedOut": "La solicitud de conexión ha caducado.",
+    "expired": "La solicitud de conexión ha caducado. Inténtalo de nuevo.",
+    "providerError": "Error al iniciar sesión.",
+    "notReachable": "No se pudo contactar con el servicio de identidad. Esperando a que la conexión termine en el servidor…",
+    "genericError": "Algo salió mal. Inténtalo de nuevo.",
+    "logout": "Cerrar sesión"
   }
 }

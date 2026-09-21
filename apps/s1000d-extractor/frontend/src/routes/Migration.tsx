@@ -7,11 +7,13 @@ import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../component
 import {
   brexApi,
   documentsApi,
+  pdfCutApi,
   resourcesApi,
   startWizardStream,
   wizardApi,
   type ContextHint,
   type DmrlRow,
+  type PdfCutDetection,
   type ResourceKind,
   type S1000dIssue,
   type TreeNode,
@@ -168,6 +170,13 @@ export function Migration() {
   const [starting, setStarting] = useState<{ pct: number; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [wizError, setWizError] = useState<string | null>(null);
+  const [pdfCut, setPdfCut] = useState<{
+    docId: string;
+    detection: PdfCutDetection;
+    startPage: number | null;
+    endPage: number | null;
+  } | null>(null);
+  const [pdfCutBusy, setPdfCutBusy] = useState(false);
 
   // Éditions locales de l'étape courante (réinitialisées à chaque nouvel état).
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -187,11 +196,55 @@ export function Migration() {
     setOverrides({});
     setSplitMsg(null);
     if (wiz?.split_level) setSplitLevel(wiz.split_level);
-    if (wiz && wizRef.current)
-      wizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [wiz]);
 
+  useEffect(() => {
+    if (wiz?.step && wizRef.current) {
+      wizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [wiz?.step]);
+
+  useEffect(() => {
+    const onDocumentsReset = () => {
+      setDocId(null);
+      setWiz(null);
+      setStarting(null);
+      setPdfCut(null);
+      setWizError(null);
+    };
+    window.addEventListener("s1000d-documents-reset", onDocumentsReset);
+    return () => window.removeEventListener("s1000d-documents-reset", onDocumentsReset);
+  }, []);
+
   const refreshDocs = () => void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
+
+  const startAnalysis = async (id: string) => {
+    setStarting({ pct: 5, label: t("migration.start.starting") });
+    await startWizardStream(id, onStreamEvent);
+    refreshDocs();
+  };
+
+  const startDocument = async (id: string, sourceFormat: string) => {
+    setStarting({ pct: 5, label: t("migration.start.starting") });
+    if (sourceFormat === "pdf") {
+      const detection = await pdfCutApi.detect(id);
+      if (
+        detection.validation_required &&
+        (detection.selected_page == null || detection.selected_end_page == null)
+      ) {
+        setPdfCut({
+          docId: id,
+          detection,
+          startPage: detection.selected_page ?? detection.default_start_page,
+          endPage: detection.selected_end_page ?? detection.total_pages,
+        });
+        setStarting(null);
+        refreshDocs();
+        return;
+      }
+    }
+    await startAnalysis(id);
+  };
 
   const stepLabel = (step: unknown) =>
     t(`migration.start.${String(step)}`, { defaultValue: t("migration.start.fallback") });
@@ -201,6 +254,7 @@ export function Migration() {
       setStarting({ pct: (data.pct as number) || 0, label: stepLabel(data.step) });
     } else if (ev === "done") {
       setStarting(null);
+      setPdfCut(null);
       setWiz(data as unknown as WizardState);
     } else if (ev === "error") {
       setStarting(null);
@@ -216,6 +270,7 @@ export function Migration() {
     setLoadError(null);
     setWiz(null);
     setWizError(null);
+    setPdfCut(null);
     try {
       const doc = await documentsApi.upload(file, issue, hint, brexId || undefined);
       setDocId(doc.id);
@@ -223,9 +278,7 @@ export function Migration() {
       for (const [kind, resource] of Object.entries(resourceFiles)) {
         if (resource) await resourcesApi.upload(doc.id, kind as ResourceKind, resource);
       }
-      setStarting({ pct: 5, label: t("migration.start.starting") });
-      await startWizardStream(doc.id, onStreamEvent);
-      refreshDocs();
+      await startDocument(doc.id, doc.source_format);
     } catch (e) {
       setStarting(null);
       setLoadError(e instanceof Error ? e.message : String(e));
@@ -240,14 +293,36 @@ export function Migration() {
       const st = await wizardApi.get(id);
       setWiz(st);
     } catch {
-      // Pas encore démarré : lance le stream de démarrage.
-      setStarting({ pct: 5, label: t("migration.start.starting") });
       try {
-        await startWizardStream(id, onStreamEvent);
+        const doc = await documentsApi.get(id);
+        await startDocument(id, doc.source_format);
       } catch (e) {
         setStarting(null);
         setWizError(e instanceof Error ? e.message : String(e));
       }
+    }
+  };
+
+  const confirmPdfCut = async () => {
+    if (!pdfCut || pdfCut.startPage == null || pdfCut.endPage == null) return;
+    const pending = pdfCut;
+    const startPage = pending.startPage;
+    const endPage = pending.endPage;
+    if (startPage == null || endPage == null) return;
+    if (startPage > endPage) {
+      setLoadError(t("migration.upload.pdfCut.invalidRange"));
+      return;
+    }
+    setPdfCutBusy(true);
+    setLoadError(null);
+    try {
+      await pdfCutApi.confirm(pending.docId, startPage, endPage);
+      setPdfCut(null);
+      await startAnalysis(pending.docId);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfCutBusy(false);
     }
   };
 
@@ -396,15 +471,103 @@ export function Migration() {
             <button
               type="button"
               className="btn primary"
-              disabled={busy || starting !== null}
+              disabled={busy || starting !== null || pdfCut !== null || pdfCutBusy}
               onClick={() => void doStart()}
             >
               {t("migration.upload.start")}
             </button>
+            {starting ? (
+              <div style={{ minWidth: 240, flex: "1 1 280px" }}>
+                <div
+                  className="label"
+                  style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+                >
+                  <span>{starting.label}</span>
+                  <span>{starting.pct}%</span>
+                </div>
+                <div
+                  className="progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={starting.pct}
+                >
+                  <span style={{ width: `${starting.pct}%` }} />
+                </div>
+              </div>
+            ) : null}
             {loadError ? <span className="error grow">{loadError}</span> : null}
           </div>
         </div>
       </div>
+
+      {pdfCut ? (
+        <div className="card">
+          <h2 className="card-title">{t("migration.upload.pdfCut.title")}</h2>
+          <p className="label">{t("migration.upload.pdfCut.help")}</p>
+          <div className="row" style={{ alignItems: "end" }}>
+            <label>
+              <div className="label">{t("migration.upload.pdfCut.startPage")}</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={pdfCut.detection.total_pages}
+                value={pdfCut.startPage ?? ""}
+                disabled={pdfCutBusy}
+                onChange={(e) =>
+                  setPdfCut((current) =>
+                    current ? { ...current, startPage: Number(e.target.value) || null } : current,
+                  )
+                }
+              />
+            </label>
+            <label>
+              <div className="label">{t("migration.upload.pdfCut.endPage")}</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={pdfCut.detection.total_pages}
+                value={pdfCut.endPage ?? ""}
+                disabled={pdfCutBusy}
+                onChange={(e) =>
+                  setPdfCut((current) =>
+                    current ? { ...current, endPage: Number(e.target.value) || null } : current,
+                  )
+                }
+              />
+            </label>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={
+                pdfCutBusy ||
+                pdfCut.startPage == null ||
+                pdfCut.endPage == null ||
+                pdfCut.startPage > pdfCut.endPage
+              }
+              onClick={() => void confirmPdfCut()}
+            >
+              {t("migration.upload.pdfCut.validate")}
+            </button>
+          </div>
+          {pdfCut.startPage != null ? (
+            <img
+              src={pdfCutApi.previewUrl(pdfCut.docId, pdfCut.startPage)}
+              alt={t("migration.upload.pdfCut.previewAlt", { page: pdfCut.startPage })}
+              style={{
+                display: "block",
+                maxWidth: "100%",
+                maxHeight: 560,
+                marginTop: 16,
+                objectFit: "contain",
+                border: "1px solid var(--border)",
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="card">
         <h2 className="card-title">{t("migration.docs.title")}</h2>
@@ -450,18 +613,6 @@ export function Migration() {
 
       {/* Assistant */}
       <div ref={wizRef}>
-        {starting ? (
-          <div className="card">
-            <h2 className="card-title">{t("migration.start.title")}</h2>
-            <div className="label" style={{ marginBottom: 6 }}>
-              {starting.label}
-            </div>
-            <div className="progress">
-              <span style={{ width: `${starting.pct}%` }} />
-            </div>
-          </div>
-        ) : null}
-
         {wizError ? <div className="card"><div className="error">{wizError}</div></div> : null}
 
         {wiz?.resources?.errors?.length ? (
@@ -487,13 +638,23 @@ export function Migration() {
                   </span>
                 ))}
                 {wiz.resources?.dmrl_count && docId ? (
-                  <a
-                    className="btn secondary small"
-                    style={{ marginLeft: "auto" }}
-                    href={resourcesApi.pmcUrl(docId)}
-                  >
-                    {t("migration.generate.pmc")}
-                  </a>
+                  <>
+                    <a
+                      className="btn secondary small"
+                      style={{ marginLeft: "auto" }}
+                      href={resourcesApi.pmcUrl(docId)}
+                    >
+                      {t("migration.generate.pmc")}
+                    </a>
+                    {wiz.step === "generate" ? (
+                      <a
+                        className="btn primary small"
+                        href={wizardApi.zipUrl(docId)}
+                      >
+                        {t("migration.generate.zip")}
+                      </a>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             </div>

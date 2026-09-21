@@ -44,7 +44,11 @@ _ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 _ICN_RE = re.compile(
+<<<<<<< HEAD
     r"""(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+\.(?:jpg|png))(?=$|[\s,;|)\]}])""",
+=======
+    r"(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+\.(?:jpg|png))(?=$|[\s,;|)\]}])",
+>>>>>>> origin/main
     re.IGNORECASE,
 )
 
@@ -75,7 +79,11 @@ def entry_from_dict(data: dict) -> DmrlEntry:
 
 
 def extract_icn_filenames(value: str | None) -> list[str]:
+<<<<<<< HEAD
     """Extracte les noms ICN valides d'une cellule DMRL, dans leur ordre."""
+=======
+    """Extrait les noms ICN valides d'une cellule DMRL, dans leur ordre."""
+>>>>>>> origin/main
     return [match.group(1) for match in _ICN_RE.finditer(value or "")]
 
 

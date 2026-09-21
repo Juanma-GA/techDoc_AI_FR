@@ -13,9 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.auth import AuthenticatedUser, require_authenticated
 from app.core.errors import AppError
 from app.core.indexer import index_document
 from app.core.mistral_client import MistralClient, MistralError, get_llm_enabled
+from app.core.ownership import get_owned_document
 from app.core.security import read_and_validate, safe_storage_join
 from app.core.template_format import is_supported_template
 from app.core.versioning import sha256_of_bytes
@@ -57,9 +59,14 @@ VALID_KINDS = {"source", "template", "style"}
 def list_documents(
     kind: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> list[Document]:
     """List documents. Optional `?kind=source|template|style` filter."""
     stmt = select(Document).order_by(Document.uploaded_at.desc())
+    # §3 (MFA pilot) : filtre par proprietaire quand l'auth est active. No-op
+    # (tous les documents, comportement tier1 inchange) quand `user` est None.
+    if user is not None:
+        stmt = stmt.where(Document.user_email == user.email)
     if kind:
         if kind not in VALID_KINDS:
             raise AppError(
@@ -77,6 +84,7 @@ def upload_documents(
     files: list[UploadFile] = File(...),
     kind: str = Form(default="source"),
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> UploadResultOut:
     """Upload N fichiers : valide, dedup sha256, parse, index synchrone.
 
@@ -123,8 +131,16 @@ def upload_documents(
 
         digest = sha256_of_bytes(raw)
 
-        # Dedup : si le même sha256 existe déjà, on signale skipped.
-        existing = db.scalar(select(Document).where(Document.sha256 == digest))
+        # Dedup : si le même sha256 existe déjà POUR CE MEME UTILISATEUR (§3,
+        # MFA pilot), on signale skipped. Scope par utilisateur : sinon deux
+        # utilisateurs uploadant le même fichier entreraient en collision sur
+        # la contrainte unique (user_email, sha256) — voir 0003_user_scoping.
+        dedup_stmt = select(Document).where(Document.sha256 == digest)
+        if user is not None:
+            dedup_stmt = dedup_stmt.where(Document.user_email == user.email)
+        else:
+            dedup_stmt = dedup_stmt.where(Document.user_email.is_(None))
+        existing = db.scalar(dedup_stmt)
         if existing is not None:
             results.append(
                 UploadItemResult(
@@ -168,6 +184,7 @@ def upload_documents(
             mime_type=upload.content_type or "",
             size=len(raw),
             sha256=digest,
+            user_email=user.email if user else None,
             storage_path=str(stored),
             extracted_text=extracted_text,
             kind=kind,
@@ -387,6 +404,7 @@ def _compute_zones(
 def get_zones(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Liste des zones a remplir detectees dans un template `.pptx`/`.docx`/`.pdf`.
 
@@ -402,7 +420,7 @@ def get_zones(
 
     400 si le document n'est pas un template supporte ; 404 si introuvable.
     """
-    doc = db.get(Document, document_id)
+    doc = get_owned_document(db, document_id, user)
     if doc is None:
         raise AppError(
             "DOCUMENT_NOT_FOUND",
@@ -519,6 +537,7 @@ def _merge_reanalysed_zones(
 def reanalyse_zones(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Redetecte les zones d'un template apres une modification du fichier
     (cadres ajoutes/supprimes), en PRESERVANT le label/consigne/activation/
@@ -532,7 +551,7 @@ def reanalyse_zones(
 
     400 si le document n'est pas un template supporte ; 404 si introuvable.
     """
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
 
     old_zones, _, _, _ = _read_zones_cache(doc)
     old_removed = _read_removed(doc)
@@ -620,11 +639,12 @@ def add_zone(
     document_id: uuid.UUID,
     payload: ZoneIn,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Ajoute une zone manuellement. kind force a 'llm' (les zones regex
     viennent du parsing du pptx, pas de l'utilisateur). Apres add,
     `validated` repasse a False : il faut re-valider explicitement."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
     cached, llm_used, dropped, _validated = _require_zones_loaded(doc)
 
     # Refus si le target est deja utilise par une zone existante (sinon
@@ -660,13 +680,14 @@ def patch_zone(
     zone_id: str,
     payload: ZonePatch,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Met a jour label / target / active d'une zone existante.
 
     Changement structurel (label, target) -> `validated` repasse a False.
     Simple toggle `active` -> PRESERVE la validation (c'est une preference
     de remplissage, pas une modif de la definition des zones)."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
     cached, llm_used, dropped, validated = _require_zones_loaded(doc)
 
     target_zone = next((z for z in cached if z.get("id") == zone_id), None)
@@ -714,11 +735,12 @@ def delete_zone(
     document_id: uuid.UUID,
     zone_id: str,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Soft-delete : deplace la zone vers la corbeille (`removed`) au lieu de
     la perdre, pour pouvoir la restaurer ensuite. Preserve la validation (une
     suppression reduit l'ensemble deja revu, elle ne l'invalide pas)."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
     cached, llm_used, dropped, validated = _require_zones_loaded(doc)
 
     target_zone = next((z for z in cached if z.get("id") == zone_id), None)
@@ -745,10 +767,11 @@ def validate_zones(
     document_id: uuid.UUID,
     payload: ZonesValidateIn,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Toggle manuel du flag `validated` du template. L'export PPTX refuse
     tant que `validated=false` (sauf rattrapage par auto-validation)."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
     cached, llm_used, dropped, _validated = _require_zones_loaded(doc)
     _write_zones_cache(
         doc, cached, llm_used, dropped, db, validated=payload.validated
@@ -762,11 +785,12 @@ def validate_zones(
 def get_structure(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> StructureOut:
     """Structure complete du template : shapes + positions EMU + dimensions
     du slide. Sert au rendu SVG cote UI et au picker du formulaire
     'Ajouter une zone'."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
 
     from app.core.template_format import resolve
 
@@ -816,11 +840,12 @@ def get_structure(
 def get_flow(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> FlowOut:
     """Apercu 'flux document' Word/PDF : le document dans l'ordre de lecture
     (paragraphes + tableaux), marqueurs inclus. Pendant du /structure (SVG)
     reserve au PPTX positionne. 400 pour un template PPTX (utiliser /structure)."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
 
     from app.core import docx_template
     from app.core.template_format import resolve
@@ -874,10 +899,11 @@ def bulk_delete_zones(
     document_id: uuid.UUID,
     payload: ZonesBulkDeleteIn,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Soft-delete de plusieurs zones (corbeille). Preserve la validation.
     Les ids inexistants sont ignores silencieusement (idempotent)."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
     cached, llm_used, dropped, validated = _require_zones_loaded(doc)
 
     to_delete = set(payload.ids)
@@ -899,11 +925,12 @@ def restore_zone(
     document_id: uuid.UUID,
     zone_id: str,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> ZonesOut:
     """Restaure une zone soft-deleted depuis la corbeille vers la liste active.
     404 si la zone n'est pas dans la corbeille. 409 si sa cible est entre-temps
     reprise par une autre zone active."""
-    doc = _require_template(db.get(Document, document_id), document_id)
+    doc = _require_template(get_owned_document(db, document_id, user), document_id)
     cached, llm_used, dropped, validated = _require_zones_loaded(doc)
     removed = _read_removed(doc)
 
@@ -949,6 +976,7 @@ def restore_zone(
 def get_document_content(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> DocumentContentOut:
     """Renvoie le TEXTE EXTRAIT d'un document (ce que le parsing / l'OCR / la
     vision a produit) — pour verifier l'extraction sans ouvrir le fichier.
@@ -957,7 +985,7 @@ def get_document_content(
     re-derive le vrai contenu via `_load_doc_text` (qui re-parse si besoin)."""
     from app.core.writer_engine import _load_doc_text
 
-    doc = db.get(Document, document_id)
+    doc = get_owned_document(db, document_id, user)
     if doc is None:
         raise AppError(
             "DOCUMENT_NOT_FOUND",
@@ -983,6 +1011,7 @@ def get_document_content(
 def reparse_document(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
 ) -> DocumentOut:
     """Re-extrait le texte d'un document DEJA stocke (sans re-upload), via le
     parser courant. Utile apres un changement de moteur de lecture PDF
@@ -992,7 +1021,7 @@ def reparse_document(
     Refuse les templates : leur `extracted_text` porte le cache des zones, pas
     du texte brut -> pour eux, utiliser GET /zones?refresh=true.
     """
-    doc = db.get(Document, document_id)
+    doc = get_owned_document(db, document_id, user)
     if doc is None:
         raise AppError(
             "DOCUMENT_NOT_FOUND",
@@ -1055,8 +1084,12 @@ def reparse_document(
 
 
 @router.delete("/{document_id}", status_code=204)
-def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
-    doc = db.get(Document, document_id)
+def delete_document(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser | None = Depends(require_authenticated),
+) -> None:
+    doc = get_owned_document(db, document_id, user)
     if doc is None:
         raise AppError(
             "DOCUMENT_NOT_FOUND",

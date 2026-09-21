@@ -10,11 +10,14 @@ from collections.abc import AsyncIterator
 import pytest
 from fastapi.testclient import TestClient
 
+from app.config import settings as app_settings
 from app.core.mistral_client import save_settings, set_llm_enabled
 from app.db.session import SessionLocal
 
 AUDIO = ("dictation.webm", b"\x1aE\xdf\xa3fake-webm-bytes", "audio/webm")
 REALTIME_MODEL = "voxtral-mini-transcribe-realtime-2602"
+# Endpoint approuve (allow-list F-01) — seul base_url accepte par save_settings.
+APPROVED_BASE_URL = app_settings.mistral_allowed_base_urls[0]
 
 
 def _configure_llm(enabled: bool = True) -> None:
@@ -46,8 +49,8 @@ def test_realtime_token_returns_short_lived_session(
         "token": "rt_test_token",
         "model": REALTIME_MODEL,
         "websocket_url": (
-            "wss://api.mistral.ai/v1/audio/transcriptions/realtime"
-            f"?model={REALTIME_MODEL}"
+            f"wss://{APPROVED_BASE_URL.removeprefix('https://')}"
+            f"/v1/audio/transcriptions/realtime?model={REALTIME_MODEL}"
         ),
     }
 
@@ -245,7 +248,7 @@ def test_transcribe_uses_dedicated_voxtral_key(
     _configure(
         {
             "api_key": "sk-main-key",
-            "base_url": "https://api.mistral.ai",
+            "base_url": APPROVED_BASE_URL,
             "voxtral_api_key": "vx-dedicated-key",
             "voxtral_base_url": "https://voxtral.example.com",
             "transcribe_model": "voxtral-mini-latest",
@@ -291,7 +294,7 @@ def test_transcribe_falls_back_to_main_key_without_dedicated(
     _configure(
         {
             "api_key": "sk-main-key",
-            "base_url": "https://api.mistral.ai",
+            "base_url": APPROVED_BASE_URL,
             "voxtral_api_key": "",
             "voxtral_base_url": "",
         }
@@ -300,7 +303,7 @@ def test_transcribe_falls_back_to_main_key_without_dedicated(
 
     resp = client.post("/api/v1/sessions/transcribe", files={"file": AUDIO})
     assert resp.status_code == 200, resp.text
-    assert captured["url"] == "https://api.mistral.ai/v1/audio/transcriptions"
+    assert captured["url"] == f"{APPROVED_BASE_URL}/v1/audio/transcriptions"
     assert captured["headers"]["Authorization"] == "Bearer sk-main-key"
 
 

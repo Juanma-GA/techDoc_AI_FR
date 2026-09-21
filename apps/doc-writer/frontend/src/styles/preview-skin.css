@@ -262,3 +262,5 @@ table.data-table tr:hover td { background: var(--bg-2); }
 .msg.assistant { background: var(--card); border-color: var(--border-bright); }
 .msg-role { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); margin-bottom: 6px; }
 .msg-citations { margin-top: 8px; font-size: 0.8rem; color: var(--fg-dim); font-family: "JetBrains Mono", monospace; }
+
+.current-user-badge { font-size: 0.75rem; color: var(--fg-dim); padding: 0 12px 8px; }

@@ -74,7 +74,10 @@ export function Data() {
       const items = Object.entries(res.deleted ?? {})
         .map(([k, v]) => `${k}: ${v}`)
         .join(", ");
-      setFeedback({ kind: "ok", message: t("data.resetOk", { items }) });
+      const message = res.backup_path
+        ? `${t("data.resetOk", { items })} ${t("data.resetBackup", { path: res.backup_path })}`
+        : t("data.resetOk", { items });
+      setFeedback({ kind: "ok", message });
       void qc.invalidateQueries({ queryKey: ["admin", "stats"] });
       void qc.invalidateQueries({ queryKey: ["documents"] });
       void qc.invalidateQueries({ queryKey: ["sessions"] });

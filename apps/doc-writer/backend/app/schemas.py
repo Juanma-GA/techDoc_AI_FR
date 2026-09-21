@@ -378,9 +378,66 @@ class AdminStatsOut(BaseModel):
     total_size_bytes: int
 
 
+class AdminResetIn(BaseModel):
+    """F-06 : jeton de confirmation explicite cote serveur (au-dela du
+    double-clic client, bypassable). Doit correspondre exactement au scope
+    cible (ex. "documents", "sessions", "all")."""
+
+    confirm: str
+
+
 class AdminResetOut(BaseModel):
     scope: str
     deleted: dict[str, int]
+    # F-06 : chemin du backup SQLite pre-reset (best-effort). None si la DB
+    # n'est pas SQLite ou si le backup a echoue (le reset n'est jamais bloque).
+    backup_path: str | None = None
+
+
+# ----- Auth (MFA pilot, R1) ---------------------------------------------------
+
+
+class AuthStartIn(BaseModel):
+    email: str
+
+
+class AuthStartOut(BaseModel):
+    auth_id: str
+    login_page_url: str | None = None
+
+
+class AuthSessionOut(BaseModel):
+    enabled: bool
+    authenticated: bool
+    email: str | None = None
+    display_name: str | None = None
+    role: str | None = None
+    disabled_reason: str | None = None
+
+
+class AuthMeOut(BaseModel):
+    email: str
+    display_name: str
+    role: str
+
+
+class AuthUserIn(BaseModel):
+    """Body admin pour créer/mettre à jour un utilisateur AUTHDB."""
+
+    email: str
+    role: str
+
+
+class AuthUserOut(BaseModel):
+    id: int
+    email: str
+    display_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    last_login_at: datetime | None = None
+    added_by: str
 
 
 class TranscriptionOut(BaseModel):

@@ -18,7 +18,11 @@ Generate technical content from selected source documents with retrieval-augment
 
 ## Auth
 
-**Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication by default. A separately configured tier-2 mode has additional security requirements.
+**Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication by default (the only tier covered by the monorepo standard, CLAUDE.md rule #8).
+
+**Écart documenté :** the codebase also contains a `TIER_MODE=tier2` / Azure deployment path (`deploy/azure/`), which is out of the POC standard's scope (palier 2/3). `_validate_security_posture()` in `backend/app/main.py` refuses to start (fail-fast `RuntimeError`) whenever `TIER_MODE=tier2` or `BIND_HOST` is not `127.0.0.1`/`localhost`/`::1`, **unless** the MFA pilot below is fully configured — so the app can never serve requests over an exposed bind while claiming auth is enforced but isn't.
+
+**MFA pilot (R1, `settings.auth_enabled`) :** an auth path now exists, delegating login + MFA entirely to the corporate MS365 identity MCP service (same service consumed by KleamPy) and authorizing against a dedicated `docwriter_users` PostgreSQL table (own role mapping, no shared state with other apps). See `MFA_PILOT_CHECKLIST_DOC-WRITER_2026-09-14.md` (repo root) for full scope, status, and the infra prerequisites (a reachable Postgres instance, the internal CA bundle) still pending before this can be exercised end-to-end. Disabled by default (`auth_enabled=False`) — tier1 local behavior is completely unaffected until explicitly turned on via `.env`.
 
 ## Port
 

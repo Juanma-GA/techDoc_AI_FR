@@ -1,9 +1,11 @@
 import { ErrorBoundary, PortalLink } from "@internal/ui";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
+import { authApi, type AuthSessionDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Documents } from "./routes/Documents";
 import { Generate } from "./routes/Generate";
@@ -24,6 +26,41 @@ const LANGS = ["fr", "en", "es"] as const;
 export function App() {
   const { t, i18n } = useTranslation();
   const currentLang = (i18n.language || "fr").slice(0, 2);
+  const qc = useQueryClient();
+
+  // MFA pilot (R1) : tant que auth_enabled=false (defaut tier1), `enabled`
+  // vaut false et la porte ci-dessous est un no-op — comportement identique
+  // a avant ce pilote.
+  const sessionQuery = useQuery<AuthSessionDto>({
+    queryKey: ["auth", "session"],
+    queryFn: authApi.session,
+    staleTime: 60_000,
+  });
+  const session = sessionQuery.data;
+
+  const logout = async () => {
+    await authApi.logout();
+    void qc.invalidateQueries({ queryKey: ["auth", "session"] });
+  };
+
+  // Session pas encore chargee (premier rendu) : ne rien afficher plutot
+  // qu'un flash de l'app avant de savoir si une connexion est requise.
+  if (sessionQuery.isPending) {
+    return null;
+  }
+
+  // SSO portal (option A) : le login n'est PAS ici, il est au portal
+  // atexispocs. Si l'auth est active et qu'aucune session partagee n'est
+  // presente, on renvoie au portal (parent de BASE_URL) plutot que
+  // d'afficher un formulaire propre. No-op quand auth_enabled=false.
+  if (session?.enabled && !session.authenticated) {
+    // BASE_URL de doc-writer = ".../atexispocs/doc-writer/" -> le portal est
+    // le parent ".../atexispocs/". En local (BASE_URL="/") -> "/".
+    const base = import.meta.env.BASE_URL || "/";
+    const portalUrl = base.replace(/[^/]+\/$/, "") || "/";
+    window.location.replace(portalUrl);
+    return null;
+  }
 
   return (
     <div className="dw">
@@ -35,6 +72,16 @@ export function App() {
             <span className="label">v{t("app.version")}</span>
             <ThemeToggleButton />
           </div>
+
+          {session?.enabled && session.authenticated ? (
+            <div className="current-user-badge">
+              {session.display_name || session.email}
+              {" · "}
+              <button type="button" className="btn ghost small" onClick={() => void logout()}>
+                {t("auth.logout")}
+              </button>
+            </div>
+          ) : null}
 
           <LlmBadge />
 
