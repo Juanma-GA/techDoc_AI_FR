@@ -28,22 +28,21 @@ export function AnalysisPageRange({ pageCount, running, onStart, blocked = false
     lastPage <= pageCount;
 
   return (
-    <span className="row" style={{ gap: 6, alignItems: "center" }}>
+    <span className="row analysis-page-range">
       <select
-        className="input"
+        className="input analysis-page-range-select"
         value={mode}
         onChange={(event) => setMode(event.target.value as "all" | "range")}
         aria-label={t("reviewer.pageScope.label")}
-        style={{ width: 180, minWidth: 180, flexShrink: 0 }}
       >
         <option value="all">{t("reviewer.pageScope.all")}</option>
         <option value="range">{t("reviewer.pageScope.range")}</option>
       </select>
 
       {mode === "range" ? (
-        <span className="row" style={{ gap: 4, alignItems: "center" }}>
+        <span className="row analysis-page-range-fields">
           <input
-            className="input"
+            className="input analysis-page-range-input"
             type="number"
             min={1}
             max={Math.max(pageCount, 1)}
@@ -51,11 +50,10 @@ export function AnalysisPageRange({ pageCount, running, onStart, blocked = false
             onChange={(event) => setFirstPage(Number(event.target.value))}
             aria-label={t("reviewer.pageScope.first")}
             title={t("reviewer.pageScope.first")}
-            style={{ width: 64 }}
           />
           <ArrowRight size={14} aria-hidden="true" />
           <input
-            className="input"
+            className="input analysis-page-range-input"
             type="number"
             min={1}
             max={Math.max(pageCount, 1)}
@@ -63,7 +61,6 @@ export function AnalysisPageRange({ pageCount, running, onStart, blocked = false
             onChange={(event) => setLastPage(Number(event.target.value))}
             aria-label={t("reviewer.pageScope.last")}
             title={t("reviewer.pageScope.last")}
-            style={{ width: 64 }}
           />
         </span>
       ) : null}

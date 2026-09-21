@@ -71,7 +71,7 @@ export function Rules() {
             : t("standards.transverse");
 
         const renderCompiledTable = (list: typeof compiled) => (
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="rules-table">
               <thead>
                 <tr>
@@ -148,7 +148,7 @@ export function Rules() {
         );
 
         const renderCustomTable = (list: Rule[]) => (
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="rules-table">
               <thead>
                 <tr>
@@ -283,7 +283,7 @@ function RuleRow({
           <span className="track" />
         </label>
       </td>
-      <td style={{ minWidth: 180 }}>
+      <td className="rule-name-cell">
         <input
           aria-label={t("rules.form.name")}
           value={edit.name}
@@ -295,14 +295,14 @@ function RuleRow({
           <span className="label">{scopeLabel}</span>
         </div>
       </td>
-      <td style={{ minWidth: 220 }}>
+      <td className="rule-message-cell">
         <textarea
           aria-label={t("rules.form.message")}
           value={edit.message}
           onChange={(e) => setEdit({ ...edit, message: e.target.value })}
         />
       </td>
-      <td style={{ minWidth: 110 }}>
+      <td className="rule-severity-cell">
         <select
           aria-label={t("rules.form.severity")}
           value={edit.severity}

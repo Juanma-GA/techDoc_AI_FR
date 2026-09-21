@@ -98,7 +98,7 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
             </button>
             <span className="badge info">{t("reviewer.docxMode")}</span>
           </div>
-          <div className="reviewer-toolbar-group">
+          <div className="reviewer-toolbar-group reviewer-toolbar-actions">
             <AnalysisPageRange
               pageCount={document.data?.page_count ?? 0}
               running={analyze.status === "running"}

@@ -79,10 +79,7 @@ export function Standards(): JSX.Element {
 
   return (
     <div className="card">
-      <section
-        className="grid-2"
-        style={{ gridTemplateColumns: "260px 1fr", alignItems: "start" }}
-      >
+      <section className="grid-2 standards-layout">
         <aside className="card">
           <h2 className="card-title">{t("standards.listTitle")}</h2>
           {standards.isLoading ? (
@@ -91,16 +88,25 @@ export function Standards(): JSX.Element {
             <ul className="item-list">
               {items.map((s) => (
                 <li key={s.id}>
-                  <button
-                    type="button"
+                  <div
                     onClick={() => {
                       setSelectedStd(s.id);
                       setSelectedVer(s.versions[0]?.id ?? null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedStd(s.id);
+                        setSelectedVer(s.versions[0]?.id ?? null);
+                      }
                     }}
                     className={[
                       "item-row clickable",
                       (current?.id ?? null) === s.id ? "active" : "",
                     ].join(" ")}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={(current?.id ?? null) === s.id}
                   >
                     <span className="item-name label">{s.code}</span>
                     {s.builtin ? (
@@ -118,7 +124,7 @@ export function Standards(): JSX.Element {
                         <Trash2 size={12} />
                       </button>
                     )}
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>

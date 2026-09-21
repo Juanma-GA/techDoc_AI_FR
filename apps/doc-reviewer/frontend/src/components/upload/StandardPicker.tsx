@@ -35,7 +35,7 @@ export function StandardPicker({ standardId, versionId, onChange }: Props): JSX.
   }, [current, versions, versionId, onChange]);
 
   return (
-    <div className="row">
+    <div className="row standard-picker">
       <label className="field">
         <span className="field-label">{t("standards.selectStandard")}</span>
         <select
@@ -50,8 +50,7 @@ export function StandardPicker({ standardId, versionId, onChange }: Props): JSX.
             const firstVersion = next?.versions[0]?.id ?? null;
             onChange(value, firstVersion);
           }}
-          className="input"
-          style={{ minWidth: "16rem" }}
+          className="input standard-picker-select"
         >
           <option value={TRANSVERSE_VALUE}>{t("standards.transverse")}</option>
           {items.map((s) => (
@@ -69,8 +68,7 @@ export function StandardPicker({ standardId, versionId, onChange }: Props): JSX.
           disabled={!current || versions.length === 0}
           value={versionId ?? ""}
           onChange={(e) => onChange(standardId, e.target.value || null)}
-          className="input"
-          style={{ minWidth: "10rem" }}
+          className="input standard-picker-version"
         >
           <option value="" disabled>
             {versions.length === 0 ? t("standards.noVersion") : t("standards.selectVersion")}

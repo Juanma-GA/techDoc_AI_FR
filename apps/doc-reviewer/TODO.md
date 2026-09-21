@@ -37,13 +37,13 @@ Pied de page : Il faudra vérifier les pieds de pages seulements des pages menti
 
 Le but est de détecter les pages modifiées avant de lancer les autres contrôles, en croisant trois sources :
 
-1. Highlights
+1. Highlights (la page où y'a marqué HIGHLIGHTS souligné logique)
 
 - R = page révisée
 - N = nouvelle page
 - U = page inchangée
 
-2. LEP (List of Effective Pages)
+2. LEP (la page où y'a marqué List of Effective Pages soulignés)
 
 - liste des pages effectives ;
 - sujet associé ;
@@ -51,7 +51,7 @@ Le but est de détecter les pages modifiées avant de lancer les autres contrôl
 - "*" après la date si la page est modifiée ;
 - attention : chaque ligne contient deux groupes de trois colonnes, qu’il faut donc traiter comme deux entrées distinctes.
 
-3. Pied de page de la page
+3. Pied de page de la page dont on veut vérifier la cohérence de modif ou revision ou rien
 
 - date affichée sur la page elle-même.
 
@@ -61,6 +61,7 @@ Le mapping fournit deux dates :
 
 - la **date de révision**, attendue pour les pages révisées (`R`) ou nouvelles (`N`) ;
 - la **date de première issue**, attendue pour les pages qui n’ont jamais été révisées.
+- Il manque dans le mapping une "date de derniere issue" à ajouter 
 
 Pour chaque page et chaque sujet, les trois sources doivent être cohérentes :
 
@@ -84,6 +85,8 @@ Il faut donc signaler notamment :
 Contrôles complémentaires
 
 - Dans Highlights, une page paire doit être précédée par la page impaire correspondante. Par exemple, si la page 4 apparaît, la page 3 doit aussi être présente.
+Toujours mettre les pages par impaire/paire (ex: si modif sur page impaire mettre "Page xx1       R  "et mettre sur la ligne suivante la page paire suivante: "Page xx2     U ")
+Toujours mettre les pages par impaire/paire (ex: si modif sur page paire mettre "Page xx2       R  "et mettre sur la ligne de dessus la page impaire précédente: "Page xx1    U ") donc ça à vérifier aussi 
 - Vérifier le formatage de page / pages et les espaces nécessaires à l’alignement. Parce que quand il y a plusieurs pages il fuat noté sous la forme "Pages 701 to 704" et quand il y a qu'un page : "Page  401".
 - Pour les pages non modifiées, vérifier que le pied de page contient bien la dernière date de révision connue ou la date de première émission, et non la nouvelle date de révision.
 
@@ -102,5 +105,88 @@ Le contrôle consiste à comparer, pour chaque page et chaque sujet :
 3. sa date de pied de page ;
 4. les dates fournies par le mapping.
 
+Pour une page `U` déjà révisée, la dernière date de révision doit être récupérée dans le LEP ou l’historique du document. Elle ne doit pas être remplacée par la date de révision actuelle du mapping. 
 
-Pour une page `U` déjà révisée, la dernière date de révision doit être récupérée dans le LEP ou l’historique du document. Elle ne doit pas être remplacée par la date de révision actuelle du mapping. --> ajouter dans le mapping une "date de derniere issue"
+
+
+
+---------------------
+
+J'ai besoin que tu ajoutes des nouvelles règles hyper importantes à @file:thales_custom.py 
+Regarder comment sont implémentées toutes les autres règles déjà présentes. Comprends les nouvelles règles et ensuite seulement tu peux les implémenter. Ne fait pas de code pour du code, il faut que ça marche et que ce soit efficace. D'ailleurs ces nouvelles règles vont peut être modifier ou vont peut etre pouvoir simplifier certaines règles déjà présentes. Je pense même que ce sont des règles qui pourront permettrent d'avoir des réponses utilisables pour les autres règles, donc que ce sont celles ci à effectuer en premier et regarder lesquelles peuvent dépendre de ces règles.
+
+Tu as à ta disposition le document test que j'utilise pour tester pour voir un peu à quoi ressemble l'objectif.
+
+Voici ce qu'on veut avec ces nouvelles règles : Le but est de détecter les pages modifiées avant de lancer les autres contrôles, en croisant trois sources :
+
+1. Highlights (la page où y'a marqué HIGHLIGHTS souligné logique)
+
+- R = page révisée
+- N = nouvelle page
+- U = page inchangée
+
+2. LEP (la page où y'a marqué List of Effective Pages soulignés)
+
+- liste des pages effectives ;
+- sujet associé ;
+- date de révision ;
+- "*" après la date si la page est modifiée ;
+- attention : chaque ligne contient deux groupes de trois colonnes, qu’il faut donc traiter comme deux entrées distinctes.
+
+3. Pied de page de la page dont on veut vérifier la cohérence de modif ou revision ou rien
+
+- date affichée sur la page elle-même.
+
+Règle principale
+
+Le mapping fournit deux dates :
+
+- la **date de révision**, attendue pour les pages révisées (`R`) ou nouvelles (`N`) ;
+- la **date de première issue**, attendue pour les pages qui n’ont jamais été révisées.
+- Il manque dans le mapping une "date de derniere issue" à ajouter 
+
+Pour chaque page et chaque sujet, les trois sources doivent être cohérentes :
+
+| Statut dans Highlights | Date attendue dans le LEP | Étoile dans le LEP | Date du pied de page | Résultat attendu |
+| --- | --- | --- | --- | --- |
+| `R` - page révisée | Date de révision du mapping | Obligatoire | Date de révision | Cohérent |
+| `N` - nouvelle page | Date de révision du mapping | Obligatoire | Date de révision | Cohérent |
+| `U` - page inchangée, jamais révisée | Date de première issue du mapping | Absente | Date de première issue | Cohérent |
+| `U` - page inchangée, déjà révisée | Dernière date de révision connue dans le LEP ou l’historique | Absente | Cette dernière date de révision | Cohérent |
+| Toute autre combinaison | Date ou valeur incohérente | Étoile absente ou inattendue | Date incorrecte ou absente | À signaler |
+
+Il faut donc signaler notamment :
+
+- une page marquée R ou N dans Highlights mais sans * dans le LEP ;
+- une page avec * dans le LEP mais marquée U dans Highlights ;
+- une date LEP différente de la date de révision attendue ;
+- une date de pied de page incorrecte ;
+- une page qui porte la nouvelle date dans son pied de page mais qui n’est déclarée comme modifiée nulle part ;
+- une page présente dans un document mais absente des Highlights ou du LEP.
+
+Contrôles complémentaires
+
+- Dans Highlights, une page paire doit être précédée par la page impaire correspondante. Par exemple, si la page 4 apparaît, la page 3 doit aussi être présente.
+Toujours mettre les pages par impaire/paire (ex: si modif sur page impaire mettre "Page xx1       R  "et mettre sur la ligne suivante la page paire suivante: "Page xx2     U ")
+Toujours mettre les pages par impaire/paire (ex: si modif sur page paire mettre "Page xx2       R  "et mettre sur la ligne de dessus la page impaire précédente: "Page xx1    U ") donc ça à vérifier aussi 
+- Vérifier le formatage de page / pages et les espaces nécessaires à l’alignement. Parce que quand il y a plusieurs pages il fuat noté sous la forme "Pages 701 to 704" et quand il y a qu'un page : "Page  401".
+- Pour les pages non modifiées, vérifier que le pied de page contient bien la dernière date de révision connue ou la date de première émission, et non la nouvelle date de révision.
+
+Ordre de traitement envisagé
+
+1. Récupérer les dates de révision attendues, probablement par sujet.
+2. Extraire les statuts des Highlights.
+3. Extraire et séparer les deux entrées de chaque ligne du LEP.
+4. Comparer Highlights, LEP et pieds de page.
+5. Produire une alerte précise avec le numéro de page, le sujet et la source incohérente.
+
+Le contrôle consiste à comparer, pour chaque page et chaque sujet :
+
+1. son statut dans Highlights ;
+2. sa date et son étoile dans le LEP ;
+3. sa date de pied de page ;
+4. les dates fournies par le mapping.
+
+Pour une page `U` déjà révisée, la dernière date de révision doit être récupérée dans le LEP ou l’historique du document. Elle ne doit pas être remplacée par la date de révision actuelle du mapping. 
+
+Si tu as des questions n'hesites pas

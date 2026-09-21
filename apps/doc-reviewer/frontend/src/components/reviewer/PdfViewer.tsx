@@ -7,6 +7,7 @@ type Props = {
   /** URL de l'image PNG de la page courante (rendu serveur). */
   pageImageUrl: string;
   pageNumber: number;
+  zoom: number;
   suggestions: Suggestion[];
   selectedSuggestionId: string | null;
   onSuggestionClick: (id: string) => void;
@@ -26,6 +27,7 @@ type Box = { left: number; top: number; width: number; height: number };
 export function PdfViewer({
   pageImageUrl,
   pageNumber,
+  zoom,
   suggestions,
   selectedSuggestionId,
   onSuggestionClick,
@@ -83,7 +85,7 @@ export function PdfViewer({
   }, [selectedSuggestionId, box]);
 
   return (
-    <div style={{ width: "100%", textAlign: "center" }}>
+    <div className="viewer-surface">
       {error ? (
         <div className="empty-state">Apercu de page indisponible.</div>
       ) : (
@@ -91,10 +93,7 @@ export function PdfViewer({
           ref={wrapRef}
           className="viewer-wrap"
           style={{
-            position: "relative",
-            display: "inline-block",
-            maxWidth: "100%",
-            lineHeight: 0,
+            width: `${zoom * 100}%`,
           }}
         >
           <img
@@ -103,7 +102,6 @@ export function PdfViewer({
             src={pageImageUrl}
             alt=""
             draggable={false}
-            style={{ display: "block", maxWidth: "100%", height: "auto" }}
             onLoad={measure}
             onError={() => setError(true)}
           />

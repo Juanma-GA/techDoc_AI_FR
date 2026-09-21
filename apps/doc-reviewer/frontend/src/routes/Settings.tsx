@@ -365,11 +365,7 @@ export function Settings() {
                   }}
                 >
                   <span
-                    style={{
-                      fontFamily: '"JetBrains Mono", monospace',
-                      color: "var(--fg)",
-                      minWidth: 120,
-                    }}
+                    className="standard-option-code"
                   >
                     {std.code}
                   </span>

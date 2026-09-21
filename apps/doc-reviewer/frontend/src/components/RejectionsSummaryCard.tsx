@@ -99,7 +99,7 @@ export function RejectionsSummaryCard() {
           </div>
 
           {/* Tableau exploitable des rejets. */}
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="rules-table">
               <thead>
                 <tr>

@@ -252,33 +252,17 @@ function BarList({
   return (
     <div className="form">
       {rows.map((r, i) => (
-        <div key={`${r.label}-${i}`} className="row">
-          <span
-            className="label grow"
-            title={r.label}
-            style={{ flex: "0 0 8rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-          >
+        <div key={`${r.label}-${i}`} className="bar-list-row">
+          <span className="label dashboard-bar-label" title={r.label}>
             {r.label}
           </span>
-          <div
-            className="grow"
-            style={{
-              height: 8,
-              overflow: "hidden",
-              borderRadius: 999,
-              background: "var(--card-hover)",
-            }}
-          >
+          <div className="dashboard-bar-track">
             <div
-              style={{
-                height: "100%",
-                borderRadius: 999,
-                background: r.fill,
-                width: `${(r.count / m) * 100}%`,
-              }}
+              className="dashboard-bar-fill"
+              style={{ background: r.fill, width: `${(r.count / m) * 100}%` }}
             />
           </div>
-          <span className="label" style={{ width: "2rem", textAlign: "right" }}>
+          <span className="label dashboard-bar-count">
             {r.count}
           </span>
         </div>

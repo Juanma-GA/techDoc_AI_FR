@@ -265,7 +265,7 @@ export function ChecklistImportCard() {
             <span className="label" style={{ opacity: 0.75 }}>{t("rules.import.clickHeader")}</span>
           </div>
 
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
+          <div className="table-scroll" style={{ marginTop: 8 }}>
             <table className="rules-table">
               <tbody>
                 {sheet.rows.slice(0, 12).map((r, ri) => (
@@ -326,7 +326,7 @@ export function ChecklistImportCard() {
         </p>
       ) : null}
       {compiledRules.length > 0 ? (
-        <div style={{ overflowX: "auto", marginTop: 8 }}>
+        <div className="table-scroll" style={{ marginTop: 8 }}>
           <table className="rules-table">
             <thead>
               <tr>

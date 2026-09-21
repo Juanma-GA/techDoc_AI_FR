@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -39,6 +39,8 @@ export function DocumentReviewer() {
   const setCurrentPage = useViewerStore((s) => s.setCurrentPage);
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
+  const zoom = useViewerStore((s) => s.zoom);
+  const setZoom = useViewerStore((s) => s.setZoom);
 
   // Nombre de pages = metadonnee du document (plus de chargement react-pdf).
   const totalPages = document.data?.page_count ?? 0;
@@ -119,6 +121,39 @@ export function DocumentReviewer() {
             </button>
           </div>
 
+          <div className="reviewer-toolbar-group reviewer-zoom-controls" aria-label={t("reviewer.toolbar.fit")}>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setZoom(zoom - 0.25)}
+              disabled={zoom <= 0.5}
+              aria-label={t("reviewer.toolbar.zoomOut")}
+              title={t("reviewer.toolbar.zoomOut")}
+            >
+              <ZoomOut size={14} aria-hidden="true" />
+            </button>
+            <span className="label reviewer-zoom-value">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setZoom(zoom + 0.25)}
+              disabled={zoom >= 3}
+              aria-label={t("reviewer.toolbar.zoomIn")}
+              title={t("reviewer.toolbar.zoomIn")}
+            >
+              <ZoomIn size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setZoom(1)}
+              aria-label={t("reviewer.toolbar.fit")}
+              title={t("reviewer.toolbar.fit")}
+            >
+              <Maximize2 size={14} aria-hidden="true" />
+            </button>
+          </div>
+
           <div className="reviewer-toolbar-group">
             <button
               type="button"
@@ -143,7 +178,7 @@ export function DocumentReviewer() {
             </button>
           </div>
 
-          <div className="reviewer-toolbar-group">
+          <div className="reviewer-toolbar-group reviewer-toolbar-actions">
             <AnalysisPageRange
               pageCount={totalPages}
               running={analyze.status === "running"}
@@ -176,6 +211,7 @@ export function DocumentReviewer() {
           <PdfViewer
             pageImageUrl={pageImageUrl}
             pageNumber={currentPage}
+            zoom={zoom}
             suggestions={suggestions.data ?? []}
             selectedSuggestionId={selectedId}
             onSuggestionClick={setSelected}
