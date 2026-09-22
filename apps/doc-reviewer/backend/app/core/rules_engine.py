@@ -582,13 +582,18 @@ def _run_ai_custom(
     deterministically. Current document metadata is supplied as literal
     reference data for semantic and AI_SCAN checklist rules."""
     custom_prompt = get_ai_custom_prompt(db)
+    use_english = str(getattr(document, "document_language", "") or "").casefold() == "en"
 
     catalog_for_ai = [
         {
             "code": r.get("code"),
             "severity": r.get("severity") or "warning",
             "title": r.get("title", ""),
-            "description": r.get("description", ""),
+            "description": (
+                r.get("description_en") or r.get("description", "")
+                if use_english
+                else r.get("description", "")
+            ),
         }
         for r in catalog
         if (r.get("kind") or "").lower() in {"regex_flag", "field_required", "section_required"}

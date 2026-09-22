@@ -193,11 +193,13 @@ export type CatalogRule = {
   code: string;
   title: string;
   description: string;
+  description_en?: string | null;
   kind: RuleKindStored;
   severity: Severity;
   pattern: string;
   replacement: string;
   message: string;
+  message_en?: string | null;
   example_invalid: string;
   example_valid: string;
   metadata: Record<string, string>;

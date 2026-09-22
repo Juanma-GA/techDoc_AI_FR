@@ -179,7 +179,9 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 compiled = compile_standard_rule(payload, f"{spec['code']}:{label}")
                 assert compiled is not None
                 assert compiled.source == "standard_rule"
+                assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
+                assert metadata[compiled.id]["message_en"]
     assert total == 71
 
 

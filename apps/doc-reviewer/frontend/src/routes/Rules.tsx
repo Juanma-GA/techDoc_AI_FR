@@ -136,7 +136,7 @@ export function Rules() {
                         {rule.severity}
                       </span>
                     </td>
-                    <td>{rule.topic}</td>
+                    <td>{t(`rules.catalog.${rule.id}`, { defaultValue: rule.topic })}</td>
                     <td>
                       <span className="label">{rule.origin_ref ?? t("standards.transverse")}</span>
                     </td>

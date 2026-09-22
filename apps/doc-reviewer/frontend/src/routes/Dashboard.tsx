@@ -7,6 +7,7 @@ import { RejectionsSummaryCard } from "../components/RejectionsSummaryCard";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { useDocuments } from "../hooks/useDocuments";
 import { api } from "../lib/api";
+import { localizedSuggestionMessage } from "../lib/suggestionText";
 import type { Severity, Suggestion } from "../types/domain";
 
 type KpiTone = "info" | "warn" | "ok" | "neutral";
@@ -101,7 +102,7 @@ export function Dashboard(): JSX.Element {
     } else {
       errorsByRule.set(ruleCode, {
         ruleCode,
-        message: s.message || ruleCode,
+        message: localizedSuggestionMessage(s, t) || ruleCode,
         severity: s.severity,
         count: 1,
       });

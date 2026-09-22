@@ -339,11 +339,13 @@ class CatalogRuleOut(BaseModel):
     code: str
     title: str
     description: str
+    description_en: Optional[str] = None
     kind: str
     severity: str = "warning"
     pattern: str = ""
     replacement: str = ""
     message: str = ""
+    message_en: Optional[str] = None
     example_invalid: str = ""
     example_valid: str = ""
     metadata: dict[str, str] = Field(default_factory=dict)
@@ -362,11 +364,13 @@ class CatalogRulePatchIn(BaseModel):
 
     title: Optional[str] = Field(default=None, min_length=1, max_length=120)
     description: Optional[str] = None
+    description_en: Optional[str] = None
     severity: Optional[Literal["info", "warning", "error"]] = None
     kind: Optional[RuleKind] = None
     pattern: Optional[str] = None
     replacement: Optional[str] = None
     message: Optional[str] = None
+    message_en: Optional[str] = None
     example_invalid: Optional[str] = None
     example_valid: Optional[str] = None
 

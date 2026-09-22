@@ -1240,10 +1240,153 @@ RULE_METADATA["CUSTOM_NO_DEGREE_C_SYMBOL"] = {
 }
 RULE_METADATA["CUSTOM_NO_DEGREE_F_SYMBOL"] = {
     "description": "Le symbole °F doit etre ecrit sous la forme deg. F.",
+    "description_en": "The °F symbol must be written as deg. F.",
     "kind": "regex_flag",
     "severity": "info",
     "message": "Le symbole °F est interdit : utiliser deg. F.",
+    "message_en": "The °F symbol is forbidden: use deg. F.",
 }
+
+
+_ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
+    "CUSTOM_CMM_NUMBER": (
+        "The number in the document must match the meta_cmm_number value entered in the document context.",
+        "The CMM number does not match the document context.",
+    ),
+    "CUSTOM_CMM_NUMBER_FONT_SIZE": (
+        "The CMM number (ATA) in the footer must use a 23 pt font.",
+        "The CMM number (ATA) font size is not 23 pt.",
+    ),
+    "CUSTOM_THALES_LOGO_FONT_SIZE": (
+        "The Thales T at the start of the page must use a 31 pt font outside TP1 pages.",
+        "The THALES logo size outside TP1 is not 31 pt.",
+    ),
+    "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": (
+        "The Thales T at the start of a TP1 page must use a 36 pt font.",
+        "The THALES logo size on TP1 is not 36 pt.",
+    ),
+    "CUSTOM_TP2_IMPORTANT_NOTICE": (
+        "The IMPORTANT NOTICE block on TP2 must exactly match the ATA100 template, apart from line-break and space differences.",
+        "The TP2 Important Notice does not match the ATA100 template.",
+    ),
+    "CUSTOM_TITLE_PAGE_COPYRIGHT": (
+        "The footer of pages modified by the revision must contain the THALES copyright with start year 1966 and the document revision year.",
+        "The footer copyright is missing or contains an incorrect year.",
+    ),
+    "CUSTOM_TP1_REVISION_NUMBER": (
+        "Each TP1 page must contain 'Revision No. 0X' above 'First Issue' in its footer, with 0X equal to the revision number in the mapping.",
+        "The TP1 footer revision number is missing or does not match the mapping.",
+    ),
+    "CUSTOM_TP1_FIRST_ISSUE_DATE": (
+        "Each TP1 page must contain 'First Issue: date' in its footer, with a date equal to the first issue date in the mapping.",
+        "The TP1 footer first issue date is missing or does not match the mapping.",
+    ),
+    "CUSTOM_HIGHLIGHTS_REVISION_HEADER": (
+        "The page whose name contains Highlights must show the REVISION No. header with the mapped number and date above the table.",
+        "The Highlights revision header is missing, incorrect, or placed after the table.",
+    ),
+    "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": (
+        "The INTRODUCTION page must contain the expected Shop Verification block for the manufacturer selected in the mapping.",
+        "The INTRODUCTION Shop Verification block is missing or incorrect.",
+    ),
+    "CUSTOM_HIGHLIGHTS_HOLDER": (
+        "The first Highlights page must start with 'TO: HOLDER OF <title>', where <title> matches the bold title on the TP1 page.",
+        "The Highlights TO: HOLDER OF sentence does not match the TP1 title.",
+    ),
+    "CUSTOM_HIGHLIGHTS_ATA_NUMBER": (
+        "The first Highlights page must contain the ATA number matching the document CMM number in the mapping.",
+        "The ATA number on the first Highlights page is missing or incorrect.",
+    ),
+    "CUSTOM_HIGHLIGHTS_PNR_HEADER": (
+        "The header of every page must contain the PNR number matching the document mapping.",
+        "The header PNR number is missing or incorrect.",
+    ),
+    "CUSTOM_PNR_PAGE_VALUE": (
+        "The number after 'PNR:' on a Highlights page must match the document mapping.",
+        "The Highlights page PNR number does not match the mapping.",
+    ),
+    "CUSTOM_TP1_PNR_PAGE_VALUE": (
+        "Every PNR number explicitly present in the body of a TP1 page must match the document mapping.",
+        "The TP1 page PNR number does not match the mapping.",
+    ),
+    "CUSTOM_REPAIR_NOTE": (
+        "Each REPAIR page must start its NOTE with the expected operational introduction and contain the Pressure and Relative humidity categories with their reference values.",
+        "The REPAIR NOTE introduction or categories are missing or incorrect.",
+    ),
+    "CUSTOM_TESTING_NOTE": (
+        "Each TESTING page must start its NOTE with the expected operational introduction and contain the Pressure, Relative humidity, and Temperature categories.",
+        "The TESTING NOTE introduction or categories are missing or incorrect.",
+    ),
+    "CUSTOM_STORAGE_NOTE": (
+        "Each STORAGE page must start its NOTE with the expected operational introduction and contain the Pressure, Relative humidity, and Temperature categories with their reference values.",
+        "The STORAGE NOTE introduction or categories are missing or incorrect.",
+    ),
+    "CUSTOM_TP1_THALES_ADDRESS": (
+        "Every page identified as TP1 must contain the exact reference THALES address.",
+        "The THALES address on the TP1 page is missing or incorrect.",
+    ),
+    "CUSTOM_DECIMAL_COMMA": (
+        "Decimal numeric values on modified pages must use a point rather than a comma as the decimal separator.",
+        "A decimal value uses a comma instead of a point.",
+    ),
+    "CUSTOM_TEMPERATURE_FAHRENHEIT": (
+        "Every temperature expressed in deg. C must be followed by its numeric conversion in deg. F in parentheses.",
+        "A temperature in deg. C must be followed by its conversion in deg. F.",
+    ),
+    "CUSTOM_BAR_PSI_CONVERSION": (
+        "Every pressure expressed in bar must be followed in parentheses by its numeric conversion in p.s.i.",
+        "A pressure in bar must be followed by its p.s.i. conversion.",
+    ),
+    "CUSTOM_FORBIDDEN_CONSUMABLES": (
+        "References to forbidden consumables must be removed.",
+        "Consumable to remove.",
+    ),
+    "CUSTOM_NO_DEGREE_C_SYMBOL": (
+        "The °C symbol must be written as deg. C.",
+        "The °C symbol is forbidden: use deg. C.",
+    ),
+    "CUSTOM_REVISION_LEP_STAR": (
+        "Every page declared revised (R) or new (N) in Highlights must have a star after its date in the list of effective pages.",
+        "A page revised in Highlights has no star in the LEP.",
+    ),
+    "CUSTOM_REVISION_UNDECLARED_STAR": (
+        "A star in the list of effective pages marks a modified page; that page must be declared R or N in Highlights.",
+        "The LEP has a star on a page not declared revised in Highlights.",
+    ),
+    "CUSTOM_REVISION_LEP_DATE": (
+        "For a revised or new page, the list of effective pages date must equal the mapped revision date and remain the latest known issue date for an unchanged page.",
+        "The LEP date is inconsistent with the page status.",
+    ),
+    "CUSTOM_REVISION_FOOTER_DATE": (
+        "The footer must show the mapped revision date for a revised or new page, and the date declared in the list of effective pages for an unchanged page.",
+        "The footer date is inconsistent with Highlights and the LEP.",
+    ),
+    "CUSTOM_REVISION_UNDECLARED_PAGE": (
+        "A page carrying the current revision date must be declared modified in Highlights (R or N) and marked with a star in the LEP.",
+        "A page dated with the current revision has no modification declaration.",
+    ),
+    "CUSTOM_REVISION_PAGE_NOT_IN_LEP": (
+        "Every page in the document must appear in the list of effective pages.",
+        "The document page is missing from the list of effective pages.",
+    ),
+    "CUSTOM_REVISION_MODIFIED_PAGE_ABSENT": (
+        "Every page declared revised or new in Highlights must exist in the document and be identified in its footer.",
+        "The page declared revised cannot be found in the document.",
+    ),
+    "CUSTOM_FOOTER_PAGE_NUMBER": (
+        "Every page must show its number in the footer. LEP, ROR, Highlights, and Title Page pages are checked against their expected prefix and order.",
+        "The footer page number is missing or incorrect.",
+    ),
+    "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": (
+        "Highlights declare pages in pairs: an odd page is followed by its corresponding even page, and an even page is preceded by its odd page.",
+        "A Highlights page is declared without its corresponding odd or even page.",
+    ),
+    "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": (
+        "A page range is written as 'Pages 701 to 704' and a single page as 'Page  401', with two spaces to preserve number alignment.",
+        "The Page/Pages label or alignment is not compliant in Highlights.",
+    ),
+}
+
 RULE_METADATA["CUSTOM_REVISION_LEP_STAR"] = {
     "description": (
         "Toute page declaree revisee (R) ou nouvelle (N) dans les Highlights "
@@ -1427,3 +1570,9 @@ RULE_METADATA["CUSTOM_TP2_IMPORTANT_NOTICE"] = {
     "severity": "error",
     "message": "L'Important Notice de la page TP2 n'est pas conforme au modele ATA100.",
 }
+
+for _rule_code, (_description_en, _message_en) in _ENGLISH_RULE_METADATA.items():
+    RULE_METADATA[_rule_code].update(
+        description_en=_description_en,
+        message_en=_message_en,
+    )

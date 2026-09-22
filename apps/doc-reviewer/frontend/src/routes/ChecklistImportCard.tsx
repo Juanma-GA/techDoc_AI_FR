@@ -373,7 +373,7 @@ export function CompiledRuleRows({ rules }: { rules: CompiledRuleSummary[] }) {
           {t(`rules.compiled.${rule.execution}`)}
         </span>
       </td>
-      <td>{rule.topic}</td>
+      <td>{t(`rules.catalog.${rule.id}`, { defaultValue: rule.topic })}</td>
       <td>{rule.detail ?? t("rules.compiled.activeImmediately")}</td>
     </tr>
   ));

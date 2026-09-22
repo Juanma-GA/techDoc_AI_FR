@@ -112,5 +112,70 @@ RULE_METADATA = {
     "MAT_TORQUE_UNIT": {"description": "Les couples de serrage sont exprimés en N·m.", "kind": "regex_flag", "severity": "info", "message": "Couple en unités impériales — convertir en N·m."},
 }
 
+_ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
+    "MAT_FIELD_PERIODICITE": (
+        "For every preventive maintenance task, the periodicity must be explicitly specified.",
+        "Periodicity field required for preventive maintenance.",
+    ),
+    "MAT_FIELD_DUREE": (
+        "The estimated procedure duration must be specified for maintenance planning.",
+        "Duration field missing.",
+    ),
+    "MAT_FIELD_PERSONNEL": (
+        "The required number and qualification of operators must be specified.",
+        "Required personnel field missing.",
+    ),
+    "MAT_FIELD_NIVEAU": (
+        "Maintenance level NTI-1 / NTI-2 / NTI-3, or Line / Base / Shop.",
+        "Maintenance level missing or outside the enumeration.",
+    ),
+    "MAT_SECTION_EQUIPEMENT": (
+        "Section listing the required tooling and support equipment.",
+        "Support equipment section missing.",
+    ),
+    "MAT_SECTION_CONSOMMABLES": (
+        "List of consumables required by the task.",
+        "Consumables section missing.",
+    ),
+    "MAT_SECTION_RECHANGE": (
+        "Spare parts listed with quantity and consistent with the task title.",
+        "Spare part is inconsistent with the task title.",
+    ),
+    "MAT_SECTION_PRELIM": (
+        "Lockout, safety, and preparation before the main procedure steps.",
+        "Preliminary tasks section missing.",
+    ),
+    "MAT_SECTION_POST": (
+        "Functional tests, lockout removal, and return to flight configuration.",
+        "Post-maintenance tasks section missing.",
+    ),
+    "MAT_STEP_VERB": (
+        "Every numbered step must start with an infinitive verb.",
+        "Step: an infinitive verb is required.",
+    ),
+    "MAT_REF_FORMAT": (
+        "References to another MAT10000 task must follow the MAT-XX-YY-ZZ-NNN format.",
+        "MAT10000 reference - check the MAT-XX-YY-ZZ-NNN format.",
+    ),
+    "MAT_NO_PASSIVE": (
+        "Steps must use the active imperative form.",
+        "Passive voice - rewrite in the active imperative.",
+    ),
+    "MAT_TERMINOLOGY_DANGER": (
+        "Prefer DANGER / WARNING / CAUTION to Attention / Important.",
+        "Prefer DANGER / WARNING / CAUTION according to the MAT10000 hierarchy.",
+    ),
+    "MAT_TORQUE_UNIT": (
+        "Torque values must be expressed in N.m.",
+        "Torque in imperial units - convert to N.m.",
+    ),
+}
+
+for _rule_code, (_description_en, _message_en) in _ENGLISH_RULE_METADATA.items():
+    RULE_METADATA[_rule_code].update(
+        description_en=_description_en,
+        message_en=_message_en,
+    )
+
 
 CATALOG: dict[str, list[CompiledRule]] = {"v1": _RULES_V1}

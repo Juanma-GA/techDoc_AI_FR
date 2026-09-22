@@ -118,5 +118,74 @@ RULE_METADATA = {
     "ATA_TORQUE_DUAL_UNIT": {"description": "Les valeurs de couple doivent être présentées dans les deux unités (SI primaire, impérial secondaire).", "kind": "regex_flag", "severity": "info", "message": "Couple — vérifier la présence des deux unités (N·m / lb·ft)."},
 }
 
+_ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
+    "ATA_CHAPTER_REF": (
+        "Flags references explicitly prefixed ATA, Chapter, or Chapitre that do not follow the chapter-section-subject format (for example, ATA 24-21-00).",
+        "Malformed ATA reference - use the CH-SE-SU format.",
+    ),
+    "ATA_CHAPTER_RANGE": (
+        "The main ATA 100 chapter is numbered from 00 (general) to 99. Any value outside this range is invalid.",
+        "ATA chapter outside the 00-99 range.",
+    ),
+    "ATA_FIELD_EFFECTIVITY": (
+        "Every procedure must declare its effectivity (applicable series/configuration).",
+        "Effectivity field missing.",
+    ),
+    "ATA_FIELD_PERIODICITE": (
+        "For scheduled maintenance tasks, the frequency (FH / FC / CAL) must be specified.",
+        "Periodicity field missing for a scheduled task.",
+    ),
+    "ATA_FIELD_DUREE": (
+        "Elapsed time / man-hours are required for planning.",
+        "Duration field missing.",
+    ),
+    "ATA_FIELD_PERSONNEL": (
+        "The required number and qualification of technicians must be specified.",
+        "Personnel field missing.",
+    ),
+    "ATA_FIELD_NIVEAU": (
+        "Line / Base / Shop according to the planned execution environment.",
+        "Maintenance level missing or outside the enumeration.",
+    ),
+    "ATA_SECTION_TOOLS": (
+        "Section listing the required tooling (P/N, source), mandatory in every ATA procedure.",
+        "Tools and equipment section missing.",
+    ),
+    "ATA_SECTION_CONSUMABLES": (
+        "Oils, greases, seals, thread lockers, and other consumables required by the procedure.",
+        "Consumables section missing.",
+    ),
+    "ATA_SECTION_SPARES": (
+        "Consistency between the task title (REPLACE / REMOVE / INSTALL) and the spare-parts list.",
+        "Spare parts are inconsistent with the task title.",
+    ),
+    "ATA_SECTION_PRELIM": (
+        "Safety section before the main procedure steps.",
+        "Preliminary / Safety section missing.",
+    ),
+    "ATA_SECTION_CLOSE": (
+        "Section for returning to flight configuration and performing functional tests at the end of the procedure.",
+        "Close-out / post-maintenance section missing.",
+    ),
+    "ATA_STEP_VERB": (
+        "Every numbered step must start with an action verb in the imperative or infinitive form.",
+        "Step: an infinitive verb is required.",
+    ),
+    "ATA_NO_AMBIGUOUS_QUANT": (
+        "Avoid 'some', 'a few', and 'several'; use a numbered quantity instead.",
+        "Ambiguous quantifier - use a numbered value.",
+    ),
+    "ATA_TORQUE_DUAL_UNIT": (
+        "Torque values must be presented in both units (primary SI, secondary imperial).",
+        "Torque - check that both units (N.m / lb.ft) are present.",
+    ),
+}
+
+for _rule_code, (_description_en, _message_en) in _ENGLISH_RULE_METADATA.items():
+    RULE_METADATA[_rule_code].update(
+        description_en=_description_en,
+        message_en=_message_en,
+    )
+
 
 CATALOG: dict[str, list[CompiledRule]] = {"rev 38": _RULES_REV38}

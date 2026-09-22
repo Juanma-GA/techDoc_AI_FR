@@ -21,7 +21,7 @@ import type { Standard } from "../types/domain";
  * custom se gèrent dans la carte « Règles custom » dédiée.
  */
 export function Standards(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const standards = useStandards();
   const createStd = useCreateStandard();
   const createVer = useCreateVersion();
@@ -259,8 +259,14 @@ export function Standards(): JSX.Element {
                               <span>{t("standards.ruleEnabled")}</span>
                             </label>
                           </p>
-                          <p className="item-name">{c.title}</p>
-                          <p className="item-meta">{c.description}</p>
+                          <p className="item-name">
+                            {t(`rules.catalog.${c.code}`, { defaultValue: c.title })}
+                          </p>
+                          <p className="item-meta">
+                            {i18n.resolvedLanguage?.startsWith("en")
+                              ? c.description_en ?? c.description
+                              : c.description}
+                          </p>
                         </div>
                       </li>
                     ))}

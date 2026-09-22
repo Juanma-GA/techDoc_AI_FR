@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { DiffInline } from "../DiffInline";
 import { SeverityBadge } from "../SeverityBadge";
 import { UnitChip } from "../UnitChip";
+import { localizedSuggestionMessage } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 
 type Props = {
@@ -33,6 +34,7 @@ export function SuggestionItem({
   onUndo,
 }: Props) {
   const { t } = useTranslation();
+  const message = localizedSuggestionMessage(suggestion, t);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(suggestion.proposed_text);
   const [feedbackDraft, setFeedbackDraft] = useState(suggestion.feedback ?? "");
@@ -68,7 +70,7 @@ export function SuggestionItem({
         ) : null}
       </header>
 
-      <p className="suggestion-msg">{suggestion.message}</p>
+      <p className="suggestion-msg">{message}</p>
 
       {editing ? (
         <textarea

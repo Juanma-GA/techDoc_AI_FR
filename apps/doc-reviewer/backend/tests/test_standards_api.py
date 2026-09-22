@@ -68,6 +68,25 @@ def test_version_detail_returns_catalog(client: TestClient) -> None:
     assert "MAT_STEP_VERB" in catalog_codes
 
 
+def test_thales_catalog_exposes_english_description_and_message(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    thales = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = thales["versions"][0]
+
+    response = client.get(
+        f"/api/v1/standards/{thales['id']}/versions/{version['id']}"
+    )
+
+    assert response.status_code == 200
+    rule = next(
+        item
+        for item in response.json()["catalog"]
+        if item["code"] == "CUSTOM_NO_DEGREE_F_SYMBOL"
+    )
+    assert rule["description_en"] == "The °F symbol must be written as deg. F."
+    assert rule["message_en"] == "The °F symbol is forbidden: use deg. F."
+
+
 def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> None:
     standards = client.get("/api/v1/standards")
     custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")

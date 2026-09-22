@@ -212,8 +212,8 @@ def get_version_detail(
 
 
 _PATCHABLE_FIELDS = {
-    "title", "description", "severity", "kind",
-    "pattern", "replacement", "message",
+    "title", "description", "description_en", "severity", "kind",
+    "pattern", "replacement", "message", "message_en",
     "example_invalid", "example_valid",
 }
 

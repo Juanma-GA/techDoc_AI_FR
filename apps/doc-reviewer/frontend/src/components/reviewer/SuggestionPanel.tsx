@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFiltersStore } from "../../stores/filtersStore";
+import { localizedSuggestionMessage } from "../../lib/suggestionText";
 import type { SourceKind, Suggestion } from "../../types/domain";
 import { SuggestionItem } from "./SuggestionItem";
 
@@ -172,6 +173,7 @@ export function SuggestionPanel({
             const isCollapsible = items.length > 1;
             const isExpanded = !isCollapsible || expanded.has(key);
             const head = items[0]!;
+            const headMessage = localizedSuggestionMessage(head, t);
             return (
               <div
                 key={key}
@@ -189,7 +191,7 @@ export function SuggestionPanel({
                       {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       <span className="suggestion-loc">{head.rule_code}</span>
                       <span className="suggestion-msg" style={{ flex: 1, textAlign: "left" }}>
-                        {head.message}
+                        {headMessage}
                       </span>
                     </button>
                     <span className="badge default">

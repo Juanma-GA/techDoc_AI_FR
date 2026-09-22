@@ -70,5 +70,42 @@ RULE_METADATA = {
     "STE_NO_CONTRACTION": {"description": "STE100 §3.7 interdit les contractions.", "kind": "regex_flag", "severity": "info", "message": "Contraction — utiliser la forme complète (STE §3.7)."},
 }
 
+_ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
+    "STE_LONG_SENTENCE": (
+        "ASD-STE100 §6.4: maximum 20 words per procedural sentence and 25 words per descriptive sentence.",
+        "Sentence too long - STE100 §6.4 limits sentences to 20-25 words.",
+    ),
+    "STE_PASSIVE_VOICE": (
+        "ASD-STE100 §3.4 requires the active voice in procedures.",
+        "Passive voice - prefer the active imperative form (STE §3.4).",
+    ),
+    "STE_FIRST_PERSON": (
+        "ASD-STE100 §3.5 forbids the first person in maintenance manuals.",
+        "First person - prefer the impersonal form (STE §3.5).",
+    ),
+    "STE_PROCEDURAL_GERUND": (
+        "ASD-STE100 §3.3 requires the imperative form for procedures.",
+        "Gerund at the start of a procedure - rewrite in the imperative form.",
+    ),
+    "STE_VOCAB_NON_APPROVED": (
+        "STE100 flags common synonyms that should be avoided.",
+        "STE: prefer 'use' to 'utilize'.",
+    ),
+    "STE_NO_MAYBE": (
+        "STE100 §6 forbids ambiguous modals in procedures.",
+        "Vague modal - remove it or rewrite as a firm instruction.",
+    ),
+    "STE_NO_CONTRACTION": (
+        "STE100 §3.7 forbids contractions.",
+        "Contraction - use the complete form (STE §3.7).",
+    ),
+}
+
+for _rule_code, (_description_en, _message_en) in _ENGLISH_RULE_METADATA.items():
+    RULE_METADATA[_rule_code].update(
+        description_en=_description_en,
+        message_en=_message_en,
+    )
+
 
 CATALOG: dict[str, list[CompiledRule]] = {"issue 7": _RULES_ISSUE7}

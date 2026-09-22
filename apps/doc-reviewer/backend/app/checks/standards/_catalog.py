@@ -76,16 +76,32 @@ def catalog_rule_view(
         "code": rule.id,
         "title": rule.topic,
         "description": "",
+        "description_en": None,
         "kind": "regex_flag" if first_check and first_check.operator == "regex" else "field_required",
         "severity": "warning",
         "pattern": str(first_check.expected or "") if first_check else "",
         "replacement": "",
         "message": rule.topic,
+        "message_en": None,
         "example_invalid": "",
         "example_valid": "",
         "metadata": {},
     }
-    for key in ("code", "title", "description", "kind", "severity", "pattern", "replacement", "message", "example_invalid", "example_valid", "metadata"):
+    for key in (
+        "code",
+        "title",
+        "description",
+        "description_en",
+        "kind",
+        "severity",
+        "pattern",
+        "replacement",
+        "message",
+        "message_en",
+        "example_invalid",
+        "example_valid",
+        "metadata",
+    ):
         if key in payload:
             view[key] = payload[key]
     if presentation:
