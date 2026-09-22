@@ -86,7 +86,7 @@ jobs:
         run: pnpm --filter "@apps/doc-reviewer-frontend" test
 
       - name: Install Playwright browser
-        run: pnpm --filter "@apps/doc-reviewer-frontend" exec playwright install --with-deps chromium
+        run: pnpm --filter "@apps/doc-reviewer-frontend" exec playwright install --with-deps chromium webkit
 
       - name: Run browser smoke test
         run: pnpm --filter "@apps/doc-reviewer-frontend" test:e2e
