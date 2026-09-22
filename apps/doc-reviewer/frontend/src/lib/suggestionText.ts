@@ -57,7 +57,7 @@ export function localizedSuggestionMessage(
   const messageKey = `rules.messages.${suggestion.rule_code}`;
   let translated = translation(t, messageKey);
   if (suggestion.rule_code === "UNITS_CONVERT") {
-    const system = suggestion.message.match(/système\s+([^\.]+)|the\s+(\w+)\s+system/i);
+    const system = suggestion.message.match(/système\s+([^.]+)|the\s+(\w+)\s+system/i);
     translated = translation(t, messageKey, { system: system?.[1] ?? system?.[2] ?? "target unit" });
   } else if (suggestion.rule_code === "FIGURE_NO_CAPTION" || suggestion.rule_code === "FIGURE_COHERENCE") {
     const index = suggestion.message.match(/Figure\s+(\d+)/i)?.[1] ?? "";
