@@ -158,6 +158,7 @@ class Check(StrictModel):
         # intent and flags the correct text as a violation every time.
         "regex_exists",
         "pressure_conversion",
+        "sentence_punctuation",
         "revision_consistency",
         "font_size_equals",
         "shop_verification",
@@ -205,6 +206,10 @@ class Check(StrictModel):
                 raise ValueError(f"regex invalide: {exc.msg}") from exc
         if self.operator == "pressure_conversion" and self.expected != "bar_to_psi":
             raise ValueError("pressure_conversion requires expected='bar_to_psi'")
+        if self.operator == "sentence_punctuation" and self.expected != "period_and_enumeration":
+            raise ValueError(
+                "sentence_punctuation requires expected='period_and_enumeration'"
+            )
         if self.operator == "revision_consistency" and self.expected not in get_args(RevisionControl):
             raise ValueError(
                 "revision_consistency requires expected in "

@@ -33,6 +33,7 @@ from app.core.compiled_rule_operators import (
     resolve_regex_pattern,
     resolve_replacement_template,
     revision_findings,
+    sentence_punctuation_issues,
 )
 
 
@@ -84,6 +85,12 @@ def deterministic_suggestions(
                     rule_kind,
                     message,
                     ctx.pdf_pages,
+                )
+            )
+        elif check.operator == "sentence_punctuation":
+            suggestions.extend(
+                sentence_punctuation_suggestions(
+                    rule, targets, rule_kind, message, ctx.pdf_pages
                 )
             )
         elif check.operator == "revision_consistency":
@@ -1210,6 +1217,41 @@ def pressure_conversion_suggestions(
     suggestions: list[RawSuggestion] = []
     for target in targets:
         for issue in pressure_conversion_issues(target.text, str(check.expected)):
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule.id,
+                    severity=rule.severity,
+                    message=message,
+                    original=issue.original,
+                    proposed=issue.proposed,
+                    page=target.raw_page,
+                    span=issue.span,
+                    bbox=suggestion_bbox(
+                        target,
+                        issue.original,
+                        pdf_pages,
+                        span_start=issue.span[0],
+                    ),
+                )
+            )
+    return suggestions
+
+
+def sentence_punctuation_suggestions(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+    pdf_pages: list[ParsedPage] | None,
+) -> list[RawSuggestion]:
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        for issue in sentence_punctuation_issues(
+            target.text,
+            target.span_ranges,
+            skip_page=target.page_type in {"TP1", "TP2", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"},
+        ):
             suggestions.append(
                 RawSuggestion(
                     rule_kind=rule_kind,

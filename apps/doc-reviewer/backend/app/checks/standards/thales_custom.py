@@ -1025,6 +1025,20 @@ _RULES_V1 = [
         replacement=r"\1.\2",
     ),
     _rule(
+        "CUSTOM_SENTENCE_PUNCTUATION",
+        "Phrases et enumerations correctement ponctuees",
+        failure_message="phrase ou enumeration sans ponctuation terminale conforme.",
+        target=_MODIFIED_TARGET,
+        severity="warning",
+        checks=[
+            Check(
+                field="text",
+                operator="sentence_punctuation",
+                expected="period_and_enumeration",
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_TEMPERATURE_FAHRENHEIT",
         "Temperature en deg. C accompagnee de sa conversion en deg. F",
         failure_message="conversion Fahrenheit absente pour la temperature.",
@@ -1224,6 +1238,16 @@ RULE_METADATA["CUSTOM_DECIMAL_COMMA"] = {
     "severity": "warning",
     "message": "Une valeur decimale utilise une virgule au lieu d'un point.",
 }
+RULE_METADATA["CUSTOM_SENTENCE_PUNCTUATION"] = {
+    "description": (
+        "Sur les pages modifiees, chaque phrase doit se terminer par un point. "
+        "Dans une enumeration, les elements intermediaires se terminent par "
+        "une virgule et le dernier par un point."
+    ),
+    "kind": "field_required",
+    "severity": "warning",
+    "message": "La ponctuation terminale de la phrase ou de l'enumeration est incorrecte.",
+}
 RULE_METADATA["CUSTOM_TEMPERATURE_FAHRENHEIT"] = {
     "description": (
         "Toute temperature exprimee en deg. C doit etre suivie de sa "
@@ -1346,6 +1370,10 @@ _ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
     "CUSTOM_DECIMAL_COMMA": (
         "Decimal numeric values on modified pages must use a point rather than a comma as the decimal separator.",
         "A decimal value uses a comma instead of a point.",
+    ),
+    "CUSTOM_SENTENCE_PUNCTUATION": (
+        "On modified pages, every sentence must end with a full stop. In an enumeration, intermediate items end with a comma and the last item with a full stop.",
+        "The sentence or enumeration terminal punctuation is incorrect.",
     ),
     "CUSTOM_TEMPERATURE_FAHRENHEIT": (
         "Every temperature expressed in deg. C must be followed by its numeric conversion in deg. F in parentheses.",

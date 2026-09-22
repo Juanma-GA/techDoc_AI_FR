@@ -182,7 +182,147 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
                 assert metadata[compiled.id]["message_en"]
-    assert total == 73
+    assert total == 74
+
+
+def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    valid_page = ParsedPage(
+        page=1,
+        text=(
+            "1. General\n\n"
+            "This sentence is wrapped over two lines\n"
+            "and ends with a full stop.\n\n"
+            "- first item,\n\n"
+            "- last item."
+        ),
+        spans=[],
+        is_modified=True,
+    )
+    invalid_page = ParsedPage(
+        page=1,
+        text=(
+            "A sentence without a full stop\n\n"
+            "- first item.\n\n"
+            "- last item"
+        ),
+        spans=[],
+        is_modified=True,
+    )
+
+    valid, valid_suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[valid_page], full_text=valid_page.text, is_signed=False),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[invalid_page],
+            full_text=invalid_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("A sentence without a full stop", "A sentence without a full stop."),
+        ("- first item.", "- first item,"),
+        ("- last item", "- last item."),
+    ]
+
+
+def test_sentence_punctuation_rule_ignores_unchanged_pages() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    page = ParsedPage(
+        page=1,
+        text="A sentence without a full stop",
+        spans=[],
+        is_modified=False,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
+def test_parenthesized_steps_are_excluded_from_punctuation_validation() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    page = ParsedPage(
+        page=1,
+        text="(1) First step.\n\n(2) Second step.\n\n(a) Substep.\n\n(b) Last substep.",
+        spans=[],
+        is_modified=True,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+    missing_period = ParsedPage(
+        page=1,
+        text="(1) First step,\n\n(2) Last step.\n\n(a) Substep,\n\n(b) Last substep",
+        spans=[],
+        is_modified=True,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[missing_period],
+            full_text=missing_period.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert invalid[0].status == "PASS"
+    assert invalid_suggestions == []
+
+
+def test_sentence_punctuation_rule_ignores_multi_column_table_cells() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    table_rows = [
+        (450.0, [("Pressure", 175.0), ("Pressure", 256.0), ("R 1", 357.0), ("R 2", 438.0)]),
+        (465.0, [("applied", 178.0), ("applied", 259.0), ("(ohms)", 348.0), ("(ohms)", 429.0)]),
+        (480.0, [("(bars)", 181.0), ("(p.s.i)", 259.0)]),
+        (510.0, [("0", 196.0), ("0", 281.0), ("22.5", 354.0), ("99.5", 435.0)]),
+        (525.0, [("1", 196.0), ("14.50", 269.0), ("35.3", 354.0), ("86.7", 435.0)]),
+        (540.0, [("2", 196.0), ("29", 278.0), ("48.1", 354.0), ("73.9", 435.0)]),
+        (555.0, [("3", 196.0), ("43.50", 269.0), ("61", 360.0), ("61", 441.0)]),
+    ]
+    spans = [
+        Span("Body text.", (40.0, 100.0, 120.0, 112.0), 1, "Arial", 10.0),
+    ]
+    for y, cells in table_rows:
+        spans.extend(
+            Span(text, (x, y, x + max(12.0, len(text) * 6.0), y + 12.0), 1, "Arial", 10.0)
+            for text, x in cells
+        )
+    spans.append(Span("Footer", (40.0, 780.0, 80.0, 792.0), 1, "Arial", 10.0))
+    page = ParsedPage(
+        page=1,
+        text="\n".join(span.text for span in spans),
+        spans=spans,
+        is_modified=True,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:

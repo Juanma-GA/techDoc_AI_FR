@@ -22,6 +22,7 @@ from app.core.logging import get_logger
 from app.core.compiled_rule_runtime import (
     _ENTITY_PATTERNS,
     _EvalContext,
+    _SpanRange,
     _TextTarget,
     evidence,
     scope_targets,
@@ -44,6 +45,28 @@ _PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
 _BAR_TO_PSI = Decimal("14.5037738")
 _PRESSURE_DISPLAY_TOLERANCE = Decimal("0.005")
 FONT_SIZE_TOLERANCE = 0.1
+_ENUMERATION_START_RE = re.compile(
+    r"^\s*(?P<marker>(?:[-*]|\([A-Za-z0-9]+\)|[A-Z]\.\s*|\d+[.)]\s+))"
+)
+# Parenthesized procedure steps are intentionally ignored for now; this policy
+# can be narrowed later without changing the rest of the punctuation scanner.
+_IGNORED_PARENTHESIZED_STEP_RE = re.compile(r"^\s*\([A-Za-z0-9]+\)(?:\s|$)")
+_DATE_ONLY_RE = re.compile(
+    r"(?i)^\s*(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)\s+"
+    r"\d{1,2}(?:\s*/\s*\d{2,4})?\s*$"
+)
+_PAGE_LABEL_RE = re.compile(
+    r"(?i)^\s*(?:TP|ROR|LEP|TC|INTRO|HIGHLIGHTS|PAGE)\s+"
+    r"(?:PAGE\s+)?\d+\s*$"
+)
+_HEADING_RE = re.compile(r"^\s*(?:\d+\.\s+|[A-Z]\.\s+)[A-Z].*$")
+_STRUCTURAL_PAGE_RE = re.compile(
+    r"(?im)^\s*(?:HIGHLIGHTS|LIST OF EFFECTIVE PAGES|"
+    r"RECORD OF REVISIONS|TABLE OF CONTENTS)\s*$"
+)
+_STRUCTURAL_PAGE_TYPES = frozenset(
+    {"TP1", "TP2", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"}
+)
 _IMPORTANT_NOTICE_START_RE = re.compile(r"(?im)^\s*IMPORTANT NOTICE\s*$")
 _IMPORTANT_NOTICE_END_RE = re.compile(
     r"(?im)^\s*https://www\.thalesgroup\.com/customer-online\s*$"
@@ -56,6 +79,24 @@ class PressureConversionIssue:
     proposed: str
     expected: str
     span: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class SentencePunctuationIssue:
+    original: str
+    proposed: str
+    expected: str
+    span: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class _PunctuationBlock:
+    text: str
+    last_line: str
+    start: int
+    end: int
+    last_start: int
+    last_end: int
 
 
 def _format_psi(value: Decimal) -> str:
@@ -110,6 +151,217 @@ def pressure_conversion_issues(
                 proposed=f"{source} {expected_conversion}",
                 expected=expected_conversion,
                 span=(source_match.start(), original_end),
+            )
+        )
+    return issues
+
+
+def _punctuation_blocks(text: str) -> list[_PunctuationBlock]:
+    blocks: list[_PunctuationBlock] = []
+    current: list[tuple[str, int, int]] = []
+    offset = 0
+
+    def flush() -> None:
+        if not current:
+            return
+        blocks.append(
+            _PunctuationBlock(
+                text=" ".join(line for line, _start, _end in current),
+                last_line=current[-1][0],
+                start=current[0][1],
+                end=current[-1][2],
+                last_start=current[-1][1],
+                last_end=current[-1][2],
+            )
+        )
+        current.clear()
+
+    for raw_line in text.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        line_start = offset
+        offset += len(raw_line)
+        if not line.strip():
+            flush()
+            continue
+        if current and (
+            line.strip() in {"-", "*"}
+            or _ENUMERATION_START_RE.match(line.strip()) is not None
+        ):
+            flush()
+        leading = len(line) - len(line.lstrip())
+        trailing = len(line.rstrip())
+        current.append(
+            (line.strip(), line_start + leading, line_start + trailing)
+        )
+    flush()
+    return blocks
+
+
+def _block_span_ranges(
+    block: _PunctuationBlock,
+    span_ranges: tuple[_SpanRange, ...],
+) -> list[_SpanRange]:
+    return [
+        item
+        for item in span_ranges
+        if item[1] > block.start and item[0] < block.end
+    ]
+
+
+def _block_is_outside_body(
+    block: _PunctuationBlock,
+    span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    relevant = _block_span_ranges(block, span_ranges)
+    if not relevant:
+        return False
+    min_y = min(item[2][1] for item in span_ranges)
+    max_y = max(item[2][3] for item in span_ranges)
+    height = max_y - min_y
+    if height <= 0:
+        return False
+    centers = [(item[2][1] + item[2][3]) / 2 for item in relevant]
+    return max(centers) <= min_y + height * 0.25 or min(centers) >= max_y - height * 0.25
+
+
+def _block_is_table_like(
+    block: _PunctuationBlock,
+    span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    relevant = _block_span_ranges(block, span_ranges)
+    if not relevant:
+        return False
+    rows: list[tuple[float, list[_SpanRange]]] = []
+    for item in sorted(span_ranges, key=lambda item: item[2][1]):
+        center = (item[2][1] + item[2][3]) / 2
+        if rows and abs(center - rows[-1][0]) <= 3.0:
+            rows[-1][1].append(item)
+        else:
+            rows.append((center, [item]))
+    table_rows = [
+        row
+        for row in rows
+        if len(row[1]) >= 3
+        and max(item[2][0] for item in row[1])
+        - min(item[2][0] for item in row[1])
+        > 40.0
+    ]
+    if len(table_rows) < 3:
+        return False
+    table_top = min(item[2][1] for _center, row in table_rows for item in row) - 70.0
+    table_bottom = max(item[2][3] for _center, row in table_rows for item in row) + 5.0
+    return any(
+        table_top
+        <= (item[2][1] + item[2][3]) / 2
+        <= table_bottom
+        for item in relevant
+    )
+
+
+def _is_non_sentence_block(text: str) -> bool:
+    compact = " ".join(text.split())
+    if not compact:
+        return True
+    if compact in {"T", "OVERHAUL MANUAL"}:
+        return True
+    if not re.search(r"[a-z]", compact):
+        return True
+    if (
+        "THALES AVS FRANCE SAS" in compact
+        or compact.startswith("https://")
+        or "@" in compact
+    ):
+        return True
+    if _DATE_ONLY_RE.fullmatch(compact) or _PAGE_LABEL_RE.fullmatch(compact):
+        return True
+    if re.fullmatch(
+        r"\d{2}-\d{2}-\d{2}|\d+-\d+-[A-Z]+|1-\d{3}-[A-Z]{2}",
+        compact,
+    ):
+        return True
+    if re.match(r"(?i)^\s*(?:table|figure)\s+\d+\b", compact):
+        return True
+    if _HEADING_RE.fullmatch(compact):
+        return True
+    return False
+
+
+def _enumeration_family(text: str) -> str | None:
+    match = _ENUMERATION_START_RE.match(text)
+    if match is None:
+        return None
+    marker = match.group("marker").strip()
+    if marker in {"-", "*"}:
+        return "bullet"
+    if marker.startswith("("):
+        return None
+    if marker[0].isdigit():
+        return "number"
+    return "letter"
+
+
+def _replace_terminal_punctuation(value: str, expected: str) -> str:
+    stripped = value.rstrip()
+    closing_quotes = ""
+    while stripped and stripped[-1] in "\"'»”":
+        closing_quotes = stripped[-1] + closing_quotes
+        stripped = stripped[:-1].rstrip()
+    if stripped and stripped[-1] in ".,;:!?":
+        stripped = stripped[:-1]
+    return f"{stripped}{expected}{closing_quotes}"
+
+
+def sentence_punctuation_issues(
+    text: str,
+    span_ranges: tuple[_SpanRange, ...] = (),
+    *,
+    skip_page: bool = False,
+) -> list[SentencePunctuationIssue]:
+    if skip_page or _STRUCTURAL_PAGE_RE.search(text):
+        return []
+    blocks = _punctuation_blocks(text)
+    candidates = [
+        block
+        for block in blocks
+        if not _block_is_outside_body(block, span_ranges)
+        and not _block_is_table_like(block, span_ranges)
+        and not _IGNORED_PARENTHESIZED_STEP_RE.match(block.text)
+        and not _is_non_sentence_block(block.text)
+    ]
+    classified = [(block, _enumeration_family(block.text)) for block in candidates]
+    issues: list[SentencePunctuationIssue] = []
+    for index, (block, family) in enumerate(classified):
+        next_family = classified[index + 1][1] if index + 1 < len(classified) else None
+        if family is None:
+            expected = "."
+            if block.text.rstrip().endswith(":"):
+                continue
+        else:
+            group_end = index
+            while (
+                group_end + 1 < len(classified)
+                and classified[group_end + 1][1] == family
+            ):
+                group_end += 1
+            expected = "," if group_end > index else "."
+            if (
+                block.text.rstrip().endswith(":")
+                and next_family is not None
+                and next_family != family
+            ):
+                continue
+        observed = block.last_line.rstrip()
+        terminal = observed.rstrip()
+        while terminal and terminal[-1] in "\"'»”":
+            terminal = terminal[:-1].rstrip()
+        if terminal.endswith(expected):
+            continue
+        issues.append(
+            SentencePunctuationIssue(
+                original=observed,
+                proposed=_replace_terminal_punctuation(observed, expected),
+                expected=expected,
+                span=(block.last_start, block.last_end),
             )
         )
     return issues
@@ -190,6 +442,17 @@ def evaluate_check(
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected
         return "PASS", values[0][0], None, policy
+    if check.operator == "sentence_punctuation":
+        for target, value in values:
+            issues = sentence_punctuation_issues(
+                value or "",
+                target.span_ranges,
+                skip_page=target.page_type in _STRUCTURAL_PAGE_TYPES,
+            )
+            if issues:
+                issue = issues[0]
+                return "FAIL", target, issue.original, issue.proposed
+        return "PASS", values[0][0], None, str(check.expected)
     if check.operator == "revision_consistency":
         return evaluate_revision_consistency(check, targets, ctx)
     if check.operator == "shop_verification":
