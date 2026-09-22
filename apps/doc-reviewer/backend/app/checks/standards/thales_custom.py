@@ -239,6 +239,14 @@ def _footer_lines(page: ParsedPage) -> list[str]:
     return [_normalized_line(" ".join(parts)) for _center_y, parts in groups]
 
 
+def _footer_has_structural_anchor(lines: list[str]) -> bool:
+    footer_text = " ".join(lines)
+    return bool(
+        re.search(_CMM_NUMBER_PATTERN, footer_text)
+        or any(revision.parse_date(line) is not None for line in lines)
+    )
+
+
 def identify_page_type(
     parsed: ParsedPdf,
     page_name: str,
@@ -270,25 +278,23 @@ def identify_page_type(
         )
     page_types: dict[str, str | None] = {}
     for page in parsed.pages:
-        lines: list[str] = []
-        if expected_anchors:
-            lines = _footer_lines(page)
-            footer_text = " ".join(lines).casefold()
-            has_anchor = any(anchor in footer_text for anchor in expected_anchors)
-            has_marker = bool(page_marker_pattern.search(footer_text))
-            if has_anchor and has_marker:
-                page.page_type = page_name
-                if (
-                    page_name == HIGHLIGHTS_PAGE_TYPE
-                    and _HIGHLIGHTS_PAGE_1_MARKER.search(page.text)
-                ):
-                    page.page_type = HIGHLIGHTS_FIRST_PAGE_TYPE
-            elif page.page_type == page_name or (
+        lines = _footer_lines(page)
+        footer_text = " ".join(lines).casefold()
+        has_anchor = _footer_has_structural_anchor(lines) or any(
+            anchor in footer_text for anchor in expected_anchors
+        )
+        has_marker = bool(page_marker_pattern.search(footer_text))
+        if has_anchor and has_marker:
+            page.page_type = page_name
+            if (
                 page_name == HIGHLIGHTS_PAGE_TYPE
-                and page.page_type in _HIGHLIGHTS_PAGE_TYPES
+                and _HIGHLIGHTS_PAGE_1_MARKER.search(page.text)
             ):
-                page.page_type = None
-        elif page.page_type == page_name:
+                page.page_type = HIGHLIGHTS_FIRST_PAGE_TYPE
+        elif page.page_type == page_name or (
+            page_name == HIGHLIGHTS_PAGE_TYPE
+            and page.page_type in _HIGHLIGHTS_PAGE_TYPES
+        ):
             page.page_type = None
         if expected_anchors and page.page_type != page_name:
             # Aide au diagnostic : si zero page n'est jamais classee TP1,

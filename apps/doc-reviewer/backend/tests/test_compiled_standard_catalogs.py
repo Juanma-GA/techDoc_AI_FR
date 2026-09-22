@@ -326,6 +326,68 @@ def test_classify_pages_identifies_tp2_from_footer_marker() -> None:
     assert parsed.pages[0].page_type == TP2_PAGE_TYPE
 
 
+def test_page_types_survive_an_incorrect_revision_date_mapping() -> None:
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=[
+            _page_with_footer_lines(
+                1,
+                ["79-30-01", "Highlights Page 1", "JUL 27/26"],
+            ),
+            _page_with_footer_lines(
+                2,
+                ["79-30-01", "TP 2", "JUL 27/26"],
+            ),
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    classify_pages(
+        parsed,
+        SimpleNamespace(
+            meta_revision_date="AUG 27/26",
+            meta_cmm_number="79-30-02",
+        ),
+    )
+
+    assert [page.page_type for page in parsed.pages] == [
+        HIGHLIGHTS_FIRST_PAGE_TYPE,
+        TP2_PAGE_TYPE,
+    ]
+
+
+def test_highlights_rule_still_runs_when_mapping_anchors_are_wrong() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ATA_NUMBER")
+    document = SimpleNamespace(
+        meta_revision_date="AUG 27/26",
+        meta_cmm_number="79-30-02",
+    )
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(
+                1,
+                [
+                    "79-30-01",
+                    "Highlights Page 1",
+                    "JUL 27/26",
+                    "ATA No 79-30-01",
+                ],
+            )
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    classify_pages(parsed, document)
+    results, suggestions = execute_pdf_rules(parsed, [rule], document=document)
+
+    assert parsed.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
+    assert results[0].status == "FAIL"
+    assert suggestions[0].proposed == "ATA No 79-30-02"
+
+
 def test_cmm_number_is_checked_on_each_page() -> None:
     pages = []
     for page_number, footer in enumerate(
