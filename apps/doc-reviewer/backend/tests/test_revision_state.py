@@ -168,16 +168,18 @@ def _lep_with(
     return _lep_page(left=left, right=[right], columns=columns)
 
 
-def _state(parsed: ParsedPdf) -> revision.RevisionState:
-    return revision.build_revision_state(parsed, _DOCUMENT)
+def _state(parsed: ParsedPdf, document: object = _DOCUMENT) -> revision.RevisionState:
+    return revision.build_revision_state(parsed, document)
 
 
-def _findings(parsed: ParsedPdf) -> list[revision.RevisionFinding]:
-    return _state(parsed).findings
+def _findings(
+    parsed: ParsedPdf, document: object = _DOCUMENT
+) -> list[revision.RevisionFinding]:
+    return _state(parsed, document).findings
 
 
-def _codes(parsed: ParsedPdf) -> list[str]:
-    return [finding.control for finding in _findings(parsed)]
+def _codes(parsed: ParsedPdf, document: object = _DOCUMENT) -> list[str]:
+    return [finding.control for finding in _findings(parsed, document)]
 
 
 def test_page_key_normalization_unifies_the_three_sources() -> None:
@@ -223,15 +225,40 @@ def test_ror_insertion_date_uses_revision_day_and_rolls_the_year() -> None:
         ("JUL 15/26", "AUG 26"),
         ("DEC 15/26", "JAN 27"),
     ):
-        assert _codes(_document([_ror_page(revision_date, insertion_date)])) == []
+        document = SimpleNamespace(
+            meta_revision_date=revision_date,
+            meta_first_issue_date="JUL 1966",
+            meta_last_issue_date="MAR 77",
+        )
+        assert (
+            _codes(_document([_ror_page(revision_date, insertion_date)]), document)
+            == []
+        )
 
 
 def test_ror_insertion_date_mismatch_is_reported_with_the_expected_month() -> None:
-    findings = _findings(_document([_ror_page("JUL 15/26", "JUL 26")]))
+    document = SimpleNamespace(
+        meta_revision_date="JUL 15/26",
+        meta_first_issue_date="JUL 1966",
+        meta_last_issue_date="MAR 77",
+    )
+    findings = _findings(
+        _document([_ror_page("JUL 15/26", "JUL 26")]), document
+    )
 
     assert [finding.control for finding in findings] == [revision.ROR_INSERTION_DATE]
     assert findings[0].original == "JUL 26"
     assert findings[0].proposed == "AUG 26"
+
+
+def test_ror_revision_date_must_match_the_highlights_revision_date() -> None:
+    assert _codes(_document([_ror_page(_REVISION_DATE, "AUG 26")])) == []
+
+    findings = _findings(_document([_ror_page("JUN 27/26", "JUL 26")]))
+
+    assert [finding.control for finding in findings] == [revision.ROR_REVISION_DATE]
+    assert findings[0].original == "JUN 27/26"
+    assert findings[0].proposed == _REVISION_DATE
 
 
 def test_page_keys_accept_any_section_abbreviation() -> None:

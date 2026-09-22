@@ -673,6 +673,12 @@ _REVISION_RULES = [
         revision.ROR_INSERTION_DATE,
         "date d'insertion du Record of Revisions incoherente avec la date de revision.",
     ),
+    _revision_rule(
+        "CUSTOM_ROR_REVISION_DATE",
+        "Date de revision du Record of Revisions conforme aux Highlights",
+        revision.ROR_REVISION_DATE,
+        "date de revision du Record of Revisions incoherente avec les Highlights.",
+    ),
 ]
 
 
@@ -1395,6 +1401,10 @@ _ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
         "In the Record of Revisions, the insertion date must use the revision month when the revision day is below 15, otherwise the following month.",
         "The Record of Revisions insertion date is inconsistent with the revision date.",
     ),
+    "CUSTOM_ROR_REVISION_DATE": (
+        "The current revision date in the Record of Revisions must match the revision date used by the Highlights.",
+        "The current Record of Revisions date does not match the Highlights revision date.",
+    ),
 }
 
 RULE_METADATA["CUSTOM_REVISION_LEP_STAR"] = {
@@ -1502,6 +1512,15 @@ RULE_METADATA["CUSTOM_ROR_INSERTION_DATE"] = {
     "kind": "field_required",
     "severity": "error",
     "message": "La date d'insertion du Record of Revisions est incoherente.",
+}
+RULE_METADATA["CUSTOM_ROR_REVISION_DATE"] = {
+    "description": (
+        "La date de revision la plus recente du Record of Revisions doit "
+        "correspondre a la date de revision des Highlights."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "La date de revision du Record of Revisions est incoherente avec les Highlights.",
 }
 
 

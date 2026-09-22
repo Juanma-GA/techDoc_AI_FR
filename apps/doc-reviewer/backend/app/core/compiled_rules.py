@@ -62,6 +62,7 @@ RevisionControl = Literal[
     "highlights_page_label",
     "footer_page_number",
     "ror_insertion_date",
+    "ror_revision_date",
 ]
 
 

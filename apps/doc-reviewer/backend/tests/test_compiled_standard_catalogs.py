@@ -182,7 +182,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
                 assert metadata[compiled.id]["message_en"]
-    assert total == 72
+    assert total == 73
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:

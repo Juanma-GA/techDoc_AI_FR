@@ -137,6 +137,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "warning",
         "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "warning",
         "CUSTOM_ROR_INSERTION_DATE": "error",
+        "CUSTOM_ROR_REVISION_DATE": "error",
     }
 
 

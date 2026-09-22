@@ -942,6 +942,7 @@ HIGHLIGHTS_PAIRING = "highlights_pairing"
 HIGHLIGHTS_PAGE_LABEL = "highlights_page_label"
 FOOTER_PAGE_NUMBER = "footer_page_number"
 ROR_INSERTION_DATE = "ror_insertion_date"
+ROR_REVISION_DATE = "ror_revision_date"
 
 _PAGE_LABEL_RE = re.compile(r"(?i)^(?P<word>pages?)(?P<gap>\s+)(?P<rest>\S.*)$")
 
@@ -1376,6 +1377,38 @@ def _ror_insertion_findings(state: RevisionState) -> list[RevisionFinding]:
     return findings
 
 
+def _ror_revision_findings(state: RevisionState) -> list[RevisionFinding]:
+    expected = state.revision_date
+    dated_entries = [
+        entry for entry in state.ror_entries if entry.revision_date is not None
+    ]
+    if expected is None or not dated_entries:
+        return []
+    current = max(
+        dated_entries,
+        key=lambda entry: (
+            entry.revision_date.sort_key
+            if entry.revision_date is not None
+            else (0, 0, 0)
+        ),
+    )
+    if current.revision_date is None or current.revision_date.same_as(expected):
+        return []
+    return [
+        RevisionFinding(
+            control=ROR_REVISION_DATE,
+            message=(
+                f"La date de revision « {current.revision_date_text} » du ROR "
+                f"ne correspond pas a la date des Highlights « {expected.text} »."
+            ),
+            original=current.revision_date_text,
+            proposed=expected.text,
+            page=current.page,
+            bbox=current.bbox,
+        )
+    ]
+
+
 def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     """Cross-check Highlights, LEP and footers, one finding per divergence."""
     findings: list[RevisionFinding] = []
@@ -1389,6 +1422,7 @@ def revision_findings(state: RevisionState) -> list[RevisionFinding]:
             + _page_label_findings(state)
         )
     findings.extend(_ror_insertion_findings(state))
+    findings.extend(_ror_revision_findings(state))
     return sorted(findings, key=lambda finding: (finding.page, finding.control))
 
 
