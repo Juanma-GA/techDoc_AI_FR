@@ -182,7 +182,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
                 assert metadata[compiled.id]["message_en"]
-    assert total == 74
+    assert total == 75
 
 
 def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
@@ -2069,6 +2069,29 @@ def test_forbidden_consumables_are_reported_by_one_rule() -> None:
     assert {item.rule_code for item in invalid_suggestions} == {
         "CUSTOM_FORBIDDEN_CONSUMABLES"
     }
+
+
+def test_legacy_thales_references_are_proposed_as_thales() -> None:
+    rule = _rule("CUSTOM_REPLACE_LEGACY_NAMES")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Use THALES equipment."),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _pdf("AVIONICS, Sextant and thomson equipment."),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [item.original for item in invalid_suggestions] == [
+        "AVIONICS",
+        "Sextant",
+        "thomson",
+    ]
+    assert {item.proposed for item in invalid_suggestions} == {"THALES"}
 
 
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:

@@ -1079,6 +1079,15 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_REPLACE_LEGACY_NAMES",
+        "References historiques a remplacer par THALES",
+        failure_message="reference historique a remplacer par THALES.",
+        target=_MODIFIED_TARGET,
+        severity="warning",
+        pattern=r"(?i)\b(?:AVIONICS|SEXTANT|THOMSON)\b",
+        replacement="THALES",
+    ),
+    _rule(
         "CUSTOM_NO_DEGREE_C_SYMBOL",
         "Unite de temperature C ecrite au format deg. C",
         failure_message="unite °C interdite, utiliser deg. C.",
@@ -1274,6 +1283,15 @@ RULE_METADATA["CUSTOM_FORBIDDEN_CONSUMABLES"] = {
     "severity": "error",
     "message": "Consommable a supprimer.",
 }
+RULE_METADATA["CUSTOM_REPLACE_LEGACY_NAMES"] = {
+    "description": (
+        "Les references a AVIONICS, SEXTANT et THOMSON doivent etre remplacees "
+        "par THALES."
+    ),
+    "kind": "regex_flag",
+    "severity": "warning",
+    "message": "Reference historique a remplacer par THALES.",
+}
 RULE_METADATA["CUSTOM_NO_DEGREE_C_SYMBOL"] = {
     "description": "Le symbole °C doit etre ecrit sous la forme deg. C.",
     "kind": "regex_flag",
@@ -1386,6 +1404,10 @@ _ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
     "CUSTOM_FORBIDDEN_CONSUMABLES": (
         "References to forbidden consumables must be removed.",
         "Consumable to remove.",
+    ),
+    "CUSTOM_REPLACE_LEGACY_NAMES": (
+        "References to AVIONICS, SEXTANT, and THOMSON must be replaced with THALES.",
+        "A legacy reference must be replaced with THALES.",
     ),
     "CUSTOM_NO_DEGREE_C_SYMBOL": (
         "The °C symbol must be written as deg. C.",
