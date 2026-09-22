@@ -305,7 +305,7 @@ def test_tp2_important_notice_matches_the_exact_ata100_model() -> None:
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].proposed == "property"
     assert "Texte attendu" in invalid_suggestions[0].message
-    assert "sole propriety" in invalid_suggestions[0].original
+    assert invalid_suggestions[0].original == "propriety"
     assert missing[0].status == "FAIL"
     assert len(missing_suggestions) == 1
     assert missing_suggestions[0].original == ""
