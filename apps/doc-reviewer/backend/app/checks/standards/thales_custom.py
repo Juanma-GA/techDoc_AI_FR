@@ -667,6 +667,12 @@ _REVISION_RULES = [
         "libelle Page/Pages ou alignement non conforme dans les Highlights.",
         severity="warning",
     ),
+    _revision_rule(
+        "CUSTOM_ROR_INSERTION_DATE",
+        "Date d'insertion du Record of Revisions conforme a la date de revision",
+        revision.ROR_INSERTION_DATE,
+        "date d'insertion du Record of Revisions incoherente avec la date de revision.",
+    ),
 ]
 
 
@@ -1385,6 +1391,10 @@ _ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
         "A page range is written as 'Pages 701 to 704' and a single page as 'Page  401', with two spaces to preserve number alignment.",
         "The Page/Pages label or alignment is not compliant in Highlights.",
     ),
+    "CUSTOM_ROR_INSERTION_DATE": (
+        "In the Record of Revisions, the insertion date must use the revision month when the revision day is below 15, otherwise the following month.",
+        "The Record of Revisions insertion date is inconsistent with the revision date.",
+    ),
 }
 
 RULE_METADATA["CUSTOM_REVISION_LEP_STAR"] = {
@@ -1482,6 +1492,16 @@ RULE_METADATA["CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT"] = {
     "kind": "field_required",
     "severity": "warning",
     "message": "Libelle Page/Pages ou alignement non conforme dans les Highlights.",
+}
+RULE_METADATA["CUSTOM_ROR_INSERTION_DATE"] = {
+    "description": (
+        "Dans le Record of Revisions, la date d'insertion doit reprendre le "
+        "mois de la date de revision si le jour est inferieur a 15, sinon le "
+        "mois suivant."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "La date d'insertion du Record of Revisions est incoherente.",
 }
 
 

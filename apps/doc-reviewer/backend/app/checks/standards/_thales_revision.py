@@ -69,7 +69,9 @@ _CHANGE_HEADER_RE = re.compile(r"(?i)^description\s+of\s+change$")
 _LEP_TITLE_RE = re.compile(r"(?i)\blist\s+of\s+effective\s+pages\b")
 _LEP_TITLE_LINE_RE = re.compile(r"(?im)^\s*list\s+of\s+effective\s+pages\s*$")
 _HIGHLIGHTS_TITLE_RE = re.compile(r"(?im)^\s*highlights\s*$")
-_ROR_TITLE_RE = re.compile(r"(?im)^\s*(?:record\s+of\s+revisions?|ror)\s*$")
+_ROR_TITLE_RE = re.compile(r"(?im)^\s*record\s+of\s+revisions\s*$")
+_ROR_REVISION_DATE_HEADER_RE = re.compile(r"(?i)\brevision\s+date\b")
+_ROR_INSERTION_DATE_HEADER_RE = re.compile(r"(?i)\binsertion\s+date\b")
 _TITLE_PAGE_RE = re.compile(r"(?im)^\s*overhaul\s+manual\s*$")
 _TITLE_PAGE_ANCHOR_RE = re.compile(
     r"(?im)^\s*(?:first\s+issue\s*:|part\s+number|important\s+notice)\b"
@@ -133,6 +135,16 @@ class LepEntry:
 
 
 @dataclass(frozen=True)
+class RorEntry:
+    revision_date: DocDate | None
+    revision_date_text: str
+    insertion_date: DocDate | None
+    insertion_date_text: str
+    page: int
+    bbox: tuple[float, float, float, float] | None
+
+
+@dataclass(frozen=True)
 class PageFooter:
     page: int
     page_key: str | None
@@ -156,6 +168,7 @@ class RevisionState:
     lep_pages: tuple[int, ...] = ()
     highlights: list[HighlightsEntry] = field(default_factory=list)
     lep: list[LepEntry] = field(default_factory=list)
+    ror_entries: list[RorEntry] = field(default_factory=list)
     footers: list[PageFooter] = field(default_factory=list)
     expected_footer_keys: dict[int, str] = field(default_factory=dict)
     missing_footer_pages: tuple[int, ...] = ()
@@ -568,6 +581,128 @@ def extract_lep(page: ParsedPage, subject: str = "") -> tuple[list[LepEntry], st
 
 
 # --------------------------------------------------------------------------
+# Record of revisions
+# --------------------------------------------------------------------------
+
+
+def _ror_header_index(rows: list[list[Span]]) -> int | None:
+    revision_rows: list[int] = []
+    insertion_rows: list[int] = []
+    for index, row in enumerate(rows):
+        row_text = _join_cell(row)
+        if _ROR_REVISION_DATE_HEADER_RE.search(row_text):
+            revision_rows.append(index)
+        if _ROR_INSERTION_DATE_HEADER_RE.search(row_text):
+            insertion_rows.append(index)
+        if revision_rows and insertion_rows and revision_rows[-1] == insertion_rows[-1]:
+            return revision_rows[-1]
+    if not revision_rows or not insertion_rows:
+        return None
+    if abs(revision_rows[0] - insertion_rows[0]) <= 3:
+        return max(revision_rows[0], insertion_rows[0])
+    return None
+
+
+def _ror_entries_from_value(
+    page_number: int,
+    value: str,
+    bbox: tuple[float, float, float, float] | None,
+    *,
+    allow_missing_insertion: bool,
+) -> list[RorEntry]:
+    dates = [
+        (parse_date(match.group(0)), " ".join(match.group(0).split()))
+        for match in _DATE_RE.finditer(value)
+    ]
+    entries: list[RorEntry] = []
+    for index, (revision_date, revision_text) in enumerate(dates):
+        if revision_date is None or revision_date.day is None:
+            continue
+        insertion = next(
+            (
+                (date, date_text)
+                for date, date_text in dates[index + 1 :]
+                if date is not None and date.day is None
+            ),
+            None,
+        )
+        if insertion is None and not allow_missing_insertion:
+            continue
+        insertion_date, insertion_text = insertion or (None, "")
+        entries.append(
+            RorEntry(
+                revision_date=revision_date,
+                revision_date_text=revision_text,
+                insertion_date=insertion_date,
+                insertion_date_text=insertion_text,
+                page=page_number,
+                bbox=bbox,
+            )
+        )
+    return entries
+
+
+def extract_ror(page: ParsedPage) -> list[RorEntry]:
+    """Read revision/insertion date pairs from a Record of Revisions page."""
+    if not _is_ror_page(page):
+        return []
+
+    entries: list[RorEntry] = []
+    if page.spans:
+        rows = visual_rows(page.spans)
+        header_index = _ror_header_index(rows)
+        title_index = next(
+            (
+                index
+                for index, row in enumerate(rows)
+                if _ROR_TITLE_RE.search(_join_cell(row))
+            ),
+            -1,
+        )
+        start_index = max(header_index if header_index is not None else -1, title_index) + 1
+        allow_missing = header_index is not None
+        for row in rows[start_index:]:
+            row_text = _join_cell(row)
+            if _COPYRIGHT_ANCHOR_RE.search(row_text):
+                break
+            entries.extend(
+                _ror_entries_from_value(
+                    page.page,
+                    row_text,
+                    _merge_bbox(row),
+                    allow_missing_insertion=allow_missing,
+                )
+            )
+        return entries
+
+    lines = (page.text or "").splitlines()
+    header_lines = [
+        index
+        for index, line in enumerate(lines)
+        if _ROR_REVISION_DATE_HEADER_RE.search(line)
+        or _ROR_INSERTION_DATE_HEADER_RE.search(line)
+    ]
+    title_index = next(
+        (index for index, line in enumerate(lines) if _ROR_TITLE_RE.search(line)),
+        -1,
+    )
+    start_index = max(header_lines + [title_index]) + 1
+    allow_missing = bool(header_lines)
+    for line in lines[start_index:]:
+        if _COPYRIGHT_ANCHOR_RE.search(line):
+            break
+        entries.extend(
+            _ror_entries_from_value(
+                page.page,
+                line,
+                None,
+                allow_missing_insertion=allow_missing,
+            )
+        )
+    return entries
+
+
+# --------------------------------------------------------------------------
 # Footers
 # --------------------------------------------------------------------------
 
@@ -674,7 +809,22 @@ def _is_lep_page(page: ParsedPage) -> bool:
 
 
 def _is_ror_page(page: ParsedPage) -> bool:
-    return _ROR_TITLE_RE.search(page.text or "") is not None
+    if page.spans:
+        rows = visual_rows(page.spans)
+        if not rows:
+            return False
+        min_y = min(span.bbox[1] for span in page.spans)
+        max_y = max(span.bbox[3] for span in page.spans)
+        title_bottom = min_y + (max_y - min_y) * 0.25
+        return any(
+            _ROR_TITLE_RE.fullmatch(_join_cell(row)) is not None
+            and min(span.bbox[1] for span in row) <= title_bottom
+            for row in rows
+        )
+    return any(
+        _ROR_TITLE_RE.fullmatch(" ".join(line.split())) is not None
+        for line in (page.text or "").splitlines()[:10]
+    )
 
 
 def _is_title_page(page: ParsedPage) -> bool:
@@ -742,6 +892,8 @@ def build_revision_state(parsed: ParsedPdf, document: object) -> RevisionState:
             lep_pages.append(page.page)
             entries, subject = extract_lep(page, subject)
             state.lep.extend(entries)
+        if _is_ror_page(page):
+            state.ror_entries.extend(extract_ror(page))
         footer = extract_footer(page, fallback_key)
         if footer is not None:
             state.footers.append(footer)
@@ -789,6 +941,7 @@ MODIFIED_PAGE_ABSENT = "modified_page_absent"
 HIGHLIGHTS_PAIRING = "highlights_pairing"
 HIGHLIGHTS_PAGE_LABEL = "highlights_page_label"
 FOOTER_PAGE_NUMBER = "footer_page_number"
+ROR_INSERTION_DATE = "ror_insertion_date"
 
 _PAGE_LABEL_RE = re.compile(r"(?i)^(?P<word>pages?)(?P<gap>\s+)(?P<rest>\S.*)$")
 
@@ -1169,18 +1322,73 @@ def _page_label_findings(state: RevisionState) -> list[RevisionFinding]:
     return findings
 
 
+def _expected_ror_insertion_date(revision_date: DocDate) -> DocDate:
+    month = revision_date.month
+    if revision_date.day is None or revision_date.day >= 15:
+        month += 1
+    year = revision_date.year
+    if month > 12:
+        month = 1
+        year += 1
+    return DocDate(
+        month=month,
+        day=None,
+        year=year,
+        text=f"{_MONTHS[month - 1]} {year % 100:02d}",
+    )
+
+
+def _ror_insertion_findings(state: RevisionState) -> list[RevisionFinding]:
+    findings: list[RevisionFinding] = []
+    for entry in state.ror_entries:
+        if entry.revision_date is None:
+            continue
+        expected = _expected_ror_insertion_date(entry.revision_date)
+        observed = entry.insertion_date
+        if (
+            observed is not None
+            and observed.day is None
+            and observed.month == expected.month
+            and observed.year == expected.year
+        ):
+            continue
+        if observed is None:
+            message = (
+                f"La date d'insertion du ROR est absente pour la date de revision "
+                f"{entry.revision_date.text} : elle doit etre {expected.text}."
+            )
+        else:
+            message = (
+                f"La date d'insertion « {entry.insertion_date_text} » du ROR est "
+                f"incorrecte pour la date de revision {entry.revision_date.text} : "
+                f"elle doit etre {expected.text}."
+            )
+        findings.append(
+            RevisionFinding(
+                control=ROR_INSERTION_DATE,
+                message=message,
+                original=entry.insertion_date_text,
+                proposed=expected.text,
+                page=entry.page,
+                bbox=entry.bbox,
+            )
+        )
+    return findings
+
+
 def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     """Cross-check Highlights, LEP and footers, one finding per divergence."""
-    if not state.available:
-        return []
-    findings = (
-        _lep_findings(state)
-        + _footer_findings(state)
-        + _footer_page_number_findings(state)
-        + _missing_page_findings(state)
-        + _pairing_findings(state)
-        + _page_label_findings(state)
-    )
+    findings: list[RevisionFinding] = []
+    if state.available:
+        findings.extend(
+            _lep_findings(state)
+            + _footer_findings(state)
+            + _footer_page_number_findings(state)
+            + _missing_page_findings(state)
+            + _pairing_findings(state)
+            + _page_label_findings(state)
+        )
+    findings.extend(_ror_insertion_findings(state))
     return sorted(findings, key=lambda finding: (finding.page, finding.control))
 
 

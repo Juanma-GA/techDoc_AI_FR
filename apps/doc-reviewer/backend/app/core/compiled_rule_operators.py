@@ -385,7 +385,7 @@ def revision_findings(check: Check, ctx: _EvalContext) -> list[Any]:
     """Divergences between Highlights, LEP and footers for one control.
 
     The state is built once per parsed document (and already by the page
-    classifier, before any rule runs) so the nine controls share a single
+    classifier, before any rule runs) so the cross-source controls share a single
     extraction pass.
     """
     if ctx.is_docx or ctx.parsed_pdf is None:
