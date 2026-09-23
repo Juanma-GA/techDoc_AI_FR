@@ -182,7 +182,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
                 assert metadata[compiled.id]["message_en"]
-    assert total == 75
+    assert total == 78
 
 
 def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
@@ -1104,6 +1104,227 @@ def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> 
     assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
 
 
+def _document_type_header_page(
+    header: str,
+    *,
+    body: str = "Document body.",
+    page_type: str | None = None,
+) -> ParsedPage:
+    footer = "Page 1"
+    return ParsedPage(
+        page=1,
+        page_type=page_type,
+        text=f"{header}\n{body}\n{footer}",
+        spans=[
+            Span(
+                text=header,
+                bbox=(40.0, 80.0, 300.0, 95.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text=body,
+                bbox=(40.0, 400.0, 200.0, 415.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text=footer,
+                bbox=(40.0, 760.0, 120.0, 775.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+
+
+def test_non_tp1_headers_require_an_allowed_document_type() -> None:
+    rule = _rule("CUSTOM_HEADER_DOCUMENT_TYPE")
+    valid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("COMPONENT MAINTENANCE MANUAL")],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    invalid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("OTHER MANUAL")],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    excluded, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("OTHER MANUAL", page_type=TP1_PAGE_TYPE)],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert excluded == []
+
+
+def test_tp1_content_requires_an_allowed_document_type() -> None:
+    rule = _rule("CUSTOM_TP1_HEADER_DOCUMENT_TYPE")
+    valid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[
+                _document_type_header_page(
+                    "TP1 heading",
+                    body="OVERHAUL MANUAL",
+                    page_type=TP1_PAGE_TYPE,
+                )
+            ],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    invalid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[
+                _document_type_header_page(
+                    "OVERHAUL MANUAL",
+                    page_type=TP1_PAGE_TYPE,
+                )
+            ],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    excluded, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("OTHER MANUAL")],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert excluded == []
+
+
+def test_highlights_document_type_must_precede_the_ata_number() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
+    valid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="OVERHAUL MANUAL\nATA No 23-56-25\nHighlights Page 1",
+    )
+    invalid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="ATA No 23-56-25\nOVERHAUL MANUAL\nHighlights Page 1",
+    )
+    later_page = ParsedPage(
+        page=2,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+        text="Highlights Page 2",
+    )
+
+    valid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[valid_page],
+            full_text=valid_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+    invalid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[invalid_page],
+            full_text=invalid_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+    later, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=2,
+            pages=[later_page],
+            full_text=later_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert later == []
+
+
+def test_highlights_document_type_does_not_use_the_centered_page_header() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
+    page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text=(
+            "OVERHAUL MANUAL\n"
+            "1-879-SB\n"
+            "PRESSURE TRANSMITTER\n"
+            "PNR: 1-879-SB\n"
+            "MANUAL with Illustrated Parts List\n"
+            "ATA No\n"
+            "HIGHLIGHTS"
+        ),
+        spans=[
+            Span(
+                text="OVERHAUL MANUAL",
+                bbox=(280.0, 45.0, 375.0, 60.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="MANUAL with Illustrated Parts List",
+                bbox=(86.0, 160.0, 300.0, 175.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="ATA No",
+                bbox=(86.0, 180.0, 134.0, 195.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "FAIL"
+    assert [
+        (suggestion.original, suggestion.proposed)
+        for suggestion in suggestions
+    ] == [("MANUAL with Illustrated Parts List", "OVERHAUL MANUAL")]
+    assert suggestions[0].bbox == (86.0, 160.0, 300.0, 175.0)
+
+
 def test_pnr_header_reports_each_invalid_page() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(meta_pnr_number="1-879-SB")
@@ -1155,7 +1376,7 @@ def test_pnr_header_reports_each_invalid_occurrence() -> None:
         text="PNR: 1-878-SB | PNR: 1-877-SB\nHighlights page 1",
         spans=[
             Span(
-                text="PNR: 1-878-SB | PNR: 1-877-SB",
+            text="PNR: 1-878-SB | PNR: 1-877-SB",
                 bbox=(40.0, 100.0, 300.0, 110.0),
                 page=1,
                 font="Arial",

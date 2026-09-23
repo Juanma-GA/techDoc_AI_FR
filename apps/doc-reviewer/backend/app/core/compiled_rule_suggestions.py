@@ -105,6 +105,12 @@ def deterministic_suggestions(
             suggestions.extend(
                 highlights_holder_suggestions(rule, targets, rule_kind, message, ctx)
             )
+        elif check.operator == "highlights_document_type":
+            suggestions.extend(
+                highlights_document_type_suggestions(
+                    rule, targets, rule_kind, message, ctx
+                )
+            )
         elif check.operator == "regex_exists" and check.expected_display is not None:
             check_status, _target, _observed, _expected = evaluate_check(
                 check, targets, ctx, rule.id
@@ -341,6 +347,50 @@ def highlights_holder_suggestions(
                 message=(
                     f"{message} Le contenu doit commencer par « {expected} »."
                 ),
+                original=original,
+                proposed=expected,
+                page=target.raw_page,
+                span=(start, start + len(original)),
+                bbox=bbox,
+            )
+        )
+    return suggestions
+
+
+def highlights_document_type_suggestions(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+    ctx: _EvalContext,
+) -> list[RawSuggestion]:
+    from app.checks.standards import thales_custom
+
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        if thales_custom.highlights_document_type_matches(target.text):
+            continue
+        expected = thales_custom.highlights_document_type_expected(target.text)
+        if expected is None:
+            continue
+        original = thales_custom.highlights_document_type_observed(target.text)
+        start = target.text.find(original) if original else 0
+        bbox = (
+            suggestion_bbox(
+                target,
+                original,
+                ctx.pdf_pages,
+                span_start=start,
+            )
+            if original
+            else missing_item_bbox(rule, target, expected, ctx.pdf_pages)
+        )
+        suggestions.append(
+            RawSuggestion(
+                rule_kind=rule_kind,
+                rule_code=rule.id,
+                severity=rule.severity,
+                message=f"{message} Texte attendu : {expected}.",
                 original=original,
                 proposed=expected,
                 page=target.raw_page,

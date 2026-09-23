@@ -77,6 +77,22 @@ _HIGHLIGHTS_CONTENT_MARKER = re.compile(r"(?im)^\s*HIGHLIGHTS\s*$")
 _HIGHLIGHTS_HOLDER_RE = re.compile(r"(?i)^TO\s*:\s*HOLDER\s+OF\s+")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_PAGE_TYPES = [HIGHLIGHTS_PAGE_TYPE, HIGHLIGHTS_FIRST_PAGE_TYPE]
+_DOCUMENT_TYPES = [
+    "OVERHAUL MANUAL",
+    "COMPONENT MAINTENANCE MANUAL",
+]
+_DOCUMENT_TYPE_ALTERNATIVES = "|".join(
+    re.escape(document_type).replace(r"\ ", r"\s+")
+    for document_type in _DOCUMENT_TYPES
+)
+_DOCUMENT_TYPE_PATTERN = (
+    rf"(?i)(?<!\w)(?:{_DOCUMENT_TYPE_ALTERNATIVES})(?!\w)"
+)
+_HIGHLIGHTS_DOCUMENT_TYPE_PATTERN = (
+    rf"(?im)^\s*(?:{_DOCUMENT_TYPE_ALTERNATIVES})\s*$"
+    r"\s*^\s*ATA\s+No\b"
+)
+_HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
 _INTRODUCTION_PAGE_MARKER = re.compile(r"(?m)^\s*INTRODUCTION\s*$")
 _TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
 _NOTE_INTRODUCTION_TEXT = {
@@ -107,6 +123,11 @@ _HEADER_TARGET = RuleTarget(
     page="all",
     region="header",
     excluded_page_types=[TP1_PAGE_TYPE],
+)
+_TP1_DOCUMENT_TARGET = RuleTarget(
+    page="all",
+    region="body",
+    page_type=TP1_PAGE_TYPE,
 )
 _HIGHLIGHTS_PNR_TARGET = RuleTarget(
     page="all",
@@ -440,6 +461,38 @@ def highlights_holder_matches(text: str, expected: str) -> bool:
     observed = " ".join(highlights_content(text).split()).casefold()
     expected_normalized = " ".join(expected.split()).casefold()
     return bool(observed) and observed.startswith(expected_normalized)
+
+
+def highlights_document_type_expected(text: str) -> str | None:
+    match = re.search(_DOCUMENT_TYPE_PATTERN, text)
+    if match is None:
+        return None
+    observed = " ".join(match.group(0).split()).casefold()
+    return next(
+        (
+            document_type
+            for document_type in _DOCUMENT_TYPES
+            if document_type.casefold() == observed
+        ),
+        None,
+    )
+
+
+def highlights_document_type_observed(text: str) -> str:
+    ata_match = _HIGHLIGHTS_ATA_LINE_RE.search(text)
+    if ata_match is None:
+        return ""
+    previous_lines = [
+        line.strip()
+        for line in text[: ata_match.start()].splitlines()
+        if line.strip()
+    ]
+    previous_line = previous_lines[-1] if previous_lines else ""
+    return previous_line if re.search(r"(?i)\bMANUAL\b", previous_line) else ""
+
+
+def highlights_document_type_matches(text: str) -> bool:
+    return re.search(_HIGHLIGHTS_DOCUMENT_TYPE_PATTERN, text) is not None
 
 
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
@@ -906,6 +959,42 @@ _RULES_V1 = [
         ],
     ),
     _rule(
+        "CUSTOM_HEADER_DOCUMENT_TYPE",
+        "Type de document present dans les en-tetes hors TP1",
+        failure_message="type de document absent de l'en-tete.",
+        target=_HEADER_TARGET,
+        severity="error",
+        checks=[
+            _required_text_check(_DOCUMENT_TYPE_PATTERN),
+        ],
+    ),
+    _rule(
+        "CUSTOM_TP1_HEADER_DOCUMENT_TYPE",
+        "Type de document present dans le contenu TP1",
+        failure_message="type de document absent du contenu TP1.",
+        target=_TP1_DOCUMENT_TARGET,
+        severity="error",
+        checks=[
+            _required_text_check(_DOCUMENT_TYPE_PATTERN),
+        ],
+    ),
+    _rule(
+        "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE",
+        "Type de document present au-dessus du numero ATA des Highlights",
+        failure_message="type de document absent au-dessus du numero ATA Highlights.",
+        target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+        severity="error",
+        checks=[
+            Check(
+                field="text",
+                operator="highlights_document_type",
+                expected="from_header",
+                missing_anchor=r"(?i)\bATA\s+No\b",
+                missing_anchor_position="above",
+            ),
+        ],
+    ),
+    _rule(
         "CUSTOM_PNR_PAGE_VALUE",
         "Numero PNR present dans la page conforme au mapping",
         failure_message="Numero PNR present dans la page non conforme.",
@@ -1220,6 +1309,33 @@ RULE_METADATA["CUSTOM_HIGHLIGHTS_PNR_HEADER"] = {
     "severity": "error",
     "message": "Le numero PNR de l'en-tete est absent ou incorrect.",
 }
+RULE_METADATA["CUSTOM_HEADER_DOCUMENT_TYPE"] = {
+    "description": (
+        "Chaque en-tete hors TP1 doit contenir l'un des types de document "
+        "autorises : OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le type de document est absent de l'en-tete.",
+}
+RULE_METADATA["CUSTOM_TP1_HEADER_DOCUMENT_TYPE"] = {
+    "description": (
+        "Chaque contenu TP1 doit contenir l'un des types de document autorises : "
+        "OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le type de document est absent du contenu TP1.",
+}
+RULE_METADATA["CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE"] = {
+    "description": (
+        "La premiere page Highlights doit afficher un type de document autorise "
+        "au-dessus du numero ATA : OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+    ),
+    "kind": "field_required",
+    "severity": "error",
+    "message": "Le type de document est absent au-dessus du numero ATA Highlights.",
+}
 RULE_METADATA["CUSTOM_PNR_PAGE_VALUE"] = {
     "description": (
         "Le numero apres 'PNR:' sur la page Highlights doit correspondre au "
@@ -1360,6 +1476,18 @@ _ENGLISH_RULE_METADATA: dict[str, tuple[str, str]] = {
     "CUSTOM_HIGHLIGHTS_PNR_HEADER": (
         "The header of every page must contain the PNR number matching the document mapping.",
         "The header PNR number is missing or incorrect.",
+    ),
+    "CUSTOM_HEADER_DOCUMENT_TYPE": (
+        "Every non-TP1 header must contain an allowed document type: OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL.",
+        "The document type is missing from the header.",
+    ),
+    "CUSTOM_TP1_HEADER_DOCUMENT_TYPE": (
+        "Every TP1 page content must contain an allowed document type: OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL.",
+        "The document type is missing from the TP1 page content.",
+    ),
+    "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE": (
+        "The first Highlights page must show an allowed document type above the ATA number: OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL.",
+        "The document type is missing above the Highlights ATA number.",
     ),
     "CUSTOM_PNR_PAGE_VALUE": (
         "The number after 'PNR:' on a Highlights page must match the document mapping.",

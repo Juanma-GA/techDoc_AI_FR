@@ -163,6 +163,7 @@ class Check(StrictModel):
         "font_size_equals",
         "shop_verification",
         "highlights_holder",
+        "highlights_document_type",
     ]
     expected: str | int | float | list[str] | None = None
     require_all: bool = False
@@ -222,6 +223,10 @@ class Check(StrictModel):
         if self.operator == "highlights_holder" and self.expected != "tp1_title":
             raise ValueError(
                 "highlights_holder requires expected='tp1_title'"
+            )
+        if self.operator == "highlights_document_type" and self.expected != "from_header":
+            raise ValueError(
+                "highlights_document_type requires expected='from_header'"
             )
         if self.operator == "font_size_equals":
             if isinstance(self.expected, bool) or not isinstance(self.expected, (int, float)):
