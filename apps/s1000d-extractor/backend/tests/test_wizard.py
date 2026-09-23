@@ -269,8 +269,12 @@ def test_split_undo_restores(client, pdf_bytes) -> None:
     assert len(st["dms"]) == n0, "undo n'a pas restaure le DM exclu"
 
 
-def test_hide_zones_removes_headers_and_undo(client, pdf_bytes_headers) -> None:
-    """« Masquer entetes/pieds » retire le bruit, undo le restaure."""
+def test_hide_zones_is_idempotent_after_automatic_noise_filter(client, pdf_bytes_headers) -> None:
+    """Le bruit de mise en page est retire avant l'etape split.
+
+    L'action historique « Masquer entetes/pieds » reste sans effet destructif
+    et son undo conserve le meme contenu deja nettoye.
+    """
     doc_id = _upload(client, pdf_bytes_headers)
     st = _split_state(client, doc_id)
     before = sum(d["node_count"] for d in st["dms"])
@@ -280,7 +284,7 @@ def test_hide_zones_removes_headers_and_undo(client, pdf_bytes_headers) -> None:
         json={"op": "hide_zones", "zones": ["header", "footer"]},
     ).json()
     after = sum(d["node_count"] for d in st["dms"])
-    assert after < before, "aucun noeud entete/pied retire"
+    assert after == before, "le masquage manuel ne doit pas retirer du contenu deja nettoye"
 
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/update", json={"op": "undo"}

@@ -29,7 +29,7 @@ from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.errors import AppError
-from app.core.s1000d_serializer import build_reference_index, serialize
+from app.core.s1000d_serializer import build_reference_index, content_node_count, serialize
 from app.core.validator import validate_document
 from app.db.models import BrexProfile, Document
 
@@ -349,6 +349,7 @@ def _generate_all(db: Session, doc: Document) -> None:
     )
     figure_offset = 0
     table_offset = 0
+    section_offset = 0
     reference_index = build_reference_index([
         (
             dm["dm_id"],
@@ -368,6 +369,7 @@ def _generate_all(db: Session, doc: Document) -> None:
                 title=dm["title"],
                 figure_offset=figure_offset,
                 table_offset=table_offset,
+                section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
                 header_template=res.header_template,
                 reference_index=reference_index,
@@ -375,6 +377,7 @@ def _generate_all(db: Session, doc: Document) -> None:
             )
             figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
             table_offset += sum(1 for node in root.walk() if node.kind == "table")
+            section_offset += content_node_count(root, "section")
             # `content_html`/`content_xml` ne sont pas persistes : ce sont des
             # rendus derives du tree, ils doubleraient inutilement le JSON.
             dm.update({
@@ -460,6 +463,7 @@ def dm_xml(doc: Document, dm_id: str) -> str:
     dms = ws.load_dms(doc)
     figure_offset = 0
     table_offset = 0
+    section_offset = 0
     res = wres.load_resources(doc)
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     reference_index = build_reference_index([
@@ -484,6 +488,7 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 title=dm["title"],
                 figure_offset=figure_offset,
                 table_offset=table_offset,
+                section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
                 header_template=res.header_template,
                 reference_index=reference_index,
@@ -496,4 +501,5 @@ def dm_xml(doc: Document, dm_id: str) -> str:
         if root is not None:
             figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
             table_offset += sum(1 for node in root.walk() if node.kind == "table")
+            section_offset += content_node_count(root, "section")
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)

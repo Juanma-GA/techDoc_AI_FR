@@ -38,3 +38,20 @@ def test_no_section_fallback_single_dm() -> None:
     root.children = [IRNode(id="p", kind="paragraph", text="x")]
     dms = split_into_dms(root, "section")
     assert len(dms) == 1
+
+
+def test_split_excludes_layout_noise_zones() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(id="s1", kind="section", text="1 Terminology", level=1, children=[
+            IRNode(id="header", kind="paragraph", text="www.example.test", zone="header"),
+            IRNode(id="toc", kind="paragraph", text="FRANCAIS", zone="toc"),
+            IRNode(id="body", kind="paragraph", text="Definitions."),
+            IRNode(id="footer", kind="paragraph", text="Page 1", zone="footer"),
+            IRNode(id="cover", kind="paragraph", text="Manual", zone="cover"),
+        ]),
+    ])
+
+    dms = split_into_dms(root, "chapter")
+    text = "\n".join(node.text for node in dms[0].root.walk() if node.text)
+
+    assert text == "1 Terminology\nDefinitions."

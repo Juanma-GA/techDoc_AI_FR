@@ -97,6 +97,7 @@ _INTERNAL_REF_CODES = {
     "graphic": "irtt09",
     "section": "irtt07",
 }
+_LAYOUT_NOISE_ZONES = frozenset({"header", "footer", "cover", "toc"})
 _FIGURE_LABEL_RE = re.compile(
     r"^\s*(?:figure|fig\.?|illustration)\s*(\d+(?:[.\-]\d+)*)\b",
     re.IGNORECASE,
@@ -160,11 +161,30 @@ def _add_reference_target(index: ReferenceIndex, target: ReferenceTarget) -> Non
     index.setdefault(key, []).append(target)
 
 
+def _content_nodes(root: IRNode) -> list[IRNode]:
+    nodes: list[IRNode] = []
+
+    def walk(node: IRNode) -> None:
+        for child in node.children:
+            if child.zone in _LAYOUT_NOISE_ZONES:
+                continue
+            nodes.append(child)
+            walk(child)
+
+    walk(root)
+    return nodes
+
+
+def content_node_count(root: IRNode, kind: str) -> int:
+    return sum(node.kind == kind for node in _content_nodes(root))
+
+
 def build_reference_index(
     documents: Sequence[tuple[str, IRNode, Mapping[str, object] | None]],
     *,
     figure_offset: int = 0,
     table_offset: int = 0,
+    section_offset: int = 0,
 ) -> ReferenceIndex:
     """Indexe les cibles visibles avec les IDs emis dans les DM.
 
@@ -174,13 +194,14 @@ def build_reference_index(
     index: ReferenceIndex = {}
     for dm_id, root, metadata in documents:
         dmc = str((metadata or {}).get("dmc") or "")
-        nodes = root.walk()
+        nodes = _content_nodes(root)
         for position, node in enumerate(nodes):
             if node.kind == "section":
+                section_offset += 1
                 target = ReferenceTarget(
                     kind="section",
                     label="",
-                    target_id=_reference_id("sec", node.id),
+                    target_id=f"par-{section_offset:04d}",
                     target_type=_INTERNAL_REF_CODES["section"],
                     dm_id=dm_id,
                     dmc=dmc,
@@ -450,6 +471,25 @@ def _append_inline_text(parent: etree._Element, text: str) -> None:
         parent.text = (parent.text or "") + safe_text
 
 
+def _append_emphasis(parent: etree._Element, code: str, text: str) -> None:
+    safe_text = xml_text(text)
+    if not safe_text:
+        return
+    if len(parent):
+        last = parent[-1]
+        separator = last.tail or ""
+        if (
+            last.tag == "emphasis"
+            and last.get("emphasisType") == code
+            and not separator.strip()
+        ):
+            last.text = (last.text or "") + separator + safe_text
+            last.tail = None
+            return
+    emphasis = etree.SubElement(parent, "emphasis", emphasisType=code)
+    emphasis.text = safe_text
+
+
 def _inline_content(
     parent: etree._Element,
     text: str,
@@ -458,6 +498,8 @@ def _inline_content(
     usable_runs = runs or []
     if usable_runs and "".join(str(_run_value(run, "text", "")) for run in usable_runs) != text:
         usable_runs = []
+    if usable_runs and not len(parent) and parent.text is None:
+        parent.text = ""
     if not usable_runs:
         _append_inline_text(parent, text)
         return
@@ -465,8 +507,7 @@ def _inline_content(
         run_text = str(_run_value(run, "text", ""))
         code = _run_emphasis_code(run)
         if code:
-            emphasis = etree.SubElement(parent, "emphasis", emphasisType=code)
-            emphasis.text = xml_text(run_text)
+            _append_emphasis(parent, code, run_text)
         else:
             _append_inline_text(parent, run_text)
 
@@ -529,6 +570,7 @@ def _emit_reference(
                 parent,
                 "dmRef",
                 id=_reference_id("dmref", target.dm_id),
+                referredFragment=target.target_id,
             )
             ident = etree.SubElement(dm_ref, "dmRefIdent")
             etree.SubElement(ident, "dmCode", **_dm_code({"dmc": target.dmc}, "descriptive"))
@@ -567,6 +609,8 @@ def _inline_content_with_refs(
     if not refs:
         _inline_content(parent, text, runs)
         return
+    if not len(parent) and parent.text is None:
+        parent.text = ""
     folded = text.casefold()
     spans: list[tuple[int, int, dict]] = []
     for ref in refs:
@@ -737,6 +781,8 @@ def _emit_node(
     reference_index: ReferenceIndex,
     current_dm_id: str,
 ) -> None:
+    if node.zone in _LAYOUT_NOISE_ZONES:
+        return
     alt = _alt_comment(node)
     if alt:
         parent.append(etree.Comment(alt))
@@ -784,7 +830,8 @@ def _emit_node(
             )
     elif node.kind == "section":
         top = _top_element(node, "levelledPara")
-        sect = etree.SubElement(parent, top, id=_reference_id("sec", node.id))
+        counters["section"] += 1
+        sect = etree.SubElement(parent, top, id=f"par-{counters['section']:04d}")
         if node.text:
             title = etree.SubElement(sect, "title")  # optionnel mais conventionnel
             title.text = clean_title(node.text)
@@ -846,6 +893,7 @@ def serialize(
     title: str = "",
     figure_offset: int = 0,
     table_offset: int = 0,
+    section_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
     header_template: Mapping[str, object] | None = None,
     reference_index: ReferenceIndex | None = None,
@@ -858,8 +906,13 @@ def serialize(
             [(reference_dm_id, root, dm_metadata)],
             figure_offset=figure_offset,
             table_offset=table_offset,
+            section_offset=section_offset,
         )
-    counters = {"figure": figure_offset, "table": table_offset}
+    counters = {
+        "figure": figure_offset,
+        "table": table_offset,
+        "section": section_offset,
+    }
     dmodule = etree.Element("dmodule", nsmap={
         "xsi": _XSI_NS,
         "xlink": _XLINK_NS,

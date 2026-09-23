@@ -290,6 +290,29 @@ def test_uri_ref_is_emitted_as_external_pub_ref() -> None:
     assert "".join(doc.find(".//content//para").itertext()) == text  # type: ignore[union-attr]
 
 
+def test_adjacent_runs_with_same_emphasis_are_merged() -> None:
+    text = "Remarque : La qualification est uniquement valable pour la societe qui a forme l employe autorise et qualifie."
+    root = IRNode(id="r", kind="section", level=0, children=[IRNode(
+        id="note",
+        kind="admonition",
+        admonition="note",
+        text=text,
+        inline_runs=[
+            InlineRun("Remarque : ", bold=True),
+            InlineRun("La qualification est uniquement valable pour la societe qui a forme l employe", italic=True),
+            InlineRun(" autorise et qualifie.", italic=True),
+        ],
+    )])
+    resolve(root)
+    doc = _parse(serialize(root, issue="5.0", dm_type="descriptive"))
+
+    note_para = doc.find(".//content//note/notePara")
+    assert note_para is not None
+    emphases = note_para.findall("emphasis")
+    assert [emphasis.get("emphasisType") for emphasis in emphases] == ["em01", "em02"]
+    assert "".join(note_para.itertext()) == text
+
+
 def test_cross_dm_ref_uses_target_dmc() -> None:
     source_text = "Voir Figure 2 pour le detail."
     source = IRNode(id="source", kind="section", level=0, children=[
@@ -315,6 +338,70 @@ def test_cross_dm_ref_uses_target_dmc() -> None:
 
     dm_ref = doc.find(".//content//para/dmRef")
     assert dm_ref is not None
+    assert dm_ref.get("referredFragment") == "fig-0001"
     assert dm_ref.find("./dmRefIdent/dmCode").get("modelIdentCode") == "TEST"  # type: ignore[union-attr]
     assert dm_ref.find("./dmRefIdent/dmCode").get("infoCode") == "520"  # type: ignore[union-attr]
     assert "".join(doc.find(".//content//para").itertext()) == source_text  # type: ignore[union-attr]
+
+
+def test_cross_dm_ref_emits_weg_dm_code():
+    source_text = "Voir Figure 2 pour le detail."
+    source = IRNode(id="source", kind="section", level=0, children=[
+        IRNode(id="p", kind="paragraph", text=source_text, refs=detect_refs(source_text)),
+    ])
+    target = IRNode(id="target", kind="section", level=0, children=[
+        IRNode(id="f", kind="figure", text="Figure 2 - Vue"),
+    ])
+    resolve(source)
+    resolve(target)
+    index = build_reference_index([
+        ("dm1", source, {"dmc": "DMC-TEST-A-00-00-00-00A-040A-D"}),
+        ("dm2", target, {"dmc": "DMC-WEG-AA-00-09-00-00A-040A-A"}),
+    ])
+    doc = _parse(serialize(
+        source,
+        issue="5.0",
+        dm_type="descriptive",
+        reference_index=index,
+        reference_dm_id="dm1",
+    ))
+
+    dm_code = doc.find(".//content//para/dmRef/dmRefIdent/dmCode")
+    assert dm_code is not None
+    assert dm_code.get("modelIdentCode") == "WEG"
+    assert dm_code.get("systemDiffCode") == "AA"
+    assert dm_code.get("systemCode") == "00"
+    assert dm_code.get("subSystemCode") == "0"
+    assert dm_code.get("subSubSystemCode") == "9"
+
+
+def test_sections_use_sequential_par_ids() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(id="s1", kind="section", text="1 First", level=1, children=[
+            IRNode(id="s11", kind="section", text="1.1 Nested", level=2),
+        ]),
+    ])
+    resolve(root)
+    doc = _parse(serialize(root, issue="5.0", dm_type="descriptive"))
+
+    sections = doc.findall(".//content//levelledPara")
+    assert [section.get("id") for section in sections] == ["par-0001", "par-0002"]
+    assert not doc.xpath('.//*[@id="sec-n69"]')
+
+
+def test_serializer_excludes_layout_noise_zones() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(id="header", kind="paragraph", text="www.example.test", zone="header"),
+        IRNode(id="toc", kind="paragraph", text="FRANCAIS", zone="toc"),
+        IRNode(id="s1", kind="section", text="1 First", level=1, children=[
+            IRNode(id="body", kind="paragraph", text="Definitions."),
+            IRNode(id="footer", kind="paragraph", text="Page 1", zone="footer"),
+        ]),
+    ])
+    resolve(root)
+    xml = serialize(root, issue="5.0", dm_type="descriptive")
+
+    assert "www.example.test" not in xml
+    assert "FRANCAIS" not in xml
+    assert "Page 1" not in xml
+    assert "Definitions." in xml

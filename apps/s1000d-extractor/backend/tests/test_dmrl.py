@@ -164,6 +164,18 @@ def test_parse_dmc_components():
     assert parse_dmc("pas-un-dmc") is None
 
 
+def test_parse_dmc_accepts_two_character_system_difference_code():
+    parsed = parse_dmc("DMC-WEG-AA-00-09-00-00A-040A-A")
+
+    assert parsed is not None
+    assert parsed["modelIdentCode"] == "WEG"
+    assert parsed["systemDiffCode"] == "AA"
+    assert parsed["systemCode"] == "00"
+    assert parsed["subSystemCode"] == "0"
+    assert parsed["subSubSystemCode"] == "9"
+    assert parsed["assyCode"] == "00"
+
+
 def test_generate_pmc_hierarchy(dmrl_json):
     xml = generate_pmc(load_dmrl(dmrl_json), pm_title="Frein")
     root = etree.fromstring(xml.encode("utf-8"))
@@ -257,6 +269,28 @@ def test_split_by_dmrl_prefers_section_title_over_body_contains():
     assert "Utilisez des appareils de levage adaptes." in contents["Manutention et transport"]
     assert "Utilisez des appareils de levage adaptes." not in contents["Levage"]
     assert "Soulevez le moteur." in contents["Levage"]
+
+
+def test_split_by_dmrl_excludes_layout_noise_zones():
+    root = IRNode(id="root", kind="section", level=0, children=[
+        IRNode(id="header", kind="paragraph", text="www.example.test", zone="header"),
+        IRNode(id="toc", kind="paragraph", text="FRANCAIS", zone="toc"),
+        IRNode(id="cover", kind="paragraph", text="Manual", zone="cover"),
+        IRNode(id="footer", kind="paragraph", text="Page 1", zone="footer"),
+        IRNode(
+            id="terminologie",
+            kind="section",
+            level=1,
+            text="1. TERMINOLOGIE",
+            children=[IRNode(id="body", kind="paragraph", text="Definitions.")],
+        ),
+    ])
+
+    units = splitter.split_by_dmrl(root, [DmrlEntry(title="Terminologie")])
+
+    assert len(units) == 1
+    assert units[0].is_orphan is False
+    assert splitter.ir_to_text(units[0].root) == "1. TERMINOLOGIE\nDefinitions."
 
 
 def test_split_by_dmrl_ignores_running_header_before_first_dm():

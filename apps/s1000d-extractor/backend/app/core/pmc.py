@@ -22,7 +22,7 @@ if TYPE_CHECKING:  # pragma: no cover - import de typage seulement
 _DMC_RE = re.compile(
     r"^(?:DMC-)?"
     r"(?P<mic>[A-Z0-9]+)-"
-    r"(?P<sdc>[A-Z0-9])-"
+    r"(?P<sdc>[A-Z0-9]{1,2})-"
     r"(?P<sc>[A-Z0-9]{2,3})-"
     r"(?P<ssc>[A-Z0-9])(?P<sssc>[A-Z0-9])-"
     r"(?P<ac>[A-Z0-9]{2,4})-"

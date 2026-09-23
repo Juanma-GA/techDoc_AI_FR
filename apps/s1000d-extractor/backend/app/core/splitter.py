@@ -17,6 +17,7 @@ attendus par le client (`split_by_dmrl`) au lieu du niveau de titre.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 
 from app.core import dmrl
@@ -24,6 +25,7 @@ from app.core.dmrl import DmrlEntry
 from app.core.ir import IRNode
 
 _LEVEL = {"chapter": 1, "section": 2, "subsection": 3}
+_LAYOUT_NOISE_ZONES = frozenset({"header", "footer", "cover", "toc"})
 
 
 def level_of(split_level: str) -> int:
@@ -56,6 +58,15 @@ def _collect(node: IRNode, depth: int, out: list[IRNode]) -> None:
             _collect(child, depth, out)
 
 
+def _without_layout_noise(node: IRNode) -> IRNode:
+    node.children = [
+        _without_layout_noise(child)
+        for child in node.children
+        if child.zone not in _LAYOUT_NOISE_ZONES
+    ]
+    return node
+
+
 def split_into_dms(root: IRNode, split_level: str) -> list[DmUnit]:
     depth = level_of(split_level)
     sections: list[IRNode] = []
@@ -63,19 +74,25 @@ def split_into_dms(root: IRNode, split_level: str) -> list[DmUnit]:
 
     # Aucune section au niveau voulu -> tout le document devient un seul DM.
     if not sections:
-        title = next((c.text for c in root.children if c.kind == "section" and c.text), "Document")
-        syn = IRNode(id="dm1-root", kind="section", level=0, children=list(root.children))
+        children = [
+            _without_layout_noise(deepcopy(child))
+            for child in root.children
+            if child.zone not in _LAYOUT_NOISE_ZONES
+        ]
+        title = next((c.text for c in children if c.kind == "section" and c.text), "Document")
+        syn = IRNode(id="dm1-root", kind="section", level=0, children=children)
         return [DmUnit(dm_id="dm1", title=title, root=syn, node_count=len(syn.walk()))]
 
     dms: list[DmUnit] = []
     for i, sec in enumerate(sections, start=1):
         dm_id = f"dm{i}"
-        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[sec])
+        clean_section = _without_layout_noise(deepcopy(sec))
+        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[clean_section])
         dms.append(DmUnit(
             dm_id=dm_id,
-            title=sec.text or f"Data Module {i}",
+            title=clean_section.text or f"Data Module {i}",
             root=syn,
-            page=sec.page,
+            page=clean_section.page,
             node_count=len(syn.walk()),
         ))
     return dms
@@ -121,7 +138,7 @@ def _dmrl_nodes(root: IRNode) -> list[IRNode]:
     Ces zones sont du bruit de mise en page : elles ne doivent ni preceder le
     premier ancrage DMRL ni etre rattachees au contenu d'un Data Module.
     """
-    return [node for node in _flat_nodes(root) if node.zone not in {"header", "footer"}]
+    return [node for node in _flat_nodes(root) if node.zone not in _LAYOUT_NOISE_ZONES]
 
 
 def _find_section_title(
