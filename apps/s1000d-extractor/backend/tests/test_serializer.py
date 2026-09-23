@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from app.core import xml_safe
+from lxml import etree
 from app.core.dmrl import DmrlEntry
 from app.core.ir import IRNode, InlineRun, from_dict, to_dict
 from app.core.resolver import resolve
+from app.core.s1000d_schema import validate_xsd
 from app.core.s1000d_serializer import build_reference_index, clean_title, serialize
 from app.core.structure_heuristics import detect_refs
 
@@ -226,7 +228,7 @@ def test_figure_icns_are_declared_in_doctype() -> None:
     assert '<!DOCTYPE dmodule [' in xml
     assert '<!ENTITY ICN-ONE SYSTEM "ICN-ONE.JPG" NDATA jpg>' in xml
     assert '<!ENTITY ICN-TWO SYSTEM "ICN-TWO.png" NDATA png>' in xml
-    assert "%ISOEntities;" in xml
+    assert "%ISOEntities;" not in xml
     assert xml.index("<!DOCTYPE") < xml.index("<dmodule")
 
 
@@ -405,3 +407,78 @@ def test_serializer_excludes_layout_noise_zones() -> None:
     assert "FRANCAIS" not in xml
     assert "Page 1" not in xml
     assert "Definitions." in xml
+
+
+def test_descriptive_output_respects_issue_4_1_content_model() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[IRNode(
+        id="s",
+        kind="section",
+        level=1,
+        text="1 Test",
+        children=[
+            IRNode(id="p", kind="paragraph", text="Blablabla :"),
+            IRNode(
+                id="l",
+                kind="item-sequence",
+                form="bullet",
+                children=[IRNode(id="i", kind="item", text="Item")],
+            ),
+            IRNode(id="w", kind="admonition", admonition="warning", text="Attention."),
+        ],
+    )])
+    resolve(root)
+    xml = serialize(root, issue="4.1", dm_type="descriptive")
+    violations = validate_xsd(xml, "4.1", dm_type="descriptive", allow_internal_dtd=True)
+
+    assert not [violation for violation in violations if violation["severity"] == "error"]
+    doc = _parse(xml)
+    level = doc.find(".//content//levelledPara")
+    assert level is not None
+    assert [child.tag for child in level if not isinstance(child, etree._Comment)] == [
+        "title", "warning", "para",
+    ]
+    assert level.find("./para/randomList") is not None
+
+
+def test_warnings_precede_cautions_in_issue_4_1() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[IRNode(
+        id="s",
+        kind="section",
+        level=1,
+        text="1 Safety",
+        children=[
+            IRNode(id="w1", kind="admonition", admonition="warning", text="W1."),
+            IRNode(id="c", kind="admonition", admonition="caution", text="C."),
+            IRNode(id="w2", kind="admonition", admonition="warning", text="W2."),
+        ],
+    )])
+    resolve(root)
+    xml = serialize(root, issue="4.1", dm_type="descriptive")
+    violations = validate_xsd(xml, "4.1", dm_type="descriptive", allow_internal_dtd=True)
+
+    assert not [violation for violation in violations if violation["severity"] == "error"]
+    doc = _parse(xml)
+    level = doc.find(".//content//levelledPara")
+    assert level is not None
+    assert [child.tag for child in level if child.tag in {"warning", "caution"}] == [
+        "warning", "warning", "caution",
+    ]
+
+
+def test_procedural_output_respects_issue_4_1_content_model() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[IRNode(
+        id="s",
+        kind="section",
+        level=1,
+        text="1 Procedure",
+        context="procedural",
+        children=[
+            IRNode(id="w", kind="admonition", admonition="warning", text="Attention."),
+            IRNode(id="p", kind="paragraph", text="Faire."),
+        ],
+    )])
+    resolve(root)
+    xml = serialize(root, issue="4.1", dm_type="procedural")
+    violations = validate_xsd(xml, "4.1", dm_type="procedural", allow_internal_dtd=True)
+
+    assert not [violation for violation in violations if violation["severity"] == "error"]

@@ -386,7 +386,7 @@ def _generate_all(db: Session, doc: Document) -> None:
             })
             dm["xml"] = xml
             dm["violations"] = validate_document(
-                xml, issue=doc.s1000d_issue, brex_xml=brex_xml,
+                xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"], brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
             ) + extra
             log.info(

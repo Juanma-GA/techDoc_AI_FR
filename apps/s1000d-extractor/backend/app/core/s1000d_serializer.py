@@ -295,9 +295,15 @@ def _doctype(root: IRNode) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
     declared: set[str] = set()
+    placeholder_ident = "ICN-TODO-00000"
     for node in root.walk():
         if node.kind != "figure":
             continue
+        if not _figure_icns(node) and placeholder_ident not in declared:
+            declarations.append(
+                f'<!ENTITY {placeholder_ident} SYSTEM "{placeholder_ident}.jpg" NDATA jpg>'
+            )
+            declared.add(placeholder_ident)
         for icn in _figure_icns(node):
             filename = xml_text(icn)
             ident = _graphic_ident(filename)
@@ -309,12 +315,6 @@ def _doctype(root: IRNode) -> str:
             declarations.append(
                 f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
             )
-    declarations.extend((
-        '<!ENTITY % ISOEntities PUBLIC '
-        '"ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" '
-        '"ent/ISOEntities">',
-        "%ISOEntities;",
-    ))
     return "<!DOCTYPE dmodule [\n" + "\n".join(declarations) + "\n]>"
 
 
@@ -658,7 +658,7 @@ def _para(
     *,
     reference_index: ReferenceIndex | None = None,
     current_dm_id: str = "",
-) -> None:
+) -> etree._Element:
     el = etree.SubElement(parent, "para")
     _inline_content_with_refs(
         el,
@@ -668,6 +668,7 @@ def _para(
         reference_index=reference_index or {},
         current_dm_id=current_dm_id,
     )
+    return el
 
 
 def _emit_row(parent: etree._Element, cells: list[str]) -> None:
@@ -773,6 +774,75 @@ def _emit_list(
         )
 
 
+def _emit_no_req_cond_group(parent: etree._Element) -> None:
+    group = etree.SubElement(parent, "reqCondGroup")
+    etree.SubElement(group, "noConds")
+
+
+def _emit_empty_preliminary_requirements(parent: etree._Element) -> None:
+    preliminary = etree.SubElement(parent, "preliminaryRqmts")
+    _emit_no_req_cond_group(preliminary)
+    support = etree.SubElement(preliminary, "reqSupportEquips")
+    etree.SubElement(support, "noSupportEquips")
+    supplies = etree.SubElement(preliminary, "reqSupplies")
+    etree.SubElement(supplies, "noSupplies")
+    spares = etree.SubElement(preliminary, "reqSpares")
+    etree.SubElement(spares, "noSpares")
+    safety = etree.SubElement(preliminary, "reqSafety")
+    etree.SubElement(safety, "noSafety")
+
+
+def _is_descriptive_list(node: IRNode) -> bool:
+    return _top_element(node, "randomList") in {
+        "randomList", "sequentialList", "definitionList",
+    }
+
+
+def _ordered_children(children: list[IRNode]) -> list[IRNode]:
+    priority = {
+        "warning": 0,
+        "caution": 1,
+    }
+    ordered = sorted(
+        enumerate(children),
+        key=lambda item: (priority.get(item[1].admonition or "", 2), item[0]),
+    )
+    return [child for _index, child in ordered]
+
+
+def _emit_children(
+    parent: etree._Element,
+    children: list[IRNode],
+    counters: dict[str, int],
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
+) -> None:
+    last_para: etree._Element | None = None
+    for child in _ordered_children(children):
+        if child.zone in _LAYOUT_NOISE_ZONES:
+            continue
+        if child.kind == "item-sequence" and _is_descriptive_list(child):
+            list_parent = last_para
+            if list_parent is None:
+                list_parent = etree.SubElement(parent, "para")
+            _emit_list(
+                list_parent,
+                child,
+                reference_index=reference_index,
+                current_dm_id=current_dm_id,
+            )
+            continue
+        emitted = _emit_node(
+            parent,
+            child,
+            counters,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
+        last_para = emitted if emitted is not None and emitted.tag == "para" else None
+
+
 def _emit_node(
     parent: etree._Element,
     node: IRNode,
@@ -780,9 +850,9 @@ def _emit_node(
     *,
     reference_index: ReferenceIndex,
     current_dm_id: str,
-) -> None:
+) -> etree._Element | None:
     if node.zone in _LAYOUT_NOISE_ZONES:
-        return
+        return None
     alt = _alt_comment(node)
     if alt:
         parent.append(etree.Comment(alt))
@@ -794,12 +864,15 @@ def _emit_node(
             reference_index=reference_index,
             current_dm_id=current_dm_id,
         )
+        return None
     elif node.kind == "figure":
         counters["figure"] += 1
         _emit_figure(parent, node, counters["figure"])
+        return None
     elif node.kind == "table":
         counters["table"] += 1
         _emit_table(parent, node, counters["table"])
+        return None
     elif node.kind == "item-sequence":
         _emit_list(
             parent,
@@ -807,6 +880,7 @@ def _emit_node(
             reference_index=reference_index,
             current_dm_id=current_dm_id,
         )
+        return None
     elif node.kind == "paragraph":
         top = _top_element(node, "para")
         if top == "proceduralStep":
@@ -819,8 +893,9 @@ def _emit_node(
                 reference_index=reference_index,
                 current_dm_id=current_dm_id,
             )
+            return None
         else:
-            _para(
+            para = _para(
                 parent,
                 node.text,
                 node.inline_runs,
@@ -828,6 +903,7 @@ def _emit_node(
                 reference_index=reference_index,
                 current_dm_id=current_dm_id,
             )
+            return para
     elif node.kind == "section":
         top = _top_element(node, "levelledPara")
         counters["section"] += 1
@@ -835,14 +911,15 @@ def _emit_node(
         if node.text:
             title = etree.SubElement(sect, "title")  # optionnel mais conventionnel
             title.text = clean_title(node.text)
-        for child in node.children:
-            _emit_node(
-                sect,
-                child,
-                counters,
-                reference_index=reference_index,
-                current_dm_id=current_dm_id,
-            )
+        _emit_children(
+            sect,
+            node.children,
+            counters,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
+        return None
+    return None
 
 
 def _build_content(
@@ -857,31 +934,30 @@ def _build_content(
     if dm_type == "procedural":
         proc = etree.SubElement(content, "procedure")
         proc.append(etree.Comment(" TODO: preliminaryRqmts (outillage, consommables, conditions) "))
-        etree.SubElement(proc, "preliminaryRqmts")
+        _emit_empty_preliminary_requirements(proc)
         main = etree.SubElement(proc, "mainProcedure")
-        for child in root.children:
-            _emit_node(
-                main,
-                child,
-                counters,
-                reference_index=reference_index,
-                current_dm_id=current_dm_id,
-            )
-        etree.SubElement(proc, "closeRqmts")
+        _emit_children(
+            main,
+            root.children,
+            counters,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
+        close = etree.SubElement(proc, "closeRqmts")
+        _emit_no_req_cond_group(close)
     else:
         desc = etree.SubElement(content, "description")
         if dm_type == "ipd":
             desc.append(etree.Comment(
                 " TODO: catalogue de pieces (IPD/IPC) - structurer en catalogSeqNumber/itemSeqNumber "
             ))
-        for child in root.children:
-                _emit_node(
-                    desc,
-                    child,
-                    counters,
-                    reference_index=reference_index,
-                    current_dm_id=current_dm_id,
-                )
+        _emit_children(
+            desc,
+            root.children,
+            counters,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
     return content
 
 

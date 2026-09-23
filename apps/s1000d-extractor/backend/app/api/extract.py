@@ -243,7 +243,12 @@ def override_node(
         header_template=resources.header_template,
     )
     brex_xml = _brex_xml(db, doc.brex_id)
-    violations = validate_document(xml, issue=doc.s1000d_issue, brex_xml=brex_xml)
+    violations = validate_document(
+        xml,
+        issue=doc.s1000d_issue,
+        dm_type=doc.dm_type or "descriptive",
+        brex_xml=brex_xml,
+    )
     Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)

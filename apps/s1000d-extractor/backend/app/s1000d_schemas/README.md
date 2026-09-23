@@ -1,15 +1,14 @@
-# Schémas XSD S1000D (non redistribués)
+# Schémas XSD S1000D
 
-Les jeux de schémas officiels S1000D sont volumineux et ne sont pas committés
-dans ce repo. Pour activer la **validation XSD réelle** de la sortie :
+Les schémas disponibles sont chargés automatiquement par version depuis ce
+dossier. Chaque version doit conserver tous ses fichiers XSD et leurs
+dépendances dans son propre sous-dossier :
 
-1. Récupère les schémas officiels de l'Issue voulue sur
-   [users.s1000d.org](https://users.s1000d.org/) (téléchargement gratuit).
-2. Dépose les `.xsd` dans :
-   - `issue-4.2/`  (pour la version 4.2)
-   - `issue-5.0/`  (pour la version 5.0)
+- `issue-4.1/` (validation `descript` et `proced` 4.1)
+- `issue-4.2/` (validation `descript` et `proced` 4.2)
+- `issue-5.0/` (répertoire réservé à l’Issue 5.0)
 
-Sans ces fichiers, [`app/core/s1000d_schema.py`](../core/s1000d_schema.py)
-signale la validation XSD comme « non installée » (dégradation gracieuse) et
-s'appuie sur le vocabulaire d'éléments interne. La validation **BREX** reste
-active indépendamment.
+Le moteur choisit `descript.xsd` ou `proced.xsd` selon le type du DM. Si le
+dossier d’une version est vide ou absent, [`app/core/s1000d_schema.py`](../core/s1000d_schema.py)
+signale la validation XSD comme « non installée » (dégradation gracieuse).
+La validation **BREX** reste active indépendamment.

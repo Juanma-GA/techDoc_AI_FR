@@ -1175,6 +1175,16 @@ export function Migration() {
 
             {wiz.step === "generate" ? (
               <div className="card">
+                <div className="row" style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void wizAction("back")}
+                  >
+                    {t("common.back")}
+                  </button>
+                </div>
                 <h2 className="card-title">
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>

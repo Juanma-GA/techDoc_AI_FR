@@ -73,7 +73,7 @@ def run(
     )
 
     progress_cb("validate", 95)
-    violations = _validate(xml, issue=issue, brex_xml=brex_xml)
+    violations = _validate(xml, issue=issue, dm_type=dm_type, brex_xml=brex_xml)
 
     progress_cb("done", 100)
     return PipelineResult(
@@ -81,9 +81,9 @@ def run(
     )
 
 
-def _validate(xml: str, *, issue: str, brex_xml: str | None) -> list[dict]:
+def _validate(xml: str, *, issue: str, dm_type: str, brex_xml: str | None) -> list[dict]:
     """Validation XSD + BREX. Import tardif pour ne pas coupler le coeur a lxml
     si la validation est desactivee/indisponible."""
     from app.core.validator import validate_document
 
-    return validate_document(xml, issue=issue, brex_xml=brex_xml)
+    return validate_document(xml, issue=issue, dm_type=dm_type, brex_xml=brex_xml)
