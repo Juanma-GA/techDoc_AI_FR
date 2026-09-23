@@ -44,8 +44,13 @@ _CAPTION_START_RE = re.compile(
 # --- Renvois / hyperliens (-> internalRef / externalPubRef / uri) ------------
 # Renvoi interne AVEC marqueur obligatoire (voir/see/cf/refer to) pour ne pas
 # confondre une legende "Figure 1 ..." avec un renvoi "voir figure 1".
+_INTERNAL_REF_MARKER = (
+    r"(?:voir|see|cf\.?|refer to|se reporter à|reportez-vous à|"
+    r"comme\s+(?:(?:le|la|les)\s+)?(?:montre|montrent|indique|indiquent|"
+    r"illustre|illustrent)|as\s+(?:shown|illustrated)\s+in|shown\s+in)"
+)
 _INTERNAL_REF_RE = re.compile(
-    r"\b(?:voir|see|cf\.?|refer to|se reporter à|reportez-vous à)\s+"
+    rf"\b{_INTERNAL_REF_MARKER}\s+"
     r"(?:(?:le|la|les|l['’])\s+)?"
     r"(figure|fig\.?|table|tableau|section|chapitre|chapter|para(?:graph)?)\s*"
     r"([0-9]+(?:[.\-][0-9]+)*)",
@@ -85,8 +90,11 @@ def detect_refs(text: str) -> list[dict]:
     for m in sorted(internal_matches, key=lambda match: match.start()):
         label = m.group(1).lower().rstrip(".")
         matched_text = m.group(0).strip()
-        matched_text = re.sub(r"^(?:voir|see|cf\.?|refer to|se reporter à|reportez-vous à)\s+", "", matched_text, flags=re.IGNORECASE)
+        matched_text = re.sub(
+            rf"^{_INTERNAL_REF_MARKER}\s+", "", matched_text, flags=re.IGNORECASE,
+        )
         matched_text = re.sub(r"^(?:et|ou)\s+", "", matched_text, flags=re.IGNORECASE)
+        matched_text = re.sub(r"^(?:le|la|les|l['’])\s+", "", matched_text, flags=re.IGNORECASE)
         refs.append({
             "kind": "internal",
             "target_kind": _INTERNAL_KIND.get(label, "section"),

@@ -482,3 +482,160 @@ def test_procedural_output_respects_issue_4_1_content_model() -> None:
     violations = validate_xsd(xml, "4.1", dm_type="procedural", allow_internal_dtd=True)
 
     assert not [violation for violation in violations if violation["severity"] == "error"]
+
+
+def test_procedural_requirements_are_structured_before_main_steps() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(
+            id="conditions", kind="section", level=1,
+            text="Conditions préalables", context="procedural",
+            children=[IRNode(
+                id="condition", kind="paragraph",
+                text="Isoler la batterie.", context="procedural",
+            )],
+        ),
+        IRNode(
+            id="personnel", kind="section", level=1,
+            text="Personnel requis", context="procedural",
+            children=[IRNode(
+                id="trade", kind="paragraph",
+                text="Deux techniciens qualifiés.", context="procedural",
+            )],
+        ),
+        IRNode(
+            id="tools", kind="section", level=1,
+            text="Outillage nécessaire", context="procedural",
+            children=[IRNode(
+                id="tool-list", kind="item-sequence", form="bullet",
+                children=[IRNode(id="tool", kind="item", text="Tournevis cruciforme")],
+            )],
+        ),
+        IRNode(
+            id="supplies", kind="section", level=1,
+            text="Consommables", context="procedural",
+            children=[IRNode(
+                id="supply", kind="paragraph",
+                text="Huile hydraulique.", context="procedural",
+            )],
+        ),
+        IRNode(
+            id="spares", kind="section", level=1,
+            text="Pièces de rechange", context="procedural",
+            children=[IRNode(
+                id="spare", kind="paragraph",
+                text="Joint torique.", context="procedural",
+            )],
+        ),
+        IRNode(
+            id="safety", kind="section", level=1,
+            text="Sécurité", context="procedural",
+            children=[
+                IRNode(
+                    id="warning", kind="admonition", admonition="warning",
+                    text="Risque de projection.",
+                ),
+                IRNode(
+                    id="safety-note", kind="paragraph",
+                    text="Porter des lunettes de protection.",
+                    context="procedural",
+                ),
+            ],
+        ),
+        IRNode(
+            id="step", kind="section", level=1,
+            text="Remplacement", context="procedural",
+            children=[IRNode(
+                id="action", kind="paragraph",
+                text="Déposer le capot.", context="procedural",
+            )],
+        ),
+    ])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="procedural")
+    violations = validate_xsd(
+        xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
+    )
+
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+    doc = _parse(xml)
+    preliminary = doc.find("./content/procedure/preliminaryRqmts")
+    assert preliminary is not None
+    assert preliminary.findtext("./reqCondGroup/reqCondNoRef/reqCond") == "Isoler la batterie."
+    assert preliminary.findtext("./reqPersons/personnel/trade") == "Deux techniciens qualifiés."
+    assert preliminary.findtext("./reqSupportEquips/supportEquipDescrGroup/supportEquipDescr/name") == "Tournevis cruciforme"
+    assert preliminary.findtext("./reqSupplies/supplyDescrGroup/supplyDescr/name") == "Huile hydraulique."
+    assert preliminary.findtext("./reqSpares/spareDescrGroup/spareDescr/name") == "Joint torique."
+    assert preliminary.findtext("./reqSafety/safetyRqmts/warning/warningAndCautionPara") == "Risque de projection."
+    assert preliminary.findtext("./reqSafety/safetyRqmts/note/notePara") == "Porter des lunettes de protection."
+    for quantity in preliminary.findall(".//reqQuantity"):
+        assert quantity.text == "TODO"
+        assert quantity.get("unitOfMeasure") == "TODO"
+
+    main_steps = doc.find("./content/procedure/mainProcedure")
+    assert main_steps is not None
+    assert "Déposer le capot." in "".join(main_steps.itertext())
+    assert "Tournevis cruciforme" not in "".join(main_steps.itertext())
+
+
+def test_nested_preliminary_requirements_are_removed_from_main_procedure() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(
+            id="preliminary", kind="section", level=1,
+            text="Preliminary Requirements", context="procedural",
+            children=[IRNode(
+                id="tools", kind="section", level=2,
+                text="Tools Required", context="procedural",
+                children=[IRNode(
+                    id="tool-list", kind="item-sequence", form="bullet",
+                    children=[IRNode(id="tool", kind="item", text="Torque wrench")],
+                )],
+            )],
+        ),
+        IRNode(
+            id="step", kind="section", level=1,
+            text="Adjustment", context="procedural",
+            children=[IRNode(
+                id="action", kind="paragraph",
+                text="Adjust the nut.", context="procedural",
+            )],
+        ),
+    ])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="procedural")
+    violations = validate_xsd(
+        xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
+    )
+
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+    doc = _parse(xml)
+    assert doc.findtext(
+        "./content/procedure/preliminaryRqmts/reqSupportEquips/"
+        "supportEquipDescrGroup/supportEquipDescr/name"
+    ) == "Torque wrench"
+    main = doc.find("./content/procedure/mainProcedure")
+    assert main is not None
+    assert "Torque wrench" not in "".join(main.itertext())
+    assert "Adjust the nut." in "".join(main.itertext())
+
+
+def test_missing_preliminary_requirements_do_not_create_todo_values() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[IRNode(
+        id="step", kind="paragraph", text="Effectuer le contrôle.", context="procedural",
+    )])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="procedural")
+    violations = validate_xsd(
+        xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
+    )
+
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+    doc = _parse(xml)
+    preliminary = doc.find("./content/procedure/preliminaryRqmts")
+    assert preliminary is not None
+    assert preliminary.find("./reqCondGroup/noConds") is not None
+    assert preliminary.find("./reqSupportEquips/noSupportEquips") is not None
+    assert preliminary.find("./reqSupplies/noSupplies") is not None
+    assert preliminary.find("./reqSpares/noSpares") is not None
+    assert preliminary.find("./reqSafety/noSafety") is not None
+    assert preliminary.find("./reqPersons") is None
+    assert "TODO" not in etree.tostring(preliminary, encoding="unicode")

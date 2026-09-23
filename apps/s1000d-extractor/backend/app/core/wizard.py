@@ -23,7 +23,7 @@ from pathlib import Path
 import structlog
 from sqlalchemy.orm import Session
 
-from app.core import context_classifier, ingest, resolver, splitter, structure_infer
+from app.core import context_classifier, form_segmenter, ingest, resolver, splitter, structure_infer
 from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
@@ -300,6 +300,7 @@ def _apply_types(doc: Document, types: dict) -> None:
             dm["dm_type"] = types[dm["dm_id"]]
         root = ir_mod.from_dict(dm["tree"])
         context_classifier.apply_dm_type(root, dm["dm_type"])
+        form_segmenter.segment(root)
         dm["tree"] = ir_mod.to_dict(root)
     ws.save_dms(doc, dms)
 

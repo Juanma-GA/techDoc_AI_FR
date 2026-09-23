@@ -363,3 +363,66 @@ def test_manual_dm_type_is_applied_before_resolution() -> None:
     assert paragraph is not None
     assert paragraph.context == "procedural"
     assert paragraph.candidates[0].element == "proceduralStep"
+
+
+def test_wizard_splits_inline_numbered_actions_after_procedural_type_selection() -> None:
+    from app.core import ir as ir_mod
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    root = IRNode(id="root", kind="section", children=[IRNode(
+        id="section",
+        kind="section",
+        level=4,
+        text="Procédures de mise en position verticale des moteurs W22",
+        children=[IRNode(
+            id="paragraph",
+            kind="paragraph",
+            text=(
+                "Pour mettre les moteurs W22 en position verticale, procédez "
+                "comme suit : 1. Serrer les anneaux de levage ; "
+                "2. Retirer le moteur de l’emballage."
+            ),
+        )],
+    )])
+    doc = Document(dms_json=json.dumps([{
+        "dm_id": "dm1",
+        "title": "Procédures W22",
+        "dm_type": "descriptive",
+        "tree": to_dict(root),
+    }]))
+
+    wizard_core._apply_types(doc, {"dm1": "procedural"})
+    wizard_core._resolve_all(doc)
+
+    generated = ir_mod.from_dict(json.loads(doc.dms_json)[0]["tree"])
+    split_paragraph = ir_mod.find_node(generated, "paragraph")
+    assert split_paragraph is not None
+    assert split_paragraph.kind == "section"
+    assert split_paragraph.children[0].text.endswith("comme suit :")
+    actions = split_paragraph.children[1]
+    assert actions.kind == "item-sequence"
+    assert [item.text for item in actions.children] == [
+        "Serrer les anneaux de levage",
+        "Retirer le moteur de l’emballage.",
+    ]
+
+    from app.core.s1000d_schema import validate_xsd
+    from app.core.s1000d_serializer import serialize
+
+    xml = serialize(generated, issue="4.2", dm_type="procedural", title="Procédures W22")
+    violations = validate_xsd(
+        xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
+    )
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+    xml_root = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    main = xml_root.find("./content/procedure/mainProcedure")
+    assert main is not None
+    procedure_step = main.find("./proceduralStep")
+    assert procedure_step is not None
+    assert procedure_step.findtext("./title") == "Procédures de mise en position verticale des moteurs W22"
+    assert "procédez comme suit" in "".join(procedure_step.find("./para").itertext())
+    generated_steps = procedure_step.findall("./proceduralStep")
+    assert len(generated_steps) == 2
+    assert "Serrer les anneaux" in "".join(generated_steps[0].itertext())
+    assert "Retirer le moteur" in "".join(generated_steps[1].itertext())
