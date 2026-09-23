@@ -17,7 +17,8 @@ Noms d'elements conformes Issue 4.1 / 4.2 / 5.0 (stables entre les trois) :
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 import re
 
@@ -88,10 +89,158 @@ _DM_FIELD_NAMES = {
     "itemLocationCode": "item_location_code",
 }
 
+_INTERNAL_REF_CODES = {
+    "figure": "irtt01",
+    "table": "irtt02",
+    "paragraph": "irtt07",
+    "step": "irtt08",
+    "graphic": "irtt09",
+    "section": "irtt07",
+}
+_FIGURE_LABEL_RE = re.compile(
+    r"^\s*(?:figure|fig\.?|illustration)\s*(\d+(?:[.\-]\d+)*)\b",
+    re.IGNORECASE,
+)
+_TABLE_LABEL_RE = re.compile(
+    r"^\s*(?:table|tableau)\s*(\d+(?:[.\-]\d+)*)\b",
+    re.IGNORECASE,
+)
+_SECTION_LABEL_RE = re.compile(r"^\s*(\d+(?:[.\-]\d+)*)\b")
+
+
+@dataclass(frozen=True)
+class ReferenceTarget:
+    kind: str
+    label: str
+    target_id: str
+    target_type: str
+    dm_id: str = ""
+    dmc: str = ""
+
+
+ReferenceIndex = dict[tuple[str, str], list[ReferenceTarget]]
+
 
 def xml_text(value: str | None) -> str:
     """Texte utilisable comme contenu XML (caracteres de controle retires)."""
     return _INVALID_XML_CHARS.sub("", value or "")
+
+
+def _canonical_ref_label(value: str) -> str:
+    return re.sub(r"[^0-9]+", ".", value or "").strip(".")
+
+
+def _reference_id(prefix: str, node_id: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", node_id or "").strip("-")
+    if not safe:
+        safe = "node"
+    if not re.match(r"^[A-Za-z_]", safe):
+        safe = f"{prefix}-{safe}"
+    return f"{prefix}-{safe}"
+
+
+def _labels_for_text(kind: str, text: str) -> list[str]:
+    pattern = {
+        "figure": _FIGURE_LABEL_RE,
+        "table": _TABLE_LABEL_RE,
+        "section": _SECTION_LABEL_RE,
+    }.get(kind)
+    if pattern is None:
+        return []
+    match = pattern.match(text or "")
+    if not match:
+        return []
+    return [_canonical_ref_label(match.group(1))]
+
+
+def _add_reference_target(index: ReferenceIndex, target: ReferenceTarget) -> None:
+    if not target.label:
+        return
+    key = (target.kind, target.label)
+    index.setdefault(key, []).append(target)
+
+
+def build_reference_index(
+    documents: Sequence[tuple[str, IRNode, Mapping[str, object] | None]],
+    *,
+    figure_offset: int = 0,
+    table_offset: int = 0,
+) -> ReferenceIndex:
+    """Indexe les cibles visibles avec les IDs emis dans les DM.
+
+    `documents` respecte l'ordre de generation : les offsets produits ici
+    doivent donc rester synchronises avec ceux passes a `serialize`.
+    """
+    index: ReferenceIndex = {}
+    for dm_id, root, metadata in documents:
+        dmc = str((metadata or {}).get("dmc") or "")
+        nodes = root.walk()
+        for position, node in enumerate(nodes):
+            if node.kind == "section":
+                target = ReferenceTarget(
+                    kind="section",
+                    label="",
+                    target_id=_reference_id("sec", node.id),
+                    target_type=_INTERNAL_REF_CODES["section"],
+                    dm_id=dm_id,
+                    dmc=dmc,
+                )
+                for label in _labels_for_text("section", node.text):
+                    _add_reference_target(index, ReferenceTarget(
+                        kind=target.kind, label=label, target_id=target.target_id,
+                        target_type=target.target_type, dm_id=target.dm_id, dmc=target.dmc,
+                    ))
+            elif node.kind == "figure":
+                figure_offset += 1
+                target_id = f"fig-{figure_offset:04d}"
+                for label in _labels_for_text("figure", node.text):
+                    _add_reference_target(index, ReferenceTarget(
+                        kind="figure", label=label, target_id=target_id,
+                        target_type=_INTERNAL_REF_CODES["figure"], dm_id=dm_id, dmc=dmc,
+                    ))
+            elif node.kind == "table":
+                table_offset += 1
+                target_id = f"tbl-{table_offset:04d}"
+                labels = _labels_for_text("table", node.text)
+                if not labels:
+                    nearby = nodes[max(0, position - 3):position + 4]
+                    nearby_labels = [
+                        (
+                            abs(candidate_position - position),
+                            _labels_for_text("table", candidate.text),
+                        )
+                        for candidate_position, candidate in enumerate(
+                            nodes[max(0, position - 3):position + 4],
+                            start=max(0, position - 3),
+                        )
+                        if candidate is not node
+                        and candidate.page == node.page
+                        and _labels_for_text("table", candidate.text)
+                    ]
+                    if nearby_labels:
+                        labels = min(nearby_labels, key=lambda item: item[0])[1]
+                for label in labels:
+                    _add_reference_target(index, ReferenceTarget(
+                        kind="table", label=label, target_id=target_id,
+                        target_type=_INTERNAL_REF_CODES["table"], dm_id=dm_id, dmc=dmc,
+                    ))
+    return index
+
+
+def _resolve_reference(
+    index: ReferenceIndex,
+    ref: Mapping[str, object],
+    current_dm_id: str,
+) -> ReferenceTarget | None:
+    kind = str(ref.get("target_kind") or "section")
+    label = _canonical_ref_label(str(ref.get("target") or ""))
+    candidates = index.get((kind, label), [])
+    if not candidates:
+        return None
+    local = [candidate for candidate in candidates if candidate.dm_id == current_dm_id]
+    if len(local) == 1:
+        return local[0]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def clean_title(value: str | None) -> str:
@@ -272,27 +421,6 @@ def _comment(text: str) -> etree._Comment:
     return etree.Comment(xml_text(text).replace("--", "- -"))
 
 
-def _emit_refs(parent: etree._Element, node: IRNode) -> None:
-    """Emet les renvois detectes (best-effort) : `internalRef` pour un renvoi
-    interne (figure/table/section), `externalPubRef` sinon, commentaire pour une
-    URL. La cible S1000D (DMC/xref) reste a completer (marquee TODO)."""
-    for ref in node.refs or []:
-        kind = ref.get("kind")
-        if kind == "internal":
-            el = etree.SubElement(
-                parent, "internalRef",
-                internalRefTargetType=xml_text(ref.get("target_kind", "section")),
-            )
-            el.set("internalRefId", f"TODO-{xml_text(ref.get('target', ''))}")
-            el.append(_comment(f" renvoi detecte : {ref.get('text', '')} "))
-        elif kind == "uri":
-            parent.append(_comment(f" lien externe (a mapper) : {ref.get('target', '')} "))
-        else:
-            etree.SubElement(parent, "externalPubRef").append(
-                _comment(f" TODO: publication externe : {ref.get('text', '')} ")
-            )
-
-
 def _run_value(run: InlineRun | dict, name: str, default: object = "") -> object:
     if isinstance(run, dict):
         return run.get(name, default)
@@ -343,9 +471,159 @@ def _inline_content(
             _append_inline_text(parent, run_text)
 
 
-def _para(parent: etree._Element, text: str, runs: list[InlineRun] | None = None) -> None:
+def _inline_runs_for_range(
+    text: str,
+    runs: list[InlineRun] | None,
+    start: int,
+    end: int,
+) -> list[InlineRun]:
+    if not runs or start >= end:
+        return []
+    source = "".join(str(_run_value(run, "text", "")) for run in runs)
+    if source != text:
+        return []
+    selected: list[InlineRun] = []
+    position = 0
+    for run in runs:
+        run_text = str(_run_value(run, "text", ""))
+        run_end = position + len(run_text)
+        left = max(start, position)
+        right = min(end, run_end)
+        if left < right:
+            selected.append(InlineRun(
+                text=run_text[left - position:right - position],
+                bold=bool(_run_value(run, "bold")),
+                italic=bool(_run_value(run, "italic")),
+                underline=bool(_run_value(run, "underline")),
+                overline=bool(_run_value(run, "overline")),
+                strikethrough=bool(_run_value(run, "strikethrough")),
+            ))
+        position = run_end
+        if position >= end:
+            break
+    return selected
+
+
+def _emit_reference(
+    parent: etree._Element,
+    ref: Mapping[str, object],
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
+) -> bool:
+    kind = ref.get("kind")
+    if kind == "internal":
+        target = _resolve_reference(reference_index, ref, current_dm_id)
+        if target is None:
+            parent.append(_comment(
+                f" reference non resolue : {ref.get('text', '')} "
+            ))
+            return False
+        if target.dm_id and target.dm_id != current_dm_id:
+            if not target.dmc:
+                parent.append(_comment(
+                    f" reference inter-DM sans DMC : {ref.get('text', '')} "
+                ))
+                return False
+            dm_ref = etree.SubElement(
+                parent,
+                "dmRef",
+                id=_reference_id("dmref", target.dm_id),
+            )
+            ident = etree.SubElement(dm_ref, "dmRefIdent")
+            etree.SubElement(ident, "dmCode", **_dm_code({"dmc": target.dmc}, "descriptive"))
+            dm_ref.append(_comment(
+                f" cible {ref.get('text', '')} dans le DM {target.dmc} "
+            ))
+            dm_ref.tail = xml_text(str(ref.get("text") or ""))
+            return True
+        element = etree.SubElement(
+            parent,
+            "internalRef",
+            internalRefId=target.target_id,
+            internalRefTargetType=target.target_type,
+        )
+        element.text = xml_text(str(ref.get("text") or ""))
+        return True
+    if kind == "uri":
+        uri = xml_text(str(ref.get("target") or ""))
+        element = etree.SubElement(parent, "externalPubRef")
+        element.set(f"{{{_XLINK_NS}}}href", uri)
+        element.text = uri
+        return True
+    parent.append(_comment(f" reference externe non resolue : {ref.get('text', '')} "))
+    return False
+
+
+def _inline_content_with_refs(
+    parent: etree._Element,
+    text: str,
+    runs: list[InlineRun] | None,
+    refs: list[dict] | None,
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
+) -> None:
+    if not refs:
+        _inline_content(parent, text, runs)
+        return
+    folded = text.casefold()
+    spans: list[tuple[int, int, dict]] = []
+    for ref in refs:
+        ref_text = str(ref.get("text") or "")
+        if not ref_text:
+            continue
+        start = folded.find(ref_text.casefold())
+        if start >= 0:
+            spans.append((start, start + len(ref_text), ref))
+    spans.sort(key=lambda item: (item[0], item[1]))
+    cursor = 0
+    for start, end, ref in spans:
+        if start < cursor:
+            continue
+        segment = text[cursor:start]
+        _inline_content(
+            parent,
+            segment,
+            _inline_runs_for_range(text, runs, cursor, start),
+        )
+        if not _emit_reference(
+            parent,
+            ref,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        ):
+            _inline_content(
+                parent,
+                text[start:end],
+                _inline_runs_for_range(text, runs, start, end),
+            )
+        cursor = end
+    _inline_content(
+        parent,
+        text[cursor:],
+        _inline_runs_for_range(text, runs, cursor, len(text)),
+    )
+
+
+def _para(
+    parent: etree._Element,
+    text: str,
+    runs: list[InlineRun] | None = None,
+    refs: list[dict] | None = None,
+    *,
+    reference_index: ReferenceIndex | None = None,
+    current_dm_id: str = "",
+) -> None:
     el = etree.SubElement(parent, "para")
-    _inline_content(el, text, runs)
+    _inline_content_with_refs(
+        el,
+        text,
+        runs,
+        refs,
+        reference_index=reference_index or {},
+        current_dm_id=current_dm_id,
+    )
 
 
 def _emit_row(parent: etree._Element, cells: list[str]) -> None:
@@ -394,75 +672,139 @@ def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> No
         etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")
 
 
-def _emit_admonition(parent: etree._Element, node: IRNode) -> None:
+def _emit_admonition(
+    parent: etree._Element,
+    node: IRNode,
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
+) -> None:
     # Fallback si la resolution n'a pas tourne (candidats vides) : sans lui,
     # l'acces `candidates[0]` levait une IndexError -> 500 "Unexpected server error".
     element = _top_element(node, node.admonition or "note")
     el = etree.SubElement(parent, element)
     child = "notePara" if node.admonition == "note" else "warningAndCautionPara"
     para = etree.SubElement(el, child)
-    _inline_content(para, node.text, node.inline_runs)
+    _inline_content_with_refs(
+        para,
+        node.text,
+        node.inline_runs,
+        node.refs,
+        reference_index=reference_index,
+        current_dm_id=current_dm_id,
+    )
 
 
-def _emit_list(parent: etree._Element, node: IRNode) -> None:
+def _emit_list(
+    parent: etree._Element,
+    node: IRNode,
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
+) -> None:
     top = _top_element(node, "randomList")
     if top == "proceduralStep":
         # En procedure, chaque item devient une etape independante.
         for item in node.children:
             step = etree.SubElement(parent, "proceduralStep")
-            _para(step, item.text, item.inline_runs)
+            _para(
+                step,
+                item.text,
+                item.inline_runs,
+                item.refs,
+                reference_index=reference_index,
+                current_dm_id=current_dm_id,
+            )
         return
     list_el = etree.SubElement(parent, top)
     for item in node.children:
         li = etree.SubElement(list_el, "listItem")
-        _para(li, item.text, item.inline_runs)
-        _emit_refs(li, item)
+        _para(
+            li,
+            item.text,
+            item.inline_runs,
+            item.refs,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
 
 
 def _emit_node(
     parent: etree._Element,
     node: IRNode,
     counters: dict[str, int],
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
 ) -> None:
     alt = _alt_comment(node)
     if alt:
         parent.append(etree.Comment(alt))
 
     if node.kind == "admonition":
-        _emit_admonition(parent, node)
-        _emit_refs(parent, node)
+        _emit_admonition(
+            parent,
+            node,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
     elif node.kind == "figure":
         counters["figure"] += 1
         _emit_figure(parent, node, counters["figure"])
-        _emit_refs(parent, node)
     elif node.kind == "table":
         counters["table"] += 1
         _emit_table(parent, node, counters["table"])
     elif node.kind == "item-sequence":
-        _emit_list(parent, node)
+        _emit_list(
+            parent,
+            node,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
     elif node.kind == "paragraph":
         top = _top_element(node, "para")
         if top == "proceduralStep":
             step = etree.SubElement(parent, "proceduralStep")
-            _para(step, node.text, node.inline_runs)
-            _emit_refs(step, node)
+            _para(
+                step,
+                node.text,
+                node.inline_runs,
+                node.refs,
+                reference_index=reference_index,
+                current_dm_id=current_dm_id,
+            )
         else:
-            _para(parent, node.text, node.inline_runs)
-            _emit_refs(parent, node)
+            _para(
+                parent,
+                node.text,
+                node.inline_runs,
+                node.refs,
+                reference_index=reference_index,
+                current_dm_id=current_dm_id,
+            )
     elif node.kind == "section":
         top = _top_element(node, "levelledPara")
-        sect = etree.SubElement(parent, top)
+        sect = etree.SubElement(parent, top, id=_reference_id("sec", node.id))
         if node.text:
             title = etree.SubElement(sect, "title")  # optionnel mais conventionnel
             title.text = clean_title(node.text)
         for child in node.children:
-            _emit_node(sect, child, counters)
+            _emit_node(
+                sect,
+                child,
+                counters,
+                reference_index=reference_index,
+                current_dm_id=current_dm_id,
+            )
 
 
 def _build_content(
     root: IRNode,
     dm_type: str,
     counters: dict[str, int],
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
 ) -> etree._Element:
     content = etree.Element("content")
     if dm_type == "procedural":
@@ -471,7 +813,13 @@ def _build_content(
         etree.SubElement(proc, "preliminaryRqmts")
         main = etree.SubElement(proc, "mainProcedure")
         for child in root.children:
-            _emit_node(main, child, counters)
+            _emit_node(
+                main,
+                child,
+                counters,
+                reference_index=reference_index,
+                current_dm_id=current_dm_id,
+            )
         etree.SubElement(proc, "closeRqmts")
     else:
         desc = etree.SubElement(content, "description")
@@ -480,7 +828,13 @@ def _build_content(
                 " TODO: catalogue de pieces (IPD/IPC) - structurer en catalogSeqNumber/itemSeqNumber "
             ))
         for child in root.children:
-            _emit_node(desc, child, counters)
+                _emit_node(
+                    desc,
+                    child,
+                    counters,
+                    reference_index=reference_index,
+                    current_dm_id=current_dm_id,
+                )
     return content
 
 
@@ -494,9 +848,17 @@ def serialize(
     table_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
     header_template: Mapping[str, object] | None = None,
+    reference_index: ReferenceIndex | None = None,
+    reference_dm_id: str = "",
     created_at: datetime | None = None,
 ) -> str:
     """Construit le squelette XML S1000D complet (string UTF-8 indentee)."""
+    if reference_index is None:
+        reference_index = build_reference_index(
+            [(reference_dm_id, root, dm_metadata)],
+            figure_offset=figure_offset,
+            table_offset=table_offset,
+        )
     counters = {"figure": figure_offset, "table": table_offset}
     dmodule = etree.Element("dmodule", nsmap={
         "xsi": _XSI_NS,
@@ -516,7 +878,13 @@ def serialize(
         created_at=created_at,
     )
 
-    dmodule.append(_build_content(root, dm_type, counters))
+    dmodule.append(_build_content(
+        root,
+        dm_type,
+        counters,
+        reference_index=reference_index,
+        current_dm_id=reference_dm_id,
+    ))
 
     tree = dmodule.getroottree()
     return etree.tostring(

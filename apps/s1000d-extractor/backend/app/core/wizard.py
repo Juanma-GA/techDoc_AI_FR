@@ -29,7 +29,7 @@ from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.errors import AppError
-from app.core.s1000d_serializer import serialize
+from app.core.s1000d_serializer import build_reference_index, serialize
 from app.core.validator import validate_document
 from app.db.models import BrexProfile, Document
 
@@ -349,6 +349,14 @@ def _generate_all(db: Session, doc: Document) -> None:
     )
     figure_offset = 0
     table_offset = 0
+    reference_index = build_reference_index([
+        (
+            dm["dm_id"],
+            ir_mod.from_dict(dm["tree"]),
+            dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+        )
+        for dm in dms
+    ])
     for dm in dms:
         try:
             enriched, extra = wres.apply_resources(dm, res)
@@ -362,6 +370,8 @@ def _generate_all(db: Session, doc: Document) -> None:
                 table_offset=table_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
                 header_template=res.header_template,
+                reference_index=reference_index,
+                reference_dm_id=dm["dm_id"],
             )
             figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
             table_offset += sum(1 for node in root.walk() if node.kind == "table")
@@ -452,6 +462,15 @@ def dm_xml(doc: Document, dm_id: str) -> str:
     table_offset = 0
     res = wres.load_resources(doc)
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
+    reference_index = build_reference_index([
+        (
+            dm["dm_id"],
+            ir_mod.from_dict(dm["tree"]),
+            dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+        )
+        for dm in dms
+        if dm.get("tree")
+    ])
     for dm in dms:
         if dm["dm_id"] == dm_id:
             if not dm.get("tree"):
@@ -467,6 +486,8 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 table_offset=table_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
                 header_template=res.header_template,
+                reference_index=reference_index,
+                reference_dm_id=dm["dm_id"],
             )
             dm["xml"] = xml
             ws.save_dms(doc, dms)

@@ -6,7 +6,8 @@ from app.core import xml_safe
 from app.core.dmrl import DmrlEntry
 from app.core.ir import IRNode, InlineRun, from_dict, to_dict
 from app.core.resolver import resolve
-from app.core.s1000d_serializer import clean_title, serialize
+from app.core.s1000d_serializer import build_reference_index, clean_title, serialize
+from app.core.structure_heuristics import detect_refs
 
 
 def _doc(dm_type: str = "descriptive") -> str:
@@ -236,11 +237,84 @@ def test_internal_ref_emitted() -> None:
         text="Voir figure 3 pour le detail.",
         refs=[{"kind": "internal", "target_kind": "figure", "target": "3",
                "text": "Voir figure 3"}],
-    )]
+    ), IRNode(id="f", kind="figure", text="Figure 3 - Vue")]
     resolve(root)
     xml = serialize(root, issue="5.0", dm_type="descriptive")
     assert "internalRef" in xml
     doc = _parse(xml)
     ref = doc.find(".//internalRef")
     assert ref is not None
-    assert ref.get("internalRefTargetType") == "figure"
+    assert ref.get("internalRefTargetType") == "irtt01"
+    assert ref.get("internalRefId") == "fig-0001"
+
+
+def test_detected_refs_resolve_inline_to_real_targets() -> None:
+    text = "Voir Figure 6.12 et le tableau 7.2 pour le detail."
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(id="p", kind="paragraph", text=text, refs=detect_refs(text)),
+        IRNode(id="f", kind="figure", text="Figure 6.12 - Vue"),
+        IRNode(
+            id="t",
+            kind="table",
+            text="Tableau 7.2 - Valeurs",
+            table_rows=[["A"]],
+        ),
+    ])
+    resolve(root)
+    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    doc = _parse(xml)
+
+    para = doc.find(".//content//para")
+    assert para is not None
+    refs = para.findall("internalRef")
+    assert [(ref.get("internalRefId"), ref.get("internalRefTargetType")) for ref in refs] == [
+        ("fig-0001", "irtt01"),
+        ("tbl-0001", "irtt02"),
+    ]
+    assert "".join(para.itertext()) == text
+    assert not doc.xpath('.//internalRef[starts-with(@internalRefId, "TODO-")]')
+
+
+def test_uri_ref_is_emitted_as_external_pub_ref() -> None:
+    text = "Consulter https://example.com/doc.pdf."
+    root = IRNode(id="r", kind="section", level=0, children=[
+        IRNode(id="p", kind="paragraph", text=text, refs=detect_refs(text)),
+    ])
+    resolve(root)
+    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    doc = _parse(xml)
+
+    external = doc.find(".//content//externalPubRef")
+    assert external is not None
+    assert external.get("{http://www.w3.org/1999/xlink}href") == "https://example.com/doc.pdf"
+    assert "".join(doc.find(".//content//para").itertext()) == text  # type: ignore[union-attr]
+
+
+def test_cross_dm_ref_uses_target_dmc() -> None:
+    source_text = "Voir Figure 2 pour le detail."
+    source = IRNode(id="source", kind="section", level=0, children=[
+        IRNode(id="p", kind="paragraph", text=source_text, refs=detect_refs(source_text)),
+    ])
+    target = IRNode(id="target", kind="section", level=0, children=[
+        IRNode(id="f", kind="figure", text="Figure 2 - Vue"),
+    ])
+    resolve(source)
+    resolve(target)
+    index = build_reference_index([
+        ("dm1", source, {"dmc": "DMC-TEST-A-00-00-00-00A-040A-D"}),
+        ("dm2", target, {"dmc": "DMC-TEST-A-00-00-00-00A-520A-D"}),
+    ])
+    xml = serialize(
+        source,
+        issue="5.0",
+        dm_type="descriptive",
+        reference_index=index,
+        reference_dm_id="dm1",
+    )
+    doc = _parse(xml)
+
+    dm_ref = doc.find(".//content//para/dmRef")
+    assert dm_ref is not None
+    assert dm_ref.find("./dmRefIdent/dmCode").get("modelIdentCode") == "TEST"  # type: ignore[union-attr]
+    assert dm_ref.find("./dmRefIdent/dmCode").get("infoCode") == "520"  # type: ignore[union-attr]
+    assert "".join(doc.find(".//content//para").itertext()) == source_text  # type: ignore[union-attr]

@@ -61,7 +61,7 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
             assert "<procedure>" in xml
             proc_found = True
         else:
-            assert "<levelledPara>" in xml
+            assert "<levelledPara" in xml
     assert proc_found, types
 
     # ZIP de tous les DMs

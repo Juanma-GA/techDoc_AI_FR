@@ -45,7 +45,15 @@ _CAPTION_START_RE = re.compile(
 # Renvoi interne AVEC marqueur obligatoire (voir/see/cf/refer to) pour ne pas
 # confondre une legende "Figure 1 ..." avec un renvoi "voir figure 1".
 _INTERNAL_REF_RE = re.compile(
-    r"\b(?:voir|see|cf\.?|refer to)\s+"
+    r"\b(?:voir|see|cf\.?|refer to|se reporter à|reportez-vous à)\s+"
+    r"(?:(?:le|la|les|l['’])\s+)?"
+    r"(figure|fig\.?|table|tableau|section|chapitre|chapter|para(?:graph)?)\s*"
+    r"([0-9]+(?:[.\-][0-9]+)*)",
+    re.IGNORECASE,
+)
+_ADDITIONAL_INTERNAL_REF_RE = re.compile(
+    r"\b(?:et|ou)\s+"
+    r"(?:(?:le|la|les|l['’])\s+)?"
     r"(figure|fig\.?|table|tableau|section|chapitre|chapter|para(?:graph)?)\s*"
     r"([0-9]+(?:[.\-][0-9]+)*)",
     re.IGNORECASE,
@@ -70,19 +78,27 @@ def detect_refs(text: str) -> list[dict]:
     (coherent avec l'ecart "squelette") : la cible S1000D (DMC/xref) reste a
     completer, on capture juste l'intention de renvoi."""
     refs: list[dict] = []
-    for m in _INTERNAL_REF_RE.finditer(text):
+    internal_matches = [
+        *_INTERNAL_REF_RE.finditer(text),
+        *_ADDITIONAL_INTERNAL_REF_RE.finditer(text),
+    ]
+    for m in sorted(internal_matches, key=lambda match: match.start()):
         label = m.group(1).lower().rstrip(".")
+        matched_text = m.group(0).strip()
+        matched_text = re.sub(r"^(?:voir|see|cf\.?|refer to|se reporter à|reportez-vous à)\s+", "", matched_text, flags=re.IGNORECASE)
+        matched_text = re.sub(r"^(?:et|ou)\s+", "", matched_text, flags=re.IGNORECASE)
         refs.append({
             "kind": "internal",
             "target_kind": _INTERNAL_KIND.get(label, "section"),
             "target": m.group(2),
-            "text": m.group(0).strip(),
+            "text": matched_text,
         })
     for m in _PARA_REF_RE.finditer(text):
         refs.append({"kind": "internal", "target_kind": "section",
                      "target": m.group(1), "text": m.group(0).strip()})
     for m in _URI_RE.finditer(text):
-        refs.append({"kind": "uri", "target": m.group(0), "text": m.group(0)})
+        uri = m.group(0).rstrip(".,;:!?\u2019\u201d")
+        refs.append({"kind": "uri", "target": uri, "text": uri})
     return refs
 
 
