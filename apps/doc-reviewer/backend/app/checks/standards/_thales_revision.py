@@ -151,6 +151,7 @@ class PageFooter:
     observed_page_key: str | None
     label_text: str
     label_bbox: tuple[float, float, float, float] | None
+    page_number_bbox: tuple[float, float, float, float] | None
     date: DocDate | None
     date_text: str
     date_bbox: tuple[float, float, float, float] | None
@@ -737,6 +738,22 @@ def _footer_block(page: ParsedPage) -> list[Span]:
     return [span for span in spans if _center_y(span) >= top]
 
 
+def _page_number_bbox(
+    date_span: Span | None,
+) -> tuple[float, float, float, float] | None:
+    if date_span is None:
+        return None
+    left, top, right, _bottom = date_span.bbox
+    height = max(date_span.bbox[3] - date_span.bbox[1], 1.0)
+    gap = max(height * 0.1, 0.5)
+    return (
+        left,
+        max(0.0, top - gap - height),
+        right,
+        max(0.0, top - gap),
+    )
+
+
 def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFooter | None:
     """Read the page id and the issue date printed in the page footer.
 
@@ -754,6 +771,7 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
             observed_page_key=None,
             label_text="",
             label_bbox=None,
+            page_number_bbox=None,
             date=None,
             date_text="",
             date_bbox=None,
@@ -781,6 +799,11 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
         observed_page_key=observed_page_key,
         label_text=label_text,
         label_bbox=label_span.bbox if label_span is not None else None,
+        page_number_bbox=(
+            label_span.bbox
+            if label_span is not None
+            else _page_number_bbox(date_span)
+        ),
         date=parse_date(date_span.text) if date_span is not None else None,
         date_text=" ".join(date_span.text.split()) if date_span is not None else "",
         date_bbox=date_span.bbox if date_span is not None else None,
@@ -1197,7 +1220,7 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
                     original=footer.label_text if footer.observed_page_key else "",
                     proposed=display,
                     page=footer.page,
-                    bbox=footer.label_bbox or footer.date_bbox,
+                    bbox=footer.page_number_bbox,
                 )
             )
             continue
@@ -1212,7 +1235,7 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
                     original="",
                     proposed="",
                     page=footer.page,
-                    bbox=footer.date_bbox,
+                    bbox=footer.page_number_bbox,
                 )
             )
 

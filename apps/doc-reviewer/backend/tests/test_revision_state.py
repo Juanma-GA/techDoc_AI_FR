@@ -370,6 +370,22 @@ def test_missing_lep_footer_page_number_is_reported() -> None:
     ] == [("CUSTOM_FOOTER_PAGE_NUMBER", 3, "", "LEP Page 2")]
 
 
+def test_missing_footer_page_number_anchors_on_line_above_revision_date() -> None:
+    parsed = _consistent_document()
+    page = parsed.pages[2]
+    page.spans = [span for span in page.spans if span.text != "Page 401"]
+    page.text = "\n".join(span.text for span in page.spans)
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.FOOTER_PAGE_NUMBER
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].bbox == (507.0, 756.0, 561.0, 766.0)
+
+
 def test_missing_tp1_footer_page_number_is_reported_on_the_title_page() -> None:
     def title_page(page_number: int, marker: str | None) -> ParsedPage:
         spans = [
