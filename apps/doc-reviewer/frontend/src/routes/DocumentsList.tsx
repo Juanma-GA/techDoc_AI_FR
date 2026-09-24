@@ -7,14 +7,10 @@ import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
-import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
 import { effectiveTarget, useFiltersStore } from "../stores/filtersStore";
 import type { Document } from "../types/domain";
-
-// Selection MULTIPLE : metric et/ou imperial (vide ou les deux => "auto").
-const TARGET_UNITS: ("metric" | "imperial")[] = ["metric", "imperial"];
 
 // Classes du badge skin (.badge.*) — coherent avec le reste de l'app et le
 // preview (au lieu du <Badge> Tailwind de @internal/ui).
@@ -38,7 +34,6 @@ export function DocumentsList() {
   const uploadingCount = useIsMutating({ mutationKey: ["upload-document"] });
   const isUploading = uploadingCount > 0;
   const targetUnits = useFiltersStore((s) => s.targetUnits);
-  const toggleTargetUnit = useFiltersStore((s) => s.toggleTargetUnit);
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
   const handleUpload = (file: File): void => {
@@ -63,7 +58,7 @@ export function DocumentsList() {
     <div>
       <PageHeader title={t("documents.title")} subtitle={t("documents.subtitle")} />
 
-      {/* Carte 1 : import (banniere norme active + slicer unites + dropzone). */}
+      {/* Carte 1 : import (banniere norme active + dropzone). */}
       <section className="card">
         <h2 className="card-title">{t("documents.uploadTitle")}</h2>
 
@@ -87,29 +82,6 @@ export function DocumentsList() {
           </div> : null}
 
           <div className="form document-upload-form">
-            <div className="field">
-              <span className="field-label">{t("documents.targetUnit")}</span>
-              <div className="slicer">
-                {TARGET_UNITS.map((unit) => {
-                  const on = targetUnits.includes(unit);
-                  return (
-                    <button
-                      key={unit}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => toggleTargetUnit(unit)}
-                      className={on ? "slicer-pill active" : "slicer-pill"}
-                    >
-                      {t(`settings.targetUnit.${unit}`)}
-                    </button>
-                  );
-                })}
-                <span className="label" style={{ alignSelf: "center", marginLeft: 6 }}>
-                  {targetUnits.length === 1 ? "" : t("settings.targetUnit.auto")}
-                </span>
-              </div>
-            </div>
-
             <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
 
             {/* Statut d'import explicite (l'upload est synchrone cote serveur :
@@ -216,13 +188,6 @@ function DocRow({
       </span>
 
       <div className="item-actions" onClick={(e) => e.stopPropagation()}>
-        <AnalysisPageRange
-          pageCount={doc.page_count}
-          running={running}
-          blocked={missingContextFields.length > 0}
-          blockReason={t("reviewer.meta.required")}
-          onStart={(range) => void analyze.start(range)}
-        />
         <button type="button" onClick={onOpen} className="btn small primary">
           {t("documents.open")}
         </button>
