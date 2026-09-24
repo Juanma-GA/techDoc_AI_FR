@@ -8,65 +8,99 @@
     "fr": "Hébergé sur l'espace de la plateforme IA Atexis.",
     "en": "Hosted on the Atexis AI platform workspace."
   },
+  "categories": [
+    {
+      "key": "assistants",
+      "label": {
+        "fr": "Assistants & connaissance",
+        "en": "Assistants & knowledge"
+      }
+    },
+    {
+      "key": "structuring",
+      "label": {
+        "fr": "Extraction & structuration",
+        "en": "Extraction & structuring"
+      }
+    },
+    {
+      "key": "lifecycle",
+      "label": {
+        "fr": "Rédaction & cycle documentaire",
+        "en": "Authoring & document lifecycle"
+      }
+    },
+    {
+      "key": "quality",
+      "label": {
+        "fr": "Qualité & conformité",
+        "en": "Quality & compliance"
+      }
+    },
+    {
+      "key": "illustration",
+      "label": {
+        "fr": "Illustration & 3D",
+        "en": "Illustration & 3D"
+      }
+    }
+  ],
   "pocs": [
     {
       "slug": "corpus-agent",
       "name": "Corpus Agent",
+      "category": "quality",
       "stage": "validation",
       "desc": {
-        "fr": "Contrôle de cohérence d'un corpus documentaire.",
-        "en": "Document corpus consistency checks."
+        "fr": "Contrôle de conformité d'un corpus documentaire.",
+        "en": "Documentation corpus compliance checker."
       }
     },
     {
       "slug": "doc-writer",
       "name": "Doc Writer",
+      "category": "lifecycle",
       "stage": "translation",
       "desc": {
-        "fr": "Génération assistée de documents à partir de templates.",
-        "en": "Assisted document generation from templates."
-      }
-    },
-    {
-      "slug": "doc-reviewer",
-      "name": "Doc Reviewer",
-      "stage": "validation",
-      "desc": {
-        "fr": "Relecture détection-first de PDF / Word, PDF commenté en sortie.",
-        "en": "Detection-first PDF / Word review with an annotated PDF output."
+        "fr": "Générateur de contenu pour alimenter des modèles définis.",
+        "en": "Content generator to populate defined templates."
       }
     },
     {
       "slug": "catia-toolbox",
-      "name": "Catia Toolbox",
+      "name": "CATIA Toolbox",
+      "category": "illustration",
       "stage": "illustration",
       "desc": {
-        "fr": "Automatisations CATIA sur données neutres, plans relisables (dry-run).",
-        "en": "CATIA automations on neutral data, reviewable dry-run plans."
+        "fr": "Ensemble d'automatisations pour les tâches CATIA.",
+        "en": "Several automations for CATIA tasks."
       }
     },
     {
       "slug": "ocr-vision",
       "name": "OCR Vision",
+      "category": "structuring",
       "stage": "structuring",
       "desc": {
-        "fr": "OCR et reconnaissance visuelle de documents techniques.",
-        "en": "OCR and visual recognition of technical documents."
+        "fr": "Extraction du contenu des images et documents afin de le comprendre et de le capitaliser dans des bases de données.",
+        "en": "Extract content from images and documents to understand and capitalize on it in databases."
       }
     },
     {
       "slug": "s1000d-extractor",
       "name": "S1000D Extractor",
+      "category": "structuring",
       "stage": "structuring",
       "desc": {
-        "fr": "Migration de documentation legacy vers un squelette XML S1000D.",
-        "en": "Legacy documentation migration into an S1000D XML skeleton."
+        "fr": "Migration de PDF ou Word vers XML S1000D avec extraction des illustrations et images.",
+        "en": "Migrate from PDF or Word to S1000D XML and extract illustrations and images."
       }
     },
     {
       "slug": "imagebot-ai-processing-image",
       "url": "http://itgfrapapp800.prod.altengroup.dir:2010/",
-      "name": "ImageBot- AI Processing Image",
+      "name": "ImageBot - AI Processing Image",
+      "category": "illustration",
       "stage": "illustration",
       "desc": {
         "fr": "Traitement d'image assisté par IA.",
@@ -77,6 +111,7 @@
       "slug": "a3-linguo",
       "url": "https://context-aware-translation.apps.alten.ai/home",
       "name": "A³ Linguo",
+      "category": "lifecycle",
       "stage": "translation",
       "desc": {
         "fr": "Traduction contextuelle assistée par IA.",
@@ -84,23 +119,123 @@
       }
     },
     {
-      "slug": "brdp-manager",
-      "name": "BRDP Manager",
+      "slug": "doc-reviewer",
+      "name": "Doc Reviewer",
+      "category": "quality",
       "stage": "validation",
-      "status": "validation",
       "desc": {
-        "fr": "Gestion des BRDP S1000D/DITA, génération BREX/Schematron, extraction IA.",
-        "en": "S1000D/DITA BRDP management, BREX/Schematron generation, AI extraction."
+        "fr": "Relecture de documents PDF ou Word avec détection des anomalies et génération d'un PDF commenté.",
+        "en": "PDF or Word document review with issue detection and an annotated PDF output."
       }
     },
     {
       "slug": "xml-proofreader",
       "name": "XML Proofreader",
+      "category": "quality",
       "stage": "validation",
       "status": "validation",
       "desc": {
-        "fr": "Annotation DITA/S1000D façon PDF, compatible Oxygen XML Author.",
-        "en": "PDF-like annotation of DITA/S1000D content, Oxygen XML Author compatible."
+        "fr": "Extraction des règles depuis des documents legacy, BRDP ou fichiers Excel, puis conversion en BREX DM S1000D/DITA et en Schematron pour les règles lexicales.",
+        "en": "Extract rules from legacy documents, BRDPs and Excel files, then convert them into auto-generated S1000D/DITA BREX DM and Schematron for lexical rules."
+      }
+    },
+    {
+      "slug": "airbus-civil-td-chatbot",
+      "name": "TD Chatbot",
+      "category": "assistants",
+      "stage": "validation",
+      "status": "planned",
+      "desc": {
+        "fr": "Chatbot IA permettant de retrouver rapidement des informations dans des guides utilisateurs par requêtes en langage naturel, avec réponses, références, codes NC et numéros de page.",
+        "en": "AI-powered chatbot for quickly retrieving information from user guides through natural-language queries, with relevant answers, references, NC codes and page numbers."
+      }
+    },
+    {
+      "slug": "auto-tracing-cgm-exports",
+      "name": "Auto Tracing CGM Exports",
+      "category": "illustration",
+      "stage": "illustration",
+      "status": "planned",
+      "desc": {
+        "fr": "Solution IA générant automatiquement des illustrations techniques depuis des modèles 3D par traçage d'exports CGM, pour améliorer la cohérence et la précision tout en réduisant l'effort manuel.",
+        "en": "AI-powered solution that automatically generates technical illustrations from 3D models using CGM export tracing, ensuring consistency, improving accuracy and reducing manual illustration effort."
+      }
+    },
+    {
+      "slug": "creation-of-3d-simplified-components",
+      "name": "Creation of 3D Simplified Components",
+      "category": "illustration",
+      "stage": "illustration",
+      "status": "planned",
+      "desc": {
+        "fr": "Extension Blender alimentée par IA qui génère une topologie propre à base de quadrilatères depuis des maillages complexes, afin de faciliter l'édition, l'animation et l'optimisation.",
+        "en": "AI-powered Blender add-on that generates clean quad-based topology from complex meshes, enabling easier editing, animation and optimization."
+      }
+    },
+    {
+      "slug": "elecgraph",
+      "name": "ElecGraph",
+      "category": "structuring",
+      "stage": "structuring",
+      "status": "planned",
+      "desc": {
+        "fr": "Automatisation de la lecture des données de routage électrique depuis Excel et génération d'un graphe ou arbre interactif avec des rapports structurés.",
+        "en": "Automation to read electrical routing data from Excel and generate an interactive graph or tree visualizer with structured reports."
+      }
+    },
+    {
+      "slug": "kleampy",
+      "name": "KleamPy",
+      "category": "assistants",
+      "stage": "validation",
+      "status": "planned",
+      "desc": {
+        "fr": "Assistant documentaire basé sur des agents et MCP pour charger des documents techniques, notamment plans, fichiers Excel et CDS, puis répondre aux questions sur leur contenu.",
+        "en": "Agentic, MCP-powered document assistant for uploading technical documents, including drawings, Excel files and CDS, and answering content-related questions."
+      }
+    },
+    {
+      "slug": "plm-docsync",
+      "name": "PLM·DocSync",
+      "category": "lifecycle",
+      "stage": "publishing",
+      "status": "planned",
+      "desc": {
+        "fr": "Connexion au PLM et extraction des différences entre plusieurs versions de documents.",
+        "en": "Connect to PLM and extract differences between document versions."
+      }
+    },
+    {
+      "slug": "smart-cms",
+      "name": "Smart CMS",
+      "category": "lifecycle",
+      "stage": "publishing",
+      "status": "planned",
+      "desc": {
+        "fr": "Système de gestion de contenu ATEXIS avec gestion des versions, check-in/check-out, gestion des utilisateurs, comparaison XML et validation de schéma.",
+        "en": "ATEXIS content management system with version control, check-in/check-out, user management, XML diff and schema validation."
+      }
+    },
+    {
+      "slug": "ste-checker",
+      "name": "STE Checker",
+      "category": "quality",
+      "stage": "validation",
+      "status": "planned",
+      "desc": {
+        "fr": "Application web aidant les auteurs techniques à respecter le Simplified Technical English en identifiant les problèmes de grammaire, de terminologie et de style.",
+        "en": "Web application that assists technical authors in ensuring compliance with Simplified Technical English standards by identifying grammar, terminology and style issues."
+      }
+    },
+    {
+      "slug": "svg-checker",
+      "name": "SVG Checker",
+      "category": "quality",
+      "stage": "validation",
+      "status": "planned",
+      "desc": {
+        "fr": "Outil de validation des hotspots et fichiers SVG conforme au schéma BRDP S1000D, fusionnable avec le POC XML Proofreader.",
+        "en": "Illustration validation tool for hotspots and SVG files, compliant with the S1000D BRDP schema and mergeable with the XML Proofreader POC."
       }
     }
   ]
