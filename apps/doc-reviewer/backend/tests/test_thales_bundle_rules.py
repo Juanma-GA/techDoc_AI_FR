@@ -37,6 +37,7 @@ from app.checks.thales_rules.rules import (
     DOCUMENT_TYPES,
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
 )
+from app.checks.thales_rules.operations import highlights_document_type_expected
 
 
 def test_rule_factory_builds_compiled_rule_and_legacy_metadata() -> None:
@@ -234,7 +235,18 @@ def test_document_type_rules_use_bundle_patterns_and_preserve_scopes() -> None:
     header = CUSTOM_HEADER_DOCUMENT_TYPE.compiled_rule
     tp1 = CUSTOM_TP1_HEADER_DOCUMENT_TYPE.compiled_rule
 
-    assert DOCUMENT_TYPES == ["OVERHAUL MANUAL", "COMPONENT MAINTENANCE MANUAL"]
+    assert DOCUMENT_TYPES == [
+        "OVERHAUL MANUAL",
+        "COMPONENT MAINTENANCE MANUAL",
+        "MAINTENANCE MANUAL",
+        "ABBREVIATED COMPONENT MAINTENANCE MANUAL",
+        "OPERATING MANUAL",
+        "ILLUSTRATED PARTS CATALOG",
+        "COMPONENT MAINTENANCE PARTS LIST",
+        "OPERATING MANUAL PARTS LIST",
+    ]
+    for document_type in DOCUMENT_TYPES:
+        assert highlights_document_type_expected(document_type) == document_type
     assert header.target.region == "header"
     assert header.target.excluded_page_types == ["TP1"]
     assert header.checks[0].expected == DOCUMENT_TYPE_PATTERN

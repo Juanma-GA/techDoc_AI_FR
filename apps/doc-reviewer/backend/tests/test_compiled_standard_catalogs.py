@@ -22,7 +22,10 @@ from app.checks.thales_rules.page_classifier import (
     identify_introduction_pages,
     identify_tp1_pages,
 )
-from app.checks.thales_rules.rules import IMPORTANT_NOTICE_TEXT as _IMPORTANT_NOTICE_TEXT
+from app.checks.thales_rules.rules import (
+    DOCUMENT_TYPES,
+    IMPORTANT_NOTICE_TEXT as _IMPORTANT_NOTICE_TEXT,
+)
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules as _execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
@@ -1238,11 +1241,6 @@ def test_tp1_content_requires_an_allowed_document_type() -> None:
 
 def test_highlights_document_type_must_precede_the_ata_number() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
-    valid_page = ParsedPage(
-        page=1,
-        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
-        text="OVERHAUL MANUAL\nATA No 23-56-25\nHighlights Page 1",
-    )
     invalid_page = ParsedPage(
         page=1,
         page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
@@ -1254,15 +1252,22 @@ def test_highlights_document_type_must_precede_the_ata_number() -> None:
         text="Highlights Page 2",
     )
 
-    valid, _ = execute_pdf_rules(
-        ParsedPdf(
-            page_count=1,
-            pages=[valid_page],
-            full_text=valid_page.text,
-            is_signed=False,
-        ),
-        [rule],
-    )
+    for document_type in DOCUMENT_TYPES:
+        valid_page = ParsedPage(
+            page=1,
+            page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+            text=f"{document_type}\nATA No 23-56-25\nHighlights Page 1",
+        )
+        valid, _ = execute_pdf_rules(
+            ParsedPdf(
+                page_count=1,
+                pages=[valid_page],
+                full_text=valid_page.text,
+                is_signed=False,
+            ),
+            [rule],
+        )
+        assert valid[0].status == "PASS", document_type
     invalid, _ = execute_pdf_rules(
         ParsedPdf(
             page_count=1,
@@ -1282,7 +1287,6 @@ def test_highlights_document_type_must_precede_the_ata_number() -> None:
         [rule],
     )
 
-    assert valid[0].status == "PASS"
     assert invalid[0].status == "FAIL"
     assert later == []
 

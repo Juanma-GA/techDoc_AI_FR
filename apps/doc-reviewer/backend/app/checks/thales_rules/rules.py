@@ -51,12 +51,23 @@ _TP1_DOCUMENT_TARGET = RuleTarget(
     region="body",
     page_type="TP1",
 )
-DOCUMENT_TYPES = ["OVERHAUL MANUAL", "COMPONENT MAINTENANCE MANUAL"]
-DOCUMENT_TYPE_PATTERN = (
-    r"(?i)(?<!\w)(?:OVERHAUL\s+MANUAL|COMPONENT\s+MAINTENANCE\s+MANUAL)(?!\w)"
+DOCUMENT_TYPES = [
+    "OVERHAUL MANUAL",
+    "COMPONENT MAINTENANCE MANUAL",
+    "MAINTENANCE MANUAL",
+    "ABBREVIATED COMPONENT MAINTENANCE MANUAL",
+    "OPERATING MANUAL",
+    "ILLUSTRATED PARTS CATALOG",
+    "COMPONENT MAINTENANCE PARTS LIST",
+    "OPERATING MANUAL PARTS LIST",
+]
+_DOCUMENT_TYPE_ALTERNATION = "|".join(
+    r"\s+".join(re.escape(part) for part in document_type.split())
+    for document_type in sorted(DOCUMENT_TYPES, key=len, reverse=True)
 )
+DOCUMENT_TYPE_PATTERN = rf"(?i)(?<!\w)(?:{_DOCUMENT_TYPE_ALTERNATION})(?!\w)"
 HIGHLIGHTS_DOCUMENT_TYPE_PATTERN = (
-    r"(?im)^\s*(?:OVERHAUL\s+MANUAL|COMPONENT\s+MAINTENANCE\s+MANUAL)\s*$"
+    rf"(?im)^\s*(?:{_DOCUMENT_TYPE_ALTERNATION})\s*$"
     r"\s*^\s*ATA\s+No\b"
 )
 _TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
@@ -501,7 +512,10 @@ CUSTOM_HEADER_DOCUMENT_TYPE = rule(
     name="Type de document present dans les en-tetes hors TP1",
     description=(
         "Chaque en-tete hors TP1 doit contenir l'un des types de document "
-        "autorises : OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+        "autorises : OVERHAUL MANUAL, MAINTENANCE MANUAL, COMPONENT "
+        "MAINTENANCE MANUAL, ABBREVIATED COMPONENT MAINTENANCE MANUAL, "
+        "OPERATING MANUAL, ILLUSTRATED PARTS CATALOG, COMPONENT MAINTENANCE "
+        "PARTS LIST ou OPERATING MANUAL PARTS LIST."
     ),
     message="Le type de document est absent de l'en-tete.",
     kind="field_required",
@@ -520,7 +534,10 @@ CUSTOM_HEADER_DOCUMENT_TYPE = rule(
         "en": {
             "description": (
                 "Every non-TP1 header must contain an allowed document type: "
-                "OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL."
+                "OVERHAUL MANUAL, MAINTENANCE MANUAL, COMPONENT MAINTENANCE "
+                "MANUAL, ABBREVIATED COMPONENT MAINTENANCE MANUAL, OPERATING "
+                "MANUAL, ILLUSTRATED PARTS CATALOG, COMPONENT MAINTENANCE "
+                "PARTS LIST, or OPERATING MANUAL PARTS LIST."
             ),
             "message": "The document type is missing from the header.",
         }
@@ -532,7 +549,10 @@ CUSTOM_TP1_HEADER_DOCUMENT_TYPE = rule(
     name="Type de document present dans le contenu TP1",
     description=(
         "Chaque contenu TP1 doit contenir l'un des types de document autorises : "
-        "OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+        "OVERHAUL MANUAL, MAINTENANCE MANUAL, COMPONENT MAINTENANCE MANUAL, "
+        "ABBREVIATED COMPONENT MAINTENANCE MANUAL, OPERATING MANUAL, "
+        "ILLUSTRATED PARTS CATALOG, COMPONENT MAINTENANCE PARTS LIST ou "
+        "OPERATING MANUAL PARTS LIST."
     ),
     message="Le type de document est absent du contenu TP1.",
     kind="field_required",
@@ -551,7 +571,10 @@ CUSTOM_TP1_HEADER_DOCUMENT_TYPE = rule(
         "en": {
             "description": (
                 "Every TP1 page content must contain an allowed document type: "
-                "OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL."
+                "OVERHAUL MANUAL, MAINTENANCE MANUAL, COMPONENT MAINTENANCE "
+                "MANUAL, ABBREVIATED COMPONENT MAINTENANCE MANUAL, OPERATING "
+                "MANUAL, ILLUSTRATED PARTS CATALOG, COMPONENT MAINTENANCE "
+                "PARTS LIST, or OPERATING MANUAL PARTS LIST."
             ),
             "message": "The document type is missing from the TP1 page content.",
         }
@@ -624,7 +647,10 @@ CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE = rule(
     name="Type de document present au-dessus du numero ATA des Highlights",
     description=(
         "La premiere page Highlights doit afficher un type de document autorise "
-        "au-dessus du numero ATA : OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+        "au-dessus du numero ATA : OVERHAUL MANUAL, MAINTENANCE MANUAL, "
+        "COMPONENT MAINTENANCE MANUAL, ABBREVIATED COMPONENT MAINTENANCE "
+        "MANUAL, OPERATING MANUAL, ILLUSTRATED PARTS CATALOG, COMPONENT "
+        "MAINTENANCE PARTS LIST ou OPERATING MANUAL PARTS LIST."
     ),
     message="Le type de document est absent au-dessus du numero ATA Highlights.",
     kind="field_required",
@@ -644,7 +670,10 @@ CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE = rule(
         "en": {
             "description": (
                 "The first Highlights page must show an allowed document type above "
-                "the ATA number: OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL."
+                "the ATA number: OVERHAUL MANUAL, MAINTENANCE MANUAL, COMPONENT "
+                "MAINTENANCE MANUAL, ABBREVIATED COMPONENT MAINTENANCE MANUAL, "
+                "OPERATING MANUAL, ILLUSTRATED PARTS CATALOG, COMPONENT "
+                "MAINTENANCE PARTS LIST, or OPERATING MANUAL PARTS LIST."
             ),
             "message": "The document type is missing above the Highlights ATA number.",
         }
