@@ -5,6 +5,7 @@ from app.checks.thales_rules.rules import (
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
     CUSTOM_DECIMAL_COMMA,
+    CUSTOM_ENUMERATION_PUNCTUATION_SWAP,
     CUSTOM_FOOTER_PAGE_NUMBER,
     CUSTOM_HEADER_DOCUMENT_TYPE,
     CUSTOM_FORBIDDEN_CONSUMABLES,
@@ -289,10 +290,15 @@ def test_highlights_holder_keeps_tp1_title_operator_contract() -> None:
 
 def test_punctuation_and_pressure_rules_keep_their_operation_parameters() -> None:
     punctuation = CUSTOM_SENTENCE_PUNCTUATION.compiled_rule.checks[0]
+    punctuation_swap = CUSTOM_ENUMERATION_PUNCTUATION_SWAP.compiled_rule.checks[0]
     pressure = CUSTOM_BAR_PSI_CONVERSION.compiled_rule.checks[0]
 
     assert punctuation.operator == "sentence_punctuation"
-    assert punctuation.expected == "period_and_enumeration"
+    assert punctuation.expected == "missing_required_punctuation"
+    assert CUSTOM_SENTENCE_PUNCTUATION.compiled_rule.severity == "error"
+    assert punctuation_swap.operator == "sentence_punctuation"
+    assert punctuation_swap.expected == "enumeration_punctuation_swap"
+    assert CUSTOM_ENUMERATION_PUNCTUATION_SWAP.compiled_rule.severity == "info"
     assert pressure.operator == "pressure_conversion"
     assert pressure.expected == "bar_to_psi"
 

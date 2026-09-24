@@ -204,9 +204,13 @@ class Check(StrictModel):
             "metric_torque_to_lbf_in",
         }:
             raise ValueError("unit_conversion requires a supported conversion policy")
-        if self.operator == "sentence_punctuation" and self.expected != "period_and_enumeration":
+        if self.operator == "sentence_punctuation" and self.expected not in {
+            "period_and_enumeration",
+            "missing_required_punctuation",
+            "enumeration_punctuation_swap",
+        }:
             raise ValueError(
-                "sentence_punctuation requires expected='period_and_enumeration'"
+                "sentence_punctuation requires a supported punctuation policy"
             )
         if self.operator == "revision_consistency" and (
             not isinstance(self.expected, str) or not self.expected

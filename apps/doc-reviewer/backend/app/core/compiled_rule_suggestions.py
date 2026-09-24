@@ -102,7 +102,12 @@ def deterministic_suggestions(
         elif check.operator == "sentence_punctuation":
             suggestions.extend(
                 sentence_punctuation_suggestions(
-                    rule, targets, rule_kind, message, ctx.pdf_pages
+                    rule,
+                    targets,
+                    rule_kind,
+                    message,
+                    ctx.pdf_pages,
+                    policy=str(check.expected),
                 )
             )
         elif check.operator in {
@@ -1210,6 +1215,8 @@ def sentence_punctuation_suggestions(
     rule_kind: str,
     message: str,
     pdf_pages: list[ParsedPage] | None,
+    *,
+    policy: str,
 ) -> list[RawSuggestion]:
     suggestions: list[RawSuggestion] = []
     for target in targets:
@@ -1217,6 +1224,7 @@ def sentence_punctuation_suggestions(
             target.text,
             target.span_ranges,
             skip_page=target.page_type in {"TP1", "TP2", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"},
+            policy=policy,
         ):
             suggestions.append(
                 RawSuggestion(

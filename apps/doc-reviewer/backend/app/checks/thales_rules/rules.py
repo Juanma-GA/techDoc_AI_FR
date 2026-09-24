@@ -783,32 +783,66 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
 
 CUSTOM_SENTENCE_PUNCTUATION = rule(
     code="CUSTOM_SENTENCE_PUNCTUATION",
-    name="Phrases et enumerations correctement ponctuees",
+    name="Ponctuation obligatoire absente des phrases et enumerations",
     description=(
-        "Sur les pages modifiees, chaque phrase doit se terminer par un point. "
-        "Dans une enumeration, les elements intermediaires se terminent par "
-        "une virgule et le dernier par un point."
+        "Sur les pages modifiees, chaque phrase doit se terminer par un point et "
+        "chaque element d'enumeration par le signe attendu : virgule pour les "
+        "elements intermediaires, point pour le dernier. Signale les signes "
+        "obligatoires manquants."
     ),
-    message="La ponctuation terminale de la phrase ou de l'enumeration est incorrecte.",
+    message="Une ponctuation obligatoire est absente.",
     kind="field_required",
-    severity="warning",
+    severity="error",
     target=_MODIFIED_TARGET,
     checks=[
         Check(
             field="text",
             operator="sentence_punctuation",
-            expected="period_and_enumeration",
+            expected="missing_required_punctuation",
         ),
     ],
-    failure_message="phrase ou enumeration sans ponctuation terminale conforme.",
+    failure_message="ponctuation terminale obligatoire absente.",
     translations={
         "en": {
             "description": (
-                "On modified pages, every sentence must end with a full stop. "
-                "In an enumeration, intermediate items end with a comma and "
-                "the last item with a full stop."
+                "On modified pages, every sentence must end with a full stop and "
+                "every enumeration item with the required mark: a comma for "
+                "intermediate items and a full stop for the last. Reports missing "
+                "required marks."
             ),
-            "message": "The sentence or enumeration terminal punctuation is incorrect.",
+            "message": "A required punctuation mark is missing.",
+        }
+    },
+)
+
+CUSTOM_ENUMERATION_PUNCTUATION_SWAP = rule(
+    code="CUSTOM_ENUMERATION_PUNCTUATION_SWAP",
+    name="Virgule et point intervertis dans les enumerations",
+    description=(
+        "Sur les pages modifiees, signale a titre informatif un point a la place "
+        "d'une virgule dans un element intermediaire, ou une virgule a la place "
+        "du point final d'une enumeration."
+    ),
+    message="Un point et une virgule semblent intervertis dans cette enumeration.",
+    kind="field_required",
+    severity="info",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="sentence_punctuation",
+            expected="enumeration_punctuation_swap",
+        ),
+    ],
+    failure_message="virgule et point intervertis dans une enumeration.",
+    translations={
+        "en": {
+            "description": (
+                "On modified pages, informationally flags a full stop instead of "
+                "a comma on an intermediate enumeration item, or a comma instead "
+                "of the final full stop."
+            ),
+            "message": "A full stop and comma appear to be swapped in this enumeration.",
         }
     },
 )
@@ -1879,6 +1913,7 @@ RULE_DEFINITIONS = (
     CUSTOM_TP1_THALES_ADDRESS,
     CUSTOM_DECIMAL_COMMA,
     CUSTOM_SENTENCE_PUNCTUATION,
+    CUSTOM_ENUMERATION_PUNCTUATION_SWAP,
     CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_TEMPERATURE_FAHRENHEIT,
     CUSTOM_BAR_PSI_CONVERSION,

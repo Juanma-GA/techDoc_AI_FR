@@ -203,7 +203,8 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
 
 
 def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
-    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    missing_rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    swap_rule = _rule("CUSTOM_ENUMERATION_PUNCTUATION_SWAP")
     valid_page = ParsedPage(
         page=1,
         text=(
@@ -221,7 +222,8 @@ def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
         text=(
             "A sentence without a full stop\n\n"
             "- first item.\n\n"
-            "- last item"
+            "- missing middle item\n\n"
+            "- last item,"
         ),
         spans=[],
         is_modified=True,
@@ -229,25 +231,38 @@ def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
 
     valid, valid_suggestions = execute_pdf_rules(
         ParsedPdf(page_count=1, pages=[valid_page], full_text=valid_page.text, is_signed=False),
-        [rule],
+        [missing_rule, swap_rule],
     )
-    invalid, invalid_suggestions = execute_pdf_rules(
+    invalid_missing, missing_suggestions = execute_pdf_rules(
         ParsedPdf(
             page_count=1,
             pages=[invalid_page],
             full_text=invalid_page.text,
             is_signed=False,
         ),
-        [rule],
+        [missing_rule],
+    )
+    invalid_swaps, swap_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[invalid_page],
+            full_text=invalid_page.text,
+            is_signed=False,
+        ),
+        [swap_rule],
     )
 
-    assert valid[0].status == "PASS"
+    assert [result.status for result in valid] == ["PASS", "PASS"]
     assert valid_suggestions == []
-    assert invalid[0].status == "FAIL"
-    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+    assert invalid_missing[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in missing_suggestions] == [
         ("A sentence without a full stop", "A sentence without a full stop."),
+        ("- missing middle item", "- missing middle item,"),
+    ]
+    assert invalid_swaps[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in swap_suggestions] == [
         ("- first item.", "- first item,"),
-        ("- last item", "- last item."),
+        ("- last item,", "- last item."),
     ]
 
 

@@ -529,6 +529,7 @@ def sentence_punctuation_issues(
     span_ranges: tuple[_SpanRange, ...] = (),
     *,
     skip_page: bool = False,
+    policy: str = "period_and_enumeration",
 ) -> list[SentencePunctuationIssue]:
     if skip_page or _STRUCTURAL_PAGE_RE.search(text):
         return []
@@ -568,6 +569,16 @@ def sentence_punctuation_issues(
         while terminal and terminal[-1] in "\"'»”":
             terminal = terminal[:-1].rstrip()
         if terminal.endswith(expected):
+            continue
+        terminal_punctuation = terminal[-1] if terminal else ""
+        enumeration_swap = (
+            family is not None
+            and terminal_punctuation in {".", ","}
+            and terminal_punctuation != expected
+        )
+        if policy == "missing_required_punctuation" and enumeration_swap:
+            continue
+        if policy == "enumeration_punctuation_swap" and not enumeration_swap:
             continue
         issues.append(
             SentencePunctuationIssue(
@@ -680,6 +691,7 @@ def evaluate_check(
                 value or "",
                 target.span_ranges,
                 skip_page=target.page_type in _STRUCTURAL_PAGE_TYPES,
+                policy=str(check.expected),
             )
             if issues:
                 issue = issues[0]
