@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
-from app.checks.standards.thales_custom import (
+from app.checks.thales_rules.operations import shop_verification_text
+from app.checks.thales_rules.page_classifier import (
     HIGHLIGHTS_PAGE_TYPE,
     HIGHLIGHTS_FIRST_PAGE_TYPE,
     INTRODUCTION_PAGE_TYPE,
@@ -15,19 +17,27 @@ from app.checks.standards.thales_custom import (
     STORAGE_PAGE_TYPE,
     TESTING_PAGE_TYPE,
     TP1_PAGE_TYPE,
-    _IMPORTANT_NOTICE_TEXT,
     classify_pages,
     identify_note_pages,
     identify_introduction_pages,
     identify_tp1_pages,
-    shop_verification_text,
 )
+from app.checks.thales_rules.rules import IMPORTANT_NOTICE_TEXT as _IMPORTANT_NOTICE_TEXT
 
-from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules
+from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules as _execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
+
+
+_TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
+
+
+def execute_pdf_rules(*args: Any, **kwargs: Any):
+    kwargs.setdefault("client_operations", _TEST_CLIENT_BUNDLE.operations)
+    kwargs.setdefault("client_entities", _TEST_CLIENT_BUNDLE.mapping.entities)
+    return _execute_pdf_rules(*args, **kwargs)
 
 
 def _rule(code: str) -> CompiledRule:
@@ -36,7 +46,7 @@ def _rule(code: str) -> CompiledRule:
             for rule in spec["versions"][label]:
                 if rule.id == code:
                     return rule
-    for definition in load_active_client_configuration().bundle.rules:
+    for definition in _TEST_CLIENT_BUNDLE.rules:
         if definition.code == code:
             return definition.compiled_rule
     raise AssertionError(f"Unknown built-in rule: {code}")

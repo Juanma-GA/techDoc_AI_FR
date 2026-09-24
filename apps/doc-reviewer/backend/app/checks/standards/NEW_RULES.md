@@ -2,8 +2,8 @@
 
 Les regles officielles THALES sont declarees dans `app/checks/thales_rules/rules.py`.
 Ce module est la source unique des `CompiledRule` et des metadonnees de presentation.
-`app/checks/standards/thales_custom.py` reste une facade de compatibilite pour les
-anciens imports ; ne pas y ajouter de regle ni modifier `RULE_METADATA` a la main.
+`RULE_METADATA` est genere depuis les definitions ; ne pas ajouter de metadonnees
+manuelles paralleles.
 
 `active_client.json` selectionne le bundle actif. Le registre charge ses modules
 de regles, operations et classification depuis les chemins du manifest ; le
@@ -50,8 +50,7 @@ CUSTOM_DECIMAL_COMMA = rule(
 )
 ```
 
-`RULE_METADATA` dans la facade est genere depuis `RULE_DEFINITIONS`. Sa presence
-sert uniquement aux appels historiques de catalogue.
+`RULE_METADATA` dans le bundle est genere depuis `RULE_DEFINITIONS`.
 
 ## Operateur client
 
@@ -75,8 +74,7 @@ branche sur le code de regle dans le moteur. Toute operation utilisee doit etre
 exportee par `OPERATIONS`; le chargeur bloque si une regle reference un nom absent.
 
 Les controles de revision utilisent maintenant ce meme contrat. Leur moteur est
-dans `app/checks/thales_rules/revision_engine.py` et l'ancien module
-`standards/_thales_revision.py` ne sert plus que de facade de compatibilite.
+dans `app/checks/thales_rules/revision_engine.py`.
 
 ## Classifier une page
 

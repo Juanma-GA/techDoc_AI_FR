@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
-from app.checks.standards import _thales_revision as revision
-from app.checks.standards.thales_custom import _REVISION_RULES, classify_pages
-from app.core.compiled_rule_executor import execute_pdf_rules
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.thales_rules import revision_engine as revision
+from app.checks.thales_rules.page_classifier import classify_pages
+from app.checks.thales_rules.rules import REVISION_RULE_DEFINITIONS
+from app.core.compiled_rule_executor import execute_pdf_rules as _execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
+
+
+_TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
+_REVISION_RULES = [
+    definition.compiled_rule for definition in REVISION_RULE_DEFINITIONS
+]
+
+
+def execute_pdf_rules(*args: Any, **kwargs: Any):
+    kwargs.setdefault("client_operations", _TEST_CLIENT_BUNDLE.operations)
+    kwargs.setdefault("client_entities", _TEST_CLIENT_BUNDLE.mapping.entities)
+    return _execute_pdf_rules(*args, **kwargs)
 
 
 _COPYRIGHT = (

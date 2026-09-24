@@ -11,7 +11,6 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Callable, Literal
 
 from app.checks.client_bundle import (
-    ClientOperation,
     ClientOperationContext,
     OperationResult,
 )
@@ -36,15 +35,6 @@ from app.core.compiled_rule_runtime import (
 )
 
 _logger = get_logger(__name__)
-
-_CLIENT_OPERATIONS: dict[str, ClientOperation[Any]] = {}
-
-
-def register_client_operation(operation: ClientOperation[Any]) -> None:
-    existing = _CLIENT_OPERATIONS.get(operation.name)
-    if existing is not None and existing != operation:
-        raise ValueError(f"client operation already registered: {operation.name}")
-    _CLIENT_OPERATIONS[operation.name] = operation
 
 
 _PRESSURE_VALUE_PATTERN = r"[+-]?\d+(?:[.,]\d+)?"
@@ -712,9 +702,7 @@ def evaluate_client_operation(
         )
     if not operation_name:
         raise ValueError("client_operation check requires an operation name")
-    operation_registry = (
-        ctx.client_operations if ctx.client_operations is not None else _CLIENT_OPERATIONS
-    )
+    operation_registry = ctx.client_operations or {}
     operation = operation_registry.get(operation_name)
     if operation is None:
         raise ValueError(f"unknown client operation: {operation_name}")
@@ -754,9 +742,7 @@ def client_operation_suggestions(
         )
     if not operation_name:
         raise ValueError("client_operation check requires an operation name")
-    operation_registry = (
-        ctx.client_operations if ctx.client_operations is not None else _CLIENT_OPERATIONS
-    )
+    operation_registry = ctx.client_operations or {}
     operation = operation_registry.get(operation_name)
     if operation is None:
         raise ValueError(f"unknown client operation: {operation_name}")
