@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import type { RuleKind, Severity, SourceKind } from "../types/domain";
+import type { RuleKind, Severity } from "../types/domain";
 
 type FiltersState = {
   severities: Severity[];
@@ -19,9 +19,7 @@ type FiltersState = {
   // Normes cibles actives (multi-select Parametres, parite preview) : liste de
   // version IDs fusionnees a chaque analyse et appliquees a chaque upload.
   activeStandardVersionIds: string[];
-  // Filtre de la liste des anomalies (panneau reviewer) : source (checklist /
-  // norme / regle / transverse) et regle precise. `null` = pas de filtre.
-  sourceKindFilter: SourceKind | null;
+  // Filtre du code de regle dans le panneau reviewer. `null` = pas de filtre.
   ruleCodeFilter: string | null;
   toggleSeverity: (s: Severity) => void;
   toggleKind: (k: RuleKind) => void;
@@ -33,7 +31,6 @@ type FiltersState = {
   toggleActiveStandardVersion: (versionId: string) => void;
   reconcileActiveStandardVersions: (validVersionIds: string[]) => void;
   clearActiveStandards: () => void;
-  setSourceKindFilter: (v: SourceKind | null) => void;
   setRuleCodeFilter: (v: string | null) => void;
 };
 
@@ -52,7 +49,6 @@ export const useFiltersStore = create<FiltersState>()(
       lastStandardId: null,
       lastStandardVersionId: null,
       activeStandardVersionIds: [],
-      sourceKindFilter: null,
       ruleCodeFilter: null,
       toggleSeverity: (s) =>
         set({
@@ -93,7 +89,6 @@ export const useFiltersStore = create<FiltersState>()(
           return unchanged ? {} : { activeStandardVersionIds: activeIds };
         }),
       clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
-      setSourceKindFilter: (v) => set({ sourceKindFilter: v }),
       setRuleCodeFilter: (v) => set({ ruleCodeFilter: v }),
     }),
     { name: "doc-reviewer-filters" },
