@@ -784,6 +784,45 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
     },
 )
 
+CUSTOM_PARAGRAPH_JUSTIFICATION = rule(
+    code="CUSTOM_PARAGRAPH_JUSTIFICATION",
+    name="Paragraphes du contenu justifies sur les pages modifiees",
+    description=(
+        "Sur les pages modifiees, les paragraphes de contenu multilignes doivent "
+        "etre visuellement alignes a gauche et a droite, hors derniere ligne. "
+        "Le controle estime l'alignement a partir de la geometrie du PDF et peut "
+        "etre inconclusif pour les paragraphes courts ou sans couche texte."
+    ),
+    message="Un paragraphe du contenu semble ne pas etre justifie.",
+    kind="field_required",
+    severity="warning",
+    target=RuleTarget(
+        page="all",
+        region="full_page",
+        page_state="modified",
+        excluded_page_types=["TP1", "TP2", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"],
+    ),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="paragraph_justification",
+        ),
+    ],
+    failure_message="Un paragraphe du contenu semble ne pas etre justifie.",
+    translations={
+        "en": {
+            "description": (
+                "On modified pages, multiline body paragraphs must be visually "
+                "aligned on both the left and right, except for the final line. "
+                "Alignment is estimated from PDF geometry and may be inconclusive "
+                "for short paragraphs or pages without a text layer."
+            ),
+            "message": "A body paragraph appears not to be justified.",
+        }
+    },
+)
+
 CUSTOM_BAR_PSI_CONVERSION = rule(
     code="CUSTOM_BAR_PSI_CONVERSION",
     name="Pression en bar accompagnee de sa conversion en p.s.i.",
@@ -1656,6 +1695,7 @@ RULE_DEFINITIONS = (
     CUSTOM_TP1_THALES_ADDRESS,
     CUSTOM_DECIMAL_COMMA,
     CUSTOM_SENTENCE_PUNCTUATION,
+    CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_TEMPERATURE_FAHRENHEIT,
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_FORBIDDEN_CONSUMABLES,

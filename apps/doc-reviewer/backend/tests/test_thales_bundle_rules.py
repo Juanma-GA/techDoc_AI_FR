@@ -15,6 +15,7 @@ from app.checks.thales_rules.rules import (
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,
+    CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_REPAIR_NOTE,
     CUSTOM_REPLACE_LEGACY_NAMES,
     CUSTOM_SENTENCE_PUNCTUATION,
@@ -278,6 +279,24 @@ def test_punctuation_and_pressure_rules_keep_their_operation_parameters() -> Non
     assert punctuation.expected == "period_and_enumeration"
     assert pressure.operator == "pressure_conversion"
     assert pressure.expected == "bar_to_psi"
+
+
+def test_paragraph_justification_is_visual_and_scoped_to_modified_pages() -> None:
+    definition = CUSTOM_PARAGRAPH_JUSTIFICATION
+    check = definition.compiled_rule.checks[0]
+
+    assert definition.compiled_rule.severity == "warning"
+    assert definition.compiled_rule.target.page_state == "modified"
+    assert definition.compiled_rule.target.region == "full_page"
+    assert definition.compiled_rule.target.excluded_page_types == [
+        "TP1",
+        "TP2",
+        "HIGHLIGHTS",
+        "HIGHLIGHTS_PAGE_1",
+    ]
+    assert check.operator == "client_operation"
+    assert check.operation == "paragraph_justification"
+    assert "geometrie du PDF" in definition.description
 
 
 def test_note_rules_keep_page_scopes_check_counts_and_storage_anchor() -> None:

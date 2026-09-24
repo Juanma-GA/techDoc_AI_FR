@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from collections.abc import Mapping
+from statistics import median
 from typing import Any
 
 from app.checks.client_bundle import ClientOperation, OperationResult
@@ -14,7 +16,7 @@ from .rules import (
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
 )
 from app.core.logging import get_logger
-from app.parsers.pdf_parser import ParsedPdf
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine
 
 
 _logger = get_logger(__name__)
@@ -34,6 +36,9 @@ _HIGHLIGHTS_CONTENT_MARKER = re.compile(r"(?im)^\s*HIGHLIGHTS\s*$")
 _HIGHLIGHTS_HOLDER_RE = re.compile(r"(?i)^TO\s*:\s*HOLDER\s+OF\s+")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
+_JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
+_JUSTIFICATION_MIN_LINE_CHARACTERS = 24
+_JUSTIFICATION_HORIZONTAL_TOLERANCE = 3.0
 
 
 def shop_verification_text(document: object | None) -> str:
@@ -151,6 +156,146 @@ def highlights_document_type_observed(text: str) -> str:
 
 def highlights_document_type_matches(text: str) -> bool:
     return re.search(HIGHLIGHTS_DOCUMENT_TYPE_PATTERN, text) is not None
+
+
+def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
+    lines_by_block: dict[int, list[PdfLine]] = defaultdict(list)
+    for line in page.lines:
+        x0, y0, x1, y1 = line.bbox
+        if x1 <= x0 or y1 <= y0:
+            continue
+        if abs(line.direction[1]) > 0.02 or abs(abs(line.direction[0]) - 1.0) > 0.02:
+            continue
+        if page.page_height > 0 and (
+            y0 < page.page_height * 0.08 or y1 > page.page_height * 0.94
+        ):
+            continue
+        lines_by_block[line.block_index].append(line)
+
+    paragraphs: list[list[PdfLine]] = []
+    for block_lines in lines_by_block.values():
+        current: list[PdfLine] = []
+        for line in sorted(block_lines, key=lambda item: item.line_index):
+            if current:
+                previous = current[-1]
+                line_height = max(
+                    previous.bbox[3] - previous.bbox[1],
+                    line.bbox[3] - line.bbox[1],
+                    1.0,
+                )
+                if line.bbox[1] - previous.bbox[1] > max(18.0, line_height * 1.8):
+                    paragraphs.append(current)
+                    current = []
+            current.append(line)
+        if current:
+            paragraphs.append(current)
+    return paragraphs
+
+
+def _paragraph_justification_issue(
+    lines: list[PdfLine],
+) -> tuple[bool, PdfLine | None] | None:
+    if len(lines) < 3:
+        return None
+    measurable = [
+        (index, line)
+        for index, line in enumerate(lines[:-1])
+        if len(re.sub(r"\W", "", line.text)) >= _JUSTIFICATION_MIN_LINE_CHARACTERS
+    ]
+    interior_lines = [line for index, line in measurable if index > 0]
+    if len(measurable) < 2:
+        return None
+
+    right_edges = [line.bbox[2] for _index, line in measurable]
+    paragraph_width = max(line.bbox[2] for _index, line in measurable) - min(
+        line.bbox[0] for _index, line in measurable
+    )
+    right_tolerance = max(4.0, paragraph_width * 0.015)
+    expected_right = median(right_edges)
+    for _index, line in measurable:
+        if abs(line.bbox[2] - expected_right) > right_tolerance:
+            return False, line
+
+    if len(interior_lines) >= 2:
+        left_edges = [line.bbox[0] for line in interior_lines]
+        expected_left = median(left_edges)
+        for line in interior_lines:
+            if abs(line.bbox[0] - expected_left) > _JUSTIFICATION_HORIZONTAL_TOLERANCE:
+                return False, line
+    return True, None
+
+
+def _paragraph_justification_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int, list[ParsedPage]]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0, []
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    pages = [page for page in parsed_pdf.pages if page.page in target_pages]
+    text_by_page = {target.raw_page: target.text for target in targets}
+    checked_paragraphs = 0
+    findings: list[OperationResult] = []
+    for page in pages:
+        for paragraph in _paragraphs_from_pdf_page(page):
+            assessment = _paragraph_justification_issue(paragraph)
+            if assessment is None:
+                continue
+            checked_paragraphs += 1
+            is_justified, issue_line = assessment
+            if is_justified:
+                continue
+            assert issue_line is not None
+            original = issue_line.text.strip()
+            if not original:
+                continue
+            start = text_by_page.get(page.page, "").find(original)
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=original,
+                    expected=_JUSTIFICATION_EXPECTED,
+                    message="L'alignement visuel d'un paragraphe semble non justifie.",
+                    original=original,
+                    proposed=original,
+                    span=(start, start + len(original)) if start >= 0 else None,
+                    page=page.page,
+                    bbox=issue_line.bbox,
+                )
+            )
+    return findings, checked_paragraphs, pages
+
+
+def _evaluate_paragraph_justification(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> OperationResult:
+    findings, checked_paragraphs, pages = _paragraph_justification_findings(context)
+    if findings:
+        return findings[0]
+
+    if checked_paragraphs == 0:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_JUSTIFICATION_EXPECTED,
+            page=pages[0].page if pages else None,
+        )
+    return OperationResult(
+        status="PASS",
+        expected=_JUSTIFICATION_EXPECTED,
+        page=pages[-1].page,
+    )
+
+
+def _suggest_paragraph_justification(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> list[OperationResult]:
+    findings, _checked_paragraphs, _pages = _paragraph_justification_findings(context)
+    return findings
 
 
 def revision_state(parsed: ParsedPdf, document: object) -> revision.RevisionState:
@@ -426,6 +571,11 @@ HIGHLIGHTS_DOCUMENT_TYPE = ClientOperation(
     execute=_evaluate_highlights_document_type,
     suggestions=_suggest_highlights_document_type,
 )
+PARAGRAPH_JUSTIFICATION = ClientOperation(
+    name="paragraph_justification",
+    execute=_evaluate_paragraph_justification,
+    suggestions=_suggest_paragraph_justification,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -433,5 +583,6 @@ OPERATIONS = {
         SHOP_VERIFICATION,
         HIGHLIGHTS_HOLDER,
         HIGHLIGHTS_DOCUMENT_TYPE,
+        PARAGRAPH_JUSTIFICATION,
     )
 }

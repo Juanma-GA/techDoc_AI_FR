@@ -100,6 +100,10 @@ def deterministic_suggestions(
             "highlights_holder",
             "highlights_document_type",
         }:
+            operation_name = check.operation or check.operator
+            operation = (ctx.client_operations or {}).get(operation_name)
+            if operation is not None and operation.suggestions is None:
+                has_non_repairable_check = True
             suggestions.extend(
                 client_operation_suggestions_for_rule(
                     rule,

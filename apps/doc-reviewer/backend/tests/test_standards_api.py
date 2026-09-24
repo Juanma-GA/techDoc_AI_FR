@@ -129,6 +129,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_TP1_THALES_ADDRESS": "warning",
         "CUSTOM_DECIMAL_COMMA": "warning",
         "CUSTOM_SENTENCE_PUNCTUATION": "warning",
+        "CUSTOM_PARAGRAPH_JUSTIFICATION": "warning",
         "CUSTOM_TEMPERATURE_FAHRENHEIT": "error",
         "CUSTOM_BAR_PSI_CONVERSION": "error",
         "CUSTOM_FORBIDDEN_CONSUMABLES": "error",

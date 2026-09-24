@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import fitz
 
-from app.parsers.pdf_parser import locate_with_search_for
+from app.parsers.pdf_parser import locate_with_search_for, parse_pdf
 
 
 def _build_pdf_with_two_occurrences(tmp_path) -> str:
@@ -59,3 +59,23 @@ def test_locate_handles_empty_original(tmp_path) -> None:
     page = doc.load_page(0)
     assert locate_with_search_for(page, "", span_index=0) is None
     doc.close()
+
+
+def test_parse_pdf_preserves_line_layout_and_block_identity(tmp_path) -> None:
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=300)
+    page.insert_textbox(
+        fitz.Rect(40, 40, 180, 130),
+        "A paragraph with enough words to wrap onto multiple lines and retain its block identity.",
+        fontname="helv",
+        fontsize=10,
+    )
+    out = tmp_path / "multiline.pdf"
+    doc.save(str(out))
+    doc.close()
+
+    parsed = parse_pdf(out)
+
+    assert len(parsed.pages[0].lines) >= 2
+    assert len({line.block_index for line in parsed.pages[0].lines}) == 1
+    assert all(line.bbox[2] > line.bbox[0] for line in parsed.pages[0].lines)
