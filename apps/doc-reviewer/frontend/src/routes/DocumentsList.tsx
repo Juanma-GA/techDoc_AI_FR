@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
@@ -24,7 +25,11 @@ const STATUS_BADGE: Record<string, string> = {
 
 export function DocumentsList() {
   const { t } = useTranslation();
+  const location = useLocation();
   const navigate = useNavigate();
+  const [autoOpenUploadDialog] = useState(
+    () => (location.state as { openUploadDialog?: boolean } | null)?.openUploadDialog === true,
+  );
   const docs = useDocuments();
   const upload = useUploadDocument();
   const remove = useDeleteDocument();
@@ -36,6 +41,15 @@ export function DocumentsList() {
   const targetUnits = useFiltersStore((s) => s.targetUnits);
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
+
+  useEffect(() => {
+    if (!autoOpenUploadDialog) return;
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: null,
+    });
+  }, [autoOpenUploadDialog, location.hash, location.pathname, location.search, navigate]);
+
   const handleUpload = (file: File): void => {
     upload.mutate(
       {
@@ -82,7 +96,11 @@ export function DocumentsList() {
           </div> : null}
 
           <div className="form document-upload-form">
-            <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
+            <PdfUploadZone
+              onFile={handleUpload}
+              uploading={isUploading}
+              autoOpen={autoOpenUploadDialog}
+            />
 
             {/* Statut d'import explicite (l'upload est synchrone cote serveur :
                 conversion Word->PDF, portail qualite -> plusieurs secondes).

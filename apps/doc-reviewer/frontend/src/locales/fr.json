@@ -23,20 +23,15 @@
   },
   "dashboard": {
     "title": "Tableau de bord",
-    "subtitle": "Indicateurs agrégés des suggestions",
     "kpis": "Indicateurs clés",
-    "bySev": "Suggestions par sévérité",
-    "byKind": "Suggestions par type de règle",
-    "topDocs": "Top documents (suggestions ouvertes)",
+    "bySev": "Erreurs par sévérité",
     "frequentErrors": "Erreurs les plus fréquentes",
     "frequentErrorsSummary": "Afficher les {{count}} erreurs les plus fréquentes",
     "frequentErrorsEmpty": "Aucune erreur recensée.",
-    "noOpen": "Aucune suggestion ouverte.",
+    "analyzeDocument": "Analyser un document",
     "kpi.pdfs": "Documents",
-    "kpi.open": "Ouvertes",
-    "kpi.applied": "Appliquées",
-    "kpi.rejected": "Rejetées",
-    "kpi.total": "Total"
+    "kpi.open": "Corrections proposées",
+    "kpi.rejected": "Corrections rejetées"
   },
   "arch": {
     "title": "Architecture",

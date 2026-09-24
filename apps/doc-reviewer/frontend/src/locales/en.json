@@ -23,20 +23,15 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Aggregated suggestion indicators",
     "kpis": "Key indicators",
-    "bySev": "Suggestions by severity",
-    "byKind": "Suggestions by rule kind",
-    "topDocs": "Top documents (open suggestions)",
+    "bySev": "Errors by severity",
     "frequentErrors": "Most frequent errors",
     "frequentErrorsSummary": "Show the {{count}} most frequent errors",
     "frequentErrorsEmpty": "No errors recorded.",
-    "noOpen": "No open suggestions.",
+    "analyzeDocument": "Analyze a document",
     "kpi.pdfs": "Documents",
-    "kpi.open": "Open",
-    "kpi.applied": "Applied",
-    "kpi.rejected": "Rejected",
-    "kpi.total": "Total"
+    "kpi.open": "Proposed corrections",
+    "kpi.rejected": "Rejected corrections"
   },
   "arch": {
     "title": "Architecture",
