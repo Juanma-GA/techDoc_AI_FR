@@ -13,9 +13,9 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 43
+    assert len(payload) == 47
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "90957ed50d8b80682feee753923c5deeb74d537586e422d7d687a4dadf53ce3f"
+        "3d747668f466bba560fdd5f051ad2a61d582a36537c251cd68be9173dbd60f07"
     )
 
     expected_controls = {
@@ -52,3 +52,14 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         assert check["operation"] == operation
         assert check["operation_params"] == {}
         assert check["expected"] is None
+
+    expected_conversions = {
+        "CUSTOM_PASCAL_INHG_CONVERSION": "pascal_to_inhg",
+        "CUSTOM_METRIC_LENGTH_INCH_CONVERSION": "metric_length_to_inch",
+        "CUSTOM_METRIC_MASS_LBF_CONVERSION": "metric_mass_to_lb",
+        "CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION": "metric_torque_to_lbf_in",
+    }
+    for code, policy in expected_conversions.items():
+        check = by_code[code]["checks"][0]
+        assert check["operator"] == "unit_conversion"
+        assert check["expected"] == policy

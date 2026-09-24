@@ -13,8 +13,12 @@ from app.checks.thales_rules.rules import (
     CUSTOM_HIGHLIGHTS_ATA_NUMBER,
     CUSTOM_HIGHLIGHTS_PNR_HEADER,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
+    CUSTOM_METRIC_LENGTH_INCH_CONVERSION,
+    CUSTOM_METRIC_MASS_LBF_CONVERSION,
+    CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,
+    CUSTOM_PASCAL_INHG_CONVERSION,
     CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_REPAIR_NOTE,
     CUSTOM_REPLACE_LEGACY_NAMES,
@@ -279,6 +283,24 @@ def test_punctuation_and_pressure_rules_keep_their_operation_parameters() -> Non
     assert punctuation.expected == "period_and_enumeration"
     assert pressure.operator == "pressure_conversion"
     assert pressure.expected == "bar_to_psi"
+
+
+def test_si_conversion_rules_use_supported_policies_on_modified_pages() -> None:
+    definitions_and_policies = (
+        (CUSTOM_PASCAL_INHG_CONVERSION, "pascal_to_inhg"),
+        (CUSTOM_METRIC_LENGTH_INCH_CONVERSION, "metric_length_to_inch"),
+        (CUSTOM_METRIC_MASS_LBF_CONVERSION, "metric_mass_to_lb"),
+        (CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION, "metric_torque_to_lbf_in"),
+    )
+
+    for definition, policy in definitions_and_policies:
+        check = definition.compiled_rule.checks[0]
+        assert definition.compiled_rule.severity == "error"
+        assert definition.compiled_rule.target.page_state == "modified"
+        assert check.operator == "unit_conversion"
+        assert check.expected == policy
+
+    assert "conversion numerique en lb" in CUSTOM_METRIC_MASS_LBF_CONVERSION.description
 
 
 def test_paragraph_justification_is_visual_and_scoped_to_modified_pages() -> None:

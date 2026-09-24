@@ -138,6 +138,7 @@ class Check(StrictModel):
         "regex_exists",
         "client_operation",
         "pressure_conversion",
+        "unit_conversion",
         "sentence_punctuation",
         "revision_consistency",
         "font_size_equals",
@@ -196,6 +197,13 @@ class Check(StrictModel):
                 raise ValueError(f"regex invalide: {exc.msg}") from exc
         if self.operator == "pressure_conversion" and self.expected != "bar_to_psi":
             raise ValueError("pressure_conversion requires expected='bar_to_psi'")
+        if self.operator == "unit_conversion" and self.expected not in {
+            "pascal_to_inhg",
+            "metric_length_to_inch",
+            "metric_mass_to_lb",
+            "metric_torque_to_lbf_in",
+        }:
+            raise ValueError("unit_conversion requires a supported conversion policy")
         if self.operator == "sentence_punctuation" and self.expected != "period_and_enumeration":
             raise ValueError(
                 "sentence_punctuation requires expected='period_and_enumeration'"
@@ -411,6 +419,14 @@ def _describe_check(check: Check) -> str:
             f"{check.field} doit contenir chaque pression en bar suivie de sa "
             "conversion numerique en p.s.i. entre parentheses"
         )
+    if check.operator == "unit_conversion":
+        descriptions = {
+            "pascal_to_inhg": "pressions en Pa converties en inHg",
+            "metric_length_to_inch": "longueurs metriques converties en pouces",
+            "metric_mass_to_lb": "masses metriques converties en lb",
+            "metric_torque_to_lbf_in": "couples metriques convertis en lbf.in",
+        }
+        return f"{check.field} doit contenir les {descriptions.get(str(check.expected), 'conversions d’unites')} entre parentheses"
     if check.operator == "revision_consistency":
         return (
             "coherence Highlights / liste des pages effectives / pied de page "

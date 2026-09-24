@@ -154,6 +154,26 @@ def test_revision_consistency_control_is_no_longer_closed() -> None:
     assert check.expected == "extension_defined_control"
 
 
+@pytest.mark.parametrize(
+    "policy",
+    [
+        "pascal_to_inhg",
+        "metric_length_to_inch",
+        "metric_mass_to_lb",
+        "metric_torque_to_lbf_in",
+    ],
+)
+def test_unit_conversion_operator_accepts_supported_policies(policy: str) -> None:
+    check = Check(field="text", operator="unit_conversion", expected=policy)
+
+    assert check.expected == policy
+
+
+def test_unit_conversion_operator_rejects_unknown_policy() -> None:
+    with pytest.raises(ValidationError, match="supported conversion policy"):
+        Check(field="text", operator="unit_conversion", expected="unknown_policy")
+
+
 def test_regex_checks_are_compiled_at_validation_time() -> None:
     Check(field="text", operator="regex", expected=r"\bTODO\b")
     Check(field="text", operator="regex_exists", expected=r"REV\s+\d+")
