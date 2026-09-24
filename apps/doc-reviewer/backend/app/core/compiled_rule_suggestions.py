@@ -29,6 +29,7 @@ from app.core.compiled_rule_operators import (
     matching_font_spans,
     normalize,
     pressure_conversion_issues,
+    unit_conversion_issues,
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
@@ -78,7 +79,18 @@ def deterministic_suggestions(
             suggestions.extend(regex_suggestions(rule, check, targets, rule_kind, message, ctx))
         elif check.operator == "pressure_conversion":
             suggestions.extend(
-                pressure_conversion_suggestions(
+                unit_conversion_suggestions(
+                    rule,
+                    check,
+                    targets,
+                    rule_kind,
+                    message,
+                    ctx.pdf_pages,
+                )
+            )
+        elif check.operator == "unit_conversion":
+            suggestions.extend(
+                unit_conversion_suggestions(
                     rule,
                     check,
                     targets,
@@ -1155,7 +1167,7 @@ def _temperature_fahrenheit_replacement(original: str) -> str:
     return f"{original} ({first}{second} deg. F)"
 
 
-def pressure_conversion_suggestions(
+def unit_conversion_suggestions(
     rule: CompiledRule,
     check: Check,
     targets: list[_TextTarget],
@@ -1165,7 +1177,12 @@ def pressure_conversion_suggestions(
 ) -> list[RawSuggestion]:
     suggestions: list[RawSuggestion] = []
     for target in targets:
-        for issue in pressure_conversion_issues(target.text, str(check.expected)):
+        issues = (
+            pressure_conversion_issues(target.text, str(check.expected))
+            if check.operator == "pressure_conversion"
+            else unit_conversion_issues(target.text, str(check.expected))
+        )
+        for issue in issues:
             suggestions.append(
                 RawSuggestion(
                     rule_kind=rule_kind,

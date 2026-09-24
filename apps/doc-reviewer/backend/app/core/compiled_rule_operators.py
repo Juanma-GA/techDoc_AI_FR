@@ -37,19 +37,137 @@ from app.core.compiled_rule_runtime import (
 _logger = get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class UnitConversionPolicy:
+    source_pattern: re.Pattern[str]
+    target_pattern: re.Pattern[str]
+    factors: Mapping[str, Decimal]
+    target_unit: str
+    source_modifier_pattern: re.Pattern[str] | None = None
+    significant_digits: int | None = None
+
+
 _PRESSURE_VALUE_PATTERN = r"[+-]?\d+(?:[.,]\d+)?"
+_PERCENT_UNCERTAINTY_PATTERN = re.compile(
+    r"[ \t]*(?P<modifier>(?:\+/-|\+-|\+|\u00b1)[ \t]*"
+    rf"[+-]?{_PRESSURE_VALUE_PATTERN}[ \t]*%)"
+)
 _BAR_PRESSURE_RE = re.compile(
-    rf"(?P<value>{_PRESSURE_VALUE_PATTERN})\s*bar\b",
+    rf"(?P<value>{_PRESSURE_VALUE_PATTERN})\s*(?P<unit>bar)\b",
     re.IGNORECASE,
 )
 _BAR_PSI_CONVERSION_RE = re.compile(
     rf"[ \t]*\(\s*(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
-    r"(?:psi|p\s*\.?\s*s\s*\.?\s*i\s*\.?)\s*\)",
+    r"(?:psi|p\s*\.?\s*s\s*\.?\s*i\s*\.?)"
+    r"(?P<modifier>[ \t]*(?:\+/-|\+-|\+|\u00b1)[ \t]*"
+    rf"[+-]?{_PRESSURE_VALUE_PATTERN}[ \t]*%)?\s*\)",
     re.IGNORECASE,
 )
 _PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
 _BAR_TO_PSI = Decimal("14.5037738")
-_PRESSURE_DISPLAY_TOLERANCE = Decimal("0.005")
+_KG_TO_LB = Decimal(1) / Decimal("0.45359237")
+_NM_TO_LBF_IN = Decimal("8.850745767378715")
+_UNIT_CONVERSION_POLICIES = {
+    "bar_to_psi": UnitConversionPolicy(
+        source_pattern=_BAR_PRESSURE_RE,
+        target_pattern=_BAR_PSI_CONVERSION_RE,
+        factors={"bar": _BAR_TO_PSI},
+        target_unit="p.s.i.",
+        source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
+        significant_digits=4,
+    ),
+    "pascal_to_inhg": UnitConversionPolicy(
+        source_pattern=re.compile(
+            rf"(?<![\w.])(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"(?P<unit>GPa|MPa|kPa|hPa|Pa)\b"
+        ),
+        target_pattern=re.compile(
+            rf"[ \t]*\(\s*(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"in\s*\.?\s*Hg"
+            r"(?P<modifier>[ \t]*(?:\+/-|\+-|\+|\u00b1)[ \t]*"
+            rf"[+-]?{_PRESSURE_VALUE_PATTERN}[ \t]*%)?\s*\)",
+            re.IGNORECASE,
+        ),
+        factors={
+            "pa": Decimal(1) / Decimal("3386.389"),
+            "hpa": Decimal(100) / Decimal("3386.389"),
+            "kpa": Decimal(1000) / Decimal("3386.389"),
+            "mpa": Decimal("1000000") / Decimal("3386.389"),
+            "gpa": Decimal("1000000000") / Decimal("3386.389"),
+        },
+        target_unit="inHg",
+        source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
+    ),
+    "metric_length_to_inch": UnitConversionPolicy(
+        source_pattern=re.compile(
+            rf"(?<![\w.])(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"(?P<unit>km|cm|mm|m)\b",
+            re.IGNORECASE,
+        ),
+        target_pattern=re.compile(
+            rf"[ \t]*\(\s*(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"(?:inch(?:es)?|in\.?)"
+            r"(?P<modifier>[ \t]*(?:\+/-|\+-|\+|\u00b1)[ \t]*"
+            rf"[+-]?{_PRESSURE_VALUE_PATTERN}[ \t]*%)?\s*\)",
+            re.IGNORECASE,
+        ),
+        factors={
+            "mm": Decimal(1) / Decimal("25.4"),
+            "cm": Decimal(10) / Decimal("25.4"),
+            "m": Decimal(1000) / Decimal("25.4"),
+            "km": Decimal("1000000") / Decimal("25.4"),
+        },
+        target_unit="in.",
+        source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
+    ),
+    "metric_mass_to_lb": UnitConversionPolicy(
+        source_pattern=re.compile(
+            rf"(?<![\w.])(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"(?P<unit>tonnes?|kg|mg|g|t)\b",
+            re.IGNORECASE,
+        ),
+        target_pattern=re.compile(
+            rf"[ \t]*\(\s*(?P<value>{_PRESSURE_VALUE_PATTERN})\s*lb\b"
+            r"(?P<modifier>[ \t]*(?:\+/-|\+-|\+|\u00b1)[ \t]*"
+            rf"[+-]?{_PRESSURE_VALUE_PATTERN}[ \t]*%)?\s*\)",
+            re.IGNORECASE,
+        ),
+        factors={
+            "mg": _KG_TO_LB / Decimal("1000000"),
+            "g": _KG_TO_LB / Decimal("1000"),
+            "kg": _KG_TO_LB,
+            "t": _KG_TO_LB * Decimal("1000"),
+            "tonne": _KG_TO_LB * Decimal("1000"),
+            "tonnes": _KG_TO_LB * Decimal("1000"),
+        },
+        target_unit="lb",
+        source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
+        significant_digits=3,
+    ),
+    "metric_torque_to_lbf_in": UnitConversionPolicy(
+        source_pattern=re.compile(
+            rf"(?<![\w.])(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"(?P<force_unit>kN|daN|N)\s*(?:[.·*]\s*)?"
+            r"(?P<length_unit>mm|cm|m)\b"
+        ),
+        target_pattern=re.compile(
+            rf"[ \t]*\(\s*(?P<value>{_PRESSURE_VALUE_PATTERN})\s*"
+            r"lbf\s*(?:[.·*]\s*|\s+)in"
+            r"(?P<modifier>[ \t]*(?:\+/-|\+-|\+|\u00b1)[ \t]*"
+            rf"[+-]?{_PRESSURE_VALUE_PATTERN}[ \t]*%)?\s*\)",
+            re.IGNORECASE,
+        ),
+        factors={
+            f"{force_unit}:{length_unit}": Decimal(force_factor)
+            * Decimal(length_factor)
+            * _NM_TO_LBF_IN
+            for force_unit, force_factor in (("N", 1), ("daN", 10), ("kN", 1000))
+            for length_unit, length_factor in (("mm", "0.001"), ("cm", "0.01"), ("m", 1))
+        },
+        target_unit="lbf.in",
+        source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
+    ),
+}
 FONT_SIZE_TOLERANCE = 0.1
 _ENUMERATION_START_RE = re.compile(
     r"^\s*(?P<marker>(?:[-*]|\([A-Za-z0-9]+\)|[A-Z]\.\s*|\d+[.)]\s+))"
@@ -105,30 +223,114 @@ class _PunctuationBlock:
     last_end: int
 
 
-def _format_psi(value: Decimal) -> str:
-    rounded = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return f"{rounded:.2f}"
-
-
 def pressure_conversion_issues(
     text: str,
     policy: str = "bar_to_psi",
 ) -> list[PressureConversionIssue]:
     """Return bar values missing or carrying an incorrect psi conversion."""
-    if policy != "bar_to_psi":
+    return unit_conversion_issues(text, policy)
+
+
+def _uncertainty_key(modifier: str | None) -> tuple[str, Decimal] | None:
+    if modifier is None:
+        return None
+    match = re.fullmatch(
+        rf"(?:\+/-|\+-|\+|\u00b1)\s*"
+        rf"(?P<value>[+-]?{_PRESSURE_VALUE_PATTERN})\s*%",
+        modifier.strip(),
+    )
+    if match is None:
+        return None
+    try:
+        value = Decimal(match.group("value").replace(",", "."))
+    except InvalidOperation:
+        return None
+    return "plus_minus_percent", value
+
+
+def _uncertainty_matches(source: str | None, converted: str | None) -> bool:
+    return _uncertainty_key(source) == _uncertainty_key(converted)
+
+
+def unit_conversion_issues(
+    text: str,
+    policy: str,
+) -> list[PressureConversionIssue]:
+    """Return SI values missing or carrying an incorrect paired conversion."""
+    conversion_policy = _UNIT_CONVERSION_POLICIES.get(policy)
+    if conversion_policy is None:
         return []
 
     issues: list[PressureConversionIssue] = []
-    for source_match in _BAR_PRESSURE_RE.finditer(text):
+    ignored_until = 0
+    for source_match in conversion_policy.source_pattern.finditer(text):
+        if source_match.start() < ignored_until:
+            continue
         try:
-            bar_value = Decimal(source_match.group("value").replace(",", "."))
+            source_value = Decimal(source_match.group("value").replace(",", "."))
         except InvalidOperation:
             continue
 
-        expected_value = bar_value * _BAR_TO_PSI
-        expected_conversion = f"({_format_psi(expected_value)} p.s.i.)"
-        conversion_match = _BAR_PSI_CONVERSION_RE.match(text, source_match.end())
-        original_end = source_match.end()
+        if "force_unit" in source_match.groupdict():
+            unit_key = (
+                f"{source_match.group('force_unit')}:"
+                f"{source_match.group('length_unit')}"
+            )
+        else:
+            unit_key = source_match.group("unit").casefold()
+        factor = conversion_policy.factors.get(unit_key)
+        if factor is None:
+            continue
+
+        source_modifier_match = (
+            conversion_policy.source_modifier_pattern.match(text, source_match.end())
+            if conversion_policy.source_modifier_pattern is not None
+            else None
+        )
+        conversion_start = (
+            source_modifier_match.end()
+            if source_modifier_match is not None
+            else source_match.end()
+        )
+        source_modifier = (
+            source_modifier_match.group("modifier")
+            if source_modifier_match is not None
+            else None
+        )
+
+        expected_value = source_value * factor
+        if conversion_policy.significant_digits is not None and expected_value != 0:
+            precision = (
+                conversion_policy.significant_digits - 1 - expected_value.adjusted()
+            )
+        elif conversion_policy.significant_digits is not None:
+            precision = conversion_policy.significant_digits - 1
+        else:
+            absolute_value = abs(expected_value)
+            precision = (
+                2
+                if absolute_value >= Decimal("0.01") or absolute_value == 0
+                else 4
+                if absolute_value >= Decimal("0.0001")
+                else 8
+            )
+        display_quantum = Decimal(1).scaleb(-precision)
+        formatted_value = expected_value.quantize(
+            display_quantum,
+            rounding=ROUND_HALF_UP,
+        )
+        rendered_precision = max(precision, 0)
+        expected_conversion = (
+            f"({formatted_value:.{rendered_precision}f} {conversion_policy.target_unit}"
+        )
+        if source_modifier is not None:
+            expected_conversion += f" {source_modifier}"
+        expected_conversion += ")"
+        conversion_match = conversion_policy.target_pattern.match(
+            text,
+            conversion_start,
+        )
+        original_end = conversion_start
         valid_conversion = False
         if conversion_match is not None:
             original_end = conversion_match.end()
@@ -140,21 +342,26 @@ def pressure_conversion_issues(
                 observed_value = None
             if observed_value is not None:
                 valid_conversion = (
-                    abs(observed_value - expected_value)
-                    <= _PRESSURE_DISPLAY_TOLERANCE
+                    abs(observed_value - expected_value) <= display_quantum / 2
+                )
+                observed_modifier = conversion_match.groupdict().get("modifier")
+                valid_conversion = valid_conversion and _uncertainty_matches(
+                    source_modifier,
+                    observed_modifier,
                 )
         else:
-            parenthesized = _PARENTHESIZED_VALUE_RE.match(text, source_match.end())
+            parenthesized = _PARENTHESIZED_VALUE_RE.match(text, conversion_start)
             if parenthesized is not None:
                 original_end = parenthesized.end()
+                ignored_until = original_end
 
         if valid_conversion:
             continue
-        source = source_match.group(0)
+        source = text[source_match.start() : conversion_start]
         issues.append(
             PressureConversionIssue(
                 original=text[source_match.start() : original_end],
-                proposed=f"{source} {expected_conversion}",
+            proposed=f"{source} {expected_conversion}",
                 expected=expected_conversion,
                 span=(source_match.start(), original_end),
             )
@@ -455,6 +662,14 @@ def evaluate_check(
         policy = str(check.expected)
         for target, value in values:
             issues = pressure_conversion_issues(value or "", policy)
+            if issues:
+                issue = issues[0]
+                return "FAIL", target, issue.original, issue.expected
+        return "PASS", values[0][0], None, policy
+    if check.operator == "unit_conversion":
+        policy = str(check.expected)
+        for target, value in values:
+            issues = unit_conversion_issues(value or "", policy)
             if issues:
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected

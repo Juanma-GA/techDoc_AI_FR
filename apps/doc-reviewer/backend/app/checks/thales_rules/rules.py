@@ -855,6 +855,126 @@ CUSTOM_BAR_PSI_CONVERSION = rule(
     },
 )
 
+CUSTOM_PASCAL_INHG_CONVERSION = rule(
+    code="CUSTOM_PASCAL_INHG_CONVERSION",
+    name="Pression en pascals accompagnee de sa conversion en inHg",
+    description=(
+        "Toute pression exprimee en Pa, hPa, kPa, MPa ou GPa doit etre suivie "
+        "de sa conversion numerique en inHg entre parentheses."
+    ),
+    message="La pression en pascals doit etre suivie de sa conversion en inHg.",
+    kind="field_required",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="unit_conversion",
+            expected="pascal_to_inhg",
+        ),
+    ],
+    failure_message="conversion inHg absente ou incorrecte pour une pression en pascals.",
+    translations={
+        "en": {
+            "description": (
+                "Every pressure expressed in Pa, hPa, kPa, MPa, or GPa must be "
+                "followed by its numeric conversion in inHg in parentheses."
+            ),
+            "message": "A pressure in pascals must be followed by its inHg conversion.",
+        }
+    },
+)
+
+CUSTOM_METRIC_LENGTH_INCH_CONVERSION = rule(
+    code="CUSTOM_METRIC_LENGTH_INCH_CONVERSION",
+    name="Longueur metrique accompagnee de sa conversion en pouces",
+    description=(
+        "Toute longueur exprimee en mm, cm, m ou km doit etre suivie de sa "
+        "conversion numerique en in. entre parentheses."
+    ),
+    message="La longueur metrique doit etre suivie de sa conversion en in.",
+    kind="field_required",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="unit_conversion",
+            expected="metric_length_to_inch",
+        ),
+    ],
+    failure_message="conversion en pouces absente ou incorrecte pour une longueur metrique.",
+    translations={
+        "en": {
+            "description": (
+                "Every length expressed in mm, cm, m, or km must be followed by "
+                "its numeric conversion in inches in parentheses."
+            ),
+            "message": "A metric length must be followed by its inch conversion.",
+        }
+    },
+)
+
+CUSTOM_METRIC_MASS_LBF_CONVERSION = rule(
+    code="CUSTOM_METRIC_MASS_LBF_CONVERSION",
+    name="Masse metrique accompagnee de sa conversion en lb",
+    description=(
+        "Toute masse exprimee en mg, g, kg ou tonne doit etre suivie entre "
+        "parentheses de sa conversion numerique en lb."
+    ),
+    message="La masse metrique doit etre suivie de sa conversion en lb.",
+    kind="field_required",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="unit_conversion",
+            expected="metric_mass_to_lb",
+        ),
+    ],
+    failure_message="conversion lb absente ou incorrecte pour une masse metrique.",
+    translations={
+        "en": {
+            "description": (
+                "Every mass expressed in mg, g, kg, or tonnes must be followed by "
+                "its numeric conversion in lb in parentheses."
+            ),
+            "message": "A metric mass must be followed by its conversion in lb.",
+        }
+    },
+)
+
+CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION = rule(
+    code="CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION",
+    name="Couple metrique accompagne de sa conversion en lbf.in",
+    description=(
+        "Tout couple exprime en N.m, daN.m ou kN.m doit etre suivi de sa "
+        "conversion numerique en lbf.in entre parentheses."
+    ),
+    message="Le couple metrique doit etre suivi de sa conversion en lbf.in.",
+    kind="field_required",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="unit_conversion",
+            expected="metric_torque_to_lbf_in",
+        ),
+    ],
+    failure_message="conversion lbf.in absente ou incorrecte pour un couple metrique.",
+    translations={
+        "en": {
+            "description": (
+                "Every torque expressed in N.m, daN.m, or kN.m must be followed "
+                "by its numeric conversion in lbf.in in parentheses."
+            ),
+            "message": "A metric torque must be followed by its lbf.in conversion.",
+        }
+    },
+)
+
 CUSTOM_REPAIR_NOTE = rule(
     code="CUSTOM_REPAIR_NOTE",
     name="Introduction et categories obligatoires dans les NOTE des pages REPAIR",
@@ -1698,6 +1818,10 @@ RULE_DEFINITIONS = (
     CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_TEMPERATURE_FAHRENHEIT,
     CUSTOM_BAR_PSI_CONVERSION,
+    CUSTOM_PASCAL_INHG_CONVERSION,
+    CUSTOM_METRIC_LENGTH_INCH_CONVERSION,
+    CUSTOM_METRIC_MASS_LBF_CONVERSION,
+    CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION,
     CUSTOM_FORBIDDEN_CONSUMABLES,
     CUSTOM_REPLACE_LEGACY_NAMES,
     CUSTOM_NO_DEGREE_C_SYMBOL,

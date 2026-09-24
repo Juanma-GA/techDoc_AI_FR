@@ -41,8 +41,8 @@ Utilise uniquement ces valeurs :
 execution: deterministic | semantic | manual | unsupported
 field pour document_text : text | page_number | document_type | important_notice ou une cle de client_mapping.entities.
 field pour document_meta et only_if : une cle de client_mapping.fields.
-operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field | font_size_equals
-expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals, un nombre de points pour font_size_equals,
+operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field | font_size_equals | unit_conversion
+expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals, une politique parmi pascal_to_inhg/metric_length_to_inch/metric_mass_to_lb/metric_torque_to_lbf_in pour unit_conversion, un nombre de points pour font_size_equals,
   une LISTE de chaînes pour contains_any/contains_all/contains_none, absent (null) pour equals_field.
   N'utilise jamais la clé `value`.
 

@@ -2280,6 +2280,58 @@ def test_bar_pressure_requires_a_parenthesized_psi_conversion() -> None:
     assert wrong_value_suggestions[0].original == "0.7 bar (10.25 p.s.i.)"
     assert wrong_value_suggestions[0].proposed == "0.7 bar (10.15 p.s.i.)"
 
+    tolerance, tolerance_suggestions = execute_pdf_rules(
+        _pdf("Pressure: 0.7 bar + 3% (10.15 p.s.i. + 3%)"),
+        [rule],
+    )
+    assert tolerance[0].status == "PASS"
+    assert tolerance_suggestions == []
+
+
+def test_thales_si_units_require_parenthesized_imperial_conversions() -> None:
+    cases = [
+        (
+            "CUSTOM_PASCAL_INHG_CONVERSION",
+            "Pressure: 101.325 kPa +- 3% (29.92 inHg + 3%)",
+            "Pressure: 101.325 kPa + 3% (30.10 inHg + 3%)",
+            "101.325 kPa + 3% (29.92 inHg + 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_LENGTH_INCH_CONVERSION",
+            "Length: 2.54 cm +- 3% (1.00 in. + 3%)",
+            "Length: 2.54 cm + 3% (1.10 in. + 3%)",
+            "2.54 cm + 3% (1.00 in. + 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_MASS_LBF_CONVERSION",
+            "Mass: 400 g +- 3% (0.882 lb + 3%)",
+            "Mass: 400 g + 3% (0.90 lb + 3%)",
+            "400 g + 3% (0.882 lb + 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_MASS_LBF_CONVERSION",
+            "Mass: 400 g +- 3% (0.882 lb +- 3%)",
+            "Mass: 400 g +- 3% (0.90 lb +- 2%)",
+            "400 g +- 3% (0.882 lb +- 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION",
+            "Torque: 1 daN.m +- 3% (88.51 lbf.in + 3%)",
+            "Torque: 1 daN.m + 3% (88.00 lbf.in + 3%)",
+            "1 daN.m + 3% (88.51 lbf.in + 3%)",
+        ),
+    ]
+
+    for rule_code, valid_text, invalid_text, expected_proposal in cases:
+        rule = _rule(rule_code)
+        valid, valid_suggestions = execute_pdf_rules(_pdf(valid_text), [rule])
+        invalid, invalid_suggestions = execute_pdf_rules(_pdf(invalid_text), [rule])
+
+        assert valid[0].status == "PASS", rule_code
+        assert valid_suggestions == [], rule_code
+        assert invalid[0].status == "FAIL", rule_code
+        assert invalid_suggestions[0].proposed == expected_proposal, rule_code
+
 
 def test_forbidden_consumables_are_reported_by_one_rule() -> None:
     rule = _rule("CUSTOM_FORBIDDEN_CONSUMABLES")
