@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
+from app.checks.client_bundle import (
+    ClientOperation,
+    ClientOperationContext,
+    OperationResult,
+)
 from app.core.compiled_rules import (
     Check,
     Condition,
@@ -29,6 +36,15 @@ from app.core.compiled_rule_runtime import (
 )
 
 _logger = get_logger(__name__)
+
+_CLIENT_OPERATIONS: dict[str, ClientOperation[Any]] = {}
+
+
+def register_client_operation(operation: ClientOperation[Any]) -> None:
+    existing = _CLIENT_OPERATIONS.get(operation.name)
+    if existing is not None and existing != operation:
+        raise ValueError(f"client operation already registered: {operation.name}")
+    _CLIENT_OPERATIONS[operation.name] = operation
 
 
 _PRESSURE_VALUE_PATTERN = r"[+-]?\d+(?:[.,]\d+)?"
@@ -420,7 +436,18 @@ def evaluate_check(
     ctx: _EvalContext,
     rule_id: str,
 ) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
-    values = [(target, field_value(check.field, target.text, target.page)) for target in targets]
+    values = [
+        (
+            target,
+            field_value(
+                check.field,
+                target.text,
+                target.page,
+                ctx.client_entities,
+            ),
+        )
+        for target in targets
+    ]
     expected = None if check.expected is None or isinstance(check.expected, list) else str(check.expected)
     if check.operator == "exists":
         match = next(((target, value) for target, value in values if value and (expected is None or expected in value)), None)
@@ -453,14 +480,14 @@ def evaluate_check(
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.proposed
         return "PASS", values[0][0], None, str(check.expected)
-    if check.operator == "revision_consistency":
-        return evaluate_revision_consistency(check, targets, ctx)
-    if check.operator == "shop_verification":
-        return evaluate_shop_verification(check, targets, ctx)
-    if check.operator == "highlights_holder":
-        return evaluate_highlights_holder(check, targets, ctx)
-    if check.operator == "highlights_document_type":
-        return evaluate_highlights_document_type(check, targets, ctx)
+    if check.operator in {
+        "client_operation",
+        "revision_consistency",
+        "shop_verification",
+        "highlights_holder",
+        "highlights_document_type",
+    }:
+        return evaluate_client_operation(check, targets, ctx)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -502,6 +529,13 @@ def evaluate_check(
             observed = left[1] if left else None
             return "INCONCLUSIVE", fallback, observed, right_value
 
+        right_values = right_value if isinstance(right_value, list) else [right_value]
+        expected_display = (
+            json.dumps(right_values, ensure_ascii=False)
+            if isinstance(right_value, list)
+            else right_value
+        )
+
         first_missing: tuple[_TextTarget, None] | None = None
         first_mismatch: tuple[_TextTarget, str] | None = None
         last_match: tuple[_TextTarget, str] | None = None
@@ -511,21 +545,21 @@ def evaluate_check(
                     first_missing = (target, None)
                 continue
             observed = normalize(value, check.normalization)
-            if observed != right_value and first_mismatch is None:
+            if observed not in right_values and first_mismatch is None:
                 first_mismatch = (target, observed)
-            elif observed == right_value:
+            elif observed in right_values:
                 last_match = (target, observed)
 
         if first_mismatch is not None:
             target, observed = first_mismatch
-            return "FAIL", target, observed, right_value
+            return "FAIL", target, observed, expected_display
         if first_missing is not None:
             target, _observed = first_missing
-            return "INCONCLUSIVE", target, None, right_value
+            return "INCONCLUSIVE", target, None, expected_display
         if last_match is not None:
             target, observed = last_match
-            return "PASS", target, observed, right_value
-        return "INCONCLUSIVE", targets[0], None, right_value
+            return "PASS", target, observed, expected_display
+        return "INCONCLUSIVE", targets[0], None, expected_display
     if check.operator == "normalized_equals":
         expected_value = normalize(expected or "", check.normalization)
         first_missing: tuple[_TextTarget, None] | None = None
@@ -563,7 +597,12 @@ def evaluate_check(
     return "FAIL", values[0][0], values[0][1], expected
 
 
-def field_value(field: str, text: str, page: str) -> str | None:
+def field_value(
+    field: str,
+    text: str,
+    page: str,
+    client_entities: Mapping[str, str] | None = None,
+) -> str | None:
     if field == "text":
         return text
     if field == "page_number":
@@ -579,7 +618,8 @@ def field_value(field: str, text: str, page: str) -> str | None:
         if end is None:
             return None
         return text[start.start() : end.end()].strip()
-    pattern = _ENTITY_PATTERNS.get(field)
+    pattern_text = (client_entities or {}).get(field)
+    pattern = re.compile(pattern_text) if pattern_text is not None else _ENTITY_PATTERNS.get(field)
     match = pattern.search(text) if pattern else None
     return match.group(1).strip() if match else None
 
@@ -587,12 +627,13 @@ def field_value(field: str, text: str, page: str) -> str | None:
 def matching_font_spans(
     check: Check,
     target: _TextTarget,
+    client_entities: Mapping[str, str] | None = None,
 ) -> list[tuple[int, int, str, tuple[float, float, float, float], float, str]]:
     """Return spans matching the entity and any logo-specific identity rules."""
     matches: list[tuple[int, int, str, tuple[float, float, float, float], float, str]] = []
     for start, end, bbox, size, font in target.span_ranges:
         original = target.text[start:end]
-        if field_value(check.field, original, target.page) is None:
+        if field_value(check.field, original, target.page, client_entities) is None:
             continue
         if check.field == "thales_logo_t":
             if start != 0 or original.strip() != "T" or "thales" not in font.casefold():
@@ -618,7 +659,11 @@ def evaluate_font_size(
     for target in targets:
         matching_sizes = [
             (original, size)
-            for _start, _end, original, _bbox, size, _font in matching_font_spans(check, target)
+            for _start, _end, original, _bbox, size, _font in matching_font_spans(
+                check,
+                target,
+                ctx.client_entities,
+            )
         ]
         if not matching_sizes:
             if first_missing is None:
@@ -646,92 +691,83 @@ def evaluate_font_size(
     return "INCONCLUSIVE", targets[0], None, expected_display
 
 
-def revision_findings(check: Check, ctx: _EvalContext) -> list[Any]:
-    """Divergences between Highlights, LEP and footers for one control.
-
-    The state is built once per parsed document (and already by the page
-    classifier, before any rule runs) so the cross-source controls share a single
-    extraction pass.
-    """
-    if ctx.is_docx or ctx.parsed_pdf is None:
-        return []
-    from app.checks.standards import thales_custom
-
-    state = thales_custom.revision_state(ctx.parsed_pdf, ctx.document)
-    return thales_custom.revision.findings_for(state, str(check.expected))
-
-
-def evaluate_revision_consistency(
+def evaluate_client_operation(
     check: Check,
     targets: list[_TextTarget],
     ctx: _EvalContext,
 ) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
-    if ctx.is_docx or ctx.parsed_pdf is None:
-        return "INCONCLUSIVE", targets[0], None, str(check.expected)
-    findings = revision_findings(check, ctx)
-    if not findings:
-        return "PASS", targets[0], None, str(check.expected)
-    finding = findings[0]
+    operation_name = check.operation
+    parameters = check.operation_params
+    if check.operator in {
+        "revision_consistency",
+        "shop_verification",
+        "highlights_holder",
+        "highlights_document_type",
+    }:
+        operation_name = check.operator
+        parameters = (
+            {"control": str(check.expected)}
+            if check.operator == "revision_consistency"
+            else {}
+        )
+    if not operation_name:
+        raise ValueError("client_operation check requires an operation name")
+    operation_registry = (
+        ctx.client_operations if ctx.client_operations is not None else _CLIENT_OPERATIONS
+    )
+    operation = operation_registry.get(operation_name)
+    if operation is None:
+        raise ValueError(f"unknown client operation: {operation_name}")
+    operation_context = ClientOperationContext(
+        runtime=ctx,
+        check=check,
+        targets=tuple(targets),
+    )
+    result = operation.execute(operation_context, parameters)
     target = next(
-        (item for item in targets if item.raw_page == finding.page),
+        (item for item in targets if result.page is not None and item.raw_page == result.page),
         targets[0],
     )
-    return "FAIL", target, finding.original or finding.message, finding.proposed or None
+    observed = result.observed if result.observed is not None else result.original
+    expected = result.expected if result.expected is not None else result.proposed
+    return result.status, target, observed, expected
 
 
-def evaluate_shop_verification(
+def client_operation_suggestions(
     check: Check,
     targets: list[_TextTarget],
     ctx: _EvalContext,
-) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
-    from app.checks.standards import thales_custom
-
-    expected = thales_custom.shop_verification_text(ctx.document)
-    first_failure: tuple[_TextTarget, str | None] | None = None
-    for target in targets:
-        observed = thales_custom.shop_verification_section(target.text)
-        if thales_custom.shop_verification_matches(target.text, expected):
-            continue
-        if first_failure is None:
-            first_failure = (target, observed or None)
-    if first_failure is None:
-        return "PASS", targets[-1], expected, expected
-    target, observed = first_failure
-    return "FAIL", target, observed, expected
-
-
-def evaluate_highlights_holder(
-    check: Check,
-    targets: list[_TextTarget],
-    ctx: _EvalContext,
-) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
-    from app.checks.standards import thales_custom
-
-    expected = thales_custom.highlights_holder_expected(ctx.parsed_pdf)
-    if expected is None:
-        return "INCONCLUSIVE", targets[0], None, None
-    for target in targets:
-        if not thales_custom.highlights_holder_matches(target.text, expected):
-            observed = thales_custom.highlights_holder_observed(target.text)
-            return "FAIL", target, observed or None, expected
-    return "PASS", targets[-1], expected, expected
-
-
-def evaluate_highlights_document_type(
-    check: Check,
-    targets: list[_TextTarget],
-    ctx: _EvalContext,
-) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
-    from app.checks.standards import thales_custom
-
-    expected_options = " / ".join(thales_custom._DOCUMENT_TYPES)
-    for target in targets:
-        if thales_custom.highlights_document_type_matches(target.text):
-            continue
-        observed = thales_custom.highlights_document_type_observed(target.text)
-        expected = thales_custom.highlights_document_type_expected(target.text)
-        return "FAIL", target, observed or None, expected or expected_options
-    return "PASS", targets[-1], expected_options, expected_options
+) -> list[OperationResult]:
+    operation_name = check.operation
+    parameters = check.operation_params
+    if check.operator in {
+        "revision_consistency",
+        "shop_verification",
+        "highlights_holder",
+        "highlights_document_type",
+    }:
+        operation_name = check.operator
+        parameters = (
+            {"control": str(check.expected)}
+            if check.operator == "revision_consistency"
+            else {}
+        )
+    if not operation_name:
+        raise ValueError("client_operation check requires an operation name")
+    operation_registry = (
+        ctx.client_operations if ctx.client_operations is not None else _CLIENT_OPERATIONS
+    )
+    operation = operation_registry.get(operation_name)
+    if operation is None:
+        raise ValueError(f"unknown client operation: {operation_name}")
+    if operation.suggestions is None:
+        return []
+    operation_context = ClientOperationContext(
+        runtime=ctx,
+        check=check,
+        targets=tuple(targets),
+    )
+    return operation.suggestions(operation_context, parameters)
 
 
 def extract_year(value: str) -> str:
@@ -762,20 +798,39 @@ def normalize(value: str, steps: list[str] | None) -> str:
 
 def condition_met(condition: Condition, ctx: _EvalContext) -> bool:
     value = resolve_meta_value(condition.field, ctx.document)
-    present = bool(value and value.strip())
+    present = bool(value) and (
+        any(str(item).strip() for item in value)
+        if isinstance(value, list)
+        else bool(str(value).strip())
+    )
     return present if condition.state == "present" else not present
 
 
-def resolve_meta_value(field: str, document: Any | None) -> str | None:
-    value = getattr(document, field, None) if document is not None else None
-    if value and str(value).strip():
+def resolve_meta_value(field: str, document: Any | None) -> str | list[str] | None:
+    if document is None:
+        return None
+    metadata = getattr(document, "client_metadata", None)
+    value = metadata.get(field) if isinstance(metadata, Mapping) and field in metadata else getattr(
+        document,
+        field,
+        None,
+    )
+    if isinstance(value, list):
+        values = [str(item).strip() for item in value if str(item).strip()]
+        return values or None
+    if value is not None and str(value).strip():
         return str(value).strip()
     return None
 
 
-def resolve_field_ref(ref: FieldRef, ctx: _EvalContext) -> tuple[_TextTarget | None, str | None]:
+def resolve_field_ref(
+    ref: FieldRef,
+    ctx: _EvalContext,
+) -> tuple[_TextTarget | None, str | list[str] | None]:
     if ref.source == "document_meta":
         raw = resolve_meta_value(ref.field, ctx.document)
+        if isinstance(raw, list):
+            return None, [normalize(value, ref.normalization) for value in raw]
         return None, (normalize(raw, ref.normalization) if raw is not None else None)
     scoped = scope_targets(
         RuleTarget(page=ref.page, region=ref.region),
@@ -787,7 +842,7 @@ def resolve_field_ref(ref: FieldRef, ctx: _EvalContext) -> tuple[_TextTarget | N
     if not scoped:
         return None, None
     for target in scoped:
-        raw = field_value(ref.field, target.text, target.page)
+        raw = field_value(ref.field, target.text, target.page, ctx.client_entities)
         if raw:
             return target, normalize(raw, ref.normalization)
     return scoped[0], None
@@ -862,9 +917,8 @@ def resolve_regex_pattern(
     pattern: str,
     ctx: _EvalContext,
 ) -> tuple[str, list[str], list[str]]:
-    from app.core.compiled_rule_runtime import _CONTEXT_TOKEN_RE, document_metadata
+    from app.core.compiled_rule_runtime import _CONTEXT_TOKEN_RE
 
-    metadata = document_metadata(ctx.document)
     context_fields: list[str] = []
     missing_context: list[str] = []
 
@@ -872,30 +926,39 @@ def resolve_regex_pattern(
         field = match.group(1)
         if field not in context_fields:
             context_fields.append(field)
-        value = metadata.get(field)
-        if value is None:
+        raw = resolve_meta_value(field, ctx.document)
+        if raw is None:
             missing_context.append(field)
             return match.group(0)
-        return re.escape(value)
+        if isinstance(raw, list):
+            return "(?:" + "|".join(re.escape(item) for item in raw) + ")"
+        return re.escape(raw)
 
     resolved = _CONTEXT_TOKEN_RE.sub(replace_token, pattern)
     return resolved, context_fields, sorted(set(missing_context))
 
 
 def resolve_replacement_template(template: str | None, document: Any | None) -> str | None:
-    from app.core.compiled_rule_runtime import _CONTEXT_TOKEN_RE, document_metadata
+    from app.core.compiled_rule_runtime import _CONTEXT_TOKEN_RE
 
     if template is None:
         return None
-    metadata = document_metadata(document)
     missing_context = False
 
     def replace_token(match: re.Match[str]) -> str:
         nonlocal missing_context
-        value = metadata.get(match.group(1))
+        token = match.group(1)
+        if token == "temperature_fahrenheit":
+            return match.group(0)
+        value = resolve_meta_value(token, document)
         if value is None:
             missing_context = True
             return match.group(0)
+        if isinstance(value, list):
+            if len(value) != 1:
+                missing_context = True
+                return match.group(0)
+            value = value[0]
         return value.replace("\\", "\\\\")
 
     resolved = _CONTEXT_TOKEN_RE.sub(replace_token, template)

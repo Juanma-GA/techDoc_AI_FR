@@ -1,8 +1,7 @@
 import { Trash2 } from "lucide-react";
-import { useMemo } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
@@ -11,9 +10,7 @@ import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanne
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
-import { useStandards } from "../hooks/useStandards";
 import { effectiveTarget, useFiltersStore } from "../stores/filtersStore";
-import { missingDocumentContext } from "../types/domain";
 import type { Document } from "../types/domain";
 
 // Selection MULTIPLE : metric et/ou imperial (vide ou les deux => "auto").
@@ -35,7 +32,6 @@ export function DocumentsList() {
   const docs = useDocuments();
   const upload = useUploadDocument();
   const remove = useDeleteDocument();
-  const standards = useStandards();
   // Nombre d'uploads en cours dans TOUT le cache TanStack Query (pas juste
   // cette instance du hook) : reste correct meme apres avoir navigue puis
   // etre revenu sur cette page pendant qu'un upload tourne encore en fond.
@@ -45,28 +41,11 @@ export function DocumentsList() {
   const toggleTargetUnit = useFiltersStore((s) => s.toggleTargetUnit);
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
-  const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
-
-  // Bandeau "Normes cibles actives" (preview 289-293) : libelles des versions
-  // actives selectionnees dans Parametres. Le choix du standard ne se fait plus
-  // a l'upload (parite preview) — juste ici en lecture.
-  const activeStandardLabel = useMemo(() => {
-    const items = standards.data ?? [];
-    const labels: string[] = [];
-    for (const std of items) {
-      for (const v of std.versions) {
-        if (activeStandardVersionIds.includes(v.id)) labels.push(`${std.code} ${v.label}`);
-      }
-    }
-    return labels.length > 0 ? labels.join(" · ") : null;
-  }, [standards.data, activeStandardVersionIds]);
-
   const handleUpload = (file: File): void => {
     upload.mutate(
       {
         file,
         target: effectiveTarget(targetUnits),
-        standardVersionIds: activeStandardVersionIds,
       },
       {
         // Fichier unique -> navigation vers le reviewer ; .zip (batch) -> on
@@ -88,21 +67,11 @@ export function DocumentsList() {
       <section className="card">
         <h2 className="card-title">{t("documents.uploadTitle")}</h2>
 
-        <div className="banner">
-          <span>{t("documents.activeStandardLabel")}</span>
-          <strong className="label">
-            {activeStandardLabel ?? t("documents.noStandardSelected")}
-          </strong>
-          <Link to="/settings" className="grow" style={{ textAlign: "right" }}>
-            {t("documents.changeStandard")}
-          </Link>
-        </div>
-
         <AnalysisTargetBanner />
 
         <div className="document-upload-controls">
           {/* Cible checklist : toggle runtime, independant des normes. */}
-          <div className="switch-row">
+          {import.meta.env.VITE_LEGACY_RULES_UI === "true" ? <div className="switch-row">
             <div>
               <div>{t("documents.checklistTarget")}</div>
               <div className="label">{t("documents.checklistTargetHint")}</div>
@@ -115,7 +84,7 @@ export function DocumentsList() {
               />
               <span className="track" />
             </label>
-          </div>
+          </div> : null}
 
           <div className="form document-upload-form">
             <div className="field">
@@ -209,7 +178,7 @@ function DocRow({
 }): JSX.Element {
   const { t } = useTranslation();
   const analyze = useAnalyze(doc.id, doc);
-  const missingContextFields = missingDocumentContext(doc);
+  const missingContextFields = analyze.missingContextFields;
   const badgeClass = STATUS_BADGE[doc.status] ?? "default";
   const running = analyze.status === "running" || doc.status === "analyzing";
 

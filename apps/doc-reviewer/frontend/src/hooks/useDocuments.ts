@@ -12,7 +12,6 @@ export type BatchUploadResult = {
 type UploadDocumentVariables = {
   file: File;
   target: "metric" | "imperial" | "auto" | "none";
-  standardVersionIds?: string[];
 };
 
 export function useDocuments() {
@@ -62,16 +61,8 @@ export function useUploadDocument() {
     // (requete non annulee par un changement de route SPA), seul l'etat
     // local du composant se perdait sans ca.
     mutationKey: ["upload-document"],
-    mutationFn: ({
-      file,
-      target,
-      standardVersionIds,
-    }: UploadDocumentVariables) => {
+    mutationFn: ({ file, target }: UploadDocumentVariables) => {
       const params = new URLSearchParams({ target });
-      // Le backend attend une chaine CSV `standard_version_ids=id1,id2`
-      // (Query Optional[str], split sur ","), pas des params repetes.
-      const ids = (standardVersionIds ?? []).filter(Boolean);
-      if (ids.length > 0) params.set("standard_version_ids", ids.join(","));
       const fd = new FormData();
       // Les .zip passent par /documents/batch ; un fichier unique passe par
       // /documents, qui choisit automatiquement son format de travail.
@@ -119,6 +110,7 @@ export function useDeleteDocument() {
 }
 
 export type DocumentMetaPatch = {
+  client_metadata?: Record<string, unknown>;
   meta_revision_date?: string | null;
   meta_cmm_number?: string | null;
   meta_first_issue_date?: string | null;

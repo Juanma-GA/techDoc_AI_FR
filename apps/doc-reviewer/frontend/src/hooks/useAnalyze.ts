@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
 import { API_BASE_URL } from "../lib/api";
+import { useClientConfig } from "./useClientConfig";
 import { useFiltersStore } from "../stores/filtersStore";
 import { missingDocumentContext } from "../types/domain";
 import type { Document } from "../types/domain";
@@ -24,8 +25,16 @@ export type AnalyzeOptions = {
 
 export function useAnalyze(documentId: string | undefined, document?: Document) {
   const qc = useQueryClient();
-  const checklistActive = useFiltersStore((s) => s.checklistActive);
-  const missingContextFields = missingDocumentContext(document);
+  const clientConfig = useClientConfig();
+  const legacyChecklistActive = useFiltersStore((s) => s.checklistActive);
+  const checklistActive =
+    import.meta.env.VITE_LEGACY_RULES_UI === "true" && legacyChecklistActive;
+  const requiredFields = clientConfig.data
+    ? Object.entries(clientConfig.data.mapping.fields)
+        .filter(([, field]) => field.required)
+        .map(([name]) => name)
+    : undefined;
+  const missingContextFields = missingDocumentContext(document, requiredFields);
   const contextReady = Boolean(document) && missingContextFields.length === 0;
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);

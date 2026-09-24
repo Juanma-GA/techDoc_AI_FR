@@ -1,0 +1,1 @@
+"""Minimal non-active bundle used by loader and runtime integration tests."""

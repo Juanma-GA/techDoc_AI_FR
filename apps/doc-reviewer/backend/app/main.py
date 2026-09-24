@@ -17,10 +17,15 @@ mimetypes.add_type("text/javascript", ".mjs")
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect
 
 from app.api import admin, analyze, documents, health, rules, standards
 from app.api import settings as settings_api
 from app.api import suggestions
+from app.checks.client_registry import (
+    active_standard_versions,
+    load_active_client_configuration,
+)
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -76,6 +81,7 @@ def _validate_security_posture() -> None:
 def create_app() -> FastAPI:
     configure_logging(settings.log_level)
     _validate_security_posture()
+    client_configuration = load_active_client_configuration()
 
     app = FastAPI(
         title=settings.app_name,
@@ -85,6 +91,7 @@ def create_app() -> FastAPI:
         redoc_url="/api/v1/redoc",
         openapi_url="/api/v1/openapi.json",
     )
+    app.state.client_configuration = client_configuration
 
     app.add_middleware(
         CORSMiddleware,
@@ -109,19 +116,24 @@ def create_app() -> FastAPI:
     api_v1.include_router(admin.router)
     app.include_router(api_v1)
 
-    _sync_standard_catalogs()
+    _sync_standard_catalogs(client_configuration)
     _mount_frontend(app)
 
     return app
 
 
-def _sync_standard_catalogs() -> None:
+def _sync_standard_catalogs(client_configuration: object) -> None:
     """Synchronize the editable local standard."""
     db = SessionLocal()
     try:
-        sync_user_standard(db)
-    except Exception:  # noqa: BLE001 — seed must never block startup
-        pass
+        # Pytest imports the application before its fixture creates the schema.
+        # In a migrated installation the table exists and sync errors are fatal.
+        if not inspect(db.get_bind()).has_table("standards"):
+            return
+        sync_user_standard(db, client_configuration.bundle.standard_specs)
+        active_standard_versions(db, client_configuration)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError("Client standard catalog synchronization failed") from exc
     finally:
         db.close()
 

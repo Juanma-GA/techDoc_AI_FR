@@ -7,6 +7,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from app.checks.client_registry import load_active_client_configuration
 from app.core.compiled_rules import (
     Check,
     CompiledRule,
@@ -114,6 +115,45 @@ def test_normalized_equals_requires_normalization() -> None:
         Check(field="text", operator="equals", expected="A", normalization=["trim"])
 
 
+def test_client_operation_check_uses_named_operation_parameters() -> None:
+    check = Check(
+        field="text",
+        operator="client_operation",
+        operation="revision_consistency",
+        operation_params={"control": "footer_date"},
+    )
+
+    assert check.operation == "revision_consistency"
+    assert check.operation_params == {"control": "footer_date"}
+
+    with pytest.raises(ValidationError, match="requires operation"):
+        Check(field="text", operator="client_operation")
+    with pytest.raises(ValidationError, match="use operation_params, not expected"):
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            expected="footer_date",
+        )
+    with pytest.raises(ValidationError, match="require client_operation"):
+        Check(
+            field="text",
+            operator="exists",
+            expected="x",
+            operation_params={"control": "footer_date"},
+        )
+
+
+def test_revision_consistency_control_is_no_longer_closed() -> None:
+    check = Check(
+        field="text",
+        operator="revision_consistency",
+        expected="extension_defined_control",
+    )
+
+    assert check.expected == "extension_defined_control"
+
+
 def test_regex_checks_are_compiled_at_validation_time() -> None:
     Check(field="text", operator="regex", expected=r"\bTODO\b")
     Check(field="text", operator="regex_exists", expected=r"REV\s+\d+")
@@ -183,11 +223,8 @@ def test_equals_field_requires_compare_to_and_no_literal_expected() -> None:
 def test_field_ref_validates_field_against_its_source() -> None:
     FieldRef(source="document_text", field="text")
     FieldRef(source="document_meta", field="meta_cmm_number")
-
-    with pytest.raises(ValidationError, match="champ invalide"):
-        FieldRef(source="document_meta", field="text")
-    with pytest.raises(ValidationError, match="champ invalide"):
-        FieldRef(source="document_text", field="meta_cmm_number")
+    FieldRef(source="document_text", field="serial_number")
+    FieldRef(source="document_meta", field="client_reference")
 
 
 def test_compiled_rule_validates_primitive_plan_and_examples() -> None:
@@ -413,6 +450,80 @@ def test_checklist_compiler_accepts_deterministic_output() -> None:
     rule = compile_checklist_rule(SessionLocal(), _checklist_row(), "checklist.xlsx", chat=chat)
     assert rule.execution == "deterministic"
     assert rule.target.region == "header"
+
+
+def test_checklist_compiler_uses_active_client_mapping() -> None:
+    client_bundle = load_active_client_configuration().bundle
+    prompt_payload: dict[str, object] = {}
+
+    def chat(_db, _system, user, **_kwargs) -> str:
+        prompt_payload.update(json.loads(user))
+        return json.dumps(
+            {
+                "id": checklist_rule_id("checklist.xlsx:Review:7"),
+                "topic": "PNR matches extracted CMM number",
+                "execution": "deterministic",
+                "target": {"page": "all", "region": "header"},
+                "checks": [
+                    {
+                        "field": "cmm_number",
+                        "operator": "equals_field",
+                        "compare_to": {
+                            "source": "document_meta",
+                            "field": "meta_pnr_number",
+                        },
+                    }
+                ],
+                "source": "user_checklist",
+                "origin_ref": "checklist.xlsx:Review:7",
+            }
+        )
+
+    rule = compile_checklist_rule(
+        SessionLocal(),
+        _checklist_row(),
+        "checklist.xlsx",
+        chat=chat,
+        client_bundle=client_bundle,
+    )
+
+    assert rule.execution == "deterministic"
+    assert rule.checks[0].field == "cmm_number"
+    assert rule.checks[0].compare_to is not None
+    assert rule.checks[0].compare_to.field == "meta_pnr_number"
+    client_mapping = prompt_payload["client_mapping"]
+    assert isinstance(client_mapping, dict)
+    assert client_mapping["fields"]["meta_pnr_number"]["type"] == "string_list"
+
+
+def test_checklist_compiler_marks_undeclared_client_field_unsupported() -> None:
+    client_bundle = load_active_client_configuration().bundle
+
+    def chat(_db, _system, _user, **_kwargs) -> str:
+        return json.dumps(
+            {
+                "id": checklist_rule_id("checklist.xlsx:Review:7"),
+                "topic": "Unknown entity",
+                "execution": "deterministic",
+                "target": {"page": "all", "region": "header"},
+                "checks": [
+                    {"field": "serial_number", "operator": "exists", "expected": "123"}
+                ],
+                "source": "user_checklist",
+                "origin_ref": "checklist.xlsx:Review:7",
+            }
+        )
+
+    rule = compile_checklist_rule(
+        SessionLocal(),
+        _checklist_row(),
+        "checklist.xlsx",
+        chat=chat,
+        client_bundle=client_bundle,
+    )
+
+    assert rule.execution == "unsupported"
+    assert "undeclared text field: serial_number" in (rule.compilation_error or "")
 
 
 def test_checklist_compiler_normalizes_catalog_style_primitive_steps() -> None:

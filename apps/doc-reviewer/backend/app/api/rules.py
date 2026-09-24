@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Optional
 
 import structlog
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.orm import Session
 
+from app.checks.client_registry import active_standard_versions
 from app.core import ingest
 from app.core.checklist_compiler import compile_checklist_rule
 from app.core.compiled_rule_store import persist_compiled_rule
@@ -39,6 +40,10 @@ from app.schemas import (
     RuleSuggestOut,
     SheetInfo,
     SheetInspectOut,
+    ClientCatalogOut,
+    ClientConfigOut,
+    ClientRuleOut,
+    ClientRulePatchIn,
 )
 
 # Kinds produits par l'import checklist (langage naturel juge par le LLM +
@@ -55,6 +60,151 @@ _SUGGEST_MAX_DOCS = 20  # never sample more than this
 
 
 router = APIRouter(tags=["rules"])
+
+
+def _client_rule_catalog(
+    client_bundle: Any,
+    rule_code: str,
+) -> tuple[str, str] | None:
+    for catalog in client_bundle.catalogs:
+        spec = client_bundle.standard_specs.get(catalog.code)
+        versions = spec.get("versions") if spec is not None else None
+        rules = versions.get(catalog.version, []) if isinstance(versions, dict) else []
+        if any(getattr(rule, "id", None) == rule_code for rule in rules):
+            return catalog.code, catalog.version
+    return None
+
+
+def _client_rule_statuses(request: Request, db: Session) -> dict[tuple[str, str], set[str]]:
+    configuration = request.app.state.client_configuration
+    versions = active_standard_versions(db, configuration)
+    disabled_by_catalog: dict[tuple[str, str], set[str]] = {}
+    for version in versions:
+        try:
+            disabled = json.loads(version.disabled_rule_codes or "[]")
+        except (TypeError, ValueError):
+            disabled = []
+        disabled_by_catalog[(version.standard.code, version.label)] = {
+            str(code) for code in disabled if str(code).strip()
+        } if isinstance(disabled, list) else set()
+    return disabled_by_catalog
+
+
+@router.get("/client-config", response_model=ClientConfigOut)
+def get_client_config(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> ClientConfigOut:
+    configuration = request.app.state.client_configuration
+    versions = active_standard_versions(db, configuration)
+    version_ids = {
+        (version.standard.code, version.label): version.id
+        for version in versions
+    }
+    return ClientConfigOut(
+        client_code=configuration.manifest.client_code,
+        label=configuration.manifest.label,
+        bundle=configuration.selection.bundle,
+        bundle_version=configuration.manifest.bundle_version,
+        contract_version=configuration.manifest.contract_version,
+        manifest_hash=configuration.manifest_hash,
+        mapping_hash=configuration.mapping_hash,
+        bundle_hash=configuration.bundle_hash,
+        catalogs=[
+            ClientCatalogOut(
+                code=catalog.code,
+                version=catalog.version,
+                standard_version_id=version_ids[(catalog.code, catalog.version)],
+            )
+            for catalog in configuration.manifest.catalogs
+        ],
+        mapping=configuration.mapping.model_dump(mode="json"),
+        ui_options=configuration.manifest.ui_options,
+    )
+
+
+@router.get("/client-rules", response_model=list[ClientRuleOut])
+def list_client_rules(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[ClientRuleOut]:
+    configuration = request.app.state.client_configuration
+    disabled_by_catalog = _client_rule_statuses(request, db)
+    results: list[ClientRuleOut] = []
+    for definition in configuration.bundle.rules:
+        catalog = _client_rule_catalog(configuration.bundle, definition.code)
+        if catalog is None:
+            continue
+        disabled = disabled_by_catalog.get(catalog, set())
+        compiled = definition.compiled_rule
+        results.append(
+            ClientRuleOut(
+                code=definition.code,
+                name=definition.name,
+                description=definition.description,
+                message=definition.message,
+                kind=definition.kind,
+                severity=definition.presentation_severity or compiled.severity,
+                execution=compiled.execution,
+                active=definition.code not in disabled,
+                catalog_code=catalog[0],
+                catalog_version=catalog[1],
+                translations=definition.translations,
+            )
+        )
+    return results
+
+
+@router.patch("/client-rules/{rule_code}", response_model=ClientRuleOut)
+def patch_client_rule(
+    rule_code: str,
+    body: ClientRulePatchIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> ClientRuleOut:
+    configuration = request.app.state.client_configuration
+    definition = next(
+        (item for item in configuration.bundle.rules if item.code == rule_code),
+        None,
+    )
+    catalog = _client_rule_catalog(configuration.bundle, rule_code)
+    if definition is None or catalog is None:
+        raise AppError("CLIENT_RULE_NOT_FOUND", "Règle client introuvable", status_code=404)
+    version = next(
+        (
+            item
+            for item in active_standard_versions(db, configuration)
+            if (item.standard.code, item.label) == catalog
+        ),
+        None,
+    )
+    if version is None:
+        raise AppError("CLIENT_CATALOG_NOT_FOUND", "Catalogue client introuvable", status_code=404)
+    try:
+        disabled = set(json.loads(version.disabled_rule_codes or "[]"))
+    except (TypeError, ValueError):
+        disabled = set()
+    if body.active:
+        disabled.discard(rule_code)
+    else:
+        disabled.add(rule_code)
+    version.disabled_rule_codes = json.dumps(sorted(disabled), ensure_ascii=False)
+    db.commit()
+    db.refresh(version)
+    compiled = definition.compiled_rule
+    return ClientRuleOut(
+        code=definition.code,
+        name=definition.name,
+        description=definition.description,
+        message=definition.message,
+        kind=definition.kind,
+        severity=definition.presentation_severity or compiled.severity,
+        execution=compiled.execution,
+        active=body.active,
+        catalog_code=catalog[0],
+        catalog_version=catalog[1],
+        translations=definition.translations,
+    )
 
 
 @router.get("/rules", response_model=list[RuleOut])
@@ -385,6 +535,7 @@ def patch_compiled_rule(
 
 @router.post("/rules/import", response_model=RuleImportResult)
 async def import_checklist(
+    request: Request,
     file: UploadFile,
     sheet: Optional[str] = Form(default=None),
     mapping: Optional[str] = Form(default=None),
@@ -445,7 +596,12 @@ async def import_checklist(
     seen: set[str] = set(existing_keys)
     compiled_rows: list[CompiledRuleVersion] = []
     for pr in parsed:
-        compiled = compile_checklist_rule(db, pr, file.filename or "checklist.xlsx")
+        compiled = compile_checklist_rule(
+            db,
+            pr,
+            file.filename or "checklist.xlsx",
+            client_bundle=request.app.state.client_configuration.bundle,
+        )
         if compiled.id in seen:
             continue
         seen.add(compiled.id)

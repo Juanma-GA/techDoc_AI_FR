@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -30,6 +31,8 @@ def execute_pdf_rules(
     rules: list[CompiledRule],
     db: Session | None = None,
     document: Any | None = None,
+    client_operations: Mapping[str, Any] | None = None,
+    client_entities: Mapping[str, str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
@@ -50,6 +53,8 @@ def execute_pdf_rules(
         db=db,
         document=document,
         parsed_pdf=parsed,
+        client_operations=client_operations,
+        client_entities=client_entities,
     )
 
 
@@ -58,6 +63,8 @@ def execute_docx_rules(
     rules: list[CompiledRule],
     db: Session | None = None,
     document: Any | None = None,
+    client_operations: Mapping[str, Any] | None = None,
+    client_entities: Mapping[str, str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
@@ -68,7 +75,17 @@ def execute_docx_rules(
         )
         for block in blocks
     ]
-    return _execute(rules, targets, None, is_docx=True, blocks=blocks, db=db, document=document)
+    return _execute(
+        rules,
+        targets,
+        None,
+        is_docx=True,
+        blocks=blocks,
+        db=db,
+        document=document,
+        client_operations=client_operations,
+        client_entities=client_entities,
+    )
 
 
 def _execute(
@@ -81,6 +98,8 @@ def _execute(
     db: Session | None = None,
     document: Any | None = None,
     parsed_pdf: ParsedPdf | None = None,
+    client_operations: Mapping[str, Any] | None = None,
+    client_entities: Mapping[str, str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     from app.core.compiled_rule_operators import condition_met, evaluate_rule
 
@@ -94,6 +113,8 @@ def _execute(
         document=document,
         db=db,
         parsed_pdf=parsed_pdf,
+        client_operations=client_operations,
+        client_entities=client_entities,
     )
     metadata = _document_metadata(document)
     _logger.info(

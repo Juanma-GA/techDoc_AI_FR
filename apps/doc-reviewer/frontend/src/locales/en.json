@@ -196,6 +196,8 @@
     "meta.languageUnset": "Select a language",
     "meta.languageFr": "French",
     "meta.languageEn": "English",
+    "meta.valueUnset": "No value",
+    "meta.listHint": "Enter one value per line.",
     "pageScope.label": "Analysis scope",
     "pageScope.all": "Full document",
     "pageScope.range": "Page range",
@@ -252,6 +254,18 @@
   "rules": {
     "title": "Custom rules",
     "subtitle": "User-defined linter, runs alongside the target standard rules",
+    "client": {
+      "bundle": "Bundle v{{version}}",
+      "rule": "Rule",
+      "mode": "Execution mode",
+      "description": "Description",
+      "search": "Search rules",
+      "manifestHash": "Manifest",
+      "mappingHash": "Mapping",
+      "ruleCount": "rules",
+      "loadFailed": "Could not load the active client catalog.",
+      "saveFailed": "Could not save this rule's status. Try again."
+    },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Revised or new page marked with a star in the LEP",
       "CUSTOM_REVISION_UNDECLARED_STAR": "LEP star justified by an R or N status in Highlights",

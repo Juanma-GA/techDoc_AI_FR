@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { usePatchDocumentMeta } from "../../hooks/useDocuments";
 import { missingDocumentContext } from "../../types/domain";
 import type { Document } from "../../types/domain";
+import { ClientMetadataPanel } from "./ClientMetadataPanel";
 
 type Props = {
   document: Document;
@@ -49,7 +50,7 @@ function isDraftComplete(draft: DocumentMetaDraft): boolean {
  * Mapping obligatoire par document. Les valeurs sont jointes au contexte
  * d'analyse du document courant ; elles ne servent pas a compiler la checklist.
  */
-export function DocumentMetaPanel({ document }: Props) {
+function LegacyDocumentMetaPanel({ document }: Props) {
   const { t } = useTranslation();
   const missingContextFields = missingDocumentContext(document);
   const [open, setOpen] = useState(missingContextFields.length > 0);
@@ -255,5 +256,13 @@ export function DocumentMetaPanel({ document }: Props) {
         </div>
       </div>
     </section>
+  );
+}
+
+export function DocumentMetaPanel({ document }: Props) {
+  return import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
+    <LegacyDocumentMetaPanel document={document} />
+  ) : (
+    <ClientMetadataPanel document={document} />
   );
 }

@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -111,6 +112,13 @@ class Document(Base):
     text_coverage: Mapped[int] = mapped_column(Integer, default=100, server_default="100")
     quality: Mapped[str] = mapped_column(
         String(20), default="analyzable", server_default="analyzable", index=True
+    )
+    client_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "client_metadata_json",
+        JSON,
+        default=dict,
+        server_default="{}",
+        nullable=False,
     )
     # Mapping manuel par document (saisi par le relecteur) : les consignes de
     # checklist peuvent y faire reference (ex. « verifier que la date de

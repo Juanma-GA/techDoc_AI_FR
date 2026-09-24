@@ -36,6 +36,7 @@ class DocumentOut(BaseModel):
     convert_engine: str = "pdf"
     text_coverage: int = 100
     quality: str = "analyzable"
+    client_metadata: dict[str, Any] = Field(default_factory=dict)
     # Mapping manuel par document, reference par les consignes de checklist.
     meta_revision_date: Optional[str] = None
     meta_cmm_number: Optional[str] = None
@@ -67,6 +68,7 @@ class DocumentMetaPatchIn(BaseModel):
     """Mapping manuel par document — champs libres references par les
     consignes de checklist (ex. « verifier la date de revision »)."""
 
+    client_metadata: dict[str, Any] = Field(default_factory=dict)
     meta_revision_date: Optional[str] = Field(default=None, max_length=60)
     meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
     meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
@@ -285,6 +287,44 @@ class CompiledRuleSummary(BaseModel):
 
 
 class CompiledRulePatchIn(BaseModel):
+    active: bool
+
+
+class ClientCatalogOut(BaseModel):
+    code: str
+    version: str
+    standard_version_id: uuid.UUID
+
+
+class ClientConfigOut(BaseModel):
+    client_code: str
+    label: str
+    bundle: str
+    bundle_version: str
+    contract_version: str
+    manifest_hash: str
+    mapping_hash: str
+    bundle_hash: str
+    catalogs: list[ClientCatalogOut] = Field(default_factory=list)
+    mapping: dict[str, Any] = Field(default_factory=dict)
+    ui_options: dict[str, Any] = Field(default_factory=dict)
+
+
+class ClientRuleOut(BaseModel):
+    code: str
+    name: str
+    description: str
+    message: str
+    kind: str
+    severity: Literal["info", "warning", "error"]
+    execution: Literal["deterministic", "semantic", "manual", "unsupported"]
+    active: bool
+    catalog_code: str
+    catalog_version: str
+    translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+class ClientRulePatchIn(BaseModel):
     active: bool
 
 

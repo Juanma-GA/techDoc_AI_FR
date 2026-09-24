@@ -1,0 +1,1680 @@
+"""Canonical THALES rule definitions built through one factory."""
+
+from __future__ import annotations
+
+import re
+from typing import Literal
+
+from app.checks.client_bundle import ClientRuleDefinition
+from app.core.compiled_rules import (
+    Check,
+    CompiledRule,
+    Condition,
+    FieldRef,
+    RuleExample,
+    RulePrerequisite,
+    RuleTarget,
+)
+
+
+_STANDARD_CODE = "THALES-CUSTOM"
+_CATALOG_VERSION = "v1"
+_ALL_PAGE_TARGET = RuleTarget(page="all", region="full_page")
+_MODIFIED_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_state="modified",
+)
+_MODIFIED_FOOTER_TARGET = RuleTarget(
+    page="all",
+    region="footer",
+    page_state="modified",
+)
+_TP2_TARGET = RuleTarget(page="all", region="full_page", page_type="TP2")
+_HIGHLIGHTS_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_types=["HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"],
+)
+_HIGHLIGHTS_FIRST_PAGE_TARGET = RuleTarget(
+    page="all",
+    region="full_page",
+    page_type="HIGHLIGHTS_PAGE_1",
+)
+_HEADER_TARGET = RuleTarget(
+    page="all",
+    region="header",
+    excluded_page_types=["TP1"],
+)
+_TP1_DOCUMENT_TARGET = RuleTarget(
+    page="all",
+    region="body",
+    page_type="TP1",
+)
+DOCUMENT_TYPES = ["OVERHAUL MANUAL", "COMPONENT MAINTENANCE MANUAL"]
+DOCUMENT_TYPE_PATTERN = (
+    r"(?i)(?<!\w)(?:OVERHAUL\s+MANUAL|COMPONENT\s+MAINTENANCE\s+MANUAL)(?!\w)"
+)
+HIGHLIGHTS_DOCUMENT_TYPE_PATTERN = (
+    r"(?im)^\s*(?:OVERHAUL\s+MANUAL|COMPONENT\s+MAINTENANCE\s+MANUAL)\s*$"
+    r"\s*^\s*ATA\s+No\b"
+)
+_TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
+_EXPECTED_TP1_REVISION_NUMBER_PATTERN = (
+    r"(?i)(?<!\w)Revision\s+No\.?\s*{{meta_revision_number}}(?!\w)"
+    r"(?=[\s\S]*\bFirst\s+Issue\b)"
+)
+_EXPECTED_TP1_FIRST_ISSUE_PATTERN = (
+    r"(?i)(?<!\w)First\s+issue\s*:\s*{{meta_first_issue_date}}(?!\w)"
+)
+_EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
+    r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+"
+    r"{{meta_revision_date}}(?!\w)"
+)
+_EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_pnr_number}}(?!\w)"
+_UNEXPECTED_PNR_PATTERN = (
+    r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
+    r"\d+-\d{3}-[A-Z]{2}(?!\w)"
+)
+_UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
+    r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
+    r"\d+-\d{3}-[A-Z]{2}(?!\w)"
+)
+_COPYRIGHT_PATTERN = (
+    r"\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
+    r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
+    r"This\s+document\s+and\s+any\s+data\s+included\s+are\s+the\s+property\s+of\s+"
+    r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
+    r"They\s+cannot\s+be\s+reproduced,\s+disclosed\s+or\s+used\s+"
+    r"without\s+the\s+company's\s+prior\s+written\s+approval\.?"
+)
+IMPORTANT_NOTICE_TEXT = """IMPORTANT NOTICE
+This document and any information contained herein are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
+In particular, they shall not be used in the creation, manufacture, development or derivation of any repairs, modifications, spare parts, design, or configuration changes or to obtain EASA, FAA or any other government or regulatory approval to do so.
+Should THALES AVS FRANCE SAS consent be given for reproduction in whole or in part, this notice and the notice set forth on each page of this document shall appear in any such reproduction in whole or in part.
+The recipient shall not use this document for any purpose other than the one stated in the relevant applicable License agreement under which it has been disclosed and it shall be returned to THALES AVS FRANCE SAS immediately upon request.
+TO BE CONSIDERED VALID FOR PART 145 REQUIREMENTS, ALL MAINTENANCE DOCUMENTATION HAS TO BE IDENTIFIED ON EACH PAGE WITH A WATERMARK AUTHORIZING ITS USE BY THE END USER COMPANY. SUCH WATERMARK MIGHT BE AS FOLLOWS:
+\u201cProvided to [USER_ID] for [COMPANY_NAME] only under license agreement [LICENSE_NUMBER] for year [YEAR] only\u201d
+Users are kindly requested to notify THALES AVS FRANCE SAS of any discrepancy, omission or error found in this manual.
+Please send your comments to:
+THALES AVS FRANCE SAS
+Technical Publications Department
+AGS, Campus Thales Bordeaux
+75-77 Avenue Marcel Dassault
+33700 Merignac
+France
+E-mail: techpubs.frontoffice@fr.thalesgroup.com
+If you do not yet have access to our website, you can apply through the following address:
+https://www.thalesgroup.com/customer-online"""
+_TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN = (
+    r"(?i)(?<!\w)(?:temperature\s*:\s*)?"
+    r"[+-]?\d+(?:[.,]\d+)?"
+    r"(?:\s+to\s+[+-]?\d+(?:[.,]\d+)?)?\s+deg\.\s*C\b"
+    r"(?!\s*\(\s*[+-]?\d+(?:[.,]\d+)?"
+    r"(?:\s+to\s+[+-]?\d+(?:[.,]\d+)?)?\s+deg\.\s*F\s*\))"
+)
+_NOTE_INTRODUCTION_TEXT = {
+    "REPAIR": (
+        "During repair operations, make sure that the environmental conditions "
+        "are as follows:"
+    ),
+    "TESTING": (
+        "During testing operations, make sure that the environmental conditions "
+        "are as follows:"
+    ),
+    "STORAGE": (
+        "During storage operations, make sure that the environmental conditions "
+        "are as follows:"
+    ),
+}
+_REPAIR_RELATIVE_HUMIDITY = (
+    "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
+    "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
+)
+_STORAGE_TEMPERATURE = (
+    "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
+    "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
+)
+_THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
+    (r"\(F9111\)", "(F9111)"),
+    (r"75-77\s+Avenue\s+Marcel\s+Dassault", "75-77 Avenue Marcel Dassault"),
+    (r"33700\s+M\u00e9rignac\s+-\s+France", "33700 Mérignac - France"),
+    (r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40", "Tel : +33 (0)5 24 44 77 40"),
+    (r"www\.thalesgroup\.com", "www.thalesgroup.com"),
+)
+_REPAIR_RELATIVE_HUMIDITY_PATTERN = re.escape(_REPAIR_RELATIVE_HUMIDITY).replace(
+    r"\ ", r"\s+"
+)
+_STORAGE_TEMPERATURE_PATTERN = re.escape(_STORAGE_TEMPERATURE).replace(r"\ ", r"\s+")
+_NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
+
+
+def _required_note_check(
+    content_pattern: str,
+    *,
+    display: str,
+    page_type: str,
+    anchor: str | None = None,
+    anchor_position: Literal["above", "below", "same"] = "above",
+) -> Check:
+    introduction_pattern = re.escape(_NOTE_INTRODUCTION_TEXT[page_type]).replace(
+        r"\ ", r"\s+"
+    )
+    expected = (
+        rf"(?i:\bNOTE\b)\s*:\s*{introduction_pattern}"
+        r"(?is:(?:(?!\bNOTE\b).)*?)"
+        + content_pattern
+    )
+    return Check(
+        field="text",
+        operator="regex_exists",
+        expected=expected,
+        require_all=True,
+        expected_display=display,
+        suggestion_mode="fuzzy",
+        missing_anchor=anchor,
+        missing_anchor_position=anchor_position,
+    )
+
+
+def rule(
+    *,
+    code: str,
+    name: str,
+    description: str,
+    message: str,
+    kind: str,
+    severity: Literal["info", "warning", "error"],
+    presentation_severity: Literal["info", "warning", "error"] | None = None,
+    target: RuleTarget,
+    checks: list[Check],
+    failure_message: str | None = None,
+    only_if: Condition | None = None,
+    valid_examples: list[RuleExample] | None = None,
+    invalid_examples: list[RuleExample] | None = None,
+    prerequisites: list[RulePrerequisite] | None = None,
+    translations: dict[str, dict[str, str]] | None = None,
+) -> ClientRuleDefinition:
+    compiled_rule = CompiledRule(
+        id=code,
+        topic=name,
+        failure_message=failure_message,
+        severity=severity,
+        execution="deterministic",
+        target=target,
+        checks=checks,
+        source="standard_rule",
+        origin_ref=f"{_STANDARD_CODE}:{_CATALOG_VERSION}:{code}",
+        only_if=only_if,
+        valid_examples=valid_examples or [],
+        invalid_examples=invalid_examples or [],
+        prerequisites=prerequisites or [],
+    )
+    return ClientRuleDefinition(
+        compiled_rule=compiled_rule,
+        name=name,
+        description=description,
+        message=message,
+        kind=kind,
+        presentation_severity=presentation_severity,
+        translations=translations or {},
+    )
+
+
+CUSTOM_THALES_LOGO_FONT_SIZE = rule(
+    code="CUSTOM_THALES_LOGO_FONT_SIZE",
+    name="Taille du logo THALES sur les pages hors TP1",
+    description=(
+        "Le T de la police Thales en debut de page doit avoir une taille "
+        "de 31 pt hors pages TP1."
+    ),
+    message="La taille du logo THALES hors TP1 n'est pas 31 pt.",
+    kind="field_required",
+    severity="warning",
+    target=RuleTarget(
+        page="all",
+        region="full_page",
+        excluded_page_types=["TP1"],
+    ),
+    checks=[
+        Check(
+            field="thales_logo_t",
+            operator="font_size_equals",
+            expected=31,
+            require_all=True,
+        ),
+    ],
+    failure_message="taille du logo THALES non conforme hors TP1.",
+    translations={
+        "en": {
+            "description": "The Thales T at the start of the page must use a 31 pt font outside TP1 pages.",
+            "message": "The THALES logo size outside TP1 is not 31 pt.",
+        }
+    },
+)
+
+CUSTOM_CMM_NUMBER_FONT_SIZE = rule(
+    code="CUSTOM_CMM_NUMBER_FONT_SIZE",
+    name="Taille de police du numero CMM (ATA)",
+    description=(
+        "Le numero CMM (ATA) present dans le footer doit utiliser une taille "
+        "de police de 23 pt."
+    ),
+    message="La taille de police du numero CMM (ATA) n'est pas 23 pt.",
+    kind="field_required",
+    severity="warning",
+    presentation_severity="error",
+    target=RuleTarget(page="all", region="footer"),
+    checks=[
+        Check(
+            field="cmm_number",
+            operator="font_size_equals",
+            expected=23,
+            require_all=True,
+        ),
+    ],
+    failure_message="taille de police du numero CMM non conforme.",
+    only_if=Condition(field="meta_cmm_number", state="present"),
+    translations={
+        "en": {
+            "description": "The CMM number (ATA) in the footer must use a 23 pt font.",
+            "message": "The CMM number (ATA) font size is not 23 pt.",
+        }
+    },
+)
+
+CUSTOM_CMM_NUMBER = rule(
+    code="CUSTOM_CMM_NUMBER",
+    name="Numero CMM conforme au contexte du document",
+    description=(
+        "Le numero present dans le document doit correspondre a la valeur "
+        "meta_cmm_number saisie dans le contexte du document."
+    ),
+    message="Le numero CMM ne correspond pas au contexte du document.",
+    kind="field_required",
+    severity="error",
+    target=RuleTarget(page="all", region="footer"),
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?<!\w){{meta_cmm_number}}(?!\w)",
+            require_all=True,
+            expected_display="{{meta_cmm_number}}",
+            missing_anchor=r"(?i)\bFirst\s+Issue\b",
+        ),
+    ],
+    failure_message="Numero CMM non conforme",
+    translations={
+        "en": {
+            "description": (
+                "The number in the document must match the meta_cmm_number value "
+                "entered in the document context."
+            ),
+            "message": "The CMM number does not match the document context.",
+        }
+    },
+)
+
+CUSTOM_TP1_REVISION_NUMBER = rule(
+    code="CUSTOM_TP1_REVISION_NUMBER",
+    name="Numero de revision du footer TP1 conforme au mapping",
+    description=(
+        "Chaque page TP1 doit contenir dans son footer 'Revision No. 0X' "
+        "au-dessus de 'First Issue', avec 0X egal au numero de revision "
+        "saisi dans le mapping (sans le prefixe 'Rev.')."
+    ),
+    message=(
+        "Le numero de revision du footer TP1 est absent ou ne correspond "
+        "pas au mapping."
+    ),
+    kind="field_required",
+    severity="error",
+    target=_TP1_REVISION_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_EXPECTED_TP1_REVISION_NUMBER_PATTERN,
+            require_all=True,
+            expected_display="Revision No. {{meta_revision_number}}",
+            missing_anchor=r"(?i)\bFirst\s+Issue\b",
+        ),
+    ],
+    failure_message="numéro de revision non conforme.",
+    translations={
+        "en": {
+            "description": (
+                "Each TP1 page must contain 'Revision No. 0X' above 'First Issue' "
+                "in its footer, with 0X equal to the revision number in the mapping."
+            ),
+            "message": "The TP1 footer revision number is missing or does not match the mapping.",
+        }
+    },
+)
+
+CUSTOM_TP1_FIRST_ISSUE_DATE = rule(
+    code="CUSTOM_TP1_FIRST_ISSUE_DATE",
+    name="Date de premiere issue du footer TP1 conforme au mapping",
+    description=(
+        "Chaque page TP1 doit contenir dans son footer 'First Issue: date' "
+        "avec une date egale a la date de premiere issue saisie dans le mapping."
+    ),
+    message=(
+        "La date de premiere issue du footer TP1 est absente ou ne correspond "
+        "pas au mapping."
+    ),
+    kind="field_required",
+    severity="warning",
+    target=_TP1_REVISION_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_EXPECTED_TP1_FIRST_ISSUE_PATTERN,
+            require_all=True,
+            expected_display="First issue: {{meta_first_issue_date}}",
+            missing_anchor=r"(?i)\bFirst\s+issue\s*:",
+            missing_anchor_position="same",
+        ),
+    ],
+    failure_message="date de premiere issue non conforme.",
+    translations={
+        "en": {
+            "description": (
+                "Each TP1 page must contain 'First Issue: date' in its footer, "
+                "with a date equal to the first issue date in the mapping."
+            ),
+            "message": "The TP1 footer first issue date is missing or does not match the mapping.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_REVISION_HEADER = rule(
+    code="CUSTOM_HIGHLIGHTS_REVISION_HEADER",
+    name="En-tete de revision present au-dessus du tableau Highlights",
+    description=(
+        "La page dont le nom contient Highlights doit afficher au-dessus du "
+        "tableau l'en-tete REVISION No. avec le numero et la date du mapping."
+    ),
+    message=(
+        "L'en-tete de revision Highlights est absent, incorrect ou place "
+        "apres le tableau."
+    ),
+    kind="field_required",
+    severity="warning",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_EXPECTED_HIGHLIGHTS_REVISION_PATTERN,
+            require_all=True,
+            expected_display="REVISION No. {{meta_revision_number}} DATED {{meta_revision_date}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bHighlights\b",
+            missing_anchor_position="above",
+        ),
+    ],
+    failure_message="En-tete de revision Highlights non conforme.",
+    translations={
+        "en": {
+            "description": (
+                "The page whose name contains Highlights must show the REVISION "
+                "No. header with the mapped number and date above the table."
+            ),
+            "message": "The Highlights revision header is missing, incorrect, or placed after the table.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_ATA_NUMBER = rule(
+    code="CUSTOM_HIGHLIGHTS_ATA_NUMBER",
+    name="Numero ATA present sur la premiere page Highlights",
+    description=(
+        "La premiere page Highlights doit contenir le numero ATA correspondant "
+        "au numero CMM du mapping du document."
+    ),
+    message="Le numero ATA de la premiere page Highlights est absent ou incorrect.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_EXPECTED_HIGHLIGHTS_ATA_PATTERN,
+            require_all=True,
+            expected_display="ATA No {{meta_cmm_number}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bATA\s+No\b",
+            missing_anchor_position="same",
+        ),
+    ],
+    failure_message="numero ATA Highlights absent ou non conforme.",
+    only_if=Condition(field="meta_cmm_number", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The first Highlights page must contain the ATA number matching "
+                "the document CMM number in the mapping."
+            ),
+            "message": "The ATA number on the first Highlights page is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
+    code="CUSTOM_HIGHLIGHTS_PNR_HEADER",
+    name="Numero PNR present et conforme dans l'en-tete des pages",
+    description=(
+        "L'en-tete de chaque page doit contenir le numero PNR correspondant "
+        "au mapping du document."
+    ),
+    message="Le numero PNR de l'en-tete est absent ou incorrect.",
+    kind="field_required",
+    severity="error",
+    target=_HEADER_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_EXPECTED_HIGHLIGHTS_PNR_PATTERN,
+            require_all=True,
+            expected_display="{{meta_pnr_number}}",
+            suggestion_mode="all",
+        ),
+    ],
+    failure_message="Numero PNR de l'en-tete non conforme.",
+    only_if=Condition(field="meta_pnr_number", state="present"),
+    translations={
+        "en": {
+            "description": "The header of every page must contain the PNR number matching the document mapping.",
+            "message": "The header PNR number is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_HEADER_DOCUMENT_TYPE = rule(
+    code="CUSTOM_HEADER_DOCUMENT_TYPE",
+    name="Type de document present dans les en-tetes hors TP1",
+    description=(
+        "Chaque en-tete hors TP1 doit contenir l'un des types de document "
+        "autorises : OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+    ),
+    message="Le type de document est absent de l'en-tete.",
+    kind="field_required",
+    severity="error",
+    target=_HEADER_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=DOCUMENT_TYPE_PATTERN,
+            require_all=True,
+        ),
+    ],
+    failure_message="type de document absent de l'en-tete.",
+    translations={
+        "en": {
+            "description": (
+                "Every non-TP1 header must contain an allowed document type: "
+                "OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL."
+            ),
+            "message": "The document type is missing from the header.",
+        }
+    },
+)
+
+CUSTOM_TP1_HEADER_DOCUMENT_TYPE = rule(
+    code="CUSTOM_TP1_HEADER_DOCUMENT_TYPE",
+    name="Type de document present dans le contenu TP1",
+    description=(
+        "Chaque contenu TP1 doit contenir l'un des types de document autorises : "
+        "OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+    ),
+    message="Le type de document est absent du contenu TP1.",
+    kind="field_required",
+    severity="error",
+    target=_TP1_DOCUMENT_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=DOCUMENT_TYPE_PATTERN,
+            require_all=True,
+        ),
+    ],
+    failure_message="type de document absent du contenu TP1.",
+    translations={
+        "en": {
+            "description": (
+                "Every TP1 page content must contain an allowed document type: "
+                "OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL."
+            ),
+            "message": "The document type is missing from the TP1 page content.",
+        }
+    },
+)
+
+CUSTOM_PNR_PAGE_VALUE = rule(
+    code="CUSTOM_PNR_PAGE_VALUE",
+    name="Numero PNR present dans la page conforme au mapping",
+    description=(
+        "Le numero apres 'PNR:' sur la page Highlights doit correspondre au "
+        "mapping du document."
+    ),
+    message="Le numero PNR de la page Highlights ne correspond pas au mapping.",
+    kind="regex_flag",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=_UNEXPECTED_HIGHLIGHTS_PNR_PATTERN,
+            replacement="{{meta_pnr_number}}",
+        ),
+    ],
+    failure_message="Numero PNR present dans la page non conforme.",
+    only_if=Condition(field="meta_pnr_number", state="present"),
+    translations={
+        "en": {
+            "description": "The number after 'PNR:' on a Highlights page must match the document mapping.",
+            "message": "The Highlights page PNR number does not match the mapping.",
+        }
+    },
+)
+
+CUSTOM_TP1_PNR_PAGE_VALUE = rule(
+    code="CUSTOM_TP1_PNR_PAGE_VALUE",
+    name="Numero PNR present dans la page TP1 conforme au mapping",
+    description=(
+        "Tout numero PNR explicitement present dans le corps d'une page TP1 "
+        "doit correspondre au mapping du document."
+    ),
+    message="Le numero PNR de la page TP1 ne correspond pas au mapping.",
+    kind="regex_flag",
+    severity="error",
+    target=_TP1_DOCUMENT_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=_UNEXPECTED_PNR_PATTERN,
+            replacement="{{meta_pnr_number}}",
+        ),
+    ],
+    failure_message="Numero PNR present dans la page TP1 non conforme.",
+    only_if=Condition(field="meta_pnr_number", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every PNR number explicitly present in the body of a TP1 page "
+                "must match the document mapping."
+            ),
+            "message": "The TP1 page PNR number does not match the mapping.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE = rule(
+    code="CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE",
+    name="Type de document present au-dessus du numero ATA des Highlights",
+    description=(
+        "La premiere page Highlights doit afficher un type de document autorise "
+        "au-dessus du numero ATA : OVERHAUL MANUAL ou COMPONENT MAINTENANCE MANUAL."
+    ),
+    message="Le type de document est absent au-dessus du numero ATA Highlights.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="highlights_document_type",
+            missing_anchor=r"(?i)\bATA\s+No\b",
+            missing_anchor_position="above",
+        ),
+    ],
+    failure_message="type de document absent au-dessus du numero ATA Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "The first Highlights page must show an allowed document type above "
+                "the ATA number: OVERHAUL MANUAL or COMPONENT MAINTENANCE MANUAL."
+            ),
+            "message": "The document type is missing above the Highlights ATA number.",
+        }
+    },
+)
+
+CUSTOM_INTRODUCTION_SHOP_VERIFICATION = rule(
+    code="CUSTOM_INTRODUCTION_SHOP_VERIFICATION",
+    name="Shop Verification conforme au constructeur du mapping",
+    description=(
+        "La page INTRODUCTION doit contenir le bloc Shop Verification attendu "
+        "pour le constructeur choisi dans le mapping (Airbus ou Boeing)."
+    ),
+    message="Le bloc Shop Verification de l'INTRODUCTION est absent ou incorrect.",
+    kind="field_required",
+    severity="error",
+    target=RuleTarget(
+        page="all",
+        region="full_page",
+        page_type="INTRODUCTION",
+    ),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="shop_verification",
+            require_all=True,
+        ),
+    ],
+    failure_message="Shop Verification INTRODUCTION non conforme.",
+    only_if=Condition(field="meta_manufacturer", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The INTRODUCTION page must contain the expected Shop Verification "
+                "block for the manufacturer selected in the mapping."
+            ),
+            "message": "The INTRODUCTION Shop Verification block is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_HOLDER = rule(
+    code="CUSTOM_HIGHLIGHTS_HOLDER",
+    name="Destinataire des Highlights conforme au titre TP1",
+    description=(
+        "La premiere page Highlights doit commencer par la phrase « TO: HOLDER "
+        "OF <titre> », avec <titre> egal au titre en gras de la page TP1."
+    ),
+    message="La phrase TO: HOLDER OF des Highlights ne correspond pas au titre TP1.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="highlights_holder",
+        ),
+    ],
+    failure_message=(
+        "La phrase TO: HOLDER OF des Highlights ne correspond pas au titre TP1."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "The first Highlights page must start with 'TO: HOLDER OF <title>', "
+                "where <title> matches the bold title on the TP1 page."
+            ),
+            "message": "The Highlights TO: HOLDER OF sentence does not match the TP1 title.",
+        }
+    },
+)
+
+CUSTOM_FOOTER_PAGE_NUMBER = rule(
+    code="CUSTOM_FOOTER_PAGE_NUMBER",
+    name="Numero de page present et conforme dans le pied de page",
+    description=(
+        "Chaque page doit afficher son numero dans le pied de page. Les pages "
+        "LEP, ROR, Highlights et Title Page sont verifiees contre leur prefixe "
+        "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.)."
+    ),
+    message="Le numero de page du pied de page est absent ou incorrect.",
+    kind="field_required",
+    severity="error",
+    target=RuleTarget(page="all", region="full_page"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "footer_page_number"},
+        ),
+    ],
+    failure_message="numero de page absent ou incoherent dans le pied de page.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every page must show its number in the footer. LEP, ROR, Highlights, "
+                "and Title Page pages are checked against their expected prefix and order."
+            ),
+            "message": "The footer page number is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_SENTENCE_PUNCTUATION = rule(
+    code="CUSTOM_SENTENCE_PUNCTUATION",
+    name="Phrases et enumerations correctement ponctuees",
+    description=(
+        "Sur les pages modifiees, chaque phrase doit se terminer par un point. "
+        "Dans une enumeration, les elements intermediaires se terminent par "
+        "une virgule et le dernier par un point."
+    ),
+    message="La ponctuation terminale de la phrase ou de l'enumeration est incorrecte.",
+    kind="field_required",
+    severity="warning",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="sentence_punctuation",
+            expected="period_and_enumeration",
+        ),
+    ],
+    failure_message="phrase ou enumeration sans ponctuation terminale conforme.",
+    translations={
+        "en": {
+            "description": (
+                "On modified pages, every sentence must end with a full stop. "
+                "In an enumeration, intermediate items end with a comma and "
+                "the last item with a full stop."
+            ),
+            "message": "The sentence or enumeration terminal punctuation is incorrect.",
+        }
+    },
+)
+
+CUSTOM_BAR_PSI_CONVERSION = rule(
+    code="CUSTOM_BAR_PSI_CONVERSION",
+    name="Pression en bar accompagnee de sa conversion en p.s.i.",
+    description=(
+        "Toute pression exprimee en bar doit etre suivie entre parentheses "
+        "de sa conversion numerique en p.s.i."
+    ),
+    message="La pression en bar doit etre suivie de sa conversion en p.s.i.",
+    kind="field_required",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="pressure_conversion",
+            expected="bar_to_psi",
+        ),
+    ],
+    failure_message=(
+        "conversion p.s.i. absente ou incorrecte pour une pression en bar."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "Every pressure expressed in bar must be followed in parentheses "
+                "by its numeric conversion in p.s.i."
+            ),
+            "message": "A pressure in bar must be followed by its p.s.i. conversion.",
+        }
+    },
+)
+
+CUSTOM_REPAIR_NOTE = rule(
+    code="CUSTOM_REPAIR_NOTE",
+    name="Introduction et categories obligatoires dans les NOTE des pages REPAIR",
+    description=(
+        "Chaque page REPAIR doit commencer sa NOTE par l'introduction "
+        "operationnelle attendue et contenir les categories Pressure et "
+        "Relative humidity avec la valeur de reference."
+    ),
+    message=(
+        "L'introduction ou les categories NOTE de la page REPAIR sont absentes "
+        "ou incorrectes."
+    ),
+    kind="field_required",
+    severity="error",
+    target=RuleTarget(page="all", region="full_page", page_type="REPAIR"),
+    checks=[
+        _required_note_check(
+            _NOTE_PRESSURE_PATTERN,
+            display="Pressure:",
+            page_type="REPAIR",
+        ),
+        _required_note_check(
+            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+            display=_REPAIR_RELATIVE_HUMIDITY,
+            page_type="REPAIR",
+        ),
+    ],
+    failure_message="introduction ou categories NOTE REPAIR non conformes.",
+    translations={
+        "en": {
+            "description": (
+                "Each REPAIR page must start its NOTE with the expected operational "
+                "introduction and contain the Pressure and Relative humidity "
+                "categories with their reference values."
+            ),
+            "message": "The REPAIR NOTE introduction or categories are missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_TESTING_NOTE = rule(
+    code="CUSTOM_TESTING_NOTE",
+    name="Introduction et categories obligatoires dans les NOTE des pages TESTING",
+    description=(
+        "Chaque page TESTING doit commencer sa NOTE par l'introduction "
+        "operationnelle attendue et contenir les categories Pressure, Relative "
+        "humidity et Temperature."
+    ),
+    message=(
+        "L'introduction ou les categories NOTE de la page TESTING sont absentes "
+        "ou incorrectes."
+    ),
+    kind="field_required",
+    severity="error",
+    target=RuleTarget(page="all", region="full_page", page_type="TESTING"),
+    checks=[
+        _required_note_check(
+            _NOTE_PRESSURE_PATTERN,
+            display="Pressure:",
+            page_type="TESTING",
+        ),
+        _required_note_check(
+            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+            display=_REPAIR_RELATIVE_HUMIDITY,
+            page_type="TESTING",
+        ),
+        _required_note_check(
+            r"\bTemperature\b",
+            display="Temperature",
+            page_type="TESTING",
+        ),
+    ],
+    failure_message="introduction ou categories NOTE TESTING non conformes.",
+    translations={
+        "en": {
+            "description": (
+                "Each TESTING page must start its NOTE with the expected operational "
+                "introduction and contain the Pressure, Relative humidity, and "
+                "Temperature categories."
+            ),
+            "message": "The TESTING NOTE introduction or categories are missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_STORAGE_NOTE = rule(
+    code="CUSTOM_STORAGE_NOTE",
+    name="Introduction et categories obligatoires dans les NOTE des pages STORAGE",
+    description=(
+        "Chaque page STORAGE doit commencer sa NOTE par l'introduction "
+        "operationnelle attendue et contenir les categories Pressure, Relative "
+        "humidity et Temperature avec les valeurs de reference."
+    ),
+    message=(
+        "L'introduction ou les categories NOTE de la page STORAGE sont absentes "
+        "ou incorrectes."
+    ),
+    kind="field_required",
+    severity="error",
+    target=RuleTarget(page="all", region="full_page", page_type="STORAGE"),
+    checks=[
+        _required_note_check(
+            _NOTE_PRESSURE_PATTERN,
+            display="Pressure:",
+            page_type="STORAGE",
+        ),
+        _required_note_check(
+            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+            display=_REPAIR_RELATIVE_HUMIDITY,
+            page_type="STORAGE",
+        ),
+        _required_note_check(
+            _STORAGE_TEMPERATURE_PATTERN,
+            display=_STORAGE_TEMPERATURE,
+            page_type="STORAGE",
+            anchor=r"(?i)\bRelative\s+humidity\s*:",
+            anchor_position="below",
+        ),
+    ],
+    failure_message="introduction ou categories NOTE STORAGE non conformes.",
+    translations={
+        "en": {
+            "description": (
+                "Each STORAGE page must start its NOTE with the expected operational "
+                "introduction and contain the Pressure, Relative humidity, and "
+                "Temperature categories with their reference values."
+            ),
+            "message": "The STORAGE NOTE introduction or categories are missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_TP1_THALES_ADDRESS = rule(
+    code="CUSTOM_TP1_THALES_ADDRESS",
+    name="Adresse THALES exacte sur les pages TP1",
+    description=(
+        "Chaque page identifiee TP1 doit contenir exactement l'adresse THALES "
+        "de reference."
+    ),
+    message="L'adresse THALES de la page TP1 est absente ou incorrecte.",
+    kind="field_required",
+    severity="warning",
+    target=RuleTarget(page="all", region="full_page", page_type="TP1"),
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=pattern,
+            require_all=True,
+            expected_display=display,
+            suggestion_mode="fuzzy",
+            missing_anchor=(
+                _THALES_TP1_ADDRESS_ELEMENTS[index + 1][0]
+                if index + 1 < len(_THALES_TP1_ADDRESS_ELEMENTS)
+                else _THALES_TP1_ADDRESS_ELEMENTS[index - 1][0]
+            ),
+            missing_anchor_position=(
+                "above" if index + 1 < len(_THALES_TP1_ADDRESS_ELEMENTS) else "below"
+            ),
+        )
+        for index, (pattern, display) in enumerate(_THALES_TP1_ADDRESS_ELEMENTS)
+    ],
+    failure_message="adresse THALES non conforme.",
+    translations={
+        "en": {
+            "description": "Every page identified as TP1 must contain the exact reference THALES address.",
+            "message": "The THALES address on the TP1 page is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_TP1_THALES_LOGO_FONT_SIZE = rule(
+    code="CUSTOM_TP1_THALES_LOGO_FONT_SIZE",
+    name="Taille du logo THALES sur les pages TP1",
+    description=(
+        "Le T de la police Thales en debut de page TP1 doit avoir une taille "
+        "de 36 pt."
+    ),
+    message="La taille du logo THALES sur TP1 n'est pas 36 pt.",
+    kind="field_required",
+    severity="warning",
+    target=RuleTarget(page="all", region="full_page", page_type="TP1"),
+    checks=[
+        Check(
+            field="thales_logo_t",
+            operator="font_size_equals",
+            expected=36,
+            require_all=True,
+        ),
+    ],
+    failure_message="taille du logo THALES non conforme sur TP1.",
+    translations={
+        "en": {
+            "description": "The Thales T at the start of a TP1 page must use a 36 pt font.",
+            "message": "The THALES logo size on TP1 is not 36 pt.",
+        }
+    },
+)
+
+CUSTOM_TP2_IMPORTANT_NOTICE = rule(
+    code="CUSTOM_TP2_IMPORTANT_NOTICE",
+    name="Important Notice TP2 conforme au modele ATA100",
+    description=(
+        "Le bloc IMPORTANT NOTICE de la page TP2 doit correspondre exactement "
+        "au modele ATA100, hors differences de retours a la ligne et d'espaces."
+    ),
+    message="L'Important Notice de la page TP2 n'est pas conforme au modele ATA100.",
+    kind="field_required",
+    severity="error",
+    target=_TP2_TARGET,
+    checks=[
+        Check(
+            field="important_notice",
+            operator="normalized_equals",
+            expected=IMPORTANT_NOTICE_TEXT,
+            normalization=["unicode", "spaces", "line_breaks", "trim"],
+        ),
+    ],
+    failure_message="Important Notice TP2 non conforme au modele ATA100.",
+    translations={
+        "en": {
+            "description": (
+                "The IMPORTANT NOTICE block on TP2 must exactly match the ATA100 "
+                "template, apart from line-break and space differences."
+            ),
+            "message": "The TP2 Important Notice does not match the ATA100 template.",
+        }
+    },
+)
+
+CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
+    code="CUSTOM_TITLE_PAGE_COPYRIGHT",
+    name="Copyright du footer conforme a l'annee de revision",
+    description=(
+        "Le footer des pages modifiees par la revision doit contenir le "
+        "copyright THALES avec l'annee de debut 1966 et l'annee de revision "
+        "du document."
+    ),
+    message="Le copyright du footer est absent ou une annee est incorrecte.",
+    kind="field_required",
+    severity="warning",
+    target=_MODIFIED_FOOTER_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_COPYRIGHT_PATTERN,
+        ),
+        Check(
+            field="copyright_start_year",
+            operator="normalized_equals",
+            expected="1966",
+            normalization=["trim"],
+        ),
+        Check(
+            field="copyright_end_year",
+            operator="equals_field",
+            compare_to=FieldRef(
+                source="document_meta",
+                field="meta_revision_date",
+                normalization=["extract_year"],
+            ),
+        ),
+    ],
+    failure_message="Copyright du footer non conforme",
+    translations={
+        "en": {
+            "description": (
+                "The footer of pages modified by the revision must contain the "
+                "THALES copyright with start year 1966 and the document revision year."
+            ),
+            "message": "The footer copyright is missing or contains an incorrect year.",
+        }
+    },
+)
+
+CUSTOM_NO_DEGREE_C_SYMBOL = rule(
+    code="CUSTOM_NO_DEGREE_C_SYMBOL",
+    name="Unite de temperature C ecrite au format deg. C",
+    description="Le symbole °C doit etre ecrit sous la forme deg. C.",
+    message="Le symbole °C est interdit : utiliser deg. C.",
+    kind="regex_flag",
+    severity="info",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=r"(?i)°\s*C\b",
+            replacement="deg. C",
+        ),
+    ],
+    failure_message="unite °C interdite, utiliser deg. C.",
+    translations={
+        "en": {
+            "description": "The °C symbol must be written as deg. C.",
+            "message": "The °C symbol is forbidden: use deg. C.",
+        }
+    },
+)
+
+CUSTOM_NO_DEGREE_F_SYMBOL = rule(
+    code="CUSTOM_NO_DEGREE_F_SYMBOL",
+    name="Unite de temperature F ecrite au format deg. F",
+    description="Le symbole °F doit etre ecrit sous la forme deg. F.",
+    message="Le symbole °F est interdit : utiliser deg. F.",
+    kind="regex_flag",
+    severity="info",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=r"(?i)°\s*F\b",
+            replacement="deg. F",
+        ),
+    ],
+    failure_message="unite °F interdite, utiliser deg. F.",
+    translations={
+        "en": {
+            "description": "The °F symbol must be written as deg. F.",
+            "message": "The °F symbol is forbidden: use deg. F.",
+        }
+    },
+)
+
+CUSTOM_DECIMAL_COMMA = rule(
+    code="CUSTOM_DECIMAL_COMMA",
+    name="Valeurs decimales doivent etre separees par un point",
+    description=(
+        "Les valeurs numeriques decimales des pages modifiees doivent utiliser "
+        "un point comme separateur decimal, et non une virgule."
+    ),
+    message="Une valeur decimale utilise une virgule au lieu d'un point.",
+    kind="regex_flag",
+    severity="warning",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=r"(?<!\d)(\d+),(\d+)(?!\d)",
+            replacement=r"\1.\2",
+        ),
+    ],
+    translations={
+        "en": {
+            "description": (
+                "Decimal numeric values on modified pages must use a point "
+                "rather than a comma as the decimal separator."
+            ),
+            "message": "A decimal value uses a comma instead of a point.",
+        }
+    },
+)
+
+CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
+    code="CUSTOM_TEMPERATURE_FAHRENHEIT",
+    name="Temperature en deg. C accompagnee de sa conversion en deg. F",
+    description=(
+        "Toute temperature exprimee en deg. C doit etre suivie de sa "
+        "conversion numerique en deg. F entre parentheses."
+    ),
+    message="La temperature en deg. C doit etre suivie de sa conversion en deg. F.",
+    kind="regex_flag",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=_TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN,
+            replacement="{{temperature_fahrenheit}}",
+        ),
+    ],
+    failure_message="conversion Fahrenheit absente pour la temperature.",
+    translations={
+        "en": {
+            "description": (
+                "Every temperature expressed in deg. C must be followed by "
+                "its numeric conversion in deg. F in parentheses."
+            ),
+            "message": "A temperature in deg. C must be followed by its conversion in deg. F.",
+        }
+    },
+)
+
+CUSTOM_FORBIDDEN_CONSUMABLES = rule(
+    code="CUSTOM_FORBIDDEN_CONSUMABLES",
+    name="Consommables a supprimer",
+    description="Les references aux consommables interdits doivent etre supprimees.",
+    message="Consommable a supprimer.",
+    kind="regex_flag",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="contains_none",
+            expected=["Silica gel", "dessicant bag"],
+            replacement="",
+        ),
+    ],
+    failure_message="consommable a supprimer.",
+    translations={
+        "en": {
+            "description": "References to forbidden consumables must be removed.",
+            "message": "Consumable to remove.",
+        }
+    },
+)
+
+CUSTOM_REPLACE_LEGACY_NAMES = rule(
+    code="CUSTOM_REPLACE_LEGACY_NAMES",
+    name="References historiques a remplacer par THALES",
+    description=(
+        "Les references a AVIONICS, SEXTANT et THOMSON doivent etre remplacees "
+        "par THALES."
+    ),
+    message="Reference historique a remplacer par THALES.",
+    kind="regex_flag",
+    severity="warning",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=r"(?i)\b(?:AVIONICS|SEXTANT|THOMSON)\b",
+            replacement="THALES",
+        ),
+    ],
+    failure_message="reference historique a remplacer par THALES.",
+    translations={
+        "en": {
+            "description": (
+                "References to AVIONICS, SEXTANT, and THOMSON must be replaced "
+                "with THALES."
+            ),
+            "message": "A legacy reference must be replaced with THALES.",
+        }
+    },
+)
+
+CUSTOM_REVISION_LEP_STAR = rule(
+    code="CUSTOM_REVISION_LEP_STAR",
+    name="Etoile LEP presente pour chaque page revisee ou nouvelle",
+    description=(
+        "Toute page declaree revisee (R) ou nouvelle (N) dans les Highlights "
+        "doit porter une etoile apres sa date dans la liste des pages effectives."
+    ),
+    message="Page revisee dans les Highlights sans etoile dans la LEP.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "lep_star"},
+        )
+    ],
+    failure_message="etoile absente dans la liste des pages effectives.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every page declared revised (R) or new (N) in Highlights must have "
+                "a star after its date in the list of effective pages."
+            ),
+            "message": "A page revised in Highlights has no star in the LEP.",
+        }
+    },
+)
+
+CUSTOM_REVISION_UNDECLARED_STAR = rule(
+    code="CUSTOM_REVISION_UNDECLARED_STAR",
+    name="Etoile LEP justifiee par un statut R ou N dans les Highlights",
+    description=(
+        "Une etoile dans la liste des pages effectives signale une page modifiee : "
+        "cette page doit etre declaree R ou N dans les Highlights."
+    ),
+    message="Etoile LEP sur une page non declaree revisee dans les Highlights.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "undeclared_star"},
+        )
+    ],
+    failure_message="etoile LEP sans statut R ou N dans les Highlights.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "A star in the list of effective pages marks a modified page; that "
+                "page must be declared R or N in Highlights."
+            ),
+            "message": "The LEP has a star on a page not declared revised in Highlights.",
+        }
+    },
+)
+
+CUSTOM_REVISION_LEP_DATE = rule(
+    code="CUSTOM_REVISION_LEP_DATE",
+    name="Date LEP conforme au statut de la page",
+    description=(
+        "La date de la liste des pages effectives doit valoir la date de revision "
+        "du mapping pour une page revisee ou nouvelle, et rester la derniere date "
+        "d'emission connue pour une page inchangee."
+    ),
+    message="Date LEP incoherente avec le statut de la page.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "lep_date"},
+        )
+    ],
+    failure_message="date LEP incoherente avec le statut de la page.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "For a revised or new page, the list of effective pages date must "
+                "equal the mapped revision date and remain the latest known issue "
+                "date for an unchanged page."
+            ),
+            "message": "The LEP date is inconsistent with the page status.",
+        }
+    },
+)
+
+CUSTOM_REVISION_FOOTER_DATE = rule(
+    code="CUSTOM_REVISION_FOOTER_DATE",
+    name="Date du pied de page conforme aux Highlights et a la LEP",
+    description=(
+        "Le pied de page doit porter la date de revision du mapping pour une page "
+        "revisee ou nouvelle, et la date declaree dans la liste des pages "
+        "effectives pour une page inchangee."
+    ),
+    message="Date du pied de page incoherente avec les Highlights et la LEP.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "footer_date"},
+        )
+    ],
+    failure_message="date du pied de page incoherente avec les Highlights et la LEP.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The footer must show the mapped revision date for a revised or new "
+                "page, and the date declared in the list of effective pages for an "
+                "unchanged page."
+            ),
+            "message": "The footer date is inconsistent with Highlights and the LEP.",
+        }
+    },
+)
+
+CUSTOM_REVISION_UNDECLARED_PAGE = rule(
+    code="CUSTOM_REVISION_UNDECLARED_PAGE",
+    name="Page datee de la revision declaree modifiee",
+    description=(
+        "Une page qui porte la date de la revision courante doit etre declaree "
+        "modifiee, dans les Highlights (R ou N) et par une etoile dans la LEP."
+    ),
+    message="Page datee de la revision courante sans declaration de modification.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "undeclared_page"},
+        )
+    ],
+    failure_message="page datee de la revision courante sans declaration de modification.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "A page carrying the current revision date must be declared modified "
+                "in Highlights (R or N) and marked with a star in the LEP."
+            ),
+            "message": "A page dated with the current revision has no modification declaration.",
+        }
+    },
+)
+
+CUSTOM_REVISION_PAGE_NOT_IN_LEP = rule(
+    code="CUSTOM_REVISION_PAGE_NOT_IN_LEP",
+    name="Page du document presente dans la liste des pages effectives",
+    description="Toute page du document doit figurer dans la liste des pages effectives.",
+    message="Page du document absente de la liste des pages effectives.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "page_not_in_lep"},
+        )
+    ],
+    failure_message="page du document absente de la liste des pages effectives.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": "Every page in the document must appear in the list of effective pages.",
+            "message": "The document page is missing from the list of effective pages.",
+        }
+    },
+)
+
+CUSTOM_REVISION_MODIFIED_PAGE_ABSENT = rule(
+    code="CUSTOM_REVISION_MODIFIED_PAGE_ABSENT",
+    name="Page declaree revisee presente dans le document",
+    description=(
+        "Toute page declaree revisee ou nouvelle dans les Highlights doit exister "
+        "dans le document et s'identifier dans son pied de page."
+    ),
+    message="Page declaree revisee introuvable dans le document.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "modified_page_absent"},
+        )
+    ],
+    failure_message="page declaree revisee introuvable dans le document.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every page declared revised or new in Highlights must exist in the "
+                "document and be identified in its footer."
+            ),
+            "message": "The page declared revised cannot be found in the document.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_PAGE_PAIRING = rule(
+    code="CUSTOM_HIGHLIGHTS_PAGE_PAIRING",
+    name="Pages Highlights declarees par couple impaire/paire",
+    description=(
+        "Les Highlights declarent les pages par couple : une page impaire est "
+        "suivie de la page paire correspondante, et une page paire est precedee "
+        "de son impaire."
+    ),
+    message="Page Highlights declaree sans sa page paire ou impaire associee.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "highlights_pairing"},
+        )
+    ],
+    failure_message="page Highlights declaree sans sa page paire ou impaire associee.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Highlights declare pages in pairs: an odd page is followed by its "
+                "corresponding even page, and an even page is preceded by its odd page."
+            ),
+            "message": "A Highlights page is declared without its corresponding odd or even page.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT = rule(
+    code="CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT",
+    name="Libelle Page/Pages et alignement dans les Highlights",
+    description=(
+        "Une plage de pages s'ecrit \u00ab Pages 701 to 704 \u00bb et une page unique "
+        "\u00ab Page  401 \u00bb, avec deux espaces pour conserver l'alignement des "
+        "numeros."
+    ),
+    message="Libelle Page/Pages ou alignement non conforme dans les Highlights.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "highlights_page_label"},
+        )
+    ],
+    failure_message="libelle Page/Pages ou alignement non conforme dans les Highlights.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "A page range is written as 'Pages 701 to 704' and a single page as "
+                "'Page  401', with two spaces to preserve number alignment."
+            ),
+            "message": "The Page/Pages label or alignment is not compliant in Highlights.",
+        }
+    },
+)
+
+CUSTOM_ROR_INSERTION_DATE = rule(
+    code="CUSTOM_ROR_INSERTION_DATE",
+    name="Date d'insertion du Record of Revisions conforme a la date de revision",
+    description=(
+        "Dans le Record of Revisions, la date d'insertion doit reprendre le mois "
+        "de la date de revision si le jour est inferieur a 15, sinon le mois suivant."
+    ),
+    message="La date d'insertion du Record of Revisions est incoherente.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "ror_insertion_date"},
+        )
+    ],
+    failure_message=(
+        "date d'insertion du Record of Revisions incoherente avec la date de revision."
+    ),
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "In the Record of Revisions, the insertion date must use the revision "
+                "month when the revision day is below 15, otherwise the following month."
+            ),
+            "message": "The Record of Revisions insertion date is inconsistent with the revision date.",
+        }
+    },
+)
+
+CUSTOM_ROR_REVISION_DATE = rule(
+    code="CUSTOM_ROR_REVISION_DATE",
+    name="Date de revision du Record of Revisions conforme aux Highlights",
+    description=(
+        "La date de revision la plus recente du Record of Revisions doit "
+        "correspondre a la date de revision des Highlights."
+    ),
+    message="La date de revision du Record of Revisions est incoherente avec les Highlights.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "ror_revision_date"},
+        )
+    ],
+    failure_message=(
+        "date de revision du Record of Revisions incoherente avec les Highlights."
+    ),
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The current revision date in the Record of Revisions must match the "
+                "revision date used by the Highlights."
+            ),
+            "message": "The current Record of Revisions date does not match the Highlights revision date.",
+        }
+    },
+)
+
+REVISION_RULE_DEFINITIONS = (
+    CUSTOM_REVISION_LEP_STAR,
+    CUSTOM_REVISION_UNDECLARED_STAR,
+    CUSTOM_REVISION_LEP_DATE,
+    CUSTOM_REVISION_FOOTER_DATE,
+    CUSTOM_FOOTER_PAGE_NUMBER,
+    CUSTOM_REVISION_UNDECLARED_PAGE,
+    CUSTOM_REVISION_PAGE_NOT_IN_LEP,
+    CUSTOM_REVISION_MODIFIED_PAGE_ABSENT,
+    CUSTOM_HIGHLIGHTS_PAGE_PAIRING,
+    CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT,
+    CUSTOM_ROR_INSERTION_DATE,
+    CUSTOM_ROR_REVISION_DATE,
+)
+
+RULE_DEFINITIONS = (
+    *REVISION_RULE_DEFINITIONS,
+    CUSTOM_CMM_NUMBER,
+    CUSTOM_CMM_NUMBER_FONT_SIZE,
+    CUSTOM_THALES_LOGO_FONT_SIZE,
+    CUSTOM_TP1_THALES_LOGO_FONT_SIZE,
+    CUSTOM_TP2_IMPORTANT_NOTICE,
+    CUSTOM_TITLE_PAGE_COPYRIGHT,
+    CUSTOM_TP1_REVISION_NUMBER,
+    CUSTOM_TP1_FIRST_ISSUE_DATE,
+    CUSTOM_HIGHLIGHTS_REVISION_HEADER,
+    CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
+    CUSTOM_HIGHLIGHTS_HOLDER,
+    CUSTOM_HIGHLIGHTS_ATA_NUMBER,
+    CUSTOM_HIGHLIGHTS_PNR_HEADER,
+    CUSTOM_HEADER_DOCUMENT_TYPE,
+    CUSTOM_TP1_HEADER_DOCUMENT_TYPE,
+    CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE,
+    CUSTOM_PNR_PAGE_VALUE,
+    CUSTOM_TP1_PNR_PAGE_VALUE,
+    CUSTOM_REPAIR_NOTE,
+    CUSTOM_TESTING_NOTE,
+    CUSTOM_STORAGE_NOTE,
+    CUSTOM_TP1_THALES_ADDRESS,
+    CUSTOM_DECIMAL_COMMA,
+    CUSTOM_SENTENCE_PUNCTUATION,
+    CUSTOM_TEMPERATURE_FAHRENHEIT,
+    CUSTOM_BAR_PSI_CONVERSION,
+    CUSTOM_FORBIDDEN_CONSUMABLES,
+    CUSTOM_REPLACE_LEGACY_NAMES,
+    CUSTOM_NO_DEGREE_C_SYMBOL,
+    CUSTOM_NO_DEGREE_F_SYMBOL,
+)
+
+RULE_METADATA = {
+    definition.code: definition.metadata
+    for definition in RULE_DEFINITIONS
+}
+CATALOG = {
+    _CATALOG_VERSION: [definition.compiled_rule for definition in RULE_DEFINITIONS]
+}
+STANDARD_SPEC: dict[str, object] = {
+    "code": _STANDARD_CODE,
+    "label": "THALES - Regles utilisateur",
+    "description": "Regles locales editables pour les controles documentaires THALES.",
+    "versions": CATALOG,
+    "metadata": RULE_METADATA,
+}

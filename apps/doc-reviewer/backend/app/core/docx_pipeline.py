@@ -17,6 +17,7 @@ import uuid
 from collections import defaultdict
 from typing import Callable, Optional
 
+from app.checks.client_bundle import ClientBundle
 from sqlalchemy.orm import Session
 
 from app.checks import docx_checks
@@ -58,6 +59,7 @@ def run_docx(
     progress_cb: Optional[Callable[[int], None]] = None,
     warnings: Optional[list[str]] = None,
     compiled_results: Optional[list[RuleResult]] = None,
+    client_bundle: ClientBundle[Any] | None = None,
 ) -> list[RawSuggestion]:
     """Détection sur un document Word natif. `RawSuggestion.page` porte l'index
     du bloc (→ `target_id = dp<page>`).
@@ -86,6 +88,7 @@ def run_docx(
         progress_cb=progress_cb,
         warnings=warnings,
         execute_compiled=False,
+        client_bundle=client_bundle,
     )
     compiled_rules = rules_engine.load_compiled_rules(
         db,
@@ -102,6 +105,8 @@ def run_docx(
             compiled_rules_for_execution,
             db=db,
             document=document,
+            client_operations=(client_bundle.operations if client_bundle is not None else None),
+            client_entities=(client_bundle.mapping.entities if client_bundle is not None else None),
         )
         if compiled_results is not None:
             compiled_results.extend(results)

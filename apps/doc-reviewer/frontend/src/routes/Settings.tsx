@@ -314,6 +314,8 @@ export function Settings() {
           </Card>
         </Collapsible>
 
+        {import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
+          <>
         {/* 1. Normes cibles actives (multi-select pills, parite preview) :
             chaque version selectionnee est fusionnee a l'analyse et appliquee
             a chaque upload. Choix persistant (filtersStore). */}
@@ -420,9 +422,11 @@ export function Settings() {
         <Collapsible title={t("settings.standardsAdmin")}>
           <Standards />
         </Collapsible>
+          </>
+        ) : null}
 
         {/* 5. Regles custom (linter user-defined) — imbriquee dans Parametres */}
-        <Rules />
+        {import.meta.env.VITE_LEGACY_RULES_UI === "true" ? <Rules /> : null}
 
         {/* 6. Systemes d'unites cibles (multi : metric et/ou imperial). */}
         <Card title={t("settings.targetUnit.title")} description={t("settings.targetUnit.multiHint")}>

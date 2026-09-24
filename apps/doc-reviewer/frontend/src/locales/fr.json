@@ -196,6 +196,8 @@
     "meta.languageUnset": "Sélectionner une langue",
     "meta.languageFr": "Français",
     "meta.languageEn": "Anglais",
+    "meta.valueUnset": "Aucune valeur",
+    "meta.listHint": "Saisissez une valeur par ligne.",
     "pageScope.label": "Périmètre d’analyse",
     "pageScope.all": "Document complet",
     "pageScope.range": "Plage de pages",
@@ -252,6 +254,18 @@
   "rules": {
     "title": "Règles custom",
     "subtitle": "Linter user-defined exécuté avec les règles de la norme cible",
+    "client": {
+      "bundle": "Bundle v{{version}}",
+      "rule": "Règle",
+      "mode": "Mode d'exécution",
+      "description": "Description",
+      "search": "Rechercher une règle",
+      "manifestHash": "Manifest",
+      "mappingHash": "Mapping",
+      "ruleCount": "règles",
+      "loadFailed": "Impossible de charger le catalogue du client actif.",
+      "saveFailed": "Impossible d'enregistrer le statut de cette règle. Réessayez."
+    },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Etoile LEP presente pour chaque page revisee ou nouvelle",
       "CUSTOM_REVISION_UNDECLARED_STAR": "Etoile LEP justifiee par un statut R ou N dans les Highlights",

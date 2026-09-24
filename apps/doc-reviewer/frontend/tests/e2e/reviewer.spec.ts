@@ -6,6 +6,15 @@ test.describe("Doc Reviewer smoke", () => {
     await expect(page.getByText(/Doc Reviewer/i)).toBeVisible();
   });
 
+  test("shows the active client rules instead of the legacy checklist panel", async ({ page }) => {
+    await page.goto("/rules");
+
+    await expect(page.getByRole("heading", { name: "THALES" })).toBeVisible();
+    await expect(page.getByText("CUSTOM_CMM_NUMBER", { exact: true })).toBeVisible();
+    await expect(page.locator(".rules-table input[type=checkbox]")).toHaveCount(42);
+    await expect(page.getByText(/Checklist import/i)).toHaveCount(0);
+  });
+
   test("keeps core routes within the viewport", async ({ page }) => {
     for (const path of ["/", "/documents", "/settings"]) {
       await page.goto(path);

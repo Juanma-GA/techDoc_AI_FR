@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -46,26 +46,6 @@ DocumentMetaField = Literal[
 ]
 
 
-# Cross-page consistency controls: the verdict for one page depends on two
-# tables printed elsewhere in the document (Highlights + List of Effective
-# Pages), so the operator reads the whole parsed document rather than the
-# scoped target. One control = one compiled rule.
-RevisionControl = Literal[
-    "lep_star",
-    "undeclared_star",
-    "lep_date",
-    "footer_date",
-    "undeclared_page",
-    "page_not_in_lep",
-    "modified_page_absent",
-    "highlights_pairing",
-    "highlights_page_label",
-    "footer_page_number",
-    "ror_insertion_date",
-    "ror_revision_date",
-]
-
-
 class RuleTarget(StrictModel):
     page: str
     region: Literal["full_page", "header", "body", "footer"]
@@ -97,9 +77,8 @@ class FieldRef(StrictModel):
 
     @model_validator(mode="after")
     def validate_field(self) -> FieldRef:
-        allowed = set(get_args(EntityField)) if self.source == "document_text" else set(get_args(DocumentMetaField))
-        if self.field not in allowed:
-            raise ValueError(f"champ invalide pour source={self.source}: {self.field}")
+        if not self.field.strip():
+            raise ValueError("field must be a non-empty string")
         return self
 
 
@@ -110,7 +89,7 @@ class Condition(StrictModel):
     number was actually captured for this document.
     """
 
-    field: DocumentMetaField
+    field: str = Field(min_length=1, max_length=120)
     state: Literal["present", "absent"] = "present"
 
 
@@ -133,7 +112,7 @@ class RulePrerequisite(StrictModel):
 
 
 class Check(StrictModel):
-    field: EntityField
+    field: str = Field(min_length=1, max_length=120)
     operator: Literal[
         "exists",
         "not_exists",
@@ -157,6 +136,7 @@ class Check(StrictModel):
         # Compiling "this text must be present" as `regex` inverts the
         # intent and flags the correct text as a violation every time.
         "regex_exists",
+        "client_operation",
         "pressure_conversion",
         "sentence_punctuation",
         "revision_consistency",
@@ -165,6 +145,8 @@ class Check(StrictModel):
         "highlights_holder",
         "highlights_document_type",
     ]
+    operation: str | None = None
+    operation_params: dict[str, Any] = Field(default_factory=dict)
     expected: str | int | float | list[str] | None = None
     require_all: bool = False
     expected_display: str | None = None
@@ -198,6 +180,13 @@ class Check(StrictModel):
             raise ValueError("compare_to is only allowed with equals_field")
         if self.operator == "normalized_equals" and not self.normalization:
             raise ValueError("normalized_equals requires at least one normalization step")
+        if self.operator == "client_operation":
+            if not self.operation:
+                raise ValueError("client_operation requires operation")
+            if self.expected is not None:
+                raise ValueError("client_operation must use operation_params, not expected")
+        elif self.operation is not None or self.operation_params:
+            raise ValueError("operation and operation_params require client_operation")
         if self.operator in {"regex", "regex_exists"}:
             if not isinstance(self.expected, str) or not self.expected:
                 raise ValueError(f"{self.operator} requires a non-empty regex string")
@@ -211,11 +200,10 @@ class Check(StrictModel):
             raise ValueError(
                 "sentence_punctuation requires expected='period_and_enumeration'"
             )
-        if self.operator == "revision_consistency" and self.expected not in get_args(RevisionControl):
-            raise ValueError(
-                "revision_consistency requires expected in "
-                f"{', '.join(get_args(RevisionControl))}"
-            )
+        if self.operator == "revision_consistency" and (
+            not isinstance(self.expected, str) or not self.expected
+        ):
+            raise ValueError("revision_consistency requires a non-empty control string")
         if self.operator == "shop_verification" and self.expected != "manufacturer_mapping":
             raise ValueError(
                 "shop_verification requires expected='manufacturer_mapping'"
@@ -428,6 +416,9 @@ def _describe_check(check: Check) -> str:
             "coherence Highlights / liste des pages effectives / pied de page "
             f"pour le controle {check.expected}"
         )
+    if check.operator == "client_operation":
+        control = check.operation_params.get("control")
+        return f"operation {check.operation}: {control or check.operation_params}"
     if check.operator == "font_size_equals":
         return f"{check.field} doit avoir une taille de police de {check.expected} pt"
     if check.operator == "shop_verification":

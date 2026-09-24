@@ -11,11 +11,12 @@ from queue import Empty, SimpleQueue
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
+from app.checks.client_registry import active_standard_versions
 from app.core.errors import AppError
 from app.core.document_context import missing_document_context
 from app.core.compiled_rules import RuleResult
@@ -61,6 +62,7 @@ def latest_rule_results(
 @router.post("/documents/{document_id}/analyze")
 def analyze_stream(
     document_id: uuid.UUID,
+    request: Request,
     vision: Optional[bool] = Query(
         default=None,
         description=(
@@ -83,7 +85,26 @@ def analyze_stream(
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
-    missing_context = missing_document_context(doc)
+    client_configuration = request.app.state.client_configuration
+    client_bundle = client_configuration.bundle
+    previous_run = db.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
+        .order_by(AnalysisRun.started_at.desc())
+        .limit(1)
+    )
+    previous_bundle_hash: str | None = None
+    if previous_run is not None:
+        try:
+            previous_snapshot = json.loads(previous_run.context_snapshot_json or "{}")
+            previous_bundle_hash = previous_snapshot.get("client_bundle", {}).get("bundle_hash")
+        except (AttributeError, TypeError, ValueError):
+            previous_bundle_hash = None
+    bundle_changed_since_previous_run = (
+        previous_bundle_hash is not None
+        and previous_bundle_hash != client_configuration.bundle_hash
+    )
+    missing_context = missing_document_context(doc, client_configuration.mapping)
     if missing_context:
         raise AppError(
             "DOCUMENT_CONTEXT_INCOMPLETE",
@@ -170,13 +191,44 @@ def analyze_stream(
         sv_ids_list = []
     if not sv_ids_list and sv_id is not None:
         sv_ids_list = [str(sv_id)]
+    if not sv_ids_list:
+        sv_ids_list = [
+            str(version.id)
+            for version in active_standard_versions(
+                db,
+                client_configuration,
+            )
+        ]
+    if sv_id is None and sv_ids_list:
+        try:
+            sv_id = uuid.UUID(str(sv_ids_list[0]))
+        except (ValueError, TypeError):
+            pass
     context_snapshot = json.dumps(
         {
+            "client_bundle": {
+                "bundle": client_configuration.selection.bundle,
+                "client_code": client_configuration.manifest.client_code,
+                "bundle_version": client_configuration.manifest.bundle_version,
+                "contract_version": client_configuration.manifest.contract_version,
+                "catalogs": [
+                    catalog.model_dump(mode="json")
+                    for catalog in client_configuration.manifest.catalogs
+                ],
+                "manifest_hash": client_configuration.manifest_hash,
+                "mapping_hash": client_configuration.mapping_hash,
+                "bundle_hash": client_configuration.bundle_hash,
+                "reanalysis": {
+                    "previous_bundle_hash": previous_bundle_hash,
+                    "using_current_bundle": bundle_changed_since_previous_run,
+                },
+            },
             "analysis_scope": {
                 "first_page": resolved_first_page,
                 "last_page": resolved_last_page,
             },
             "metadata": {
+                "client_metadata": doc.client_metadata or {},
                 "meta_cmm_number": doc.meta_cmm_number,
                 "meta_revision_date": doc.meta_revision_date,
                 "meta_first_issue_date": doc.meta_first_issue_date,
@@ -231,6 +283,7 @@ def analyze_stream(
     meta_pnr_number_value = doc.meta_pnr_number
     meta_manufacturer_value = doc.meta_manufacturer
     document_language_value = doc.document_language
+    client_metadata_value = dict(doc.client_metadata or {})
     first_page_value = resolved_first_page
     last_page_value = resolved_last_page
     partial_page_range_value = partial_page_range
@@ -320,6 +373,7 @@ def analyze_stream(
                 meta_pnr_number = meta_pnr_number_value
                 meta_manufacturer = meta_manufacturer_value
                 document_language = document_language_value
+                client_metadata = client_metadata_value
 
             scoped_session: Session = SessionLocal()
             try:
@@ -351,6 +405,12 @@ def analyze_stream(
                 # lieu de se traduire silencieusement par "0 anomalie" (HR7).
                 run_warnings: list[str] = []
                 compiled_results = []
+                if bundle_changed_since_previous_run:
+                    run_warnings.append(
+                        "Le run precedent utilisait un autre bundle; cette analyse "
+                        f"utilise le bundle actif {client_configuration.manifest.client_code} "
+                        f"v{client_configuration.manifest.bundle_version}."
+                    )
                 if partial_page_range_value and vision_override_value:
                     run_warnings.append(
                         "Analyse vision ignoree pour une plage partielle de pages"
@@ -367,6 +427,7 @@ def analyze_stream(
                                 progress_cb=_on_progress,
                                 warnings=run_warnings,
                                 compiled_results=compiled_results,
+                                client_bundle=client_bundle,
                             )
                         )
                     )
@@ -394,6 +455,7 @@ def analyze_stream(
                                 progress_cb=_on_progress,
                                 warnings=run_warnings,
                                 compiled_results=compiled_results,
+                                client_bundle=client_bundle,
                             )
                         )
                     )

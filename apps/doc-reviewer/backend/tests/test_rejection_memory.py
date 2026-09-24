@@ -42,7 +42,8 @@ def test_rejected_finding_is_suppressed_on_reanalyze(
 
     rows = client.get(f"/api/v1/documents/{doc_id}/suggestions").json()
     assert rows, "au moins une suggestion au premier passage"
-    victim = rows[0]
+    victim = next((row for row in rows if row["original_text"]), None)
+    assert victim is not None, "une suggestion avec texte source est requise"
 
     # Rejet + motif libre (corpus-agent-style).
     patch = client.patch(
@@ -74,12 +75,13 @@ def test_done_event_reports_suppressed_count(
     doc_id = _upload(client, sample_pdf_bytes)
     _analyze(client, doc_id)
     rows = client.get(f"/api/v1/documents/{doc_id}/suggestions").json()
-    if not rows:
-        return
-    client.patch(
-        f"/api/v1/suggestions/{rows[0]['id']}",
+    victim = next((row for row in rows if row["original_text"]), None)
+    assert victim is not None, "une suggestion avec texte source est requise"
+    rejection = client.patch(
+        f"/api/v1/suggestions/{victim['id']}",
         json={"status": "rejected", "feedback": "x"},
     )
+    assert rejection.status_code == 200
     body = _analyze(client, doc_id).decode("utf-8", "replace")
     # Recupere la charge JSON de l'event `done`.
     done_payloads = [

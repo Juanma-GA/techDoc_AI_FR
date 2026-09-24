@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Trash2 } from "lucide-react";
+import { Check, CheckCheck, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -13,12 +13,26 @@ import {
   useValidateAllRules,
   type RuleInput,
 } from "../hooks/useRules";
+import {
+  useClientConfig,
+  useClientRules,
+  usePatchClientRule,
+  type ClientRule,
+} from "../hooks/useClientConfig";
 import { useStandards, useToggleCatalogRule } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
 import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
 
 export function Rules() {
+  return import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
+    <LegacyRules />
+  ) : (
+    <ClientRules />
+  );
+}
+
+function LegacyRules() {
   const { t } = useTranslation();
   const standards = useStandards();
   const rules = useRules();
@@ -340,5 +354,145 @@ function RuleRow({
         </div>
       </td>
     </tr>
+  );
+}
+
+function ClientRules() {
+  const { t, i18n } = useTranslation();
+  const config = useClientConfig();
+  const clientRules = useClientRules();
+  const patchClientRule = usePatchClientRule();
+  const [search, setSearch] = useState("");
+
+  if (config.isLoading || clientRules.isLoading) {
+    return <p className="empty-state">{t("common.loading")}</p>;
+  }
+  if (config.isError || clientRules.isError || !config.data || !clientRules.data) {
+    return (
+      <section className="card">
+        <p className="banner warn">{t("rules.client.loadFailed")}</p>
+        <button
+          type="button"
+          className="btn secondary small"
+          onClick={() => {
+            void config.refetch();
+            void clientRules.refetch();
+          }}
+        >
+          {t("common.retry")}
+        </button>
+      </section>
+    );
+  }
+
+  const query = search.trim().toLocaleLowerCase();
+  const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
+  const localized = (rule: ClientRule, field: "name" | "description" | "message") =>
+    rule.translations[locale]?.[field] ?? rule[field];
+  const filtered = clientRules.data.filter((rule) =>
+    [rule.code, rule.name, localized(rule, "name"), localized(rule, "description"), localized(rule, "message")].some((value) =>
+      value.toLocaleLowerCase().includes(query),
+    ),
+  );
+  const active = filtered.filter((rule) => rule.active);
+  const inactive = filtered.filter((rule) => !rule.active);
+  const executionLabel = (execution: ClientRule["execution"]) =>
+    t(`rules.compiled.${execution}`);
+
+  const renderRules = (rows: ClientRule[]) => (
+    <div className="table-scroll">
+      <table className="rules-table">
+        <thead>
+          <tr>
+            <th>{t("rules.form.enabled")}</th>
+            <th>{t("rules.client.rule")}</th>
+            <th>{t("rules.client.mode")}</th>
+            <th>{t("rules.form.severity")}</th>
+            <th>{t("rules.client.description")}</th>
+            <th>{t("rules.form.message")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((rule) => (
+            <tr key={rule.code} style={rule.active ? undefined : { opacity: 0.62 }}>
+              <td>
+                <label
+                  className="switch"
+                  title={rule.active ? t("rules.disable") : t("rules.enable")}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label={`${rule.active ? t("rules.disable") : t("rules.enable")} ${rule.name}`}
+                    checked={rule.active}
+                    onChange={(event) =>
+                      patchClientRule.mutate({ code: rule.code, active: event.target.checked })
+                    }
+                    disabled={patchClientRule.isPending}
+                  />
+                  <span className="track" />
+                </label>
+              </td>
+              <td className="rule-name-cell">
+                <strong>{localized(rule, "name")}</strong>
+                <div className="label">{rule.code}</div>
+              </td>
+              <td>
+                <span className={`badge ${rule.execution === "unsupported" ? "default" : "success"}`}>
+                  {executionLabel(rule.execution)}
+                </span>
+              </td>
+              <td><span className="badge default">{rule.severity}</span></td>
+              <td>{localized(rule, "description")}</td>
+              <td>{localized(rule, "message")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const catalogLabel = config.data.catalogs
+    .map((catalog) => `${catalog.code} ${catalog.version}`)
+    .join(" · ");
+
+  return (
+    <section className="card">
+      <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <h2 className="card-title">{config.data.label}</h2>
+          <p className="card-sub">
+            {config.data.client_code} · {t("rules.client.bundle", { version: config.data.bundle_version })}
+            {catalogLabel ? ` · ${catalogLabel}` : ""}
+          </p>
+        </div>
+        <label className="row" style={{ gap: 8, minWidth: 220 }}>
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            className="input"
+            aria-label={t("rules.client.search")}
+            placeholder={t("rules.client.search")}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+      </div>
+
+      <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+        <span className="label">
+          {t("rules.client.manifestHash")}: {config.data.manifest_hash.slice(0, 12)}
+        </span>
+        <span className="label">
+          {t("rules.client.mappingHash")}: {config.data.mapping_hash.slice(0, 12)}
+        </span>
+        <span className="label">{filtered.length} {t("rules.client.ruleCount")}</span>
+      </div>
+
+      {patchClientRule.isError ? <p className="banner warn">{t("rules.client.saveFailed")}</p> : null}
+      <div className="rules-section-title">{t("rules.active")} · {active.length}</div>
+      {active.length ? renderRules(active) : <p className="empty-state">{t("rules.activeEmpty")}</p>}
+      <div className="rules-section-title">{t("rules.inactive")} · {inactive.length}</div>
+      {inactive.length ? renderRules(inactive) : <p className="empty-state">{t("rules.inactiveEmpty")}</p>}
+    </section>
   );
 }

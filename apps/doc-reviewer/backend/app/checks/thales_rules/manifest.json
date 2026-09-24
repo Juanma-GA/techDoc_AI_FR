@@ -1,0 +1,22 @@
+{
+  "client_code": "THALES",
+  "label": "THALES",
+  "bundle_version": "1.1.0",
+  "contract_version": "1",
+  "catalogs": [
+    {
+      "code": "THALES-CUSTOM",
+      "version": "v1"
+    }
+  ],
+  "files": {
+    "mapping": "mapping.json"
+  },
+  "modules": {
+    "rules": "rules.py",
+    "operations": "operations.py",
+    "page_classifier": "page_classifier.py",
+    "revision_engine": "revision_engine.py"
+  },
+  "ui_options": {}
+}

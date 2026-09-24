@@ -3,15 +3,24 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.checks.standards import CUSTOM_STANDARD_SPECS, serialize_builtin_version
+from app.core.logging import get_logger
 from app.db.models import Standard, StandardVersion
 
-def sync_custom_standards(db: Session) -> int:
+
+_logger = get_logger(__name__)
+
+
+def sync_custom_standards(
+    db: Session,
+    client_standard_specs: Mapping[str, Mapping[str, object]] | None = None,
+) -> int:
     """Create and refresh all file-backed client standard catalogs.
 
     The published built-in catalogs remain database-owned after their Alembic
@@ -21,7 +30,12 @@ def sync_custom_standards(db: Session) -> int:
     """
     now = datetime.now(timezone.utc)
     changed = 0
-    for spec in CUSTOM_STANDARD_SPECS:
+    standard_specs = (
+        list(client_standard_specs.values())
+        if client_standard_specs is not None
+        else CUSTOM_STANDARD_SPECS
+    )
+    for spec in standard_specs:
         code = str(spec["code"])
         label = str(spec["label"])
         description = str(spec["description"])
@@ -74,10 +88,13 @@ def sync_custom_standards(db: Session) -> int:
 
     db.commit()
     if changed:
-        logger.info("custom_standards_synced", changed_versions=changed)
+        _logger.info("custom_standards_synced", changed_versions=changed)
     return changed
 
 
-def sync_user_standard(db: Session) -> int:
+def sync_user_standard(
+    db: Session,
+    client_standard_specs: Mapping[str, Mapping[str, object]] | None = None,
+) -> int:
     """Backward-compatible alias for the generic client catalog sync."""
-    return sync_custom_standards(db)
+    return sync_custom_standards(db, client_standard_specs)
