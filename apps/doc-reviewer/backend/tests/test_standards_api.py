@@ -142,6 +142,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_NO_DEGREE_F_SYMBOL": "info",
         "CUSTOM_REVISION_LEP_STAR": "error",
         "CUSTOM_REVISION_UNDECLARED_STAR": "error",
+        "CUSTOM_REVISION_LEP_BLANK_STAR": "error",
         "CUSTOM_REVISION_LEP_DATE": "error",
         "CUSTOM_REVISION_FOOTER_DATE": "error",
         "CUSTOM_REVISION_UNDECLARED_PAGE": "error",

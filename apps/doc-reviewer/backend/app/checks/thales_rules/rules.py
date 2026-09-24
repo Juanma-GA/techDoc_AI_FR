@@ -1511,6 +1511,40 @@ CUSTOM_REVISION_UNDECLARED_STAR = rule(
     },
 )
 
+CUSTOM_REVISION_LEP_BLANK_STAR = rule(
+    code="CUSTOM_REVISION_LEP_BLANK_STAR",
+    name="Etoile LEP des pages Blank selon le statut New de la page impaire",
+    description=(
+        "Une entree Blank dans la LEP porte une etoile uniquement lorsque la page "
+        "impaire de son couple est declaree N (New) dans les Highlights. Une page "
+        "declaree R (Modify), inchangee ou sans statut N ne doit pas porter d'etoile."
+    ),
+    message="Etoile de page Blank incoherente avec le statut de sa page impaire.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "blank_lep_star"},
+        )
+    ],
+    failure_message="etoile de page Blank incoherente avec le statut New de sa page impaire.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "A Blank entry in the LEP has a star only when the odd page in its "
+                "pair is declared N (New) in Highlights. A page declared R (Modify), "
+                "unchanged, or without an N status must not have a star."
+            ),
+            "message": "The Blank page star is inconsistent with its odd page's status.",
+        }
+    },
+)
+
 CUSTOM_REVISION_LEP_DATE = rule(
     code="CUSTOM_REVISION_LEP_DATE",
     name="Date LEP conforme au statut de la page",
@@ -1806,6 +1840,7 @@ CUSTOM_ROR_REVISION_DATE = rule(
 REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_LEP_STAR,
     CUSTOM_REVISION_UNDECLARED_STAR,
+    CUSTOM_REVISION_LEP_BLANK_STAR,
     CUSTOM_REVISION_LEP_DATE,
     CUSTOM_REVISION_FOOTER_DATE,
     CUSTOM_FOOTER_PAGE_NUMBER,

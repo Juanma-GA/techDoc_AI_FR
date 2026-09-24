@@ -13,14 +13,15 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 47
+    assert len(payload) == 48
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "3d747668f466bba560fdd5f051ad2a61d582a36537c251cd68be9173dbd60f07"
+        "32a3b2267442f5481e8a63db5bcf31a92779259a7fd6d0243b1220a8e1f338fe"
     )
 
     expected_controls = {
         "CUSTOM_REVISION_LEP_STAR": "lep_star",
         "CUSTOM_REVISION_UNDECLARED_STAR": "undeclared_star",
+        "CUSTOM_REVISION_LEP_BLANK_STAR": "blank_lep_star",
         "CUSTOM_REVISION_LEP_DATE": "lep_date",
         "CUSTOM_REVISION_FOOTER_DATE": "footer_date",
         "CUSTOM_FOOTER_PAGE_NUMBER": "footer_page_number",

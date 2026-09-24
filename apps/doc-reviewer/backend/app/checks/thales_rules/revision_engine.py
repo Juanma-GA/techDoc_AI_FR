@@ -956,6 +956,7 @@ def _mark_modified_pages(parsed: ParsedPdf, state: RevisionState) -> None:
 # `app.core.compiled_rules`): one control = one compiled rule.
 LEP_STAR = "lep_star"
 UNDECLARED_STAR = "undeclared_star"
+BLANK_LEP_STAR = "blank_lep_star"
 LEP_DATE = "lep_date"
 FOOTER_DATE = "footer_date"
 UNDECLARED_PAGE = "undeclared_page"
@@ -992,6 +993,43 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
     for entry in state.lep:
         status = statuses.get(entry.page_key)
         context = _context(entry.subject, entry.page_key)
+
+        if entry.is_blank:
+            page_number = page_number_of(entry.page_key)
+            if page_number is not None:
+                odd_page_number = page_number if page_number % 2 else page_number - 1
+                prefix = page_key_prefix(entry.page_key)
+                odd_page_key = (
+                    f"{prefix} {odd_page_number}" if prefix else str(odd_page_number)
+                )
+                should_be_starred = statuses.get(odd_page_key) == "N"
+                if entry.starred != should_be_starred:
+                    if should_be_starred:
+                        message = (
+                            f"{context} est une page Blank dont la page impaire "
+                            f"{odd_page_key} est déclarée New (N) dans les Highlights : "
+                            "sa date doit être suivie de « * » dans la LEP."
+                        )
+                        proposed = f"{entry.date_text.rstrip()} *"
+                    else:
+                        message = (
+                            f"{context} est une page Blank dont la page impaire "
+                            f"{odd_page_key} n'est pas déclarée New (N) dans les "
+                            "Highlights : elle ne doit pas porter de « * » dans la LEP."
+                        )
+                        proposed = entry.date_text.replace("*", "").rstrip()
+                    findings.append(
+                        RevisionFinding(
+                            control=BLANK_LEP_STAR,
+                            message=message,
+                            original=entry.date_text,
+                            proposed=proposed,
+                            page=entry.page,
+                            bbox=entry.bbox,
+                        )
+                    )
+            continue
+
         declared = status in _MODIFIED_STATUSES or status == "D"
 
         if declared and not entry.starred:
@@ -1026,7 +1064,7 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
                 )
             )
             continue
-        if entry.is_blank or status == "D":
+        if status == "D":
             continue
 
         if declared:

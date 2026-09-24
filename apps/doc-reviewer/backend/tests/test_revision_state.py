@@ -495,6 +495,38 @@ def test_star_without_a_revised_status_in_the_highlights_is_reported() -> None:
     assert findings[0].proposed == "JUL 66"
 
 
+def test_blank_lep_star_matches_new_status_of_its_odd_page() -> None:
+    cases = (
+        ("N", "R", "Blank *", []),
+        ("N", "R", "Blank", [revision.BLANK_LEP_STAR]),
+        ("R", "N", "Blank *", [revision.BLANK_LEP_STAR]),
+        ("R", "N", "Blank", []),
+    )
+
+    for odd_status, even_status, blank_date, expected_controls in cases:
+        parsed = _consistent_document()
+        parsed.pages[0] = _highlights_page(
+            [
+                ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                ("Repair", "Page  401", odd_status),
+                ("", "Page  402", even_status),
+            ]
+        )
+        parsed.pages[1] = _lep_with(
+            ("Repair", "401", f"{_REVISION_DATE} *"),
+            ("", "402", blank_date),
+        )
+
+        findings = _findings(parsed)
+
+        assert [finding.control for finding in findings] == expected_controls
+        if expected_controls:
+            assert findings[0].original == blank_date
+            assert findings[0].proposed == (
+                "Blank *" if odd_status == "N" else "Blank"
+            )
+
+
 def test_revised_page_keeping_its_old_lep_date_is_reported() -> None:
     parsed = _consistent_document()
     parsed.pages[1] = _lep_with(
