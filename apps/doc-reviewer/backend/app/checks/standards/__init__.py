@@ -9,14 +9,9 @@ from the DB so the user can clone/override built-in catalogs.
 
 from __future__ import annotations
 
-import importlib
-import pkgutil
-from typing import Any, Callable
-
 from app.checks.standards import ata100, mat10000, ste100
 from app.checks.standards._catalog import serialize_compiled_rule
 from app.core.compiled_rules import CompiledRule
-from app.parsers.pdf_parser import ParsedPdf
 
 
 # Le Doc Reviewer analyse le **rendu PDF** publié, jamais la source. Les
@@ -29,27 +24,6 @@ from app.parsers.pdf_parser import ParsedPdf
 # rédactionnel STE (voix passive, gérondif, longueur de phrase…) vivent dans
 # le catalogue ASD-STE100 et sont exécutées par `catalog_runner`
 # (+ `style_checks` pour la longueur de phrase).
-_BUILTIN_MODULE_NAMES = frozenset({"ata100", "mat10000", "ste100"})
-
-
-def _discover_custom_standard_modules() -> list[Any]:
-    modules: list[Any] = []
-    for module_info in pkgutil.iter_modules(__path__):
-        module_name = module_info.name
-        if module_name.startswith("_") or module_name in _BUILTIN_MODULE_NAMES:
-            continue
-        module = importlib.import_module(f"{__name__}.{module_name}")
-        if isinstance(getattr(module, "STANDARD_SPEC", None), dict):
-            modules.append(module)
-    return modules
-
-
-_CUSTOM_STANDARD_MODULES = _discover_custom_standard_modules()
-CUSTOM_STANDARD_SPECS: list[dict[str, object]] = [
-    module.STANDARD_SPEC for module in _CUSTOM_STANDARD_MODULES
-]
-
-
 BUILTIN_STANDARDS: list[dict[str, object]] = [
     {
         "code": "ASD-STE100",
@@ -87,22 +61,6 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
         "metadata": ata100.RULE_METADATA,
     },
 ]
-BUILTIN_STANDARDS.extend(
-    CUSTOM_STANDARD_SPECS
-)
-
-# Optionnel par standard : classe les pages du PDF parse (`page.page_type`) en
-# fonction du contexte document, AVANT l'execution des regles compilees, pour
-# les standards dont des regles ciblent un `page_type` (cf. RuleTarget). Cle
-# = `code` du standard (voir chaque spec ci-dessus) : le pipeline generique
-# (`rules_engine.run_all`) n'a donc jamais besoin d'importer un module de
-# standard particulier par son nom.
-PAGE_CLASSIFIERS: dict[str, Callable[[ParsedPdf, Any], None]] = {
-    str(module.STANDARD_SPEC["code"]): classifier
-    for module in _CUSTOM_STANDARD_MODULES
-    if (classifier := getattr(module, "classify_pages", None)) is not None
-    and callable(classifier)
-}
 
 
 def serialize_builtin_version(spec: dict[str, object], label: str) -> list[dict[str, object]]:

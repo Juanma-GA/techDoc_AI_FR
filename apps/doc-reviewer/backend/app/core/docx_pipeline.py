@@ -15,9 +15,10 @@ from __future__ import annotations
 import json
 import uuid
 from collections import defaultdict
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from app.checks.client_bundle import ClientBundle
+from app.checks.client_registry import load_active_client_configuration
 from sqlalchemy.orm import Session
 
 from app.checks import docx_checks
@@ -73,6 +74,9 @@ def run_docx(
     Les zones sémantiques (Highlights, Fiche suiveuse, LEP…) sont reconnues au
     préalable (`docx_zones`) pour enrichir l'affichage et le ciblage.
     """
+    if client_bundle is None:
+        client_bundle = load_active_client_configuration().bundle
+
     docx_zones.recognize_zones(parsed)  # renseigne Block.semantic_zone (in place)
 
     pseudo = as_parsed_pdf(parsed)
@@ -105,8 +109,8 @@ def run_docx(
             compiled_rules_for_execution,
             db=db,
             document=document,
-            client_operations=(client_bundle.operations if client_bundle is not None else None),
-            client_entities=(client_bundle.mapping.entities if client_bundle is not None else None),
+            client_operations=client_bundle.operations,
+            client_entities=client_bundle.mapping.entities,
         )
         if compiled_results is not None:
             compiled_results.extend(results)

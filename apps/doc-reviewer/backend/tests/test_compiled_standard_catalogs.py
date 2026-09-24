@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from app.checks.client_registry import load_active_client_configuration
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 from app.checks.standards.thales_custom import (
     HIGHLIGHTS_PAGE_TYPE,
@@ -35,6 +36,9 @@ def _rule(code: str) -> CompiledRule:
             for rule in spec["versions"][label]:
                 if rule.id == code:
                     return rule
+    for definition in load_active_client_configuration().bundle.rules:
+        if definition.code == code:
+            return definition.compiled_rule
     raise AssertionError(f"Unknown built-in rule: {code}")
 
 
@@ -182,7 +186,7 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
                 assert metadata[compiled.id]["message_en"]
-    assert total == 78
+    assert total == 36
 
 
 def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:

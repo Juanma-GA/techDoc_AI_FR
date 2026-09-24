@@ -13,15 +13,15 @@ import json
 import re
 import uuid
 from collections import defaultdict
-from typing import Callable, Iterable, Literal, Optional
+from typing import Any, Callable, Iterable, Literal, Optional
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.checks import catalog_runner, custom_rules, layout_checks, units_check, vision_checks
 from app.checks.client_bundle import ClientBundle
+from app.checks.client_registry import load_active_client_configuration
 from app.checks.raw import RawSuggestion
-from app.checks.standards import PAGE_CLASSIFIERS
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import (
     CompiledRule,
@@ -98,6 +98,9 @@ def run_all(
     jump once the whole run completes — that step is usually the bulk of the
     wall-clock time when checklist rules are active.
     """
+    if client_bundle is None:
+        client_bundle = load_active_client_configuration().bundle
+
     _logger.info(
         "rules_run_started",
         page_count=parsed.page_count,
@@ -120,11 +123,9 @@ def run_all(
     versions = standard_versions or []
     # Chaque standard selectionne peut classer les pages (`page.page_type`)
     # avant l'execution des regles compilees qui en dependent (RuleTarget.
-    # page_type) — remplace un appel en dur depuis la route d'analyse.
+    # page_type) via le bundle transmis/resolu pour ce run.
     for version in versions:
-        if client_bundle is None:
-            classifier = PAGE_CLASSIFIERS.get(version.standard.code)
-        elif version.standard.code in client_bundle.standard_specs:
+        if version.standard.code in client_bundle.standard_specs:
             classifier = client_bundle.page_classifier
         else:
             classifier = None
@@ -209,8 +210,8 @@ def run_all(
             compiled_rules_for_execution,
             db=db,
             document=document,
-            client_operations=(client_bundle.operations if client_bundle is not None else None),
-            client_entities=(client_bundle.mapping.entities if client_bundle is not None else None),
+            client_operations=client_bundle.operations,
+            client_entities=client_bundle.mapping.entities,
         )
         if compiled_results is not None:
             compiled_results.extend(compiled_results_for_log)

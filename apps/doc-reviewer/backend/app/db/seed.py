@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.checks.standards import CUSTOM_STANDARD_SPECS, serialize_builtin_version
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.standards import serialize_builtin_version
 from app.core.logging import get_logger
 from app.db.models import Standard, StandardVersion
 
@@ -24,17 +25,14 @@ def sync_custom_standards(
     """Create and refresh all file-backed client standard catalogs.
 
     The published built-in catalogs remain database-owned after their Alembic
-    migrations. Client catalogs are sourced from the discovered ``*_custom``
-    modules so they can be edited and tested after a backend restart without a
-    new migration for every rule change.
+    migrations. Client catalogs are sourced from the active bundle's exported
+    standard specs so they can be edited without a migration per rule change.
     """
     now = datetime.now(timezone.utc)
     changed = 0
-    standard_specs = (
-        list(client_standard_specs.values())
-        if client_standard_specs is not None
-        else CUSTOM_STANDARD_SPECS
-    )
+    if client_standard_specs is None:
+        client_standard_specs = load_active_client_configuration().bundle.standard_specs
+    standard_specs = list(client_standard_specs.values())
     for spec in standard_specs:
         code = str(spec["code"])
         label = str(spec["label"])

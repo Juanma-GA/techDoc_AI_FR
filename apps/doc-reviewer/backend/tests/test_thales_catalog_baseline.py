@@ -3,11 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 
-from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.standards import serialize_builtin_version
 
 
 def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
-    spec = next(item for item in BUILTIN_STANDARDS if item["code"] == "THALES-CUSTOM")
+    configuration = load_active_client_configuration()
+    spec = configuration.bundle.standard_specs["THALES-CUSTOM"]
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 

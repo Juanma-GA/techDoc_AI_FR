@@ -7,7 +7,6 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from app.checks.client_registry import load_active_client_configuration
 from app.db.models import StandardVersion
 from app.db.seed import sync_user_standard
 from app.db.session import SessionLocal
@@ -46,12 +45,11 @@ def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -
     assert disabled.status_code == 200, disabled.text
     assert disabled.json()["active"] is False
 
-    configuration = load_active_client_configuration()
     with SessionLocal() as session:
         version = session.get(StandardVersion, version_id)
         assert version is not None
         assert rule_code in json.loads(version.disabled_rule_codes)
-        sync_user_standard(session, configuration.bundle.standard_specs)
+        sync_user_standard(session)
         session.refresh(version)
         assert rule_code in json.loads(version.disabled_rule_codes)
 

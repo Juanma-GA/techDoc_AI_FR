@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +75,30 @@ def test_repository_active_client_configuration_loads() -> None:
         "highlights_document_type",
     }
     assert configuration.bundle.page_classifier is not None
+
+
+def test_application_startup_does_not_discover_legacy_thales_facade(
+    tmp_path: Path,
+) -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    environment = os.environ.copy()
+    environment["DATABASE_URL"] = "sqlite:///:memory:"
+    environment["STORAGE_DIR"] = str(tmp_path / "storage")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import app.main; "
+            "assert 'app.checks.standards.thales_custom' not in sys.modules",
+        ],
+        cwd=backend_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_manifest_modules_build_executable_client_bundle(tmp_path: Path) -> None:

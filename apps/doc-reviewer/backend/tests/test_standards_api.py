@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.standards import serialize_builtin_version
+
 
 def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     resp = client.get("/api/v1/standards")
@@ -197,3 +200,32 @@ def test_toggle_thales_catalog_rule_individually(client: TestClient) -> None:
     )
     assert enabled.status_code == 200
     assert code not in enabled.json()["disabled_rule_codes"]
+
+
+def test_reset_thales_catalog_rule_reads_active_bundle(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = custom["versions"][0]
+    code = "CUSTOM_CMM_NUMBER"
+    rule_url = (
+        f"/api/v1/standards/{custom['id']}/versions/{version['id']}"
+        f"/rules/{code}"
+    )
+
+    patched = client.patch(rule_url, json={"message": "Temporary message"})
+    assert patched.status_code == 200, patched.text
+    assert next(item for item in patched.json()["catalog"] if item["code"] == code)["message"] == (
+        "Temporary message"
+    )
+
+    reset = client.post(f"{rule_url}/reset")
+    assert reset.status_code == 200, reset.text
+    reset_rule = next(item for item in reset.json()["catalog"] if item["code"] == code)
+    configuration = load_active_client_configuration()
+    spec = configuration.bundle.standard_specs["THALES-CUSTOM"]
+    expected = next(
+        item
+        for item in serialize_builtin_version(spec, "v1")
+        if item["code"] == code
+    )
+    assert reset_rule["message"] == expected["message"]

@@ -468,9 +468,8 @@ def analyze_stream(
                     raws = await task
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
-                    # A ce stade, un classifieur de standard (cf. PAGE_CLASSIFIERS,
-                    # invoque par `run_all`) a pu peupler `page.page_type` — on ne
-                    # le sait qu'apres coup, d'ou la capture ici plutot qu'au parse.
+                    # A ce stade, le classifieur du ClientBundle invoque par
+                    # `run_all` a pu peupler `page.page_type`; on le capture ici.
                     page_types = {str(page.page): page.page_type for page in parsed.pages}
 
                 run_row = scoped_session.get(AnalysisRun, run_id_value)
