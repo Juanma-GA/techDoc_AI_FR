@@ -67,7 +67,7 @@ def test_repository_active_client_configuration_loads() -> None:
     assert configuration.mapping_hash
     assert configuration.configuration_hash
     assert configuration.bundle_hash == configuration.configuration_hash
-    assert len(configuration.bundle.rules) == 47
+    assert len(configuration.bundle.rules) == 49
     assert set(configuration.bundle.operations) == {
         "revision_consistency",
         "shop_verification",
