@@ -12,9 +12,14 @@ ce module ne fait que l'assemblage de l'arbre.
 
 from __future__ import annotations
 
+import re
+
 from app.core import structure_heuristics as heur
 from app.core import zone_classifier
 from app.core.ir import IRNode, InlineRun, RawBlock
+
+_NUMBERED_NOTE_ITEM_RE = re.compile(r"(?m)(?<!\S)(?P<number>\d{1,3})[.)][ \t]+")
+_ORDERED_ITEM_NUMBER_RE = re.compile(r"^\s*(?P<number>\d{1,3})[.)]\s+")
 
 
 class _Ids:
@@ -61,6 +66,48 @@ def _inline_runs_for_text(
     if start < 0:
         return [InlineRun(target_text)]
     return _slice_inline_runs(runs, start, start + len(target_text))
+
+
+def _clean_item_text(text: str) -> str:
+    return re.sub(r"^[\s\x00-\x1f]+", "", text).strip()
+
+
+def _inline_runs_without_controls(runs: list[InlineRun]) -> list[InlineRun]:
+    cleaned: list[InlineRun] = []
+    for run in runs:
+        text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", run.text)
+        if text:
+            cleaned.append(InlineRun(
+                text=text,
+                bold=run.bold,
+                italic=run.italic,
+                underline=run.underline,
+                overline=run.overline,
+                strikethrough=run.strikethrough,
+            ))
+    return cleaned
+
+
+def _split_numbered_note_items(text: str) -> tuple[str, list[str]] | None:
+    matches = list(_NUMBERED_NOTE_ITEM_RE.finditer(text))
+    numbers = [int(match.group("number")) for match in matches]
+    if not matches or numbers != list(range(1, len(matches) + 1)):
+        return None
+
+    intro = text[:matches[0].start()].rstrip()
+    items = []
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        item = _clean_item_text(text[match.end():end].strip(" \t\r\n;"))
+        if not item:
+            return None
+        items.append(item)
+    return intro, items
+
+
+def _ordered_item_number(text: str) -> int | None:
+    match = _ORDERED_ITEM_NUMBER_RE.match(text)
+    return int(match.group("number")) if match else None
 
 
 def _merge_touching_continuation(blocks: list[RawBlock]) -> list[RawBlock]:
@@ -119,6 +166,9 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
     # Pile des sections ouvertes : (niveau, noeud). La racine est niveau 0.
     stack: list[tuple[int, IRNode]] = [(0, root)]
     pending_list: IRNode | None = None  # sequence d'items en cours d'accumulation
+    pending_attention: IRNode | None = None
+    pending_attention_list: IRNode | None = None
+    pending_attention_number = 1
 
     def current() -> IRNode:
         return stack[-1][1]
@@ -127,10 +177,44 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         nonlocal pending_list
         pending_list = None
 
+    def close_attention() -> None:
+        nonlocal pending_attention, pending_attention_list, pending_attention_number
+        pending_attention = None
+        pending_attention_list = None
+        pending_attention_number = 1
+
     for block in blocks:
         text = (block.text or "").strip()
         if not text and not block.is_table:
             continue
+
+        layout_zone = block.zone in ("header", "footer", "cover", "toc")
+        if pending_attention is not None and not layout_zone:
+            if not heur.is_caption(text):
+                if _ordered_item_number(text) == pending_attention_number:
+                    if pending_attention_list is None:
+                        pending_attention_list = IRNode(
+                            id=ids.next(), kind="item-sequence", form="ordered",
+                            page=block.page, zone=block.zone, confidence=0.8,
+                        )
+                        pending_attention.children.append(pending_attention_list)
+                    raw_item_text = heur.strip_list_marker(text)
+                    item_text = _clean_item_text(raw_item_text)
+                    item_runs = _inline_runs_without_controls(
+                        _inline_runs_for_text(block.inline_runs, block.text, raw_item_text)
+                    )
+                    pending_attention_list.children.append(
+                        IRNode(
+                            id=ids.next(), kind="item", form="ordered", text=item_text,
+                            page=block.page, zone=block.zone,
+                            refs=heur.detect_refs(item_text) or None,
+                            inline_runs=item_runs,
+                        )
+                    )
+                    pending_attention_number += 1
+                    close_list()
+                    continue
+                close_attention()
 
         # 0) Entete / pied recurrent : court-circuite toute la cascade pour ne
         # PAS promouvoir un entete repete en titre (via infer_heading_level).
@@ -175,14 +259,42 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
             adm, confidence, rationale = heur.classify_callout(text, pictogram=True)
         if adm is not None:
             close_list()
-            current().children.append(
-                IRNode(id=ids.next(), kind="admonition", admonition=adm,
-                       form="plain", text=text, page=block.page, zone=block.zone,
-                       refs=heur.detect_refs(text) or None, confidence=confidence,
-                       admonition_rationale=rationale,
-                       is_pictogram=block.is_pictogram,
-                       inline_runs=_inline_runs_for_text(block.inline_runs, block.text, text))
+            note_text = text
+            note_items = _split_numbered_note_items(text) if adm == "note" else None
+            if note_items is not None:
+                note_text, item_texts = note_items
+            else:
+                item_texts = []
+            note = IRNode(
+                id=ids.next(), kind="admonition", admonition=adm,
+                form="plain", text=note_text, page=block.page, zone=block.zone,
+                refs=heur.detect_refs(note_text) or None, confidence=confidence,
+                admonition_rationale=rationale,
+                is_pictogram=block.is_pictogram,
+                inline_runs=_inline_runs_for_text(block.inline_runs, block.text, note_text),
             )
+            if adm == "note" and (item_texts or note_text.rstrip().endswith(":")):
+                pending_attention = note
+                pending_attention_number = len(item_texts) + 1
+                pending_attention_list = None
+                if item_texts:
+                    pending_attention_list = IRNode(
+                        id=ids.next(), kind="item-sequence", form="ordered",
+                        page=block.page, zone=block.zone, confidence=0.8,
+                    )
+                    pending_attention_list.children = [
+                        IRNode(
+                            id=ids.next(), kind="item", form="ordered", text=item_text,
+                            page=block.page, zone=block.zone,
+                            refs=heur.detect_refs(item_text) or None,
+                            inline_runs=_inline_runs_without_controls(
+                                _inline_runs_for_text(block.inline_runs, block.text, item_text)
+                            ),
+                        )
+                        for item_text in item_texts
+                    ]
+                    note.children.append(pending_attention_list)
+            current().children.append(note)
             continue
 
         # 4) Titre / section ----------------------------------------------
@@ -202,7 +314,11 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         # 5) Item de liste -------------------------------------------------
         list_kind = block.list_kind or heur.detect_list_kind(text)
         if list_kind is not None:
-            item_text = heur.strip_list_marker(text) if block.list_kind is None else text
+            raw_item_text = heur.strip_list_marker(text) if block.list_kind is None else text
+            item_text = _clean_item_text(raw_item_text)
+            item_runs = _inline_runs_without_controls(
+                _inline_runs_for_text(block.inline_runs, block.text, raw_item_text)
+            )
             if pending_list is None or pending_list.form != list_kind:
                 pending_list = IRNode(id=ids.next(), kind="item-sequence",
                                       form=list_kind, page=block.page,
@@ -212,7 +328,7 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
                 IRNode(id=ids.next(), kind="item", form=list_kind, text=item_text,
                        page=block.page, zone=block.zone,
                        refs=heur.detect_refs(item_text) or None,
-                       inline_runs=_inline_runs_for_text(block.inline_runs, text, item_text))
+                      inline_runs=item_runs)
             )
             continue
 

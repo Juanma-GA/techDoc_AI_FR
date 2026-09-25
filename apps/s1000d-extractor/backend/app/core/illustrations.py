@@ -18,6 +18,7 @@ import re
 from pathlib import Path
 
 from app.core.ir import IRNode
+from app.core.pdf_overlays import large_red_cross_rects
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 _CHAPTER_NUMBER_RE = re.compile(r"^\s*(\d+(?:\s*[._-]\s*\d+)*)\b")
@@ -315,6 +316,9 @@ def _composite_bounds(page, image_rects):
         if rect.intersects(nearby):
             bounds |= rect
 
+    for rect in large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects):
+        bounds |= rect
+
     return bounds
 
 
@@ -348,6 +352,7 @@ def _save_composite_figure(page, image_rects, dest: Path) -> bool:
     if not image_rects:
         return False
     bounds = _composite_bounds(page, image_rects)
+    cross_rects = large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects)
     bounds &= page.rect
     if bounds.width < 10 or bounds.height < 10:
         return False
@@ -359,7 +364,7 @@ def _save_composite_figure(page, image_rects, dest: Path) -> bool:
             text_rect = fitz.Rect(block[:4]) & bounds
             if text_rect.is_empty:
                 continue
-            for piece in _subtract_rect(text_rect, image_rects):
+            for piece in _subtract_rect(text_rect, [*image_rects, *cross_rects]):
                 pixmap.set_rect(
                     fitz.IRect(
                         round((piece.x0 - bounds.x0) * 2),
@@ -373,6 +378,31 @@ def _save_composite_figure(page, image_rects, dest: Path) -> bool:
         return True
     except Exception:
         return False
+
+
+def _has_figure_overlays(page, image_rects) -> bool:
+    import fitz
+
+    if not image_rects:
+        return False
+    bounds = image_rects[0]
+    for rect in image_rects[1:]:
+        bounds |= rect
+    nearby = bounds + fitz.Rect(-20, -12, 20, 12)
+    if large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects):
+        return True
+    if any(
+        len(block) >= 5
+        and _is_composite_overlay_text(str(block[4]))
+        and fitz.Rect(block[:4]).intersects(nearby)
+        for block in page.get_text("blocks")
+    ):
+        return True
+    return any(
+        not (rect := fitz.Rect(drawing.get("rect", ()))).is_empty
+        and rect.intersects(nearby)
+        for drawing in page.get_drawings()
+    )
 
 
 def attach_illustrations(
@@ -497,15 +527,16 @@ def attach_illustrations(
             for fig, records in composite_records.values():
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
-                if len(records) > 1:
-                    image_rects = [image_rect for _, image_rect in records]
+                image_rects = [image_rect for _, image_rect in records]
+                composite = len(records) > 1 or _has_figure_overlays(page, image_rects)
+                if composite:
                     success = _save_composite_figure(page, image_rects, out_dir / name)
                 else:
                     success = _save_pixmap(doc, records[0][0], out_dir / name)
                 if success:
                     saved += 1
                     _set_figure_icn(fig, name)
-                elif len(records) > 1:
+                elif composite:
                     for xref, _ in records:
                         fallback_name = _unique_name(out_dir, base)
                         if _save_pixmap(doc, xref, out_dir / fallback_name):

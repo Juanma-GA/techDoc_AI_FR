@@ -88,11 +88,37 @@ def _emit_entry(parent: etree._Element, node: dict) -> None:
 
 
 def _build_tree(entries: list[DmrlEntry]) -> list[dict]:
-    """Arbre {key, entry, children} construit depuis les chemins `Arbo`.
+    """Construit l'arbre depuis des niveaux numeriques ou des chemins `Arbo`."""
+    levels: list[int | None] = []
+    numeric_levels = True
+    for entry in entries:
+        value = str(entry.arbo or "").strip()
+        if not value:
+            levels.append(None)
+        elif re.fullmatch(r"\d+", value):
+            levels.append(int(value))
+        else:
+            numeric_levels = False
+            break
 
-    Les entrees sans `Arbo` (ou dont le parent est absent) sont rattachees a la
-    racine, dans leur ordre d'apparition : aucune ligne de DMRL n'est perdue.
-    """
+    if numeric_levels and any(level is not None for level in levels):
+        roots: list[dict] = []
+        stack: list[tuple[int, dict]] = []
+        for entry, level in zip(entries, levels):
+            node = {"key": entry.title or entry.dmc, "entries": [entry], "children": []}
+            if level is None:
+                roots.append(node)
+                stack.clear()
+                continue
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            if level == 1 or not stack:
+                roots.append(node)
+            else:
+                stack[-1][1]["children"].append(node)
+            stack.append((level, node))
+        return roots
+
     roots: list[dict] = []
     index: dict[str, dict] = {}
     for entry in entries:

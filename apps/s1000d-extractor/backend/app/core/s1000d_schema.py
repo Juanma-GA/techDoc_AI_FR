@@ -26,11 +26,13 @@ _VOCAB: dict[str, set[str]] = {
     "descriptive": {
         "levelledPara", "title", "para", "randomList", "sequentialList",
         "listItem", "warning", "caution", "note", "warningAndCautionPara",
-        "notePara", "figure", "graphic", "table", "tgroup", "tbody", "row", "entry",
+        "notePara", "attentionSequentialList", "attentionSequentialListItem",
+        "attentionListItemPara", "figure", "graphic", "table", "tgroup", "tbody", "row", "entry",
     },
     "procedural": {
         "proceduralStep", "para", "warning", "caution", "note",
-        "warningAndCautionPara", "notePara", "figure", "graphic",
+        "warningAndCautionPara", "notePara", "attentionSequentialList",
+        "attentionSequentialListItem", "attentionListItemPara", "figure", "graphic",
         "table", "tgroup", "tbody", "row", "entry", "title",
     },
 }

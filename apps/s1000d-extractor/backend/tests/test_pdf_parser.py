@@ -31,3 +31,58 @@ def test_table_detected(pdf_bytes_table) -> None:
     assert tables, "aucun tableau detecte par find_tables"
     rows = tables[0].table_rows
     assert any("M6" in c for r in rows for c in r)
+
+
+def test_large_red_crosses_over_images_do_not_pollute_figure_captions(tmp_path) -> None:
+    import fitz
+
+    from app.core.structure_infer import build_ir
+    from app.parsers.pdf_parser import parse_pdf_pages
+
+    pdf_path = tmp_path / "figure-crosses.pdf"
+    doc = fitz.open()
+    image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 100, 100))
+    image.set_rect(image.irect, (80, 120, 160))
+
+    first_page = doc.new_page()
+    first_page.insert_image(fitz.Rect(72, 50, 260, 230), pixmap=image)
+    first_page.insert_text((72, 230), "Figure 5.2 - Empilage incorrect", fontsize=10)
+    first_page.insert_text((160, 230), "X", fontsize=72, fontname="hebo", color=(1, 0, 0))
+
+    second_page = doc.new_page()
+    second_page.insert_image(fitz.Rect(72, 50, 220, 220), pixmap=image)
+    second_page.insert_image(fitz.Rect(260, 50, 408, 220), pixmap=image)
+    second_page.insert_text((115, 210), "X", fontsize=72, fontname="hebo", color=(1, 0, 0))
+    second_page.insert_text((303, 210), "X", fontsize=72, fontname="hebo", color=(1, 0, 0))
+    second_page.insert_text(
+        (72, 230),
+        "Figure 5.3 - Correct stacking\nFigure 5.4 - Incorrect stacking",
+        fontsize=10,
+    )
+    doc.save(str(pdf_path))
+    doc.close()
+
+    pages = parse_pdf_pages(pdf_path)
+    root = build_ir([block for page in pages for block in page.blocks])
+
+    assert [node.text for node in root.walk() if node.kind == "figure"] == [
+        "Figure 5.2 - Empilage incorrect",
+        "Figure 5.3 - Correct stacking",
+        "Figure 5.4 - Incorrect stacking",
+    ]
+
+
+def test_red_cross_is_found_inside_caption_text_block() -> None:
+    import fitz
+
+    from app.core.pdf_overlays import large_red_cross_rects
+
+    blocks = [{"lines": [{"spans": [
+        {"text": "Figure 5.2 - Empilage incorrect", "bbox": (0, 80, 100, 90)},
+        {"text": "X", "bbox": (35, 10, 85, 90), "size": 72, "color": 0xFF0000},
+        {"text": "X", "bbox": (35, 10, 85, 90), "size": 72, "color": 0x000000},
+    ]}]}]
+
+    rects = large_red_cross_rects(blocks, [fitz.Rect(0, 0, 100, 100)])
+
+    assert rects == [fitz.Rect(35, 10, 85, 90)]

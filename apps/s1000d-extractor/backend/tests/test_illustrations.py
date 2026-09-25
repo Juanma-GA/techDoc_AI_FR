@@ -97,6 +97,41 @@ def test_small_page_icon_does_not_replace_real_figure_image(tmp_path) -> None:
     assert len(list(out_dir.glob("*.jpg"))) == 1
 
 
+def test_single_image_figure_keeps_red_cross_overlay(tmp_path) -> None:
+    import fitz
+
+    from app.core.illustrations import attach_illustrations
+    from app.core.ir import IRNode
+
+    pdf_path = tmp_path / "figure-with-cross.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    image = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 100, 100))
+    image.set_rect(image.irect, (80, 120, 160))
+    page.insert_image(fitz.Rect(72, 50, 220, 220), pixmap=image)
+    page.insert_text((112, 190), "X", fontsize=72, fontname="hebo", color=(1, 0, 0))
+    page.insert_text((72, 240), "Figure 5.2 Incorrect stacking", fontsize=11)
+    doc.save(str(pdf_path))
+    doc.close()
+
+    figure = IRNode(id="figure", kind="figure", text="Figure 5.2 Incorrect stacking", page=1)
+    root = IRNode(id="root", kind="section", children=[figure])
+    out_dir = tmp_path / "images"
+
+    assert attach_illustrations(root, pdf_path=str(pdf_path), out_dir=out_dir, doc_id="doc") == 1
+    assert figure.icn == "figure-5-2-incorrect-stacking.jpg"
+    pixmap = fitz.Pixmap(str(out_dir / figure.icn))
+    samples = pixmap.samples
+    channels = pixmap.n
+    red_pixels = sum(
+        1
+        for index in range(0, len(samples) - channels + 1, channels)
+        if samples[index] > 160 and samples[index + 1] < 100 and samples[index + 2] < 100
+    )
+
+    assert red_pixels > 100
+
+
 def test_multiple_dmrl_icns_are_applied_in_figure_order(tmp_path) -> None:
     from app.core.dmrl import DmrlEntry
     from app.core.illustrations import rename_illustration

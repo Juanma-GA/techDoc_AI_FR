@@ -52,6 +52,7 @@ _FIGURE_TITLE_PREFIX = re.compile(
 _NUMBERED_TITLE_PREFIX = re.compile(
     r"^\s*\d+(?:\.\d+)*(?:\s*[.)\-\u2013\u2014:]\s*|\s+)",
 )
+_TRAILING_PUNCTUATION = re.compile(r"^[\s\u00a0\u202f]*[:;,.!?]+$")
 _XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
 _XLINK_NS = "http://www.w3.org/1999/xlink"
 _RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -472,16 +473,17 @@ def _run_value(run: InlineRun | dict, name: str, default: object = "") -> object
     return getattr(run, name, default)
 
 
-def _run_emphasis_code(run: InlineRun | dict) -> str | None:
+def _run_emphasis_codes(run: InlineRun | dict) -> list[str]:
     if not str(_run_value(run, "text", "")).strip():
-        return None
+        return []
+    codes: list[str] = []
     for style in ("bold", "italic", "underline", "overline", "strikethrough"):
         if not bool(_run_value(run, style, False)):
             continue
         code = emphasis_code_for_style(style)
-        if code and get_code("emphasisType", code):
-            return code
-    return None
+        if code and code not in codes and get_code("emphasisType", code):
+            codes.append(code)
+    return codes
 
 
 def _append_inline_text(parent: etree._Element, text: str) -> None:
@@ -514,6 +516,18 @@ def _append_emphasis(parent: etree._Element, code: str, text: str) -> None:
     emphasis.text = safe_text
 
 
+def _append_nested_emphasis(
+    parent: etree._Element,
+    codes: list[str],
+    text: str,
+) -> etree._Element:
+    current = parent
+    for code in codes:
+        current = etree.SubElement(current, "emphasis", emphasisType=code)
+    current.text = xml_text(text)
+    return parent[-1]
+
+
 def _inline_content(
     parent: etree._Element,
     text: str,
@@ -527,13 +541,30 @@ def _inline_content(
     if not usable_runs:
         _append_inline_text(parent, text)
         return
+    last_nested_emphasis: tuple[tuple[str, ...], etree._Element] | None = None
+    bold_code = emphasis_code_for_style("bold")
     for run in usable_runs:
         run_text = str(_run_value(run, "text", ""))
-        code = _run_emphasis_code(run)
-        if code:
-            _append_emphasis(parent, code, run_text)
+        codes = _run_emphasis_codes(run)
+        if (
+            last_nested_emphasis is not None
+            and bold_code is not None
+            and last_nested_emphasis[0][0] == bold_code
+            and codes == list(last_nested_emphasis[0][1:])
+            and _TRAILING_PUNCTUATION.fullmatch(run_text)
+        ):
+            _append_inline_text(last_nested_emphasis[1], run_text)
+            last_nested_emphasis = None
+            continue
+        if len(codes) == 1:
+            _append_emphasis(parent, codes[0], run_text)
+            last_nested_emphasis = None
+        elif codes:
+            outer = _append_nested_emphasis(parent, codes, run_text)
+            last_nested_emphasis = (tuple(codes), outer)
         else:
             _append_inline_text(parent, run_text)
+            last_nested_emphasis = None
 
 
 def _inline_runs_for_range(
@@ -761,6 +792,15 @@ def _emit_admonition(
         reference_index=reference_index,
         current_dm_id=current_dm_id,
     )
+    if node.admonition == "note":
+        for child in node.children:
+            if child.kind == "item-sequence" and child.form == "ordered" and child.children:
+                _emit_attention_sequential_list(
+                    el,
+                    child,
+                    reference_index=reference_index,
+                    current_dm_id=current_dm_id,
+                )
 
 
 def _emit_list(
@@ -789,6 +829,27 @@ def _emit_list(
         li = etree.SubElement(list_el, "listItem")
         _para(
             li,
+            item.text,
+            item.inline_runs,
+            item.refs,
+            reference_index=reference_index,
+            current_dm_id=current_dm_id,
+        )
+
+
+def _emit_attention_sequential_list(
+    parent: etree._Element,
+    node: IRNode,
+    *,
+    reference_index: ReferenceIndex,
+    current_dm_id: str,
+) -> None:
+    sequence = etree.SubElement(parent, "attentionSequentialList")
+    for item in node.children:
+        list_item = etree.SubElement(sequence, "attentionSequentialListItem")
+        item_para = etree.SubElement(list_item, "attentionListItemPara")
+        _inline_content_with_refs(
+            item_para,
             item.text,
             item.inline_runs,
             item.refs,

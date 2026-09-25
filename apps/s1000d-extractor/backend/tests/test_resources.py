@@ -207,8 +207,10 @@ def test_pmc_endpoint(client, pdf_bytes) -> None:
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/xml")
     root = etree.fromstring(r.content)
-    assert [e.findtext("pmEntryTitle") for e in root.findall("./content/pmEntry")] == [
-        "Description", "Removal Procedure"
+    top = root.findall("./content/pmEntry")
+    assert [entry.findtext("pmEntryTitle") for entry in top] == ["Description"]
+    assert [entry.findtext("pmEntryTitle") for entry in top[0].findall("./pmEntry")] == [
+        "Removal Procedure"
     ]
 
 

@@ -18,6 +18,7 @@ import re
 import fitz  # PyMuPDF
 
 from app.core.ir import InlineRun, RawBlock
+from app.core.pdf_overlays import is_large_red_image_cross
 
 # Bit 2^4 (=16) du flag span PyMuPDF = gras ; on detecte aussi via le nom.
 _BOLD_FLAG = 1 << 4
@@ -104,15 +105,18 @@ def _block_is_bold(spans: list[dict]) -> bool:
     return False
 
 
-def _pictogram_rects(page: fitz.Page) -> list[fitz.Rect]:
-    """Retourne les occurrences d'images assez petites pour etre des pictos."""
+def _image_infos(page: fitz.Page) -> list[dict]:
     try:
-        infos = page.get_image_info(xrefs=True)
+        return page.get_image_info(xrefs=True)
     except Exception:
         return []
+
+
+def _pictogram_rects(image_infos: list[dict]) -> list[fitz.Rect]:
+    """Retourne les occurrences d'images assez petites pour etre des pictos."""
     return [
         fitz.Rect(info["bbox"])
-        for info in infos
+        for info in image_infos
         if int(info.get("width", 0)) <= 65 and int(info.get("height", 0)) <= 65
     ]
 
@@ -137,7 +141,9 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
     # est faux -> on neutralise la geometrie (page_height=None) et zone reste body.
     rotated = int(page.rotation) != 0
     page_height = None if rotated else round(float(page.rect.height), 1)
-    pictograms = _pictogram_rects(page)
+    image_infos = _image_infos(page)
+    image_rects = [fitz.Rect(info["bbox"]) for info in image_infos if info.get("bbox")]
+    pictograms = _pictogram_rects(image_infos)
     for block in data.get("blocks", []):
         lines = block.get("lines", [])
         if not lines:
@@ -147,7 +153,10 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
         spans_all: list[dict] = []
         max_size = 0.0
         for line in lines:
-            line_spans = line.get("spans", [])
+            line_spans = [
+                span for span in line.get("spans", [])
+                if not is_large_red_image_cross(span, image_rects)
+            ]
             spans_all.extend(line_spans)
             line_text = _line_text(line_spans)
             if line_text.strip():

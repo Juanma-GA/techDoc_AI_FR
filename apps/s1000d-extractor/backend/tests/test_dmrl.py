@@ -189,18 +189,37 @@ def test_generate_pmc_hierarchy(dmrl_json):
     assert root.findtext("./identAndStatusSection/pmAddress/pmTitle") == "Frein"
 
 
-def test_generate_pmc_keeps_entries_sharing_arbo():
+def test_generate_pmc_numeric_arbo_builds_outline_and_resets():
     entries = [
-        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-040A-D", title="Description"),
-        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-520A-D", title="Removal"),
-        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-941A-D", title="Parts"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-040A-D", title="Terminologie"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-520A-D", title="Recommandations"),
+        DmrlEntry(arbo="2", dmc="DMC-BRAKE-A-00-00-00-00A-012A-D", title="Pictogramme"),
+        DmrlEntry(arbo="2", dmc="DMC-BRAKE-A-00-00-00-00A-720A-D", title="Reception"),
+        DmrlEntry(arbo="3", dmc="DMC-BRAKE-A-00-00-00-00A-721A-D", title="Detail reception"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-130A-D", title="Securite"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-041A-D", title="Manutention"),
+        DmrlEntry(arbo="2", dmc="DMC-BRAKE-A-00-00-00-00A-042A-D", title="Levage"),
+        DmrlEntry(arbo="3", dmc="DMC-BRAKE-A-00-00-00-00A-043A-D", title="Moteur horizontal"),
+        DmrlEntry(arbo="1", dmc="DMC-BRAKE-A-00-00-00-00A-044A-D", title="Stockage"),
     ]
 
     root = etree.fromstring(generate_pmc(entries).encode("utf-8"))
+    top = root.findall("./content/pmEntry")
 
+    assert [entry.findtext("pmEntryTitle") for entry in top] == [
+        "Terminologie", "Recommandations", "Securite", "Manutention", "Stockage"
+    ]
+    recommendations = top[1].findall("./pmEntry")
+    assert [entry.findtext("pmEntryTitle") for entry in recommendations] == [
+        "Pictogramme", "Reception"
+    ]
+    assert recommendations[1].findtext("./pmEntry/pmEntryTitle") == "Detail reception"
+    handling = top[3].find("./pmEntry")
+    assert handling.findtext("pmEntryTitle") == "Levage"
+    assert handling.findtext("./pmEntry/pmEntryTitle") == "Moteur horizontal"
     assert len(root.findall(".//dmRef")) == len(entries)
     assert [ref.findtext("./dmRefAddressItems/dmTitle/techName") for ref in root.findall(".//dmRef")] == [
-        "Description", "Removal", "Parts"
+        entry.title for entry in entries
     ]
 
 

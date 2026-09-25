@@ -85,6 +85,78 @@ def test_inline_bold_uses_normalized_emphasis_code() -> None:
     assert "".join(doc.find(".//para").itertext()) == "Texte normal mot important."
 
 
+def test_inline_bold_italic_uses_nested_emphasis_and_validates() -> None:
+    root = IRNode(id="r", kind="section", level=0, children=[IRNode(
+        id="p",
+        kind="paragraph",
+        text="Remarque",
+        context="descriptive",
+        inline_runs=[InlineRun("Remarque", bold=True, italic=True)],
+    )])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    doc = _parse(xml)
+    outer = doc.find(".//para/emphasis")
+
+    assert outer is not None and outer.get("emphasisType") == "em01"
+    inner = outer.find("./emphasis")
+    assert inner is not None and inner.get("emphasisType") == "em02"
+    assert inner.text == "Remarque"
+    violations = validate_xsd(xml, "4.2", dm_type="descriptive", allow_internal_dtd=True)
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+
+
+def test_italic_colon_stays_inside_outer_bold_emphasis() -> None:
+    note = IRNode(
+        id="note",
+        kind="admonition",
+        admonition="note",
+        text="Remarque\u00a0:",
+        inline_runs=[
+            InlineRun("Remarque", bold=True, italic=True),
+            InlineRun("\u00a0:", italic=True),
+        ],
+    )
+    root = IRNode(id="r", kind="section", level=0, children=[note])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    doc = _parse(xml)
+    outer = doc.find(".//note/notePara/emphasis")
+
+    assert outer is not None and outer.get("emphasisType") == "em01"
+    inner = outer.find("./emphasis")
+    assert inner is not None and inner.get("emphasisType") == "em02"
+    assert inner.text == "Remarque"
+    assert inner.tail == "\u00a0:"
+    violations = validate_xsd(xml, "4.2", dm_type="descriptive", allow_internal_dtd=True)
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+
+
+def test_ordered_note_items_use_s1000d_attention_list() -> None:
+    sequence = IRNode(id="list", kind="item-sequence", form="ordered", children=[
+        IRNode(id="item-1", kind="item", text="Ne superposez pas."),
+        IRNode(id="item-2", kind="item", text="Alignez les caisses."),
+    ])
+    note = IRNode(
+        id="note", kind="admonition", admonition="note", text="Remarque :",
+        children=[sequence],
+    )
+    root = IRNode(id="r", kind="section", level=0, children=[note])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    doc = _parse(xml)
+    items = doc.findall(
+        ".//note/attentionSequentialList/attentionSequentialListItem/attentionListItemPara"
+    )
+
+    assert ["".join(item.itertext()) for item in items] == [
+        "Ne superposez pas.",
+        "Alignez les caisses.",
+    ]
+    violations = validate_xsd(xml, "4.2", dm_type="descriptive", allow_internal_dtd=True)
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+
+
 def test_inline_runs_survive_ir_json_round_trip() -> None:
     node = IRNode(
         id="p",

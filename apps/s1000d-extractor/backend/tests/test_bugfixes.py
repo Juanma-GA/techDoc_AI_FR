@@ -143,3 +143,63 @@ def test_multiple_figure_captions_on_one_line_create_separate_figures() -> None:
         "Figure 4.2 Serrage incorrect",
         "Figure 4.3 Detail",
     ]
+
+
+def test_numbered_note_items_continue_across_figure_captions_and_pages() -> None:
+    from app.core.ir import InlineRun, RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([
+        RawBlock(
+            text="Remarque :\n1) Ne superposez pas.\n2) Alignez les caisses.",
+            page=1,
+        ),
+        RawBlock(text="Figure 5.1 Empilage correct\nFigure 5.2 Empilage incorrect", page=1),
+        RawBlock(
+            text="3) \x07Soutenez les pieds.",
+            page=2,
+            inline_runs=[
+                InlineRun("3) "),
+                InlineRun("\x07"),
+                InlineRun("Soutenez les pieds.", italic=True),
+            ],
+        ),
+        RawBlock(text="Figure 5.3 Appui correct\nFigure 5.4 Appui incorrect", page=2),
+        RawBlock(text="4) Ajoutez des lattes.", page=2),
+        RawBlock(text="Figure 5.5 Lattes supplémentaires", page=2),
+        RawBlock(text="5.3 Paliers", page=2, heading_level=1),
+    ])
+
+    note = next(node for node in root.walk() if node.kind == "admonition")
+    sequence = note.children[0]
+
+    assert note.text == "Remarque :"
+    assert sequence.kind == "item-sequence" and sequence.form == "ordered"
+    assert [item.text for item in sequence.children] == [
+        "Ne superposez pas.",
+        "Alignez les caisses.",
+        "Soutenez les pieds.",
+        "Ajoutez des lattes.",
+    ]
+    assert sequence.children[2].inline_runs == [
+        InlineRun("Soutenez les pieds.", italic=True),
+    ]
+
+
+def test_numbered_note_items_can_follow_a_separate_note_label() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([
+        RawBlock(text="Remarque :", page=1),
+        RawBlock(text="Figure 1 Empilage correct", page=1),
+        RawBlock(text="1) Alignez les caisses.", page=1),
+        RawBlock(text="2) Soutenez les pieds.", page=1),
+        RawBlock(text="Fin de la note.", page=1),
+    ])
+
+    note = next(node for node in root.walk() if node.kind == "admonition")
+    assert [item.text for item in note.children[0].children] == [
+        "Alignez les caisses.",
+        "Soutenez les pieds.",
+    ]
