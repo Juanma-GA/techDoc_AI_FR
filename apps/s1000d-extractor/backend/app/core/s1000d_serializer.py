@@ -827,7 +827,7 @@ def _emit_list(
     list_el = etree.SubElement(parent, top)
     for item in node.children:
         li = etree.SubElement(list_el, "listItem")
-        _para(
+        item_para = _para(
             li,
             item.text,
             item.inline_runs,
@@ -835,6 +835,14 @@ def _emit_list(
             reference_index=reference_index,
             current_dm_id=current_dm_id,
         )
+        for child in item.children:
+            if child.kind == "item-sequence":
+                _emit_list(
+                    item_para,
+                    child,
+                    reference_index=reference_index,
+                    current_dm_id=current_dm_id,
+                )
 
 
 def _emit_attention_sequential_list(

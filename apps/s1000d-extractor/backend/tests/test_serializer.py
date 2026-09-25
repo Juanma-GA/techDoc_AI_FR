@@ -157,6 +157,42 @@ def test_ordered_note_items_use_s1000d_attention_list() -> None:
     assert not [violation for violation in violations if violation["severity"] == "error"], violations
 
 
+def test_nested_lettered_list_serializes_inside_numbered_item() -> None:
+    letters = IRNode(
+        id="letters",
+        kind="item-sequence",
+        form="lettered",
+        children=[
+            IRNode(id="letter-a", kind="item", text="a. Premier sous-item."),
+            IRNode(id="letter-b", kind="item", text="b. Deuxième sous-item."),
+        ],
+    )
+    numbered = IRNode(
+        id="numbered",
+        kind="item-sequence",
+        form="ordered",
+        children=[
+            IRNode(id="number-1", kind="item", text="Premier item."),
+            IRNode(id="number-2", kind="item", text="Second item.", children=[letters]),
+            IRNode(id="number-3", kind="item", text="Troisième item."),
+        ],
+    )
+    root = IRNode(id="r", kind="section", level=0, children=[numbered])
+    resolve(root)
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    doc = _parse(xml)
+    nested_items = doc.findall(
+        ".//sequentialList/listItem/para/randomList/listItem/para"
+    )
+
+    assert ["".join(item.itertext()) for item in nested_items] == [
+        "a. Premier sous-item.",
+        "b. Deuxième sous-item.",
+    ]
+    violations = validate_xsd(xml, "4.2", dm_type="descriptive", allow_internal_dtd=True)
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+
+
 def test_inline_runs_survive_ir_json_round_trip() -> None:
     node = IRNode(
         id="p",

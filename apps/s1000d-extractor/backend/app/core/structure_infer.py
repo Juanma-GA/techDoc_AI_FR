@@ -20,6 +20,7 @@ from app.core.ir import IRNode, InlineRun, RawBlock
 
 _NUMBERED_NOTE_ITEM_RE = re.compile(r"(?m)(?<!\S)(?P<number>\d{1,3})[.)][ \t]+")
 _ORDERED_ITEM_NUMBER_RE = re.compile(r"^\s*(?P<number>\d{1,3})[.)]\s+")
+_LINE_LIST_ITEM_RE = re.compile(r"(?m)^[ \t]*(?P<marker>\d{1,3}[.)]|[a-z][.)])[ \t]+", re.IGNORECASE)
 
 
 class _Ids:
@@ -110,6 +111,80 @@ def _ordered_item_number(text: str) -> int | None:
     return int(match.group("number")) if match else None
 
 
+def _split_inline_list_block(
+    block: RawBlock,
+    ids: _Ids,
+) -> tuple[str, list[IRNode]] | None:
+    matches = list(_LINE_LIST_ITEM_RE.finditer(block.text))
+    if len(matches) < 2:
+        return None
+
+    prefix = block.text[:matches[0].start()].strip()
+    sequences: list[IRNode] = []
+    active_sequence: IRNode | None = None
+    last_numbered_item: IRNode | None = None
+    nested_lettered_sequence: IRNode | None = None
+
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(block.text)
+        raw_item_text = block.text[match.end():end].strip(" \t\r\n")
+        item_text = _clean_item_text(raw_item_text)
+        if not item_text:
+            return None
+        item_runs = _inline_runs_without_controls(
+            _inline_runs_for_text(block.inline_runs, block.text, raw_item_text)
+        )
+        marker = match.group("marker")
+
+        if marker[0].isdigit():
+            if active_sequence is None or active_sequence.form != "ordered":
+                active_sequence = IRNode(
+                    id=ids.next(), kind="item-sequence", form="ordered",
+                    page=block.page, zone=block.zone, confidence=0.8,
+                )
+                sequences.append(active_sequence)
+            item = IRNode(
+                id=ids.next(), kind="item", form="ordered", text=item_text,
+                page=block.page, zone=block.zone,
+                refs=heur.detect_refs(item_text) or None,
+                inline_runs=item_runs,
+            )
+            active_sequence.children.append(item)
+            last_numbered_item = item
+            nested_lettered_sequence = None
+            continue
+
+        if last_numbered_item is not None:
+            if nested_lettered_sequence is None:
+                nested_lettered_sequence = IRNode(
+                    id=ids.next(), kind="item-sequence", form="lettered",
+                    page=block.page, zone=block.zone, confidence=0.8,
+                )
+                last_numbered_item.children.append(nested_lettered_sequence)
+            lettered_sequence = nested_lettered_sequence
+        else:
+            if active_sequence is None or active_sequence.form != "lettered":
+                active_sequence = IRNode(
+                    id=ids.next(), kind="item-sequence", form="lettered",
+                    page=block.page, zone=block.zone, confidence=0.8,
+                )
+                sequences.append(active_sequence)
+            lettered_sequence = active_sequence
+
+        lettered_text = f"{marker} {item_text}"
+        lettered_runs = [InlineRun(f"{marker} "), *item_runs]
+        lettered_sequence.children.append(
+            IRNode(
+                id=ids.next(), kind="item", form="lettered", text=lettered_text,
+                page=block.page, zone=block.zone,
+                refs=heur.detect_refs(item_text) or None,
+                inline_runs=lettered_runs,
+            )
+        )
+
+    return prefix, sequences
+
+
 def _merge_touching_continuation(blocks: list[RawBlock]) -> list[RawBlock]:
     """Recolle un bloc PDF qui continue exactement le bloc precedent."""
     merged: list[RawBlock] = []
@@ -166,6 +241,7 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
     # Pile des sections ouvertes : (niveau, noeud). La racine est niveau 0.
     stack: list[tuple[int, IRNode]] = [(0, root)]
     pending_list: IRNode | None = None  # sequence d'items en cours d'accumulation
+    pending_list_parent: IRNode | None = None
     pending_attention: IRNode | None = None
     pending_attention_list: IRNode | None = None
     pending_attention_number = 1
@@ -174,8 +250,9 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
         return stack[-1][1]
 
     def close_list() -> None:
-        nonlocal pending_list
+        nonlocal pending_list, pending_list_parent
         pending_list = None
+        pending_list_parent = None
 
     def close_attention() -> None:
         nonlocal pending_attention, pending_attention_list, pending_attention_number
@@ -311,19 +388,66 @@ def build_ir(blocks: list[RawBlock]) -> IRNode:
             stack.append((level, section))
             continue
 
-        # 5) Item de liste -------------------------------------------------
-        list_kind = block.list_kind or heur.detect_list_kind(text)
+        # 5) Listes multi-items dans un meme bloc PDF --------------------
+        split_list = _split_inline_list_block(block, ids)
+        if split_list is not None:
+            prefix, sequences = split_list
+            close_list()
+            if prefix:
+                current().children.append(
+                    IRNode(
+                        id=ids.next(), kind="paragraph", form="prose", text=prefix,
+                        page=block.page, zone=block.zone,
+                        refs=heur.detect_refs(prefix) or None,
+                        inline_runs=_inline_runs_for_text(block.inline_runs, block.text, prefix),
+                    )
+                )
+            current().children.extend(sequences)
+            pending_list = sequences[-1] if sequences else None
+            continue
+
+        # 6) Item de liste -------------------------------------------------
+        marker_match = _LINE_LIST_ITEM_RE.match(text)
+        marker_kind = (
+            "lettered"
+            if marker_match is not None and not marker_match.group("marker")[0].isdigit()
+            else None
+        )
+        list_kind = block.list_kind or marker_kind or heur.detect_list_kind(text)
         if list_kind is not None:
-            raw_item_text = heur.strip_list_marker(text) if block.list_kind is None else text
-            item_text = _clean_item_text(raw_item_text)
-            item_runs = _inline_runs_without_controls(
-                _inline_runs_for_text(block.inline_runs, block.text, raw_item_text)
-            )
+            if list_kind == "lettered":
+                marker_match = _LINE_LIST_ITEM_RE.match(text)
+                marker = marker_match.group("marker") if marker_match else ""
+                raw_item_text = heur.strip_list_marker(text)
+                item_text = f"{marker} {_clean_item_text(raw_item_text)}".strip()
+                item_runs = [InlineRun(f"{marker} ")] + _inline_runs_without_controls(
+                    _inline_runs_for_text(block.inline_runs, block.text, raw_item_text)
+                )
+            else:
+                raw_item_text = heur.strip_list_marker(text) if block.list_kind is None else text
+                item_text = _clean_item_text(raw_item_text)
+                item_runs = _inline_runs_without_controls(
+                    _inline_runs_for_text(block.inline_runs, block.text, raw_item_text)
+                )
+            if list_kind == "ordered" and pending_list_parent is not None:
+                pending_list = pending_list_parent
+                pending_list_parent = None
             if pending_list is None or pending_list.form != list_kind:
-                pending_list = IRNode(id=ids.next(), kind="item-sequence",
-                                      form=list_kind, page=block.page,
-                                      zone=block.zone, confidence=0.8)
-                current().children.append(pending_list)
+                sequence = IRNode(
+                    id=ids.next(), kind="item-sequence", form=list_kind,
+                    page=block.page, zone=block.zone, confidence=0.8,
+                )
+                if (
+                    list_kind == "lettered"
+                    and pending_list is not None
+                    and pending_list.form == "ordered"
+                    and pending_list.children
+                ):
+                    pending_list_parent = pending_list
+                    pending_list.children[-1].children.append(sequence)
+                else:
+                    current().children.append(sequence)
+                pending_list = sequence
             pending_list.children.append(
                 IRNode(id=ids.next(), kind="item", form=list_kind, text=item_text,
                        page=block.page, zone=block.zone,

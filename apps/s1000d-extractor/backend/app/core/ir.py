@@ -21,7 +21,7 @@ from typing import Literal
 # --- Vocabulaires controles --------------------------------------------------
 
 # Forme visuelle observee dans le document source (signal *faible*).
-Form = Literal["bullet", "ordered", "subheading", "prose", "plain", "table", "caption"]
+Form = Literal["bullet", "ordered", "lettered", "subheading", "prose", "plain", "table", "caption"]
 
 # Contexte semantique S1000D (signal *fort*, decide par la classification IA).
 Context = Literal["descriptive", "procedural", "unknown"]

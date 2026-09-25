@@ -203,3 +203,68 @@ def test_numbered_note_items_can_follow_a_separate_note_label() -> None:
         "Alignez les caisses.",
         "Soutenez les pieds.",
     ]
+
+
+def test_inline_numbered_and_lettered_lists_split_into_nested_items() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([RawBlock(
+        text=(
+            "Vérifiez les éléments :\n"
+            "1. Résistance d’isolation, voir l’article 5.4.\n"
+            "2. Paliers :\n"
+            "a. Paliers à roulement avec détail\ncontinué sur la ligne suivante.\n"
+            "b. Palier lisse.\n"
+            "3. Conditions de fonctionnement.\n"
+            "4. Boîte à bornes :\n"
+            "a. L’intérieur est propre.\n"
+            "b. Les contacts sont raccordés.\n"
+            "c. Les entrées sont hermétiques.\n"
+            "5. Refroidissement."
+        ),
+        page=1,
+    )])
+
+    sequences = [node for node in root.walk() if node.kind == "item-sequence"]
+    numbered = next(sequence for sequence in sequences if sequence.form == "ordered")
+
+    assert len(numbered.children) == 5
+    assert "5.4" in numbered.children[0].text
+    first_sublist = numbered.children[1].children[0]
+    second_sublist = numbered.children[3].children[0]
+    assert first_sublist.form == second_sublist.form == "lettered"
+    assert [item.text for item in first_sublist.children] == [
+        "a. Paliers à roulement avec détail\ncontinué sur la ligne suivante.",
+        "b. Palier lisse.",
+    ]
+    assert [item.text for item in second_sublist.children] == [
+        "a. L’intérieur est propre.",
+        "b. Les contacts sont raccordés.",
+        "c. Les entrées sont hermétiques.",
+    ]
+
+
+def test_lettered_list_blocks_nest_under_number_and_resume_numbering() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([
+        RawBlock(text="1. Résistance d’isolation.", page=1),
+        RawBlock(text="2. Paliers :", page=1),
+        RawBlock(text="a. Paliers à roulement.", page=1),
+        RawBlock(text="b. Palier lisse.", page=1),
+        RawBlock(text="3. Refroidissement.", page=1),
+    ])
+    numbered = next(node for node in root.walk() if node.kind == "item-sequence")
+
+    assert numbered.form == "ordered"
+    assert [item.text for item in numbered.children] == [
+        "Résistance d’isolation.",
+        "Paliers :",
+        "Refroidissement.",
+    ]
+    assert [item.text for item in numbered.children[1].children[0].children] == [
+        "a. Paliers à roulement.",
+        "b. Palier lisse.",
+    ]
