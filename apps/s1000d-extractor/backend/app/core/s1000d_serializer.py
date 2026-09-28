@@ -340,6 +340,9 @@ def _doctype(root: IRNode) -> str:
             declarations.append(
                 f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
             )
+    declarations.append(
+        '<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">'
+    )
     return "<!DOCTYPE dmodule [\n" + "\n".join(declarations) + "\n]>"
 
 

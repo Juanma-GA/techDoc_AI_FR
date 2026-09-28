@@ -336,8 +336,16 @@ def test_figure_icns_are_declared_in_doctype() -> None:
     assert '<!DOCTYPE dmodule [' in xml
     assert '<!ENTITY ICN-ONE SYSTEM "ICN-ONE.JPG" NDATA jpg>' in xml
     assert '<!ENTITY ICN-TWO SYSTEM "ICN-TWO.png" NDATA png>' in xml
+    assert '<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">' in xml
     assert "%ISOEntities;" not in xml
     assert xml.index("<!DOCTYPE") < xml.index("<dmodule")
+
+
+def test_iso_entities_are_declared_without_graphics_for_descriptive_and_procedural_dms() -> None:
+    declaration = '<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">'
+
+    assert declaration in _doc("descriptive")
+    assert declaration in _doc("procedural")
 
 
 def test_internal_ref_emitted() -> None:
