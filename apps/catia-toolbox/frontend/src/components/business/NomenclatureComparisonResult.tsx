@@ -9,37 +9,14 @@ type Props = {
 
 type Entry = NomenclatureCompareDto["added_sin"][number];
 
-function ResultTable({ title, entries, prefix }: { title: string; entries: Entry[]; prefix: string }) {
-  const { t } = useTranslation();
-  return (
-    <>
-      <h3 className="label" style={{ marginTop: 12 }}>{title}</h3>
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>{t("diff.colSin")}</th>
-            <th>{t("diff.colOldPn")}</th>
-            <th>{t("diff.colOldPnV2")}</th>
-            <th>{t("diff.colDesignation")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((entry) => (
-            <tr key={`${prefix}-${entry.sin}`}>
-              <td>{entry.sin}</td>
-              <td>{entry.old_pn}</td>
-              <td>{entry.old_pn_v2}</td>
-              <td>{entry.designation}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
-}
-
 export function NomenclatureComparisonResult({ result, pairLabel }: Props) {
   const { t } = useTranslation();
+  const sections: { key: string; title: string; entries: Entry[] }[] = [
+    { key: "added", title: t("diff.sinAdded"), entries: result.added_sin },
+    { key: "removed", title: t("diff.sinRemoved"), entries: result.removed_sin },
+    { key: "changed", title: t("diff.pnChanged"), entries: result.changed_pn },
+  ];
+
   return (
     <article className="card">
       <div className="row" style={{ marginBottom: 8 }}>
@@ -61,9 +38,46 @@ export function NomenclatureComparisonResult({ result, pairLabel }: Props) {
           changed: result.summary.changed ?? 0,
         })}
       </p>
-      <ResultTable title={t("diff.sinAdded")} entries={result.added_sin} prefix="a" />
-      <ResultTable title={t("diff.sinRemoved")} entries={result.removed_sin} prefix="r" />
-      <ResultTable title={t("diff.pnChanged")} entries={result.changed_pn} prefix="c" />
+      <div style={{ overflowX: "auto" }}>
+        <table className="tbl">
+          <colgroup>
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "34%" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>{t("diff.colSin")}</th>
+              <th style={{ textTransform: "none" }}>{t("diff.colOldPn")}</th>
+              <th style={{ textTransform: "none" }}>{t("diff.colOldPnV2")}</th>
+              <th>{t("diff.colDesignation")}</th>
+            </tr>
+          </thead>
+          {sections.map((section) => (
+            <tbody key={section.key}>
+              <tr>
+                <th
+                  colSpan={4}
+                  scope="rowgroup"
+                  className="label"
+                  style={{ textAlign: "left", background: "var(--bg-2)" }}
+                >
+                  {section.title}
+                </th>
+              </tr>
+              {section.entries.map((entry) => (
+                <tr key={`${section.key}-${entry.sin}`}>
+                  <td>{entry.sin}</td>
+                  <td>{entry.old_pn}</td>
+                  <td>{entry.old_pn_v2}</td>
+                  <td>{entry.designation}</td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+      </div>
     </article>
   );
 }
