@@ -116,6 +116,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_HEADER_DOCUMENT_TYPE": "error",
         "CUSTOM_TP1_HEADER_DOCUMENT_TYPE": "error",
         "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE": "error",
+        "CUSTOM_HIGHLIGHTS_LEGEND_FOOTER": "warning",
         "CUSTOM_TP1_REVISION_NUMBER": "error",
         "CUSTOM_TP1_FIRST_ISSUE_DATE": "warning",
         "CUSTOM_HIGHLIGHTS_REVISION_HEADER": "warning",

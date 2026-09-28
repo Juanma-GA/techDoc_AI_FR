@@ -680,6 +680,48 @@ CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE = rule(
     },
 )
 
+CUSTOM_HIGHLIGHTS_LEGEND_FOOTER = rule(
+    code="CUSTOM_HIGHLIGHTS_LEGEND_FOOTER",
+    name="Legende du tableau Highlights avant le pied de page",
+    description=(
+        "Sur chaque page Highlights, le tableau et sa legende "
+        "(N: New - D: Deleted ...) doivent se terminer juste avant le pied "
+        "de page, sans ligne de texte entre les deux."
+    ),
+    message=(
+        "Une ligne de texte s'intercale entre la legende du tableau Highlights "
+        "et le pied de page."
+    ),
+    kind="field_required",
+    severity="warning",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="highlights_legend_footer",
+        ),
+    ],
+    failure_message=(
+        "Le tableau et la legende Highlights doivent se terminer juste avant "
+        "le pied de page, sans ligne de texte intercalaire."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "On every Highlights page, the table and its legend "
+                "(N: New - D: Deleted ...) must end immediately before the "
+                "footer, with no intervening text line."
+            ),
+            "message": (
+                "A text line appears between the Highlights table legend "
+                "and the footer."
+            ),
+        }
+    },
+)
+
+
 CUSTOM_INTRODUCTION_SHOP_VERIFICATION = rule(
     code="CUSTOM_INTRODUCTION_SHOP_VERIFICATION",
     name="Shop Verification conforme au constructeur du mapping",
@@ -1905,6 +1947,7 @@ RULE_DEFINITIONS = (
     CUSTOM_HEADER_DOCUMENT_TYPE,
     CUSTOM_TP1_HEADER_DOCUMENT_TYPE,
     CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE,
+    CUSTOM_HIGHLIGHTS_LEGEND_FOOTER,
     CUSTOM_PNR_PAGE_VALUE,
     CUSTOM_TP1_PNR_PAGE_VALUE,
     CUSTOM_REPAIR_NOTE,

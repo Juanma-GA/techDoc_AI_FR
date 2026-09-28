@@ -36,6 +36,17 @@ _HIGHLIGHTS_CONTENT_MARKER = re.compile(r"(?im)^\s*HIGHLIGHTS\s*$")
 _HIGHLIGHTS_HOLDER_RE = re.compile(r"(?i)^TO\s*:\s*HOLDER\s+OF\s+")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
+_HIGHLIGHTS_LEGEND_RE = re.compile(r"(?i)\bN\s*:\s*New\b.*\bD\s*:\s*Deleted\b")
+_HIGHLIGHTS_FOOTER_LABEL_RE = re.compile(r"(?i)\bHighlights(?:\s+Page\s+\d+)?\b")
+_HIGHLIGHTS_FOOTER_CMM_RE = re.compile(r"(?i)(?<!\d)\d{2}-\d{2}-\d{2}(?!\d)")
+_HIGHLIGHTS_FOOTER_COPYRIGHT_RE = re.compile(r"(?i)\bTHALES\s+AVS\s+FRANCE\b")
+_HIGHLIGHTS_FOOTER_BAND_MIN_HEIGHT = 80.0
+_HIGHLIGHTS_FOOTER_LINE_TOLERANCE = 3.0
+_HIGHLIGHTS_FOOTER_DATA_DISTANCE = 80.0
+_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED = (
+    "la legende N: New - D: Deleted ... doit se terminer juste avant le pied "
+    "de page, sans ligne de texte intercalaire"
+)
 _JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
 _JUSTIFICATION_MIN_LINE_CHARACTERS = 24
 _JUSTIFICATION_HORIZONTAL_TOLERANCE = 3.0
@@ -156,6 +167,94 @@ def highlights_document_type_observed(text: str) -> str:
 
 def highlights_document_type_matches(text: str) -> bool:
     return re.search(HIGHLIGHTS_DOCUMENT_TYPE_PATTERN, text) is not None
+
+
+def _highlights_visual_lines(
+    page: ParsedPage,
+) -> list[tuple[str, tuple[float, float, float, float]]]:
+    source_lines = [
+        (line.text, line.bbox)
+        for line in page.lines
+        if line.text.strip() and line.bbox[3] > line.bbox[1]
+    ]
+    if not source_lines:
+        source_lines = [
+            (span.text, span.bbox)
+            for span in page.spans
+            if span.text.strip() and span.bbox[3] > span.bbox[1]
+        ]
+
+    grouped: list[
+        tuple[float, list[str], tuple[float, float, float, float]]
+    ] = []
+    for text, bbox in sorted(
+        source_lines,
+        key=lambda item: ((item[1][1] + item[1][3]) / 2, item[1][0]),
+    ):
+        center_y = (bbox[1] + bbox[3]) / 2
+        if grouped and abs(center_y - grouped[-1][0]) <= _HIGHLIGHTS_FOOTER_LINE_TOLERANCE:
+            previous_center, texts, previous_bbox = grouped[-1]
+            texts.append(text.strip())
+            grouped[-1] = (
+                previous_center,
+                texts,
+                (
+                    min(previous_bbox[0], bbox[0]),
+                    min(previous_bbox[1], bbox[1]),
+                    max(previous_bbox[2], bbox[2]),
+                    max(previous_bbox[3], bbox[3]),
+                ),
+            )
+        else:
+            grouped.append((center_y, [text.strip()], bbox))
+
+    return [(" ".join(texts), bbox) for _center_y, texts, bbox in grouped]
+
+
+def _highlights_footer_start(
+    lines: list[tuple[str, tuple[float, float, float, float]]],
+) -> float | None:
+    if not lines:
+        return None
+    min_y = min(bbox[1] for _text, bbox in lines)
+    max_y = max(bbox[3] for _text, bbox in lines)
+    footer_band_top = max_y - max(
+        (max_y - min_y) * 0.25,
+        _HIGHLIGHTS_FOOTER_BAND_MIN_HEIGHT,
+    )
+    footer_band = [
+        (text, bbox)
+        for text, bbox in lines
+        if bbox[3] >= footer_band_top
+    ]
+    footer_labels = [
+        (text, bbox)
+        for text, bbox in footer_band
+        if _HIGHLIGHTS_FOOTER_LABEL_RE.search(text)
+    ]
+    if not footer_labels:
+        return None
+
+    footer_label_center = max(
+        (bbox[1] + bbox[3]) / 2 for _text, bbox in footer_labels
+    )
+    footer_anchor_centers = [footer_label_center]
+    for text, bbox in footer_band:
+        center_y = (bbox[1] + bbox[3]) / 2
+        before_footer_label = (
+            center_y <= footer_label_center + _HIGHLIGHTS_FOOTER_LINE_TOLERANCE
+        )
+        is_copyright = bool(_HIGHLIGHTS_FOOTER_COPYRIGHT_RE.search(text))
+        is_nearby_footer_data = (
+            abs(center_y - footer_label_center) <= _HIGHLIGHTS_FOOTER_DATA_DISTANCE
+            and (
+                _HIGHLIGHTS_FOOTER_CMM_RE.search(text)
+                or revision.parse_date(text) is not None
+            )
+        )
+        if before_footer_label and (is_copyright or is_nearby_footer_data):
+            footer_anchor_centers.append(center_y)
+    return min(footer_anchor_centers)
 
 
 def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
@@ -551,6 +650,85 @@ def _suggest_highlights_document_type(
     return results
 
 
+def _evaluate_highlights_legend_footer(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> OperationResult:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED,
+        )
+
+    target_pages = {target.raw_page for target in getattr(context, "targets", ())}
+    pages = [page for page in parsed_pdf.pages if page.page in target_pages]
+    if not pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED,
+        )
+
+    for page in pages:
+        lines = _highlights_visual_lines(page)
+        footer_start = _highlights_footer_start(lines)
+        if footer_start is None:
+            return OperationResult(
+                status="INCONCLUSIVE",
+                expected=_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED,
+                page=page.page,
+            )
+
+        legends = [
+            line
+            for line in lines
+            if _HIGHLIGHTS_LEGEND_RE.search(line[0])
+            and (line[1][1] + line[1][3]) / 2 < footer_start
+        ]
+        if not legends:
+            return OperationResult(
+                status="FAIL",
+                expected=_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED,
+                message=(
+                    "La legende du tableau Highlights est absente au-dessus du "
+                    "pied de page."
+                ),
+                page=page.page,
+            )
+
+        legend = max(legends, key=lambda item: (item[1][1] + item[1][3]) / 2)
+        legend_center = (legend[1][1] + legend[1][3]) / 2
+        intervening_lines = [
+            line
+            for line in lines
+            if legend_center < (line[1][1] + line[1][3]) / 2 < footer_start
+        ]
+        if intervening_lines:
+            issue_text, issue_bbox = min(
+                intervening_lines,
+                key=lambda item: (item[1][1] + item[1][3]) / 2,
+            )
+            return OperationResult(
+                status="FAIL",
+                observed=issue_text,
+                expected=_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED,
+                message=(
+                    "Une ligne de texte s'intercale entre la legende du tableau "
+                    "Highlights et le pied de page."
+                ),
+                original=issue_text,
+                page=page.page,
+                bbox=issue_bbox,
+            )
+
+    return OperationResult(
+        status="PASS",
+        expected=_HIGHLIGHTS_LEGEND_FOOTER_EXPECTED,
+        page=pages[-1].page,
+    )
+
+
 REVISION_CONSISTENCY = ClientOperation(
     name="revision_consistency",
     execute=_evaluate_revision_consistency,
@@ -576,6 +754,10 @@ PARAGRAPH_JUSTIFICATION = ClientOperation(
     execute=_evaluate_paragraph_justification,
     suggestions=_suggest_paragraph_justification,
 )
+HIGHLIGHTS_LEGEND_FOOTER = ClientOperation(
+    name="highlights_legend_footer",
+    execute=_evaluate_highlights_legend_footer,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -584,5 +766,6 @@ OPERATIONS = {
         HIGHLIGHTS_HOLDER,
         HIGHLIGHTS_DOCUMENT_TYPE,
         PARAGRAPH_JUSTIFICATION,
+        HIGHLIGHTS_LEGEND_FOOTER,
     )
 }

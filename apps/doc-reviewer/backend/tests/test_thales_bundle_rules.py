@@ -11,6 +11,7 @@ from app.checks.thales_rules.rules import (
     CUSTOM_FORBIDDEN_CONSUMABLES,
     CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE,
     CUSTOM_HIGHLIGHTS_HOLDER,
+    CUSTOM_HIGHLIGHTS_LEGEND_FOOTER,
     CUSTOM_HIGHLIGHTS_ATA_NUMBER,
     CUSTOM_HIGHLIGHTS_PNR_HEADER,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
@@ -266,6 +267,19 @@ def test_highlights_document_type_keeps_special_operator_contract() -> None:
     assert check.operation == "highlights_document_type"
     assert check.missing_anchor == r"(?i)\bATA\s+No\b"
     assert check.missing_anchor_position == "above"
+
+
+def test_highlights_legend_footer_rule_uses_the_highlights_page_scope() -> None:
+    definition = CUSTOM_HIGHLIGHTS_LEGEND_FOOTER
+    check = definition.compiled_rule.checks[0]
+
+    assert definition.compiled_rule.target.page_types == [
+        "HIGHLIGHTS",
+        "HIGHLIGHTS_PAGE_1",
+    ]
+    assert check.operator == "client_operation"
+    assert check.operation == "highlights_legend_footer"
+    assert "sans ligne de texte" in definition.description
 
 
 def test_shop_verification_keeps_manufacturer_context_and_special_operator() -> None:

@@ -31,7 +31,7 @@ from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rule
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span
 
 
 _TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
@@ -1304,6 +1304,53 @@ def test_highlights_document_type_must_precede_the_ata_number() -> None:
 
     assert invalid[0].status == "FAIL"
     assert later == []
+
+
+def test_highlights_legend_must_be_the_last_body_line_before_the_footer() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_LEGEND_FOOTER")
+
+    def build_pdf(*, has_intervening_line: bool) -> ParsedPdf:
+        lines = [
+            PdfLine(
+                "Chapter / Section Revision Status",
+                (40.0, 680.0, 520.0, 692.0),
+                0,
+                0,
+            ),
+            PdfLine(
+                "N: New - D: Deleted - R: Revised - U: Unchanged",
+                (40.0, 710.0, 520.0, 722.0),
+                0,
+                1,
+            ),
+        ]
+        if has_intervening_line:
+            lines.append(
+                PdfLine("Extra body line", (40.0, 730.0, 520.0, 742.0), 0, 2)
+            )
+        lines.extend(
+            [
+                PdfLine("THALES AVS FRANCE SAS", (240.0, 756.0, 400.0, 766.0), 1, 0),
+                PdfLine("Highlights Page 1", (40.0, 756.0, 180.0, 766.0), 1, 1),
+                PdfLine("JUL 27/26", (40.0, 772.0, 120.0, 782.0), 1, 2),
+            ]
+        )
+        text = "\n".join(line.text for line in lines)
+        page = ParsedPage(
+            page=1,
+            text=text,
+            page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+            lines=lines,
+            page_height=792.0,
+        )
+        return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+    valid, _ = execute_pdf_rules(build_pdf(has_intervening_line=False), [rule])
+    invalid, _ = execute_pdf_rules(build_pdf(has_intervening_line=True), [rule])
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert invalid[0].evidence.observed_value == "Extra body line"
 
 
 def test_highlights_document_type_does_not_use_the_centered_page_header() -> None:
