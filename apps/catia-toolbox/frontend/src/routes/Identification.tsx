@@ -368,6 +368,13 @@ function MonoCorpsCard({
     onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
   });
 
+  const savedMonoItemsQuery = useQuery<NomenclatureItemDto[]>({
+    queryKey: ["identification", runId, "saved-mono-body"],
+    queryFn: () => identificationApi.items(runId!, { monoBody: true }),
+    enabled: !!runId && !!analysisStatus && !result,
+  });
+  const savedMonoItems = savedMonoItemsQuery.data ?? [];
+
   const ncols = preview ? preview.rows.reduce((m, r) => Math.max(m, r.length), 0) : 0;
   const canAnalyze =
     !!sourcePath.trim() &&
@@ -588,6 +595,9 @@ function MonoCorpsCard({
                         <th style={{ position: "sticky", top: 0, background: "var(--bg-2)" }}>
                           {t("identification.monoIdentityCol")}
                         </th>
+                        <th style={{ position: "sticky", top: 0, background: "var(--bg-2)" }}>
+                          {t("identification.colOldPn")}
+                        </th>
                         {Array.from({ length: slotCount }, (_v, i) => (
                           <th
                             key={i}
@@ -607,11 +617,56 @@ function MonoCorpsCard({
                       {monoItems.map((it, ri) => (
                         <tr key={`${it.identity}-${ri}`}>
                           <td>{it.identity}</td>
+                          <td>{it.old_pn}</td>
                           {Array.from({ length: slotCount }, (_v, i) => (
                             <td key={i} style={{ textAlign: "center" }}>{it.slots[i] ?? ""}</td>
                           ))}
                           <td style={{ textAlign: "center" }}>
                             {it.mono_body ? <span className="badge ok">{t("common.yes")}</span> : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <h3 className="card-title">{t("identification.empty")}</h3>
+                </div>
+              )}
+            </div>
+          ) : null}
+          {!result && analysisStatus ? (
+            <div style={{ marginTop: 16 }}>
+              {savedMonoItemsQuery.isLoading ? (
+                <span className="spinner" />
+              ) : savedMonoItemsQuery.isError ? (
+                <p className="error">
+                  {savedMonoItemsQuery.error instanceof Error
+                    ? savedMonoItemsQuery.error.message
+                    : String(savedMonoItemsQuery.error)}
+                </p>
+              ) : savedMonoItems.length ? (
+                <div style={{ maxHeight: "30rem", overflow: "auto" }}>
+                  <table className="tbl" style={{ whiteSpace: "nowrap" }}>
+                    <thead>
+                      <tr>
+                        <th>{identityLabel}</th>
+                        <th>{t("identification.colOldPn")}</th>
+                        <th>{t("identification.colCatpart")}</th>
+                        <th>{t("identification.colDesignation")}</th>
+                        <th style={{ textAlign: "center" }}>{t("identification.colMonoBody")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedMonoItems.map((item) => (
+                        <tr key={item.id}>
+                          <td>{item[identityField] || item.sin || item.catpart || item.old_pn || item.new_pn}</td>
+                          <td>{item.old_pn}</td>
+                          <td>{item.catpart}</td>
+                          <td>{item.designation}</td>
+                          <td style={{ textAlign: "center" }}>
+                            <span className="badge ok">{t("common.yes")}</span>
                           </td>
                         </tr>
                       ))}

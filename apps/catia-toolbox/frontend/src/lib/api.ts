@@ -417,7 +417,7 @@ export type MonoCorpsInput = {
   run_id?: string;
 };
 
-export type MonoCorpsItemDto = { identity: string; slots: string[]; mono_body: boolean };
+export type MonoCorpsItemDto = { identity: string; old_pn: string; slots: string[]; mono_body: boolean };
 export type MonoCorpsResultDto = {
   items: MonoCorpsItemDto[];
   summary: Record<string, number | boolean | number[]>;

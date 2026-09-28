@@ -531,6 +531,7 @@ class MonoCorpsIn(BaseModel):
 
 class MonoCorpsItemOut(BaseModel):
     identity: str = ""
+    old_pn: str = ""
     slots: list[str] = Field(default_factory=list)
     mono_body: bool = False
 

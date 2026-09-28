@@ -1,6 +1,6 @@
-- Y'a un problème de fonctionnement pur dans la nomenclature puis analyse mono-corps car les résultats de l'analyse  mono-corps dépend des choix des colonnes de l'analyse de base, il faudrait tout détecter automatiquement dans l'analyse de base déjà, sinon ça fausse un peut tout
+- Y'a un problème de fonctionnement pour dans la nomenclature puis analyse mono-corps car les résultats de l'analyse  mono-corps dépend des choix des colonnes de l'analyse de base, il faudrait tout détecter automatiquement dans l'analyse de base déjà, sinon ça fausse un peut tout
 
-- Il faut analyser 2 fichiers en 1. pour pouvoir faire une comparaison en 1.2, pas très pratique, ça serait bien de pouvoir directement comparer avec 2 fichiers
+- Faire apparaitre Old P/N dans l'analyse des mono-corps 
 
 - Faire un outil permettant de comparer de dossier de pieces catia avec la taille des fichiers
 Sortir (on s'en occupe pas) tous les fichiers avec même noms et même taille et faire apparaitre les fichiers qui restes, et afficher ceux 

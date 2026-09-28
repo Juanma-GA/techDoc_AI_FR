@@ -121,6 +121,7 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
     }
 
     # Optionnel : applique mono_body aux pieces du run par le champ d'identite.
+    old_pn_by_identity: dict[str, str] = {}
     if payload.run_id is not None:
         run = db.get(NomenclatureRun, payload.run_id)
         if run is None:
@@ -134,6 +135,7 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
             it.mono_body = is_mono
             if key and key in ident_map:
                 matched += 1
+                old_pn_by_identity[key] = it.old_pn or ""
             if is_mono:
                 mono += 1
         run_summary = json.loads(run.summary or "{}")
@@ -144,7 +146,13 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
         summary.update({"matched": matched, "mono": mono, "applied": True})
         log.info("mono-corps run %s : %d apparies, %d mono-corps", payload.run_id, matched, mono)
 
-    items = [MonoCorpsItemOut(**it) for it in parsed["items"][:2000]]
+    items = [
+        MonoCorpsItemOut(
+            **it,
+            old_pn=old_pn_by_identity.get(str(it.get("identity") or "").strip(), ""),
+        )
+        for it in parsed["items"][:2000]
+    ]
     return MonoCorpsResultOut(items=items, summary=summary)
 
 

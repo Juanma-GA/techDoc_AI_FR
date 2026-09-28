@@ -391,10 +391,10 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     # Onglet 1 : nomenclature (identite CATPart / SIN).
     ws = wb.active
     ws.title = "Nomenclature"
-    ws.append(["CATPart", "SIN"])
+    ws.append(["CATPart", "SIN", "OLD P/N"])
     for cat, sin in [("P1.CATPart", "SIN-001"), ("P2.CATPart", "SIN-002"),
                      ("P3.CATPart", "SIN-003"), ("P4.CATPart", "SIN-004")]:
-        ws.append([cat, sin])
+        ws.append([cat, sin, f"OLD-{sin}"])
     # Onglet 2 : Materiaux (CATPart + 4 colonnes Slot).
     mat = wb.create_sheet("Materiaux")
     mat.append(["CATPart", "Slot 1", "Slot 2", "Slot 3", "Slot 4"])
@@ -439,6 +439,8 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     )
     assert r.status_code == 200, r.text
     assert r.json()["summary"]["applied"] is True and r.json()["summary"]["mono"] == 2
+    response_items = {item["identity"]: item for item in r.json()["items"]}
+    assert response_items["P1.CATPart"]["old_pn"] == "OLD-SIN-001"
     assert client.get(f"/api/v1/identification/{run_id}").json()["summary"]["mono_body"] == 2
 
     mono = client.get(f"/api/v1/identification/{run_id}/items", params={"mono_body": True}).json()
