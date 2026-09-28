@@ -6,15 +6,15 @@ par **SIN** (le « signe ») et renvoie :
   - les SIN **supprimes** (presents en V0, absents en V1) ;
   - les SIN **modifies** pour un meme signe : le PN change entre V0 et V1.
 
-Detection du changement de PN : on compare les colonnes **OLD P/N entre elles**
-et **NEW P/N entre elles** d'une version a l'autre. Un SIN est « modifie » des
-que l'OLD *ou* le NEW change. Quand la nomenclature n'a pas de colonne P/N
-dediee, le **CATPart** de la ligne fait office de P/N (fallback).
+Detection du changement de PN : on compare uniquement les colonnes **OLD P/N**
+entre les versions. Un SIN est « modifie » quand son OLD P/N change. Quand la
+nomenclature n'a pas de colonne OLD P/N dediee, le **CATPart** de la ligne fait
+office de P/N (fallback).
 
-Les informations **OLD PN** de V0 et **NEW PN** de V1 sont reportees pour
-rendre le remplacement directement exploitable.
+Les informations **OLD P/N** de la version de base et de la version la plus
+recente sont reportees.
 
-Deterministe, sans DB : opere sur des dicts {sin, catpart, old_pn, new_pn, ...}.
+Deterministe, sans DB : opere sur des dicts {sin, catpart, old_pn, designation}.
 """
 
 from __future__ import annotations
@@ -28,11 +28,6 @@ from typing import Literal
 def _old_pn_of(item: dict) -> str:
     """OLD P/N effectif : colonne OLD P/N, sinon le CATPart de la version."""
     return str(item.get("old_pn") or item.get("catpart") or "").strip()
-
-
-def _new_pn_of(item: dict) -> str:
-    """NEW P/N effectif : colonne NEW P/N, sinon le CATPart de la version."""
-    return str(item.get("new_pn") or item.get("catpart") or "").strip()
 
 
 def _designation_of(item: dict) -> str:
@@ -53,7 +48,7 @@ def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
     """Compare deux nomenclatures (A = V0 base, B = V1 nouvelle) par SIN.
 
     Retour : {added_sin[], removed_sin[], changed_pn[]}. Chaque changement porte
-    le SIN, l'OLD PN de la base, le NEW PN de la nouvelle version et la
+    le SIN, l'OLD P/N de la base, l'OLD P/N de la nouvelle version et la
     designation (pas de revisions).
     """
     a = _by_sin(items_a)
@@ -63,7 +58,7 @@ def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
         {
             "sin": sin,
             "old_pn": "",
-            "new_pn": _new_pn_of(b[sin]),
+            "old_pn_v2": _old_pn_of(b[sin]),
             "designation": _designation_of(b[sin]),
         }
         for sin in b
@@ -73,7 +68,7 @@ def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
         {
             "sin": sin,
             "old_pn": _old_pn_of(a[sin]),
-            "new_pn": "",
+            "old_pn_v2": "",
             "designation": _designation_of(a[sin]),
         }
         for sin in a
@@ -83,16 +78,12 @@ def compare_runs(items_a: Iterable[dict], items_b: Iterable[dict]) -> dict:
     for sin in a:
         if sin not in b:
             continue
-        # Changement de PN = OLD(V0) != OLD(V1) *ou* NEW(V0) != NEW(V1) (colonnes
-        # OLD comparees entre elles, NEW entre elles).
-        old_changed = _old_pn_of(a[sin]) != _old_pn_of(b[sin])
-        new_changed = _new_pn_of(a[sin]) != _new_pn_of(b[sin])
-        if old_changed or new_changed:
+        if _old_pn_of(a[sin]) != _old_pn_of(b[sin]):
             changed_pn.append(
                 {
                     "sin": sin,
                     "old_pn": _old_pn_of(a[sin]),
-                    "new_pn": _new_pn_of(b[sin]),
+                    "old_pn_v2": _old_pn_of(b[sin]),
                     "designation": _designation_of(b[sin]) or _designation_of(a[sin]),
                 }
             )
@@ -176,7 +167,7 @@ def build_matrix(
                 {
                     "run_id": run_id,
                     "present": item is not None,
-                    "pn": _new_pn_of(item) if item else "",
+                    "pn": _old_pn_of(item) if item else "",
                     "state": state_by_cell.get((run_id, sin), "unchanged"),
                 }
             )

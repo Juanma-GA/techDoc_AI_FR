@@ -255,15 +255,16 @@ def test_compare_nomenclatures(client, tmp_path):
     body = r.json()
     assert {e["sin"] for e in body["added_sin"]} == {"SIN-003"}
     assert {e["sin"] for e in body["removed_sin"]} == {"SIN-002"}
-    assert body["added_sin"][0]["new_pn"] == "P3.CATPart"
+    assert body["added_sin"][0]["old_pn_v2"] == "P3.CATPart"
     assert body["removed_sin"][0]["old_pn"] == "P2.CATPart"
+    assert body["removed_sin"][0]["old_pn_v2"] == ""
     changed = {e["sin"]: e for e in body["changed_pn"]}
     # Seul un changement de PN est reporte (SIN-001). SIN-004 garde le meme PN
     # (seule la revision change) -> non reporte par la comparaison.
     assert set(changed) == {"SIN-001"}
-    # OLD PN de V0 et NEW PN de V1 sont exposes ; les revisions restent exclues.
+    # OLD P/N de V0 et V1 sont exposes ; les revisions restent exclues.
     assert changed["SIN-001"]["old_pn"] == "P1.CATPart"
-    assert changed["SIN-001"]["new_pn"] == "P1B.CATPart"
+    assert changed["SIN-001"]["old_pn_v2"] == "P1B.CATPart"
     assert "old_rev" not in changed["SIN-001"]
 
     csv = client.get(
@@ -271,7 +272,8 @@ def test_compare_nomenclatures(client, tmp_path):
         params={"base_run_id": run_a, "other_run_id": run_b},
     )
     assert csv.status_code == 200
-    assert csv.text.splitlines()[0] == "type;sin;old_pn;new_pn;designation"
+    assert csv.text.splitlines()[0] == "type;sin;old_pn;old_pn_v2;designation"
+    assert "new_pn" not in csv.text
     assert "SIN-003" in csv.text and "SIN-002" in csv.text
     assert "modifie" in csv.text
 
@@ -334,10 +336,8 @@ def test_compare_multiple_nomenclatures_preserves_pairwise_results(client, tmp_p
     ] == [(v1, v0), (v1, v2)]
 
 
-def test_compare_old_new_pn_columns(client, tmp_path):
-    """Comparaison via colonnes OLD/NEW P/N dediees : un SIN est modifie des que
-    l'OLD *ou* le NEW P/N change d'une version a l'autre (colonnes OLD comparees
-    entre elles, NEW entre elles). Le nom de fichier CATPart peut ne pas bouger."""
+def test_compare_old_pn_columns_only(client, tmp_path):
+    """Seul un changement d'OLD P/N compte, et les deux versions sont exposees."""
     _set_input_root(client, str(tmp_path))
 
     def _make(name, rows):
@@ -352,21 +352,29 @@ def test_compare_old_new_pn_columns(client, tmp_path):
 
     # V0 -> V1 :
     #  SIN-001 : OLD A1->A2 (OLD change)         => modifie
-    #  SIN-002 : NEW B1->B2 (NEW change)         => modifie
+    #  SIN-002 : OLD B1 inchange, NEW B1->B2     => ignore
     #  SIN-003 : inchange                        => non
-    run_a = _make("v0.xlsx", [["SIN-001", "A1", "A1"], ["SIN-002", "B1", "B1"], ["SIN-003", "C1", "C1"]])
-    run_b = _make("v1.xlsx", [["SIN-001", "A2", "A2"], ["SIN-002", "B1", "B2"], ["SIN-003", "C1", "C1"]])
+    run_a = _make("v0.xlsx", [["SIN-001", "A1", "AN1"], ["SIN-002", "B1", "B1"], ["SIN-003", "C1", "C1"]])
+    run_b = _make("v1.xlsx", [["SIN-001", "A2", "AN2"], ["SIN-002", "B1", "B2"], ["SIN-003", "C1", "C1"]])
 
     body = client.post(
         "/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_b}
     ).json()
     changed = {e["sin"]: e for e in body["changed_pn"]}
-    assert set(changed) == {"SIN-001", "SIN-002"}
-    # OLD PN de V0 et NEW PN de V1 reportes.
+    assert set(changed) == {"SIN-001"}
+    # OLD P/N de V0 et V1 reportes, sans utiliser NEW P/N.
     assert changed["SIN-001"]["old_pn"] == "A1"
-    assert changed["SIN-001"]["new_pn"] == "A2"
-    assert changed["SIN-002"]["old_pn"] == "B1"
-    assert changed["SIN-002"]["new_pn"] == "B2"
+    assert changed["SIN-001"]["old_pn_v2"] == "A2"
+    assert "new_pn" not in changed["SIN-001"]
+
+    multi = client.post(
+        "/api/v1/identification/compare/multi",
+        json={"run_ids": [run_a, run_b], "mode": "chronology"},
+    )
+    assert multi.status_code == 200, multi.text
+    matrix = {row["sin"]: row for row in multi.json()["matrix"]}
+    assert [cell["pn"] for cell in matrix["SIN-001"]["cells"]] == ["A1", "A2"]
+    assert matrix["SIN-002"]["cells"][1]["state"] == "unchanged"
 
     same = client.post(
         "/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_a}

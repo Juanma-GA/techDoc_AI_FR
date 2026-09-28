@@ -173,7 +173,6 @@ def _item_dict(it: NomenclatureItem) -> dict:
         "sin": it.sin,
         "version": it.version,
         "old_pn": it.old_pn,
-        "new_pn": it.new_pn,
         "new_rev": it.new_rev,
     }
 
@@ -286,13 +285,13 @@ def compare_export_csv(
     diff = _load_compare(db, base_run_id, other_run_id)
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["type", "sin", "old_pn", "new_pn", "designation"])
+    w.writerow(["type", "sin", "old_pn", "old_pn_v2", "designation"])
     for e in diff["added_sin"]:
-        w.writerow(["ajoute", e["sin"], e["old_pn"], e["new_pn"], e["designation"]])
+        w.writerow(["ajoute", e["sin"], e["old_pn"], e["old_pn_v2"], e["designation"]])
     for e in diff["removed_sin"]:
-        w.writerow(["supprime", e["sin"], e["old_pn"], e["new_pn"], e["designation"]])
+        w.writerow(["supprime", e["sin"], e["old_pn"], e["old_pn_v2"], e["designation"]])
     for e in diff["changed_pn"]:
-        w.writerow(["modifie", e["sin"], e["old_pn"], e["new_pn"], e["designation"]])
+        w.writerow(["modifie", e["sin"], e["old_pn"], e["old_pn_v2"], e["designation"]])
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv; charset=utf-8",

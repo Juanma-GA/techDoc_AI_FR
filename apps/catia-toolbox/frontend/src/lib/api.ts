@@ -431,8 +431,8 @@ export type ZipListDto = { path: string; count: number; entries: ZipEntryDto[] }
 export type ZipImportDto = ImportDto & { count: number; entries: ZipEntryDto[] };
 
 // Comparaison de deux nomenclatures (versions V0 vs V1) par SIN.
-export type SinEntryDto = { sin: string; old_pn: string; new_pn: string; designation: string };
-export type PnChangeDto = { sin: string; old_pn: string; new_pn: string; designation: string };
+export type SinEntryDto = { sin: string; old_pn: string; old_pn_v2: string; designation: string };
+export type PnChangeDto = { sin: string; old_pn: string; old_pn_v2: string; designation: string };
 export type NomenclatureCompareDto = {
   base_run_id: string;
   other_run_id: string;

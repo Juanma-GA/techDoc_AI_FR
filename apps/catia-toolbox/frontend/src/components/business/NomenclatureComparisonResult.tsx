@@ -19,7 +19,7 @@ function ResultTable({ title, entries, prefix }: { title: string; entries: Entry
           <tr>
             <th>{t("diff.colSin")}</th>
             <th>{t("diff.colOldPn")}</th>
-            <th>{t("diff.colNewPn")}</th>
+            <th>{t("diff.colOldPnV2")}</th>
             <th>{t("diff.colDesignation")}</th>
           </tr>
         </thead>
@@ -28,7 +28,7 @@ function ResultTable({ title, entries, prefix }: { title: string; entries: Entry
             <tr key={`${prefix}-${entry.sin}`}>
               <td>{entry.sin}</td>
               <td>{entry.old_pn}</td>
-              <td>{entry.new_pn}</td>
+              <td>{entry.old_pn_v2}</td>
               <td>{entry.designation}</td>
             </tr>
           ))}

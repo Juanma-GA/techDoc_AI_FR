@@ -611,14 +611,14 @@ class NomenclatureCompareIn(BaseModel):
 class SinEntryOut(BaseModel):
     sin: str
     old_pn: str = ""
-    new_pn: str = ""
+    old_pn_v2: str = ""
     designation: str = ""
 
 
 class PnChangeOut(BaseModel):
     sin: str
     old_pn: str = ""
-    new_pn: str = ""
+    old_pn_v2: str = ""
     designation: str = ""
 
 
