@@ -28,6 +28,7 @@ type WorkspaceState = {
   setImport: (id: string | null) => void;
   setRun: (id: string | null) => void;
   setNomenclatureRun: (id: string | null) => void;
+  resetWorkspace: () => void;
   setSource: (kind: SourceKind, path: string) => void;
   setNomenMapping: (mapping: NomenMapping) => void;
 };
@@ -53,6 +54,14 @@ export const useWorkspace = create<WorkspaceState>()(
       setImport: (id) => set({ importId: id, runId: null }),
       setRun: (id) => set({ runId: id }),
       setNomenclatureRun: (id) => set({ nomenclatureRunId: id }),
+      resetWorkspace: () =>
+        set({
+          importId: null,
+          runId: null,
+          nomenclatureRunId: null,
+          sources: { ...EMPTY_SOURCES },
+          nomenMapping: null,
+        }),
       setSource: (kind, path) => set((s) => ({ sources: { ...s.sources, [kind]: path } })),
       setNomenMapping: (mapping) => set({ nomenMapping: mapping }),
     }),

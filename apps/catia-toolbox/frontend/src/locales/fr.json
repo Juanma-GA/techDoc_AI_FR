@@ -360,6 +360,8 @@
     "onedriveUseInput": "Entrée",
     "onedriveUseOutput": "Sortie",
     "composerTitle": "Licence Composer (conversion)",
+    "deleteUserDataTitle": "Supprimer les données utilisateur",
+    "deleteUserDataHint": "Efface les imports, analyses et résultats enregistrés ainsi que les copies locales temporaires. Les sources OneDrive et tous les réglages de l'application sont conservés. Opération irréversible.",
     "composerLicense": "Serveur de licence (port@hôte)",
     "composerHint": "Best-effort : la variable exacte lue par votre édition de Composer reste à confirmer (candidats DSLICSRV / DS_LICENSE_SERVER / LSERVRC).",
     "llmTitle": "Intelligence artificielle",
@@ -567,7 +569,7 @@
     "qcChecklists": "Checklists QC",
     "totalSize": "Taille totale",
     "resetTitle": "Réinitialiser",
-    "resetBanner": "Opération irréversible. La configuration Mistral (table app_config) est préservée.",
+    "resetBanner": "Opération irréversible. Les imports, analyses, résultats et copies locales temporaires sont supprimés. Les sources OneDrive et tous les réglages, dont Mistral, sont conservés.",
     "resetAll": "Tout supprimer",
     "resetOk": "Reset OK ({{items}}).",
     "resetEmpty": "(rien à supprimer)"

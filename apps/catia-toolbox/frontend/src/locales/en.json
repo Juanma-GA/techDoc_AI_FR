@@ -360,6 +360,8 @@
     "onedriveUseInput": "Input",
     "onedriveUseOutput": "Output",
     "composerTitle": "Composer license (conversion)",
+    "deleteUserDataTitle": "Delete user data",
+    "deleteUserDataHint": "Deletes saved imports, analyses, results, and temporary local copies. OneDrive sources and all application settings are kept. This cannot be undone.",
     "composerLicense": "License server (port@host)",
     "composerHint": "Best-effort: the exact variable read by your Composer edition is still to be confirmed (candidates DSLICSRV / DS_LICENSE_SERVER / LSERVRC).",
     "llmTitle": "Artificial intelligence",
@@ -567,7 +569,7 @@
     "qcChecklists": "QC checklists",
     "totalSize": "Total size",
     "resetTitle": "Reset",
-    "resetBanner": "Irreversible operation. The Mistral configuration (app_config table) is preserved.",
+    "resetBanner": "This cannot be undone. Imports, analyses, results, and temporary local copies will be deleted. OneDrive sources and all settings, including Mistral, are kept.",
     "resetAll": "Delete everything",
     "resetOk": "Reset OK ({{items}}).",
     "resetEmpty": "(nothing to delete)"

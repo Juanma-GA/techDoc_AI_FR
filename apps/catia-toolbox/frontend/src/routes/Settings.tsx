@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
+import { DataResetCard } from "../components/business/DataResetCard";
 import { browseApi, settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 
 const schema = z.object({
@@ -316,6 +317,11 @@ export function Settings() {
           {licNotice ? <p className="success">{licNotice}</p> : null}
         </div>
       </article>
+
+      <DataResetCard
+        title={t("settings.deleteUserDataTitle")}
+        description={t("settings.deleteUserDataHint")}
+      />
     </div>
   );
 }
