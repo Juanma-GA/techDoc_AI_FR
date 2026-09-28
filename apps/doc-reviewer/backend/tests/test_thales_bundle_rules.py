@@ -4,6 +4,7 @@ from app.checks.thales_rules.rules import (
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
+    CUSTOM_COPYRIGHT_POSITION,
     CUSTOM_DECIMAL_COMMA,
     CUSTOM_ENUMERATION_PUNCTUATION_SWAP,
     CUSTOM_FOOTER_PAGE_NUMBER,
@@ -147,6 +148,18 @@ def test_title_copyright_rule_keeps_generic_cross_field_checks() -> None:
     assert definition.metadata["description_en"].startswith(
         "The footer of pages modified by the revision"
     )
+
+
+def test_copyright_position_rule_uses_all_pdf_pages() -> None:
+    definition = CUSTOM_COPYRIGHT_POSITION
+    check = definition.compiled_rule.checks[0]
+
+    assert definition.compiled_rule.target.page == "all"
+    assert definition.compiled_rule.target.region == "full_page"
+    assert definition.compiled_rule.target.page_state is None
+    assert check.operator == "client_operation"
+    assert check.operation == "copyright_position"
+    assert definition.compiled_rule.severity == "warning"
 
 
 def test_tp2_important_notice_bundle_definition_keeps_text_and_normalization() -> None:

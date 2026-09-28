@@ -1356,6 +1356,38 @@ CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
     },
 )
 
+CUSTOM_COPYRIGHT_POSITION = rule(
+    code="CUSTOM_COPYRIGHT_POSITION",
+    name="Position du copyright selon la parite de page",
+    description=(
+        "Sur chaque page PDF, le coin superieur gauche du copyright THALES "
+        "doit etre a x=3.03 cm sur les pages impaires et x=1.76 cm sur les "
+        "pages paires, avec y=26.51 cm. La tolerance est de 0.10 cm."
+    ),
+    message="Le copyright est absent ou mal positionne.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="copyright_position",
+        ),
+    ],
+    failure_message="Position du copyright non conforme a la parite de page.",
+    translations={
+        "en": {
+            "description": (
+                "On every PDF page, the upper-left corner of the THALES "
+                "copyright must be at x=3.03 cm on odd pages and x=1.76 cm "
+                "on even pages, with y=26.51 cm. Tolerance is 0.10 cm."
+            ),
+            "message": "The copyright is missing or incorrectly positioned.",
+        }
+    },
+)
+
 CUSTOM_NO_DEGREE_C_SYMBOL = rule(
     code="CUSTOM_NO_DEGREE_C_SYMBOL",
     name="Unite de temperature C ecrite au format deg. C",
@@ -1937,6 +1969,7 @@ RULE_DEFINITIONS = (
     CUSTOM_TP1_THALES_LOGO_FONT_SIZE,
     CUSTOM_TP2_IMPORTANT_NOTICE,
     CUSTOM_TITLE_PAGE_COPYRIGHT,
+    CUSTOM_COPYRIGHT_POSITION,
     CUSTOM_TP1_REVISION_NUMBER,
     CUSTOM_TP1_FIRST_ISSUE_DATE,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,

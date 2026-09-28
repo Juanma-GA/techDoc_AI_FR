@@ -2560,6 +2560,86 @@ def test_title_page_copyright_reports_mismatches_from_multiple_checks_and_pages(
     ] == [(3, "2025", "2026"), (4, "1970", "1966")]
 
 
+def test_copyright_position_matches_pdf_page_parity_and_coordinates() -> None:
+    rule = _rule("CUSTOM_COPYRIGHT_POSITION")
+    points_per_cm = 72.0 / 2.54
+    page_positions = {
+        1: (3.03, 26.51),
+        2: (1.76, 26.51),
+        3: (3.03, 26.51),
+        4: (1.76, 26.51),
+    }
+
+    def build_pdf(
+        overrides: dict[int, tuple[float, float]] | None = None,
+        *,
+        missing_copyright_page: int | None = None,
+    ) -> ParsedPdf:
+        overrides = overrides or {}
+        pages = []
+        for page_number, expected_position in page_positions.items():
+            text = f"Page {page_number} body."
+            spans = [
+                Span(
+                    text=text,
+                    bbox=(40.0, 100.0, 200.0, 112.0),
+                    page=page_number,
+                    font="Arial",
+                    size=10.0,
+                )
+            ]
+            if page_number != missing_copyright_page:
+                x_cm, y_cm = overrides.get(page_number, expected_position)
+                copyright = "© 1966-2026 THALES AVS FRANCE SAS."
+                spans.append(
+                    Span(
+                        text=copyright,
+                        bbox=(
+                            x_cm * points_per_cm,
+                            y_cm * points_per_cm,
+                            x_cm * points_per_cm + 200.0,
+                            y_cm * points_per_cm + 8.0,
+                        ),
+                        page=page_number,
+                        font="Arial",
+                        size=6.0,
+                    )
+                )
+                text = f"{text}\n{copyright}"
+            pages.append(ParsedPage(page=page_number, text=text, spans=spans))
+        return ParsedPdf(
+            page_count=4,
+            pages=pages,
+            full_text="\n".join(page.text for page in pages),
+            is_signed=False,
+        )
+
+    valid, _ = execute_pdf_rules(build_pdf(), [rule])
+    assert valid[0].status == "PASS"
+
+    invalid_positions = (
+        (1, (1.76, 26.51)),
+        (2, (3.03, 26.51)),
+        (3, (3.03, 26.71)),
+    )
+    for page_number, position in invalid_positions:
+        invalid, _ = execute_pdf_rules(
+            build_pdf({page_number: position}),
+            [rule],
+        )
+        assert invalid[0].status == "FAIL"
+        assert invalid[0].evidence is not None
+        assert invalid[0].evidence.page == str(page_number)
+
+    missing, _ = execute_pdf_rules(
+        build_pdf(missing_copyright_page=4),
+        [rule],
+    )
+    assert missing[0].status == "FAIL"
+    assert missing[0].evidence is not None
+    assert missing[0].evidence.page == "4"
+
+
 def test_mat_reference_format_is_passed_and_failed_by_the_compiled_executor() -> None:
     rule = _rule("MAT_REF_FORMAT")
     valid, _ = execute_pdf_rules(_pdf("See MAT-24-21-00-001."), [rule])

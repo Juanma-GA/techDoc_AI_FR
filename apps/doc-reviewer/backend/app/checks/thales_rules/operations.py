@@ -47,6 +47,16 @@ _HIGHLIGHTS_LEGEND_FOOTER_EXPECTED = (
     "la legende N: New - D: Deleted ... doit se terminer juste avant le pied "
     "de page, sans ligne de texte intercalaire"
 )
+_COPYRIGHT_POSITION_MARKER_RE = re.compile(r"(?i)(?:\u00a9|\bcopyright\b)")
+_POINTS_PER_CENTIMETER = 72.0 / 2.54
+_COPYRIGHT_POSITION_ODD_X_CM = 3.03
+_COPYRIGHT_POSITION_EVEN_X_CM = 1.76
+_COPYRIGHT_POSITION_Y_CM = 26.51
+_COPYRIGHT_POSITION_TOLERANCE_CM = 0.10
+_COPYRIGHT_POSITION_EXPECTED = (
+    "pages impaires: x=3.03 cm, y=26.51 cm; pages paires: "
+    "x=1.76 cm, y=26.51 cm (tolerance +/- 0.10 cm)"
+)
 _JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
 _JUSTIFICATION_MIN_LINE_CHARACTERS = 24
 _JUSTIFICATION_HORIZONTAL_TOLERANCE = 3.0
@@ -729,6 +739,93 @@ def _evaluate_highlights_legend_footer(
     )
 
 
+def _evaluate_copyright_position(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> OperationResult:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_COPYRIGHT_POSITION_EXPECTED,
+        )
+
+    target_pages = {target.raw_page for target in getattr(context, "targets", ())}
+    pages = [page for page in parsed_pdf.pages if page.page in target_pages]
+    if not pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_COPYRIGHT_POSITION_EXPECTED,
+        )
+
+    inconclusive_page: int | None = None
+    for page in pages:
+        expected_x_cm = (
+            _COPYRIGHT_POSITION_ODD_X_CM
+            if page.page % 2
+            else _COPYRIGHT_POSITION_EVEN_X_CM
+        )
+        parity = "impaire" if page.page % 2 else "paire"
+        expected = (
+            f"page {page.page} ({parity}): x={expected_x_cm:.2f} cm, "
+            f"y={_COPYRIGHT_POSITION_Y_CM:.2f} cm "
+            f"(+/- {_COPYRIGHT_POSITION_TOLERANCE_CM:.2f} cm)"
+        )
+        copyright_spans = [
+            span
+            for span in page.spans
+            if _COPYRIGHT_POSITION_MARKER_RE.search(span.text)
+        ]
+        if not copyright_spans:
+            if not page.has_text_layer:
+                inconclusive_page = page.page
+                continue
+            return OperationResult(
+                status="FAIL",
+                expected=expected,
+                message=f"Le copyright est absent de la page PDF {page.page}.",
+                page=page.page,
+            )
+
+        copyright_span = min(
+            copyright_spans,
+            key=lambda span: (span.bbox[1], span.bbox[0]),
+        )
+        observed_x_cm = copyright_span.bbox[0] / _POINTS_PER_CENTIMETER
+        observed_y_cm = copyright_span.bbox[1] / _POINTS_PER_CENTIMETER
+        if (
+            abs(observed_x_cm - expected_x_cm) > _COPYRIGHT_POSITION_TOLERANCE_CM
+            or abs(observed_y_cm - _COPYRIGHT_POSITION_Y_CM)
+            > _COPYRIGHT_POSITION_TOLERANCE_CM
+        ):
+            observed = f"x={observed_x_cm:.2f} cm, y={observed_y_cm:.2f} cm"
+            return OperationResult(
+                status="FAIL",
+                observed=observed,
+                expected=expected,
+                message=(
+                    f"Le copyright de la page {page.page} est en {observed}; "
+                    f"position attendue : {expected}."
+                ),
+                original=copyright_span.text,
+                page=page.page,
+                bbox=copyright_span.bbox,
+            )
+
+    if inconclusive_page is not None:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_COPYRIGHT_POSITION_EXPECTED,
+            page=inconclusive_page,
+        )
+    return OperationResult(
+        status="PASS",
+        expected=_COPYRIGHT_POSITION_EXPECTED,
+        page=pages[-1].page,
+    )
+
+
 REVISION_CONSISTENCY = ClientOperation(
     name="revision_consistency",
     execute=_evaluate_revision_consistency,
@@ -758,6 +855,10 @@ HIGHLIGHTS_LEGEND_FOOTER = ClientOperation(
     name="highlights_legend_footer",
     execute=_evaluate_highlights_legend_footer,
 )
+COPYRIGHT_POSITION = ClientOperation(
+    name="copyright_position",
+    execute=_evaluate_copyright_position,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -767,5 +868,6 @@ OPERATIONS = {
         HIGHLIGHTS_DOCUMENT_TYPE,
         PARAGRAPH_JUSTIFICATION,
         HIGHLIGHTS_LEGEND_FOOTER,
+        COPYRIGHT_POSITION,
     )
 }
