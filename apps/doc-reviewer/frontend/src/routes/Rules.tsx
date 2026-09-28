@@ -465,11 +465,12 @@ function ClientRules() {
             {catalogLabel ? ` · ${catalogLabel}` : ""}
           </p>
         </div>
-        <label className="row" style={{ gap: 8, minWidth: 220 }}>
+        <label className="row" style={{ gap: 8, minWidth: 220, flexWrap: "nowrap" }}>
           <Search size={16} aria-hidden="true" />
           <input
             type="search"
             className="input"
+            style={{ width: "auto", flex: 1, minWidth: 0 }}
             aria-label={t("rules.client.search")}
             placeholder={t("rules.client.search")}
             value={search}

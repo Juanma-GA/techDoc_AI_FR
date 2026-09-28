@@ -15,6 +15,5 @@ OTHER :
 
 - Mettre les tests aussi dans le dossier client ? Pas tous, mais ceux spécifiques aux regles et operators specifique au client
 
-
 - Attention si il faut mapper tous les PNR ça va faire bcp si y'en a plein dans le doc (des docs avec plusieurs PNR ??) --> Racine + 
 --> une règle différente pour la page TP1 avec toutes les PNR et une pour les en-tetes Racines series
