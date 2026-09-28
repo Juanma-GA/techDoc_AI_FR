@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -171,6 +171,8 @@ const MONO_IDENTITY_FIELDS: { field: MonoIdentityField; labelKey: string }[] = [
   { field: "new_pn", labelKey: "identification.colNewPn" },
 ];
 
+type MonoPreviewRequest = { path: string; sheet?: string; requestId: number };
+
 /**
  * Etape Mono-Corps : onglet Materiaux separe. L'utilisateur choisit un onglet,
  * un champ d'identite, un nombre `n` de colonnes slots, puis mappe ces n
@@ -180,11 +182,17 @@ const MONO_IDENTITY_FIELDS: { field: MonoIdentityField; labelKey: string }[] = [
 function MonoCorpsCard({
   runId,
   sourcePath,
+  targetName,
+  analysisStatus,
+  canAutoPreview,
   runIdentityFields,
   runIdentityFieldsLoading,
 }: {
   runId: string | null;
   sourcePath: string;
+  targetName: string | null;
+  analysisStatus: { matched: number; mono: number } | null;
+  canAutoPreview: boolean;
   runIdentityFields: string[];
   runIdentityFieldsLoading: boolean;
 }) {
@@ -201,8 +209,10 @@ function MonoCorpsCard({
   const [result, setResult] = useState<MonoCorpsResultDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const previewRequestId = useRef(0);
 
   useEffect(() => {
+    previewRequestId.current += 1;
     setPath(sourcePath);
     setPreview(null);
     setIdentityCol(undefined);
@@ -213,28 +223,37 @@ function MonoCorpsCard({
   }, [runId, sourcePath]);
 
   const previewMutation = useMutation({
-    mutationFn: async (s?: string) => {
-      if (s) {
-        return identificationApi.preview({ scope: "input", path: path.trim(), sheet: s, rows: 20 });
+    mutationFn: async ({ path: previewPath, sheet: previewSheet, requestId }: MonoPreviewRequest) => {
+      let data: NomenclaturePreviewDto;
+      if (previewSheet) {
+        data = await identificationApi.preview({
+          scope: "input",
+          path: previewPath.trim(),
+          sheet: previewSheet,
+          rows: 20,
+        });
+      } else {
+        const initial = await identificationApi.preview({
+          scope: "input",
+          path: previewPath.trim(),
+          rows: 20,
+        });
+        const materialsSheet = initial.sheets.find(
+          (candidate) => normalizedLabel(candidate) === "materiaux",
+        );
+        data = materialsSheet && materialsSheet !== initial.sheet
+          ? await identificationApi.preview({
+              scope: "input",
+              path: previewPath.trim(),
+              sheet: materialsSheet,
+              rows: 20,
+            })
+          : initial;
       }
-      const initial = await identificationApi.preview({
-        scope: "input",
-        path: path.trim(),
-        rows: 20,
-      });
-      const materialsSheet = initial.sheets.find(
-        (candidate) => normalizedLabel(candidate) === "materiaux",
-      );
-      return materialsSheet && materialsSheet !== initial.sheet
-        ? identificationApi.preview({
-            scope: "input",
-            path: path.trim(),
-            sheet: materialsSheet,
-            rows: 20,
-          })
-        : initial;
+      return { data, requestId };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ data, requestId }) => {
+      if (requestId !== previewRequestId.current) return;
       setError(null);
       setNotice(null);
       setPreview(data);
@@ -249,8 +268,30 @@ function MonoCorpsCard({
       setIdentityCol(data.columns_map[detectedIdentityField]);
       setFirstSlotCol(detectFirstSlotColumn(data, detectedHeaderRow));
     },
-    onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
+    onError: (e, request) => {
+      if (request.requestId === previewRequestId.current) {
+        setError(e instanceof ApiClientError ? e.message : String(e));
+      }
+    },
   });
+  const mutatePreview = previewMutation.mutate;
+
+  useEffect(() => {
+    if (
+      !canAutoPreview ||
+      !runId ||
+      runIdentityFieldsLoading ||
+      !sourcePath ||
+      path !== sourcePath
+    ) return;
+    const requestId = ++previewRequestId.current;
+    mutatePreview({ path: sourcePath, requestId });
+  }, [canAutoPreview, mutatePreview, path, runId, runIdentityFieldsLoading, sourcePath]);
+
+  const requestPreview = (requestedSheet?: string) => {
+    const requestId = ++previewRequestId.current;
+    mutatePreview({ path: path.trim(), sheet: requestedSheet, requestId });
+  };
 
   const analyzeMutation = useMutation({
     mutationFn: () =>
@@ -305,6 +346,7 @@ function MonoCorpsCard({
     "identification.colSin";
   const identityLabel = t(identityLabelKey);
   const onPathChange = (nextPath: string) => {
+    previewRequestId.current += 1;
     setPath(nextPath);
     setPreview(null);
     setSheet("");
@@ -318,10 +360,26 @@ function MonoCorpsCard({
 
   return (
     <article className="card">
-      <h2 className="card-title">{t("identification.monoTitle")}</h2>
+      <h2 className="card-title" style={{ marginBottom: 8 }}>{t("identification.monoTitle")}</h2>
+      {runId && !runIdentityFieldsLoading ? (
+        analysisStatus ? (
+          <p className="success" style={{ margin: "0 0 8px" }}>
+            {t("identification.monoAlreadyApplied", analysisStatus)}
+          </p>
+        ) : (
+          <p className="hint" style={{ margin: "0 0 8px" }}>
+            {t("identification.monoNotApplied")}
+          </p>
+        )
+      ) : null}
+      <p className="hint" style={{ margin: "0 0 12px" }}>
+        {runId
+          ? t("identification.monoTargetRun", { file: targetName ?? runId.slice(0, 8) })
+          : t("identification.monoNoTarget")}
+      </p>
 
       <div className="field">
-        <label className="label">{t("identification.nomenFileLabel")}</label>
+        <label className="label">{t("identification.monoWorkbookLabel")}</label>
         <FilePicker exts={NOMEN_EXTS} value={path} onChange={onPathChange} sheetPreview={false} />
       </div>
 
@@ -329,13 +387,13 @@ function MonoCorpsCard({
         <button
           type="button"
           className="btn secondary"
-          onClick={() => previewMutation.mutate(sheet || undefined)}
+          onClick={() => requestPreview(sheet || undefined)}
           disabled={previewMutation.isPending || !path.trim() || runIdentityFieldsLoading || (!!runId && !runIdentityFields.length)}
         >
           {previewMutation.isPending ? <span className="spinner" /> : null}
           <span>{t("identification.preview")}</span>
         </button>
-        {notice ? <span className="success">{notice}</span> : null}
+        {notice && !analysisStatus ? <span className="success">{notice}</span> : null}
         {error ? <span className="error">{error}</span> : null}
       </div>
 
@@ -350,7 +408,7 @@ function MonoCorpsCard({
                 value={sheet}
                 onChange={(e) => {
                   setResult(null);
-                  previewMutation.mutate(e.target.value);
+                  requestPreview(e.target.value);
                 }}
               >
                 {preview.sheets.map((s) => (
@@ -588,6 +646,20 @@ export function Identification() {
         MONO_IDENTITY_FIELDS.some((identity) => identity.field === field),
       )
     : [];
+  const monoAnalysisStatus =
+    activeRun && typeof activeRun.summary.mono_matched === "number"
+      ? {
+          matched: activeRun.summary.mono_matched,
+          mono: summaryNum(activeRun.summary, "mono_body"),
+        }
+      : null;
+  const selectRun = (run: NomenclatureRunDto) => {
+    setResultRunId(run.id);
+    useWorkspace.getState().setNomenclatureRun(run.id);
+    const columns = detectedColumns(run.summary);
+    setResultColumns(columns);
+    setFilter(defaultFilter(columns));
+  };
 
   useEffect(() => {
     if (!resultRunId) return;
@@ -961,14 +1033,6 @@ export function Identification() {
           ) : null}
       </article>
 
-      {/* ---- Carte Mono-Corps : autonome (onglet Materiaux + n slots) ---- */}
-      <MonoCorpsCard
-        runId={resultRunId}
-        sourcePath={activeRun?.source_ref ?? nomenPath}
-        runIdentityFields={runIdentityFields}
-        runIdentityFieldsLoading={!!resultRunId && runsQuery.isLoading}
-      />
-
       {/* ---- Carte 2 : nomenclatures analysees ---------------------------- */}
       <article className="card">
         <h2 className="card-title">{t("identification.listTitle")}</h2>
@@ -977,7 +1041,15 @@ export function Identification() {
         ) : runs.length ? (
           <ul className="item-list">
             {runs.map((r) => (
-              <li key={r.id} className="item-row">
+              <li
+                key={r.id}
+                className="item-row clickable"
+                aria-current={r.id === resultRunId ? "true" : undefined}
+                style={r.id === resultRunId
+                  ? { borderColor: "var(--brand-light)" }
+                  : undefined}
+                onClick={() => selectRun(r)}
+              >
                 <span className="item-main grow" style={{ minWidth: 0 }}>
                   <span className="item-name">{fileName(r.source_ref)}</span>{" "}
                   <span className="badge info">
@@ -992,25 +1064,24 @@ export function Identification() {
                   <span className="badge default">
                     {t("identification.badgeMono", { count: summaryNum(r.summary, "mono_color") })}
                   </span>
+                  {r.id === resultRunId ? (
+                    <span className="badge info">{t("identification.selectedRun")}</span>
+                  ) : null}
                 </span>
                 <span className="item-actions">
                   <button
                     type="button"
                     className="btn secondary small"
-                    onClick={() => {
-                      setResultRunId(r.id);
-                      useWorkspace.getState().setNomenclatureRun(r.id);
-                      const cols = detectedColumns(r.summary);
-                      setResultColumns(cols);
-                      setFilter(defaultFilter(cols));
-                    }}
                   >
                     {t("common.view")}
                   </button>
                   <button
                     type="button"
                     className="btn ghost small"
-                    onClick={() => deleteMutation.mutate(r.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteMutation.mutate(r.id);
+                    }}
                   >
                     {t("common.delete")}
                   </button>
@@ -1024,6 +1095,17 @@ export function Identification() {
           </div>
         )}
       </article>
+
+      {/* ---- Carte Mono-Corps : onglet Materiaux + n slots ---------------- */}
+      <MonoCorpsCard
+        runId={resultRunId}
+        sourcePath={activeRun?.source_ref ?? nomenPath}
+        targetName={activeRun ? fileName(activeRun.source_ref) : null}
+        analysisStatus={monoAnalysisStatus}
+        canAutoPreview={!!activeRun && runIdentityFields.length > 0}
+        runIdentityFields={runIdentityFields}
+        runIdentityFieldsLoading={!!resultRunId && runsQuery.isLoading}
+      />
     </div>
   );
 }
