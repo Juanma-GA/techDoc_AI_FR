@@ -13,6 +13,7 @@ import {
   type TextureConfig,
 } from "../lib/api";
 import { FilePicker } from "../components/FilePicker";
+import { Colorization } from "./Colorization";
 import { useWorkspace } from "../stores/workspace";
 
 const SMGXML_EXTS = [".smgxml", ".smg", ".xml"];
@@ -96,7 +97,8 @@ export function SmgxmlRecolor() {
   const path = useWorkspace((s) => s.sources.smgxml);
   const setSource = useWorkspace((s) => s.setSource);
   const setPath = (p: string) => setSource("smgxml", p);
-  const [nomenId, setNomenId] = useState("");
+  const nomenId = useWorkspace((s) => s.nomenclatureRunId) ?? "";
+  const setNomenId = (id: string) => useWorkspace.getState().setNomenclatureRun(id || null);
   // Colorisation par PN + RGB direct (Actor.Color via referentiel Ref Couleur).
   const [matchBy, setMatchBy] = useState<"sin" | "catpart" | "pn">("pn");
   // Le style (texture via bibliotheque) est desormais le mecanisme principal
@@ -359,6 +361,7 @@ export function SmgxmlRecolor() {
           </div>
         ) : null}
       </article>
+      <Colorization />
     </div>
   );
 }

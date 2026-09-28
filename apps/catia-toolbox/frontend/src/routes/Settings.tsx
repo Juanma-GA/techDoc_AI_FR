@@ -27,7 +27,6 @@ export function Settings() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
     reset,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),

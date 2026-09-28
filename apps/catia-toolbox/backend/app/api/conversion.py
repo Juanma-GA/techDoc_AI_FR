@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response, StreamingResponse
@@ -48,9 +49,18 @@ def create_conversion(import_id: uuid.UUID, body: ConversionIn, db: Session = De
     nodes, _ = load_parsed_nodes(db, import_id)
     # Dossier de sortie : celui fourni, sinon auto '<NomDossierInput>_Converti'.
     target_dir = body.target_dir.strip() or conversion_planner.output_dir_name(imp.root_label or imp.source_ref)
+    target_path = Path(target_dir)
+    if target_path.is_absolute() or ".." in target_path.parts:
+        raise AppError(
+            "CONVERSION_OUTPUT_INVALID",
+            "Le dossier de sortie doit rester relatif a la source.",
+            status_code=400,
+        )
     items = conversion_planner.plan(nodes, target_dir=target_dir, target_ext=body.target_ext, flat=True)
     summary = conversion_planner.summarize(items)
     summary["output_dir"] = target_dir
+    if imp.source_mode in {"folder", "selection"}:
+        summary["output_path"] = str((Path(imp.source_ref).expanduser().resolve() / target_path).resolve())
     summary["selected"] = sum(1 for it in items if it.get("status") == "accepted")
 
     run = ConversionRun(

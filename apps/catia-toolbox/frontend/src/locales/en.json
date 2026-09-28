@@ -9,7 +9,7 @@
     "import": "Source (scan / select)",
     "diff": "Compare",
     "conversion": "Conversion → Composer",
-    "smgxmlRecolor": "SMGXML: color",
+    "smgxmlRecolor": "SMGXML: color + plan",
     "colorization": "Colorization (plan)",
     "tree": "Tree",
     "suggestions": "Optimization",
@@ -33,7 +33,7 @@
     "import": { "title": "Import", "sub": "Scan a local folder or import a CSV / JSON listing." },
     "diff": { "title": "Compare", "sub": "Detect parts added / removed / modified between two imports." },
     "conversion": { "title": "Conversion", "sub": "CATIA 3D to Composer conversion plan (dry-run)." },
-    "smgxmlRecolor": { "title": "3 - SMGXML: color", "sub": "Apply the mono-color SIN colors to the SMGXML (dry-run by default)." },
+    "smgxmlRecolor": { "title": "3 - SMGXML: color + plan", "sub": "Apply SMGXML colors and prepare a colorization plan (dry-run by default)." },
     "colorization": { "title": "Colorization", "sub": "Assign a color to parts (by state / type / depth)." },
     "tree": { "title": "Tree", "sub": "Metrics and structure of the current import." },
     "suggestions": { "title": "Suggestions", "sub": "Generate a reorganization plan then accept / reject." },
@@ -54,6 +54,8 @@
   },
   "picker": {
     "browse": "Browse",
+    "browseLocal": "Choose a file",
+    "chooseLocalFolder": "Choose a folder",
     "placeholder": "Browse or paste a path",
     "up": "Up",
     "open": "Open",
@@ -75,7 +77,10 @@
     "recursiveHint": "Recursive view: all files under this folder. Filter, check, then import.",
     "folder": "folder",
     "recursiveEmpty": "No file (try another filter).",
-    "countSelected": "{{count}} file(s) — {{sel}} checked"
+    "countSelected": "{{count}} file(s) — {{sel}} checked",
+    "localHint": "No Source root is configured: the file will be copied to the application local storage.",
+    "localFolderHint": "No Source root is configured: the folder will be copied to the application local storage.",
+    "localUploaded": "{{count}} local file(s) ready."
   },
   "import": {
     "title": "Import",

@@ -60,6 +60,22 @@ def test_conversion_lists_all_files(client, synthetic_tree) -> None:
     assert "txt" in by_ext and by_ext["txt"] == {"rejected"}
 
 
+def test_conversion_disambiguates_duplicate_basenames(client, synthetic_tree) -> None:
+    imp_id = _scan(client, str(synthetic_tree))
+    response = client.post(f"/api/v1/imports/{imp_id}/conversion", json={})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    items = client.get(f"/api/v1/conversions/{body['id']}/items").json()
+
+    duplicate_targets = [
+        item["target_path"] for item in items if item["source_path"].endswith("PIECE_001.CATPart")
+    ]
+    assert len(duplicate_targets) == 2
+    assert len(set(duplicate_targets)) == 2
+    assert body["summary"]["collisions"] >= 1
+    assert any("__" in target for target in duplicate_targets)
+
+
 def test_conversion_execute_dry_run(client, synthetic_tree) -> None:
     """L'app peut lancer le script en dry-run (aucun appel Composer)."""
     imp_id = _scan(client, str(synthetic_tree))

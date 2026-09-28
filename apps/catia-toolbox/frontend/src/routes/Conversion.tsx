@@ -244,6 +244,10 @@ export function Conversion() {
 
   const outputDir =
     run && typeof run.summary.output_dir === "string" ? (run.summary.output_dir as string) : "";
+  const outputPath =
+    run && typeof run.summary.output_path === "string"
+      ? (run.summary.output_path as string)
+      : outputDir;
   const selectedCount = items.filter((it) => it.status === "accepted").length;
 
   return (
@@ -342,7 +346,7 @@ export function Conversion() {
       {run ? (
         <article className="card">
           <h2 className="card-title">{t("conversion.resultTitle", { count: items.length })}</h2>
-          {outputDir ? <p className="hint">{t("conversion.outputFolder", { name: outputDir })}</p> : null}
+          {outputPath ? <p className="hint">{t("conversion.outputFolder", { name: outputPath })}</p> : null}
 
           <div className="row" style={{ margin: "0.5rem 0" }}>
             <button type="button" className="btn ghost small" onClick={() => setAll(true)}>

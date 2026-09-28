@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -466,7 +466,9 @@ export function Identification() {
   const [mapping, setMapping] = useState<Record<string, number | undefined>>({});
 
   // Resultat (items de la nomenclature analysee).
-  const [resultRunId, setResultRunId] = useState<string | null>(null);
+  const [resultRunId, setResultRunId] = useState<string | null>(
+    () => useWorkspace.getState().nomenclatureRunId,
+  );
   // Colonnes reellement mappees pour ce resultat : le tableau n'affiche QUE
   // celles-ci (strictement le contenu du mapping).
   const [resultColumns, setResultColumns] = useState<string[]>([]);
@@ -480,6 +482,17 @@ export function Identification() {
     queryFn: identificationApi.list,
   });
   const runs = runsQuery.data ?? [];
+
+  useEffect(() => {
+    if (!resultRunId) return;
+    const currentRun = runs.find((run) => run.id === resultRunId);
+    if (!currentRun) return;
+    const columns = detectedColumns(currentRun.summary);
+    setResultColumns((current) => (current.length ? current : columns));
+    setFilter((current) =>
+      current === "replaced" && !canFilterReplaced(columns) ? defaultFilter(columns) : current,
+    );
+  }, [resultRunId, runs]);
 
   const itemsQuery = useQuery<NomenclatureItemDto[]>({
     queryKey: ["identification", resultRunId, "items", filter],
@@ -535,6 +548,7 @@ export function Identification() {
         }),
       );
       setResultRunId(run.id);
+      useWorkspace.getState().setNomenclatureRun(run.id);
       const cols = detectedColumns(run.summary);
       setResultColumns(cols);
       // Filtre par defaut sur "Pieces remplacees" quand la colonne est mappee,
@@ -548,7 +562,10 @@ export function Identification() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => identificationApi.remove(id),
     onSuccess: (_d, id) => {
-      if (resultRunId === id) setResultRunId(null);
+      if (resultRunId === id) {
+        setResultRunId(null);
+        useWorkspace.getState().setNomenclatureRun(null);
+      }
       void qc.invalidateQueries({ queryKey: ["identification"] });
     },
   });
@@ -871,6 +888,7 @@ export function Identification() {
                     className="btn secondary small"
                     onClick={() => {
                       setResultRunId(r.id);
+                      useWorkspace.getState().setNomenclatureRun(r.id);
                       const cols = detectedColumns(r.summary);
                       setResultColumns(cols);
                       setFilter(defaultFilter(cols));

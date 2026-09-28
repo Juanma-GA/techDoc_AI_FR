@@ -103,7 +103,13 @@ def export_save(
     else:
         content = plan_export.to_sh(rows)
 
-    output_root = onedrive.root_for_scope(db, "output")
+    output_root = onedrive.get_onedrive_roots(db)["output"]
+    if not output_root:
+        raise AppError(
+            "ROOT_NOT_CONFIGURED",
+            "Racine OneDrive de sortie non configuree. Renseignez-la dans Parametres.",
+            status_code=400,
+        )
     name = safe_filename(payload.filename)
     if not name.lower().endswith(_EXT_FOR_KIND[payload.kind]):
         name = f"{name}{_EXT_FOR_KIND[payload.kind]}"

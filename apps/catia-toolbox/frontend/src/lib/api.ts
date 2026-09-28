@@ -208,6 +208,9 @@ export type BrowseListDto = {
   entries: BrowseEntryDto[];
 };
 
+export type LocalUploadFileDto = { path: string; rel: string; size: number };
+export type LocalUploadDto = { root: string; files: LocalUploadFileDto[] };
+
 export type BrowsePreviewDto = {
   sheets: string[];
   sheet: string;
@@ -573,6 +576,11 @@ export const importsApi = {
 
 export const browseApi = {
   roots: () => request<BrowseRootsDto>("/browse/roots"),
+  uploadLocal: (files: File[]) => {
+    const fd = new FormData();
+    files.forEach((file) => fd.append("files", file, file.webkitRelativePath || file.name));
+    return request<LocalUploadDto>("/browse/local-upload", { method: "POST", body: fd });
+  },
   list: (path: string, scope: BrowseScope = "input") =>
     request<BrowseListDto>("/browse/list", {
       method: "POST",

@@ -1,12 +1,14 @@
 import { ErrorBoundary } from "@internal/ui";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import i18n from "./i18n";
+import { healthApi, importsApi, identificationApi } from "./lib/api";
 import { Checks } from "./routes/Checks";
-import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
 import { Diff } from "./routes/Diff";
 import { Export } from "./routes/Export";
@@ -18,6 +20,7 @@ import { SmgxmlRecolor } from "./routes/SmgxmlRecolor";
 import { SmgxmlRename } from "./routes/SmgxmlRename";
 import { Suggestions } from "./routes/Suggestions";
 import { Tree } from "./routes/Tree";
+import { useWorkspace } from "./stores/workspace";
 
 type NavLeaf = { to: string; labelKey: string; end?: boolean };
 type NavGroup = { groupKey: string; items: NavLeaf[] };
@@ -42,7 +45,6 @@ const NAV: NavEntry[] = [
     groupKey: "nav.groups.traitement",
     items: [
       { to: "/smgxml-recolor", labelKey: "nav.smgxmlRecolor" },
-      { to: "/colorization", labelKey: "nav.colorization" },
       { to: "/tree", labelKey: "nav.tree" },
       { to: "/suggestions", labelKey: "nav.suggestions" },
       { to: "/export", labelKey: "nav.export" },
@@ -88,6 +90,69 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
 const navItemClass = ({ isActive }: { isActive: boolean }) =>
   isActive ? "nav-item active" : "nav-item";
 
+function WorkspaceBootstrap() {
+  const importId = useWorkspace((state) => state.importId);
+  const runId = useWorkspace((state) => state.runId);
+  const nomenclatureRunId = useWorkspace((state) => state.nomenclatureRunId);
+  const setImport = useWorkspace((state) => state.setImport);
+  const setRun = useWorkspace((state) => state.setRun);
+  const setNomenclatureRun = useWorkspace((state) => state.setNomenclatureRun);
+  const validated = useRef(false);
+
+  const healthQuery = useQuery({ queryKey: ["health"], queryFn: healthApi.get });
+  const importsQuery = useQuery({
+    queryKey: ["imports"],
+    queryFn: importsApi.list,
+    enabled: healthQuery.isSuccess,
+  });
+  const nomenclaturesQuery = useQuery({
+    queryKey: ["identification"],
+    queryFn: identificationApi.list,
+    enabled: healthQuery.isSuccess,
+  });
+  const runsQuery = useQuery({
+    queryKey: ["workspace", "runs", importId],
+    queryFn: () => importsApi.runs(importId as string),
+    enabled: healthQuery.isSuccess && !!importId,
+  });
+
+  useEffect(() => {
+    if (
+      validated.current ||
+      !healthQuery.isSuccess ||
+      !importsQuery.isSuccess ||
+      !nomenclaturesQuery.isSuccess
+    ) return;
+    if (importId && !runsQuery.isSuccess) return;
+
+    if (importId && !importsQuery.data.some((item) => item.id === importId)) {
+      setImport(null);
+    } else if (runId && !runsQuery.data?.some((run) => run.id === runId)) {
+      setRun(null);
+    }
+    if (nomenclatureRunId && !nomenclaturesQuery.data.some((run) => run.id === nomenclatureRunId)) {
+      setNomenclatureRun(null);
+    }
+    validated.current = true;
+  }, [
+    importId,
+    healthQuery.isSuccess,
+    importsQuery.data,
+    importsQuery.isSuccess,
+    nomenclatureRunId,
+    nomenclaturesQuery.data,
+    nomenclaturesQuery.isSuccess,
+    runId,
+    runsQuery.data,
+    runsQuery.isSuccess,
+    setImport,
+    setNomenclatureRun,
+    setRun,
+  ]);
+
+  return null;
+}
+
 export function App() {
   const { t } = useTranslation();
   const { pathname } = useLocation();
@@ -96,6 +161,7 @@ export function App() {
 
   return (
     <div className="ct">
+      <WorkspaceBootstrap />
       <div className="layout">
         <aside className="sidebar">
           <div className="sidebar-header">
@@ -153,7 +219,7 @@ export function App() {
               <Route path="/diff" element={<Diff />} />
               <Route path="/conversion" element={<Conversion />} />
               <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />
-              <Route path="/colorization" element={<Colorization />} />
+              <Route path="/colorization" element={<Navigate to="/smgxml-recolor" replace />} />
               <Route path="/tree" element={<Tree />} />
               <Route path="/suggestions" element={<Suggestions />} />
               <Route path="/export" element={<Export />} />

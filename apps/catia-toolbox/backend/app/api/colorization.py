@@ -43,6 +43,13 @@ def create_colorization(import_id: uuid.UUID, body: ColorizationIn, db: Session 
         diff = db.get(DiffRun, body.diff_run_id)
         if diff is None:
             raise AppError("DIFF_NOT_FOUND", "Comparaison introuvable.", status_code=404, detail={"id": str(body.diff_run_id)})
+        if import_id not in (diff.base_import_id, diff.other_import_id):
+            raise AppError(
+                "DIFF_IMPORT_MISMATCH",
+                "La comparaison ne concerne pas l'import courant.",
+                status_code=400,
+                detail={"import_id": str(import_id), "diff_run_id": str(body.diff_run_id)},
+            )
         entries = db.scalars(select(DiffEntry).where(DiffEntry.run_id == body.diff_run_id))
         items = colorize_engine.colorize_by_change(
             [{"rel_path": e.rel_path, "change_type": e.change_type} for e in entries]

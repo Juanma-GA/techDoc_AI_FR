@@ -90,6 +90,17 @@ class BrowseListOut(BaseModel):
     entries: list[BrowseEntryOut] = Field(default_factory=list)
 
 
+class LocalUploadFileOut(BaseModel):
+    path: str
+    rel: str
+    size: int
+
+
+class LocalUploadOut(BaseModel):
+    root: str
+    files: list[LocalUploadFileOut] = Field(default_factory=list)
+
+
 class BrowsePreviewIn(BaseModel):
     scope: str = Field(default="input")  # input | output
     path: str = Field(..., min_length=1)

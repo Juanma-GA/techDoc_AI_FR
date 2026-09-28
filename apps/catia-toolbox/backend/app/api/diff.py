@@ -9,7 +9,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -64,7 +64,9 @@ def create_diff(body: DiffIn, db: Session = Depends(get_db)) -> DiffRun:
 def list_diffs(import_id: uuid.UUID, db: Session = Depends(get_db)) -> list[DiffRun]:
     return list(
         db.scalars(
-            select(DiffRun).where(DiffRun.base_import_id == import_id).order_by(DiffRun.created_at.desc())
+            select(DiffRun)
+            .where(or_(DiffRun.base_import_id == import_id, DiffRun.other_import_id == import_id))
+            .order_by(DiffRun.created_at.desc())
         )
     )
 

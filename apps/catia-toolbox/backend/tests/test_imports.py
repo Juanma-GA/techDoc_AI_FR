@@ -129,4 +129,4 @@ def test_select_without_root(client, synthetic_tree) -> None:
         json={"scope": "input", "paths": [str(synthetic_tree)]},
     )
     assert r.status_code == 400
-    assert r.json()["code"] == "ROOT_NOT_CONFIGURED"
+    assert r.json()["code"] == "PATH_OUTSIDE_ROOT"

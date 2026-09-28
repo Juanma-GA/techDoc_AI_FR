@@ -9,7 +9,7 @@
     "import": "Source (scan / sélection)",
     "diff": "Comparaison",
     "conversion": "Conversion → Composer",
-    "smgxmlRecolor": "SMGXML : couleur",
+    "smgxmlRecolor": "SMGXML : couleur + plan",
     "colorization": "Colorisation (plan)",
     "tree": "Arborescence",
     "suggestions": "Optimisation",
@@ -33,7 +33,7 @@
     "import": { "title": "Import", "sub": "Scanner un dossier local ou importer un listing CSV / JSON." },
     "diff": { "title": "Comparaison", "sub": "Détecter les pièces ajoutées / supprimées / modifiées entre deux imports." },
     "conversion": { "title": "Conversion", "sub": "Plan de conversion CATIA 3D vers Composer (dry-run)." },
-    "smgxmlRecolor": { "title": "3 - SMGXML : couleur", "sub": "Appliquer la couleur des SIN mono-couleur dans le SMGXML (dry-run par défaut)." },
+    "smgxmlRecolor": { "title": "3 - SMGXML : couleur + plan", "sub": "Appliquer la couleur au SMGXML et préparer un plan de colorisation (dry-run par défaut)." },
     "colorization": { "title": "Colorisation", "sub": "Attribuer une couleur aux pièces (par état / type / profondeur)." },
     "tree": { "title": "Arborescence", "sub": "Métriques et structure de l'import courant." },
     "suggestions": { "title": "Suggestions", "sub": "Générer un plan de réorganisation puis accepter / rejeter." },
@@ -54,6 +54,8 @@
   },
   "picker": {
     "browse": "Parcourir",
+    "browseLocal": "Choisir un fichier",
+    "chooseLocalFolder": "Choisir un dossier",
     "placeholder": "Parcourir ou coller un chemin",
     "up": "Remonter",
     "open": "Ouvrir",
@@ -75,7 +77,10 @@
     "recursiveHint": "Vue récursive : tous les fichiers sous ce dossier. Filtrez, cochez, puis importez.",
     "folder": "dossier",
     "recursiveEmpty": "Aucun fichier (essayez un autre filtre).",
-    "countSelected": "{{count}} fichier(s) — {{sel}} coché(s)"
+    "countSelected": "{{count}} fichier(s) — {{sel}} coché(s)",
+    "localHint": "Aucune racine Source configurée : le fichier sera copié dans le stockage local de l'application.",
+    "localFolderHint": "Aucune racine Source configurée : le dossier sera copié dans le stockage local de l'application.",
+    "localUploaded": "{{count}} fichier(s) local(aux) prêt(s)."
   },
   "import": {
     "title": "Import",

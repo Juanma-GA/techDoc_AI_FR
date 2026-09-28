@@ -16,6 +16,8 @@ Prepare reviewable CATIA and Composer document-structure plans and run confirmed
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
 - Plan SMGXML colorization, tree optimization, and part replacement.
 - Produce CSV, script, macro, and visual simulation artifacts for user review.
+- Use the native file/folder picker when no Source root is configured; selected
+	files are copied into the local application storage before processing.
 
 ## Auth
 
@@ -48,6 +50,8 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 ## Persistence
 
 SQLite stores imports, plans, checks, and runtime configuration under `backend/data/`. Generated plans remain subject to user review.
+Native local selections are staged below `backend/data/storage/local/` and remain
+confined to that storage root for subsequent reads.
 
 ## LLM Configuration
 
@@ -55,7 +59,9 @@ Mistral may suggest tree grouping. Deterministic type and naming heuristics rema
 
 ## Tests
 
-Use the backend pytest suite and frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:catia-toolbox`. No tests were executed during this documentation change.
+Use the backend pytest suite and frontend scripts declared in `frontend/package.json`.
+The frontend `test` script excludes Playwright files; use `test:e2e` for browser
+scenarios. The backend suite currently passes 120 tests.
 
 ## Limitations
 

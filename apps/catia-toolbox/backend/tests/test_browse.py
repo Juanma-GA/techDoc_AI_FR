@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 def _set_input_root(client, root: str) -> None:
     r = client.post("/api/v1/settings", json={"onedrive_input_root": root})
@@ -58,10 +60,35 @@ def test_list_rejects_traversal(client, synthetic_tree) -> None:
     assert r.json()["code"] == "PATH_OUTSIDE_ROOT"
 
 
-def test_list_without_root_configured(client) -> None:
+def test_list_without_root_uses_local_storage(client) -> None:
     r = client.post("/api/v1/browse/list", json={"scope": "input", "path": ""})
-    assert r.status_code == 400
-    assert r.json()["code"] == "ROOT_NOT_CONFIGURED"
+    assert r.status_code == 200, r.text
+    assert Path(r.json()["root"]).is_dir()
+
+
+def test_local_upload_preserves_folder_selection(client) -> None:
+    r = client.post(
+        "/api/v1/browse/local-upload",
+        files=[
+            ("files", ("assembly/part-a.CATPart", b"a", "application/octet-stream")),
+            ("files", ("assembly/part-b.CATPart", b"bb", "application/octet-stream")),
+        ],
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["files"]) == 2
+    assert all(Path(item["path"]).is_file() for item in body["files"])
+    assert {item["rel"] for item in body["files"]} == {
+        "assembly/part-a.CATPart",
+        "assembly/part-b.CATPart",
+    }
+
+    listed = client.post(
+        "/api/v1/browse/list",
+        json={"scope": "input", "path": str(Path(body["root"]) / "assembly")},
+    )
+    assert listed.status_code == 200, listed.text
+    assert {entry["name"] for entry in listed.json()["entries"]} == {"part-a.CATPart", "part-b.CATPart"}
 
 
 def test_files_recursive(client, synthetic_tree) -> None:
