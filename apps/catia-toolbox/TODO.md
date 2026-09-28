@@ -13,6 +13,4 @@ SIN d'une piece mono corps, ça fait le lien avec la nomenclature (lien nomencla
 Le but de ça c'est que t'as des lignes inutiles (on garde la derniere balise (exemple clitassygroup on garde celui le plus indenté à l'intérieur))
 Slide 39
 
-- SMGXML renommage : Code XML du Sin tu fais appel à ta Part (représenté par le P/N) , ya une variable qui appel la part --> Dans le code XML du SIN remplacer tous les noms avec les nouveau P/N. Sur la V0 on rajoute les pièces de la v1 donc la v0 devient au final la v1. Slide 56 --> 63 du PPT de Paul ? 
-
-- Dans l'indentification ça serait bien de faire en sorte d'avoir un seul input de fichier et quand on sélectionne l'import ba ça sélectionne dans les 2 analyses. Et que au niveau UI on ai en visuel en haut d'abord avec l'input et la liste des nomenclatures analysées et ensuite en dessous on a coté gauche l'analyse de la nomenclature et à droite la box Pièces mono-corps.
+- SMGXML renommage : Code XML du Sin tu fais appel à ta Part (représenté par le P/N) , ya une variable qui appel la part --> Dans le code XML du SIN remplacer tous les noms avec les nouveau P/N. Sur la V0 on rajoute les pièces de la v1 donc la v0 devient au final la v1. Slide 56 --> 63 du PPT de Paul ?

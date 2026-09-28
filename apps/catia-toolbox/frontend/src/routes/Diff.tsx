@@ -56,7 +56,7 @@ function FoldersDiff() {
   const opts = imports.map((i) => ({ value: i.id, label: `${i.root_label} (${i.node_count})` }));
 
   return (
-    <div className="form" style={{ maxWidth: "56rem" }}>
+    <div className="form">
       <article className="card">
         <h2 className="card-title">{t("diff.compareTitle")}</h2>
         <div className="row" style={{ alignItems: "flex-end" }}>

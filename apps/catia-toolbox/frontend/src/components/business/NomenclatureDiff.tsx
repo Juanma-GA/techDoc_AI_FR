@@ -108,7 +108,7 @@ export function NomenclatureDiff() {
   }
 
   return (
-    <div className="form" style={{ maxWidth: "56rem" }}>
+    <div className="form">
       <article className="card">
         <h2 className="card-title">{t("diff.nomenCompareTitle")}</h2>
         <NomenclatureVersionSelector
