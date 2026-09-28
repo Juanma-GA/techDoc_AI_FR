@@ -1,11 +1,10 @@
-- Le "Parcourir" pour les fichier il faut que ce soit un open folder classique si aucun lien n'est renseigné en paramètre, et si un lien est renseigné alors on laisse comme c'est depuis le lien
+- 1.2 - comparaison : Avant après sur les old P/N --> il faudrait OLD P/N (vinitial) OLD P/N (vfinal) / Pas faire apparaitre les colonnes new P/N
 
 - Il faut analyser 2 fichiers en 1. pour pouvoir faire une comparaison en 1.2, pas très pratique, ça serait bien de pouvoir directement comparer avec 2 fichiers
 
 - Faire un outil permettant de comparer de dossier de pieces catia avec la taille des fichiers
 Sortir (on s'en occupe pas) tous les fichiers avec même noms et même taille et faire apparaitre les fichiers qui restes, et afficher ceux 
 --> But faire ressortir les pièces qui ont changés de taille (et peut etre de nom mais faut capter que c'est la même piece)
-
 
 - SMGXML color + colorisation des pièces mono-corps (pareil donc regrouper sous un seul onglet) : Recup le nom du profil et le coller à un endroit du code XML de la piece 
 SIN d'une piece mono corps, ça fait le lien avec la nomenclature (lien nomenclature + fichier de liens + dossier avec les pieces). Une fois qu'on a le SIN mono corps récupérer dans la nomenclature le code de la couleur à prendre et on cherche le bon XML du SIN et on met au bon endroit. 

@@ -127,6 +127,12 @@ function colLabel(preview: NomenclaturePreviewDto, idx: number, headerRow: numbe
   return colLetter(idx) + (name ? ` - ${name}` : "");
 }
 
+function detectFirstSlotColumn(preview: NomenclaturePreviewDto, headerRow: number): number | undefined {
+  const header = preview.rows[headerRow - 1] ?? [];
+  const column = header.findIndex((cell) => /^slot[\s_-]*1(?:\b|$)/.test(normalizedLabel(cell)));
+  return column >= 0 ? column : undefined;
+}
+
 function normalizedLabel(value: unknown): string {
   return String(value ?? "")
     .normalize("NFD")
@@ -156,7 +162,9 @@ function ColorDot({ item }: { item: NomenclatureItemDto }) {
 }
 
 // Champs d'identite pour relier une ligne "slots" a une piece.
-const MONO_IDENTITY_FIELDS: { field: "catpart" | "sin" | "old_pn" | "new_pn"; labelKey: string }[] = [
+type MonoIdentityField = "catpart" | "sin" | "old_pn" | "new_pn";
+
+const MONO_IDENTITY_FIELDS: { field: MonoIdentityField; labelKey: string }[] = [
   { field: "catpart", labelKey: "identification.colCatpart" },
   { field: "sin", labelKey: "identification.colSin" },
   { field: "old_pn", labelKey: "identification.colOldPn" },
@@ -165,25 +173,44 @@ const MONO_IDENTITY_FIELDS: { field: "catpart" | "sin" | "old_pn" | "new_pn"; la
 
 /**
  * Etape Mono-Corps : onglet Materiaux separe. L'utilisateur choisit un onglet,
- * une colonne d'identite, un nombre `n` de colonnes slots, puis mappe ces n
+ * un champ d'identite, un nombre `n` de colonnes slots, puis mappe ces n
  * colonnes. Le backend calcule mono_body (1 valeur distincte parmi les slots)
  * et l'applique aux pieces du run par la valeur d'identite.
  */
-function MonoCorpsCard({ runId }: { runId: string | null }) {
+function MonoCorpsCard({
+  runId,
+  sourcePath,
+  runIdentityFields,
+  runIdentityFieldsLoading,
+}: {
+  runId: string | null;
+  sourcePath: string;
+  runIdentityFields: string[];
+  runIdentityFieldsLoading: boolean;
+}) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  // Fichier .xlsm autonome : pre-rempli depuis la source nomenclature, editable.
-  const [path, setPath] = useState(() => useWorkspace.getState().sources.nomenclature || "");
+  const [path, setPath] = useState(sourcePath);
   const [preview, setPreview] = useState<NomenclaturePreviewDto | null>(null);
   const [sheet, setSheet] = useState("");
   const [headerRow, setHeaderRow] = useState(1);
-  const [identityField, setIdentityField] =
-    useState<"catpart" | "sin" | "old_pn" | "new_pn">("sin");
+  const [identityField, setIdentityField] = useState<MonoIdentityField>("sin");
+  const [identityCol, setIdentityCol] = useState<number | undefined>(undefined);
   // 1re colonne Slot : comparee a toutes les colonnes suivantes.
   const [firstSlotCol, setFirstSlotCol] = useState<number | undefined>(undefined);
   const [result, setResult] = useState<MonoCorpsResultDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPath(sourcePath);
+    setPreview(null);
+    setIdentityCol(undefined);
+    setFirstSlotCol(undefined);
+    setResult(null);
+    setError(null);
+    setNotice(null);
+  }, [runId, sourcePath]);
 
   const previewMutation = useMutation({
     mutationFn: async (s?: string) => {
@@ -214,10 +241,13 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
       setSheet(data.sheet);
       const detectedHeaderRow = data.header_row_detected > 0 ? data.header_row_detected : 1;
       setHeaderRow(detectedHeaderRow);
-      setIdentityField("sin");
-      const header = data.rows[detectedHeaderRow - 1] ?? [];
-      const slotOne = header.findIndex((cell) => /^slot\s*1$/.test(normalizedLabel(cell)));
-      setFirstSlotCol(slotOne >= 0 ? slotOne : header.length > 2 ? 2 : undefined);
+      const identityOrder = ["sin", "catpart", "old_pn", "new_pn"] as const;
+      const detectedIdentityField = runId
+        ? identityOrder.find((field) => runIdentityFields.includes(field)) ?? "sin"
+        : identityOrder.find((field) => data.columns_map[field] !== undefined) ?? "sin";
+      setIdentityField(detectedIdentityField);
+      setIdentityCol(data.columns_map[detectedIdentityField]);
+      setFirstSlotCol(detectFirstSlotColumn(data, detectedHeaderRow));
     },
     onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
   });
@@ -249,10 +279,13 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
   });
 
   const ncols = preview ? preview.rows.reduce((m, r) => Math.max(m, r.length), 0) : 0;
-  // Colonne d'identite deduite du champ choisi via la detection d'en-tete de
-  // l'onglet (plus de selecteur de colonne dedie).
-  const identityCol = preview?.columns_map?.[identityField];
-  const canAnalyze = !!path.trim() && identityCol !== undefined && firstSlotCol !== undefined;
+  const canAnalyze =
+    !!path.trim() &&
+    identityCol !== undefined &&
+    firstSlotCol !== undefined &&
+    (!runId || runIdentityFields.includes(identityField)) &&
+    !previewMutation.isPending &&
+    !previewMutation.isError;
   const monoItems = result?.items.filter((item) => item.mono_body) ?? [];
   const slotCount = monoItems.reduce((m, item) => Math.max(m, item.slots.length), 0);
   // Indices des colonnes slots reellement comparees (renseignes par le backend),
@@ -264,6 +297,24 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
     value: String(i),
     label: preview ? colLabel(preview, i, headerRow) : String(i),
   }));
+  const detectedIdentityCol =
+    preview?.header_row_detected === headerRow ? preview.columns_map[identityField] : undefined;
+  const needsIdentityColumnSelection = !!preview && detectedIdentityCol === undefined;
+  const identityLabelKey =
+    MONO_IDENTITY_FIELDS.find((option) => option.field === identityField)?.labelKey ??
+    "identification.colSin";
+  const identityLabel = t(identityLabelKey);
+  const onPathChange = (nextPath: string) => {
+    setPath(nextPath);
+    setPreview(null);
+    setSheet("");
+    setHeaderRow(1);
+    setIdentityCol(undefined);
+    setFirstSlotCol(undefined);
+    setResult(null);
+    setError(null);
+    setNotice(null);
+  };
 
   return (
     <article className="card">
@@ -271,7 +322,7 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
 
       <div className="field">
         <label className="label">{t("identification.nomenFileLabel")}</label>
-        <FilePicker exts={NOMEN_EXTS} value={path} onChange={setPath} sheetPreview={false} />
+        <FilePicker exts={NOMEN_EXTS} value={path} onChange={onPathChange} sheetPreview={false} />
       </div>
 
       <div className="row" style={{ marginTop: 8 }}>
@@ -279,7 +330,7 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
           type="button"
           className="btn secondary"
           onClick={() => previewMutation.mutate(sheet || undefined)}
-          disabled={previewMutation.isPending || !path.trim()}
+          disabled={previewMutation.isPending || !path.trim() || runIdentityFieldsLoading || (!!runId && !runIdentityFields.length)}
         >
           {previewMutation.isPending ? <span className="spinner" /> : null}
           <span>{t("identification.preview")}</span>
@@ -297,7 +348,10 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                 id="mono-sheet"
                 className="input"
                 value={sheet}
-                onChange={(e) => previewMutation.mutate(e.target.value)}
+                onChange={(e) => {
+                  setResult(null);
+                  previewMutation.mutate(e.target.value);
+                }}
               >
                 {preview.sheets.map((s) => (
                   <option key={s} value={s}>{s}</option>
@@ -310,7 +364,17 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                 id="mono-header"
                 className="input"
                 value={String(headerRow)}
-                onChange={(e) => setHeaderRow(parseInt(e.target.value, 10))}
+                onChange={(e) => {
+                  const nextHeaderRow = parseInt(e.target.value, 10);
+                  setHeaderRow(nextHeaderRow);
+                  setIdentityCol(
+                    preview.header_row_detected === nextHeaderRow
+                      ? preview.columns_map[identityField]
+                      : undefined,
+                  );
+                  setFirstSlotCol(preview ? detectFirstSlotColumn(preview, nextHeaderRow) : undefined);
+                  setResult(null);
+                }}
               >
                 {preview.rows.map((_r, i) => (
                   <option key={i} value={String(i + 1)}>{String(i + 1)}</option>
@@ -344,15 +408,50 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                 id="mono-identity-field"
                 className="input"
                 value={identityField}
-                onChange={(e) =>
-                  setIdentityField(e.target.value as "catpart" | "sin" | "old_pn" | "new_pn")
-                }
+                onChange={(e) => {
+                  const field = e.target.value as MonoIdentityField;
+                  setIdentityField(field);
+                  setIdentityCol(
+                    preview?.header_row_detected === headerRow
+                      ? preview.columns_map[field]
+                      : undefined,
+                  );
+                  setResult(null);
+                }}
               >
-                {MONO_IDENTITY_FIELDS.map((f) => (
+                {MONO_IDENTITY_FIELDS.filter((f) => !runId || runIdentityFields.includes(f.field)).map((f) => (
                   <option key={f.field} value={f.field}>{t(f.labelKey)}</option>
                 ))}
               </select>
             </div>
+            {needsIdentityColumnSelection ? (
+              <div className="field">
+                <label htmlFor="mono-identity-col" className="field-label">
+                  {t("identification.monoIdentityColumn")}
+                </label>
+                <select
+                  id="mono-identity-col"
+                  className="input"
+                  value={identityCol === undefined ? "" : String(identityCol)}
+                  onChange={(e) => {
+                    setIdentityCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10));
+                    setResult(null);
+                  }}
+                >
+                  <option value="">{t("identification.none")}</option>
+                  {colOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <span className="hint" style={{ paddingBottom: 8 }}>
+                {t("identification.monoIdentityDetected", {
+                  field: identityLabel,
+                  column: colLabel(preview!, detectedIdentityCol!, headerRow),
+                })}
+              </span>
+            )}
             <div className="field">
               <label htmlFor="mono-first-slot" className="field-label">
                 {t("identification.monoFirstSlotCol")}
@@ -361,9 +460,10 @@ function MonoCorpsCard({ runId }: { runId: string | null }) {
                 id="mono-first-slot"
                 className="input"
                 value={firstSlotCol === undefined ? "" : String(firstSlotCol)}
-                onChange={(e) =>
-                  setFirstSlotCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10))
-                }
+                onChange={(e) => {
+                  setFirstSlotCol(e.target.value === "" ? undefined : parseInt(e.target.value, 10));
+                  setResult(null);
+                }}
               >
                 <option value="">{t("identification.none")}</option>
                 {colOptions.map((o) => (
@@ -482,6 +582,12 @@ export function Identification() {
     queryFn: identificationApi.list,
   });
   const runs = runsQuery.data ?? [];
+  const activeRun = runs.find((run) => run.id === resultRunId);
+  const runIdentityFields = activeRun
+    ? detectedColumns(activeRun.summary).filter((field) =>
+        MONO_IDENTITY_FIELDS.some((identity) => identity.field === field),
+      )
+    : [];
 
   useEffect(() => {
     if (!resultRunId) return;
@@ -856,7 +962,12 @@ export function Identification() {
       </article>
 
       {/* ---- Carte Mono-Corps : autonome (onglet Materiaux + n slots) ---- */}
-      <MonoCorpsCard runId={resultRunId} />
+      <MonoCorpsCard
+        runId={resultRunId}
+        sourcePath={activeRun?.source_ref ?? nomenPath}
+        runIdentityFields={runIdentityFields}
+        runIdentityFieldsLoading={!!resultRunId && runsQuery.isLoading}
+      />
 
       {/* ---- Carte 2 : nomenclatures analysees ---------------------------- */}
       <article className="card">

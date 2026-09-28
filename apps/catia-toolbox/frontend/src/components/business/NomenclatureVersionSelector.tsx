@@ -42,9 +42,7 @@ export function NomenclatureVersionSelector({
           <label className="field grow" key={index}>
             <span className="field-label">{t(index === 0 ? "diff.nomenBase" : "diff.nomenOther")}</span>
             <select className="input" value={id} onChange={(event) => onReplace(index, event.target.value)}>
-              {options
-                .filter((option) => option.value === id || !selected.includes(option.value))
-                .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
         ))}

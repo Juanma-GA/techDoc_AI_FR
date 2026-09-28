@@ -23,7 +23,7 @@ export function NomenclatureDiff() {
     queryFn: identificationApi.list,
   });
   const runs = runsQuery.data ?? [];
-  const defaults = runs.slice(0, 2).map((run) => run.id);
+  const defaults = runs.slice(0, 2).reverse().map((run) => run.id);
   const [selection, setSelection] = useState<string[]>([]);
   const [mode, setMode] = useState<NomenclatureCompareMode>("chronology");
   const [referenceId, setReferenceId] = useState("");
@@ -61,7 +61,16 @@ export function NomenclatureDiff() {
   });
 
   const replaceAt = (index: number, value: string) => {
-    setSelection(selected.map((id, current) => (current === index ? value : id)));
+    const next = [...selected];
+    const existingIndex = selected.indexOf(value);
+    if (existingIndex >= 0) {
+      const current = next[index]!;
+      next[index] = next[existingIndex]!;
+      next[existingIndex] = current;
+    } else {
+      next[index] = value;
+    }
+    setSelection(next);
     setSingleResult(null);
     setMultiResult(null);
   };
