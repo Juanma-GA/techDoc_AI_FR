@@ -2,7 +2,7 @@
 
 Three sources describe the same fact — « which pages did this revision
 touch » — and they must agree before any other control is worth running:
-
+                f"d'étoile et sa date {lep_entry.date_text} correspond au pied de "
 1. the **Highlights** table: one row per revised block, with a status
    letter (``R`` revised, ``N`` new, ``U`` unchanged, ``D`` deleted);
 2. the **List of Effective Pages** (LEP): every effective page with its
@@ -959,6 +959,7 @@ UNDECLARED_STAR = "undeclared_star"
 BLANK_LEP_STAR = "blank_lep_star"
 LEP_DATE = "lep_date"
 FOOTER_DATE = "footer_date"
+HIGHLIGHTS_STATUS_CONSISTENCY = "highlights_status_consistency"
 UNDECLARED_PAGE = "undeclared_page"
 PAGE_NOT_IN_LEP = "page_not_in_lep"
 MODIFIED_PAGE_ABSENT = "modified_page_absent"
@@ -1118,6 +1119,83 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
                     bbox=entry.bbox,
                 )
             )
+    return findings
+
+
+def _highlights_status_findings(state: RevisionState) -> list[RevisionFinding]:
+    revision = state.revision_date
+    assert revision is not None
+    lep_by_key = state.lep_by_key
+    footer_by_key = state.footer_by_key
+    findings: list[RevisionFinding] = []
+
+    for entry in state.highlights:
+        if entry.status not in _MODIFIED_STATUSES | {"U"}:
+            continue
+        conflicting_pages: list[str] = []
+        for page_key in entry.page_keys:
+            lep_entry = lep_by_key.get(page_key)
+            footer = footer_by_key.get(page_key)
+            if lep_entry is None or footer is None or lep_entry.is_blank:
+                continue
+
+            if entry.status == "U":
+                if not (
+                    lep_entry.starred
+                    and revision.same_as(lep_entry.date)
+                    and revision.same_as(footer.date)
+                ):
+                    continue
+                conflicting_pages.append(
+                    f"{_context(entry.subject, page_key)} : la LEP porte une étoile "
+                    f"et la date {lep_entry.date_text}, et le pied de page porte "
+                    f"{footer.date_text}."
+                )
+                continue
+
+            previous_issue = state.last_issue_date or revision
+            if (
+                lep_entry.starred
+                or lep_entry.date is None
+                or footer.date is None
+                or revision.same_as(lep_entry.date)
+                or not lep_entry.date.same_as(footer.date)
+                or lep_entry.date.sort_key > previous_issue.sort_key
+            ):
+                continue
+            conflicting_pages.append(
+                f"{_context(entry.subject, page_key)} : la LEP ne porte pas "
+                f"d'etoile et sa date {lep_entry.date_text} correspond au pied de "
+                f"page, avec une date antérieure à la révision courante."
+            )
+
+        if not conflicting_pages:
+            continue
+        if entry.status == "U":
+            message = (
+                f"Les Highlights déclarent « U » (inchangée), mais "
+                f"{'; '.join(conflicting_pages)} Ces marqueurs indiquent une page "
+                "modifiée. Vérifier la désignation; sans la LEP précédente, le "
+                "moteur ne peut pas choisir entre « R » et « N »."
+            )
+        else:
+            message = (
+                f"Les Highlights déclarent « {entry.status} » "
+                f"({'révisée' if entry.status == 'R' else 'nouvelle'}), mais "
+                f"{'; '.join(conflicting_pages)} Ces marqueurs indiquent une page "
+                "inchangée. Vérifier la désignation (probablement « U » si la LEP "
+                "et le pied de page sont corrects)."
+            )
+        findings.append(
+            RevisionFinding(
+                control=HIGHLIGHTS_STATUS_CONSISTENCY,
+                message=message,
+                original=entry.status,
+                proposed="",
+                page=entry.page,
+                bbox=entry.status_bbox,
+            )
+        )
     return findings
 
 
@@ -1475,7 +1553,8 @@ def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     findings: list[RevisionFinding] = []
     if state.available:
         findings.extend(
-            _lep_findings(state)
+            _highlights_status_findings(state)
+            + _lep_findings(state)
             + _footer_findings(state)
             + _footer_page_number_findings(state)
             + _missing_page_findings(state)

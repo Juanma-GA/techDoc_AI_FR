@@ -1619,6 +1619,42 @@ CUSTOM_REVISION_UNDECLARED_STAR = rule(
     },
 )
 
+CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
+    code="CUSTOM_REVISION_HIGHLIGHTS_STATUS",
+    name="Designation Highlights coherente avec la LEP et le pied de page",
+    description=(
+        "La designation R, N ou U des Highlights doit etre coherente avec "
+        "l'etoile et la date de la LEP ainsi qu'avec la date du pied de page. "
+        "Sans la LEP precedente, le controle ne peut pas departager R et N."
+    ),
+    message="La designation Highlights est incoherente avec les pages effectives.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "highlights_status_consistency"},
+        )
+    ],
+    failure_message=(
+        "designation Highlights incoherente avec l'etoile ou les dates LEP/pied de page."
+    ),
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The R, N, or U Highlights designation must agree with the LEP star "
+                "and date and the page footer date. Without the previous LEP, this "
+                "check cannot distinguish R from N."
+            ),
+            "message": "The Highlights designation conflicts with the effective-page evidence.",
+        }
+    },
+)
+
 CUSTOM_REVISION_LEP_BLANK_STAR = rule(
     code="CUSTOM_REVISION_LEP_BLANK_STAR",
     name="Etoile LEP des pages Blank selon le statut New de la page impaire",
@@ -1948,6 +1984,7 @@ CUSTOM_ROR_REVISION_DATE = rule(
 REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_LEP_STAR,
     CUSTOM_REVISION_UNDECLARED_STAR,
+    CUSTOM_REVISION_HIGHLIGHTS_STATUS,
     CUSTOM_REVISION_LEP_BLANK_STAR,
     CUSTOM_REVISION_LEP_DATE,
     CUSTOM_REVISION_FOOTER_DATE,

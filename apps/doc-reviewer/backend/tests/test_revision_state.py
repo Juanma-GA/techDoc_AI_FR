@@ -495,6 +495,145 @@ def test_star_without_a_revised_status_in_the_highlights_is_reported() -> None:
     assert findings[0].proposed == "JUL 66"
 
 
+def test_highlights_r_and_n_are_both_valid_when_lep_and_footer_show_revision() -> None:
+    for status in ("R", "N"):
+        parsed = _consistent_document()
+        parsed.pages[0] = _highlights_page(
+            [
+                ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                ("Repair", "Pages 401 to 402", status),
+            ]
+        )
+
+        findings = [
+            finding
+            for finding in _findings(parsed)
+            if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+        ]
+
+        assert findings == []
+
+
+def test_highlights_r_or_n_conflicts_with_agreeing_unchanged_lep_and_footer() -> None:
+    for status in ("R", "N"):
+        parsed = _consistent_document()
+        parsed.pages[0] = _highlights_page(
+            [
+                ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                ("Repair", "Pages 401 to 402", status),
+            ]
+        )
+        parsed.pages[1] = _lep_with(
+            ("Repair", "401", "JUL 66"), ("", "402", "JUL 66")
+        )
+        parsed.pages[2] = _page(3, _footer(3, "Page 401", "JUL 66"))
+        parsed.pages[3] = _page(4, _footer(4, "Page 402", "JUL 66"))
+
+        findings = [
+            finding
+            for finding in _findings(parsed)
+            if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+        ]
+        highlight_entry = next(
+            entry for entry in _state(parsed).highlights if entry.subject == "Repair"
+        )
+
+        assert len(findings) == 1
+        assert findings[0].original == status
+        assert findings[0].bbox == highlight_entry.status_bbox
+        assert "inchangée" in findings[0].message
+        assert "U" in findings[0].message
+
+
+def test_highlights_u_conflicts_with_star_and_current_lep_and_footer_dates() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "U"),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+    highlight_entry = next(
+        entry for entry in _state(parsed).highlights if entry.subject == "Repair"
+    )
+
+    assert len(findings) == 1
+    assert findings[0].original == "U"
+    assert findings[0].bbox == highlight_entry.status_bbox
+    assert "R" in findings[0].message
+    assert "N" in findings[0].message
+
+
+def test_compiled_highlights_status_rule_comments_on_the_designation_cell() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "U"),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    status_raws = [
+        raw for raw in raws if raw.rule_code == "CUSTOM_REVISION_HIGHLIGHTS_STATUS"
+    ]
+    highlight_entry = next(
+        entry for entry in _state(parsed).highlights if entry.subject == "Repair"
+    )
+
+    assert len(status_raws) == 1
+    assert status_raws[0].page == 1
+    assert status_raws[0].original == "U"
+    assert status_raws[0].bbox == highlight_entry.status_bbox
+    assert status_raws[0].severity == "warning"
+
+
+def test_highlights_u_matches_unstarred_previous_lep_and_footer_dates() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "U"),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", "JUL 66"), ("", "402", "JUL 66")
+    )
+    parsed.pages[2] = _page(3, _footer(3, "Page 401", "JUL 66"))
+    parsed.pages[3] = _page(4, _footer(4, "Page 402", "JUL 66"))
+
+    assert not any(
+        finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+        for finding in _findings(parsed)
+    )
+
+
+def test_highlights_u_is_not_flagged_when_only_the_lep_star_disagrees() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "U"),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", "JUL 66 *"), ("", "402", "JUL 66 *")
+    )
+    parsed.pages[2] = _page(3, _footer(3, "Page 401", "JUL 66"))
+    parsed.pages[3] = _page(4, _footer(4, "Page 402", "JUL 66"))
+
+    assert not any(
+        finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+        for finding in _findings(parsed)
+    )
+
+
 def test_blank_lep_star_matches_new_status_of_its_odd_page() -> None:
     cases = (
         ("N", "R", "Blank *", []),
