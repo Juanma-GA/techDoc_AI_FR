@@ -63,6 +63,11 @@ _ZONE_KW: dict[str, list[str]] = {
 
 @dataclass
 class ParsedRule:
+    sheet: str
+    row_number: int
+    check: str
+    handling: str
+    context: str
     name: str
     category: str
     kind: str
@@ -215,7 +220,7 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
 
     out: list[ParsedRule] = []
     last_topic = ""
-    for row in rows[header_idx + 1:]:
+    for row_number, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
         cells = list(row)
         raw_topic = _cell(cells, columns.get("topic"))
         topic = raw_topic or last_topic
@@ -248,6 +253,11 @@ def parse_checklist(data: bytes, sheet: str | None = None, mapping: dict | None 
             severity = {"erreur": "error"}.get(sev_col, sev_col)
         out.append(
             ParsedRule(
+                sheet=ws.title,
+                row_number=row_number,
+                check=check,
+                handling=handling,
+                context=context,
                 name=full[:500],
                 category=topic[:120],
                 kind=kind,

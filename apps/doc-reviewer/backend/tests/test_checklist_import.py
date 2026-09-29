@@ -1,4 +1,4 @@
-"""Import checklist Excel -> regles llm_nl desactivees + activation en masse."""
+"""Checklist import persists every compiled outcome with its execution state."""
 
 from __future__ import annotations
 
@@ -6,6 +6,9 @@ import io
 
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
+
+from app.api import rules as rules_api
+from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 
 
 def _checklist_xlsx() -> bytes:
@@ -20,7 +23,7 @@ def _checklist_xlsx() -> bytes:
     return buf.getvalue()
 
 
-def test_import_creates_disabled_llm_rules(client: TestClient) -> None:
+def test_import_keeps_unsupported_rows_visible(client: TestClient) -> None:
     resp = client.post(
         "/api/v1/rules/import",
         files={"file": ("checklist.xlsx", _checklist_xlsx(), "application/vnd.ms-excel")},
@@ -28,29 +31,96 @@ def test_import_creates_disabled_llm_rules(client: TestClient) -> None:
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["imported"] >= 1
-    assert body["by_kind"].get("llm_nl", 0) >= 1
+    assert body["imported"] == 3
+    assert body["by_kind"] == {"unsupported": 3}
+    assert all(rule["execution"] == "unsupported" for rule in body["rules"])
+    assert all(rule["active"] is False for rule in body["rules"])
 
-    rules = client.get("/api/v1/rules").json()
-    llm_rules = [r for r in rules if r["kind"] == "llm_nl"]
-    assert llm_rules, "au moins une regle llm_nl importee"
-    # Importees desactivees : elles n'atteignent le LLM qu'apres activation.
-    assert all(r["enabled"] is False for r in llm_rules)
+    compiled = client.get("/api/v1/compiled-rules").json()
+    checklist_rules = [rule for rule in compiled if rule["source"] == "user_checklist"]
+    assert len(checklist_rules) == 3
+    assert all(rule["execution"] == "unsupported" for rule in checklist_rules)
 
 
-def test_validate_all_enables_imported_rules(client: TestClient) -> None:
-    client.post(
+def test_deterministic_rule_is_active_immediately(client: TestClient, monkeypatch) -> None:
+    def compile_deterministic(_db, row, filename: str) -> CompiledRule:
+        return CompiledRule(
+            id=f"compiled-{row.row_number}",
+            topic=row.name,
+            execution="deterministic",
+            target=RuleTarget(page="all", region="full_page"),
+            checks=[Check(field="text", operator="regex", expected="ATA")],
+            source="user_checklist",
+            origin_ref=f"{filename}:{row.sheet}:{row.row_number}",
+        )
+
+    monkeypatch.setattr(rules_api, "compile_checklist_rule", compile_deterministic)
+    resp = client.post(
         "/api/v1/rules/import",
         files={"file": ("checklist.xlsx", _checklist_xlsx(), "application/vnd.ms-excel")},
         data={"mode": "replace"},
     )
-    resp = client.post("/api/v1/rules/validate-all")
     assert resp.status_code == 200
-    assert resp.json()["activated"] >= 1
+    body = resp.json()
+    assert body["by_kind"] == {"deterministic": 3}
+    assert all(rule["active"] is True for rule in body["rules"])
 
-    rules = client.get("/api/v1/rules").json()
-    llm_rules = [r for r in rules if r["kind"] == "llm_nl"]
-    assert all(r["enabled"] is True for r in llm_rules)
+
+def test_compiled_rule_activation_patch_is_persisted(client: TestClient, monkeypatch) -> None:
+    def compile_deterministic(_db, row, filename: str) -> CompiledRule:
+        return CompiledRule(
+            id=f"compiled-{row.row_number}",
+            topic=row.name,
+            execution="deterministic",
+            target=RuleTarget(page="all", region="full_page"),
+            checks=[Check(field="text", operator="regex", expected="ATA")],
+            source="user_checklist",
+            origin_ref=f"{filename}:{row.sheet}:{row.row_number}",
+        )
+
+    monkeypatch.setattr(rules_api, "compile_checklist_rule", compile_deterministic)
+    imported = client.post(
+        "/api/v1/rules/import",
+        files={"file": ("checklist.xlsx", _checklist_xlsx(), "application/vnd.ms-excel")},
+        data={"mode": "replace"},
+    ).json()
+    rule_id = imported["rules"][0]["id"]
+
+    disabled = client.patch(f"/api/v1/compiled-rules/{rule_id}", json={"active": False})
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["active"] is False
+
+    listed = client.get("/api/v1/compiled-rules").json()
+    assert next(rule for rule in listed if rule["id"] == rule_id)["active"] is False
+
+
+def test_compiled_standard_rules_are_filtered_by_selected_version(client: TestClient) -> None:
+    from sqlalchemy import select
+
+    from app.db.models import Standard, StandardVersion
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        ata_id = db.scalar(
+            select(StandardVersion.id)
+            .join(Standard)
+            .where(Standard.code == "ATA100")
+        )
+        assert ata_id is not None
+    finally:
+        db.close()
+
+    unscoped = client.get("/api/v1/compiled-rules")
+    assert not any(rule["source"] == "standard_rule" for rule in unscoped.json())
+
+    scoped = client.get(
+        "/api/v1/compiled-rules",
+        params={"standard_version_id": str(ata_id)},
+    )
+    standard_rules = [rule for rule in scoped.json() if rule["source"] == "standard_rule"]
+    assert standard_rules
+    assert all((rule["origin_ref"] or "").startswith("ATA100:") for rule in standard_rules)
 
 
 def test_template_download(client: TestClient) -> None:

@@ -133,7 +133,7 @@ def _seed_builtin_standards() -> None:
     (re-seed) prendra le relais.
     """
     try:
-        from app.checks.standards import BUILTIN_STANDARDS
+        from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     except Exception:  # noqa: BLE001
         return
 
@@ -177,7 +177,7 @@ def _seed_builtin_standards() -> None:
         versions: dict[str, list] = spec["versions"]  # type: ignore[assignment]
         for label, rules in versions.items():
             ver_id = uuid.uuid4()
-            catalog_payload = [r.as_dict() for r in rules]
+            catalog_payload = serialize_builtin_version(spec, label)
             bind.execute(
                 ver_table.insert().values(
                     id=ver_id,

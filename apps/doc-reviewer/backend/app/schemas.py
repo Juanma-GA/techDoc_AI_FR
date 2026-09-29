@@ -27,8 +27,11 @@ class DocumentOut(BaseModel):
     standard_version_ids: list[uuid.UUID] = Field(default_factory=list)
     status: str
     current_version: int
-    # Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif).
+    has_applied_edits: bool = False
+    # Format source fourni par l'utilisateur, puis format interne choisi automatiquement.
     source_format: str = "pdf"
+    working_format: str = "pdf"
+    original_sha256: Optional[str] = None
     # Portail qualite (revuabilite homogene tous formats).
     convert_engine: str = "pdf"
     text_coverage: int = 100
@@ -37,7 +40,11 @@ class DocumentOut(BaseModel):
     meta_revision_date: Optional[str] = None
     meta_cmm_number: Optional[str] = None
     meta_first_issue_date: Optional[str] = None
+    meta_last_issue_date: Optional[str] = None
     meta_revision_number: Optional[str] = None
+    meta_pnr_number: Optional[str] = None
+    meta_manufacturer: Literal["Airbus", "Boeing"] = "Airbus"
+    document_language: Optional[Literal["fr", "en"]] = None
     created_at: datetime
 
     @field_validator("standard_version_ids", mode="before")
@@ -63,7 +70,23 @@ class DocumentMetaPatchIn(BaseModel):
     meta_revision_date: Optional[str] = Field(default=None, max_length=60)
     meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
     meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
+    meta_last_issue_date: Optional[str] = Field(default=None, max_length=60)
     meta_revision_number: Optional[str] = Field(default=None, max_length=60)
+    meta_pnr_number: Optional[str] = Field(default=None, max_length=120)
+    meta_manufacturer: Literal["Airbus", "Boeing"] = "Airbus"
+    document_language: Optional[Literal["fr", "en"]] = None
+
+
+class ChecklistContextIn(BaseModel):
+    meta_revision_date: Optional[str] = Field(default=None, max_length=60)
+    meta_cmm_number: Optional[str] = Field(default=None, max_length=120)
+    meta_first_issue_date: Optional[str] = Field(default=None, max_length=60)
+    meta_revision_number: Optional[str] = Field(default=None, max_length=60)
+    document_language: Optional[Literal["fr", "en"]] = None
+
+
+class ChecklistContextOut(ChecklistContextIn):
+    pass
 
 
 # =============================================================================
@@ -242,6 +265,27 @@ class RuleImportResult(BaseModel):
     by_kind: dict[str, int] = Field(default_factory=dict)
     skipped_manual: int = 0
     skipped: list[str] = Field(default_factory=list)
+    rules: list["CompiledRuleSummary"] = Field(default_factory=list)
+
+
+class CompiledRuleSummary(BaseModel):
+    id: str
+    topic: str
+    severity: Literal["info", "warning", "error"] = "warning"
+    execution: Literal["deterministic", "semantic", "manual", "unsupported"]
+    active: bool
+    source: Literal["standard_rule", "user_checklist"]
+    standard_id: Optional[uuid.UUID] = None
+    standard_version_id: Optional[uuid.UUID] = None
+    origin_ref: Optional[str] = None
+    semantic_instruction: Optional[str] = None
+    manual_instruction: Optional[str] = None
+    compilation_error: Optional[str] = None
+    detail: Optional[str] = None
+
+
+class CompiledRulePatchIn(BaseModel):
+    active: bool
 
 
 # =============================================================================
@@ -295,11 +339,13 @@ class CatalogRuleOut(BaseModel):
     code: str
     title: str
     description: str
+    description_en: Optional[str] = None
     kind: str
     severity: str = "warning"
     pattern: str = ""
     replacement: str = ""
     message: str = ""
+    message_en: Optional[str] = None
     example_invalid: str = ""
     example_valid: str = ""
     metadata: dict[str, str] = Field(default_factory=dict)
@@ -318,11 +364,13 @@ class CatalogRulePatchIn(BaseModel):
 
     title: Optional[str] = Field(default=None, min_length=1, max_length=120)
     description: Optional[str] = None
+    description_en: Optional[str] = None
     severity: Optional[Literal["info", "warning", "error"]] = None
     kind: Optional[RuleKind] = None
     pattern: Optional[str] = None
     replacement: Optional[str] = None
     message: Optional[str] = None
+    message_en: Optional[str] = None
     example_invalid: Optional[str] = None
     example_valid: Optional[str] = None
 
@@ -336,9 +384,10 @@ class MistralSettingsIn(BaseModel):
     api_key: str = ""
     base_url: str = "https://api.mistral.ai"
     chat_model: str = "mistral-small-latest"
-    vision_model: str = "pixtral-12b-2409"
+    vision_model: str = "mistral-medium-3-5"
     vision_enabled: Optional[bool] = None
     llm_enabled: Optional[bool] = None
+    checklist_ai_scan: Optional[bool] = None
 
 
 class MistralSettingsOut(BaseModel):
@@ -346,10 +395,11 @@ class MistralSettingsOut(BaseModel):
     api_key_preview: str = ""
     base_url: str
     chat_model: str
-    vision_model: str = "pixtral-12b-2409"
+    vision_model: str = "mistral-medium-3-5"
     vision_enabled: bool = False
     llm_enabled: bool = True
     llm_tested: bool = False
+    checklist_ai_scan: bool = False
 
 
 class TestConnectionOut(BaseModel):

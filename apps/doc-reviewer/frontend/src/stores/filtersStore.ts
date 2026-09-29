@@ -31,6 +31,7 @@ type FiltersState = {
   setChecklistActive: (v: boolean) => void;
   setLastStandard: (standardId: string | null, versionId: string | null) => void;
   toggleActiveStandardVersion: (versionId: string) => void;
+  reconcileActiveStandardVersions: (validVersionIds: string[]) => void;
   clearActiveStandards: () => void;
   setSourceKindFilter: (v: SourceKind | null) => void;
   setRuleCodeFilter: (v: string | null) => void;
@@ -82,6 +83,15 @@ export const useFiltersStore = create<FiltersState>()(
             ? get().activeStandardVersionIds.filter((x) => x !== versionId)
             : [...get().activeStandardVersionIds, versionId],
         }),
+      reconcileActiveStandardVersions: (validVersionIds) =>
+        set((state) => {
+          const validIds = new Set(validVersionIds);
+          const activeIds = state.activeStandardVersionIds.filter((id) => validIds.has(id));
+          const unchanged =
+            activeIds.length === state.activeStandardVersionIds.length &&
+            activeIds.every((id, index) => id === state.activeStandardVersionIds[index]);
+          return unchanged ? {} : { activeStandardVersionIds: activeIds };
+        }),
       clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
       setSourceKindFilter: (v) => set({ sourceKindFilter: v }),
       setRuleCodeFilter: (v) => set({ ruleCodeFilter: v }),
@@ -97,5 +107,6 @@ export function effectiveTarget(
   units: ("metric" | "imperial")[],
 ): "metric" | "imperial" | "auto" | "none" {
   if (units.length === 0) return "none";
-  return units.length === 1 ? units[0] : "auto";
+  const selectedUnit = units[0];
+  return units.length === 1 && selectedUnit ? selectedUnit : "auto";
 }

@@ -1,5 +1,5 @@
-import { Play, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { useMemo } from "react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
@@ -8,10 +8,12 @@ import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
 import { useStandards } from "../hooks/useStandards";
 import { effectiveTarget, useFiltersStore } from "../stores/filtersStore";
+import { missingDocumentContext } from "../types/domain";
 import type { Document } from "../types/domain";
 
 // Selection MULTIPLE : metric et/ou imperial (vide ou les deux => "auto").
@@ -44,8 +46,6 @@ export function DocumentsList() {
   const checklistActive = useFiltersStore((s) => s.checklistActive);
   const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
-  // Pipeline de revue (dual-mode) : PDF (defaut) ou Word natif (.docx).
-  const [wordNative, setWordNative] = useState(false);
 
   // Bandeau "Normes cibles actives" (preview 289-293) : libelles des versions
   // actives selectionnees dans Parametres. Le choix du standard ne se fait plus
@@ -62,18 +62,11 @@ export function DocumentsList() {
   }, [standards.data, activeStandardVersionIds]);
 
   const handleUpload = (file: File): void => {
-    const lowerName = file.name.toLowerCase();
-    // Un .doc (legacy binaire) n'a pas d'interet a etre revise en PDF : le
-    // pipeline Word natif (conversion interne, export reconverti en .doc) est
-    // force pour ce format, sans dependre du switch (qui reste au choix de
-    // l'utilisateur pour un .docx : PDF ou Word natif).
-    const isLegacyDoc = lowerName.endsWith(".doc") && !lowerName.endsWith(".docx");
     upload.mutate(
       {
         file,
         target: effectiveTarget(targetUnits),
         standardVersionIds: activeStandardVersionIds,
-        wordMode: isLegacyDoc || wordNative ? "docx" : "pdf",
       },
       {
         // Fichier unique -> navigation vers le reviewer ; .zip (batch) -> on
@@ -107,86 +100,72 @@ export function DocumentsList() {
 
         <AnalysisTargetBanner />
 
-        {/* Cible checklist : toggle runtime, independant des normes. */}
-        <div className="switch-row">
-          <div>
-            <div>{t("documents.checklistTarget")}</div>
-            <div className="label">{t("documents.checklistTargetHint")}</div>
-          </div>
-          <label className="switch" title={t("documents.checklistTarget")}>
-            <input
-              type="checkbox"
-              checked={checklistActive}
-              onChange={(e) => setChecklistActive(e.target.checked)}
-            />
-            <span className="track" />
-          </label>
-        </div>
-
-        {/* Pipeline de revue (dual-mode) : Word natif -> sortie .docx corrigee. */}
-        <div className="switch-row">
-          <div>
-            <div>{t("documents.wordNative")}</div>
-            <div className="label">{t("documents.wordNativeHint")}</div>
-          </div>
-          <label className="switch" title={t("documents.wordNative")}>
-            <input
-              type="checkbox"
-              checked={wordNative}
-              onChange={(e) => setWordNative(e.target.checked)}
-            />
-            <span className="track" />
-          </label>
-        </div>
-
-        <div className="form">
-          <div className="field">
-            <span className="field-label">{t("documents.targetUnit")}</span>
-            <div className="slicer">
-              {TARGET_UNITS.map((unit) => {
-                const on = targetUnits.includes(unit);
-                return (
-                  <button
-                    key={unit}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggleTargetUnit(unit)}
-                    className={on ? "slicer-pill active" : "slicer-pill"}
-                  >
-                    {t(`settings.targetUnit.${unit}`)}
-                  </button>
-                );
-              })}
-              <span className="label" style={{ alignSelf: "center", marginLeft: 6 }}>
-                {targetUnits.length === 1 ? "" : t("settings.targetUnit.auto")}
-              </span>
+        <div className="document-upload-controls">
+          {/* Cible checklist : toggle runtime, independant des normes. */}
+          <div className="switch-row">
+            <div>
+              <div>{t("documents.checklistTarget")}</div>
+              <div className="label">{t("documents.checklistTargetHint")}</div>
             </div>
+            <label className="switch" title={t("documents.checklistTarget")}>
+              <input
+                type="checkbox"
+                checked={checklistActive}
+                onChange={(e) => setChecklistActive(e.target.checked)}
+              />
+              <span className="track" />
+            </label>
           </div>
 
-          <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
-
-          {/* Statut d'import explicite (l'upload est synchrone cote serveur :
-              conversion Word->PDF, portail qualite -> plusieurs secondes).
-              Base sur le cache global (useIsMutating), donc reste affiche
-              meme si on quitte cette page et qu'on y revient pendant l'upload. */}
-          {isUploading ? (
-            <div
-              className="banner"
-              role="status"
-              aria-live="polite"
-              style={{ display: "flex", alignItems: "center", gap: 10 }}
-            >
-              <span className="spinner" />
-              <strong>{t("documents.upload.uploading")}</strong>
+          <div className="form document-upload-form">
+            <div className="field">
+              <span className="field-label">{t("documents.targetUnit")}</span>
+              <div className="slicer">
+                {TARGET_UNITS.map((unit) => {
+                  const on = targetUnits.includes(unit);
+                  return (
+                    <button
+                      key={unit}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleTargetUnit(unit)}
+                      className={on ? "slicer-pill active" : "slicer-pill"}
+                    >
+                      {t(`settings.targetUnit.${unit}`)}
+                    </button>
+                  );
+                })}
+                <span className="label" style={{ alignSelf: "center", marginLeft: 6 }}>
+                  {targetUnits.length === 1 ? "" : t("settings.targetUnit.auto")}
+                </span>
+              </div>
             </div>
-          ) : null}
-          {upload.isError ? (
-            <p className="error" role="alert">
-              {t("documents.upload.failed", {
-                message: upload.error instanceof Error ? upload.error.message : "",
-              })}
-            </p>
-          ) : null}
+
+            <PdfUploadZone onFile={handleUpload} uploading={isUploading} />
+
+            {/* Statut d'import explicite (l'upload est synchrone cote serveur :
+                conversion Word->PDF, portail qualite -> plusieurs secondes).
+                Base sur le cache global (useIsMutating), donc reste affiche
+                meme si on quitte cette page et qu'on y revient pendant l'upload. */}
+            {isUploading ? (
+              <div
+                className="banner"
+                role="status"
+                aria-live="polite"
+                style={{ display: "flex", alignItems: "center", gap: 10 }}
+              >
+                <span className="spinner" />
+                <strong>{t("documents.upload.uploading")}</strong>
+              </div>
+            ) : null}
+            {upload.isError ? (
+              <p className="error" role="alert">
+                {t("documents.upload.failed", {
+                  message: upload.error instanceof Error ? upload.error.message : "",
+                })}
+              </p>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -229,7 +208,8 @@ function DocRow({
   onDelete: () => void;
 }): JSX.Element {
   const { t } = useTranslation();
-  const analyze = useAnalyze(doc.id);
+  const analyze = useAnalyze(doc.id, doc);
+  const missingContextFields = missingDocumentContext(doc);
   const badgeClass = STATUS_BADGE[doc.status] ?? "default";
   const running = analyze.status === "running" || doc.status === "analyzing";
 
@@ -251,6 +231,9 @@ function DocRow({
             />
           </div>
         ) : null}
+        {missingContextFields.length > 0 ? (
+          <p className="hint">{t("reviewer.meta.required")}</p>
+        ) : null}
         {analyze.status === "running" ? (
           <div className="progress" style={{ marginTop: 6 }}>
             <div className="progress-bar" style={{ width: `${analyze.progress}%` }} />
@@ -264,15 +247,13 @@ function DocRow({
       </span>
 
       <div className="item-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={() => void analyze.start()}
-          disabled={running}
-          className="btn small secondary"
-        >
-          <Play size={14} />
-          {running ? t("reviewer.toolbar.analyzing") : t("reviewer.toolbar.analyze")}
-        </button>
+        <AnalysisPageRange
+          pageCount={doc.page_count}
+          running={running}
+          blocked={missingContextFields.length > 0}
+          blockReason={t("reviewer.meta.required")}
+          onStart={(range) => void analyze.start(range)}
+        />
         <button type="button" onClick={onOpen} className="btn small primary">
           {t("documents.open")}
         </button>

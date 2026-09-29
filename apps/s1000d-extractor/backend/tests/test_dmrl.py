@@ -62,6 +62,27 @@ def test_load_dmrl_csv_accents_and_semicolon(tmp_path):
     assert entries[0].dm_type == "descriptive"
 
 
+<<<<<<< HEAD
+def test_load_dmrl_maps_multiple_icns_and_ignores_non_icn_names(tmp_path):
+    path = tmp_path / "dmrl.json"
+    raw_icn = (
+        "ICN-WEG-AA0004-00001-A-02.jpg\r\n"
+        "ICN-WEG-AA0004-00002-A-02.png\n"
+        "Pictogram-warning.png ICN-WEG-AA0004-00003-A-02.gif\n"
+        "ICN-WEG-AA0004-00004-A-02.JPG"
+    )
+    path.write_text(json.dumps([{"Titre": "Description", "ICN": raw_icn}]), encoding="utf-8")
+
+    entry = load_dmrl(path)[0]
+
+    assert entry.icn == raw_icn
+    assert extract_icn_filenames(entry.icn) == [
+        "ICN-WEG-AA0004-00001-A-02.jpg",
+        "ICN-WEG-AA0004-00002-A-02.png",
+        "ICN-WEG-AA0004-00004-A-02.JPG",
+    ]
+    assert entry_from_dict(entry.to_dict()).icn == raw_icn
+=======
 def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
     path = tmp_path / "dmrl.json"
     icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"
@@ -74,6 +95,7 @@ def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
         "ICN-WEG-AA0004-00002-A-02.png",
     ]
     assert entry_from_dict(entry.to_dict()).icn == icn_cell
+>>>>>>> origin/main
 
 
 def test_load_dmrl_rejects_unknown_format(tmp_path):
@@ -166,6 +188,22 @@ def test_split_by_dmrl_uses_dmrl_titles():
     contents = {u.title: splitter.ir_to_text(u.root) for u in units}
     assert "Le frein comporte deux etriers." in contents["Description generale"]
     assert "Deposer les vis." in contents["Depose du frein"]
+
+
+def test_split_by_dmrl_keeps_source_entry_index():
+    entries = [
+        DmrlEntry(title="Titre absent"),
+        DmrlEntry(title="Description generale"),
+        DmrlEntry(title="Depose du frein"),
+    ]
+
+    units = splitter.split_by_dmrl(_ir_with_sections(), entries)
+
+    assert [(unit.title, unit.dmrl_index) for unit in units] == [
+        ("Description generale", 1),
+        ("Depose du frein", 2),
+        ("Titre absent", 0),
+    ]
 
 
 def test_split_by_dmrl_keeps_missing_entry_as_empty_dm():

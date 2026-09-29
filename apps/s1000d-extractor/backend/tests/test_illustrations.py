@@ -20,6 +20,26 @@ def test_slugify() -> None:
     assert slugify("") == "illustration"
 
 
+<<<<<<< HEAD
+def test_rename_illustration_preserves_target_name_and_converts_png(tmp_path) -> None:
+    import fitz
+
+    source = tmp_path / "figure.jpg"
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 8, 8))
+    pix.set_rect(pix.irect, (255, 0, 0))
+    pix.save(str(source), jpg_quality=85)
+
+    from app.core.illustrations import rename_illustration
+
+    name = rename_illustration(tmp_path, source.name, "ICN-XX.png")
+
+    assert name == "ICN-XX.png"
+    assert not source.exists()
+    assert (tmp_path / name).read_bytes().startswith(b"\x89PNG")
+
+
+def test_dmrl_icns_are_applied_in_figure_order_and_collisions_are_suffixes(tmp_path) -> None:
+=======
 def test_rename_illustration_to_icn_png(tmp_path) -> None:
     import fitz
 
@@ -41,6 +61,7 @@ def test_rename_illustration_to_icn_png(tmp_path) -> None:
 
 
 def test_multiple_dmrl_icns_are_applied_in_figure_order(tmp_path) -> None:
+>>>>>>> origin/main
     from app.core.dmrl import DmrlEntry
     from app.core.illustrations import rename_illustration
     from app.core.ir import IRNode
@@ -48,6 +69,23 @@ def test_multiple_dmrl_icns_are_applied_in_figure_order(tmp_path) -> None:
     from app.core.wizard import _apply_dmrl_icns
 
     figures = [
+<<<<<<< HEAD
+        IRNode(id="figure-1", kind="figure", icn="source-1.jpg"),
+        IRNode(id="figure-2", kind="figure", icn="source-2.jpg"),
+        IRNode(id="figure-3", kind="figure", icn="source-3.jpg"),
+    ]
+    for figure in figures:
+        (tmp_path / figure.icn).write_bytes(b"image")
+
+    unit = DmUnit(
+        dm_id="dm1", title="Description",
+        root=IRNode(id="root", kind="section", children=figures),
+        dmrl_index=0,
+    )
+    _apply_dmrl_icns(
+        [unit],
+        [DmrlEntry(icn="ICN-FIRST.jpg\nICN-SECOND.jpg")],
+=======
         IRNode(id="f1", kind="figure", icn="figure-4-1.jpg"),
         IRNode(id="f2", kind="figure", icn="figure-4-2.jpg"),
     ]
@@ -63,10 +101,36 @@ def test_multiple_dmrl_icns_are_applied_in_figure_order(tmp_path) -> None:
     _apply_dmrl_icns(
         [unit],
         [DmrlEntry(icn="ICN-WEG-AA0004-00001-A-02.jpg\nICN-WEG-AA0004-00002-A-02.jpg")],
+>>>>>>> origin/main
         tmp_path,
     )
 
     assert [figure.icn for figure in figures] == [
+<<<<<<< HEAD
+        "ICN-FIRST.jpg", "ICN-SECOND.jpg", "source-3.jpg",
+    ]
+    (tmp_path / "ICN-COLLIDE.jpg").write_bytes(b"existing")
+    (tmp_path / "source-collision.jpg").write_bytes(b"image")
+    assert rename_illustration(tmp_path, "source-collision.jpg", "ICN-COLLIDE.jpg") == (
+        "ICN-COLLIDE-2.jpg"
+    )
+
+
+def test_graphic_reference_omits_extension() -> None:
+    from app.core.ir import IRNode
+    from app.core.s1000d_serializer import serialize
+
+    root = IRNode(
+        id="root", kind="section", children=[
+            IRNode(id="figure", kind="figure", text="Figure 1", icn="ICN-XX.jpg"),
+        ],
+    )
+
+    xml = serialize(root, issue="5.0", dm_type="descriptive", title="Description")
+
+    assert 'infoEntityIdent="ICN-XX"' in xml
+    assert 'infoEntityIdent="ICN-XX.jpg"' not in xml
+=======
         "ICN-WEG-AA0004-00001-A-02.jpg",
         "ICN-WEG-AA0004-00002-A-02.jpg",
     ]
@@ -149,6 +213,7 @@ def test_vector_figure_is_rasterized_when_pdf_has_no_embedded_image(tmp_path) ->
     image = fitz.Pixmap(str(out_dir / figure.icn))
     assert image.width > 100
     assert image.height > 200
+>>>>>>> origin/main
 
 
 def test_images_extracted_and_served(client, pdf_bytes_image) -> None:
@@ -181,7 +246,11 @@ def test_figure_icn_in_generated_xml(client, pdf_bytes_image) -> None:
     found = False
     for d in st["dms"]:
         xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{d['dm_id']}/xml").text
+<<<<<<< HEAD
+        if 'infoEntityIdent="figure-1' in xml:
+=======
         graphic_lines = [line for line in xml.splitlines() if "<graphic " in line]
         if any('infoEntityIdent="figure-1' in line and ".jpg" not in line for line in graphic_lines):
+>>>>>>> origin/main
             found = True
     assert found, "l'ICN de la figure n'est pas referencee dans le XML"

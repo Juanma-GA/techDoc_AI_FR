@@ -35,7 +35,7 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     try:
-        from app.checks.standards import BUILTIN_STANDARDS
+        from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     except Exception:  # noqa: BLE001
         return
 
@@ -49,7 +49,7 @@ def upgrade() -> None:
         if std_row is None:
             continue
         for label, rules in spec["versions"].items():
-            payload = json.dumps([r.as_dict() for r in rules], ensure_ascii=False)
+            payload = json.dumps(serialize_builtin_version(spec, label), ensure_ascii=False)
             bind.execute(
                 sa.text(
                     "UPDATE standard_versions SET catalog_json = :payload, "

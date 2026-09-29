@@ -197,7 +197,11 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     if entries:
         _apply_dmrl_icns(units, entries, images_dir(doc.id))
+<<<<<<< HEAD
+    doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
+=======
         doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
+>>>>>>> origin/main
     progress_cb("classify", 80)
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
     dmrl_types = {e.dmc: e.dm_type for e in entries if e.dmc and e.dm_type}

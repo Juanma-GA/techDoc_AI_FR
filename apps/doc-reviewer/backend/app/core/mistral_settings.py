@@ -8,6 +8,7 @@ analysis pipeline still runs.
 
 from __future__ import annotations
 
+import json
 import logging
 
 from sqlalchemy import select
@@ -27,15 +28,21 @@ _PREFIX = "mistral."
 # (cf. encryption.py). Seul le secret Mistral est sensible ; base_url et modeles
 # restent en clair.
 ENCRYPTED_KEYS = {"api_key"}
+_PLAINTEXT_WARNING_LOGGED = False
 
 
 def _get_secret_manager():  # type: ignore[no-untyped-def]
-    """SecretManager configure depuis settings. Cle absente => chiffrement off
-    (valeurs lues/ecrites en clair, mode dev/local)."""
+    """Create the configured secret manager for persisted Mistral settings."""
+    global _PLAINTEXT_WARNING_LOGGED
+
     from app.core.encryption import SecretManager
 
     if not settings.encryption_key:
-        logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
+        if not _PLAINTEXT_WARNING_LOGGED:
+            logger.warning(
+                "Encryption key not configured - local-only Mistral secrets are stored in plaintext"
+            )
+            _PLAINTEXT_WARNING_LOGGED = True
         return SecretManager(None)
     return SecretManager(settings.encryption_key)
 
@@ -228,6 +235,17 @@ def _set_int(db: Session, key: str, value: int, *, lo: int, hi: int) -> None:
     db.commit()
 
 
+_CHECKLIST_AI_SCAN_KEY = "checklist.ai_scan"
+
+
+def get_checklist_ai_scan(db: Session) -> bool:
+    return _get_bool(db, _CHECKLIST_AI_SCAN_KEY, False)
+
+
+def set_checklist_ai_scan(db: Session, enabled: bool) -> None:
+    _set_bool(db, _CHECKLIST_AI_SCAN_KEY, enabled)
+
+
 def get_verify_enabled(db: Session) -> bool:
     return _get_bool(db, _VERIFY_ENABLED_KEY, True)
 
@@ -267,6 +285,16 @@ def set_feedback_enabled(db: Session, enabled: bool) -> None:
 
 _AI_PROMPT_KEY = "ai.custom_prompt"
 
+_CHECKLIST_CONTEXT_KEY = "checklist.context"
+_CHECKLIST_CONTEXT_FIELDS = (
+    "meta_revision_date",
+    "meta_cmm_number",
+    "meta_first_issue_date",
+    "meta_revision_number",
+    "meta_manufacturer",
+    "document_language",
+)
+
 
 def get_ai_custom_prompt(db: Session) -> str:
     row = db.get(AppConfig, _AI_PROMPT_KEY)
@@ -280,4 +308,36 @@ def set_ai_custom_prompt(db: Session, text: str) -> None:
         db.add(AppConfig(key=_AI_PROMPT_KEY, value=cleaned))
     else:
         row.value = cleaned
+    db.commit()
+
+
+def get_checklist_context(db: Session) -> dict[str, str | None]:
+    """Return the reference values used while compiling checklist rules."""
+    row = db.get(AppConfig, _CHECKLIST_CONTEXT_KEY)
+    if row is None or not row.value:
+        return {field: None for field in _CHECKLIST_CONTEXT_FIELDS}
+    try:
+        raw = json.loads(row.value)
+    except (TypeError, ValueError):
+        raw = {}
+    if not isinstance(raw, dict):
+        raw = {}
+    return {
+        field: str(raw[field]).strip() if raw.get(field) not in (None, "") else None
+        for field in _CHECKLIST_CONTEXT_FIELDS
+    }
+
+
+def set_checklist_context(db: Session, values: dict[str, str | None]) -> None:
+    """Persist the non-secret checklist reference values as one JSON object."""
+    payload = {
+        field: str(values.get(field) or "").strip() or None
+        for field in _CHECKLIST_CONTEXT_FIELDS
+    }
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    row = db.get(AppConfig, _CHECKLIST_CONTEXT_KEY)
+    if row is None:
+        db.add(AppConfig(key=_CHECKLIST_CONTEXT_KEY, value=serialized))
+    else:
+        row.value = serialized
     db.commit()

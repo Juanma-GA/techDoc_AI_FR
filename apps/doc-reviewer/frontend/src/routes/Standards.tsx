@@ -10,21 +10,24 @@ import {
   useDeleteVersion,
   useStandardVersionDetail,
   useStandards,
+  useToggleCatalogRule,
 } from "../hooks/useStandards";
 import type { Standard } from "../types/domain";
 
 /**
  * Administration des normes : liste des normes (built-in + custom), versions,
- * et **catalogue de regles en lecture seule** par version. Les regles custom se
- * gerent desormais dans la carte « Regles custom » dediee (retirees d'ici).
+ * et catalogue par version. Le contenu des règles built-in reste en lecture
+ * seule, mais leur activation est configurable règle par règle. Les règles
+ * custom se gèrent dans la carte « Règles custom » dédiée.
  */
 export function Standards(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const standards = useStandards();
   const createStd = useCreateStandard();
   const createVer = useCreateVersion();
   const deleteStd = useDeleteStandard();
   const deleteVer = useDeleteVersion();
+  const toggleCatalogRule = useToggleCatalogRule();
 
   const items: Standard[] = standards.data ?? [];
 
@@ -76,10 +79,7 @@ export function Standards(): JSX.Element {
 
   return (
     <div className="card">
-      <section
-        className="grid-2"
-        style={{ gridTemplateColumns: "260px 1fr", alignItems: "start" }}
-      >
+      <section className="grid-2 standards-layout">
         <aside className="card">
           <h2 className="card-title">{t("standards.listTitle")}</h2>
           {standards.isLoading ? (
@@ -88,16 +88,25 @@ export function Standards(): JSX.Element {
             <ul className="item-list">
               {items.map((s) => (
                 <li key={s.id}>
-                  <button
-                    type="button"
+                  <div
                     onClick={() => {
                       setSelectedStd(s.id);
                       setSelectedVer(s.versions[0]?.id ?? null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedStd(s.id);
+                        setSelectedVer(s.versions[0]?.id ?? null);
+                      }
                     }}
                     className={[
                       "item-row clickable",
                       (current?.id ?? null) === s.id ? "active" : "",
                     ].join(" ")}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={(current?.id ?? null) === s.id}
                   >
                     <span className="item-name label">{s.code}</span>
                     {s.builtin ? (
@@ -115,7 +124,7 @@ export function Standards(): JSX.Element {
                         <Trash2 size={12} />
                       </button>
                     )}
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -232,9 +241,32 @@ export function Standards(): JSX.Element {
                           <p className="row">
                             <span className="item-name label grow">{c.code}</span>
                             <span className="badge default">{c.kind} · {c.severity}</span>
+                            <label className="row" style={{ gap: "0.4rem" }}>
+                              <input
+                                type="checkbox"
+                                checked={!detail.data.disabled_rule_codes.includes(c.code)}
+                                disabled={toggleCatalogRule.isPending}
+                                onChange={(event) => {
+                                  if (!current || !activeVersion) return;
+                                  toggleCatalogRule.mutate({
+                                    standardId: current.id,
+                                    versionId: activeVersion.id,
+                                    code: c.code,
+                                    enabled: event.target.checked,
+                                  });
+                                }}
+                              />
+                              <span>{t("standards.ruleEnabled")}</span>
+                            </label>
                           </p>
-                          <p className="item-name">{c.title}</p>
-                          <p className="item-meta">{c.description}</p>
+                          <p className="item-name">
+                            {t(`rules.catalog.${c.code}`, { defaultValue: c.title })}
+                          </p>
+                          <p className="item-meta">
+                            {i18n.resolvedLanguage?.startsWith("en")
+                              ? c.description_en ?? c.description
+                              : c.description}
+                          </p>
                         </div>
                       </li>
                     ))}

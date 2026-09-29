@@ -36,6 +36,8 @@ _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD
 # Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
 _GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
+<<<<<<< HEAD
+=======
 _GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
 _FIGURE_TITLE_PREFIX = re.compile(
     r"^\s*(?:figure|fig\.?|illustration)\s+\d+(?:[.\-]\d+)*"
@@ -45,6 +47,7 @@ _FIGURE_TITLE_PREFIX = re.compile(
 _NUMBERED_TITLE_PREFIX = re.compile(
     r"^\s*\d+(?:\.\d+)*(?:\s*[.)\-\u2013\u2014:]\s*|\s+)",
 )
+>>>>>>> origin/main
 
 
 def xml_text(value: str | None) -> str:
@@ -72,6 +75,8 @@ def _graphic_ident(icn: str) -> str:
     return _GRAPHIC_EXTENSION.sub("", xml_text(icn))
 
 
+<<<<<<< HEAD
+=======
 def _doctype(root: IRNode) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
@@ -98,6 +103,7 @@ def _doctype(root: IRNode) -> str:
     return "<!DOCTYPE dmodule [\n" + "\n".join(declarations) + "\n]>"
 
 
+>>>>>>> origin/main
 def _alt_comment(node: IRNode) -> str | None:
     if len(node.candidates) > 1:
         alts = ", ".join(f"{c.element}({c.score:.2f})" for c in node.candidates[1:])

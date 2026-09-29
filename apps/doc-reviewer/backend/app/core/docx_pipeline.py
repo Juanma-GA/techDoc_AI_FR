@@ -1,4 +1,4 @@
-"""Pipeline de revue **Word natif** (dual-mode, cf. Document.source_format).
+"""Pipeline de revue **Word natif** (selected by Document.working_format).
 
 Un document `.docx` est parsé en blocs (`docx_parser`), chaque bloc portant un
 `target_id` stable `dp<N>`. La détection **réutilise le moteur texte existant**
@@ -22,6 +22,8 @@ from sqlalchemy.orm import Session
 from app.checks import docx_checks
 from app.checks.raw import RawSuggestion
 from app.core import docx_zones, rules_engine
+from app.core.compiled_rule_executor import execute_docx_rules
+from app.core.compiled_rules import RuleResult
 from app.db.models import Document, StandardVersion, Suggestion
 from app.parsers.docx_parser import Block, ParsedDocx
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
@@ -55,6 +57,7 @@ def run_docx(
     checklist_enabled: bool = True,
     progress_cb: Optional[Callable[[int], None]] = None,
     warnings: Optional[list[str]] = None,
+    compiled_results: Optional[list[RuleResult]] = None,
 ) -> list[RawSuggestion]:
     """Détection sur un document Word natif. `RawSuggestion.page` porte l'index
     du bloc (→ `target_id = dp<page>`).
@@ -82,7 +85,27 @@ def run_docx(
         checklist_enabled=checklist_enabled,
         progress_cb=progress_cb,
         warnings=warnings,
+        execute_compiled=False,
     )
+    compiled_rules = rules_engine.load_compiled_rules(
+        db,
+        standard_versions or [],
+        checklist_enabled=checklist_enabled,
+    )
+    compiled_rules_for_execution, _compiled_checklist_rules_for_ai = rules_engine.route_compiled_rules(
+        compiled_rules,
+        checklist_ai_scan=checklist_enabled and rules_engine.get_checklist_ai_scan(db),
+    )
+    if compiled_rules_for_execution:
+        results, compiled_raws = execute_docx_rules(
+            parsed.blocks,
+            compiled_rules_for_execution,
+            db=db,
+            document=document,
+        )
+        if compiled_results is not None:
+            compiled_results.extend(results)
+        out.extend(compiled_raws)
     # Checks Word natifs (revision) : toujours actifs sur un docx.
     out.extend(docx_checks.run(parsed))
     return out

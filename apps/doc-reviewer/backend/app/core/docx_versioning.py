@@ -43,5 +43,12 @@ def write_version(storage_dir: str, version: int, data: bytes) -> Path:
     return path
 
 
+def write_original(storage_dir: str, data: bytes, filename: str) -> Path:
+    """Persist the uploaded source separately when the working file differs."""
+    path = doc_dir(storage_dir) / f"original{Path(filename).suffix.lower()}"
+    path.write_bytes(data)
+    return path
+
+
 def read_version(storage_dir: str, version: int) -> bytes:
     return version_path(storage_dir, version).read_bytes()

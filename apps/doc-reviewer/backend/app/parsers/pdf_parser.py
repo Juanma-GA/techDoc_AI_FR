@@ -33,6 +33,12 @@ class ParsedPage:
     text: str
     spans: list[Span] = field(default_factory=list)
     has_text_layer: bool = True
+    page_type: str | None = None
+    # Filled by a standard's page classifier when the document declares which
+    # pages the revision touched. None = undecided (no such declaration, or
+    # the page could not be matched), which every consumer must treat as
+    # "do not filter this page out".
+    is_modified: bool | None = None
 
 
 @dataclass
@@ -207,9 +213,12 @@ def locate_with_search_for(
     page: fitz.Page,
     original: str,
     span_index: int,
+    reference_bbox: tuple[float, float, float, float] | None = None,
 ) -> tuple[float, float, float, float] | None:
     """Return the bbox of `original`'s `span_index`-th occurrence on `page`,
-    using PyMuPDF's native `page.search_for`. None when not found.
+    using PyMuPDF's native `page.search_for`. When a precomputed bbox is
+    available, prefer the hit that overlaps it so repeated text in another
+    page region cannot steal the overlay. None when not found.
 
     Used by `rules_engine.materialize` to compute precise bboxes for
     suggestion overlays. Pairing the overlay's bbox with the editor's
@@ -224,6 +233,20 @@ def locate_with_search_for(
         return None
     if not hits:
         return None
+    if reference_bbox is not None and len(hits) > 1:
+        reference = fitz.Rect(*reference_bbox)
+
+        def overlap_ratio(hit: fitz.Rect) -> float:
+            intersection = hit & reference
+            if intersection.is_empty:
+                return 0.0
+            smaller_area = min(hit.get_area(), reference.get_area())
+            return float(intersection.get_area() / smaller_area) if smaller_area > 0 else 0.0
+
+        ranked = sorted(hits, key=overlap_ratio, reverse=True)
+        if overlap_ratio(ranked[0]) > 0:
+            rect = ranked[0]
+            return (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))
     idx = max(0, min(span_index, len(hits) - 1))
     rect = hits[idx]
     return (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))

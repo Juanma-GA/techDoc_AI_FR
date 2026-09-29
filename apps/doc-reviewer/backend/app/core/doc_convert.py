@@ -294,3 +294,33 @@ def docx_to_doc_bytes(data: bytes) -> bytes:
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+
+def pdf_to_docx_bytes(data: bytes) -> bytes:
+    """Convertit un PDF en DOCX via LibreOffice.
+
+    Cette conversion est volontairement une sortie de compatibilite: elle ne
+    preserve pas fidelement la mise en page PDF et doit etre signalee comme
+    degradee dans l'interface.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="dr_pdf2docx_"))
+    src = tmp / "input.pdf"
+    src.write_bytes(data)
+    try:
+        produced = _convert_libreoffice_format(src, tmp, "docx")
+        if produced is None or not produced.exists():
+            raise AppError(
+                "DOC_CONVERT_UNAVAILABLE",
+                "Conversion PDF -> DOCX impossible sur ce poste : LibreOffice "
+                "n'a pas produit de fichier. Verifiez DR_SOFFICE_PATH, ou "
+                "conservez l'export PDF natif.",
+                status_code=409,
+            )
+        return produced.read_bytes()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def pdf_to_doc_bytes(data: bytes) -> bytes:
+    """Convertit un PDF en DOC via la chaine degradee PDF -> DOCX -> DOC."""
+    return docx_to_doc_bytes(pdf_to_docx_bytes(data))
+

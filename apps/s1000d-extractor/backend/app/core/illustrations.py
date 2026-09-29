@@ -215,7 +215,11 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
 
 
 def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> str | None:
+<<<<<<< HEAD
+    """Renomme une image extraite, en convertissant son format si necessaire."""
+=======
     """Renomme une image extraite, avec conversion si l'extension change."""
+>>>>>>> origin/main
     current = Path(current_name)
     target = Path(target_name)
     if current.name != current_name or target.name != target_name:
@@ -237,6 +241,15 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
         else:
             import fitz
 
+<<<<<<< HEAD
+            pix = fitz.Pixmap(str(source))
+            if pix.n >= 5 or pix.alpha:
+                pix = fitz.Pixmap(fitz.csRGB, pix)
+            if target.suffix.lower() == ".png":
+                pix.save(str(destination), output="png")
+            else:
+                pix.save(str(destination), output="jpg", jpg_quality=85)
+=======
             pixmap = fitz.Pixmap(str(source))
             if pixmap.n >= 5 or pixmap.alpha:
                 pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
@@ -244,6 +257,7 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
                 pixmap.save(str(destination))
             else:
                 pixmap.save(str(destination), jpg_quality=85)
+>>>>>>> origin/main
             source.unlink()
     except Exception:
         destination.unlink(missing_ok=True)
@@ -257,10 +271,19 @@ def _same_path(left: Path, right: Path) -> bool:
 
 def _unique_filename(out_dir: Path, filename: str, *, exclude: Path | None = None) -> str:
     path = Path(filename)
+<<<<<<< HEAD
+    stem = path.stem
+    suffix = path.suffix
+    name = filename
+    n = 2
+    while (out_dir / name).exists() and not (exclude and _same_path(out_dir / name, exclude)):
+        name = f"{stem}-{n}{suffix}"
+=======
     name = filename
     n = 2
     while (out_dir / name).exists() and not (exclude and _same_path(out_dir / name, exclude)):
         name = f"{path.stem}-{n}{path.suffix}"
+>>>>>>> origin/main
         n += 1
     return name
 
