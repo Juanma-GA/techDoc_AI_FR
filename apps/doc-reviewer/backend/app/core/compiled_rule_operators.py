@@ -990,7 +990,8 @@ def extract_year(value: str) -> str:
         return four_digit[-1]
     two_digit = re.findall(r"(?<!\d)\d{2}(?!\d)", value)
     if two_digit:
-        return f"20{two_digit[-1]}"
+        year = int(two_digit[-1])
+        return str((2000 if year < 50 else 1900) + year)
     return value
 
 
@@ -1020,6 +1021,11 @@ def condition_met(condition: Condition, ctx: _EvalContext) -> bool:
 
 
 def resolve_meta_value(field: str, document: Any | None) -> str | list[str] | None:
+    if field == "meta_first_pnr_number":
+        pnr_numbers = resolve_meta_value("meta_pnr_number", document)
+        if isinstance(pnr_numbers, list):
+            return pnr_numbers[0] if pnr_numbers else None
+        return pnr_numbers
     if document is None:
         return None
     metadata = getattr(document, "client_metadata", None)
@@ -1145,7 +1151,10 @@ def resolve_regex_pattern(
             return match.group(0)
         if isinstance(raw, list):
             return "(?:" + "|".join(re.escape(item) for item in raw) + ")"
-        return re.escape(raw)
+        escaped = re.escape(raw)
+        if field == "meta_first_pnr_number":
+            escaped = escaped.replace(r"\-", r"\s*-\s*")
+        return escaped
 
     resolved = _CONTEXT_TOKEN_RE.sub(replace_token, pattern)
     return resolved, context_fields, sorted(set(missing_context))

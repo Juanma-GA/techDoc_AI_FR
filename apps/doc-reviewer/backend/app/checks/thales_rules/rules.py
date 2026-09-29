@@ -67,7 +67,8 @@ _DOCUMENT_TYPE_ALTERNATION = "|".join(
 )
 DOCUMENT_TYPE_PATTERN = rf"(?i)(?<!\w)(?:{_DOCUMENT_TYPE_ALTERNATION})(?!\w)"
 HIGHLIGHTS_DOCUMENT_TYPE_PATTERN = (
-    rf"(?im)^\s*(?:{_DOCUMENT_TYPE_ALTERNATION})\s*$"
+    rf"(?im)^\s*(?:{_DOCUMENT_TYPE_ALTERNATION})"
+    r"(?:\s+with\s+Illustrated\s+Parts\s+List)?\s*$"
     r"\s*^\s*ATA\s+No\b"
 )
 _TP1_REVISION_TARGET = RuleTarget(page="all", region="footer", page_type="TP1")
@@ -83,7 +84,7 @@ _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
     r"{{meta_revision_date}}(?!\w)"
 )
 _EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
-_EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_pnr_number}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_first_pnr_number}}(?!\w)"
 _UNEXPECTED_PNR_PATTERN = (
     r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
@@ -493,7 +494,7 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
             operator="regex_exists",
             expected=_EXPECTED_HIGHLIGHTS_PNR_PATTERN,
             require_all=True,
-            expected_display="{{meta_pnr_number}}",
+            expected_display="{{meta_first_pnr_number}}",
             suggestion_mode="all",
         ),
     ],
@@ -1315,7 +1316,7 @@ CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
     name="Copyright du footer conforme a l'annee de revision",
     description=(
         "Le footer des pages modifiees par la revision doit contenir le "
-        "copyright THALES avec l'annee de debut 1966 et l'annee de revision "
+        "copyright THALES avec l'annee de premiere issue et l'annee de revision "
         "du document."
     ),
     message="Le copyright du footer est absent ou une annee est incorrecte.",
@@ -1330,9 +1331,12 @@ CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
         ),
         Check(
             field="copyright_start_year",
-            operator="normalized_equals",
-            expected="1966",
-            normalization=["trim"],
+            operator="equals_field",
+            compare_to=FieldRef(
+                source="document_meta",
+                field="meta_first_issue_date",
+                normalization=["extract_year"],
+            ),
         ),
         Check(
             field="copyright_end_year",
@@ -1349,7 +1353,8 @@ CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
         "en": {
             "description": (
                 "The footer of pages modified by the revision must contain the "
-                "THALES copyright with start year 1966 and the document revision year."
+                "THALES copyright with the first issue year and the document "
+                "revision year."
             ),
             "message": "The footer copyright is missing or contains an incorrect year.",
         }

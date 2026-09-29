@@ -136,13 +136,18 @@ def highlights_holder_expected(parsed: ParsedPdf | None) -> str | None:
 
 
 def highlights_holder_observed(text: str) -> str:
-    content = highlights_content(text)
-    first_line = next((line.strip() for line in content.splitlines() if line.strip()), "")
-    return first_line if _HIGHLIGHTS_HOLDER_RE.match(first_line) else ""
+    return next(
+        (
+            line.strip()
+            for line in text.splitlines()
+            if _HIGHLIGHTS_HOLDER_RE.match(line.strip())
+        ),
+        "",
+    )
 
 
 def highlights_holder_matches(text: str, expected: str) -> bool:
-    observed = " ".join(highlights_content(text).split()).casefold()
+    observed = " ".join(highlights_holder_observed(text).split()).casefold()
     expected_normalized = " ".join(expected.split()).casefold()
     return bool(observed) and observed.startswith(expected_normalized)
 

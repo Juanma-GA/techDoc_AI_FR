@@ -28,6 +28,7 @@ from app.checks.thales_rules.rules import (
 )
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules as _execute_pdf_rules
+from app.core.compiled_rule_operators import extract_year
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
@@ -835,7 +836,13 @@ def test_first_highlights_page_matches_the_tp1_holder_phrase() -> None:
     valid_page = ParsedPage(
         page=1,
         page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
-        text="HIGHLIGHTS\nTO: HOLDER OF PRESSURE TRANSMITTER\nRevision content",
+        text=(
+            "COMPONENT MAINTENANCE MANUAL\n"
+            "TO: HOLDER OF PRESSURE TRANSMITTER\n"
+            "PNR: 1-879-SB\n"
+            "HIGHLIGHTS\n"
+            "Revision content"
+        ),
         spans=[
             Span(
                 text="HIGHLIGHTS",
@@ -1136,6 +1143,46 @@ def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> 
     assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
 
 
+def test_highlights_pnr_header_uses_only_the_first_mapping_value() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    document = SimpleNamespace(
+        client_metadata={"meta_pnr_number": ["33140-02", "33140-03"]}
+    )
+
+    def build_page(pnr: str) -> ParsedPdf:
+        text = f"PNR: {pnr}\nHighlights page 1"
+        page = ParsedPage(
+            page=1,
+            page_type=HIGHLIGHTS_PAGE_TYPE,
+            text=text,
+            spans=[
+                Span(pnr, (40.0, 100.0, 180.0, 110.0), 1, "Arial", 8.0),
+                Span(
+                    "Highlights page 1",
+                    (40.0, 756.0, 220.0, 766.0),
+                    1,
+                    "Arial",
+                    8.0,
+                ),
+            ],
+        )
+        return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+    valid, valid_suggestions = execute_pdf_rules(
+        build_page("33140 - 02"), [rule], document=document
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        build_page("33140 - 03"), [rule], document=document
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("33140 - 03", "33140-02")
+    ]
+
+
 def _document_type_header_page(
     header: str,
     *,
@@ -1304,6 +1351,26 @@ def test_highlights_document_type_must_precede_the_ata_number() -> None:
 
     assert invalid[0].status == "FAIL"
     assert later == []
+
+def test_highlights_document_type_accepts_illustrated_parts_list_suffix() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
+    text = (
+        "COMPONENT MAINTENANCE MANUAL with Illustrated Parts List\n"
+        "ATA No 21-33-13\n"
+        "Highlights Page 1"
+    )
+    page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text=text,
+    )
+
+    results, _ = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
 
 
 def test_highlights_legend_must_be_the_last_body_line_before_the_footer() -> None:
@@ -2472,13 +2539,16 @@ def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:
 def test_title_page_copyright_matches_revision_year_in_footer() -> None:
     rule = _rule("CUSTOM_TITLE_PAGE_COPYRIGHT")
     valid_footer = (
-        "© 1966-2026 THALES AVS FRANCE SAS. This document and any data included "
+        "© 1973-2026 THALES AVS FRANCE SAS. This document and any data included "
         "are the property of THALES AVS FRANCE SAS. They cannot be reproduced, "
         "disclosed or used without the company's prior written approval"
     )
-    invalid_year_footer = valid_footer.replace("1966-2026", "1966-2025")
-    invalid_start_year_footer = valid_footer.replace("1966-2026", "1967-2026")
-    document = SimpleNamespace(meta_revision_date="JUL 27/26")
+    invalid_year_footer = valid_footer.replace("1973-2026", "1973-2025")
+    invalid_start_year_footer = valid_footer.replace("1973-2026", "1974-2026")
+    document = SimpleNamespace(
+        meta_first_issue_date="JUL 30/73",
+        meta_revision_date="JUL 27/26",
+    )
 
     valid, valid_suggestions = execute_pdf_rules(
         _title_page_copyright_pdf(valid_footer), [rule], document=document
@@ -2503,8 +2573,11 @@ def test_title_page_copyright_matches_revision_year_in_footer() -> None:
     ]
     assert invalid_start[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_start_suggestions] == [
-        ("1967", "1966")
+        ("1974", "1973")
     ]
+    assert extract_year("JUL 30/73") == "1973"
+    assert extract_year("JUL 30/49") == "2049"
+    assert extract_year("JUL 30/50") == "1950"
     assert missing[0].status == "FAIL"
     # Copyright entierement absent (pas seulement une annee erronee) : pas de
     # span a remplacer, mais le FAIL doit rester visible via un commentaire.
@@ -2516,16 +2589,19 @@ def test_title_page_copyright_matches_revision_year_in_footer() -> None:
 def test_title_page_copyright_checks_every_selected_footer_page() -> None:
     rule = _rule("CUSTOM_TITLE_PAGE_COPYRIGHT")
     valid_footer = (
-        "© 1966-2026 THALES AVS FRANCE SAS. This document and any data included "
+        "© 1973-2026 THALES AVS FRANCE SAS. This document and any data included "
         "are the property of THALES AVS FRANCE SAS. They cannot be reproduced, "
         "disclosed or used without the company's prior written approval"
     )
-    invalid_footer = valid_footer.replace("1966-2026", "1966-2025")
+    invalid_footer = valid_footer.replace("1973-2026", "1973-2025")
 
     results, suggestions = execute_pdf_rules(
         _title_page_copyright_pages({1: valid_footer, 3: invalid_footer}),
         [rule],
-        document=SimpleNamespace(meta_revision_date="JUL 27/26"),
+        document=SimpleNamespace(
+            meta_first_issue_date="JUL 30/73",
+            meta_revision_date="JUL 27/26",
+        ),
     )
 
     assert results[0].status == "FAIL"
@@ -2540,24 +2616,27 @@ def test_title_page_copyright_checks_every_selected_footer_page() -> None:
 def test_title_page_copyright_reports_mismatches_from_multiple_checks_and_pages() -> None:
     rule = _rule("CUSTOM_TITLE_PAGE_COPYRIGHT")
     valid_footer = (
-        "© 1966-2026 THALES AVS FRANCE SAS. This document and any data included "
+        "© 1973-2026 THALES AVS FRANCE SAS. This document and any data included "
         "are the property of THALES AVS FRANCE SAS. They cannot be reproduced, "
         "disclosed or used without the company's prior written approval"
     )
-    first_invalid_footer = valid_footer.replace("1966-2026", "1966-2025")
-    second_invalid_footer = valid_footer.replace("1966-2026", "1970-2026")
+    first_invalid_footer = valid_footer.replace("1973-2026", "1973-2025")
+    second_invalid_footer = valid_footer.replace("1973-2026", "1970-2026")
 
     results, suggestions = execute_pdf_rules(
         _title_page_copyright_pages({3: first_invalid_footer, 4: second_invalid_footer}),
         [rule],
-        document=SimpleNamespace(meta_revision_date="JUL 27/26"),
+        document=SimpleNamespace(
+            meta_first_issue_date="JUL 30/73",
+            meta_revision_date="JUL 27/26",
+        ),
     )
 
     assert results[0].status == "FAIL"
     assert [
         (item.page, item.original, item.proposed)
         for item in suggestions
-    ] == [(3, "2025", "2026"), (4, "1970", "1966")]
+    ] == [(3, "2025", "2026"), (4, "1970", "1973")]
 
 
 def test_copyright_position_matches_pdf_page_parity_and_coordinates() -> None:

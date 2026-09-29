@@ -456,6 +456,8 @@ def fuzzy_required_suggestions(
             if not candidate_compact:
                 continue
             candidate_folded = candidate_compact.casefold()
+            if check.expected_display == "{{meta_first_pnr_number}}":
+                candidate_folded = candidate_folded.replace(" - ", "-")
             if check.suggestion_mode == "all" and expected_folded in candidate_folded:
                 continue
             if check.missing_anchor_position == "below":

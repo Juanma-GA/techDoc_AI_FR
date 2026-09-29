@@ -85,6 +85,18 @@ def document_metadata(document: Any | None) -> dict[str, str]:
     for field in _DOCUMENT_METADATA_FIELDS:
         if field not in metadata:
             metadata[field] = getattr(document, field, None)
+        pnr_numbers = metadata.get("meta_pnr_number")
+        if isinstance(pnr_numbers, list):
+            metadata["meta_first_pnr_number"] = next(
+                (
+                    str(value).strip()
+                    for value in pnr_numbers
+                    if value is not None and str(value).strip()
+                ),
+                None,
+            )
+        elif pnr_numbers is not None:
+            metadata["meta_first_pnr_number"] = pnr_numbers
     return {
         field: rendered
         for field, value in metadata.items()

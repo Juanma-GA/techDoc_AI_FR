@@ -140,11 +140,13 @@ def test_title_copyright_rule_keeps_generic_cross_field_checks() -> None:
     assert definition.compiled_rule.target.page_state == "modified"
     assert [check.operator for check in checks] == [
         "regex_exists",
-        "normalized_equals",
+        "equals_field",
         "equals_field",
     ]
     assert checks[2].compare_to is not None
     assert checks[2].compare_to.field == "meta_revision_date"
+    assert checks[1].compare_to is not None
+    assert checks[1].compare_to.field == "meta_first_issue_date"
     assert definition.metadata["description_en"].startswith(
         "The footer of pages modified by the revision"
     )
