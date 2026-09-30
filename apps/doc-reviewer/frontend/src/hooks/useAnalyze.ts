@@ -3,6 +3,8 @@ import { useCallback, useState } from "react";
 
 import { API_BASE_URL } from "../lib/api";
 import { useFiltersStore } from "../stores/filtersStore";
+import { missingDocumentContext } from "../types/domain";
+import type { Document } from "../types/domain";
 
 type AnalyzeStatus = "idle" | "running" | "done" | "error";
 
@@ -14,9 +16,17 @@ export type AnalyzeQuality = {
   engine: string;
 };
 
-export function useAnalyze(documentId: string | undefined) {
+export type AnalyzeOptions = {
+  vision?: boolean;
+  firstPage?: number;
+  lastPage?: number;
+};
+
+export function useAnalyze(documentId: string | undefined, document?: Document) {
   const qc = useQueryClient();
   const checklistActive = useFiltersStore((s) => s.checklistActive);
+  const missingContextFields = missingDocumentContext(document);
+  const contextReady = Boolean(document) && missingContextFields.length === 0;
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -26,8 +36,13 @@ export function useAnalyze(documentId: string | undefined) {
   // le resultat peut etre incomplet — ne doit jamais passer inaperçu.
   const [warnings, setWarnings] = useState<string[]>([]);
 
-  const start = useCallback(async (vision?: boolean) => {
+  const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
+    if (!contextReady) {
+      setStatus("error");
+      setError("DOCUMENT_CONTEXT_INCOMPLETE");
+      return;
+    }
     setStatus("running");
     setProgress(0);
     setError(null);
@@ -38,14 +53,23 @@ export function useAnalyze(documentId: string | undefined) {
       // Cible « checklist » (toggle Documents) transmise a chaque run ; `vision`
       // override le reglage persiste le temps d'un run.
       const params = new URLSearchParams({ checklist: String(checklistActive) });
-      if (vision !== undefined) params.set("vision", String(vision));
+      if (options.vision !== undefined) params.set("vision", String(options.vision));
+      if (options.firstPage !== undefined) params.set("first_page", String(options.firstPage));
+      if (options.lastPage !== undefined) params.set("last_page", String(options.lastPage));
       const url = `${API_BASE_URL}/documents/${documentId}/analyze?${params.toString()}`;
       const response = await fetch(url, {
         method: "POST",
         headers: { Accept: "text/event-stream" },
       });
       if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status}`);
+        let message = `HTTP ${response.status}`;
+        try {
+          const payload = (await response.json()) as { message?: string; code?: string };
+          message = payload.message ?? payload.code ?? message;
+        } catch {
+          /* keep the HTTP fallback */
+        }
+        throw new Error(message);
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -113,13 +137,14 @@ export function useAnalyze(documentId: string | undefined) {
         }
       }
       qc.invalidateQueries({ queryKey: ["suggestions", documentId] });
+      qc.invalidateQueries({ queryKey: ["rule-results", documentId] });
       qc.invalidateQueries({ queryKey: ["document", documentId] });
       if (status !== "error") setStatus("done");
     } catch (exc) {
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [documentId, qc, status, checklistActive]);
+  }, [contextReady, documentId, qc, status, checklistActive]);
 
-  return { status, progress, error, quality, warnings, start };
+  return { status, progress, error, quality, warnings, start, contextReady, missingContextFields };
 }

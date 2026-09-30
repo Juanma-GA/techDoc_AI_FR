@@ -260,7 +260,7 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
         recorded = fitz.Rect(*patch.bbox)
         hits = page.search_for(patch.original_text) or []
 
-        if not hits:
+        if not hits and patch.original_text:
             raise AppError(
                 "ORIGINAL_NOT_FOUND",
                 "Texte original introuvable sur la page (PDF déjà modifié ?)",
@@ -268,9 +268,10 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
                 detail={"page": patch.page, "original": patch.original_text},
             )
 
+        insertion_only = not patch.original_text
         # Multi-line phrase: search_for returns one rect per line. We treat
         # the whole run as a single edit zone.
-        multi_line = len(hits) > 1 and _are_rects_contiguous(hits)
+        multi_line = not insertion_only and len(hits) > 1 and _are_rects_contiguous(hits)
 
         chosen: fitz.Rect | None = None
         all_rects: list[fitz.Rect] = hits
@@ -280,6 +281,9 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
             chosen = fitz.Rect(hits[0])
             for r in hits[1:]:
                 chosen.include_rect(r)
+        elif insertion_only:
+            chosen = recorded
+            all_rects = []
         elif len(hits) == 1:
             chosen = hits[0]
             all_rects = [chosen]
@@ -320,7 +324,10 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
         font_name, font_size, color = _find_span_font(page, chosen)
         resolved_font, fallback = _resolve_font(font_name)
 
-        if multi_line:
+        if insertion_only:
+            redact_rect = chosen
+            insert_text = patch.proposed_text
+        elif multi_line:
             # Redact every line individually (avoids carving columns into
             # the rest of the page), then insert the proposed text in a
             # textbox covering the union — `insert_textbox` wraps as needed.
@@ -363,7 +370,11 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
             text_w = fitz.get_text_length(insert_text, fontname=resolved_font, fontsize=size_used)
 
         wrapped = False
-        if not multi_line:
+        if insertion_only:
+            # The recorded bbox is an intentional empty insertion zone.
+            # Nothing is redacted; the proposed text is rendered there.
+            pass
+        elif not multi_line:
             # Single-line edits still need an explicit redact (multi-line
             # already redacted each rect above). fill=None : aucun rectangle
             # peint, la mise en forme d'origine est preservee.
@@ -402,8 +413,8 @@ def apply_patch(src: Path, dst: Path, patch: PatchSpec) -> PatchResult:
                 wrap_rect = fitz.Rect(
                     redact_rect.x0,
                     redact_rect.y0,
-                    redact_rect.x1,
-                    redact_rect.y0 + 2 * target_h,
+                        max(redact_rect.x1, page.rect.x1 - 4),
+                        max(redact_rect.y0 + 2 * target_h, page.rect.y1 - 4),
                 )
             wrapped = True
             leftover = page.insert_textbox(

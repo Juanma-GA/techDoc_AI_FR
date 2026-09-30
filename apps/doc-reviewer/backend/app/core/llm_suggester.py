@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.logging import sanitize_llm_debug
 from app.core.fallback_rules import FallbackNLPRules
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
@@ -80,7 +81,8 @@ _OUTPUT_INSTRUCTIONS = (
 
 
 _BATCH_LIMIT = 30
-_TIMEOUT_S = 30.0
+_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
+_NETWORK_ATTEMPTS = 2
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -137,23 +139,54 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
         "temperature": temperature,
         "response_format": {"type": "json_object"},
     }
-    try:
-        with httpx.Client(timeout=_TIMEOUT_S) as client:
-            r = client.post(
-                f"{s['base_url'].rstrip('/')}/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {s['api_key']}",
-                    "Content-Type": "application/json",
-                },
-                content=json.dumps(payload),
+    r: httpx.Response | None = None
+    for attempt in range(1, _NETWORK_ATTEMPTS + 1):
+        try:
+            logger.debug(
+                "llm_request",
+                provider="mistral",
+                endpoint="chat/completions",
+                model=payload["model"],
+                payload=sanitize_llm_debug(payload),
             )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("llm_network_error", error=type(exc).__name__, message=str(exc))
+            with httpx.Client(timeout=_TIMEOUT) as client:
+                r = client.post(
+                    f"{s['base_url'].rstrip('/')}/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {s['api_key']}",
+                        "Content-Type": "application/json",
+                    },
+                    content=json.dumps(payload),
+                )
+            break
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            logger.warning(
+                "llm_network_error",
+                error=type(exc).__name__,
+                message=str(exc),
+                attempt=attempt,
+                retrying=attempt < _NETWORK_ATTEMPTS,
+            )
+            if attempt == _NETWORK_ATTEMPTS:
+                raise AppError(
+                    "LLM_REPHRASE_FAILED",
+                    f"Échec d'appel Mistral : {type(exc).__name__}",
+                    status_code=502,
+                ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("llm_network_error", error=type(exc).__name__, message=str(exc))
+            raise AppError(
+                "LLM_REPHRASE_FAILED",
+                f"Échec d'appel Mistral : {type(exc).__name__}",
+                status_code=502,
+            ) from exc
+
+    if r is None:
         raise AppError(
             "LLM_REPHRASE_FAILED",
-            f"Échec d'appel Mistral : {type(exc).__name__}",
+            "Échec d'appel Mistral sans réponse.",
             status_code=502,
-        ) from exc
+        )
 
     if r.status_code != 200:
         raise AppError(
@@ -162,6 +195,13 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
             status_code=502,
             detail={"body": r.text[:300]},
         )
+    logger.debug(
+        "llm_response",
+        provider="mistral",
+        model=payload["model"],
+        status_code=r.status_code,
+        response=sanitize_llm_debug(getattr(r, "text", "")),
+    )
     try:
         data = r.json()
         return data["choices"][0]["message"]["content"] or ""
@@ -208,6 +248,7 @@ def _format_rules_block(
     s1000d_rules: list[dict] | None,
     custom_rules_list: list[dict] | None,
     custom_prompt: str,
+    compiled_checklist_rules: list[dict] | None = None,
 ) -> str:
     """Render every rule configured in Settings as one block of natural-language
     instructions injected into the system prompt. Anything empty is skipped."""
@@ -237,6 +278,21 @@ def _format_rules_block(
             lines.append(f"- {name} ({kind}){' : ' + tail if tail else ''}")
         sections.append("Règles custom activées :\n" + "\n".join(lines))
 
+    if compiled_checklist_rules:
+        lines = []
+        for rule in compiled_checklist_rules:
+            code = rule.get("id") or "CHECKLIST"
+            severity = rule.get("severity") or "warning"
+            instruction = rule.get("instruction") or rule.get("description") or rule.get("title") or ""
+            target = rule.get("target")
+            scope = ""
+            if isinstance(target, dict):
+                page = target.get("page") or "all"
+                region = target.get("region") or "full_page"
+                scope = f" [{page}/{region}]"
+            lines.append(f"- {code} ({severity}){scope} : {instruction}")
+        sections.append("Règles checklist à appliquer avec AI_SCAN :\n" + "\n".join(lines))
+
     cleaned_prompt = (custom_prompt or "").strip()
     if cleaned_prompt:
         sections.append("Consignes en langage naturel :\n" + cleaned_prompt)
@@ -251,6 +307,8 @@ def scan_with_prompt(
     *,
     s1000d_rules: list[dict] | None = None,
     custom_rules_list: list[dict] | None = None,
+    compiled_checklist_rules: list[dict] | None = None,
+    document_metadata: str | None = None,
 ) -> list[dict]:
     """Run a single LLM pass on `page_text` with the aggregated rule set
     drawn from Settings: enabled S1000D rules + enabled custom rules +
@@ -275,12 +333,21 @@ def scan_with_prompt(
             }
             for match in fallback_matches
         ]
-    rules_block = _format_rules_block(s1000d_rules, custom_rules_list, custom_prompt)
+    rules_block = _format_rules_block(
+        s1000d_rules,
+        custom_rules_list,
+        custom_prompt,
+        compiled_checklist_rules,
+    )
     if not rules_block or not page_text.strip():
         return []
 
     text_to_scan = page_text[:_SCAN_PAGE_TEXT_LIMIT]
-    system = _SCAN_SYSTEM + "\n\n" + rules_block
+    system_parts = [_SCAN_SYSTEM]
+    if document_metadata:
+        system_parts.append(document_metadata)
+    system_parts.append(rules_block)
+    system = "\n\n".join(system_parts)
     user_payload = json.dumps({"text": text_to_scan}, ensure_ascii=False)
 
     try:

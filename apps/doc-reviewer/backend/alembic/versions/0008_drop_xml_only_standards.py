@@ -93,7 +93,7 @@ def downgrade() -> None:
         import uuid
         from datetime import datetime, timezone
 
-        from app.checks.standards import BUILTIN_STANDARDS
+        from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     except Exception:  # noqa: BLE001
         return
 
@@ -133,7 +133,7 @@ def downgrade() -> None:
                     "sid": std_id,
                     "label": label,
                     "catalog": json.dumps(
-                        [r.as_dict() for r in rules], ensure_ascii=False
+                        serialize_builtin_version(spec, label), ensure_ascii=False
                     ),
                     "now": now,
                 },

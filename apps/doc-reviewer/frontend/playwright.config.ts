@@ -10,6 +10,12 @@ export default defineConfig({
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile", use: { ...devices["iPhone 13"] } },
+    { name: "tablet", use: { ...devices["iPad (gen 7)"] } },
+    {
+      name: "tablet-landscape",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1024, height: 768 } },
+    },
   ],
   webServer: {
     command: "pnpm dev",

@@ -1,25 +1,29 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import {
-  useAiPrompt,
   useMistralSettings,
   useReliability,
   useTestMistralConnection,
   useToggleLlm,
-  useUpdateAiPrompt,
   useUpdateMistralSettings,
   useUpdateReliability,
 } from "../hooks/useMistralSettings";
+import { api } from "../lib/api";
 import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
+import type { ResetAllResult, WipeSuggestionsResult } from "../types/domain";
 
 import { Rules } from "./Rules";
 import { Standards } from "./Standards";
 
 export function Settings() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const targetUnits = useFiltersStore((s) => s.targetUnits);
   const toggleTargetUnit = useFiltersStore((s) => s.toggleTargetUnit);
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
@@ -34,22 +38,30 @@ export function Settings() {
       .map((v) => `${s.code} ${v.label}`),
   );
 
+  const toggleStandard = (versionIds: string[]): void => {
+    if (versionIds.length === 0) return;
+    const allActive = versionIds.every((id) => activeStandardVersionIds.includes(id));
+    for (const versionId of versionIds) {
+      const isActive = activeStandardVersionIds.includes(versionId);
+      if (allActive ? isActive : !isActive) toggleActiveStandardVersion(versionId);
+    }
+  };
+
   const mistral = useMistralSettings();
   const updateMistral = useUpdateMistralSettings();
   const testMistral = useTestMistralConnection();
   const toggleLlm = useToggleLlm();
-  const aiPrompt = useAiPrompt();
-  const updateAiPrompt = useUpdateAiPrompt();
   const reliability = useReliability();
   const updateReliability = useUpdateReliability();
+  const setChecklistActive = useFiltersStore((s) => s.setChecklistActive);
 
   const [apiKeyDraft, setApiKeyDraft] = useState("");
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
   const [modelDraft, setModelDraft] = useState("");
   const [visionModelDraft, setVisionModelDraft] = useState("");
-  const [promptDraft, setPromptDraft] = useState<string | null>(null);
-
-  const effectivePrompt = promptDraft ?? aiPrompt.data?.prompt ?? "";
+  const [resetDialog, setResetDialog] = useState<"sugs" | "all" | null>(null);
+  const [resetFeedback, setResetFeedback] = useState<string | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
 
   const submitMistral = (): void => {
     updateMistral.mutate(
@@ -107,6 +119,23 @@ export function Settings() {
                   </label>
                 </div>
 
+                <div className="switch-row">
+                  <div>
+                    <div>{t("settings.mistral.checklistAiScan")}</div>
+                    <div className="label">{t("settings.mistral.checklistAiScanHint")}</div>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={!!mistral.data?.checklist_ai_scan}
+                      onChange={(e) =>
+                        updateMistral.mutate({ checklist_ai_scan: e.target.checked })
+                      }
+                    />
+                    <span className="track" />
+                  </label>
+                </div>
+
                 <p className="hint" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                   {mistral.data?.api_key_set
                     ? t("settings.mistral.keySet", { preview: mistral.data.api_key_preview })
@@ -145,7 +174,7 @@ export function Settings() {
                 </Field>
                 <Field label={t("settings.mistral.visionModel")}>
                   <input
-                    placeholder="pixtral-12b-2409"
+                    placeholder="mistral-medium-3-5"
                     value={visionModelDraft || mistral.data?.vision_model || ""}
                     onChange={(e) => setVisionModelDraft(e.target.value)}
                     className="input mono"
@@ -203,49 +232,6 @@ export function Settings() {
                     </div>
                   </div>
                 ) : null}
-              </div>
-            )}
-          </Card>
-
-          <Card
-            title={t("settings.aiPrompt.title")}
-            description={t("settings.aiPrompt.description")}
-          >
-            {aiPrompt.isLoading ? (
-              <p className="hint">{t("common.loading")}</p>
-            ) : (
-              <div className="form">
-                <textarea
-                  rows={6}
-                  value={effectivePrompt}
-                  onChange={(e) => setPromptDraft(e.target.value)}
-                  placeholder={t("settings.aiPrompt.placeholder")}
-                  className="input mono"
-                />
-                <div className="row">
-                  <button
-                    type="button"
-                    className="btn primary"
-                    onClick={() => {
-                      if (promptDraft === null) return;
-                      updateAiPrompt.mutate(promptDraft, {
-                        onSuccess: () => setPromptDraft(null),
-                      });
-                    }}
-                    disabled={promptDraft === null || updateAiPrompt.isPending}
-                  >
-                    {t("common.save")}
-                  </button>
-                  {promptDraft !== null ? (
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      onClick={() => setPromptDraft(null)}
-                    >
-                      {t("common.cancel")}
-                    </button>
-                  ) : null}
-                </div>
               </div>
             )}
           </Card>
@@ -342,12 +328,28 @@ export function Settings() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {(standards.data ?? []).map((std) => {
+                const versionIds = std.versions.map((v) => v.id);
                 const stdActive = std.versions.some((v) =>
                   activeStandardVersionIds.includes(v.id),
                 );
+                const allVersionsActive =
+                  versionIds.length > 0 && versionIds.every((id) => activeStandardVersionIds.includes(id));
                 return (
                 <div
                   key={std.id}
+                  className="standard-option"
+                  role={versionIds.length > 0 ? "button" : undefined}
+                  tabIndex={versionIds.length > 0 ? 0 : undefined}
+                  aria-pressed={versionIds.length > 0 ? allVersionsActive : undefined}
+                  aria-label={`${std.code} ${std.label}`}
+                  onClick={() => toggleStandard(versionIds)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggleStandard(versionIds);
+                    }
+                  }}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -359,14 +361,11 @@ export function Settings() {
                     background: stdActive ? "var(--card-hover)" : "var(--bg-2)",
                     border: `1px solid ${stdActive ? "var(--brand-light)" : "var(--border)"}`,
                     borderRadius: 8,
+                    cursor: versionIds.length > 0 ? "pointer" : "default",
                   }}
                 >
                   <span
-                    style={{
-                      fontFamily: '"JetBrains Mono", monospace',
-                      color: "var(--fg)",
-                      minWidth: 120,
-                    }}
+                    className="standard-option-code"
                   >
                     {std.code}
                   </span>
@@ -383,7 +382,10 @@ export function Settings() {
                         key={v.id}
                         type="button"
                         aria-pressed={on}
-                        onClick={() => toggleActiveStandardVersion(v.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleActiveStandardVersion(v.id);
+                        }}
                         className={on ? "slicer-pill active" : "slicer-pill"}
                       >
                         {v.label}
@@ -446,7 +448,86 @@ export function Settings() {
             </span>
           </div>
         </Card>
+
+        <Card title={t("data.reset")}>
+          <div className="banner warn">{t("data.resetWarn")}</div>
+          <div className="row">
+            <button
+              type="button"
+              disabled={resetBusy}
+              onClick={() => setResetDialog("sugs")}
+              className="btn secondary"
+            >
+              {t("data.resetSugs")}
+            </button>
+            <button
+              type="button"
+              disabled={resetBusy}
+              onClick={() => setResetDialog("all")}
+              className="btn danger"
+            >
+              {t("data.resetAll")}
+            </button>
+            {resetFeedback ? <span className="hint">{resetFeedback}</span> : null}
+          </div>
+        </Card>
       </section>
+
+      <ConfirmDialog
+        open={resetDialog === "sugs"}
+        onOpenChange={(open) => setResetDialog(open ? "sugs" : null)}
+        title={t("data.resetSugs")}
+        description={t("data.confirmSugs")}
+        confirmLabel={t("data.resetSugs")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setResetBusy(true);
+          setResetFeedback(null);
+          void api
+            .post<WipeSuggestionsResult>("/admin/wipe-suggestions")
+            .then((result) => {
+              setResetFeedback(t("data.wipedSugs", { count: result.deleted }));
+              return queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+            })
+            .catch((error: unknown) => {
+              setResetFeedback(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => setResetBusy(false));
+        }}
+      />
+      <ConfirmDialog
+        open={resetDialog === "all"}
+        onOpenChange={(open) => setResetDialog(open ? "all" : null)}
+        title={t("data.resetAll")}
+        description={t("data.confirmAll")}
+        confirmLabel={t("data.resetAll")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          setResetBusy(true);
+          setResetFeedback(null);
+          void api
+            .post<ResetAllResult>("/admin/reset")
+            .then((result) => {
+              clearActiveStandards();
+              setChecklistActive(false);
+              const folders = result.storage_folders_cleaned + result.orphan_folders_cleaned;
+              setResetFeedback(
+                t("data.resetDone", {
+                  docs: result.documents_deleted,
+                  rules: result.rules_deleted + result.checklist_rules_deleted,
+                  folders,
+                }),
+              );
+              return queryClient.invalidateQueries();
+            })
+            .catch((error: unknown) => {
+              setResetFeedback(error instanceof Error ? error.message : String(error));
+            })
+            .finally(() => setResetBusy(false));
+        }}
+      />
     </div>
   );
 }
@@ -463,10 +544,11 @@ function Collapsible({
   return (
     <details className="collapsible" open={defaultOpen} style={{ marginBottom: 4 }}>
       <summary
-        className="card-title"
-        style={{ cursor: "pointer", listStyle: "none", padding: "6px 2px", userSelect: "none" }}
+        className="collapsible-summary card-title"
+        style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
       >
-        ▸ {title}
+        <ChevronRight size={16} aria-hidden="true" />
+        <span>{title}</span>
       </summary>
       <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 16 }}>
         {children}

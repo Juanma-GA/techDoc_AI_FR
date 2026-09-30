@@ -97,7 +97,46 @@ export type ChecklistImportResult = {
   by_kind: Record<string, number>;
   skipped_manual: number;
   skipped: string[];
+  rules: CompiledRuleSummary[];
 };
+
+export type CompiledRuleSummary = {
+  id: string;
+  topic: string;
+  severity: "info" | "warning" | "error";
+  execution: "deterministic" | "semantic" | "manual" | "unsupported";
+  active: boolean;
+  source: "standard_rule" | "user_checklist";
+  standard_id: string | null;
+  standard_version_id: string | null;
+  origin_ref: string | null;
+  semantic_instruction: string | null;
+  manual_instruction: string | null;
+  compilation_error: string | null;
+  detail: string | null;
+};
+
+export function useCompiledRules(standardVersionIds: string[] = []) {
+  const selectedIds = [...standardVersionIds].sort();
+  return useQuery({
+    queryKey: ["compiled-rules", selectedIds],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      selectedIds.forEach((id) => params.append("standard_version_id", id));
+      const query = params.toString();
+      return api.get<CompiledRuleSummary[]>(`/compiled-rules${query ? `?${query}` : ""}`);
+    },
+  });
+}
+
+export function usePatchCompiledRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api.patch<CompiledRuleSummary>(`/compiled-rules/${encodeURIComponent(id)}`, { active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["compiled-rules"] }),
+  });
+}
 
 // Apercu d'un onglet Excel (pour piloter le mapping des colonnes).
 export type SheetInfo = { name: string; header_row: number; rows: string[][] };
@@ -148,6 +187,9 @@ export function useValidateAllRules() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.post<{ activated: number }>("/rules/validate-all", {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["rules"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rules"] });
+      qc.invalidateQueries({ queryKey: ["compiled-rules"] });
+    },
   });
 }

@@ -6,7 +6,7 @@
 
 @layer base {
   html {
-    font-size: 13.5px;
+    font-size: 14px;
     line-height: 1.5;
   }
   body {
@@ -17,7 +17,7 @@
   }
   .label {
     @apply font-mono text-label uppercase text-fg-dim;
-    font-size: 0.6rem;
-    letter-spacing: 1px;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
   }
 }

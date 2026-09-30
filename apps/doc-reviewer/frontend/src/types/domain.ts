@@ -1,6 +1,13 @@
 export type Severity = "info" | "warning" | "error";
 
-export type RuleKind = "standard" | "custom" | "units" | "layout" | "vision";
+export type RuleKind =
+  | "standard"
+  | "custom"
+  | "units"
+  | "layout"
+  | "vision"
+  | "compiled_standard"
+  | "compiled_checklist";
 
 /** Provenance affichee/filtrable dans la liste des anomalies. */
 export type SourceKind = "norme" | "checklist" | "regle" | "transverse";
@@ -23,6 +30,21 @@ export type RuleKindStored =
   | "manual";
 
 export type SuggestionStatus = "open" | "accepted" | "edited" | "rejected" | "applied";
+
+export type EvidenceLocation =
+  | { type: "bbox"; bbox: [number, number, number, number] }
+  | { type: "target_id"; target_id: string };
+
+export type RuleResult = {
+  rule_id: string;
+  status: "PASS" | "FAIL" | "MANUAL" | "UNSUPPORTED" | "INCONCLUSIVE";
+  evidence: {
+    page: string;
+    location: EvidenceLocation;
+    observed_value: string | null;
+    expected_value: string | null;
+  } | null;
+};
 
 export type Bbox = {
   x0: number | null;
@@ -90,6 +112,7 @@ export type Document = {
   current_version: number;
   /** Pipeline de revue : "pdf" (defaut) ou "docx" (Word natif). */
   source_format: "pdf" | "docx";
+  working_format: "pdf" | "docx";
   // Portail qualite : revuabilite homogene tous formats.
   convert_engine: string;
   text_coverage: number;
@@ -98,9 +121,39 @@ export type Document = {
   meta_revision_date: string | null;
   meta_cmm_number: string | null;
   meta_first_issue_date: string | null;
+  meta_last_issue_date: string | null;
   meta_revision_number: string | null;
+  meta_pnr_number: string | null;
+  meta_manufacturer: "Airbus" | "Boeing";
+  document_language: "fr" | "en" | null;
   created_at: string;
 };
+
+export const REQUIRED_DOCUMENT_CONTEXT_FIELDS = [
+  "meta_revision_date",
+  "meta_cmm_number",
+  "meta_first_issue_date",
+  "meta_revision_number",
+  "document_language",
+] as const;
+
+export type DocumentContextField = (typeof REQUIRED_DOCUMENT_CONTEXT_FIELDS)[number];
+
+export function missingDocumentContext(
+  document: Pick<
+    Document,
+    | "meta_revision_date"
+    | "meta_cmm_number"
+    | "meta_first_issue_date"
+    | "meta_revision_number"
+    | "document_language"
+  > | null | undefined,
+): DocumentContextField[] {
+  if (!document) return [...REQUIRED_DOCUMENT_CONTEXT_FIELDS];
+  return REQUIRED_DOCUMENT_CONTEXT_FIELDS.filter(
+    (field) => !String(document[field] ?? "").trim(),
+  );
+}
 
 export type Rule = {
   id: string;
@@ -140,11 +193,13 @@ export type CatalogRule = {
   code: string;
   title: string;
   description: string;
+  description_en?: string | null;
   kind: RuleKindStored;
   severity: Severity;
   pattern: string;
   replacement: string;
   message: string;
+  message_en?: string | null;
   example_invalid: string;
   example_valid: string;
   metadata: Record<string, string>;
@@ -153,6 +208,7 @@ export type CatalogRule = {
 export type StandardVersionDetail = StandardVersion & {
   catalog: CatalogRule[];
   custom_rules: Rule[];
+  disabled_rule_codes: string[];
 };
 
 export type SuggestionApplyResult = {
@@ -186,6 +242,8 @@ export type WipeSuggestionsResult = {
 
 export type ResetAllResult = {
   documents_deleted: number;
+  rules_deleted: number;
+  checklist_rules_deleted: number;
   storage_folders_cleaned: number;
   orphan_folders_cleaned: number;
 };

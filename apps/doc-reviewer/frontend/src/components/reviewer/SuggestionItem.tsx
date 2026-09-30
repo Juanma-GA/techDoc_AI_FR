@@ -1,19 +1,16 @@
-import { Check, Layers, Pencil, Undo2, X } from "lucide-react";
+import { Check, Pencil, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DiffInline } from "../DiffInline";
 import { SeverityBadge } from "../SeverityBadge";
 import { UnitChip } from "../UnitChip";
+import { localizedSuggestionMessage } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 
 type Props = {
   suggestion: Suggestion;
   isSelected: boolean;
-  /** Number of distinct pages where the exact same anomaly recurs. */
-  groupPages: number;
-  /** Total still-pending occurrences of the same anomaly. */
-  groupOccurrences: number;
   onSelect: () => void;
   onAccept: () => void;
   onReject: () => void;
@@ -22,33 +19,28 @@ type Props = {
   onSaveFeedback: (feedback: string) => void;
   /** Un-reject: put a rejected suggestion back to `open`. */
   onUnreject: () => void;
-  onApplyGroup: () => void;
   onUndo: () => void;
 };
 
 export function SuggestionItem({
   suggestion,
   isSelected,
-  groupPages,
-  groupOccurrences,
   onSelect,
   onAccept,
   onReject,
   onSaveEdit,
   onSaveFeedback,
   onUnreject,
-  onApplyGroup,
   onUndo,
 }: Props) {
   const { t } = useTranslation();
+  const message = localizedSuggestionMessage(suggestion, t);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(suggestion.proposed_text);
   const [feedbackDraft, setFeedbackDraft] = useState(suggestion.feedback ?? "");
 
   const isApplied = suggestion.status === "applied";
   const isRejected = suggestion.status === "rejected";
-  // Surface the grouped action only when the anomaly truly spans pages.
-  const isMultiPage = !isApplied && !isRejected && !editing && groupPages > 1;
 
   return (
     <article
@@ -66,15 +58,6 @@ export function SuggestionItem({
         <span className="badge default" title={t(`source.${suggestion.source_kind}`)}>
           {t(`source.${suggestion.source_kind}`)}
         </span>
-        {isMultiPage ? (
-          <span
-            className="badge info"
-            title={t("reviewer.suggestion.multiPageHint", { pages: groupPages })}
-          >
-            <Layers size={11} />
-            {t("reviewer.suggestion.multiPageBadge", { pages: groupPages })}
-          </span>
-        ) : null}
         {isApplied ? (
           <span className="badge ok" style={{ marginLeft: "auto" }}>
             {t("reviewer.suggestion.applied")}
@@ -87,7 +70,7 @@ export function SuggestionItem({
         ) : null}
       </header>
 
-      <p className="suggestion-msg">{suggestion.message}</p>
+      <p className="suggestion-msg">{message}</p>
 
       {editing ? (
         <textarea
@@ -99,26 +82,6 @@ export function SuggestionItem({
       ) : (
         <DiffInline original={suggestion.original_text} proposed={suggestion.proposed_text} />
       )}
-
-      {isMultiPage ? (
-        <div className="banner row" style={{ justifyContent: "space-between", marginTop: 8 }}>
-          <span className="hint">
-            {t("reviewer.suggestion.multiPageHint", { pages: groupPages })}
-          </span>
-          <button
-            type="button"
-            className="btn primary small"
-            data-testid="suggestion-apply-group"
-            onClick={(e) => {
-              e.stopPropagation();
-              onApplyGroup();
-            }}
-          >
-            <Layers size={12} />
-            {t("reviewer.suggestion.applyGroup", { count: groupOccurrences })}
-          </button>
-        </div>
-      ) : null}
 
       {!isApplied && !isRejected ? (
         <footer className="suggestion-actions" style={{ justifyContent: "flex-end" }}>

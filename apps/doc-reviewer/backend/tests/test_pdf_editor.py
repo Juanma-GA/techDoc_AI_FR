@@ -57,6 +57,34 @@ def test_apply_patch_writes_proposed_text(storage_dir_value: str) -> None:
     assert "12 cm" not in rendered
 
 
+def test_apply_patch_inserts_proposed_text_when_original_is_missing(
+    storage_dir_value: str,
+) -> None:
+    storage = "document_missing_insertion"
+    raw = _build_pdf_with_text("First Issue: JUL 27/26")
+    init_storage(storage, raw)
+
+    snap = bump_version(storage, 0)
+    apply_patch(
+        path_for(storage, 0),
+        snap.snapshot_path,
+        PatchSpec(
+            page=1,
+            bbox=(50.0, 60.0, 170.0, 76.0),
+            original_text="",
+            proposed_text="Revision No.04",
+        ),
+    )
+
+    edited = fitz.open(snap.snapshot_path)
+    try:
+        rendered = edited[0].get_text("text")
+    finally:
+        edited.close()
+    assert "Revision No.04" in rendered
+    assert "First Issue: JUL 27/26" in rendered
+
+
 def test_v0_remains_immutable_after_apply(storage_dir_value: str) -> None:
     storage = "document_immutable_v0"
     raw = _build_pdf_with_text("Torque 12 cm here")

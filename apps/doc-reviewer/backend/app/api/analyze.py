@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
@@ -11,12 +12,17 @@ from queue import Empty, SimpleQueue
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.errors import AppError
+from app.core.document_context import missing_document_context
+from app.core.compiled_rules import RuleResult
+from app.core.logging import get_logger
+from app.core.page_range import filter_docx, filter_pdf, resolve_page_range
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
-from app.core.rules_engine import materialize, run_all
+from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
 from app.db.session import SessionLocal, get_db
 from app.parsers.pdf_parser import parse_pdf
@@ -24,6 +30,32 @@ from app.schemas import SuggestionOut
 
 
 router = APIRouter(tags=["analyze"])
+_logger = get_logger(__name__)
+
+
+def _text_preview(value: str, limit: int = 300) -> str:
+    compact = " ".join((value or "").split())
+    return compact if len(compact) <= limit else f"{compact[:limit]}..."
+
+
+@router.get("/documents/{document_id}/rule-results", response_model=list[RuleResult])
+def latest_rule_results(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> list[RuleResult]:
+    run = db.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
+        .order_by(AnalysisRun.started_at.desc())
+        .limit(1)
+    )
+    if run is None:
+        return []
+    try:
+        payload = json.loads(run.compiled_rules_snapshot_json or "{}")
+        return [RuleResult.model_validate(item) for item in payload.get("results", [])]
+    except (AttributeError, TypeError, ValueError):
+        return []
 
 
 @router.post("/documents/{document_id}/analyze")
@@ -32,7 +64,7 @@ def analyze_stream(
     vision: Optional[bool] = Query(
         default=None,
         description=(
-            "Override per-run vision (Pixtral) opt-in/out. None = use the "
+            "Override per-run multimodal vision opt-in/out. None = use the "
             "persisted `vision.enabled` setting from /settings/mistral."
         ),
     ),
@@ -40,17 +72,58 @@ def analyze_stream(
         default=True,
         description="Cible checklist : quand false, exclut les regles importees (llm_nl/manual) du run.",
     ),
+    first_page: int = Query(default=1, ge=1, description="Premiere page physique a analyser."),
+    last_page: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Derniere page physique a analyser. Par defaut : derniere page du document.",
+    ),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    missing_context = missing_document_context(doc)
+    if missing_context:
+        raise AppError(
+            "DOCUMENT_CONTEXT_INCOMPLETE",
+            "Renseignez le contexte du document avant de lancer l'analyse.",
+            detail={"fields": missing_context},
+            status_code=409,
+        )
+    resolved_first_page, resolved_last_page = resolve_page_range(
+        first_page,
+        last_page,
+        doc.page_count,
+    )
+    partial_page_range = resolved_first_page != 1 or resolved_last_page != doc.page_count
+    _logger.info(
+        "analysis_requested",
+        document_id=str(document_id),
+        source_format=doc.source_format,
+        working_format=doc.working_format,
+        page_count=doc.page_count,
+        first_page=resolved_first_page,
+        last_page=resolved_last_page,
+        checklist_enabled=checklist,
+        vision_override=vision,
+        context={
+            "meta_revision_date": doc.meta_revision_date,
+            "meta_cmm_number": doc.meta_cmm_number,
+            "meta_first_issue_date": doc.meta_first_issue_date,
+            "meta_last_issue_date": doc.meta_last_issue_date,
+            "meta_revision_number": doc.meta_revision_number,
+            "meta_pnr_number": doc.meta_pnr_number,
+            "meta_manufacturer": doc.meta_manufacturer,
+            "document_language": doc.document_language,
+        },
+    )
 
     # Run on the current version (post-edit) so the user can re-run the
     # analysis after applying suggestions and pick up new issues that the
     # edit may have introduced (or simply check that fixes hold). Le chemin
     # depend du pipeline : .pdf (defaut) ou .docx (pipeline Word natif).
-    is_docx = doc.source_format == "docx"
+    is_docx = doc.working_format == "docx"
     if is_docx:
         from app.core import docx_versioning
 
@@ -97,11 +170,34 @@ def analyze_stream(
         sv_ids_list = []
     if not sv_ids_list and sv_id is not None:
         sv_ids_list = [str(sv_id)]
+    context_snapshot = json.dumps(
+        {
+            "analysis_scope": {
+                "first_page": resolved_first_page,
+                "last_page": resolved_last_page,
+            },
+            "metadata": {
+                "meta_cmm_number": doc.meta_cmm_number,
+                "meta_revision_date": doc.meta_revision_date,
+                "meta_first_issue_date": doc.meta_first_issue_date,
+                "meta_last_issue_date": doc.meta_last_issue_date,
+                "meta_revision_number": doc.meta_revision_number,
+                "meta_manufacturer": doc.meta_manufacturer,
+                "document_language": doc.document_language,
+            }
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     run = AnalysisRun(
         document_id=document_id,
         standard_version_id=sv_id,
         standard_version_ids=json.dumps(sv_ids_list),
         status="running",
+        context_snapshot_json=context_snapshot,
+        compiled_rules_snapshot_json="[]",
+        snapshot_sha256=hashlib.sha256(context_snapshot.encode("utf-8")).hexdigest(),
     )
     db.add(run)
     # Mark the document as analyzing immediately so the UI list reflects
@@ -130,12 +226,24 @@ def analyze_stream(
     meta_revision_date_value = doc.meta_revision_date
     meta_cmm_number_value = doc.meta_cmm_number
     meta_first_issue_date_value = doc.meta_first_issue_date
+    meta_last_issue_date_value = doc.meta_last_issue_date
     meta_revision_number_value = doc.meta_revision_number
+    meta_pnr_number_value = doc.meta_pnr_number
+    meta_manufacturer_value = doc.meta_manufacturer
+    document_language_value = doc.document_language
+    first_page_value = resolved_first_page
+    last_page_value = resolved_last_page
+    partial_page_range_value = partial_page_range
 
     async def event_gen():
         yield {
             "event": "run_started",
-            "data": json.dumps({"run_id": str(run_id_value), "document_id": str(document_id_value)}),
+            "data": json.dumps({
+                "run_id": str(run_id_value),
+                "document_id": str(document_id_value),
+                "first_page": first_page_value,
+                "last_page": last_page_value,
+            }),
         }
         yield {
             "event": "quality",
@@ -152,8 +260,52 @@ def analyze_stream(
                 from app.parsers.docx_parser import parse_docx
 
                 parsed = await asyncio.to_thread(parse_docx, src_path)
+                parsed = filter_docx(parsed, first_page_value, last_page_value)
             else:
                 parsed = await asyncio.to_thread(parse_pdf, src_path)
+                parsed = filter_pdf(parsed, first_page_value, last_page_value)
+            # `page.page_type` (le cas echeant) n'est peuple qu'une fois les
+            # standards selectionnes connus : voir le classifieur invoque par
+            # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
+            page_types: dict[str, str | None] = {}
+            if is_docx_value:
+                parsed_page_summaries = [
+                    {
+                        "page": block.page,
+                        "target_id": block.target_id,
+                        "text_chars": len(block.text or ""),
+                        "text_preview": _text_preview(block.text or ""),
+                    }
+                    for block in parsed.blocks
+                ]
+                parsed_page_count = parsed.block_count
+                parsed_text_chars = sum(len(block.text or "") for block in parsed.blocks)
+                span_count = 0
+            else:
+                parsed_page_summaries = [
+                    {
+                        "page": page.page,
+                        "text_chars": len(page.text or ""),
+                        "text_preview": _text_preview(page.text or ""),
+                        "span_count": len(page.spans),
+                        "page_type": page.page_type,
+                    }
+                    for page in parsed.pages
+                ]
+                parsed_page_count = len(parsed.pages)
+                parsed_text_chars = sum(len(page.text or "") for page in parsed.pages)
+                span_count = sum(len(page.spans) for page in parsed.pages)
+            _logger.info(
+                "analysis_document_parsed",
+                document_id=str(document_id_value),
+                run_id=str(run_id_value),
+                format="docx" if is_docx_value else "pdf",
+                page_count=parsed_page_count,
+                text_chars=parsed_text_chars,
+                span_count=span_count,
+                pages=parsed_page_summaries,
+                page_types=page_types,
+            )
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
 
             # Build a lightweight Document-like with target_unit_system (we
@@ -163,7 +315,11 @@ def analyze_stream(
                 meta_revision_date = meta_revision_date_value
                 meta_cmm_number = meta_cmm_number_value
                 meta_first_issue_date = meta_first_issue_date_value
+                meta_last_issue_date = meta_last_issue_date_value
                 meta_revision_number = meta_revision_number_value
+                meta_pnr_number = meta_pnr_number_value
+                meta_manufacturer = meta_manufacturer_value
+                document_language = document_language_value
 
             scoped_session: Session = SessionLocal()
             try:
@@ -194,6 +350,11 @@ def analyze_stream(
                 # modele invalide sur un endpoint prive…) : remontes ici au
                 # lieu de se traduire silencieusement par "0 anomalie" (HR7).
                 run_warnings: list[str] = []
+                compiled_results = []
+                if partial_page_range_value and vision_override_value:
+                    run_warnings.append(
+                        "Analyse vision ignoree pour une plage partielle de pages"
+                    )
 
                 if is_docx_value:
                     from app.core import docx_pipeline
@@ -205,6 +366,7 @@ def analyze_stream(
                                 checklist_enabled=checklist_enabled_value,
                                 progress_cb=_on_progress,
                                 warnings=run_warnings,
+                                compiled_results=compiled_results,
                             )
                         )
                     )
@@ -225,10 +387,13 @@ def analyze_stream(
                             lambda: run_all(
                                 parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
                                 src_path=src_path,
-                                vision_enabled_override=vision_override_value,
+                                vision_enabled_override=(
+                                    False if partial_page_range_value else vision_override_value
+                                ),
                                 checklist_enabled=checklist_enabled_value,
                                 progress_cb=_on_progress,
                                 warnings=run_warnings,
+                                compiled_results=compiled_results,
                             )
                         )
                     )
@@ -241,6 +406,25 @@ def analyze_stream(
                     raws = await task
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
+                    # A ce stade, un classifieur de standard (cf. PAGE_CLASSIFIERS,
+                    # invoque par `run_all`) a pu peupler `page.page_type` — on ne
+                    # le sait qu'apres coup, d'ou la capture ici plutot qu'au parse.
+                    page_types = {str(page.page): page.page_type for page in parsed.pages}
+
+                run_row = scoped_session.get(AnalysisRun, run_id_value)
+                if run_row is not None:
+                    try:
+                        context_payload = json.loads(run_row.context_snapshot_json or "{}")
+                    except (TypeError, ValueError):
+                        context_payload = {}
+                    context_payload["page_types"] = page_types
+                    run_row.context_snapshot_json = json.dumps(
+                        context_payload,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    scoped_session.commit()
 
                 if run_warnings:
                     yield {"event": "warning", "data": json.dumps({"messages": run_warnings})}
@@ -262,8 +446,26 @@ def analyze_stream(
 
                 run_row = scoped_session.get(AnalysisRun, run_id_value)
                 if run_row is not None:
+                    compiled_rules = load_compiled_rules(
+                        scoped_session,
+                        versions,
+                        checklist_enabled=checklist_enabled_value,
+                    )
+                    compiled_snapshot = json.dumps(
+                        {
+                            "rules": [rule.model_dump(mode="json") for rule in compiled_rules],
+                            "results": [result.model_dump(mode="json") for result in compiled_results],
+                        },
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
                     run_row.status = "done"
                     run_row.finished_at = datetime.now(timezone.utc)
+                    run_row.compiled_rules_snapshot_json = compiled_snapshot
+                    run_row.snapshot_sha256 = hashlib.sha256(
+                        f"{run_row.context_snapshot_json}\n{compiled_snapshot}".encode("utf-8")
+                    ).hexdigest()
                     run_row.summary = json.dumps(
                         {"total": total, "suppressed_rejected": suppressed_rejected}
                     )
@@ -274,6 +476,15 @@ def analyze_stream(
                     doc_row.status = "analyzed"
                     scoped_session.commit()
 
+                _logger.info(
+                    "analysis_finished",
+                    document_id=str(document_id_value),
+                    run_id=str(run_id_value),
+                    total_suggestions=total,
+                    suppressed_rejected=suppressed_rejected,
+                    warning_count=len(run_warnings),
+                    compiled_result_count=len(compiled_results),
+                )
                 yield {
                     "event": "done",
                     "data": json.dumps({
@@ -285,9 +496,23 @@ def analyze_stream(
             finally:
                 scoped_session.close()
         except AppError as exc:
+            _logger.warning(
+                "analysis_failed",
+                document_id=str(document_id_value),
+                run_id=str(run_id_value),
+                error=exc.code,
+                message=exc.message,
+            )
             _mark_failed(document_id_value)
             yield {"event": "error", "data": json.dumps({"code": exc.code, "message": exc.message})}
         except Exception as exc:  # noqa: BLE001
+            _logger.exception(
+                "analysis_failed",
+                document_id=str(document_id_value),
+                run_id=str(run_id_value),
+                error=type(exc).__name__,
+                message=str(exc),
+            )
             _mark_failed(document_id_value)
             yield {
                 "event": "error",

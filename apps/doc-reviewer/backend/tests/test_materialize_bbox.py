@@ -65,6 +65,56 @@ def test_materialize_uses_search_for_when_src_path_present(tmp_path) -> None:
     assert abs(box0["y0"] - box1["y0"]) > 50
 
 
+def test_materialize_replaces_precomputed_text_bbox_with_pdf_location(tmp_path) -> None:
+    path = _make_pdf(tmp_path)
+    parsed = parse_pdf(path)
+    raws = [
+        RawSuggestion(
+            rule_kind="compiled_standard",
+            rule_code="CUSTOM_FOOTER_RULE",
+            severity="error",
+            message="revision date mismatch",
+            original="must",
+            proposed="shall",
+            page=1,
+            span=(0, 4),
+            # Simulate a compiled span bbox that does not match the rendered
+            # occurrence. Textual findings must be re-localized in the PDF.
+            bbox=(50.0, 0.0, 100.0, 10.0),
+        ),
+    ]
+
+    rows = materialize(raws, parsed, uuid.uuid4(), uuid.uuid4(), src_path=path)
+    box = json.loads(rows[0].bbox)
+
+    assert box["x0"] == 50.0
+    assert box["y0"] > 50.0
+    assert box["y1"] > box["y0"]
+
+
+def test_materialize_uses_precomputed_bbox_to_choose_duplicate_text(tmp_path) -> None:
+    path = _make_pdf(tmp_path)
+    parsed = parse_pdf(path)
+    raws = [
+        RawSuggestion(
+            rule_kind="compiled_standard",
+            rule_code="CUSTOM_FOOTER_RULE",
+            severity="error",
+            message="footer occurrence",
+            original="must",
+            proposed="shall",
+            page=1,
+            span=(0, 4),
+            bbox=(50.0, 190.0, 100.0, 215.0),
+        ),
+    ]
+
+    rows = materialize(raws, parsed, uuid.uuid4(), uuid.uuid4(), src_path=path)
+    box = json.loads(rows[0].bbox)
+
+    assert box["y0"] > 150.0
+
+
 def test_materialize_returns_null_bbox_for_missing_text(tmp_path) -> None:
     path = _make_pdf(tmp_path)
     parsed = parse_pdf(path)

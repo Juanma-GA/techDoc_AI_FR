@@ -1,24 +1,40 @@
 import { ErrorBoundary } from "@internal/ui";
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import i18n from "./i18n";
-import { Dashboard } from "./routes/Dashboard";
-import { Data } from "./routes/Data";
-import { DocumentReviewer } from "./routes/DocumentReviewer";
-import { DocumentsList } from "./routes/DocumentsList";
-import { Settings } from "./routes/Settings";
 
-// Coquille pixel-coherente avec le preview.html : 5 onglets (Tableau de bord /
-// Documents / Architecture / Donnees / Parametres). Normes + Regles vivent
+const Dashboard = lazy(async () => ({
+  default: (await import("./routes/Dashboard")).Dashboard,
+}));
+const DocumentReviewer = lazy(async () => ({
+  default: (await import("./routes/DocumentReviewer")).DocumentReviewer,
+}));
+const DocumentsList = lazy(async () => ({
+  default: (await import("./routes/DocumentsList")).DocumentsList,
+}));
+const Settings = lazy(async () => ({
+  default: (await import("./routes/Settings")).Settings,
+}));
+
+function RouteFallback() {
+  return (
+    <div className="empty-state" aria-busy="true">
+      <span className="spinner" />
+    </div>
+  );
+}
+
+// Coquille pixel-coherente avec le preview.html : 4 onglets (Tableau de bord /
+// Documents / Parametres). Normes + Regles vivent
 // DANS Parametres (cartes), le reviewer est embarque dans le detail Documents
 // (la sidebar reste visible) — parite 1:1 avec preview.html.
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
-  { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
@@ -37,9 +53,11 @@ export function App() {
     return (
       <div className="pr">
         <ErrorBoundary>
-          <Routes>
-            <Route path="/documents/:id" element={<DocumentReviewer />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/documents/:id" element={<DocumentReviewer />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </div>
     );
@@ -86,12 +104,13 @@ export function App() {
 
         <main>
           <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/documents" element={<DocumentsList />} />
-              <Route path="/data" element={<Data />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/documents" element={<DocumentsList />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>

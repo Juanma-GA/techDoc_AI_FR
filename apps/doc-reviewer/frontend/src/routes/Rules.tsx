@@ -6,12 +6,15 @@ import { ChecklistImportCard } from "./ChecklistImportCard";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import {
   useDeleteRule,
+  useCompiledRules,
+  usePatchCompiledRule,
   usePatchRule,
   useRules,
   useValidateAllRules,
   type RuleInput,
 } from "../hooks/useRules";
-import { useStandards } from "../hooks/useStandards";
+import { useStandards, useToggleCatalogRule } from "../hooks/useStandards";
+import { useFiltersStore } from "../stores/filtersStore";
 import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
 
@@ -19,9 +22,13 @@ export function Rules() {
   const { t } = useTranslation();
   const standards = useStandards();
   const rules = useRules();
+  const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
+  const compiledRules = useCompiledRules(activeStandardVersionIds);
+  const patchCompiled = usePatchCompiledRule();
   const patch = usePatchRule();
   const remove = useDeleteRule();
   const validateAll = useValidateAllRules();
+  const toggleCatalogRule = useToggleCatalogRule();
 
   const [confirmDelete, setConfirmDelete] = useState<Rule | null>(null);
 
@@ -42,86 +49,177 @@ export function Rules() {
 
       <RulesSuggestPanel />
 
-      <div>
-        {rules.isLoading ? (
-          <p className="empty-state">{t("common.loading")}</p>
-        ) : rules.data && rules.data.length > 0 ? (
-          (() => {
-            const all = rules.data ?? [];
-            const pending = all.filter((r) => !r.enabled);
-            const active = all.filter((r) => r.enabled);
-            const scopeOf = (r: Rule): string =>
-              r.standard_version_id
-                ? versionLabelById.get(r.standard_version_id) ?? r.standard_version_id
-                : t("standards.transverse");
-            const renderTable = (list: Rule[]) => (
-              <div style={{ overflowX: "auto" }}>
-                <table className="rules-table">
-                  <thead>
-                    <tr>
-                      <th>{t("rules.form.enabled")}</th>
-                      <th>{t("rules.form.name")}</th>
-                      <th>{t("rules.form.message")}</th>
-                      <th>{t("rules.form.severity")}</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {list.map((r) => (
-                      <RuleRow
-                        key={r.id}
-                        rule={r}
-                        scopeLabel={scopeOf(r)}
-                        onSave={(changes) => patch.mutate({ id: r.id, ...changes })}
-                        onToggle={() => patch.mutate({ id: r.id, enabled: !r.enabled })}
-                        saving={patch.isPending}
-                        onDelete={() => setConfirmDelete(r)}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-            return (
-              <>
-                {pending.length > 0 ? (
-                  <>
-                    <div
-                      className="row"
-                      style={{ alignItems: "center", gap: 10, flexWrap: "wrap" }}
-                    >
-                      <div className="rules-section-title" style={{ margin: 0 }}>
-                        {t("rules.pending")} · {pending.length}
-                      </div>
-                      <button
-                        type="button"
-                        className="btn secondary small"
-                        disabled={validateAll.isPending}
-                        onClick={() => validateAll.mutate()}
+      {activeStandardVersionIds.length === 0 ? (
+        <p className="banner warn">{t("rules.compiled.noActiveStandard")}</p>
+      ) : null}
+
+      {(() => {
+        if (rules.isLoading) {
+          return <p className="empty-state">{t("common.loading")}</p>;
+        }
+        const compiled = compiledRules.data ?? [];
+        const compiledActive = compiled.filter((rule) => rule.active);
+        const compiledInactive = compiled.filter((rule) => !rule.active);
+        const custom = rules.data ?? [];
+        const customActive = custom.filter((rule) => rule.enabled);
+        const customInactive = custom.filter((rule) => !rule.enabled);
+        const activeCount = compiledActive.length + customActive.length;
+        const inactiveCount = compiledInactive.length + customInactive.length;
+        const scopeOf = (rule: Rule): string =>
+          rule.standard_version_id
+            ? versionLabelById.get(rule.standard_version_id) ?? rule.standard_version_id
+            : t("standards.transverse");
+
+        const renderCompiledTable = (list: typeof compiled) => (
+          <div className="table-scroll">
+            <table className="rules-table">
+              <thead>
+                <tr>
+                  <th>{t("rules.form.enabled")}</th>
+                  <th>{t("rules.compiled.status")}</th>
+                  <th>{t("rules.form.name")}</th>
+                  <th>{t("rules.form.scope")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((rule) => (
+                  <tr key={rule.id} style={rule.active ? undefined : { opacity: 0.7 }}>
+                    <td>
+                      {rule.source === "standard_rule" && rule.standard_id && rule.standard_version_id ? (
+                        <label
+                          className="switch"
+                          title={rule.active ? t("rules.disable") : t("rules.enable")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={rule.active}
+                            onChange={(event) =>
+                              toggleCatalogRule.mutate({
+                                standardId: rule.standard_id as string,
+                                versionId: rule.standard_version_id as string,
+                                code: rule.id,
+                                enabled: event.target.checked,
+                              })
+                            }
+                            disabled={toggleCatalogRule.isPending}
+                          />
+                          <span className="track" />
+                        </label>
+                      ) : (
+                        <label
+                          className="switch"
+                          title={rule.active ? t("rules.disable") : t("rules.enable")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={rule.active}
+                            onChange={(event) =>
+                              patchCompiled.mutate({ id: rule.id, active: event.target.checked })
+                            }
+                            disabled={patchCompiled.isPending}
+                          />
+                          <span className="track" />
+                        </label>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${
+                          rule.execution === "deterministic" || rule.execution === "semantic"
+                            ? "success"
+                            : "default"
+                        }`}
                       >
-                        <CheckCheck size={14} />
-                        {t("rules.import.validateAll")}
-                      </button>
-                    </div>
-                    <p className="banner warn">{t("rules.pendingHint")}</p>
-                    {renderTable(pending)}
-                  </>
-                ) : null}
-                <div className="rules-section-title">
-                  {t("rules.active")} · {active.length}
-                </div>
-                {active.length > 0 ? (
-                  renderTable(active)
-                ) : (
-                  <p className="empty-state">{t("rules.activeEmpty")}</p>
-                )}
+                        {t(`rules.compiled.${rule.execution}`)}
+                      </span>
+                      <span className="label" style={{ marginLeft: 6 }}>
+                        {rule.severity}
+                      </span>
+                    </td>
+                    <td>{t(`rules.catalog.${rule.id}`, { defaultValue: rule.topic })}</td>
+                    <td>
+                      <span className="label">{rule.origin_ref ?? t("standards.transverse")}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+
+        const renderCustomTable = (list: Rule[]) => (
+          <div className="table-scroll">
+            <table className="rules-table">
+              <thead>
+                <tr>
+                  <th>{t("rules.form.enabled")}</th>
+                  <th>{t("rules.form.name")}</th>
+                  <th>{t("rules.form.message")}</th>
+                  <th>{t("rules.form.severity")}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((rule) => (
+                  <RuleRow
+                    key={rule.id}
+                    rule={rule}
+                    scopeLabel={scopeOf(rule)}
+                    onSave={(changes) => patch.mutate({ id: rule.id, ...changes })}
+                    onToggle={() => patch.mutate({ id: rule.id, enabled: !rule.enabled })}
+                    saving={patch.isPending}
+                    onDelete={() => setConfirmDelete(rule)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+
+        return (
+          <>
+            <div className="rules-section-title">
+              {t("rules.active")} · {activeCount}
+            </div>
+            {activeCount === 0 ? (
+              <p className="empty-state">{t("rules.activeEmpty")}</p>
+            ) : (
+              <>
+                {compiledActive.length > 0 ? renderCompiledTable(compiledActive) : null}
+                {customActive.length > 0 ? renderCustomTable(customActive) : null}
               </>
-            );
-          })()
-        ) : (
-          <p className="empty-state">{t("common.empty")}</p>
-        )}
-      </div>
+            )}
+
+            <div className="row" style={{ alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div className="rules-section-title" style={{ margin: 0 }}>
+                {t("rules.inactive")} · {inactiveCount}
+              </div>
+              {customInactive.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn secondary small"
+                  disabled={validateAll.isPending}
+                  onClick={() => validateAll.mutate()}
+                >
+                  <CheckCheck size={14} />
+                  {t("rules.import.validateAll")}
+                </button>
+              ) : null}
+            </div>
+            {customInactive.length > 0 ? (
+              <p className="banner warn">{t("rules.pendingHint")}</p>
+            ) : null}
+            {inactiveCount === 0 ? (
+              <p className="empty-state">{t("rules.inactiveEmpty")}</p>
+            ) : (
+              <>
+                {compiledInactive.length > 0 ? renderCompiledTable(compiledInactive) : null}
+                {customInactive.length > 0 ? renderCustomTable(customInactive) : null}
+              </>
+            )}
+          </>
+        );
+      })()}
 
       <ConfirmDialog
         open={confirmDelete !== null}
@@ -185,7 +283,7 @@ function RuleRow({
           <span className="track" />
         </label>
       </td>
-      <td style={{ minWidth: 180 }}>
+      <td className="rule-name-cell">
         <input
           aria-label={t("rules.form.name")}
           value={edit.name}
@@ -197,14 +295,14 @@ function RuleRow({
           <span className="label">{scopeLabel}</span>
         </div>
       </td>
-      <td style={{ minWidth: 220 }}>
+      <td className="rule-message-cell">
         <textarea
           aria-label={t("rules.form.message")}
           value={edit.message}
           onChange={(e) => setEdit({ ...edit, message: e.target.value })}
         />
       </td>
-      <td style={{ minWidth: 110 }}>
+      <td className="rule-severity-cell">
         <select
           aria-label={t("rules.form.severity")}
           value={edit.severity}

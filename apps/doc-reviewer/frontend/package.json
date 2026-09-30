@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "openapi:gen": "openapi-typescript http://127.0.0.1:8008/api/v1/openapi.json -o src/types/api.ts"
+    "openapi:gen": "openapi-typescript http://127.0.0.1:8003/api/v1/openapi.json -o src/types/api.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

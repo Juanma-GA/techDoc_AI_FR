@@ -72,7 +72,7 @@ def _seed_ste100_and_refresh_s1000d() -> None:
     """Insert ASD-STE100 (new) + refresh S1000D's catalog_json with the
     structure-only ruleset. Idempotent."""
     try:
-        from app.checks.standards import BUILTIN_STANDARDS
+        from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     except Exception:  # noqa: BLE001
         return
 
@@ -129,7 +129,7 @@ def _seed_ste100_and_refresh_s1000d() -> None:
                         label=label,
                         builtin=True,
                         catalog_json=json.dumps(
-                            [r.as_dict() for r in rules], ensure_ascii=False
+                            serialize_builtin_version(ste_spec, label), ensure_ascii=False
                         ),
                         created_at=now,
                         updated_at=now,
@@ -147,7 +147,7 @@ def _seed_ste100_and_refresh_s1000d() -> None:
         if s1000d_id_row is not None:
             for label, rules in s1000d_spec["versions"].items():
                 payload = json.dumps(
-                    [r.as_dict() for r in rules], ensure_ascii=False
+                    serialize_builtin_version(s1000d_spec, label), ensure_ascii=False
                 )
                 bind.execute(
                     sa.text(
