@@ -83,6 +83,22 @@ function fileName(ref: string): string {
   return (ref || "").split(/[\\/]/).pop() ?? "";
 }
 
+function downloadCsv(rows: Array<Array<string | number>>, filename: string): void {
+  const csv = rows
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";"))
+    .join("\r\n");
+  const url = URL.createObjectURL(
+    new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function comparablePath(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
@@ -180,6 +196,7 @@ function AnalysisAction({
   error,
   hint,
   onClick,
+  extraAction,
 }: {
   mode: "preview" | "analyze";
   pending: boolean;
@@ -187,6 +204,7 @@ function AnalysisAction({
   error: string | null;
   hint?: string | null;
   onClick: () => void;
+  extraAction?: ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -200,6 +218,7 @@ function AnalysisAction({
         {pending ? <span className="spinner" /> : null}
         <span>{t(mode === "analyze" ? "identification.analyze" : "identification.preview")}</span>
       </button>
+      {extraAction}
       {hint ? <span className="hint">{hint}</span> : null}
       {error ? <span className="error">{error}</span> : null}
     </div>
@@ -392,6 +411,28 @@ function MonoCorpsCard({
   const resultSlotCols = Array.isArray(result?.summary.slot_cols)
     ? (result.summary.slot_cols as number[])
     : [];
+  const resultSlotLabels = Array.from({ length: slotCount }, (_v, i) =>
+    preview && resultSlotCols[i] !== undefined
+      ? colLabel(preview, resultSlotCols[i]!, headerRow)
+      : t("identification.monoSlotN", { n: i + 1 }),
+  );
+  const exportMonoCsv = () => {
+    const rows: Array<Array<string | number>> = [
+      [
+        t("identification.monoIdentityCol"),
+        t("identification.colOldPn"),
+        ...resultSlotLabels,
+        t("identification.colMonoBody"),
+      ],
+      ...monoItems.map((item) => [
+        item.identity,
+        item.old_pn,
+        ...Array.from({ length: resultSlotLabels.length }, (_v, i) => item.slots[i] ?? ""),
+        item.mono_body ? 1 : 0,
+      ]),
+    ];
+    downloadCsv(rows, "mono-corps.csv");
+  };
   const colOptions = Array.from({ length: ncols }, (_v, i) => ({
     value: String(i),
     label: preview ? colLabel(preview, i, headerRow) : String(i),
@@ -440,6 +481,11 @@ function MonoCorpsCard({
           if (actionMode === "analyze") analyzeMutation.mutate();
           else requestPreview(sheet || undefined);
         }}
+        extraAction={result && monoItems.length ? (
+          <button type="button" className="btn secondary small" onClick={exportMonoCsv}>
+            {t("common.exportCsv")}
+          </button>
+        ) : null}
       />
 
       {preview ? (
@@ -603,9 +649,7 @@ function MonoCorpsCard({
                             key={i}
                             style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "center" }}
                           >
-                            {preview && resultSlotCols[i] !== undefined
-                              ? colLabel(preview, resultSlotCols[i]!, headerRow)
-                              : t("identification.monoSlotN", { n: i + 1 })}
+                            {resultSlotLabels[i]}
                           </th>
                         ))}
                         <th style={{ position: "sticky", top: 0, background: "var(--bg-2)", textAlign: "center" }}>
