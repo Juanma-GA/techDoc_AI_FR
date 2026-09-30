@@ -21,8 +21,8 @@ OTHER :
 PROBLEMES REGLES : 
 
 - CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT : Je comprend pas pourquoi dans "Page  1001" il détecte qu'il manque un espace alors que y'a bien les 2...
+Il peut y avoir des pages sur plusieurs page "1101-1 to 1101-2" qui correspondent enfait à 1101 Page 1 et 1102 Page 2 attention dans Highlights et LEP mais ducoup le tiret correspond pas à plusieurs pas : quand y'a juste marqué "Page  1101-1" c'est bien une seule page
 
-Il peut y avoir des pages sur plusieurs pages "1101-1 to 1101-2" qui correspondent enfait à 1101 Page 1 et 1102 Page 2 attention dans Highlights et LEP mais ducoup le tiret correspond pas à plusieurs pas : quand y'a juste marqué "Page  1101-1" c'est bien une seule page
-
+- CUSTOM_HIGHLIGHTS_PAGE_PAIRING : Pourquoi il detecte ici Page Highlights déclarée sans sa page paire ou impaire associée : INTRO 1101 Page 3 to INTRO Page 4
 
 - 
