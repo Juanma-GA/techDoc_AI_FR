@@ -92,6 +92,8 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
             d.storage_path,
             d.pdf_cut_path,
             d.xml_path,
+            d.dmrl_path,
+            d.dm_header_path,
             d.cir_path,
             d.brex_rules_path,
         ):

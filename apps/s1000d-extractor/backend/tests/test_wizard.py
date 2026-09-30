@@ -60,6 +60,8 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
         if d["dm_type"] == "procedural":
             assert "<procedure>" in xml
             proc_found = True
+        else:
+            assert "<levelledPara" in xml
     assert proc_found, types
 
     # ZIP de tous les DMs
@@ -267,8 +269,12 @@ def test_split_undo_restores(client, pdf_bytes) -> None:
     assert len(st["dms"]) == n0, "undo n'a pas restaure le DM exclu"
 
 
-def test_hide_zones_removes_headers_and_undo(client, pdf_bytes_headers) -> None:
-    """« Masquer entetes/pieds » retire le bruit, undo le restaure."""
+def test_hide_zones_is_idempotent_after_automatic_noise_filter(client, pdf_bytes_headers) -> None:
+    """Le bruit de mise en page est retire avant l'etape split.
+
+    L'action historique « Masquer entetes/pieds » reste sans effet destructif
+    et son undo conserve le meme contenu deja nettoye.
+    """
     doc_id = _upload(client, pdf_bytes_headers)
     st = _split_state(client, doc_id)
     before = sum(d["node_count"] for d in st["dms"])
@@ -278,7 +284,7 @@ def test_hide_zones_removes_headers_and_undo(client, pdf_bytes_headers) -> None:
         json={"op": "hide_zones", "zones": ["header", "footer"]},
     ).json()
     after = sum(d["node_count"] for d in st["dms"])
-    assert after < before, "aucun noeud entete/pied retire"
+    assert after == before, "le masquage manuel ne doit pas retirer du contenu deja nettoye"
 
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/update", json={"op": "undo"}
@@ -330,3 +336,93 @@ def test_wizard_type_override(client, pdf_bytes) -> None:
     client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []})
     xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm0}/xml").text
     assert "<procedure>" in xml
+
+
+def test_manual_dm_type_is_applied_before_resolution() -> None:
+    from app.core import ir as ir_mod
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[IRNode(id="p1", kind="paragraph", text="Check the pump.")],
+    )
+    doc = Document(dms_json=json.dumps([{
+        "dm_id": "dm1",
+        "title": "Pump",
+        "dm_type": "descriptive",
+        "tree": to_dict(root),
+    }]))
+
+    wizard_core._apply_types(doc, {"dm1": "procedural"})
+    wizard_core._resolve_all(doc)
+
+    tree = ir_mod.from_dict(json.loads(doc.dms_json)[0]["tree"])
+    paragraph = ir_mod.find_node(tree, "p1")
+    assert paragraph is not None
+    assert paragraph.context == "procedural"
+    assert paragraph.candidates[0].element == "proceduralStep"
+
+
+def test_wizard_splits_inline_numbered_actions_after_procedural_type_selection() -> None:
+    from app.core import ir as ir_mod
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    root = IRNode(id="root", kind="section", children=[IRNode(
+        id="section",
+        kind="section",
+        level=4,
+        text="Procédures de mise en position verticale des moteurs W22",
+        children=[IRNode(
+            id="paragraph",
+            kind="paragraph",
+            text=(
+                "Pour mettre les moteurs W22 en position verticale, procédez "
+                "comme suit : 1. Serrer les anneaux de levage ; "
+                "2. Retirer le moteur de l’emballage."
+            ),
+        )],
+    )])
+    doc = Document(dms_json=json.dumps([{
+        "dm_id": "dm1",
+        "title": "Procédures W22",
+        "dm_type": "descriptive",
+        "tree": to_dict(root),
+    }]))
+
+    wizard_core._apply_types(doc, {"dm1": "procedural"})
+    wizard_core._resolve_all(doc)
+
+    generated = ir_mod.from_dict(json.loads(doc.dms_json)[0]["tree"])
+    split_paragraph = ir_mod.find_node(generated, "paragraph")
+    assert split_paragraph is not None
+    assert split_paragraph.kind == "section"
+    assert split_paragraph.children[0].text.endswith("comme suit :")
+    actions = split_paragraph.children[1]
+    assert actions.kind == "item-sequence"
+    assert [item.text for item in actions.children] == [
+        "Serrer les anneaux de levage",
+        "Retirer le moteur de l’emballage.",
+    ]
+
+    from app.core.s1000d_schema import validate_xsd
+    from app.core.s1000d_serializer import serialize
+
+    xml = serialize(generated, issue="4.2", dm_type="procedural", title="Procédures W22")
+    violations = validate_xsd(
+        xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
+    )
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+    xml_root = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    main = xml_root.find("./content/procedure/mainProcedure")
+    assert main is not None
+    procedure_step = main.find("./proceduralStep")
+    assert procedure_step is not None
+    assert procedure_step.findtext("./title") == "Procédures de mise en position verticale des moteurs W22"
+    assert "procédez comme suit" in "".join(procedure_step.find("./para").itertext())
+    generated_steps = procedure_step.findall("./proceduralStep")
+    assert len(generated_steps) == 2
+    assert "Serrer les anneaux" in "".join(generated_steps[0].itertext())
+    assert "Retirer le moteur" in "".join(generated_steps[1].itertext())

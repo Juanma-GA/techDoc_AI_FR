@@ -46,7 +46,7 @@ def list_brex(db: Session = Depends(get_db)) -> list[BrexProfileOut]:
 async def upload_brex(
     file: UploadFile = File(...),
     name: str = Form(...),
-    s1000d_issue: str = Form("5.0"),
+    s1000d_issue: str = Form("4.2"),
     db: Session = Depends(get_db),
 ) -> BrexProfileOut:
     if s1000d_issue not in SUPPORTED_ISSUES:

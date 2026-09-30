@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { ThemeToggleButton } from "./components/ThemeToggleButton";
@@ -19,7 +19,9 @@ const LANGS = ["fr", "en"] as const;
 
 export function App() {
   const { t, i18n } = useTranslation();
+  const location = useLocation();
   const currentLang = (i18n.language || "fr").slice(0, 2);
+  const showMigration = location.pathname === "/migration";
 
   return (
     <div className="dw">
@@ -62,9 +64,11 @@ export function App() {
         </aside>
 
         <main>
+          <div hidden={!showMigration}>
+            <Migration />
+          </div>
           <Routes>
             <Route path="/" element={<Navigate to="/migration" replace />} />
-            <Route path="/migration" element={<Migration />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/versioning" element={<Versioning />} />

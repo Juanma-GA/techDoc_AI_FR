@@ -187,6 +187,13 @@ def _first_text(section: IRNode) -> str:
 DM_TYPES = ("descriptive", "procedural", "ipd")
 
 
+def apply_dm_type(root: IRNode, dm_type: str) -> None:
+    """Propagate le type valide du DM vers tous ses noeuds."""
+    context: Context = "procedural" if dm_type == "procedural" else "descriptive"
+    for node in root.walk():
+        node.context = context
+
+
 def _dm_signal(title: str, root: IRNode, default: Context) -> str:
     if _IPD_TITLE.search(title):
         return "ipd"
@@ -222,9 +229,7 @@ def classify_dms(dms: list, *, hint: str = "mixed", db: Session | None = None) -
         _llm_refine_dms(dms, types, db)
 
     for dm in dms:
-        ctx: Context = "procedural" if types[dm.dm_id] == "procedural" else "descriptive"
-        for n in dm.root.walk():
-            n.context = ctx
+        apply_dm_type(dm.root, types[dm.dm_id])
     return types
 
 

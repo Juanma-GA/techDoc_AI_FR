@@ -178,11 +178,18 @@ def split_one(dm: dict) -> list[dict]:
     """Scinde un DM en sous-DMs (1 par section enfant). Renvoie [dm] si on ne
     peut pas le scinder (aucune section enfant)."""
     root = ir_mod.from_dict(dm["tree"])
+    container = root
+    if (
+        len(root.children) == 1
+        and root.children[0].kind == "section"
+        and any(child.kind == "section" for child in root.children[0].children)
+    ):
+        container = root.children[0]
     units: list[list] = []
     lead: list = []
-    for child in root.children:
+    for child in container.children:
         if child.kind == "section":
-            syn = ir_mod.IRNode(id="x", kind="section", level=0, children=list(child.children))
+            syn = ir_mod.IRNode(id="x", kind="section", level=0, children=[child])
             units.append([child.text or "Section", syn])
         elif units:
             units[-1][1].children.append(child)

@@ -31,6 +31,7 @@ def validate_document(
     xml: str,
     *,
     issue: str,
+    dm_type: str | None = None,
     brex_xml: str | None = None,
     brex_rules: dict | None = None,
     dm: dict | None = None,
@@ -45,7 +46,14 @@ def validate_document(
 
     # 2. XSD officiel (si installe pour l'Issue).
     try:
-        violations.extend(s1000d_schema.validate_xsd(xml, issue, allow_internal_dtd=True))
+        violations.extend(
+            s1000d_schema.validate_xsd(
+                xml,
+                issue,
+                dm_type=dm_type,
+                allow_internal_dtd=True,
+            )
+        )
     except Exception as exc:
         log.warning("XSD validation failed: %s", exc)
         # `warning`, pas `info` : "non validee" ne doit pas se lire comme "validee

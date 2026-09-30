@@ -22,6 +22,7 @@ from pathlib import Path
 
 from app.core.errors import AppError
 from app.core.pmc import generate_pmc as _generate_pmc
+from app.core.pmc import parse_dmc
 
 __all__ = [
     "DmrlEntry", "extract_icn_filenames", "find_dm_boundaries", "generate_pmc",
@@ -33,7 +34,9 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "arbo": ("arbo", "arborescence", "hierarchie", "niveau", "level", "position", "index"),
     "dmc": ("dmc", "data module code", "code dm", "dm code", "code"),
     "title": ("title", "titre", "dmtitle", "titre dm", "libelle", "designation"),
-    "dm_type": ("dm type", "type dm", "type", "nature", "info type", "categorie"),
+    "dm_type": (
+        "dm type", "type dm", "type de dm", "type", "nature", "info type", "categorie",
+    ),
     "info_code": ("info code", "infocode", "ic", "code information"),
     "tech_name": ("tech name", "techname", "nom technique", "technical name"),
     "info_name": ("info name", "infoname", "nom information", "information name"),
@@ -41,14 +44,20 @@ _ALIASES: dict[str, tuple[str, ...]] = {
         "icn", "illustration code number", "illustration code no", "illustration code num",
         "icn illustration code number", "illustration code number icn",
     ),
+    "model_ident_code": ("mic", "model ident code", "modelidentcode"),
+    "system_diff_code": ("sdc", "system diff code", "systemdiffcode"),
+    "system_code": ("sc", "system code", "systemcode"),
+    "sub_system_code": ("sub system code", "subsystemcode"),
+    "sub_sub_system_code": ("sssc", "sub sub system code", "subsubsystemcode"),
+    "assy_code": ("ac", "assy code", "assycode"),
+    "disassy_code": ("dc", "disassy code", "disassycode"),
+    "disassy_code_variant": ("dcv", "disassy code variant", "disassycodevariant"),
+    "info_code_variant": ("icv", "info code variant", "infocodevariant"),
+    "item_location_code": ("ilc", "item location code", "itemlocationcode"),
 }
 
 _ICN_RE = re.compile(
-<<<<<<< HEAD
-    r"""(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+\.(?:jpg|png))(?=$|[\s,;|)\]}])""",
-=======
     r"(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+\.(?:jpg|png))(?=$|[\s,;|)\]}])",
->>>>>>> origin/main
     re.IGNORECASE,
 )
 
@@ -65,12 +74,61 @@ class DmrlEntry:
     tech_name: str = ""
     info_name: str = ""
     icn: str = ""
+    model_ident_code: str = ""
+    system_diff_code: str = ""
+    system_code: str = ""
+    sub_system_code: str = ""
+    sub_sub_system_code: str = ""
+    assy_code: str = ""
+    disassy_code: str = ""
+    disassy_code_variant: str = ""
+    info_code_variant: str = ""
+    item_location_code: str = ""
+
+    def __post_init__(self) -> None:
+        parsed = parse_dmc(self.dmc)
+        if parsed:
+            for target, source in (
+                ("model_ident_code", "modelIdentCode"),
+                ("system_diff_code", "systemDiffCode"),
+                ("system_code", "systemCode"),
+                ("sub_system_code", "subSystemCode"),
+                ("sub_sub_system_code", "subSubSystemCode"),
+                ("assy_code", "assyCode"),
+                ("disassy_code", "disassyCode"),
+                ("disassy_code_variant", "disassyCodeVariant"),
+                ("info_code_variant", "infoCodeVariant"),
+                ("item_location_code", "itemLocationCode"),
+            ):
+                if not getattr(self, target):
+                    setattr(self, target, parsed[source])
+        if not self.dmc and all(getattr(self, key) for key in (
+            "model_ident_code", "system_diff_code", "system_code", "sub_system_code",
+            "sub_sub_system_code", "assy_code", "disassy_code", "disassy_code_variant",
+            "info_code", "info_code_variant", "item_location_code",
+        )):
+            self.dmc = (
+                f"DMC-{self.model_ident_code}-{self.system_diff_code}-{self.system_code}-"
+                f"{self.sub_system_code}{self.sub_sub_system_code}-{self.assy_code}-"
+                f"{self.disassy_code}{self.disassy_code_variant}-"
+                f"{self.info_code}{self.info_code_variant}-{self.item_location_code}"
+            )
 
     def to_dict(self) -> dict:
         return {
             "arbo": self.arbo, "dmc": self.dmc, "title": self.title,
             "dm_type": self.dm_type, "info_code": self.info_code,
             "tech_name": self.tech_name, "info_name": self.info_name, "icn": self.icn,
+            "model_ident_code": self.model_ident_code,
+            "system_diff_code": self.system_diff_code,
+            "system_code": self.system_code,
+            "sub_system_code": self.sub_system_code,
+            "sub_sub_system_code": self.sub_sub_system_code,
+            "assy_code": self.assy_code,
+            "disassy_code": self.disassy_code,
+            "disassy_code_variant": self.disassy_code_variant,
+            "info_code_variant": self.info_code_variant,
+            "item_location_code": self.item_location_code,
         }
 
 
@@ -79,11 +137,7 @@ def entry_from_dict(data: dict) -> DmrlEntry:
 
 
 def extract_icn_filenames(value: str | None) -> list[str]:
-<<<<<<< HEAD
-    """Extracte les noms ICN valides d'une cellule DMRL, dans leur ordre."""
-=======
     """Extrait les noms ICN valides d'une cellule DMRL, dans leur ordre."""
->>>>>>> origin/main
     return [match.group(1) for match in _ICN_RE.finditer(value or "")]
 
 
@@ -103,6 +157,12 @@ def _map_row(row: dict) -> DmrlEntry:
     picked: dict[str, str] = {}
     for field_name, aliases in _ALIASES.items():
         picked[field_name] = next((norm[a] for a in aliases if norm.get(a)), "")
+    # Dans une DMRL, SSC est le champ compact a deux caracteres du DMC :
+    # son premier caractere est subSystemCode et le second subSubSystemCode.
+    ssc = norm.get("ssc", "")
+    if ssc:
+        picked["sub_system_code"] = ssc[0]
+        picked["sub_sub_system_code"] = ssc[1] if len(ssc) > 1 else ""
     entry = DmrlEntry(**picked)
     entry.dm_type = _canonical_type(entry.dm_type, entry.info_code or entry.dmc)
     if not entry.title:

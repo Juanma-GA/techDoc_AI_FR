@@ -21,7 +21,7 @@ from typing import Literal
 # --- Vocabulaires controles --------------------------------------------------
 
 # Forme visuelle observee dans le document source (signal *faible*).
-Form = Literal["bullet", "ordered", "subheading", "prose", "plain", "table", "caption"]
+Form = Literal["bullet", "ordered", "lettered", "subheading", "prose", "plain", "table", "caption"]
 
 # Contexte semantique S1000D (signal *fort*, decide par la classification IA).
 Context = Literal["descriptive", "procedural", "unknown"]
@@ -47,6 +47,28 @@ Admonition = Literal["warning", "caution", "note"]
 
 
 @dataclass
+class InlineRun:
+    """Segment de texte avec son style source, avant mapping S1000D."""
+
+    text: str
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    overline: bool = False
+    strikethrough: bool = False
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "text": self.text,
+            "bold": self.bold,
+            "italic": self.italic,
+            "underline": self.underline,
+            "overline": self.overline,
+            "strikethrough": self.strikethrough,
+        }
+
+
+@dataclass
 class RawBlock:
     """Bloc brut normalise par un adapter (pdf_parser / docx_parser).
 
@@ -60,6 +82,8 @@ class RawBlock:
     style_name: str | None = None       # ex. "Heading 1", "List Paragraph"
     font_size: float | None = None
     bold: bool = False
+    inline_runs: list[InlineRun] = field(default_factory=list)
+    is_pictogram: bool = False
     heading_level: int | None = None    # 1..n si connu par l'adapter
     list_kind: Literal["bullet", "ordered"] | None = None
     list_level: int = 0
@@ -111,12 +135,16 @@ class IRNode:
     page: int | None = None
     zone: Zone = "body"
     confidence: float = 1.0
+    admonition_rationale: str = ""
     candidates: list[Candidate] = field(default_factory=_empty_candidates)
     children: list[IRNode] = field(default_factory=_empty_children)
     table_rows: list[list[str]] | None = None
     table_header: list[str] | None = None      # ligne d'entete (-> thead CALS)
     icn: str | None = None                     # nom de fichier illustration associee
+    icns: list[str] = field(default_factory=list)  # plusieurs fichiers pour une figure composee
+    is_pictogram: bool = False                 # image-signaleur sans legende de figure
     refs: list[dict] | None = None             # renvois/hyperliens (-> internalRef...)
+    inline_runs: list[InlineRun] = field(default_factory=list)
 
     def walk(self) -> list[IRNode]:
         """Parcours prefixe (self puis enfants) - pratique pour stats/tests."""
@@ -143,6 +171,7 @@ def from_dict(data: dict) -> IRNode:
         page=data.get("page"),
         zone=data.get("zone", "body"),
         confidence=data.get("confidence", 1.0),
+        admonition_rationale=str(data.get("admonition_rationale") or ""),
         candidates=[
             Candidate(c["element"], c.get("score", 0.0), c.get("rationale", ""))
             for c in data.get("candidates", [])
@@ -151,7 +180,21 @@ def from_dict(data: dict) -> IRNode:
         table_rows=data.get("table_rows"),
         table_header=data.get("table_header"),
         icn=data.get("icn"),
+        icns=list(data.get("icns", [])),
+        is_pictogram=bool(data.get("is_pictogram", False)),
         refs=data.get("refs"),
+        inline_runs=[
+            InlineRun(
+                text=str(run.get("text") or ""),
+                bold=bool(run.get("bold")),
+                italic=bool(run.get("italic")),
+                underline=bool(run.get("underline")),
+                overline=bool(run.get("overline")),
+                strikethrough=bool(run.get("strikethrough")),
+            )
+            for run in data.get("inline_runs", [])
+            if isinstance(run, dict) and run.get("text") is not None
+        ],
     )
 
 
@@ -175,6 +218,7 @@ def to_dict(node: IRNode) -> dict:
         "page": node.page,
         "zone": node.zone,
         "confidence": round(node.confidence, 3),
+        "admonition_rationale": node.admonition_rationale,
         "candidates": [
             {"element": c.element, "score": round(c.score, 3), "rationale": c.rationale}
             for c in node.candidates
@@ -182,6 +226,9 @@ def to_dict(node: IRNode) -> dict:
         "table_rows": node.table_rows,
         "table_header": node.table_header,
         "icn": node.icn,
+        "icns": node.icns,
+        "is_pictogram": node.is_pictogram,
         "refs": node.refs,
+        "inline_runs": [run.to_dict() for run in node.inline_runs],
         "children": [to_dict(c) for c in node.children],
     }

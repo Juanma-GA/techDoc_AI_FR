@@ -146,7 +146,7 @@ def pdf_bytes_image() -> bytes:
     page = doc.new_page()
     page.insert_text((72, 60), "1 Description", fontsize=18, fontname="hebo")
     # Petite image RGB rouge 24x24 inseree dans la page.
-    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 24, 24))
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 80, 80))
     pix.set_rect(pix.irect, (255, 0, 0))
     page.insert_image(fitz.Rect(72, 90, 168, 186), pixmap=pix)
     page.insert_text((72, 210), "Figure 1 Hydraulic pump location", fontsize=11)

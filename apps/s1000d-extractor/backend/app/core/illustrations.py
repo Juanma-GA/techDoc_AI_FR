@@ -18,9 +18,13 @@ import re
 from pathlib import Path
 
 from app.core.ir import IRNode
+from app.core.pdf_overlays import large_red_cross_rects
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+_CHAPTER_NUMBER_RE = re.compile(r"^\s*(\d+(?:\s*[._-]\s*\d+)*)\b")
+_PICTOGRAM_MAX_PIXELS = 65
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+_JPEG_QUALITY = 100
 
 
 def slugify(text: str, *, maxlen: int = 60) -> str:
@@ -34,9 +38,19 @@ def _save_pixmap(doc, xref: int, dest: Path) -> bool:
 
     try:
         pix = fitz.Pixmap(doc, xref)
+        # Preserve an embedded JPEG byte-for-byte when no conversion is needed.
+        extracted = doc.extract_image(xref)
+        if (
+            extracted
+            and extracted.get("ext", "").lower() in {"jpg", "jpeg"}
+            and pix.n < 5
+            and not pix.alpha
+        ):
+            dest.write_bytes(extracted["image"])
+            return True
         if pix.n >= 5 or pix.alpha:            # CMYK ou canal alpha -> RGB
             pix = fitz.Pixmap(fitz.csRGB, pix)
-        pix.save(str(dest), jpg_quality=85)
+        pix.save(str(dest), jpg_quality=_JPEG_QUALITY)
         return True
     except Exception:
         return False
@@ -69,6 +83,109 @@ def _caption_rect(page, caption: str):
         return fitz.Rect(block[:4])
     matches = page.search_for(caption)
     return matches[0] if matches else None
+
+
+def _figure_caption_rect(page, caption: str):
+    """Return the rectangle of this caption, not a merged text block."""
+    matches = page.search_for(caption)
+    if matches:
+        return matches[0]
+    return _caption_rect(page, caption)
+
+
+def _image_records(page):
+    """Return unique page image resources with their displayed rectangles."""
+    import fitz
+
+    records = []
+    seen: set[int] = set()
+    try:
+        infos = page.get_image_info(xrefs=True)
+    except Exception:
+        infos = []
+    for info in infos:
+        xref = int(info.get("xref", 0))
+        if not xref or xref in seen:
+            continue
+        seen.add(xref)
+        records.append((xref, fitz.Rect(info["bbox"])))
+    if records:
+        return records
+    return [(int(img[0]), None) for img in page.get_images(full=True)]
+
+
+def _looks_like_pictogram(doc, xref: int) -> bool:
+    """Detecte exclusivement les images dont les pixels source font au plus 65x65."""
+    import fitz
+
+    try:
+        pix = fitz.Pixmap(doc, xref)
+        if pix.n != 3 or pix.alpha:
+            pix = fitz.Pixmap(fitz.csRGB, pix)
+        return pix.width <= _PICTOGRAM_MAX_PIXELS and pix.height <= _PICTOGRAM_MAX_PIXELS
+    except Exception:
+        return False
+
+
+def _chapter_key(dm_section: IRNode | None, page_number: int) -> str:
+    if dm_section is not None:
+        match = _CHAPTER_NUMBER_RE.match(dm_section.text or "")
+        if match:
+            return re.sub(r"\s*[._-]\s*", "_", match.group(1))
+    return f"p{page_number}"
+
+
+def _dm_sections(root: IRNode, dm_level: int | None) -> list[IRNode]:
+    """Retourne les sections racines des DM au niveau de decoupage choisi."""
+    if dm_level is None:
+        return [n for n in root.walk() if n.kind == "section" and n is not root]
+
+    sections: list[IRNode] = []
+
+    def collect(node: IRNode) -> None:
+        for child in node.children:
+            if child.kind != "section":
+                continue
+            if child.level is not None and child.level >= dm_level:
+                sections.append(child)
+            else:
+                collect(child)
+
+    collect(root)
+    return sections
+
+
+def _dm_for_page(dm_sections: list[IRNode], page_number: int) -> IRNode | None:
+    candidates = [section for section in dm_sections if section.page is not None and section.page <= page_number]
+    return candidates[-1] if candidates else None
+
+
+def _match_figure(image_rect, figures, page_width: float, page_height: float):
+    if image_rect is None:
+        return None
+    candidates = []
+    image_center_x = (image_rect.x0 + image_rect.x1) / 2
+    for figure, caption_rect in figures:
+        # Some PDFs let the caption bbox overlap the image bbox by a few
+        # points. Keep that nearest caption instead of assigning the image to
+        # the following figure.
+        if caption_rect is None or caption_rect.y0 < image_rect.y1 - 12:
+            continue
+        caption_center_x = (caption_rect.x0 + caption_rect.x1) / 2
+        vertical_gap = max(0.0, caption_rect.y0 - image_rect.y1)
+        score = (
+            abs(image_center_x - caption_center_x) / page_width
+            + vertical_gap / page_height
+        )
+        candidates.append((score, figure))
+    return min(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
+def _set_figure_icn(figure: IRNode, name: str) -> None:
+    if name not in figure.icns:
+        figure.icns.append(name)
+    if figure.icn is None:
+        figure.icn = name
 
 
 def _vector_rects(page, caption_rect):
@@ -151,16 +268,156 @@ def _save_vector_figure(page, caption: str, dest: Path) -> bool:
         return False
     try:
         pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=bounds, alpha=False)
-        pixmap.save(str(dest), jpg_quality=85)
+        pixmap.save(str(dest), jpg_quality=_JPEG_QUALITY)
         return True
     except Exception:
         return False
 
 
-def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: str) -> int:
+def _is_composite_overlay_text(text: str) -> bool:
+    text = _normalize_text(text)
+    return bool(
+        text
+        and len(text) <= 120
+        and not re.match(r"^(?:figure|fig\.?|illustration|tableau)\b", text, re.IGNORECASE)
+    )
+
+
+def _composite_bounds(page, image_rects):
+    import fitz
+
+    image_bounds = image_rects[0]
+    for rect in image_rects[1:]:
+        image_bounds |= rect
+    nearby = image_bounds + fitz.Rect(-20, -12, 20, 12)
+    bounds = fitz.Rect(image_bounds)
+
+    for block in page.get_text("blocks"):
+        if len(block) < 5 or _is_composite_overlay_text(str(block[4])):
+            continue
+        rect = fitz.Rect(block[:4])
+        if rect.y0 < image_bounds.y0 < rect.y1 and rect.y1 - image_bounds.y0 <= 12:
+            bounds.y0 = max(bounds.y0, rect.y1 + 1)
+        if rect.y0 < image_bounds.y1 < rect.y1 and image_bounds.y1 - rect.y0 <= 12:
+            bounds.y1 = min(bounds.y1, rect.y0 - 1)
+
+    for drawing in page.get_drawings():
+        rect = fitz.Rect(drawing.get("rect", ()))
+        if not rect.is_empty and rect.intersects(nearby):
+            bounds |= rect
+
+    for block in page.get_text("blocks"):
+        if len(block) < 5:
+            continue
+        text = _normalize_text(str(block[4]))
+        if not _is_composite_overlay_text(text):
+            continue
+        rect = fitz.Rect(block[:4])
+        if rect.intersects(nearby):
+            bounds |= rect
+
+    for rect in large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects):
+        bounds |= rect
+
+    return bounds
+
+
+def _subtract_rect(rect, keep_rects):
+    import fitz
+
+    pieces = [rect]
+    for keep in keep_rects:
+        next_pieces = []
+        for piece in pieces:
+            overlap = piece & keep
+            if overlap.is_empty:
+                next_pieces.append(piece)
+                continue
+            if piece.y0 < overlap.y0:
+                next_pieces.append(fitz.Rect(piece.x0, piece.y0, piece.x1, overlap.y0))
+            if overlap.y1 < piece.y1:
+                next_pieces.append(fitz.Rect(piece.x0, overlap.y1, piece.x1, piece.y1))
+            if piece.x0 < overlap.x0:
+                next_pieces.append(fitz.Rect(piece.x0, overlap.y0, overlap.x0, overlap.y1))
+            if overlap.x1 < piece.x1:
+                next_pieces.append(fitz.Rect(overlap.x1, overlap.y0, piece.x1, overlap.y1))
+        pieces = next_pieces
+    return [piece for piece in pieces if not piece.is_empty]
+
+
+def _save_composite_figure(page, image_rects, dest: Path) -> bool:
+    """Rasterise une figure composee et ses annotations vectorielles."""
+    import fitz
+
+    if not image_rects:
+        return False
+    bounds = _composite_bounds(page, image_rects)
+    cross_rects = large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects)
+    bounds &= page.rect
+    if bounds.width < 10 or bounds.height < 10:
+        return False
+    try:
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=bounds, alpha=False)
+        for block in page.get_text("blocks"):
+            if len(block) < 5 or _is_composite_overlay_text(str(block[4])):
+                continue
+            text_rect = fitz.Rect(block[:4]) & bounds
+            if text_rect.is_empty:
+                continue
+            for piece in _subtract_rect(text_rect, [*image_rects, *cross_rects]):
+                pixmap.set_rect(
+                    fitz.IRect(
+                        round((piece.x0 - bounds.x0) * 2),
+                        round((piece.y0 - bounds.y0) * 2),
+                        round((piece.x1 - bounds.x0) * 2),
+                        round((piece.y1 - bounds.y0) * 2),
+                    ),
+                    (255, 255, 255),
+                )
+        pixmap.save(str(dest), jpg_quality=_JPEG_QUALITY)
+        return True
+    except Exception:
+        return False
+
+
+def _has_figure_overlays(page, image_rects) -> bool:
+    import fitz
+
+    if not image_rects:
+        return False
+    bounds = image_rects[0]
+    for rect in image_rects[1:]:
+        bounds |= rect
+    nearby = bounds + fitz.Rect(-20, -12, 20, 12)
+    if large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects):
+        return True
+    if any(
+        len(block) >= 5
+        and _is_composite_overlay_text(str(block[4]))
+        and fitz.Rect(block[:4]).intersects(nearby)
+        for block in page.get_text("blocks")
+    ):
+        return True
+    return any(
+        not (rect := fitz.Rect(drawing.get("rect", ()))).is_empty
+        and rect.intersects(nearby)
+        for drawing in page.get_drawings()
+    )
+
+
+def attach_illustrations(
+    root: IRNode,
+    *,
+    pdf_path: str,
+    out_dir: Path,
+    doc_id: str,
+    dm_level: int | None = None,
+) -> int:
     """Extrait les images du PDF, les enregistre en JPG et pose l'ICN sur les
-    figures de l'IR (appariement par page + ordre de lecture). Renvoie le nombre
-    d'images enregistrees. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
+    figures de l'IR (appariement par page + ordre de lecture). Les figures qui
+    contiennent plusieurs bitmaps sont rasterisees en une seule image afin de
+    conserver aussi les annotations vectorielles superposees. Renvoie le nombre
+    de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
     try:
         import fitz
     except Exception:
@@ -172,9 +429,13 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
 
     # Figures de l'IR par page (dans l'ordre), pour le nommage.
     figs_by_page: dict[int, list[IRNode]] = {}
+    pictogram_callouts_by_page: dict[int, list[IRNode]] = {}
+    dm_sections = _dm_sections(root, dm_level)
     for n in root.walk():
         if n.kind == "figure" and n.page is not None:
             figs_by_page.setdefault(n.page, []).append(n)
+        if n.kind == "admonition" and n.is_pictogram and n.page is not None:
+            pictogram_callouts_by_page.setdefault(n.page, []).append(n)
 
     out_dir.mkdir(parents=True, exist_ok=True)
     saved = 0
@@ -186,8 +447,25 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
     try:
         for pidx, page in enumerate(doc, start=1):
             figs = list(figs_by_page.get(pidx, []))
-            for img in page.get_images(full=True):
-                xref = int(img[0])
+            figure_anchors = [
+                (figure, _figure_caption_rect(page, figure.text))
+                for figure in figs
+            ]
+            standard_matches = {
+                id(figure)
+                for xref, image_rect in _image_records(page)
+                if image_rect is not None
+                and not _looks_like_pictogram(doc, xref)
+                for figure in [_match_figure(
+                    image_rect,
+                    figure_anchors,
+                    float(page.rect.width),
+                    float(page.rect.height),
+                )]
+                if figure is not None
+            }
+            composite_records: dict[int, tuple[IRNode, list[tuple[int, object]]]] = {}
+            for xref, image_rect in _image_records(page):
                 if xref in seen:
                     continue
                 seen.add(xref)
@@ -196,30 +474,89 @@ def attach_illustrations(root: IRNode, *, pdf_path: str, out_dir: Path, doc_id: 
                     continue
                 if digest is not None:
                     seen_digests.add(digest)
-                fig = figs.pop(0) if figs else None
+                if _looks_like_pictogram(doc, xref):
+                    figure = _match_figure(
+                        image_rect,
+                        figure_anchors,
+                        float(page.rect.width),
+                        float(page.rect.height),
+                    )
+                    if figure is not None and id(figure) in standard_matches:
+                        continue
+                    dm_section = _dm_for_page(dm_sections, pidx)
+                    chapter = _chapter_key(dm_section, pidx)
+                    name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
+                    if _save_pixmap(doc, xref, out_dir / name):
+                        saved += 1
+                        if pictogram_callouts_by_page.get(pidx):
+                            continue
+                        if figure is not None and not figure.icn:
+                            figure.text = f"Picto chapitre {chapter}"
+                            figure.icn = name
+                            figure.icns = [name]
+                            figure.is_pictogram = True
+                        else:
+                            pictogram = IRNode(
+                                id=f"picto-{pidx}-{xref}",
+                                kind="figure",
+                                form="caption",
+                                text=f"Picto chapitre {chapter}",
+                                page=pidx,
+                                icn=name,
+                                icns=[name],
+                                is_pictogram=True,
+                            )
+                            (dm_section or root).children.append(pictogram)
+                    continue
+                fig = _match_figure(
+                    image_rect,
+                    figure_anchors,
+                    float(page.rect.width),
+                    float(page.rect.height),
+                )
+                if fig is not None and image_rect is not None:
+                    record = composite_records.setdefault(id(fig), (fig, []))
+                    record[1].append((xref, image_rect))
+                    continue
                 base = slugify(fig.text) if fig and fig.text else f"illustration-{doc_id[:8]}-p{pidx}-{xref}"
                 name = _unique_name(out_dir, base)
                 if _save_pixmap(doc, xref, out_dir / name):
                     saved += 1
                     if fig is not None:
-                        fig.icn = name
+                        _set_figure_icn(fig, name)
+            for fig, records in composite_records.values():
+                base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
+                name = _unique_name(out_dir, base)
+                image_rects = [image_rect for _, image_rect in records]
+                composite = len(records) > 1 or _has_figure_overlays(page, image_rects)
+                if composite:
+                    success = _save_composite_figure(page, image_rects, out_dir / name)
+                else:
+                    success = _save_pixmap(doc, records[0][0], out_dir / name)
+                if success:
+                    saved += 1
+                    _set_figure_icn(fig, name)
+                elif composite:
+                    for xref, _ in records:
+                        fallback_name = _unique_name(out_dir, base)
+                        if _save_pixmap(doc, xref, out_dir / fallback_name):
+                            saved += 1
+                            _set_figure_icn(fig, fallback_name)
             for fig in figs:
+                if fig.icn:
+                    continue
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
                 if _save_vector_figure(page, fig.text, out_dir / name):
                     saved += 1
-                    fig.icn = name
+                    _set_figure_icn(fig, name)
         return saved
     finally:
         doc.close()
 
 
 def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> str | None:
-<<<<<<< HEAD
-    """Renomme une image extraite, en convertissant son format si necessaire."""
-=======
     """Renomme une image extraite, avec conversion si l'extension change."""
->>>>>>> origin/main
     current = Path(current_name)
     target = Path(target_name)
     if current.name != current_name or target.name != target_name:
@@ -241,23 +578,13 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
         else:
             import fitz
 
-<<<<<<< HEAD
-            pix = fitz.Pixmap(str(source))
-            if pix.n >= 5 or pix.alpha:
-                pix = fitz.Pixmap(fitz.csRGB, pix)
-            if target.suffix.lower() == ".png":
-                pix.save(str(destination), output="png")
-            else:
-                pix.save(str(destination), output="jpg", jpg_quality=85)
-=======
             pixmap = fitz.Pixmap(str(source))
             if pixmap.n >= 5 or pixmap.alpha:
                 pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
             if target.suffix.lower() == ".png":
                 pixmap.save(str(destination))
             else:
-                pixmap.save(str(destination), jpg_quality=85)
->>>>>>> origin/main
+                pixmap.save(str(destination), jpg_quality=_JPEG_QUALITY)
             source.unlink()
     except Exception:
         destination.unlink(missing_ok=True)
@@ -271,19 +598,10 @@ def _same_path(left: Path, right: Path) -> bool:
 
 def _unique_filename(out_dir: Path, filename: str, *, exclude: Path | None = None) -> str:
     path = Path(filename)
-<<<<<<< HEAD
-    stem = path.stem
-    suffix = path.suffix
-    name = filename
-    n = 2
-    while (out_dir / name).exists() and not (exclude and _same_path(out_dir / name, exclude)):
-        name = f"{stem}-{n}{suffix}"
-=======
     name = filename
     n = 2
     while (out_dir / name).exists() and not (exclude and _same_path(out_dir / name, exclude)):
         name = f"{path.stem}-{n}{path.suffix}"
->>>>>>> origin/main
         n += 1
     return name
 

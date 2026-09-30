@@ -13,7 +13,7 @@ import re
 import statistics
 
 from app.core.ir import RawBlock
-from app.core.notes_detector import detect_note_kind
+from app.core.notes_detector import classify_admonition, detect_note_kind
 
 # --- Formes de liste ---------------------------------------------------------
 
@@ -44,8 +44,21 @@ _CAPTION_START_RE = re.compile(
 # --- Renvois / hyperliens (-> internalRef / externalPubRef / uri) ------------
 # Renvoi interne AVEC marqueur obligatoire (voir/see/cf/refer to) pour ne pas
 # confondre une legende "Figure 1 ..." avec un renvoi "voir figure 1".
+_INTERNAL_REF_MARKER = (
+    r"(?:voir|see|cf\.?|refer to|se reporter à|reportez-vous à|"
+    r"comme\s+(?:(?:le|la|les)\s+)?(?:montre|montrent|indique|indiquent|"
+    r"illustre|illustrent)|as\s+(?:shown|illustrated)\s+in|shown\s+in)"
+)
 _INTERNAL_REF_RE = re.compile(
-    r"\b(?:voir|see|cf\.?|refer to)\s+"
+    rf"\b{_INTERNAL_REF_MARKER}\s+"
+    r"(?:(?:le|la|les|l['’])\s+)?"
+    r"(figure|fig\.?|table|tableau|section|chapitre|chapter|para(?:graph)?)\s*"
+    r"([0-9]+(?:[.\-][0-9]+)*)",
+    re.IGNORECASE,
+)
+_ADDITIONAL_INTERNAL_REF_RE = re.compile(
+    r"\b(?:et|ou)\s+"
+    r"(?:(?:le|la|les|l['’])\s+)?"
     r"(figure|fig\.?|table|tableau|section|chapitre|chapter|para(?:graph)?)\s*"
     r"([0-9]+(?:[.\-][0-9]+)*)",
     re.IGNORECASE,
@@ -70,19 +83,30 @@ def detect_refs(text: str) -> list[dict]:
     (coherent avec l'ecart "squelette") : la cible S1000D (DMC/xref) reste a
     completer, on capture juste l'intention de renvoi."""
     refs: list[dict] = []
-    for m in _INTERNAL_REF_RE.finditer(text):
+    internal_matches = [
+        *_INTERNAL_REF_RE.finditer(text),
+        *_ADDITIONAL_INTERNAL_REF_RE.finditer(text),
+    ]
+    for m in sorted(internal_matches, key=lambda match: match.start()):
         label = m.group(1).lower().rstrip(".")
+        matched_text = m.group(0).strip()
+        matched_text = re.sub(
+            rf"^{_INTERNAL_REF_MARKER}\s+", "", matched_text, flags=re.IGNORECASE,
+        )
+        matched_text = re.sub(r"^(?:et|ou)\s+", "", matched_text, flags=re.IGNORECASE)
+        matched_text = re.sub(r"^(?:le|la|les|l['’])\s+", "", matched_text, flags=re.IGNORECASE)
         refs.append({
             "kind": "internal",
             "target_kind": _INTERNAL_KIND.get(label, "section"),
             "target": m.group(2),
-            "text": m.group(0).strip(),
+            "text": matched_text,
         })
     for m in _PARA_REF_RE.finditer(text):
         refs.append({"kind": "internal", "target_kind": "section",
                      "target": m.group(1), "text": m.group(0).strip()})
     for m in _URI_RE.finditer(text):
-        refs.append({"kind": "uri", "target": m.group(0), "text": m.group(0)})
+        uri = m.group(0).rstrip(".,;:!?\u2019\u201d")
+        refs.append({"kind": "uri", "target": uri, "text": uri})
     return refs
 
 
@@ -91,6 +115,7 @@ def detect_refs(text: str) -> list[dict]:
 # est un item de liste ordonnee, pas un titre. Les titres de niveau 1 ("1
 # Description") sont detectes par la taille de police, pas par ce regex.
 _NUMBERED_HEADING_RE = re.compile(r"^\s*(\d{1,2}(?:\.\d{1,2})+)\.?\s+\S")
+_DEFINITION_RE = re.compile(r"^\s*[^:\n]{2,80}:\s+\S")
 
 
 def detect_list_kind(text: str) -> str | None:
@@ -117,6 +142,11 @@ def detect_admonition(text: str) -> str | None:
         if pat.match(text):
             return kind
     return detect_note_kind(text)
+
+
+def classify_callout(text: str, *, pictogram: bool = False) -> tuple[str | None, float, str]:
+    """Retourne le type, la confiance et la justification d'un callout."""
+    return classify_admonition(text, pictogram=pictogram)
 
 
 def is_caption(text: str) -> bool:
@@ -176,6 +206,11 @@ def infer_heading_level(block: RawBlock, body_size: float) -> int | None:
     depth = numbered_heading_depth(block.text)
     if depth is not None and len(block.text) < 200:
         return depth
+
+    # Les pages de glossaire utilisent souvent le gras pour le terme avant
+    # deux-points. Ce n'est pas un titre de section, meme si le bloc est court.
+    if _DEFINITION_RE.match(block.text):
+        return None
 
     if body_size and block.font_size:
         ratio = block.font_size / body_size

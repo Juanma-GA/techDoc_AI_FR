@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "standard": "S1000D Issue 4.1",
+  "style_to_emphasis": {
+    "bold": "em01",
+    "italic": "em02",
+    "underline": "em03",
+    "overline": "em04",
+    "strikethrough": "em05"
+  },
+  "code_sets": {
+    "thresholdUnitOfMeasure": {
+      "source_page": 1720,
+      "values": [
+        {"code": "th01", "label": "Flight hours", "status": "standard"},
+        {"code": "th02", "label": "Flight cycles", "status": "standard"},
+        {"code": "th03", "label": "Months", "status": "standard"},
+        {"code": "th04", "label": "Weeks", "status": "standard"},
+        {"code": "th05", "label": "Years", "status": "standard"},
+        {"code": "th06", "label": "Days", "status": "standard"}
+      ]
+    },
+    "skillLevelCode": {
+      "source_page": 1718,
+      "values": [
+        {"code": "sk01", "label": "Basic", "status": "standard"},
+        {"code": "sk02", "label": "Intermediate", "status": "standard"},
+        {"code": "sk03", "label": "Advanced", "status": "standard"}
+      ],
+      "project_ranges": [
+        {"prefix": "sk", "start": 51, "end": 99, "label": "Available for projects", "status": "project"}
+      ]
+    },
+    "emphasisType": {
+      "source_page": 1703,
+      "values": [
+        {"code": "em01", "label": "Bold", "status": "standard", "style": "bold"},
+        {"code": "em02", "label": "Italic", "status": "legacy", "style": "italic", "notes": "Only for legacy data; refer to Chapter 3.9.1"},
+        {"code": "em03", "label": "Underline", "status": "legacy", "style": "underline", "notes": "Only for legacy data; refer to Chapter 3.9.1"},
+        {"code": "em04", "label": "Overline", "status": "restricted", "style": "overline", "notes": "Only for marking vectors"},
+        {"code": "em05", "label": "Strikethrough", "status": "legacy", "style": "strikethrough", "notes": "Not to be used to mark deleted text"}
+      ],
+      "project_ranges": [
+        {"prefix": "em", "start": 51, "end": 99, "label": "Available for projects", "status": "project"}
+      ]
+    },
+    "internalRefTargetType": {
+      "source_page": 1707,
+      "values": [
+        {"code": "irtt01", "label": "Figure", "status": "standard"},
+        {"code": "irtt02", "label": "Table", "status": "standard"},
+        {"code": "irtt03", "label": "Multimedia", "status": "standard"},
+        {"code": "irtt04", "label": "Supply", "status": "standard"},
+        {"code": "irtt05", "label": "Support equipment", "status": "standard"},
+        {"code": "irtt06", "label": "Spare", "status": "standard"},
+        {"code": "irtt07", "label": "Paragraph", "status": "standard"},
+        {"code": "irtt08", "label": "Step", "status": "standard"},
+        {"code": "irtt09", "label": "Graphic", "status": "standard"},
+        {"code": "irtt10", "label": "Multimedia object", "status": "standard"},
+        {"code": "irtt11", "label": "Hotspot", "status": "standard"},
+        {"code": "irtt12", "label": "Parameter", "status": "standard"},
+        {"code": "irtt13", "label": "Zone", "status": "standard"},
+        {"code": "irtt14", "label": "Work location", "status": "standard"}
+      ]
+    },
+    "quantityType": {
+      "source_page": 1713,
+      "values": [
+        {"code": "qty01", "label": "Length", "status": "standard"},
+        {"code": "qty02", "label": "Price", "status": "standard"},
+        {"code": "qty03", "label": "Temperature", "status": "standard"},
+        {"code": "qty04", "label": "Time", "status": "standard"},
+        {"code": "qty05", "label": "Torque value", "status": "standard"},
+        {"code": "qty06", "label": "Voltage", "status": "standard"},
+        {"code": "qty07", "label": "Volume", "status": "standard"},
+        {"code": "qty08", "label": "Mass", "status": "standard"}
+      ],
+      "project_ranges": [
+        {"prefix": "qty", "start": 51, "end": 99, "label": "Available for projects", "status": "project"}
+      ]
+    }
+  }
+}
