@@ -238,6 +238,34 @@ def test_pdf_semantic_rule_receives_current_document_metadata(monkeypatch) -> No
     }
 
 
+def test_json_metadata_pnr_list_resolves_as_alternatives_in_rule_patterns() -> None:
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=[
+            ParsedPage(page=1, text="PNR 1-879-SB"),
+            ParsedPage(page=2, text="PNR 2-410-MX"),
+        ],
+        full_text="PNR 1-879-SB\nPNR 2-410-MX",
+        is_signed=False,
+    )
+    rule = _rule(
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?<!\w){{meta_pnr_number}}(?!\w)",
+            require_all=True,
+        )
+    )
+    document = SimpleNamespace(
+        client_metadata={"meta_pnr_number": ["1-879-SB", "2-410-MX"]},
+        meta_pnr_number="1-879-SB, 2-410-MX",
+    )
+
+    results, _raws = execute_pdf_rules(parsed, [rule], document=document)
+
+    assert results[0].status == "PASS"
+
+
 def test_active_manual_rule_emits_user_review_comment() -> None:
     parsed = ParsedPdf(
         page_count=1,

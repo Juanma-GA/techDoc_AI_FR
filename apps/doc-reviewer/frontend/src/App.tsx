@@ -19,6 +19,9 @@ const DocumentsList = lazy(async () => ({
 const Settings = lazy(async () => ({
   default: (await import("./routes/Settings")).Settings,
 }));
+const Rules = lazy(async () => ({
+  default: (await import("./routes/Rules")).Rules,
+}));
 
 function RouteFallback() {
   return (
@@ -28,13 +31,11 @@ function RouteFallback() {
   );
 }
 
-// Coquille pixel-coherente avec le preview.html : 4 onglets (Tableau de bord /
-// Documents / Parametres). Normes + Regles vivent
-// DANS Parametres (cartes), le reviewer est embarque dans le detail Documents
-// (la sidebar reste visible) — parite 1:1 avec preview.html.
+// Navigation principale et reviewer plein ecran pour le document courant.
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
+  { to: "/rules", labelKey: "nav.rules" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
@@ -108,6 +109,7 @@ export function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/documents" element={<DocumentsList />} />
+                <Route path="/rules" element={<Rules />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>

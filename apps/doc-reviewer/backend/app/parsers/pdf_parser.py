@@ -28,6 +28,15 @@ class Span:
 
 
 @dataclass
+class PdfLine:
+    text: str
+    bbox: tuple[float, float, float, float]
+    block_index: int
+    line_index: int
+    direction: tuple[float, float] = (1.0, 0.0)
+
+
+@dataclass
 class ParsedPage:
     page: int  # 1-indexed
     text: str
@@ -39,6 +48,8 @@ class ParsedPage:
     # the page could not be matched), which every consumer must treat as
     # "do not filter this page out".
     is_modified: bool | None = None
+    lines: list[PdfLine] = field(default_factory=list)
+    page_height: float = 0.0
 
 
 @dataclass
@@ -60,9 +71,23 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
             text = page.get_text("text") or ""
             data = page.get_text("dict")
             spans: list[Span] = []
-            for block in data.get("blocks", []):
-                for line in block.get("lines", []):
-                    for span in line.get("spans", []):
+            lines: list[PdfLine] = []
+            for block_index, block in enumerate(data.get("blocks", [])):
+                for line_index, line in enumerate(block.get("lines", [])):
+                    line_spans = line.get("spans", [])
+                    line_text = "".join(span.get("text", "") or "" for span in line_spans)
+                    if line_text.strip():
+                        raw_direction = line.get("dir", (1.0, 0.0))
+                        lines.append(
+                            PdfLine(
+                                text=line_text,
+                                bbox=tuple(float(value) for value in line.get("bbox", (0, 0, 0, 0))),
+                                block_index=block_index,
+                                line_index=line_index,
+                                direction=(float(raw_direction[0]), float(raw_direction[1])),
+                            )
+                        )
+                    for span in line_spans:
                         s_text = span.get("text", "") or ""
                         if not s_text.strip():
                             continue
@@ -81,6 +106,8 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
                     text=text,
                     spans=spans,
                     has_text_layer=bool(text.strip()),
+                    lines=lines,
+                    page_height=float(page.rect.height),
                 )
             )
             all_text.append(f"[PAGE: {idx}]\n{text}")

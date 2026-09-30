@@ -3,25 +3,37 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.checks.standards import CUSTOM_STANDARD_SPECS, serialize_builtin_version
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.standards import serialize_builtin_version
+from app.core.logging import get_logger
 from app.db.models import Standard, StandardVersion
 
-def sync_custom_standards(db: Session) -> int:
+
+_logger = get_logger(__name__)
+
+
+def sync_custom_standards(
+    db: Session,
+    client_standard_specs: Mapping[str, Mapping[str, object]] | None = None,
+) -> int:
     """Create and refresh all file-backed client standard catalogs.
 
     The published built-in catalogs remain database-owned after their Alembic
-    migrations. Client catalogs are sourced from the discovered ``*_custom``
-    modules so they can be edited and tested after a backend restart without a
-    new migration for every rule change.
+    migrations. Client catalogs are sourced from the active bundle's exported
+    standard specs so they can be edited without a migration per rule change.
     """
     now = datetime.now(timezone.utc)
     changed = 0
-    for spec in CUSTOM_STANDARD_SPECS:
+    if client_standard_specs is None:
+        client_standard_specs = load_active_client_configuration().bundle.standard_specs
+    standard_specs = list(client_standard_specs.values())
+    for spec in standard_specs:
         code = str(spec["code"])
         label = str(spec["label"])
         description = str(spec["description"])
@@ -74,10 +86,13 @@ def sync_custom_standards(db: Session) -> int:
 
     db.commit()
     if changed:
-        logger.info("custom_standards_synced", changed_versions=changed)
+        _logger.info("custom_standards_synced", changed_versions=changed)
     return changed
 
 
-def sync_user_standard(db: Session) -> int:
+def sync_user_standard(
+    db: Session,
+    client_standard_specs: Mapping[str, Mapping[str, object]] | None = None,
+) -> int:
     """Backward-compatible alias for the generic client catalog sync."""
-    return sync_custom_standards(db)
+    return sync_custom_standards(db, client_standard_specs)

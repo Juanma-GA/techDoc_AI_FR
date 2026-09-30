@@ -29,10 +29,12 @@ from app.core.compiled_rule_operators import (
     matching_font_spans,
     normalize,
     pressure_conversion_issues,
+    unit_conversion_issues,
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
-    revision_findings,
+    client_operation_suggestions,
+    sentence_punctuation_issues,
 )
 
 
@@ -77,7 +79,7 @@ def deterministic_suggestions(
             suggestions.extend(regex_suggestions(rule, check, targets, rule_kind, message, ctx))
         elif check.operator == "pressure_conversion":
             suggestions.extend(
-                pressure_conversion_suggestions(
+                unit_conversion_suggestions(
                     rule,
                     check,
                     targets,
@@ -86,17 +88,47 @@ def deterministic_suggestions(
                     ctx.pdf_pages,
                 )
             )
-        elif check.operator == "revision_consistency":
+        elif check.operator == "unit_conversion":
             suggestions.extend(
-                revision_consistency_suggestions(rule, check, rule_kind, ctx)
+                unit_conversion_suggestions(
+                    rule,
+                    check,
+                    targets,
+                    rule_kind,
+                    message,
+                    ctx.pdf_pages,
+                )
             )
-        elif check.operator == "shop_verification":
+        elif check.operator == "sentence_punctuation":
             suggestions.extend(
-                shop_verification_suggestions(rule, targets, rule_kind, message, ctx)
+                sentence_punctuation_suggestions(
+                    rule,
+                    targets,
+                    rule_kind,
+                    message,
+                    ctx.pdf_pages,
+                    policy=str(check.expected),
+                )
             )
-        elif check.operator == "highlights_holder":
+        elif check.operator in {
+            "revision_consistency",
+            "client_operation",
+            "shop_verification",
+            "highlights_holder",
+            "highlights_document_type",
+        }:
+            operation_name = check.operation or check.operator
+            operation = (ctx.client_operations or {}).get(operation_name)
+            if operation is not None and operation.suggestions is None:
+                has_non_repairable_check = True
             suggestions.extend(
-                highlights_holder_suggestions(rule, targets, rule_kind, message, ctx)
+                client_operation_suggestions_for_rule(
+                    rule,
+                    check,
+                    rule_kind,
+                    targets,
+                    ctx,
+                )
             )
         elif check.operator == "regex_exists" and check.expected_display is not None:
             check_status, _target, _observed, _expected = evaluate_check(
@@ -166,6 +198,7 @@ def deterministic_suggestions(
                     targets,
                     rule_kind,
                     message,
+                    ctx,
                 )
             )
             has_non_repairable_check = True
@@ -226,118 +259,53 @@ def deterministic_suggestions(
     ]
 
 
-def revision_consistency_suggestions(
+def client_operation_suggestions_for_rule(
     rule: CompiledRule,
     check: Check,
     rule_kind: str,
+    targets: list[_TextTarget],
     ctx: _EvalContext,
 ) -> list[RawSuggestion]:
-    """One suggestion per page/subject where the three sources diverge."""
+    """Adapt structured client-operation findings into persisted suggestions."""
     text_by_page = {target.raw_page: target.text for target in ctx.all_targets}
     suggestions: list[RawSuggestion] = []
-    for finding in revision_findings(check, ctx):
-        start = text_by_page.get(finding.page, "").find(finding.original)
-        suggestions.append(
-            RawSuggestion(
-                rule_kind=rule_kind,
-                rule_code=rule.id,
-                severity=rule.severity,
-                message=finding.message,
-                original=finding.original,
-                proposed=finding.proposed,
-                page=finding.page,
-                span=(start, start + len(finding.original)) if start >= 0 else (0, 0),
-                bbox=finding.bbox,
-            )
-        )
-    return suggestions
-
-
-def shop_verification_suggestions(
-    rule: CompiledRule,
-    targets: list[_TextTarget],
-    rule_kind: str,
-    message: str,
-    ctx: _EvalContext,
-) -> list[RawSuggestion]:
-    from app.checks.standards import thales_custom
-
-    expected = thales_custom.shop_verification_text(ctx.document)
-    manufacturer = getattr(ctx.document, "meta_manufacturer", "Airbus") or "Airbus"
-    suggestions: list[RawSuggestion] = []
-    for target in targets:
-        observed = thales_custom.shop_verification_section(target.text)
-        if thales_custom.shop_verification_matches(target.text, expected):
+    for result in client_operation_suggestions(check, targets, ctx):
+        if result.page is None or result.original is None:
             continue
-        original = observed.strip()
-        start = target.text.find(observed) if observed else -1
-        if start < 0:
-            start = target.text.lower().find("shop verification")
-        if start < 0:
-            start = 0
-        bbox = (
-            empty_middle_bbox(target, ctx.pdf_pages)
-            if not original
-            else suggestion_bbox(
+        target = next(
+            (item for item in ctx.all_targets if item.raw_page == result.page),
+            None,
+        )
+        if target is None:
+            continue
+        start = text_by_page.get(result.page, "").find(result.original)
+        if result.bbox is not None:
+            bbox = result.bbox
+        elif result.bbox_strategy == "empty_middle":
+            bbox = empty_middle_bbox(target, ctx.pdf_pages)
+        elif result.bbox_strategy == "highlight_holder":
+            bbox = highlights_holder_bbox(target, ctx.pdf_pages)
+        elif result.bbox_strategy == "missing_anchor":
+            bbox = missing_item_bbox(rule, target, result.proposed, ctx.pdf_pages)
+        elif result.original:
+            bbox = suggestion_bbox(
                 target,
-                original,
+                result.original,
                 ctx.pdf_pages,
-                span_start=start,
+                span_start=start if start >= 0 else 0,
             )
-        )
+        else:
+            bbox = first_bbox(target)
         suggestions.append(
             RawSuggestion(
                 rule_kind=rule_kind,
                 rule_code=rule.id,
                 severity=rule.severity,
-                message=(
-                    f"{message} Texte attendu pour {manufacturer} : {expected}"
-                ),
-                original=original,
-                proposed=expected,
-                page=target.raw_page,
-                span=(start, start + len(original)),
-                bbox=bbox,
-            )
-        )
-    return suggestions
-
-
-def highlights_holder_suggestions(
-    rule: CompiledRule,
-    targets: list[_TextTarget],
-    rule_kind: str,
-    message: str,
-    ctx: _EvalContext,
-) -> list[RawSuggestion]:
-    from app.checks.standards import thales_custom
-
-    expected = thales_custom.highlights_holder_expected(ctx.parsed_pdf)
-    if expected is None:
-        return []
-    suggestions: list[RawSuggestion] = []
-    for target in targets:
-        if thales_custom.highlights_holder_matches(target.text, expected):
-            continue
-        original = thales_custom.highlights_holder_observed(target.text)
-        start = target.text.find(original) if original else 0
-        bbox = (
-            suggestion_bbox(target, original, ctx.pdf_pages, span_start=start)
-            if original
-            else highlights_holder_bbox(target, ctx.pdf_pages)
-        )
-        suggestions.append(
-            RawSuggestion(
-                rule_kind=rule_kind,
-                rule_code=rule.id,
-                severity=rule.severity,
-                message=(
-                    f"{message} Le contenu doit commencer par « {expected} »."
-                ),
-                original=original,
-                proposed=expected,
-                page=target.raw_page,
-                span=(start, start + len(original)),
+                message=result.message or rule.failure_message or rule.topic,
+                original=result.original,
+                proposed=result.proposed or "",
+                page=result.page,
+                span=result.span or ((start, start + len(result.original)) if start >= 0 else (0, 0)),
                 bbox=bbox,
             )
         )
@@ -427,12 +395,17 @@ def font_size_suggestions(
     targets: list[_TextTarget],
     rule_kind: str,
     message: str,
+    ctx: _EvalContext,
 ) -> list[RawSuggestion]:
     """Emit a localized detection-only finding for each wrong font size."""
     expected_size = float(check.expected)
     suggestions: list[RawSuggestion] = []
     for target in targets:
-        for start, end, original, bbox, observed_size, _font in matching_font_spans(check, target):
+        for start, end, original, bbox, observed_size, _font in matching_font_spans(
+            check,
+            target,
+            ctx.client_entities,
+        ):
             if abs(observed_size - expected_size) <= FONT_SIZE_TOLERANCE:
                 continue
             suggestions.append(
@@ -483,6 +456,8 @@ def fuzzy_required_suggestions(
             if not candidate_compact:
                 continue
             candidate_folded = candidate_compact.casefold()
+            if check.expected_display == "{{meta_first_pnr_number}}":
+                candidate_folded = candidate_folded.replace(" - ", "-")
             if check.suggestion_mode == "all" and expected_folded in candidate_folded:
                 continue
             if check.missing_anchor_position == "below":
@@ -1199,7 +1174,7 @@ def _temperature_fahrenheit_replacement(original: str) -> str:
     return f"{original} ({first}{second} deg. F)"
 
 
-def pressure_conversion_suggestions(
+def unit_conversion_suggestions(
     rule: CompiledRule,
     check: Check,
     targets: list[_TextTarget],
@@ -1209,7 +1184,50 @@ def pressure_conversion_suggestions(
 ) -> list[RawSuggestion]:
     suggestions: list[RawSuggestion] = []
     for target in targets:
-        for issue in pressure_conversion_issues(target.text, str(check.expected)):
+        issues = (
+            pressure_conversion_issues(target.text, str(check.expected))
+            if check.operator == "pressure_conversion"
+            else unit_conversion_issues(target.text, str(check.expected))
+        )
+        for issue in issues:
+            suggestions.append(
+                RawSuggestion(
+                    rule_kind=rule_kind,
+                    rule_code=rule.id,
+                    severity=rule.severity,
+                    message=message,
+                    original=issue.original,
+                    proposed=issue.proposed,
+                    page=target.raw_page,
+                    span=issue.span,
+                    bbox=suggestion_bbox(
+                        target,
+                        issue.original,
+                        pdf_pages,
+                        span_start=issue.span[0],
+                    ),
+                )
+            )
+    return suggestions
+
+
+def sentence_punctuation_suggestions(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    rule_kind: str,
+    message: str,
+    pdf_pages: list[ParsedPage] | None,
+    *,
+    policy: str,
+) -> list[RawSuggestion]:
+    suggestions: list[RawSuggestion] = []
+    for target in targets:
+        for issue in sentence_punctuation_issues(
+            target.text,
+            target.span_ranges,
+            skip_page=target.page_type in {"TP1", "TP2", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"},
+            policy=policy,
+        ):
             suggestions.append(
                 RawSuggestion(
                     rule_kind=rule_kind,

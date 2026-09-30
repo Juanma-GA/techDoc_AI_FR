@@ -39,14 +39,19 @@ def _seed_builtin_standards() -> None:
     import json
 
     from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
+    from app.checks.client_registry import load_active_client_configuration
+    from app.db.seed import sync_user_standard
     from app.db.models import Standard, StandardVersion
     from app.db.session import SessionLocal
 
     session = SessionLocal()
     try:
-        if session.query(Standard).first() is not None:
-            return
+        existing_codes = {
+            code for (code,) in session.query(Standard.code).all()
+        }
         for spec in BUILTIN_STANDARDS:
+            if spec["code"] in existing_codes:
+                continue
             std = Standard(
                 code=spec["code"],
                 label=spec["label"],
@@ -64,7 +69,10 @@ def _seed_builtin_standards() -> None:
                         catalog_json=json.dumps(serialize_builtin_version(spec, label)),
                     )
                 )
-        session.commit()
+            sync_user_standard(
+                session,
+                load_active_client_configuration().bundle.standard_specs,
+            )
     finally:
         session.close()
 

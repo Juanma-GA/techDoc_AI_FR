@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useFiltersStore } from "../../stores/filtersStore";
 import { localizedSuggestionMessage } from "../../lib/suggestionText";
-import type { SourceKind, Suggestion } from "../../types/domain";
+import type { Suggestion } from "../../types/domain";
 import { SuggestionItem } from "./SuggestionItem";
 
 type Props = {
@@ -24,8 +24,6 @@ function occurrenceKey(s: Suggestion): string {
   return s.rule_code;
 }
 
-const SOURCE_KINDS: SourceKind[] = ["norme", "checklist", "regle", "transverse"];
-
 export function SuggestionPanel({
   suggestions,
   selectedId,
@@ -40,8 +38,6 @@ export function SuggestionPanel({
   const { t } = useTranslation();
   const showUnits = useFiltersStore((s) => s.showUnitConversions);
   const hideAccepted = useFiltersStore((s) => s.hideAccepted);
-  const sourceKindFilter = useFiltersStore((s) => s.sourceKindFilter);
-  const setSourceKindFilter = useFiltersStore((s) => s.setSourceKindFilter);
   const ruleCodeFilter = useFiltersStore((s) => s.ruleCodeFilter);
   const setRuleCodeFilter = useFiltersStore((s) => s.setRuleCodeFilter);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,11 +56,10 @@ export function SuggestionPanel({
     return suggestions.filter((s) => {
       if (!showUnits && s.rule_kind === "units") return false;
       if (hideAccepted && (s.status === "applied" || s.status === "rejected")) return false;
-      if (sourceKindFilter && s.source_kind !== sourceKindFilter) return false;
       if (ruleCodeFilter && s.rule_code !== ruleCodeFilter) return false;
       return true;
     });
-  }, [suggestions, showUnits, hideAccepted, sourceKindFilter, ruleCodeFilter]);
+  }, [suggestions, showUnits, hideAccepted, ruleCodeFilter]);
 
   // Bucket the *visible* list by rule, preserving first-seen order, so the
   // panel shows one collapsible row per rule instead of every occurrence.
@@ -137,19 +132,6 @@ export function SuggestionPanel({
       </header>
 
       <div className="row" style={{ gap: 8, padding: "0 12px 8px", flexWrap: "wrap" }}>
-        <select
-          className="input small"
-          value={sourceKindFilter ?? ""}
-          onChange={(e) => setSourceKindFilter((e.target.value || null) as SourceKind | null)}
-          aria-label={t("reviewer.panel.filters.source")}
-        >
-          <option value="">{t("reviewer.panel.filters.allSources")}</option>
-          {SOURCE_KINDS.map((k) => (
-            <option key={k} value={k}>
-              {t(`source.${k}`)}
-            </option>
-          ))}
-        </select>
         <select
           className="input small"
           value={ruleCodeFilter ?? ""}

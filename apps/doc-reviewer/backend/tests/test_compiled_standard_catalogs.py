@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 
+from app.checks.client_registry import load_active_client_configuration
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
-from app.checks.standards.thales_custom import (
+from app.checks.thales_rules.operations import shop_verification_text
+from app.checks.thales_rules.page_classifier import (
     HIGHLIGHTS_PAGE_TYPE,
     HIGHLIGHTS_FIRST_PAGE_TYPE,
     INTRODUCTION_PAGE_TYPE,
@@ -14,19 +17,31 @@ from app.checks.standards.thales_custom import (
     STORAGE_PAGE_TYPE,
     TESTING_PAGE_TYPE,
     TP1_PAGE_TYPE,
-    _IMPORTANT_NOTICE_TEXT,
     classify_pages,
     identify_note_pages,
     identify_introduction_pages,
     identify_tp1_pages,
-    shop_verification_text,
+)
+from app.checks.thales_rules.rules import (
+    DOCUMENT_TYPES,
+    IMPORTANT_NOTICE_TEXT as _IMPORTANT_NOTICE_TEXT,
 )
 
-from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules
+from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules as _execute_pdf_rules
+from app.core.compiled_rule_operators import extract_year
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span
+
+
+_TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
+
+
+def execute_pdf_rules(*args: Any, **kwargs: Any):
+    kwargs.setdefault("client_operations", _TEST_CLIENT_BUNDLE.operations)
+    kwargs.setdefault("client_entities", _TEST_CLIENT_BUNDLE.mapping.entities)
+    return _execute_pdf_rules(*args, **kwargs)
 
 
 def _rule(code: str) -> CompiledRule:
@@ -35,6 +50,9 @@ def _rule(code: str) -> CompiledRule:
             for rule in spec["versions"][label]:
                 if rule.id == code:
                     return rule
+    for definition in _TEST_CLIENT_BUNDLE.rules:
+        if definition.code == code:
+            return definition.compiled_rule
     raise AssertionError(f"Unknown built-in rule: {code}")
 
 
@@ -182,7 +200,162 @@ def test_all_builtin_catalog_entries_round_trip_as_compiled_rules() -> None:
                 assert metadata[compiled.id]["description_en"]
                 assert metadata[compiled.id]["message"]
                 assert metadata[compiled.id]["message_en"]
-    assert total == 71
+    assert total == 36
+
+
+def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
+    missing_rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    swap_rule = _rule("CUSTOM_ENUMERATION_PUNCTUATION_SWAP")
+    valid_page = ParsedPage(
+        page=1,
+        text=(
+            "1. General\n\n"
+            "This sentence is wrapped over two lines\n"
+            "and ends with a full stop.\n\n"
+            "- first item,\n\n"
+            "- last item."
+        ),
+        spans=[],
+        is_modified=True,
+    )
+    invalid_page = ParsedPage(
+        page=1,
+        text=(
+            "A sentence without a full stop\n\n"
+            "- first item.\n\n"
+            "- missing middle item\n\n"
+            "- last item,"
+        ),
+        spans=[],
+        is_modified=True,
+    )
+
+    valid, valid_suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[valid_page], full_text=valid_page.text, is_signed=False),
+        [missing_rule, swap_rule],
+    )
+    invalid_missing, missing_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[invalid_page],
+            full_text=invalid_page.text,
+            is_signed=False,
+        ),
+        [missing_rule],
+    )
+    invalid_swaps, swap_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[invalid_page],
+            full_text=invalid_page.text,
+            is_signed=False,
+        ),
+        [swap_rule],
+    )
+
+    assert [result.status for result in valid] == ["PASS", "PASS"]
+    assert valid_suggestions == []
+    assert invalid_missing[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in missing_suggestions] == [
+        ("A sentence without a full stop", "A sentence without a full stop."),
+        ("- missing middle item", "- missing middle item,"),
+    ]
+    assert invalid_swaps[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in swap_suggestions] == [
+        ("- first item.", "- first item,"),
+        ("- last item,", "- last item."),
+    ]
+
+
+def test_sentence_punctuation_rule_ignores_unchanged_pages() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    page = ParsedPage(
+        page=1,
+        text="A sentence without a full stop",
+        spans=[],
+        is_modified=False,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
+def test_parenthesized_steps_are_excluded_from_punctuation_validation() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    page = ParsedPage(
+        page=1,
+        text="(1) First step.\n\n(2) Second step.\n\n(a) Substep.\n\n(b) Last substep.",
+        spans=[],
+        is_modified=True,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+    missing_period = ParsedPage(
+        page=1,
+        text="(1) First step,\n\n(2) Last step.\n\n(a) Substep,\n\n(b) Last substep",
+        spans=[],
+        is_modified=True,
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[missing_period],
+            full_text=missing_period.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert invalid[0].status == "PASS"
+    assert invalid_suggestions == []
+
+
+def test_sentence_punctuation_rule_ignores_multi_column_table_cells() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    table_rows = [
+        (450.0, [("Pressure", 175.0), ("Pressure", 256.0), ("R 1", 357.0), ("R 2", 438.0)]),
+        (465.0, [("applied", 178.0), ("applied", 259.0), ("(ohms)", 348.0), ("(ohms)", 429.0)]),
+        (480.0, [("(bars)", 181.0), ("(p.s.i)", 259.0)]),
+        (510.0, [("0", 196.0), ("0", 281.0), ("22.5", 354.0), ("99.5", 435.0)]),
+        (525.0, [("1", 196.0), ("14.50", 269.0), ("35.3", 354.0), ("86.7", 435.0)]),
+        (540.0, [("2", 196.0), ("29", 278.0), ("48.1", 354.0), ("73.9", 435.0)]),
+        (555.0, [("3", 196.0), ("43.50", 269.0), ("61", 360.0), ("61", 441.0)]),
+    ]
+    spans = [
+        Span("Body text.", (40.0, 100.0, 120.0, 112.0), 1, "Arial", 10.0),
+    ]
+    for y, cells in table_rows:
+        spans.extend(
+            Span(text, (x, y, x + max(12.0, len(text) * 6.0), y + 12.0), 1, "Arial", 10.0)
+            for text, x in cells
+        )
+    spans.append(Span("Footer", (40.0, 780.0, 80.0, 792.0), 1, "Arial", 10.0))
+    page = ParsedPage(
+        page=1,
+        text="\n".join(span.text for span in spans),
+        spans=spans,
+        is_modified=True,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -324,6 +497,68 @@ def test_classify_pages_identifies_tp2_from_footer_marker() -> None:
     )
 
     assert parsed.pages[0].page_type == TP2_PAGE_TYPE
+
+
+def test_page_types_survive_an_incorrect_revision_date_mapping() -> None:
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=[
+            _page_with_footer_lines(
+                1,
+                ["79-30-01", "Highlights Page 1", "JUL 27/26"],
+            ),
+            _page_with_footer_lines(
+                2,
+                ["79-30-01", "TP 2", "JUL 27/26"],
+            ),
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    classify_pages(
+        parsed,
+        SimpleNamespace(
+            meta_revision_date="AUG 27/26",
+            meta_cmm_number="79-30-02",
+        ),
+    )
+
+    assert [page.page_type for page in parsed.pages] == [
+        HIGHLIGHTS_FIRST_PAGE_TYPE,
+        TP2_PAGE_TYPE,
+    ]
+
+
+def test_highlights_rule_still_runs_when_mapping_anchors_are_wrong() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ATA_NUMBER")
+    document = SimpleNamespace(
+        meta_revision_date="AUG 27/26",
+        meta_cmm_number="79-30-02",
+    )
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(
+                1,
+                [
+                    "79-30-01",
+                    "Highlights Page 1",
+                    "JUL 27/26",
+                    "ATA No 79-30-01",
+                ],
+            )
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    classify_pages(parsed, document)
+    results, suggestions = execute_pdf_rules(parsed, [rule], document=document)
+
+    assert parsed.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
+    assert results[0].status == "FAIL"
+    assert suggestions[0].proposed == "ATA No 79-30-02"
 
 
 def test_cmm_number_is_checked_on_each_page() -> None:
@@ -601,7 +836,13 @@ def test_first_highlights_page_matches_the_tp1_holder_phrase() -> None:
     valid_page = ParsedPage(
         page=1,
         page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
-        text="HIGHLIGHTS\nTO: HOLDER OF PRESSURE TRANSMITTER\nRevision content",
+        text=(
+            "COMPONENT MAINTENANCE MANUAL\n"
+            "TO: HOLDER OF PRESSURE TRANSMITTER\n"
+            "PNR: 1-879-SB\n"
+            "HIGHLIGHTS\n"
+            "Revision content"
+        ),
         spans=[
             Span(
                 text="HIGHLIGHTS",
@@ -902,6 +1143,335 @@ def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> 
     assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
 
 
+def test_highlights_pnr_header_uses_only_the_first_mapping_value() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    document = SimpleNamespace(
+        client_metadata={"meta_pnr_number": ["33140-02", "33140-03"]}
+    )
+
+    def build_page(pnr: str) -> ParsedPdf:
+        text = f"PNR: {pnr}\nHighlights page 1"
+        page = ParsedPage(
+            page=1,
+            page_type=HIGHLIGHTS_PAGE_TYPE,
+            text=text,
+            spans=[
+                Span(pnr, (40.0, 100.0, 180.0, 110.0), 1, "Arial", 8.0),
+                Span(
+                    "Highlights page 1",
+                    (40.0, 756.0, 220.0, 766.0),
+                    1,
+                    "Arial",
+                    8.0,
+                ),
+            ],
+        )
+        return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+    valid, valid_suggestions = execute_pdf_rules(
+        build_page("33140 - 02"), [rule], document=document
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        build_page("33140 - 03"), [rule], document=document
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("33140 - 03", "33140-02")
+    ]
+
+
+def _document_type_header_page(
+    header: str,
+    *,
+    body: str = "Document body.",
+    page_type: str | None = None,
+) -> ParsedPage:
+    footer = "Page 1"
+    return ParsedPage(
+        page=1,
+        page_type=page_type,
+        text=f"{header}\n{body}\n{footer}",
+        spans=[
+            Span(
+                text=header,
+                bbox=(40.0, 80.0, 300.0, 95.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text=body,
+                bbox=(40.0, 400.0, 200.0, 415.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text=footer,
+                bbox=(40.0, 760.0, 120.0, 775.0),
+                page=1,
+                font="Arial",
+                size=8.0,
+            ),
+        ],
+    )
+
+
+def test_non_tp1_headers_require_an_allowed_document_type() -> None:
+    rule = _rule("CUSTOM_HEADER_DOCUMENT_TYPE")
+    valid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("COMPONENT MAINTENANCE MANUAL")],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    invalid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("OTHER MANUAL")],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    excluded, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("OTHER MANUAL", page_type=TP1_PAGE_TYPE)],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert excluded == []
+
+
+def test_tp1_content_requires_an_allowed_document_type() -> None:
+    rule = _rule("CUSTOM_TP1_HEADER_DOCUMENT_TYPE")
+    valid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[
+                _document_type_header_page(
+                    "TP1 heading",
+                    body="OVERHAUL MANUAL",
+                    page_type=TP1_PAGE_TYPE,
+                )
+            ],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    invalid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[
+                _document_type_header_page(
+                    "OVERHAUL MANUAL",
+                    page_type=TP1_PAGE_TYPE,
+                )
+            ],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+    excluded, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[_document_type_header_page("OTHER MANUAL")],
+            full_text="",
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert excluded == []
+
+
+def test_highlights_document_type_must_precede_the_ata_number() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
+    invalid_page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text="ATA No 23-56-25\nOVERHAUL MANUAL\nHighlights Page 1",
+    )
+    later_page = ParsedPage(
+        page=2,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+        text="Highlights Page 2",
+    )
+
+    for document_type in DOCUMENT_TYPES:
+        valid_page = ParsedPage(
+            page=1,
+            page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+            text=f"{document_type}\nATA No 23-56-25\nHighlights Page 1",
+        )
+        valid, _ = execute_pdf_rules(
+            ParsedPdf(
+                page_count=1,
+                pages=[valid_page],
+                full_text=valid_page.text,
+                is_signed=False,
+            ),
+            [rule],
+        )
+        assert valid[0].status == "PASS", document_type
+    invalid, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[invalid_page],
+            full_text=invalid_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+    later, _ = execute_pdf_rules(
+        ParsedPdf(
+            page_count=2,
+            pages=[later_page],
+            full_text=later_page.text,
+            is_signed=False,
+        ),
+        [rule],
+    )
+
+    assert invalid[0].status == "FAIL"
+    assert later == []
+
+def test_highlights_document_type_accepts_illustrated_parts_list_suffix() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
+    text = (
+        "COMPONENT MAINTENANCE MANUAL with Illustrated Parts List\n"
+        "ATA No 21-33-13\n"
+        "Highlights Page 1"
+    )
+    page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text=text,
+    )
+
+    results, _ = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+
+
+def test_highlights_legend_must_be_the_last_body_line_before_the_footer() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_LEGEND_FOOTER")
+
+    def build_pdf(*, has_intervening_line: bool) -> ParsedPdf:
+        lines = [
+            PdfLine(
+                "Chapter / Section Revision Status",
+                (40.0, 680.0, 520.0, 692.0),
+                0,
+                0,
+            ),
+            PdfLine(
+                "N: New - D: Deleted - R: Revised - U: Unchanged",
+                (40.0, 710.0, 520.0, 722.0),
+                0,
+                1,
+            ),
+        ]
+        if has_intervening_line:
+            lines.append(
+                PdfLine("Extra body line", (40.0, 730.0, 520.0, 742.0), 0, 2)
+            )
+        lines.extend(
+            [
+                PdfLine("THALES AVS FRANCE SAS", (240.0, 756.0, 400.0, 766.0), 1, 0),
+                PdfLine("Highlights Page 1", (40.0, 756.0, 180.0, 766.0), 1, 1),
+                PdfLine("JUL 27/26", (40.0, 772.0, 120.0, 782.0), 1, 2),
+            ]
+        )
+        text = "\n".join(line.text for line in lines)
+        page = ParsedPage(
+            page=1,
+            text=text,
+            page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+            lines=lines,
+            page_height=792.0,
+        )
+        return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+    valid, _ = execute_pdf_rules(build_pdf(has_intervening_line=False), [rule])
+    invalid, _ = execute_pdf_rules(build_pdf(has_intervening_line=True), [rule])
+
+    assert valid[0].status == "PASS"
+    assert invalid[0].status == "FAIL"
+    assert invalid[0].evidence.observed_value == "Extra body line"
+
+
+def test_highlights_document_type_does_not_use_the_centered_page_header() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE")
+    page = ParsedPage(
+        page=1,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+        text=(
+            "OVERHAUL MANUAL\n"
+            "1-879-SB\n"
+            "PRESSURE TRANSMITTER\n"
+            "PNR: 1-879-SB\n"
+            "MANUAL with Illustrated Parts List\n"
+            "ATA No\n"
+            "HIGHLIGHTS"
+        ),
+        spans=[
+            Span(
+                text="OVERHAUL MANUAL",
+                bbox=(280.0, 45.0, 375.0, 60.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="MANUAL with Illustrated Parts List",
+                bbox=(86.0, 160.0, 300.0, 175.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+            Span(
+                text="ATA No",
+                bbox=(86.0, 180.0, 134.0, 195.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            ),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "FAIL"
+    assert [
+        (suggestion.original, suggestion.proposed)
+        for suggestion in suggestions
+    ] == [("MANUAL with Illustrated Parts List", "OVERHAUL MANUAL")]
+    assert suggestions[0].bbox == (86.0, 160.0, 300.0, 175.0)
+
+
 def test_pnr_header_reports_each_invalid_page() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(meta_pnr_number="1-879-SB")
@@ -953,7 +1523,7 @@ def test_pnr_header_reports_each_invalid_occurrence() -> None:
         text="PNR: 1-878-SB | PNR: 1-877-SB\nHighlights page 1",
         spans=[
             Span(
-                text="PNR: 1-878-SB | PNR: 1-877-SB",
+            text="PNR: 1-878-SB | PNR: 1-877-SB",
                 bbox=(40.0, 100.0, 300.0, 110.0),
                 page=1,
                 font="Arial",
@@ -1843,6 +2413,58 @@ def test_bar_pressure_requires_a_parenthesized_psi_conversion() -> None:
     assert wrong_value_suggestions[0].original == "0.7 bar (10.25 p.s.i.)"
     assert wrong_value_suggestions[0].proposed == "0.7 bar (10.15 p.s.i.)"
 
+    tolerance, tolerance_suggestions = execute_pdf_rules(
+        _pdf("Pressure: 0.7 bar + 3% (10.15 p.s.i. + 3%)"),
+        [rule],
+    )
+    assert tolerance[0].status == "PASS"
+    assert tolerance_suggestions == []
+
+
+def test_thales_si_units_require_parenthesized_imperial_conversions() -> None:
+    cases = [
+        (
+            "CUSTOM_PASCAL_INHG_CONVERSION",
+            "Pressure: 101.325 kPa +- 3% (29.92 inHg + 3%)",
+            "Pressure: 101.325 kPa + 3% (30.10 inHg + 3%)",
+            "101.325 kPa + 3% (29.92 inHg + 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_LENGTH_INCH_CONVERSION",
+            "Length: 2.54 cm +- 3% (1.00 in. + 3%)",
+            "Length: 2.54 cm + 3% (1.10 in. + 3%)",
+            "2.54 cm + 3% (1.00 in. + 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_MASS_LBF_CONVERSION",
+            "Mass: 400 g +- 3% (0.882 lb + 3%)",
+            "Mass: 400 g + 3% (0.90 lb + 3%)",
+            "400 g + 3% (0.882 lb + 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_MASS_LBF_CONVERSION",
+            "Mass: 400 g +- 3% (0.882 lb +- 3%)",
+            "Mass: 400 g +- 3% (0.90 lb +- 2%)",
+            "400 g +- 3% (0.882 lb +- 3%)",
+        ),
+        (
+            "CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION",
+            "Torque: 1 daN.m +- 3% (88.51 lbf.in + 3%)",
+            "Torque: 1 daN.m + 3% (88.00 lbf.in + 3%)",
+            "1 daN.m + 3% (88.51 lbf.in + 3%)",
+        ),
+    ]
+
+    for rule_code, valid_text, invalid_text, expected_proposal in cases:
+        rule = _rule(rule_code)
+        valid, valid_suggestions = execute_pdf_rules(_pdf(valid_text), [rule])
+        invalid, invalid_suggestions = execute_pdf_rules(_pdf(invalid_text), [rule])
+
+        assert valid[0].status == "PASS", rule_code
+        assert valid_suggestions == [], rule_code
+        assert invalid[0].status == "FAIL", rule_code
+        assert invalid_suggestions[0].proposed == expected_proposal, rule_code
+
 
 def test_forbidden_consumables_are_reported_by_one_rule() -> None:
     rule = _rule("CUSTOM_FORBIDDEN_CONSUMABLES")
@@ -1867,6 +2489,29 @@ def test_forbidden_consumables_are_reported_by_one_rule() -> None:
     assert {item.rule_code for item in invalid_suggestions} == {
         "CUSTOM_FORBIDDEN_CONSUMABLES"
     }
+
+
+def test_legacy_thales_references_are_proposed_as_thales() -> None:
+    rule = _rule("CUSTOM_REPLACE_LEGACY_NAMES")
+
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Use THALES equipment."),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _pdf("AVIONICS, Sextant and thomson equipment."),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [item.original for item in invalid_suggestions] == [
+        "AVIONICS",
+        "Sextant",
+        "thomson",
+    ]
+    assert {item.proposed for item in invalid_suggestions} == {"THALES"}
 
 
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:
@@ -1894,13 +2539,16 @@ def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:
 def test_title_page_copyright_matches_revision_year_in_footer() -> None:
     rule = _rule("CUSTOM_TITLE_PAGE_COPYRIGHT")
     valid_footer = (
-        "© 1966-2026 THALES AVS FRANCE SAS. This document and any data included "
+        "© 1973-2026 THALES AVS FRANCE SAS. This document and any data included "
         "are the property of THALES AVS FRANCE SAS. They cannot be reproduced, "
         "disclosed or used without the company's prior written approval"
     )
-    invalid_year_footer = valid_footer.replace("1966-2026", "1966-2025")
-    invalid_start_year_footer = valid_footer.replace("1966-2026", "1967-2026")
-    document = SimpleNamespace(meta_revision_date="JUL 27/26")
+    invalid_year_footer = valid_footer.replace("1973-2026", "1973-2025")
+    invalid_start_year_footer = valid_footer.replace("1973-2026", "1974-2026")
+    document = SimpleNamespace(
+        meta_first_issue_date="JUL 30/73",
+        meta_revision_date="JUL 27/26",
+    )
 
     valid, valid_suggestions = execute_pdf_rules(
         _title_page_copyright_pdf(valid_footer), [rule], document=document
@@ -1925,8 +2573,11 @@ def test_title_page_copyright_matches_revision_year_in_footer() -> None:
     ]
     assert invalid_start[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_start_suggestions] == [
-        ("1967", "1966")
+        ("1974", "1973")
     ]
+    assert extract_year("JUL 30/73") == "1973"
+    assert extract_year("JUL 30/49") == "2049"
+    assert extract_year("JUL 30/50") == "1950"
     assert missing[0].status == "FAIL"
     # Copyright entierement absent (pas seulement une annee erronee) : pas de
     # span a remplacer, mais le FAIL doit rester visible via un commentaire.
@@ -1938,16 +2589,19 @@ def test_title_page_copyright_matches_revision_year_in_footer() -> None:
 def test_title_page_copyright_checks_every_selected_footer_page() -> None:
     rule = _rule("CUSTOM_TITLE_PAGE_COPYRIGHT")
     valid_footer = (
-        "© 1966-2026 THALES AVS FRANCE SAS. This document and any data included "
+        "© 1973-2026 THALES AVS FRANCE SAS. This document and any data included "
         "are the property of THALES AVS FRANCE SAS. They cannot be reproduced, "
         "disclosed or used without the company's prior written approval"
     )
-    invalid_footer = valid_footer.replace("1966-2026", "1966-2025")
+    invalid_footer = valid_footer.replace("1973-2026", "1973-2025")
 
     results, suggestions = execute_pdf_rules(
         _title_page_copyright_pages({1: valid_footer, 3: invalid_footer}),
         [rule],
-        document=SimpleNamespace(meta_revision_date="JUL 27/26"),
+        document=SimpleNamespace(
+            meta_first_issue_date="JUL 30/73",
+            meta_revision_date="JUL 27/26",
+        ),
     )
 
     assert results[0].status == "FAIL"
@@ -1962,24 +2616,107 @@ def test_title_page_copyright_checks_every_selected_footer_page() -> None:
 def test_title_page_copyright_reports_mismatches_from_multiple_checks_and_pages() -> None:
     rule = _rule("CUSTOM_TITLE_PAGE_COPYRIGHT")
     valid_footer = (
-        "© 1966-2026 THALES AVS FRANCE SAS. This document and any data included "
+        "© 1973-2026 THALES AVS FRANCE SAS. This document and any data included "
         "are the property of THALES AVS FRANCE SAS. They cannot be reproduced, "
         "disclosed or used without the company's prior written approval"
     )
-    first_invalid_footer = valid_footer.replace("1966-2026", "1966-2025")
-    second_invalid_footer = valid_footer.replace("1966-2026", "1970-2026")
+    first_invalid_footer = valid_footer.replace("1973-2026", "1973-2025")
+    second_invalid_footer = valid_footer.replace("1973-2026", "1970-2026")
 
     results, suggestions = execute_pdf_rules(
         _title_page_copyright_pages({3: first_invalid_footer, 4: second_invalid_footer}),
         [rule],
-        document=SimpleNamespace(meta_revision_date="JUL 27/26"),
+        document=SimpleNamespace(
+            meta_first_issue_date="JUL 30/73",
+            meta_revision_date="JUL 27/26",
+        ),
     )
 
     assert results[0].status == "FAIL"
     assert [
         (item.page, item.original, item.proposed)
         for item in suggestions
-    ] == [(3, "2025", "2026"), (4, "1970", "1966")]
+    ] == [(3, "2025", "2026"), (4, "1970", "1973")]
+
+
+def test_copyright_position_matches_pdf_page_parity_and_coordinates() -> None:
+    rule = _rule("CUSTOM_COPYRIGHT_POSITION")
+    points_per_cm = 72.0 / 2.54
+    page_positions = {
+        1: (3.03, 26.51),
+        2: (1.76, 26.51),
+        3: (3.03, 26.51),
+        4: (1.76, 26.51),
+    }
+
+    def build_pdf(
+        overrides: dict[int, tuple[float, float]] | None = None,
+        *,
+        missing_copyright_page: int | None = None,
+    ) -> ParsedPdf:
+        overrides = overrides or {}
+        pages = []
+        for page_number, expected_position in page_positions.items():
+            text = f"Page {page_number} body."
+            spans = [
+                Span(
+                    text=text,
+                    bbox=(40.0, 100.0, 200.0, 112.0),
+                    page=page_number,
+                    font="Arial",
+                    size=10.0,
+                )
+            ]
+            if page_number != missing_copyright_page:
+                x_cm, y_cm = overrides.get(page_number, expected_position)
+                copyright = "© 1966-2026 THALES AVS FRANCE SAS."
+                spans.append(
+                    Span(
+                        text=copyright,
+                        bbox=(
+                            x_cm * points_per_cm,
+                            y_cm * points_per_cm,
+                            x_cm * points_per_cm + 200.0,
+                            y_cm * points_per_cm + 8.0,
+                        ),
+                        page=page_number,
+                        font="Arial",
+                        size=6.0,
+                    )
+                )
+                text = f"{text}\n{copyright}"
+            pages.append(ParsedPage(page=page_number, text=text, spans=spans))
+        return ParsedPdf(
+            page_count=4,
+            pages=pages,
+            full_text="\n".join(page.text for page in pages),
+            is_signed=False,
+        )
+
+    valid, _ = execute_pdf_rules(build_pdf(), [rule])
+    assert valid[0].status == "PASS"
+
+    invalid_positions = (
+        (1, (1.76, 26.51)),
+        (2, (3.03, 26.51)),
+        (3, (3.03, 26.71)),
+    )
+    for page_number, position in invalid_positions:
+        invalid, _ = execute_pdf_rules(
+            build_pdf({page_number: position}),
+            [rule],
+        )
+        assert invalid[0].status == "FAIL"
+        assert invalid[0].evidence is not None
+        assert invalid[0].evidence.page == str(page_number)
+
+    missing, _ = execute_pdf_rules(
+        build_pdf(missing_copyright_page=4),
+        [rule],
+    )
+    assert missing[0].status == "FAIL"
+    assert missing[0].evidence is not None
+    assert missing[0].evidence.page == "4"
 
 
 def test_mat_reference_format_is_passed_and_failed_by_the_compiled_executor() -> None:

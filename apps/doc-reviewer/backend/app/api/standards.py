@@ -12,7 +12,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -280,6 +280,7 @@ def reset_catalog_rule(
     standard_id: uuid.UUID,
     version_id: uuid.UUID,
     code: str,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
     """Restore a built-in catalog rule from the Python source of truth
@@ -300,7 +301,11 @@ def reset_catalog_rule(
         )
 
     factory_rule = None
-    for spec in BUILTIN_STANDARDS:
+    factory_specs = [
+        *BUILTIN_STANDARDS,
+        *request.app.state.client_configuration.bundle.standard_specs.values(),
+    ]
+    for spec in factory_specs:
         if spec["code"] != std.code:
             continue
         for label in spec["versions"]:

@@ -1,0 +1,21 @@
+{
+  "client_code": "SAMPLE",
+  "label": "Sample client",
+  "bundle_version": "1.0.0",
+  "contract_version": "1",
+  "catalogs": [
+    {
+      "code": "SAMPLE-CHECKS",
+      "version": "v1"
+    }
+  ],
+  "files": {
+    "mapping": "mapping.json"
+  },
+  "modules": {
+    "rules": "rules.py",
+    "operations": "operations.py",
+    "page_classifier": "page_classifier.py"
+  },
+  "ui_options": {}
+}

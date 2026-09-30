@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -41,9 +43,7 @@ _DOCUMENT_METADATA_FIELDS = (
     "meta_manufacturer",
     "document_language",
 )
-_CONTEXT_TOKEN_RE = re.compile(
-    r"\{\{(?:document\.)?(meta_revision_date|meta_cmm_number|meta_first_issue_date|meta_last_issue_date|meta_revision_number|meta_pnr_number|meta_manufacturer|document_language)\}\}"
-)
+_CONTEXT_TOKEN_RE = re.compile(r"\{\{(?:document\.)?([A-Za-z_][A-Za-z0-9_]*)\}\}")
 
 
 @dataclass(frozen=True)
@@ -68,6 +68,8 @@ class _EvalContext:
     pdf_pages: list[ParsedPage] | None
     document: Any | None
     db: Session | None
+    client_operations: Mapping[str, Any] | None = None
+    client_entities: Mapping[str, str] | None = None
     # Required by the operators whose verdict spans the whole document
     # (cross-page consistency); None on the docx pipeline.
     parsed_pdf: ParsedPdf | None = None
@@ -76,11 +78,41 @@ class _EvalContext:
 def document_metadata(document: Any | None) -> dict[str, str]:
     if document is None:
         return {}
+    metadata: dict[str, Any] = {}
+    raw_metadata = getattr(document, "client_metadata", None)
+    if isinstance(raw_metadata, Mapping):
+        metadata.update(raw_metadata)
+    for field in _DOCUMENT_METADATA_FIELDS:
+        if field not in metadata:
+            metadata[field] = getattr(document, field, None)
+        pnr_numbers = metadata.get("meta_pnr_number")
+        if isinstance(pnr_numbers, list):
+            metadata["meta_first_pnr_number"] = next(
+                (
+                    str(value).strip()
+                    for value in pnr_numbers
+                    if value is not None and str(value).strip()
+                ),
+                None,
+            )
+        elif pnr_numbers is not None:
+            metadata["meta_first_pnr_number"] = pnr_numbers
     return {
-        field: str(value).strip()
-        for field in _DOCUMENT_METADATA_FIELDS
-        if (value := getattr(document, field, None)) is not None and str(value).strip()
+        field: rendered
+        for field, value in metadata.items()
+        if (rendered := _metadata_text(value))
     }
+
+
+def _metadata_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return json.dumps(
+            [str(item).strip() for item in value if str(item).strip()],
+            ensure_ascii=False,
+        )
+    return str(value).strip()
 
 
 def page_span_ranges(page: ParsedPage) -> tuple[_SpanRange, ...]:

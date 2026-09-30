@@ -41,6 +41,8 @@ export function SuggestionItem({
 
   const isApplied = suggestion.status === "applied";
   const isRejected = suggestion.status === "rejected";
+  const detectionOnly =
+    !suggestion.proposed_text || suggestion.proposed_text === suggestion.original_text;
 
   return (
     <article
@@ -82,10 +84,13 @@ export function SuggestionItem({
       ) : (
         <DiffInline original={suggestion.original_text} proposed={suggestion.proposed_text} />
       )}
+      {detectionOnly ? (
+        <span className="badge default">{t("rules.suggestionDetails.detectionOnly")}</span>
+      ) : null}
 
       {!isApplied && !isRejected ? (
         <footer className="suggestion-actions" style={{ justifyContent: "flex-end" }}>
-          {editing ? (
+          {editing && !detectionOnly ? (
             <>
               <button
                 type="button"
@@ -123,29 +128,33 @@ export function SuggestionItem({
                 <X size={12} />
                 {t("reviewer.suggestion.reject")}
               </button>
-              <button
-                type="button"
-                className="btn secondary small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditing(true);
-                }}
-              >
-                <Pencil size={12} />
-                {t("reviewer.suggestion.edit")}
-              </button>
-              <button
-                type="button"
-                className="btn primary small"
-                data-testid="suggestion-accept"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAccept();
-                }}
-              >
-                <Check size={12} />
-                {t("reviewer.suggestion.accept")}
-              </button>
+              {!detectionOnly ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(true);
+                    }}
+                  >
+                    <Pencil size={12} />
+                    {t("reviewer.suggestion.edit")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn primary small"
+                    data-testid="suggestion-accept"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAccept();
+                    }}
+                  >
+                    <Check size={12} />
+                    {t("reviewer.suggestion.accept")}
+                  </button>
+                </>
+              ) : null}
             </>
           )}
         </footer>

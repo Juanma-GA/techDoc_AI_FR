@@ -5,17 +5,23 @@ from __future__ import annotations
 import uuid
 import tempfile
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 import fitz  # PyMuPDF
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.checks.client_registry import (
+    LoadedClientConfiguration,
+    active_standard_versions,
+)
+from app.checks.client_bundle import ClientMapping, ClientMappingField
 from app.config import settings
 from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
 from app.core.document_context import (
+    DOCUMENT_CONTEXT_FIELDS,
     get_document_context_defaults,
     save_document_context_defaults,
 )
@@ -35,17 +41,80 @@ router = APIRouter(tags=["documents"])
 _MAX_BATCH_SIZE = 20
 
 
+def _legacy_metadata_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return ", ".join(str(item).strip() for item in value if str(item).strip()) or None
+    return str(value).strip()
+
+
+def _validate_client_metadata_patch(
+    values: dict[str, Any],
+    field_definitions: dict[str, ClientMappingField],
+) -> None:
+    for key, value in values.items():
+        definition = field_definitions.get(key)
+        if definition is None:
+            raise AppError(
+                "CLIENT_METADATA_INVALID",
+                f"Le champ de métadonnées '{key}' n'est pas déclaré par le client actif.",
+                detail={"field": key, "reason": "undeclared"},
+                status_code=422,
+            )
+        if value is None:
+            continue
+
+        if definition.type in {"string", "enum"}:
+            value_is_valid = isinstance(value, str)
+        elif definition.type == "string_list":
+            value_is_valid = isinstance(value, list) and all(
+                isinstance(item, str) for item in value
+            )
+        elif definition.type == "integer":
+            value_is_valid = type(value) is int
+        elif definition.type == "number":
+            value_is_valid = isinstance(value, (int, float)) and not isinstance(value, bool)
+        else:
+            value_is_valid = type(value) is bool
+
+        if not value_is_valid:
+            raise AppError(
+                "CLIENT_METADATA_INVALID",
+                f"Valeur invalide pour le champ de métadonnées '{key}'.",
+                detail={"field": key, "expected": definition.type},
+                status_code=422,
+            )
+        if definition.max_length is not None and len(value) > definition.max_length:
+            value_is_valid = False
+        if definition.max_items is not None and len(value) > definition.max_items:
+            value_is_valid = False
+        if definition.allowed_values is not None:
+            candidates = value if definition.type == "string_list" else [value]
+            if any(item not in definition.allowed_values for item in candidates):
+                value_is_valid = False
+        if not value_is_valid:
+            raise AppError(
+                "CLIENT_METADATA_INVALID",
+                f"Valeur invalide pour le champ de métadonnées '{key}'.",
+                detail={"field": key, "expected": definition.type},
+                status_code=422,
+            )
+
+
 def _resolve_standard_versions(
     standard_version_id: Optional[uuid.UUID],
     standard_version_ids: Optional[str],
     db: Session,
+    client_configuration: LoadedClientConfiguration | None = None,
 ) -> tuple[Optional[uuid.UUID], list[uuid.UUID]]:
     """Resolve the multi-norm payload into a validated (primary, [all]) pair.
 
     `standard_version_id` (single, legacy) and `standard_version_ids`
     (comma-separated, v2 multi-norm) can be combined: every value listed
     is validated against the DB, the *first* one becomes the « primary »
-    that stays in `Document.standard_version_id` for backward compat.
+    that stays in `Document.standard_version_id` for backward compat. With
+    no explicit selection, the active bundle manifest supplies the defaults.
     """
     raw_ids: list[uuid.UUID] = []
     if standard_version_id is not None:
@@ -80,6 +149,11 @@ def _resolve_standard_versions(
                 "Version de norme introuvable",
                 status_code=400,
             )
+    if not deduped:
+        deduped = [
+            version.id
+            for version in active_standard_versions(db, client_configuration)
+        ]
     primary = deduped[0] if deduped else None
     return primary, deduped
 
@@ -94,6 +168,7 @@ def _persist_pdf(
     convert_engine: str = "pdf",
     source_format: str = "pdf",
     original_data: Optional[bytes] = None,
+    client_mapping: ClientMapping | None = None,
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
@@ -130,7 +205,7 @@ def _persist_pdf(
         opened.close()
 
     import json as _json
-    context_defaults = get_document_context_defaults(db)
+    context_defaults = get_document_context_defaults(db, client_mapping)
 
     document = Document(
         id=doc_id,
@@ -150,14 +225,15 @@ def _persist_pdf(
         convert_engine=convert_engine,
         text_coverage=report.coverage,
         quality=report.state,
-        meta_revision_date=context_defaults["meta_revision_date"],
-        meta_cmm_number=context_defaults["meta_cmm_number"],
-        meta_first_issue_date=context_defaults["meta_first_issue_date"],
-        meta_last_issue_date=context_defaults["meta_last_issue_date"],
-        meta_revision_number=context_defaults["meta_revision_number"],
-        meta_pnr_number=context_defaults["meta_pnr_number"],
-        meta_manufacturer=context_defaults["meta_manufacturer"],
-        document_language=context_defaults["document_language"],
+        client_metadata=dict(context_defaults),
+        meta_revision_date=context_defaults.get("meta_revision_date"),
+        meta_cmm_number=context_defaults.get("meta_cmm_number"),
+        meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
+        meta_last_issue_date=context_defaults.get("meta_last_issue_date"),
+        meta_revision_number=context_defaults.get("meta_revision_number"),
+        meta_pnr_number=_legacy_metadata_value(context_defaults.get("meta_pnr_number")),
+        meta_manufacturer=context_defaults.get("meta_manufacturer", "Airbus"),
+        document_language=context_defaults.get("document_language"),
     )
     db.add(document)
     db.commit()
@@ -204,6 +280,7 @@ def _persist_docx(
     original_data: Optional[bytes] = None,
     source_format: Optional[str] = None,
     engine_override: Optional[str] = None,
+    client_mapping: ClientMapping | None = None,
 ) -> Document:
     """Persist a DOCX working document while retaining the detected source.
 
@@ -261,7 +338,7 @@ def _persist_docx(
     page_count = max((b.page for b in parsed.blocks), default=1)
 
     import json as _json
-    context_defaults = get_document_context_defaults(db)
+    context_defaults = get_document_context_defaults(db, client_mapping)
 
     document = Document(
         id=doc_id,
@@ -281,14 +358,15 @@ def _persist_docx(
         convert_engine=engine,
         text_coverage=100,
         quality="analyzable",
-        meta_revision_date=context_defaults["meta_revision_date"],
-        meta_cmm_number=context_defaults["meta_cmm_number"],
-        meta_first_issue_date=context_defaults["meta_first_issue_date"],
-        meta_last_issue_date=context_defaults["meta_last_issue_date"],
-        meta_revision_number=context_defaults["meta_revision_number"],
-        meta_pnr_number=context_defaults["meta_pnr_number"],
-        meta_manufacturer=context_defaults["meta_manufacturer"],
-        document_language=context_defaults["document_language"],
+        client_metadata=dict(context_defaults),
+        meta_revision_date=context_defaults.get("meta_revision_date"),
+        meta_cmm_number=context_defaults.get("meta_cmm_number"),
+        meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
+        meta_last_issue_date=context_defaults.get("meta_last_issue_date"),
+        meta_revision_number=context_defaults.get("meta_revision_number"),
+        meta_pnr_number=_legacy_metadata_value(context_defaults.get("meta_pnr_number")),
+        meta_manufacturer=context_defaults.get("meta_manufacturer", "Airbus"),
+        document_language=context_defaults.get("document_language"),
     )
     db.add(document)
     db.commit()
@@ -298,6 +376,7 @@ def _persist_docx(
 
 @router.post("/documents", response_model=DocumentOut, status_code=201)
 def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
@@ -308,7 +387,10 @@ def upload_document(
     db: Session = Depends(get_db),
 ) -> Document:
     primary, all_ids = _resolve_standard_versions(
-        standard_version_id, standard_version_ids, db
+        standard_version_id,
+        standard_version_ids,
+        db,
+        request.app.state.client_configuration,
     )
     name = file.filename or "upload"
     if name.lower().endswith(".zip"):
@@ -327,6 +409,7 @@ def upload_document(
             original_data=prepared.original_bytes,
             source_format=prepared.source_format,
             engine_override=prepared.convert_engine,
+            client_mapping=request.app.state.client_configuration.mapping,
         )
     return _persist_pdf(
         prepared.working_bytes, prepared.filename, target, db,
@@ -335,11 +418,13 @@ def upload_document(
         convert_engine=prepared.convert_engine,
         source_format=prepared.source_format,
         original_data=prepared.original_bytes,
+        client_mapping=request.app.state.client_configuration.mapping,
     )
 
 
 @router.post("/documents/batch")
 def upload_documents_batch(
+    request: Request,
     files: list[UploadFile] = File(...),
     target: Literal["metric", "imperial", "auto", "none"] = Query(default="none"),
     standard_version_id: Optional[uuid.UUID] = Query(default=None),
@@ -360,7 +445,10 @@ def upload_documents_batch(
         )
 
     primary, all_ids = _resolve_standard_versions(
-        standard_version_id, standard_version_ids, db
+        standard_version_id,
+        standard_version_ids,
+        db,
+        request.app.state.client_configuration,
     )
     raw_items = [(f.filename or "upload", f.file.read()) for f in files]
     expanded, ignored = ingest.expand_uploads(raw_items)
@@ -378,6 +466,7 @@ def upload_documents_batch(
                     original_data=prepared.original_bytes,
                     source_format=prepared.source_format,
                     engine_override=prepared.convert_engine,
+                    client_mapping=request.app.state.client_configuration.mapping,
                 )
             else:
                 doc = _persist_pdf(
@@ -387,6 +476,7 @@ def upload_documents_batch(
                     convert_engine=prepared.convert_engine,
                     source_format=prepared.source_format,
                     original_data=prepared.original_bytes,
+                    client_mapping=request.app.state.client_configuration.mapping,
                 )
             created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
         except AppError as exc:
@@ -426,6 +516,7 @@ def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Docum
 @router.patch("/documents/{document_id}", response_model=DocumentOut)
 def patch_document_meta(
     document_id: uuid.UUID,
+    request: Request,
     body: DocumentMetaPatchIn,
     db: Session = Depends(get_db),
 ) -> Document:
@@ -434,10 +525,43 @@ def patch_document_meta(
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     patch = body.model_dump(exclude_unset=True)
-    for key, value in patch.items():
-        setattr(doc, key, value)
+    client_metadata_patch = patch.pop("client_metadata", {})
+    client_mapping = request.app.state.client_configuration.mapping
+    _validate_client_metadata_patch(
+        client_metadata_patch,
+        client_mapping.fields,
+    )
+    metadata_updates = dict(client_metadata_patch)
+    legacy_updates = {
+        key: value for key, value in patch.items() if key in DOCUMENT_CONTEXT_FIELDS
+    }
+    for key, value in legacy_updates.items():
+        definition = client_mapping.fields.get(key)
+        if definition is not None and definition.type == "string_list":
+            if isinstance(value, str):
+                metadata_updates[key] = [
+                    item.strip() for item in value.split(",") if item.strip()
+                ]
+            else:
+                metadata_updates[key] = []
+        else:
+            metadata_updates[key] = value
+
+    client_metadata = dict(doc.client_metadata or {})
+    client_metadata.update(metadata_updates)
+    doc.client_metadata = client_metadata
+    for key, value in metadata_updates.items():
+        if key in DOCUMENT_CONTEXT_FIELDS:
+            setattr(doc, key, _legacy_metadata_value(value))
+
     db.commit()
-    save_document_context_defaults(db, patch)
+    context_updates = {
+        key: value
+        for key, value in metadata_updates.items()
+        if key in DOCUMENT_CONTEXT_FIELDS
+    }
+    if context_updates:
+        save_document_context_defaults(db, context_updates, client_mapping)
     db.refresh(doc)
     return doc
 

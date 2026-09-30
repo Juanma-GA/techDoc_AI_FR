@@ -1,137 +1,124 @@
-# Règles compilées par client
+# Regles par bundle client
 
-Les règles propres à une entreprise vivent dans son module `*_custom.py`.
-Le pipeline générique charge les modules qui exposent `STANDARD_SPEC` et
-synchronise leur catalogue en base au démarrage du backend.
+Les regles officielles THALES sont declarees dans `app/checks/thales_rules/rules.py`.
+Ce module est la source unique des `CompiledRule` et des metadonnees de presentation.
+`RULE_METADATA` est genere depuis les definitions ; ne pas ajouter de metadonnees
+manuelles paralleles.
 
-## Ajouter une règle à un client existant
+`active_client.json` selectionne le bundle actif. Le registre charge ses modules
+de regles, operations et classification depuis les chemins du manifest ; le
+catalogue est synchronise au demarrage et les versions manifestes sont les defauts
+des nouveaux uploads et des analyses historiques sans version enregistree.
 
-1. Ouvrir le module du client, par exemple
-   `app/checks/standards/thales_custom.py`.
-2. Ajouter la règle dans `_RULES_V1`.
-3. Ajouter son entrée dans `RULE_METADATA` si le texte présenté dans l’API
-    doit être plus précis que le `topic` par défaut.
-4. Redémarrer le backend pour synchroniser le catalogue.
-5. Ajouter un test dans `backend/tests/`, puis lancer le test ciblé.
+## Ajouter une regle THALES
 
-### Règle simple : motif interdit
+1. Ajouter une definition avec la fabrique `rule(...)` dans
+   `app/checks/thales_rules/rules.py`.
+2. Fournir dans cette definition son code, nom, description, message, type de
+   presentation, severite, cible, checks et eventuelles traductions.
+3. Ajouter la definition a `RULE_DEFINITIONS` a l'endroit correspondant a l'ordre
+   d'execution souhaite. Les definitions de revision restent au debut : elles
+  determinent les pages modifiees dont dependent les autres regles.
+4. Ajouter un test du contrat de la regle et un test de comportement dans
+   `backend/tests/`.
 
-Utiliser `_rule` avec `pattern` lorsqu’un motif trouvé constitue une erreur. Le
-moteur signale chaque occurrence et peut proposer un remplacement avec `\1`,
-`\2`, etc. Pour une règle composée, passer directement `checks=[...]` à ce
-même helper.
-
-```python
-_rule(
-    "CUSTOM_DECIMAL_COMMA",
-    "Les décimales doivent utiliser un point",
-    pattern=r"(?<!\d)(\d+),(\d+)(?!\d)",
-    severity="error",
-    replacement=r"\1.\2",
-)
-```
-
-### Règle obligatoire : élément absent ou incorrect
-
-Utiliser `operator="regex_exists"` lorsqu’un élément doit être présent. Pour
-obtenir une suggestion compréhensible :
-
-- `expected` contient le regex utilisé par le moteur ;
-- `expected_display` contient le texte attendu affiché à l’utilisateur ;
-- `failure_message` contient la formulation négative affichée dans la suggestion ;
-- `replacement` permet de corriger un élément présent mais incorrect ;
-- `require_all=True` impose la présence du motif sur chaque cible (utile pour
-    un footer répété sur plusieurs pages) ;
-- `missing_anchor` indique un texte voisin auquel accrocher un élément absent ;
-- `missing_anchor_position` vaut `"above"`, `"below"` ou `"same"` selon la
-    mise en page. `"same"` pose la bbox directement sur l'ancre existante.
-
-Les placeholders comme `{{meta_revision_number}}` sont résolus depuis le
-mapping du document dans `expected_display` et `replacement`.
-
-Pour une règle obligatoire corrigible, `expected_display` sert aussi de forme
-canonique pour le diagnostic après un `FAIL`. Le moteur cherche alors une ligne
-ou une fenêtre de mots proche et produit les différences minimales : caractère
-ou mot corrigé, valeur manquante insérée, ou valeur incorrecte remplacée. Il
-ne faut donc pas ajouter un second `operator="regex"` pour détecter chaque
-valeur incorrecte. Si aucun candidat suffisamment proche n'est trouvé, le
-moteur conserve le commentaire d'élément attendu absent et utilise
-`missing_anchor` pour le positionner.
+Exemple de definition declarative :
 
 ```python
-_rule(
-    "CUSTOM_TP1_REVISION_NUMBER",
-    "Numéro de révision TP1",
-    failure_message="numéro de révision non conforme.",
-    severity="error",
-    target=RuleTarget(page="all", region="footer", page_type="TP1"),
+CUSTOM_DECIMAL_COMMA = rule(
+    code="CUSTOM_DECIMAL_COMMA",
+    name="Valeurs decimales separees par un point",
+    description="Les valeurs decimales utilisent un point, pas une virgule.",
+    message="Une valeur decimale utilise une virgule.",
+    kind="regex_flag",
+    severity="warning",
+    target=_MODIFIED_TARGET,
     checks=[
         Check(
             field="text",
-            operator="regex_exists",
-            expected=r"Revision\s+No\.?\s*{{meta_revision_number}}",
-            expected_display="Revision No.{{meta_revision_number}}",
-            missing_anchor=r"(?i)\bFirst\s+Issue\b",
+            operator="regex",
+            expected=r"(?<!\d)(\d+),(\d+)(?!\d)",
+            replacement=r"\1.\2",
         ),
     ],
+    translations={
+        "en": {
+            "description": "Decimal values must use a point.",
+            "message": "A decimal value uses a comma.",
+        }
+    },
 )
 ```
 
-Pour une règle composée de plusieurs éléments obligatoires, créer un `Check`
-par élément. Cela permet d’indiquer précisément ce qui manque, au lieu de
-signaler tout le bloc comme incorrect.
+`RULE_METADATA` dans le bundle est genere depuis `RULE_DEFINITIONS`.
 
-### Choisir la cible
+## Operateur client
 
-- `region="full_page"` : tout le texte de la page ;
-- `region="footer"` : le bandeau bas calculé à partir des coordonnées PDF ;
-- `region="header"` ou `region="body"` : les zones correspondantes ;
-- `page_type="TP1"` : uniquement les pages classifiées TP1 ;
-- `page="all"` : toutes les pages, sauf si un numéro précis est requis.
+Utiliser un check generique si l'operateur est deja pris en charge. Pour une
+operation propre au client, utiliser `operator="client_operation"`, nommer
+`operation` et passer ses parametres dans `operation_params` :
 
-Si la règle dépend d’un contexte document, utiliser le placeholder prévu dans
-`compiled_rules.py` (`meta_cmm_number`, `meta_revision_date`,
-`meta_revision_number`, etc.) plutôt qu’une valeur écrite en dur.
+```python
+Check(
+    field="text",
+    operator="client_operation",
+    operation="revision_consistency",
+    operation_params={"control": "footer_date"},
+)
+```
 
-## Ajouter un nouveau client
+Implementer cette operation dans le module `operations.py` declare par le
+manifest. Elle recoit un `ClientOperationContext` et renvoie un `OperationResult`;
+le coeur adapte ce resultat en verdict et en suggestions. Ne pas ajouter de
+branche sur le code de regle dans le moteur. Toute operation utilisee doit etre
+exportee par `OPERATIONS`; le chargeur bloque si une regle reference un nom absent.
 
-1. Copier le module existant :
+Les controles de revision utilisent maintenant ce meme contrat. Leur moteur est
+dans `app/checks/thales_rules/revision_engine.py`.
 
-   ```text
-   app/checks/standards/thales_custom.py
-   -> app/checks/standards/<client>_custom.py
-   ```
+## Classifier une page
 
-2. Adapter `STANDARD_CODE`, `STANDARD_LABEL`, `STANDARD_DESCRIPTION`, les
-    règles et `STANDARD_SPEC`.
-3. Vérifier que le fichier expose `STANDARD_SPEC` avec :
-   - `code` ;
-   - `label` ;
-   - `description` ;
-   - `versions` ;
-   - `metadata`.
-4. Le module sera découvert automatiquement et ajouté à `BUILTIN_STANDARDS`.
-5. Si le client a besoin de classifier des pages, exposer aussi une fonction
-   `classify_pages(parsed, document)` dans le module.
-6. Ajouter des tests propres au client.
+La classification des pages appartient au module `page_classifier.py` declare
+par le manifest. Le pipeline appelle son entree `classify_pages(parsed, document)`
+depuis le `ClientBundle` actif. Les regles ne doivent pas etre declarees dans le
+classifieur.
 
-Aucune modification de `analyze.py`, `rules_engine.py` ou de l’exécuteur n’est
-nécessaire pour ajouter un module client conforme à ce contrat.
+## Manifest et versions
 
-## Vérification rapide
+- `active_client.json` selectionne un dossier bundle ; `CLIENT_BUNDLE` peut
+  surcharger ce nom.
+- Le manifest declare le client, les catalogues, leur version, le mapping et les
+  modules Python du bundle.
+- Les modules declares (`rules`, `operations`, `page_classifier` et le moteur
+  interne de revision) sont charges dans un namespace isole ; leur contenu
+  participe au `bundle_hash`.
+- Toute evolution comportementale du bundle doit augmenter `bundle_version`.
+- Le bundle ne stocke pas d'UUID de base de donnees ; les catalogues sont resolus
+  en versions de standard par le registre.
+- `GET /api/v1/client-config` expose l'identite, les hashes, les catalogues
+  resolus et le mapping. `GET /api/v1/client-rules` expose les regles officielles ;
+  `PATCH /api/v1/client-rules/{code}` modifie leur statut persiste dans
+  `StandardVersion.disabled_rule_codes`.
+- Les valeurs saisies par document sont stockees dans `Document.client_metadata`
+  selon `mapping.json`. Les anciennes colonnes THALES et les champs PATCH plats
+  restent compatibles pendant la transition.
+- L'ecran Rules affiche le catalogue du bundle actif. L'ancien ecran checklist et
+  regles utilisateur reste disponible pour depannage avec
+  `VITE_LEGACY_RULES_UI=true`.
+- `app/checks/sample_client/` est un bundle d'exemple non actif. Il sert de
+  reference minimale pour les champs string/enum/string_list, les entites, les
+  operations et le classifieur ; `test_client_registry.py` le charge sans
+  modifier `active_client.json`.
 
-Depuis la racine du dépôt :
+## Tests
+
+Depuis la racine du depot :
 
 ```powershell
 Push-Location backend
-python -m pytest tests/test_compiled_standard_catalogs.py -q
+python -m pytest tests/test_client_bundle_contract.py tests/test_client_registry.py tests/test_thales_catalog_baseline.py tests/test_thales_bundle_rules.py tests/test_compiled_standard_catalogs.py tests/test_revision_state.py -q
 Pop-Location
 ```
 
-Pour une règle qui modifie le texte, tester au minimum les cas suivants :
-
-- élément présent et conforme : `PASS` ;
-- élément présent mais incorrect : `FAIL` avec remplacement ;
-- élément complètement absent : `FAIL` avec élément attendu lisible et ancre
-  de suggestion correcte ;
-- page hors cible : aucune suggestion.
+Le test `test_thales_catalog_baseline.py` fige la serialisation du catalogue THALES
+et rend explicite chaque changement de contrat.

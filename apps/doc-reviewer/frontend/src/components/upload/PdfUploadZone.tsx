@@ -1,10 +1,11 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 
 type Props = {
   onFile: (file: File) => void;
   disabled?: boolean;
+  autoOpen?: boolean;
   // Import en cours : affiche un retour visuel immediat (spinner + texte). La
   // requete d'upload est SYNCHRONE cote serveur (conversion Word->PDF, portail
   // qualite) et peut prendre quelques secondes — sans ce retour, la dropzone
@@ -12,8 +13,9 @@ type Props = {
   uploading?: boolean;
 };
 
-export function PdfUploadZone({ onFile, disabled, uploading }: Props) {
+export function PdfUploadZone({ onFile, disabled, uploading, autoOpen = false }: Props) {
   const { t } = useTranslation();
+  const autoOpenHandled = useRef(false);
 
   const onDrop = useCallback(
     (accepted: File[]) => {
@@ -23,7 +25,7 @@ export function PdfUploadZone({ onFile, disabled, uploading }: Props) {
     [onFile],
   );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     // Formats supportes : PDF natif + Word (.doc/.docx, convertis en PDF fidele
     // au serveur) + archives .zip (etendues cote batch).
@@ -36,6 +38,12 @@ export function PdfUploadZone({ onFile, disabled, uploading }: Props) {
     multiple: false,
     disabled: disabled || uploading,
   });
+
+  useEffect(() => {
+    if (!autoOpen || autoOpenHandled.current || disabled || uploading) return;
+    autoOpenHandled.current = true;
+    open();
+  }, [autoOpen, disabled, open, uploading]);
 
   return (
     <div

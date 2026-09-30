@@ -23,20 +23,15 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "subtitle": "Aggregated suggestion indicators",
     "kpis": "Key indicators",
-    "bySev": "Suggestions by severity",
-    "byKind": "Suggestions by rule kind",
-    "topDocs": "Top documents (open suggestions)",
+    "bySev": "Errors by severity",
     "frequentErrors": "Most frequent errors",
     "frequentErrorsSummary": "Show the {{count}} most frequent errors",
     "frequentErrorsEmpty": "No errors recorded.",
-    "noOpen": "No open suggestions.",
+    "analyzeDocument": "Analyze a document",
     "kpi.pdfs": "Documents",
-    "kpi.open": "Open",
-    "kpi.applied": "Applied",
-    "kpi.rejected": "Rejected",
-    "kpi.total": "Total"
+    "kpi.open": "Proposed corrections",
+    "kpi.rejected": "Rejected corrections"
   },
   "arch": {
     "title": "Architecture",
@@ -196,6 +191,8 @@
     "meta.languageUnset": "Select a language",
     "meta.languageFr": "French",
     "meta.languageEn": "English",
+    "meta.valueUnset": "No value",
+    "meta.listHint": "Enter one value per line.",
     "pageScope.label": "Analysis scope",
     "pageScope.all": "Full document",
     "pageScope.range": "Page range",
@@ -210,9 +207,7 @@
     "panel.filters.type": "Type",
     "panel.filters.page": "Page",
     "panel.filters.hideAccepted": "Hide accepted",
-    "panel.filters.source": "Source",
     "panel.filters.rule": "Rule",
-    "panel.filters.allSources": "All sources",
     "panel.filters.allRules": "All rules",
     "panel.group.toggle": "Expand/collapse this group of occurrences",
     "panel.group.occurrences": "{{count}} occurrences",
@@ -252,6 +247,18 @@
   "rules": {
     "title": "Custom rules",
     "subtitle": "User-defined linter, runs alongside the target standard rules",
+    "client": {
+      "bundle": "Bundle v{{version}}",
+      "rule": "Rule",
+      "mode": "Execution mode",
+      "description": "Description",
+      "search": "Search rules",
+      "manifestHash": "Manifest",
+      "mappingHash": "Mapping",
+      "ruleCount": "rules",
+      "loadFailed": "Could not load the active client catalog.",
+      "saveFailed": "Could not save this rule's status. Try again."
+    },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Revised or new page marked with a star in the LEP",
       "CUSTOM_REVISION_UNDECLARED_STAR": "LEP star justified by an R or N status in Highlights",

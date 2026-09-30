@@ -5,11 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from typing import get_args
+from typing import Any, get_args
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.checks.client_bundle import ClientBundle, validate_compiled_rule_mapping
 from app.core.compiled_rules import CompiledRule, DocumentMetaField, RuleTarget
 from app.core.errors import AppError
 from app.core.excel_rules import ParsedRule
@@ -38,11 +39,10 @@ zones, présence conditionnelle) SONT déterministes : ne bascule pas en semanti
 
 Utilise uniquement ces valeurs :
 execution: deterministic | semantic | manual | unsupported
-field (pour un check normal et pour compare_to.field quand compare_to.source=document_text):
-    text | cmm_number | thales_logo_t | important_notice | page_number | revision_number | revision_date | first_issue_date | copyright_start_year |
-  copyright_end_year | document_type
-operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field | font_size_equals
-expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals, un nombre de points pour font_size_equals,
+field pour document_text : text | page_number | document_type | important_notice ou une cle de client_mapping.entities.
+field pour document_meta et only_if : une cle de client_mapping.fields.
+operator: exists | not_exists | equals | regex | regex_exists | normalized_equals | contains_any | contains_all | contains_none | equals_field | font_size_equals | unit_conversion
+expected: valeur attendue du contrôle ; une chaîne pour exists/not_exists/equals/regex/regex_exists/normalized_equals, une politique parmi pascal_to_inhg/metric_length_to_inch/metric_mass_to_lb/metric_torque_to_lbf_in pour unit_conversion, un nombre de points pour font_size_equals,
   une LISTE de chaînes pour contains_any/contains_all/contains_none, absent (null) pour equals_field.
   N'utilise jamais la clé `value`.
 
@@ -60,8 +60,8 @@ Vocabulaire déterministe disponible (choisis l'opérateur le plus proche du bes
 - Liste de termes interdits (aucun de ces mots ne doit apparaître) -> operator=contains_none, expected=["terme1","terme2",...].
 - Liste de synonymes acceptés (au moins un doit apparaître) -> operator=contains_any, expected=["terme1","terme2",...].
 - Plusieurs mentions toutes obligatoires -> operator=contains_all, expected=["mention1","mention2",...].
-- Taille de police d'un numero CMM/ATA -> field=cmm_number, operator=font_size_equals, expected=23 (en points).
-- Taille du logo THALES -> field=thales_logo_t, operator=font_size_equals, expected=31 ou 36 selon la cible de page.
+- Taille de police d'une entite declaree -> utilise la cle de cette entite comme field avec
+    operator=font_size_equals et une valeur en points.
 - Toute valeur introduite par « ex: », « exemple » ou entre parenthèses est une illustration, pas une
     valeur littérale. Déduis la structure invariante de la règle et écris dans `expected` le regex complet,
     avec les séparateurs, espaces optionnels et parties variables nécessaires. Le backend n'élargit ni ne
@@ -70,9 +70,8 @@ Vocabulaire déterministe disponible (choisis l'opérateur le plus proche du bes
   operator=regex_exists, expected="regex Python". N'utilise JAMAIS operator=regex pour ce cas (voir
   l'avertissement ci-dessus) : `regex` est réservé a un motif qui ne doit PAS apparaître.
 - Motif regex qui doit contenir une valeur saisie dans le contexte du document -> utilise un placeholder
-    litteral `{{meta_revision_date}}`, `{{meta_cmm_number}}`, `{{meta_first_issue_date}}`,
-    `{{meta_revision_number}}` ou `{{document_language}}` dans expected. Le backend remplace ce placeholder
-    par la valeur du document courant en l'echappant comme texte litteral; si la valeur manque, le resultat
+    litteral `{{nom_du_champ}}` dans expected, uniquement pour un champ de `client_mapping.fields`.
+    Le backend remplace ce placeholder par la valeur du document courant; si la valeur manque, le resultat
     est INCONCLUSIVE. N'invente jamais la valeur. Pour une comparaison de champs extraits, prefere
     `equals_field` et `compare_to`.
 - Remplacement automatique proposé quand la règle décrit une correction évidente (X doit être remplacé par Y,
@@ -86,10 +85,8 @@ Vocabulaire déterministe disponible (choisis l'opérateur le plus proche du bes
   "normalization":[...]}.
   - source=document_text : relit un autre champ/zone du document (mêmes valeurs que field ci-dessus), avec sa
     propre page/region (ex. {"page":"all","region":"full_page"}).
-  - source=document_meta : lit une donnée structurée saisie par l'utilisateur pour CE document (pas une valeur
-    du texte). Champs disponibles, et UNIQUEMENT ceux-là (ne réutilise jamais une valeur de field comme
-    text/page_number/revision_number/document_type ici, ce n'est pas le même vocabulaire) : meta_revision_date |
-    meta_cmm_number | meta_first_issue_date | meta_revision_number | document_language.
+    - source=document_meta : lit une donnée structurée saisie pour CE document (pas une valeur du texte).
+        Utilise uniquement les champs declares dans `client_mapping.fields`.
   - normalization accepte : unicode, trim, spaces, line_breaks, et "extract_year" (extrait une année sur 4
     chiffres, ou étend un suffixe à 2 chiffres en 20XX — utile pour comparer "MAR 18/26" à "2000-2026").
     - Exemple générique : le pied de page (region=footer) contient un copyright avec une plage d'années
@@ -104,11 +101,8 @@ Vocabulaire déterministe disponible (choisis l'opérateur le plus proche du bes
     dans le texte et peut être évaluée avec le contexte du document; sinon utilise execution=unsupported
     avec compilation_error explicite. Ne la remplace jamais par un regex sur un numéro d'exemple.
 - Présence conditionnelle (une règle qui ne s'applique que si une donnée du document existe) -> ajoute au
-  niveau de la règle (pas du check) "only_if":{"field":"meta_cmm_number","state":"present"} (ou "absent"). La
-  règle entière est alors ignorée pour les documents où cette condition n'est pas remplie, plutôt que de
-  produire un résultat trompeur. only_if.field utilise le MÊME vocabulaire restreint que compare_to.field en
-  source=document_meta (meta_revision_date | meta_cmm_number | meta_first_issue_date | meta_revision_number |
-  document_language) — jamais document_type ni une autre valeur de field.
+    niveau de la règle (pas du check) "only_if":{"field":"nom_du_champ","state":"present"} (ou "absent").
+    only_if.field doit être une cle de `client_mapping.fields`.
 
 Les références documentaires sont décrites par leurs identifiants uniquement. Le compilateur ne reçoit
 aucune valeur d'un document particulier. Une valeur concrète sera fournie au runtime, pendant l'analyse
@@ -183,6 +177,7 @@ def _normalize_compiler_payload(
     fallback_target: RuleTarget,
     fallback_topic: str,
     fallback_instruction: str,
+    allowed_meta_fields: set[str] | None = None,
 ) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise ValueError("la réponse du compilateur doit être un objet JSON")
@@ -224,6 +219,8 @@ def _normalize_compiler_payload(
                 check.pop("value", None)
             compare_to = check.get("compare_to")
             if (
+                allowed_meta_fields is None
+                and
                 isinstance(compare_to, dict)
                 and compare_to.get("source") == "document_meta"
                 and compare_to.get("field") not in _ALLOWED_META_FIELDS
@@ -265,7 +262,11 @@ def _normalize_compiler_payload(
     # model's echo, which used to fail the whole rule on any drift.
     normalized["target"] = fallback_target.model_dump(mode="json")
     only_if = normalized.get("only_if")
-    if isinstance(only_if, dict) and only_if.get("field") not in _ALLOWED_META_FIELDS:
+    if (
+        allowed_meta_fields is None
+        and isinstance(only_if, dict)
+        and only_if.get("field") not in _ALLOWED_META_FIELDS
+    ):
         # The model sometimes reuses a `Check.field` value (e.g. document_type)
         # that isn't a valid document_meta field — drop the condition instead
         # of failing the whole rule; the check simply always applies.
@@ -286,6 +287,7 @@ def compile_checklist_rule(
     filename: str,
     *,
     chat: Callable[..., str] | None = None,
+    client_bundle: ClientBundle[Any] | None = None,
 ) -> CompiledRule:
     origin_ref = f"{filename}:{parsed.sheet}:{parsed.row_number}"
     rule_id = checklist_rule_id(origin_ref)
@@ -299,6 +301,20 @@ def compile_checklist_rule(
         if region is None
         else f'Utilise exactement target={{"page":"all","region":"{region}"}}.'
     )
+    client_mapping_payload = (
+        {
+            "fields": {
+                name: definition.model_dump(mode="json")
+                for name, definition in client_bundle.mapping.fields.items()
+            },
+            "entities": dict(client_bundle.mapping.entities),
+            "tokens": dict(client_bundle.mapping.tokens),
+            "operations": sorted(client_bundle.operations),
+        }
+        if client_bundle is not None
+        else None
+    )
+    allowed_meta_fields = set(client_bundle.mapping.fields) if client_bundle is not None else None
     user_prompt = json.dumps(
         {
             "required_metadata": {
@@ -314,11 +330,14 @@ def compile_checklist_rule(
                 "context": parsed.context,
             },
             "primitive_catalog": _PRIMITIVE_CATALOG,
+            "client_mapping": client_mapping_payload,
             "constraints": [
                 zone_instruction,
                 "Recopie required_metadata sans modification dans la réponse.",
                 "Une prise en compte manuelle impose execution=manual.",
                 "Utilise uniquement les identifiants et références du primitive_catalog; n'attends aucune valeur concrète pendant l'import.",
+                "Les champs de document_text viennent des champs generiques et de client_mapping.entities; les champs document_meta et only_if viennent uniquement de client_mapping.fields.",
+                "Les operations de client_mapping.operations sont les seules operations client autorisees.",
             ],
         },
         ensure_ascii=False,
@@ -330,6 +349,7 @@ def compile_checklist_rule(
             fallback_target=target,
             fallback_topic=parsed.category or "Checklist",
             fallback_instruction=parsed.message,
+            allowed_meta_fields=allowed_meta_fields,
         )
         rule = CompiledRule.model_validate(payload)
         if (rule.id, rule.source, rule.origin_ref) != (rule_id, "user_checklist", origin_ref):
@@ -338,6 +358,17 @@ def compile_checklist_rule(
             raise ValueError(f'region non supportée: "{parsed.target_zone}"')
         if expected_manual and rule.execution != "manual":
             raise ValueError("la prise en compte manuelle exige execution=manual")
+        if client_bundle is not None:
+            validate_compiled_rule_mapping(rule, client_bundle.mapping)
+            unknown_operations = {
+                check.operation
+                for check in rule.checks
+                if check.operator == "client_operation"
+                and check.operation not in client_bundle.operations
+            }
+            if unknown_operations:
+                names = ", ".join(sorted(str(name) for name in unknown_operations))
+                raise ValueError(f"operations client non declarees: {names}")
         rule = rule.model_copy(update={"source_instruction": parsed.message})
         rule.severity = parsed.severity if parsed.severity in {"info", "warning", "error"} else "warning"
         return rule

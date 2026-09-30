@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.standards import serialize_builtin_version
+
 
 def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     resp = client.get("/api/v1/standards")
@@ -107,9 +110,14 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "warning",
         "CUSTOM_TP2_IMPORTANT_NOTICE": "error",
         "CUSTOM_TITLE_PAGE_COPYRIGHT": "warning",
+        "CUSTOM_COPYRIGHT_POSITION": "warning",
         "CUSTOM_FOOTER_PAGE_NUMBER": "error",
         "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": "error",
         "CUSTOM_HIGHLIGHTS_HOLDER": "error",
+        "CUSTOM_HEADER_DOCUMENT_TYPE": "error",
+        "CUSTOM_TP1_HEADER_DOCUMENT_TYPE": "error",
+        "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE": "error",
+        "CUSTOM_HIGHLIGHTS_LEGEND_FOOTER": "warning",
         "CUSTOM_TP1_REVISION_NUMBER": "error",
         "CUSTOM_TP1_FIRST_ISSUE_DATE": "warning",
         "CUSTOM_HIGHLIGHTS_REVISION_HEADER": "warning",
@@ -122,13 +130,22 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_STORAGE_NOTE": "error",
         "CUSTOM_TP1_THALES_ADDRESS": "warning",
         "CUSTOM_DECIMAL_COMMA": "warning",
+        "CUSTOM_SENTENCE_PUNCTUATION": "error",
+        "CUSTOM_ENUMERATION_PUNCTUATION_SWAP": "info",
+        "CUSTOM_PARAGRAPH_JUSTIFICATION": "warning",
         "CUSTOM_TEMPERATURE_FAHRENHEIT": "error",
         "CUSTOM_BAR_PSI_CONVERSION": "error",
+        "CUSTOM_PASCAL_INHG_CONVERSION": "error",
+        "CUSTOM_METRIC_LENGTH_INCH_CONVERSION": "error",
+        "CUSTOM_METRIC_MASS_LBF_CONVERSION": "error",
+        "CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION": "error",
         "CUSTOM_FORBIDDEN_CONSUMABLES": "error",
+        "CUSTOM_REPLACE_LEGACY_NAMES": "warning",
         "CUSTOM_NO_DEGREE_C_SYMBOL": "info",
         "CUSTOM_NO_DEGREE_F_SYMBOL": "info",
         "CUSTOM_REVISION_LEP_STAR": "error",
         "CUSTOM_REVISION_UNDECLARED_STAR": "error",
+        "CUSTOM_REVISION_LEP_BLANK_STAR": "error",
         "CUSTOM_REVISION_LEP_DATE": "error",
         "CUSTOM_REVISION_FOOTER_DATE": "error",
         "CUSTOM_REVISION_UNDECLARED_PAGE": "error",
@@ -136,6 +153,9 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_REVISION_MODIFIED_PAGE_ABSENT": "warning",
         "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "warning",
         "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "warning",
+        "CUSTOM_ROR_INSERTION_DATE": "error",
+        "CUSTOM_ROR_REVISION_DATE": "error",
+        "CUSTOM_REVISION_HIGHLIGHTS_STATUS": "warning",
     }
 
 
@@ -190,3 +210,32 @@ def test_toggle_thales_catalog_rule_individually(client: TestClient) -> None:
     )
     assert enabled.status_code == 200
     assert code not in enabled.json()["disabled_rule_codes"]
+
+
+def test_reset_thales_catalog_rule_reads_active_bundle(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = custom["versions"][0]
+    code = "CUSTOM_CMM_NUMBER"
+    rule_url = (
+        f"/api/v1/standards/{custom['id']}/versions/{version['id']}"
+        f"/rules/{code}"
+    )
+
+    patched = client.patch(rule_url, json={"message": "Temporary message"})
+    assert patched.status_code == 200, patched.text
+    assert next(item for item in patched.json()["catalog"] if item["code"] == code)["message"] == (
+        "Temporary message"
+    )
+
+    reset = client.post(f"{rule_url}/reset")
+    assert reset.status_code == 200, reset.text
+    reset_rule = next(item for item in reset.json()["catalog"] if item["code"] == code)
+    configuration = load_active_client_configuration()
+    spec = configuration.bundle.standard_specs["THALES-CUSTOM"]
+    expected = next(
+        item
+        for item in serialize_builtin_version(spec, "v1")
+        if item["code"] == code
+    )
+    assert reset_rule["message"] == expected["message"]

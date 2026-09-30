@@ -43,7 +43,7 @@ def test_import_keeps_unsupported_rows_visible(client: TestClient) -> None:
 
 
 def test_deterministic_rule_is_active_immediately(client: TestClient, monkeypatch) -> None:
-    def compile_deterministic(_db, row, filename: str) -> CompiledRule:
+    def compile_deterministic(_db, row, filename: str, *, client_bundle=None) -> CompiledRule:
         return CompiledRule(
             id=f"compiled-{row.row_number}",
             topic=row.name,
@@ -67,7 +67,7 @@ def test_deterministic_rule_is_active_immediately(client: TestClient, monkeypatc
 
 
 def test_compiled_rule_activation_patch_is_persisted(client: TestClient, monkeypatch) -> None:
-    def compile_deterministic(_db, row, filename: str) -> CompiledRule:
+    def compile_deterministic(_db, row, filename: str, *, client_bundle=None) -> CompiledRule:
         return CompiledRule(
             id=f"compiled-{row.row_number}",
             topic=row.name,

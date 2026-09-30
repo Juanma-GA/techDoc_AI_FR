@@ -117,6 +117,8 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .kpi-value.warn { color: var(--warning); }
 .kpi-value.err { color: var(--danger); }
 .kpi-value.info { color: var(--info); }
+.dashboard-cta-wrap { display: flex; justify-content: center; margin: 24px 0 8px; }
+.dashboard-cta { width: min(280px, 100%); min-height: 72px; justify-content: center; font-size: 1rem; font-weight: 600; }
 
 .form { display: flex; flex-direction: column; gap: 10px; }
 .document-upload-controls { display: flex; flex-direction: column; gap: 16px; }

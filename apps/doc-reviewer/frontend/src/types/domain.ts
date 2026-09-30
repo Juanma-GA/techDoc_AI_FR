@@ -117,6 +117,7 @@ export type Document = {
   convert_engine: string;
   text_coverage: number;
   quality: QualityState;
+  client_metadata: Record<string, unknown>;
   /** Mapping manuel par document, reference par les consignes de checklist. */
   meta_revision_date: string | null;
   meta_cmm_number: string | null;
@@ -142,17 +143,25 @@ export type DocumentContextField = (typeof REQUIRED_DOCUMENT_CONTEXT_FIELDS)[num
 export function missingDocumentContext(
   document: Pick<
     Document,
+    | "client_metadata"
     | "meta_revision_date"
     | "meta_cmm_number"
     | "meta_first_issue_date"
     | "meta_revision_number"
     | "document_language"
   > | null | undefined,
-): DocumentContextField[] {
-  if (!document) return [...REQUIRED_DOCUMENT_CONTEXT_FIELDS];
-  return REQUIRED_DOCUMENT_CONTEXT_FIELDS.filter(
-    (field) => !String(document[field] ?? "").trim(),
-  );
+  requiredFields: readonly string[] = REQUIRED_DOCUMENT_CONTEXT_FIELDS,
+): string[] {
+  if (!document) return [...requiredFields];
+  const metadata = document.client_metadata ?? {};
+  return requiredFields.filter((field) => {
+    const value = Object.prototype.hasOwnProperty.call(metadata, field)
+      ? metadata[field]
+      : (document as unknown as Record<string, unknown>)[field];
+    if (Array.isArray(value)) return !value.some((item) => String(item ?? "").trim());
+    if (typeof value === "boolean" || typeof value === "number") return false;
+    return !String(value ?? "").trim();
+  });
 }
 
 export type Rule = {
