@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -19,7 +20,6 @@ from app.core.compiled_rule_runtime import (
 )
 
 _SEMANTIC_GROUP_CHAR_LIMIT = 10_000
-_SEMANTIC_TOTAL_CHAR_LIMIT = 120_000
 
 
 def execute_semantic(
@@ -42,6 +42,15 @@ def execute_semantic(
         )
 
     groups = semantic_groups(targets)
+    if not groups:
+        return (
+            RuleResult(
+                rule_id=rule.id,
+                status="INCONCLUSIVE",
+                evidence=evidence(fallback_target, None, rule.semantic_instruction, is_docx, pdf_pages),
+            ),
+            [],
+        )
     violations: list[tuple[_TextTarget, str, str, str]] = []
     failed_call = False
     for group in groups:
@@ -81,17 +90,22 @@ def execute_semantic(
             failed_call = True
             continue
 
-        by_page = {target.page: target for target in group}
+        by_page: dict[str, list[_TextTarget]] = {}
+        for target in group:
+            by_page.setdefault(target.page, []).append(target)
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
             page = str(entry.get("page") or "")
-            target = by_page.get(page)
             original = entry.get("original")
-            if target is None or not isinstance(original, str) or not original.strip():
+            if not isinstance(original, str) or not original.strip():
                 continue
             original = original.strip()
-            if original not in target.text:
+            target = next(
+                (candidate for candidate in by_page.get(page, []) if original in candidate.text),
+                None,
+            )
+            if target is None:
                 continue
             proposed = entry.get("proposed")
             proposed = proposed.strip() if isinstance(proposed, str) else ""
@@ -105,7 +119,7 @@ def execute_semantic(
         target, original, _proposed, _message = violations[0]
         result = RuleResult(
             rule_id=rule.id,
-            status="FAIL",
+            status="INCONCLUSIVE" if failed_call else "FAIL",
             evidence=evidence(target, original, rule.semantic_instruction, is_docx, pdf_pages),
         )
         raws = [
@@ -117,7 +131,11 @@ def execute_semantic(
                 original=original,
                 proposed=proposed,
                 page=target.raw_page,
-                span=(0, len(original)),
+                span=(
+                    target.text_offset + target.text.find(original),
+                    target.text_offset + target.text.find(original) + len(original),
+                ),
+                ai_generated=True,
             )
             for target, original, proposed, message in violations
         ]
@@ -145,22 +163,32 @@ def semantic_groups(targets: list[_TextTarget]) -> list[list[_TextTarget]]:
     groups: list[list[_TextTarget]] = []
     current: list[_TextTarget] = []
     current_len = 0
-    total_len = 0
     for target in targets:
-        text = target.text.strip()
-        if not text or total_len >= _SEMANTIC_TOTAL_CHAR_LIMIT:
+        text = target.text
+        if not text.strip():
             continue
-        if len(text) > _SEMANTIC_GROUP_CHAR_LIMIT:
-            text = text[:_SEMANTIC_GROUP_CHAR_LIMIT]
-            from dataclasses import replace
-            target = replace(target, text=text)
-        if current and current_len + len(text) > _SEMANTIC_GROUP_CHAR_LIMIT:
-            groups.append(current)
-            current = []
-            current_len = 0
-        current.append(target)
-        current_len += len(text)
-        total_len += len(text)
+        start = 0
+        while start < len(text):
+            end = min(start + _SEMANTIC_GROUP_CHAR_LIMIT, len(text))
+            if end < len(text):
+                boundary_start = start + _SEMANTIC_GROUP_CHAR_LIMIT // 2
+                boundary = max(
+                    text.rfind("\n", boundary_start, end),
+                    text.rfind(" ", boundary_start, end),
+                    text.rfind("\t", boundary_start, end),
+                )
+                if boundary >= boundary_start:
+                    end = boundary + 1
+            segment = text[start:end]
+            if current and current_len + len(segment) > _SEMANTIC_GROUP_CHAR_LIMIT:
+                groups.append(current)
+                current = []
+                current_len = 0
+            current.append(
+                replace(target, text=segment, text_offset=target.text_offset + start)
+            )
+            current_len += len(segment)
+            start = end
     if current:
         groups.append(current)
     return groups

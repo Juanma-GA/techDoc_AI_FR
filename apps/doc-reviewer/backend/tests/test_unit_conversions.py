@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
+import fitz
 import pytest
 
 from app.core.compiled_rule_operators import (
@@ -185,8 +184,14 @@ def test_mismatched_uncertainty_is_reported_for_every_conversion_policy(
     assert issues[0].proposed == expected_proposal
 
 
-def test_mass_conversion_pair_from_example_pdf_is_not_reported() -> None:
-    pdf_path = Path(__file__).resolve().parents[2] / "79-30-02-01_test_erreur.pdf"
+def test_mass_conversion_pair_from_pdf_is_not_reported(tmp_path) -> None:
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "400 g + 3% (0,882 lb + 3%)")
+    pdf_path = tmp_path / "mass-conversion.pdf"
+    doc.save(str(pdf_path))
+    doc.close()
+
     parsed = parse_pdf(pdf_path)
     page = next(page for page in parsed.pages if "400 g + 3%" in page.text)
     start = page.text.index("400 g + 3%")

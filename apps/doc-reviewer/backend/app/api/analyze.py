@@ -1,7 +1,5 @@
 """POST /api/v1/documents/{id}/analyze — SSE stream emitting suggestions."""
 
-from __future__ import annotations
-
 import asyncio
 import hashlib
 import json
@@ -34,11 +32,6 @@ router = APIRouter(tags=["analyze"])
 _logger = get_logger(__name__)
 
 
-def _text_preview(value: str, limit: int = 300) -> str:
-    compact = " ".join((value or "").split())
-    return compact if len(compact) <= limit else f"{compact[:limit]}..."
-
-
 @router.get("/documents/{document_id}/rule-results", response_model=list[RuleResult])
 def latest_rule_results(
     document_id: uuid.UUID,
@@ -54,7 +47,21 @@ def latest_rule_results(
         return []
     try:
         payload = json.loads(run.compiled_rules_snapshot_json or "{}")
-        return [RuleResult.model_validate(item) for item in payload.get("results", [])]
+        rule_titles = {
+            str(rule.get("id")): str(rule.get("topic") or "")
+            for rule in payload.get("rules", [])
+            if isinstance(rule, dict) and rule.get("id")
+        }
+        return [
+            RuleResult.model_validate(
+                {
+                    **item,
+                    "rule_title": item.get("rule_title") or rule_titles.get(str(item.get("rule_id"))),
+                }
+            )
+            for item in payload.get("results", [])
+            if isinstance(item, dict)
+        ]
     except (AttributeError, TypeError, ValueError):
         return []
 
@@ -120,7 +127,6 @@ def analyze_stream(
     partial_page_range = resolved_first_page != 1 or resolved_last_page != doc.page_count
     _logger.info(
         "analysis_requested",
-        document_id=str(document_id),
         source_format=doc.source_format,
         working_format=doc.working_format,
         page_count=doc.page_count,
@@ -128,16 +134,6 @@ def analyze_stream(
         last_page=resolved_last_page,
         checklist_enabled=checklist,
         vision_override=vision,
-        context={
-            "meta_revision_date": doc.meta_revision_date,
-            "meta_cmm_number": doc.meta_cmm_number,
-            "meta_first_issue_date": doc.meta_first_issue_date,
-            "meta_last_issue_date": doc.meta_last_issue_date,
-            "meta_revision_number": doc.meta_revision_number,
-            "meta_pnr_number": doc.meta_pnr_number,
-            "meta_manufacturer": doc.meta_manufacturer,
-            "document_language": doc.document_language,
-        },
     )
 
     # Run on the current version (post-edit) so the user can re-run the
@@ -322,42 +318,19 @@ def analyze_stream(
             # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
             page_types: dict[str, str | None] = {}
             if is_docx_value:
-                parsed_page_summaries = [
-                    {
-                        "page": block.page,
-                        "target_id": block.target_id,
-                        "text_chars": len(block.text or ""),
-                        "text_preview": _text_preview(block.text or ""),
-                    }
-                    for block in parsed.blocks
-                ]
                 parsed_page_count = parsed.block_count
                 parsed_text_chars = sum(len(block.text or "") for block in parsed.blocks)
                 span_count = 0
             else:
-                parsed_page_summaries = [
-                    {
-                        "page": page.page,
-                        "text_chars": len(page.text or ""),
-                        "text_preview": _text_preview(page.text or ""),
-                        "span_count": len(page.spans),
-                        "page_type": page.page_type,
-                    }
-                    for page in parsed.pages
-                ]
                 parsed_page_count = len(parsed.pages)
                 parsed_text_chars = sum(len(page.text or "") for page in parsed.pages)
                 span_count = sum(len(page.spans) for page in parsed.pages)
             _logger.info(
                 "analysis_document_parsed",
-                document_id=str(document_id_value),
-                run_id=str(run_id_value),
                 format="docx" if is_docx_value else "pdf",
                 page_count=parsed_page_count,
                 text_chars=parsed_text_chars,
                 span_count=span_count,
-                pages=parsed_page_summaries,
-                page_types=page_types,
             )
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
 
@@ -539,8 +512,6 @@ def analyze_stream(
 
                 _logger.info(
                     "analysis_finished",
-                    document_id=str(document_id_value),
-                    run_id=str(run_id_value),
                     total_suggestions=total,
                     suppressed_rejected=suppressed_rejected,
                     warning_count=len(run_warnings),
@@ -559,25 +530,19 @@ def analyze_stream(
         except AppError as exc:
             _logger.warning(
                 "analysis_failed",
-                document_id=str(document_id_value),
-                run_id=str(run_id_value),
                 error=exc.code,
-                message=exc.message,
             )
             _mark_failed(document_id_value)
             yield {"event": "error", "data": json.dumps({"code": exc.code, "message": exc.message})}
         except Exception as exc:  # noqa: BLE001
-            _logger.exception(
+            _logger.error(
                 "analysis_failed",
-                document_id=str(document_id_value),
-                run_id=str(run_id_value),
                 error=type(exc).__name__,
-                message=str(exc),
             )
             _mark_failed(document_id_value)
             yield {
                 "event": "error",
-                "data": json.dumps({"code": "INTERNAL_ERROR", "message": str(exc)}),
+                "data": json.dumps({"code": "INTERNAL_ERROR", "message": "Erreur interne pendant l'analyse."}),
             }
 
     return EventSourceResponse(event_gen())

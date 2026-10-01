@@ -32,7 +32,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         started_at = perf_counter()
 
         structlog.contextvars.clear_contextvars()
-        structlog.contextvars.bind_contextvars(request_id=rid, path=request.url.path)
+        structlog.contextvars.bind_contextvars(request_id=rid)
         try:
             response: Response = await call_next(request)
             logger.debug(

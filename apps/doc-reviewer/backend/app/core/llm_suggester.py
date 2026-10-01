@@ -27,8 +27,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.mistral_settings import get_effective, get_llm_enabled
-from app.core.logging import sanitize_llm_debug
-from app.core.fallback_rules import FallbackNLPRules
+from app.core.regex_safety import UserRegexPatternError, compile_user_regex
+from app.core.security import validate_mistral_base_url
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
 try:
@@ -81,6 +81,7 @@ _OUTPUT_INSTRUCTIONS = (
 
 
 _BATCH_LIMIT = 30
+MAX_RULE_SUGGEST_INPUT_CHARS = 12_000
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
 _NETWORK_ATTEMPTS = 2
 
@@ -147,11 +148,11 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
                 provider="mistral",
                 endpoint="chat/completions",
                 model=payload["model"],
-                payload=sanitize_llm_debug(payload),
             )
-            with httpx.Client(timeout=_TIMEOUT) as client:
+            base_url = validate_mistral_base_url(s["base_url"])
+            with httpx.Client(timeout=_TIMEOUT, follow_redirects=False) as client:
                 r = client.post(
-                    f"{s['base_url'].rstrip('/')}/v1/chat/completions",
+                    f"{base_url}/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {s['api_key']}",
                         "Content-Type": "application/json",
@@ -163,7 +164,6 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
             logger.warning(
                 "llm_network_error",
                 error=type(exc).__name__,
-                message=str(exc),
                 attempt=attempt,
                 retrying=attempt < _NETWORK_ATTEMPTS,
             )
@@ -174,7 +174,7 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
                     status_code=502,
                 ) from exc
         except Exception as exc:  # noqa: BLE001
-            logger.warning("llm_network_error", error=type(exc).__name__, message=str(exc))
+            logger.warning("llm_network_error", error=type(exc).__name__)
             raise AppError(
                 "LLM_REPHRASE_FAILED",
                 f"Échec d'appel Mistral : {type(exc).__name__}",
@@ -193,14 +193,12 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
             "LLM_REPHRASE_FAILED",
             f"Mistral a renvoyé HTTP {r.status_code}.",
             status_code=502,
-            detail={"body": r.text[:300]},
         )
     logger.debug(
         "llm_response",
         provider="mistral",
         model=payload["model"],
         status_code=r.status_code,
-        response=sanitize_llm_debug(getattr(r, "text", "")),
     )
     try:
         data = r.json()
@@ -240,9 +238,6 @@ _SCAN_SYSTEM = (
     "— sinon la suggestion sera rejetée. Pas d'invention, pas de paraphrase de l'original.\n"
     'Réponds STRICTEMENT en JSON : {"items": [...]}. Sans violation, réponds {"items": []}.'
 )
-
-_SCAN_PAGE_TEXT_LIMIT = 4000   # chars per page sent to Mistral
-
 
 def _format_rules_block(
     s1000d_rules: list[dict] | None,
@@ -318,21 +313,15 @@ def scan_with_prompt(
     keep only items whose `original` appears verbatim in the page text.
     Empty list on Mistral failure or unparseable response.
     
-    **Fallback (HR4/HR7):** When LLM is disabled, applies deterministic regex
-    patterns to detect common writing issues. Results logged as llm_disabled.
+    If the LLM is disabled or unavailable, raises an explicit AppError so the
+    caller can mark the AI-dependent part of the analysis incomplete.
     """
     if not get_llm_enabled(db):
-        logger.info("llm_disabled: using fallback regex rules")
-        fallback_matches = FallbackNLPRules.analyze_all(page_text)
-        # Convert FallbackMatch objects to {original, proposed, message} dicts
-        return [
-            {
-                "original": match.original,
-                "proposed": match.suggestion,
-                "message": f"{match.rule_name} — {match.reason}",
-            }
-            for match in fallback_matches
-        ]
+        raise AppError(
+            "LLM_DISABLED",
+            "Le scan IA n’a pas été exécuté; sa couverture est indisponible.",
+            status_code=503,
+        )
     rules_block = _format_rules_block(
         s1000d_rules,
         custom_rules_list,
@@ -342,7 +331,7 @@ def scan_with_prompt(
     if not rules_block or not page_text.strip():
         return []
 
-    text_to_scan = page_text[:_SCAN_PAGE_TEXT_LIMIT]
+    text_to_scan = page_text
     system_parts = [_SCAN_SYSTEM]
     if document_metadata:
         system_parts.append(document_metadata)
@@ -359,11 +348,19 @@ def scan_with_prompt(
     try:
         parsed = json.loads(json_text)
     except (ValueError, TypeError):
-        logger.warning("ai_scan_unparsed", snippet=content[:200])
-        return []
+        logger.warning("ai_scan_unparsed")
+        raise AppError(
+            "LLM_RESPONSE_INVALID",
+            "Le scan IA a retourné un résultat inexploitable; cette partie est incomplète.",
+            status_code=502,
+        )
     items = parsed.get("items") if isinstance(parsed, dict) else None
     if not isinstance(items, list):
-        return []
+        raise AppError(
+            "LLM_RESPONSE_INVALID",
+            "Le scan IA a retourné un résultat inexploitable; cette partie est incomplète.",
+            status_code=502,
+        )
 
     out: list[dict] = []
     for entry in items:
@@ -456,9 +453,9 @@ def suggest_rules_from_corpus(
 ) -> list[dict]:
     """Ask Mistral to propose new editorial rules from a list of text samples.
 
-    `samples` is a list of `=== <filename> ===\\n<text>` blocks already truncated
-    by the caller. `standard_context` (optional) injects the target norm
-    metadata + its existing catalog so Mistral can tailor the suggestions and
+    `samples` contains complete `=== <filename> ===\\n<text>` blocks. The
+    complete prompt is rejected before a request if it exceeds the input budget.
+    `standard_context` (optional) injects the target norm metadata + its existing catalog so Mistral can tailor the suggestions and
     avoid duplicating built-in rules. Returns a list of dicts shaped like
     `RuleIn` (name, kind, pattern, replacement, severity, message). Invalid
     items are dropped silently so the UI never shows a broken suggestion.
@@ -466,19 +463,28 @@ def suggest_rules_from_corpus(
     if not samples:
         return []
     if not get_llm_enabled(db):
-        return []
+        raise AppError(
+            "LLM_DISABLED",
+            "La génération de règles IA est désactivée; aucune suggestion complète n'a été produite.",
+            status_code=503,
+        )
     user_payload = _format_standard_context(standard_context) + "Extraits :\n\n" + "\n\n".join(samples)
+    if len(user_payload) > MAX_RULE_SUGGEST_INPUT_CHARS:
+        raise AppError(
+            "RULE_SUGGEST_INPUT_TOO_LARGE",
+            "Le corpus complet dépasse la taille d'une requête IA; réduisez le périmètre. Aucun extrait n'a été tronqué.",
+            status_code=413,
+        )
     content = _call_mistral(db, _RULE_SUGGEST_SYSTEM, user_payload)
     json_text = _extract_first_json_object(content) or content
     try:
         parsed = json.loads(json_text)
     except (ValueError, TypeError) as exc:
-        logger.warning("rule_suggest_unparsed", snippet=content[:200])
+        logger.warning("rule_suggest_unparsed")
         raise AppError(
             "RULE_SUGGEST_INVALID_JSON",
             "Mistral n'a pas retourné un JSON valide.",
             status_code=502,
-            detail={"raw": content[:300]},
         ) from exc
 
     rules_field = parsed.get("rules") if isinstance(parsed, dict) else None
@@ -514,8 +520,8 @@ def suggest_rules_from_corpus(
         # Validate regex patterns to avoid noisy /rules POST 400s downstream.
         if kind in {"regex_replace", "regex_flag", "step_pattern"}:
             try:
-                re.compile(pattern)
-            except re.error:
+                compile_user_regex(pattern)
+            except UserRegexPatternError:
                 continue
         # Drop any suggestion whose name collides with an existing built-in
         # code (cheap dedupe; Mistral occasionally re-emits known codes).
@@ -529,7 +535,7 @@ def suggest_rules_from_corpus(
             "severity": severity,
             "message": message,
         })
-    return out[:12]
+    return out
 
 
 def rephrase_batch(db: Session, rule_code: str, originals: list[str]) -> list[str | None]:
@@ -565,7 +571,7 @@ def rephrase_batch(db: Session, rule_code: str, originals: list[str]) -> list[st
         try:
             parsed = json.loads(json_text)
         except (ValueError, TypeError):
-            logger.warning("llm_unparsed_response", rule_code=rule_code, snippet=content[:200])
+            logger.warning("llm_unparsed_response", rule_code=rule_code)
             continue
 
         rewrites_field = parsed.get("rewrites") if isinstance(parsed, dict) else None

@@ -145,7 +145,11 @@ def materialize_docx(
                 run_id=run_id,
                 rule_kind=raw.rule_kind,
                 rule_code=raw.rule_code,
-                source_kind=rules_engine.classify_source(raw.rule_kind, raw.rule_code),
+                source_kind=rules_engine.classify_source(
+                    raw.rule_kind,
+                    raw.rule_code,
+                    ai_generated=raw.ai_generated,
+                ),
                 severity=raw.severity,
                 message=raw.message,
                 original_text=raw.original,

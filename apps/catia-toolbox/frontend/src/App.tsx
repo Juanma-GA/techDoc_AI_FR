@@ -1,9 +1,8 @@
-import { ErrorBoundary } from "@internal/ui";
+import { AppShell, ErrorBoundary, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import i18n from "./i18n";
 import { Checks } from "./routes/Checks";
 import { Colorization } from "./routes/Colorization";
@@ -91,7 +90,7 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
 };
 
 const navItemClass = ({ isActive }: { isActive: boolean }) =>
-  isActive ? "nav-item active" : "nav-item";
+  sidebarNavItemClass(isActive);
 
 export function App() {
   const { t } = useTranslation();
@@ -100,78 +99,59 @@ export function App() {
   const lang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
 
   return (
-    <div className="ct">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <span className="brand" title={t("app.description")} style={{ cursor: "help" }}>
-              {t("app.title")}
-            </span>
-            <span className="label">v{t("app.version")}</span>
-            <ThemeToggleButton />
-          </div>
-
-          <LlmBadge />
-
-          <nav>
-            {NAV.map((entry) =>
-              isGroup(entry) ? (
-                <div key={entry.groupKey} className="nav-group">
-                  <div className="nav-group-title">{t(entry.groupKey)}</div>
-                  {entry.items.map((it) => (
-                    <NavLink key={it.to} to={it.to} className={navItemClass}>
-                      {t(it.labelKey)}
-                    </NavLink>
-                  ))}
-                </div>
-              ) : (
-                <NavLink key={entry.to} to={entry.to} end={entry.end} className={navItemClass}>
-                  {t(entry.labelKey)}
-                </NavLink>
-              ),
-            )}
-          </nav>
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {(["fr", "en"] as const).map((code) => (
-              <button
-                key={code}
-                type="button"
-                className={lang === code ? "lang-btn active" : "lang-btn"}
-                onClick={() => void i18n.changeLanguage(code)}
-              >
-                {code.toUpperCase()}
-              </button>
+    <AppShell
+      className="ct"
+      title={t("app.title")}
+      brandTitle={t("app.description")}
+      version={t("app.version")}
+      llmStatus={<LlmBadge />}
+      navigation={NAV.map((entry) =>
+        isGroup(entry) ? (
+          <div key={entry.groupKey} className="nav-group">
+            <div className="nav-group-title">{t(entry.groupKey)}</div>
+            {entry.items.map((it) => (
+              <NavLink key={it.to} to={it.to} className={navItemClass}>
+                {t(it.labelKey)}
+              </NavLink>
             ))}
           </div>
-        </aside>
-
-        <main>
-          <div className="page-header">
-            <h1>{t(meta.titleKey)}</h1>
-            <p>{t(meta.subKey)}</p>
-          </div>
-          <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Navigate to="/identification" replace />} />
-              <Route path="/identification" element={<Identification />} />
-              <Route path="/diff" element={<Diff />} />
-              <Route path="/conversion" element={<Conversion />} />
-              <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />
-              <Route path="/colorization" element={<Colorization />} />
-              <Route path="/tree" element={<Tree />} />
-              <Route path="/suggestions" element={<Suggestions />} />
-              <Route path="/export" element={<Export />} />
-              <Route path="/smgxml-rename" element={<SmgxmlRename />} />
-              <Route path="/replacement" element={<Replacement />} />
-              <Route path="/qc" element={<Qc />} />
-              <Route path="/checks" element={<Checks />} />
-              <Route path="/data" element={<Data />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </ErrorBoundary>
-        </main>
+        ) : (
+          <NavLink key={entry.to} to={entry.to} end={entry.end} className={navItemClass}>
+            {t(entry.labelKey)}
+          </NavLink>
+        ),
+      )}
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={["fr", "en"]}
+          currentLanguage={lang}
+          onLanguageChange={(language) => void i18n.changeLanguage(language)}
+        />
+      }
+    >
+      <div className="page-header">
+        <h1>{t(meta.titleKey)}</h1>
+        <p>{t(meta.subKey)}</p>
       </div>
-    </div>
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<Navigate to="/identification" replace />} />
+          <Route path="/identification" element={<Identification />} />
+          <Route path="/diff" element={<Diff />} />
+          <Route path="/conversion" element={<Conversion />} />
+          <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />
+          <Route path="/colorization" element={<Colorization />} />
+          <Route path="/tree" element={<Tree />} />
+          <Route path="/suggestions" element={<Suggestions />} />
+          <Route path="/export" element={<Export />} />
+          <Route path="/smgxml-rename" element={<SmgxmlRename />} />
+          <Route path="/replacement" element={<Replacement />} />
+          <Route path="/qc" element={<Qc />} />
+          <Route path="/checks" element={<Checks />} />
+          <Route path="/data" element={<Data />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </ErrorBoundary>
+    </AppShell>
   );
 }

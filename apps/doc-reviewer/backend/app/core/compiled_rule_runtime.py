@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -56,6 +56,7 @@ class _TextTarget:
     bbox: _BBox | None = None
     target_id: str | None = None
     span_ranges: tuple[_SpanRange, ...] = ()
+    text_offset: int = 0
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,7 @@ class _EvalContext:
     db: Session | None
     client_operations: Mapping[str, Any] | None = None
     client_entities: Mapping[str, str] | None = None
+    inconclusive_pages: dict[str, list[int]] = field(default_factory=dict)
     # Required by the operators whose verdict spans the whole document
     # (cross-page consistency); None on the docx pipeline.
     parsed_pdf: ParsedPdf | None = None
@@ -236,7 +238,12 @@ def evidence(
     if is_docx:
         location = DocxEvidenceLocation(target_id=target.target_id or str(target.raw_page))
     else:
-        location = PdfEvidenceLocation(bbox=observed_bbox(target, observed or target.text, pdf_pages))
+        evidence_text = observed or target.text
+        local_offset = target.text.find(evidence_text) if observed else 0
+        span_start = target.text_offset + max(local_offset, 0)
+        location = PdfEvidenceLocation(
+            bbox=observed_bbox(target, evidence_text, pdf_pages, span_start=span_start)
+        )
     return Evidence(page=target.page, location=location, observed_value=observed, expected_value=expected)
 
 

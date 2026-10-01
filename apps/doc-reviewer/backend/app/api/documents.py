@@ -1,7 +1,5 @@
 """Documents API — upload / list / get / pdf / export / rollback / history."""
 
-from __future__ import annotations
-
 import uuid
 import tempfile
 from pathlib import Path
@@ -27,6 +25,7 @@ from app.core.document_context import (
 )
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
+from app.core.security import read_upload_bounded
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Document, EditHistory, StandardVersion
 from app.db.session import get_db
@@ -399,7 +398,7 @@ def upload_document(
             "Les archives .zip doivent etre envoyees via /documents/batch",
             status_code=400,
         )
-    data = file.file.read()
+    data = read_upload_bounded(file, settings.max_upload_size_bytes)
     prepared = ingest.prepare_document(name, data)
     if prepared.working_format == "docx":
         return _persist_docx(
@@ -450,39 +449,72 @@ def upload_documents_batch(
         db,
         request.app.state.client_configuration,
     )
-    raw_items = [(f.filename or "upload", f.file.read()) for f in files]
-    expanded, ignored = ingest.expand_uploads(raw_items)
-
     created: list[dict] = []
     failed: list[dict] = []
-    for name, data in expanded:
+    ignored: list[str] = []
+    expanded_count = 0
+    for upload in files:
+        upload_name = upload.filename or "upload"
         try:
-            prepared = ingest.prepare_document(name, data)
-            if prepared.working_format == "docx":
-                doc = _persist_docx(
-                    prepared.filename, prepared.working_bytes, target, db,
-                    standard_version_id=primary,
-                    standard_version_ids=all_ids,
-                    original_data=prepared.original_bytes,
-                    source_format=prepared.source_format,
-                    engine_override=prepared.convert_engine,
-                    client_mapping=request.app.state.client_configuration.mapping,
+            raw = read_upload_bounded(upload, settings.max_upload_size_bytes)
+            expanded, file_ignored = ingest.expand_uploads(
+                [(upload_name, raw)],
+                max_total_uncompressed=settings.max_upload_size_bytes,
+                allow_empty=True,
+            )
+            ignored.extend(file_ignored)
+            if expanded_count + len(expanded) > ingest.MAX_FILES:
+                raise AppError(
+                    "TOO_MANY_FILES",
+                    f"Plus de {ingest.MAX_FILES} fichiers dans l'upload.",
+                    status_code=413,
                 )
-            else:
-                doc = _persist_pdf(
-                    prepared.working_bytes, prepared.filename, target, db,
-                    standard_version_id=primary,
-                    standard_version_ids=all_ids,
-                    convert_engine=prepared.convert_engine,
-                    source_format=prepared.source_format,
-                    original_data=prepared.original_bytes,
-                    client_mapping=request.app.state.client_configuration.mapping,
-                )
-            created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
+            expanded_count += len(expanded)
         except AppError as exc:
-            failed.append({"filename": name, "code": exc.code, "message": exc.message})
-        except Exception as exc:  # noqa: BLE001
-            failed.append({"filename": name, "code": "INTERNAL_ERROR", "message": str(exc)})
+            failed.append({"filename": upload_name, "code": exc.code, "message": exc.message})
+            continue
+
+        for name, data in expanded:
+            try:
+                prepared = ingest.prepare_document(name, data)
+                if prepared.working_format == "docx":
+                    doc = _persist_docx(
+                        prepared.filename, prepared.working_bytes, target, db,
+                        standard_version_id=primary,
+                        standard_version_ids=all_ids,
+                        original_data=prepared.original_bytes,
+                        source_format=prepared.source_format,
+                        engine_override=prepared.convert_engine,
+                        client_mapping=request.app.state.client_configuration.mapping,
+                    )
+                else:
+                    doc = _persist_pdf(
+                        prepared.working_bytes, prepared.filename, target, db,
+                        standard_version_id=primary,
+                        standard_version_ids=all_ids,
+                        convert_engine=prepared.convert_engine,
+                        source_format=prepared.source_format,
+                        original_data=prepared.original_bytes,
+                        client_mapping=request.app.state.client_configuration.mapping,
+                    )
+                created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
+            except AppError as exc:
+                failed.append({"filename": name, "code": exc.code, "message": exc.message})
+            except Exception as exc:  # noqa: BLE001
+                failed.append(
+                    {
+                        "filename": name,
+                        "code": "INTERNAL_ERROR",
+                        "message": "Erreur interne pendant le traitement du fichier.",
+                    }
+                )
+
+    if not created and not failed:
+        raise AppError(
+            "NO_SUPPORTED_FILE",
+            "Aucun fichier .pdf / .doc / .docx trouvé dans l'upload.",
+            status_code=400,
+        )
 
     status = 201 if not failed else (207 if created else 400)
     return JSONResponse(

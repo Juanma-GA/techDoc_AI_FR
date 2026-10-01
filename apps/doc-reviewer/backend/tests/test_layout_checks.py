@@ -40,3 +40,21 @@ def test_layout_emits_findings_with_points_bbox() -> None:
 def test_layout_run_missing_file_returns_empty() -> None:
     assert layout_checks.run(None) == []
     assert layout_checks.run("does_not_exist.pdf") == []
+
+
+def test_layout_findings_limit_marks_remaining_pages_incomplete(tmp_path, monkeypatch) -> None:
+    doc = fitz.open()
+    for page_index in range(2):
+        page = doc.new_page(width=600, height=800)
+        page.insert_text((40, 120), f"Synthetic page {page_index + 1}", fontsize=10)
+    path = tmp_path / "synthetic-layout.pdf"
+    doc.save(str(path))
+    doc.close()
+    monkeypatch.setattr(layout_checks, "_MAX_FINDINGS", 1)
+    warnings: list[str] = []
+
+    findings = layout_checks.run(str(path), warnings=warnings)
+
+    assert len(findings) == 1
+    assert len(warnings) == 1
+    assert "pages restantes n'ont pas été vérifiées" in warnings[0]

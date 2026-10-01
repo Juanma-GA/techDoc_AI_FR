@@ -1,11 +1,14 @@
 """Vision checks — Mistral multimodal analysis of embedded illustrations.
 
 Emits `RawSuggestion` entries with `rule_kind="vision"` so the rest of
-the pipeline (materialize, persistence, overlay) handles them
+        images = extract_images(src_path, max_per_doc=max_images + 1)
 identically to text-bearing rules.
 
 Two checks run per image (cap at 20 images per document) :
 
+    if len(images) > max_images:
+        _mark_vision_limited(warnings)
+        images = images[:max_images]
 - **FIGURE_NO_CAPTION** (structural, no Mistral call) : the PDF doesn't
     contain a « Figure N — … » line below the image. Detection-only —
   the operator has to add the caption in the source document.
@@ -72,6 +75,7 @@ def run(
     *,
     max_images: int = 20,
     enable_mistral: bool = True,
+    warnings: list[str] | None = None,
 ) -> list[RawSuggestion]:
     """Extract every embedded image and emit vision-related suggestions.
 
@@ -79,10 +83,14 @@ def run(
     (FIGURE_NO_CAPTION) — useful when the user just wants the caption
     audit without paying for vision calls."""
     try:
-        images = extract_images(src_path, max_per_doc=max_images)
+        images = extract_images(src_path, max_per_doc=max_images + 1)
     except Exception as exc:  # noqa: BLE001
-        _logger.warning("vision_extract_failed: %s", exc)
+        _logger.warning("vision_extract_failed: %s", type(exc).__name__)
+        _mark_vision_incomplete(warnings)
         return []
+    if len(images) > max_images:
+        _mark_vision_limited(warnings)
+        images = images[:max_images]
 
     out: list[RawSuggestion] = []
     for idx, img in enumerate(images, start=1):
@@ -115,9 +123,11 @@ def run(
                 "vision_compliance_skipped: page=%s img=%s code=%s",
                 img.page, idx, exc.code,
             )
+            _mark_vision_incomplete(warnings)
             continue
         except Exception as exc:  # noqa: BLE001
-            _logger.warning("vision_compliance_error: %s", exc)
+            _logger.warning("vision_compliance_error: %s", type(exc).__name__)
+            _mark_vision_incomplete(warnings)
             continue
 
         for entry in result.get("results", []):
@@ -143,6 +153,7 @@ def run(
                         proposed="",  # detection-only
                         page=img.page,
                         span=(0, 0),
+                        ai_generated=True,
                     )
                 )
 
@@ -151,8 +162,10 @@ def run(
         if img.caption_nearby:
             try:
                 desc = describe_image(db, img.bytes)
-            except (AppError, Exception):  # noqa: BLE001
-                desc = ""
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("vision_description_skipped: %s", type(exc).__name__)
+                _mark_vision_incomplete(warnings)
+                continue
             if desc and _looks_incoherent(desc, img.caption_nearby):
                 out.append(
                     RawSuggestion(
@@ -169,10 +182,23 @@ def run(
                         proposed="",
                         page=img.page,
                         span=(0, 0),
+                        ai_generated=True,
                     )
                 )
 
     return out
+
+
+def _mark_vision_incomplete(warnings: list[str] | None) -> None:
+    warning = "La vérification sémantique des figures est indisponible; la couverture est réduite."
+    if warnings is not None and warning not in warnings:
+        warnings.append(warning)
+
+
+def _mark_vision_limited(warnings: list[str] | None) -> None:
+    warning = "La limite d'illustrations a été atteinte; les images restantes n'ont pas été analysées."
+    if warnings is not None and warning not in warnings:
+        warnings.append(warning)
 
 
 def _looks_incoherent(description: str, caption: str) -> bool:

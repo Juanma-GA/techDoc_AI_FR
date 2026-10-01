@@ -46,7 +46,7 @@ def _payload(code: str, message: str, detail: Any, request_id: str) -> dict[str,
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _on_app_error(request: Request, exc: AppError) -> JSONResponse:
-        logger.warning("app_error", code=exc.code, message=exc.message)
+        logger.warning("app_error", code=exc.code)
         return JSONResponse(
             status_code=exc.status_code,
             content=_payload(exc.code, exc.message, exc.detail, _request_id(request)),
@@ -81,7 +81,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _on_unhandled(request: Request, exc: Exception) -> JSONResponse:
-        logger.exception("unhandled_exception")
+        logger.error("unhandled_exception", error=type(exc).__name__)
         return JSONResponse(
             status_code=500,
             content=_payload(

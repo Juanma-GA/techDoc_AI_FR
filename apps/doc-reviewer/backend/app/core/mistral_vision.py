@@ -24,8 +24,8 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.logging import sanitize_llm_debug
 from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.security import validate_mistral_base_url
 
 # Inject the OS trust store — same trick used by the chat client so
 # corporate SSL proxies don't sink the multimodal call.
@@ -91,11 +91,11 @@ def _call_mistral_vision(db: Session, messages: list[dict], *, response_format: 
             provider="mistral",
             endpoint="chat/completions",
             model=payload["model"],
-            payload=sanitize_llm_debug(payload),
         )
-        with httpx.Client(timeout=_TIMEOUT_S) as client:
+        base_url = validate_mistral_base_url(s["base_url"])
+        with httpx.Client(timeout=_TIMEOUT_S, follow_redirects=False) as client:
             r = client.post(
-                f"{s['base_url'].rstrip('/')}/v1/chat/completions",
+            f"{base_url}/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {s['api_key']}",
                     "Content-Type": "application/json",
@@ -108,10 +108,9 @@ def _call_mistral_vision(db: Session, messages: list[dict], *, response_format: 
             endpoint="chat/completions",
             model=payload["model"],
             status_code=r.status_code,
-            response=sanitize_llm_debug(r.text),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("vision_network_error", error=type(exc).__name__, message=str(exc))
+        logger.warning("vision_network_error", error=type(exc).__name__)
         raise AppError(
             "VISION_CALL_FAILED",
             f"Échec d'appel Mistral (vision) : {type(exc).__name__}",
@@ -225,7 +224,15 @@ def check_figure_compliance(
     try:
         parsed = json.loads(json_text)
     except (ValueError, TypeError):
-        return {"results": [], "error": "invalid_json", "raw": content[:300]}
+        raise AppError(
+            "VISION_RESPONSE_INVALID",
+            "La réponse vision est inexploitable; cette partie de l'analyse est incomplète.",
+            status_code=502,
+        )
     if not isinstance(parsed, dict) or not isinstance(parsed.get("results"), list):
-        return {"results": [], "error": "invalid_shape", "raw": content[:300]}
+        raise AppError(
+            "VISION_RESPONSE_INVALID",
+            "La réponse vision est inexploitable; cette partie de l'analyse est incomplète.",
+            status_code=502,
+        )
     return parsed

@@ -59,7 +59,7 @@ def _find_soffice() -> str | None:
             p = p / "soffice.exe"
         if p.exists():
             return str(p)
-        log.warning("DR_SOFFICE_PATH defini mais introuvable: %s", env)
+        log.warning("DR_SOFFICE_PATH defini mais introuvable")
     # 2) Emplacements standards (PATH + Program Files).
     for cand in _SOFFICE_CANDIDATES:
         if cand.lower().endswith(".exe"):
@@ -110,10 +110,9 @@ def _convert_libreoffice(soffice: str, src: Path, outdir: Path) -> Path | None:
                 capture_output=True,
                 timeout=180,
             )
-        log.info("LibreOffice convert ok: %s", (result.stdout or b"").decode("utf-8", "replace").strip()[:200])
+        log.info("LibreOffice convert ok")
     except Exception as exc:  # noqa: BLE001
-        stderr = getattr(exc, "stderr", b"") or b""
-        log.warning("conversion LibreOffice echouee: %s | stderr=%s", exc, stderr.decode("utf-8", "replace")[:300])
+        log.warning("conversion LibreOffice echouee: %s", type(exc).__name__)
         return None
     out = outdir / (src.stem + ".pdf")
     return out if out.exists() else None
@@ -144,8 +143,8 @@ def _word_export_pdf(src: Path, out: Path) -> tuple[Path | None, str | None]:
         finally:
             doc.Close(False)
     except Exception as exc:  # noqa: BLE001
-        log.warning("export PDF Word echoue: %s", exc)
-        return None, str(exc)
+        log.warning("export PDF Word echoue: %s", type(exc).__name__)
+        return None, type(exc).__name__
     finally:
         if word is not None:
             try:
@@ -232,16 +231,12 @@ def _convert_libreoffice_format(src: Path, outdir: Path, target_format: str) -> 
                 capture_output=True,
                 timeout=180,
             )
-        log.info(
-            "LibreOffice convert (%s) ok: %s",
-            target_format,
-            (result.stdout or b"").decode("utf-8", "replace").strip()[:200],
-        )
+        log.info("LibreOffice convert ok", target_format=target_format)
     except Exception as exc:  # noqa: BLE001
-        stderr = getattr(exc, "stderr", b"") or b""
         log.warning(
-            "conversion LibreOffice (%s) echouee: %s | stderr=%s",
-            target_format, exc, stderr.decode("utf-8", "replace")[:300],
+            "conversion LibreOffice echouee",
+            target_format=target_format,
+            error=type(exc).__name__,
         )
         return None
     out = outdir / (src.stem + f".{target_format}")

@@ -7,7 +7,7 @@ import { PageHeader } from "../components/PageHeader";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { useDocuments } from "../hooks/useDocuments";
 import { api } from "../lib/api";
-import { localizedSuggestionMessage } from "../lib/suggestionText";
+import { localizedRuleCode, localizedSuggestionMessage } from "../lib/suggestionText";
 import type { Severity, Suggestion } from "../types/domain";
 
 type KpiTone = "info" | "warn" | "danger";
@@ -71,7 +71,7 @@ export function Dashboard(): JSX.Element {
     } else {
       errorsByRule.set(ruleCode, {
         ruleCode,
-        message: localizedSuggestionMessage(s, t) || ruleCode,
+        message: localizedSuggestionMessage(s, t) || localizedRuleCode(ruleCode, t),
         severity: s.severity,
         count: 1,
       });
@@ -121,10 +121,10 @@ export function Dashboard(): JSX.Element {
                       <div className="grow" style={{ minWidth: 0 }}>
                         <div className="row" style={{ gap: 8 }}>
                           <strong
-                            title={error.ruleCode}
+                            title={localizedRuleCode(error.ruleCode, t)}
                             style={{ overflow: "hidden", textOverflow: "ellipsis" }}
                           >
-                            {error.ruleCode}
+                            {localizedRuleCode(error.ruleCode, t)}
                           </strong>
                           <SeverityBadge severity={error.severity} />
                         </div>

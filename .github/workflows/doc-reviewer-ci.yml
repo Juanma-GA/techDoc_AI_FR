@@ -32,6 +32,24 @@ permissions:
   contents: read
 
 jobs:
+  repository-content:
+    name: Doc Reviewer repository content policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Reject tracked PDF and Word documents
+        shell: bash
+        run: |
+          forbidden_files="$(git ls-files -- 'apps/doc-reviewer' | grep -Ei '\.(pdf|docx?)$' || true)"
+          if [ -n "$forbidden_files" ]; then
+            printf '%s\n' "::error::PDF, DOC, and DOCX files must not be committed under apps/doc-reviewer."
+            printf '%s\n' "$forbidden_files"
+            exit 1
+          fi
+          echo "No tracked PDF, DOC, or DOCX files found under apps/doc-reviewer."
+
   backend:
     name: Doc Reviewer backend
     runs-on: ubuntu-latest

@@ -132,6 +132,9 @@ export function RulesSuggestPanel() {
           <header className="row" style={{ justifyContent: "space-between" }}>
             <div className="card-title">{t("rules.suggest.title")}</div>
             <div className="row">
+              {count > 0 ? (
+                <span className="badge info">{t("rules.suggest.aiSource")}</span>
+              ) : null}
               {suggest.data ? (
                 <span className="card-sub">
                   {t("rules.suggest.docsAnalyzed", {
@@ -178,7 +181,7 @@ export function RulesSuggestPanel() {
                       <div className="item-name">{s.name}</div>
                       <div className="item-meta">
                         {t(`rules.kind.${s.kind}`)} · /{s.pattern}/
-                        {s.replacement ? ` → ${s.replacement}` : ""} · {s.severity}
+                        {s.replacement ? ` → ${s.replacement}` : ""} · {t(`reviewer.suggestion.severity.${s.severity}`)}
                       </div>
                       {s.message ? (
                         <div className="item-meta">{s.message}</div>

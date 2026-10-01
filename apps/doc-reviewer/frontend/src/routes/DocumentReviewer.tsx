@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PdfViewer } from "../components/reviewer/PdfViewer";
+import { IncompleteChecksNotice } from "../components/reviewer/IncompleteChecksNotice";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
@@ -16,7 +17,7 @@ import {
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
+import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
 import { API_BASE_URL } from "../lib/api";
 import { useViewerStore } from "../stores/viewerStore";
 
@@ -28,6 +29,9 @@ export function DocumentReviewer() {
 
   const document = useDocument(documentId);
   const suggestions = useSuggestions(documentId);
+  const ruleResults = useRuleResults(
+    document.data?.working_format === "pdf" ? documentId : undefined,
+  );
   const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
   const revert = useRevertSuggestion(documentId);
@@ -205,6 +209,10 @@ export function DocumentReviewer() {
         </div>
 
         <AnalysisTargetBanner />
+        <IncompleteChecksNotice
+          results={ruleResults.data ?? []}
+          isRunning={analyze.status === "running"}
+        />
 
         <main className="reviewer-canvas reviewer-canvas-stack">
           {document.data ? <DocumentMetaPanel document={document.data} /> : null}

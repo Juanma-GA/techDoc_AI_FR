@@ -621,7 +621,7 @@ def test_copyright_year_mismatch_only_flags_the_year_not_the_whole_block() -> No
     assert raws[0].proposed == "2025"
 
 
-def test_regex_evaluates_every_page_and_logs_document_context() -> None:
+def test_regex_evaluates_every_page_without_logging_document_context() -> None:
     parsed = ParsedPdf(
         page_count=2,
         pages=[
@@ -658,10 +658,11 @@ def test_regex_evaluates_every_page_and_logs_document_context() -> None:
     regex_logs = [entry for entry in logs if entry.get("event") == "compiled_regex_evaluated"]
     assert [entry["page"] for entry in regex_logs] == ["1", "2"]
     assert regex_logs[0]["match_count"] == 1
-    assert regex_logs[0]["document_metadata"] == {
-        "meta_revision_date": "JUL 27/26",
-        "meta_cmm_number": "79-30-02",
-    }
+    log_text = str(logs)
+    assert "document_metadata" not in log_text
+    assert "JUL 27/26" not in log_text
+    assert "79-30-02" not in log_text
+    assert "TODO on the first page" not in log_text
     assert results[0].status == "FAIL"
     assert results[0].evidence is not None
     assert results[0].evidence.page == "1"

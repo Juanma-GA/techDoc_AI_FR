@@ -1,10 +1,38 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Starter shell for ATEXIS proof-of-concept apps."
+  },
+  "nav": {
+    "home": "Home",
+    "data": "Data",
+    "settings": "Settings"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "LLM status (see Settings)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "UNTESTED",
+    "noKey": "NO KEY"
   },
   "home": {
     "title": "Welcome",
     "subtitle": "POC skeleton — adapt routes/Home.tsx, app/api/, and locales/."
+  },
+  "data": {
+    "title": "Data",
+    "subtitle": "Local data status for this application.",
+    "overview": "Overview",
+    "documents": "Documents",
+    "chunks": "Chunks",
+    "sessions": "Sessions",
+    "messages": "Messages",
+    "storage": "Storage",
+    "resetTitle": "Reset data",
+    "resetHint": "Settings and LLM configuration are preserved.",
+    "resetButton": "Delete all data",
+    "resetDone": "Reset complete ({count} items deleted)."
   }
 }
