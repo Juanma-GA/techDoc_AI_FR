@@ -37,6 +37,7 @@ export type EvidenceLocation =
 
 export type RuleResult = {
   rule_id: string;
+  rule_title?: string | null;
   status: "PASS" | "FAIL" | "MANUAL" | "UNSUPPORTED" | "INCONCLUSIVE";
   evidence: {
     page: string;

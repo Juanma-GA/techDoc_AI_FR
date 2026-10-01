@@ -47,7 +47,21 @@ def latest_rule_results(
         return []
     try:
         payload = json.loads(run.compiled_rules_snapshot_json or "{}")
-        return [RuleResult.model_validate(item) for item in payload.get("results", [])]
+        rule_titles = {
+            str(rule.get("id")): str(rule.get("topic") or "")
+            for rule in payload.get("rules", [])
+            if isinstance(rule, dict) and rule.get("id")
+        }
+        return [
+            RuleResult.model_validate(
+                {
+                    **item,
+                    "rule_title": item.get("rule_title") or rule_titles.get(str(item.get("rule_id"))),
+                }
+            )
+            for item in payload.get("results", [])
+            if isinstance(item, dict)
+        ]
     except (AttributeError, TypeError, ValueError):
         return []
 
@@ -430,14 +444,6 @@ def analyze_stream(
                     # A ce stade, le classifieur du ClientBundle invoque par
                     # `run_all` a pu peupler `page.page_type`; on le capture ici.
                     page_types = {str(page.page): page.page_type for page in parsed.pages}
-
-                if any(result.status == "INCONCLUSIVE" for result in compiled_results):
-                    warning = (
-                        "Certaines vérifications n'ont pas pu être évaluées jusqu'au bout; "
-                        "la couverture est réduite."
-                    )
-                    if warning not in run_warnings:
-                        run_warnings.append(warning)
 
                 run_row = scoped_session.get(AnalysisRun, run_id_value)
                 if run_row is not None:

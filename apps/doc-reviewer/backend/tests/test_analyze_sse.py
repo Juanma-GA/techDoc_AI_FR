@@ -10,6 +10,7 @@ import io
 import hashlib
 import json
 import uuid
+from types import SimpleNamespace
 
 from openpyxl import Workbook
 from fastapi.testclient import TestClient
@@ -17,9 +18,36 @@ from sqlalchemy import select
 
 from app.checks.client_registry import load_active_client_configuration
 from app.api import rules as rules_api
+from app.api.analyze import latest_rule_results
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 from app.db.models import AnalysisRun, Document
 from app.db.session import SessionLocal
+
+
+def test_rule_results_include_human_readable_titles_from_synthetic_snapshot() -> None:
+    snapshot = {
+        "rules": [{"id": "CHECKLIST_REVISION_DATE", "topic": "Revision date"}],
+        "results": [
+            {
+                "rule_id": "CHECKLIST_REVISION_DATE",
+                "status": "INCONCLUSIVE",
+                "evidence": {
+                    "page": "1",
+                    "location": {"type": "bbox", "bbox": [0, 0, 0, 0]},
+                    "observed_value": None,
+                    "expected_value": None,
+                },
+            }
+        ],
+    }
+    run = SimpleNamespace(compiled_rules_snapshot_json=json.dumps(snapshot))
+    db = SimpleNamespace(scalar=lambda _statement: run)
+
+    results = latest_rule_results(uuid.uuid4(), db)  # type: ignore[arg-type]
+
+    assert len(results) == 1
+    assert results[0].status == "INCONCLUSIVE"
+    assert results[0].rule_title == "Revision date"
 
 
 def _set_document_context(client: TestClient, document_id: str) -> None:

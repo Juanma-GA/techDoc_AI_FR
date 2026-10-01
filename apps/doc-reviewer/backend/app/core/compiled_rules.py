@@ -385,6 +385,7 @@ class CompiledRule(StrictModel):
 
 class RuleResult(StrictModel):
     rule_id: str = Field(min_length=1, max_length=120)
+    rule_title: str | None = None
     status: Literal["PASS", "FAIL", "MANUAL", "UNSUPPORTED", "INCONCLUSIVE"]
     evidence: Evidence | None = None
 
