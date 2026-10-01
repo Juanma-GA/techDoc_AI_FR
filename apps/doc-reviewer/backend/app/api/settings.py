@@ -104,7 +104,7 @@ def update_mistral_settings(
         except ValueError as exc:
             raise AppError(
                 "MISTRAL_URL_NOT_ALLOWED",
-                "Seule l’URL HTTPS officielle de Mistral est autorisée.",
+                "Seule l’URL HTTPS officielle de Mistral ou une URL entreprise autorisée est acceptée.",
                 status_code=422,
             ) from exc
     # `vision_enabled` is stored separately (boolean flag, not in Mistral

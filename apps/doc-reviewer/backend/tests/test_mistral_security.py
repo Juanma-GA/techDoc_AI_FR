@@ -25,6 +25,9 @@ from app.db.session import SessionLocal
         "https://169.254.169.254",
         "https://[::1]",
         "https://api.mistral.ai.attacker.test",
+        "https://api.2a91ec1812a1.dc.mistral.ai.attacker.test",
+        "https://api.bad-.dc.mistral.ai",
+        "https://api.foo.bar.dc.mistral.ai",
         "https://user@api.mistral.ai",
         "https://api.mistral.ai:8443",
         "https://api.mistral.ai/v1",
@@ -37,11 +40,22 @@ def test_mistral_base_url_rejects_untrusted_targets(url: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "url",
-    ["https://api.mistral.ai", "https://API.MISTRAL.AI:443/"],
+    ("url", "expected"),
+    [
+        ("https://api.mistral.ai", "https://api.mistral.ai"),
+        ("https://API.MISTRAL.AI:443/", "https://api.mistral.ai"),
+        (
+            "https://api.2a91ec1812a1.dc.mistral.ai",
+            "https://api.2a91ec1812a1.dc.mistral.ai",
+        ),
+        (
+            "https://API.2A91EC1812A1.DC.MISTRAL.AI:443/",
+            "https://api.2a91ec1812a1.dc.mistral.ai",
+        ),
+    ],
 )
-def test_mistral_base_url_normalizes_the_allowed_origin(url: str) -> None:
-    assert validate_mistral_base_url(url) == "https://api.mistral.ai"
+def test_mistral_base_url_normalizes_the_allowed_origin(url: str, expected: str) -> None:
+    assert validate_mistral_base_url(url) == expected
 
 
 def test_settings_reject_untrusted_mistral_url(client: TestClient) -> None:

@@ -17,10 +17,13 @@ _MAX_FILENAME_LEN = 180
 
 _MAGIC_PDF = b"%PDF-"
 _MISTRAL_ALLOWED_HOSTS = frozenset({"api.mistral.ai"})
+_MISTRAL_ENTERPRISE_HOST = re.compile(
+    r"api\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.dc\.mistral\.ai"
+)
 
 
 def validate_mistral_base_url(raw: str) -> str:
-    """Allow only the canonical HTTPS Mistral API origin."""
+    """Allow the canonical Mistral API and enterprise HTTPS origins."""
     if not isinstance(raw, str) or not raw or len(raw) > 2048 or raw != raw.strip():
         raise ValueError("URL Mistral non autorisée")
     if any(char.isspace() or ord(char) < 0x20 for char in raw):
@@ -61,9 +64,13 @@ def validate_mistral_base_url(raw: str) -> str:
     ):
         raise ValueError("URL Mistral non autorisée")
 
-    if address is not None or host.rstrip(".").lower() not in _MISTRAL_ALLOWED_HOSTS:
+    normalized_host = host.rstrip(".").lower()
+    if address is not None or (
+        normalized_host not in _MISTRAL_ALLOWED_HOSTS
+        and _MISTRAL_ENTERPRISE_HOST.fullmatch(normalized_host) is None
+    ):
         raise ValueError("URL Mistral non autorisée")
-    return "https://api.mistral.ai"
+    return f"https://{normalized_host}"
 
 
 def safe_filename(raw: str | None) -> str:
