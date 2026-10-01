@@ -91,7 +91,7 @@ export function RejectionsSummaryCard() {
           )}
 
           {/* Répartition par règle (indice de faux positifs par règle). */}
-          <h3 className="card-title" style={{ fontSize: "0.95rem" }}>
+          <h3 className="card-title">
             {t("data.rejects.byRule")}
           </h3>
           <div style={{ marginBottom: 12 }}>

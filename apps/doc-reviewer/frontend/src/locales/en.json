@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "Doc Reviewer",
-    "version": "v2"
+    "version": "v2",
+    "description": "Review documents, identify issues, and validate suggested corrections."
   },
   "llm": {
     "label": "LLM",

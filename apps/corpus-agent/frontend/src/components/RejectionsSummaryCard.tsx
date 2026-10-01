@@ -101,7 +101,7 @@ export function RejectionsSummaryCard({ projectId }: { projectId: string }) {
           )}
 
           {/* Répartition par sujet (indice de faux positifs par règle). */}
-          <h3 className="card-title" style={{ fontSize: "0.95rem" }}>
+          <h3 className="card-title">
             {t("rejections.bySubject")}
           </h3>
           <BarList items={byCat} />

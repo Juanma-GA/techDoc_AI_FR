@@ -1,10 +1,15 @@
-import { ErrorBoundary, PortalLink } from "@internal/ui";
+import {
+  AppShell,
+  ErrorBoundary,
+  LanguageSwitcher,
+  PortalLink,
+  sidebarNavItemClass,
+} from "@internal/ui";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { setAppLanguage } from "./i18n";
 import { useUnsavedGuardStore } from "./stores/useUnsavedGuardStore";
 
@@ -80,79 +85,63 @@ export function App() {
   };
 
   return (
-    <div className="ca">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <PortalLink className="sidebar-home" label={t("nav.portal")} />
-            <span className="brand" title={t("app.titleTooltip")}>
-              {t("app.title")}
-            </span>
-            <span className="label">{t("app.version")}</span>
-            <ThemeToggleButton />
-          </div>
-
-          <LlmBadge />
-
-          <nav>
-            {navItems.map(({ to, labelKey }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === "/"}
-                className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
-                onClick={handleNavClick(to)}
-              >
-                {t(labelKey)}
-              </NavLink>
-            ))}
-          </nav>
-
-          {pendingTo && (
-            <div className="banner warn" style={{ margin: "8px 12px" }}>
-              {guardMessage}
-              <div className="row" style={{ gap: 8, marginTop: 8 }}>
-                <button type="button" className="btn danger small" onClick={confirmLeave}>
-                  {t("nav.leaveWithoutSaving")}
-                </button>
-                <button type="button" className="btn ghost small" onClick={() => setPendingTo(null)}>
-                  {t("nav.stayHere")}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {LANGS.map((lng) => (
-              <button
-                key={lng}
-                type="button"
-                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
-                onClick={() => void setAppLanguage(lng)}
-              >
-                {lng.toUpperCase()}
+    <AppShell
+      className="ca"
+      headerStart={<PortalLink className="sidebar-home" label={t("nav.portal")} />}
+      title={t("app.title")}
+      brandTitle={t("app.titleTooltip")}
+      version={t("app.version")}
+      llmStatus={<LlmBadge />}
+      navigation={navItems.map(({ to, labelKey }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === "/"}
+          className={({ isActive }) => sidebarNavItemClass(isActive)}
+          onClick={handleNavClick(to)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+      sidebarBottom={
+        pendingTo ? (
+          <div className="banner warn" style={{ margin: "8px 12px" }}>
+            {guardMessage}
+            <div className="row" style={{ gap: 8, marginTop: 8 }}>
+              <button type="button" className="btn danger small" onClick={confirmLeave}>
+                {t("nav.leaveWithoutSaving")}
               </button>
-            ))}
+              <button type="button" className="btn ghost small" onClick={() => setPendingTo(null)}>
+                {t("nav.stayHere")}
+              </button>
+            </div>
           </div>
-        </aside>
-
-        <main>
-          <ErrorBoundary>
-            <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
-              <Routes>
-                <Route path="/" element={<Manager />} />
-                <Route path="/projects" element={<Projects />} />
-                <Route path="/projects/:id" element={<ProjectDetail />} />
-                <Route path="/redacteur" element={<Redacteur />} />
-                <Route path="/chatbot" element={<Chatbot />} />
-                <Route path="/architecture" element={<Architecture />} />
-                <Route path="/data" element={<Data />} />
-                <Route path="/settings" element={<Settings />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
-        </main>
-      </div>
-    </div>
+        ) : null
+      }
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={LANGS}
+          currentLanguage={currentLang}
+          onLanguageChange={(language) => {
+            if (language === "fr" || language === "en") void setAppLanguage(language);
+          }}
+        />
+      }
+    >
+      <ErrorBoundary>
+        <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
+          <Routes>
+            <Route path="/" element={<Manager />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/:id" element={<ProjectDetail />} />
+            <Route path="/redacteur" element={<Redacteur />} />
+            <Route path="/chatbot" element={<Chatbot />} />
+            <Route path="/architecture" element={<Architecture />} />
+            <Route path="/data" element={<Data />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    </AppShell>
   );
 }

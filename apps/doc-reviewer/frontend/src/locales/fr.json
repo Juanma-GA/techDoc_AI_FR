@@ -1,14 +1,15 @@
 {
   "app": {
     "title": "Doc Reviewer",
-    "version": "v2"
+    "version": "v2",
+    "description": "Relecture de documents avec détection des écarts et suggestions à valider."
   },
   "llm": {
     "label": "LLM",
     "title": "Etat du LLM (voir Paramètres)",
     "on": "ON",
     "off": "OFF",
-    "untested": "A TESTER",
+    "untested": "À TESTER",
     "noKey": "NO KEY"
   },
   "nav": {
