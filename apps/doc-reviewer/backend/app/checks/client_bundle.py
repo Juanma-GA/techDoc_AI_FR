@@ -10,6 +10,7 @@ from typing import Any, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.compiled_rules import CompiledRule
+from app.core.regex_safety import UserRegexPatternError, compile_user_regex
 
 
 class _StrictModel(BaseModel):
@@ -79,9 +80,9 @@ class ClientMapping(_StrictModel):
     def validate_entities(self) -> ClientMapping:
         for name, pattern in self.entities.items():
             try:
-                compiled = re.compile(pattern)
-            except re.error as exc:
-                raise ValueError(f"invalid entity pattern for {name}: {exc.msg}") from exc
+                compiled = compile_user_regex(pattern)
+            except UserRegexPatternError as exc:
+                raise ValueError(f"invalid entity pattern for {name}: {exc.message}") from exc
             if compiled.groups == 0:
                 raise ValueError(f"entity pattern for {name} must define a capture group")
         return self

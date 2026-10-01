@@ -108,8 +108,6 @@ def identify_page_type(
             _logger.debug(
                 "tp1_detection_no_match",
                 page=page.page,
-                expected_anchors=expected_anchors,
-                footer_lines=lines,
             )
         page_types[str(page.page)] = page.page_type
     return page_types

@@ -9,6 +9,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.regex_safety import MAX_USER_REGEX_LENGTH
+
 
 # =============================================================================
 # Documents
@@ -192,7 +194,7 @@ RuleKind = Literal[
 class RuleIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     kind: RuleKind
-    pattern: str = Field(..., min_length=1)
+    pattern: str = Field(..., min_length=1, max_length=MAX_USER_REGEX_LENGTH)
     replacement: str = ""
     severity: Literal["info", "warning", "error"] = "warning"
     message: str = ""
@@ -203,7 +205,7 @@ class RuleIn(BaseModel):
 class RulePatchIn(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     kind: Optional[RuleKind] = None
-    pattern: Optional[str] = None
+    pattern: Optional[str] = Field(default=None, max_length=MAX_USER_REGEX_LENGTH)
     replacement: Optional[str] = None
     severity: Optional[Literal["info", "warning", "error"]] = None
     message: Optional[str] = None

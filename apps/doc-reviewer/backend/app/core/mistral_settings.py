@@ -28,22 +28,12 @@ _PREFIX = "mistral."
 # (cf. encryption.py). Seul le secret Mistral est sensible ; base_url et modeles
 # restent en clair.
 ENCRYPTED_KEYS = {"api_key"}
-_PLAINTEXT_WARNING_LOGGED = False
-
-
 def _get_secret_manager():  # type: ignore[no-untyped-def]
     """Create the configured secret manager for persisted Mistral settings."""
-    global _PLAINTEXT_WARNING_LOGGED
-
-    from app.core.encryption import SecretManager
+    from app.core.encryption import EncryptionError, SecretManager
 
     if not settings.encryption_key:
-        if not _PLAINTEXT_WARNING_LOGGED:
-            logger.warning(
-                "Encryption key not configured - local-only Mistral secrets are stored in plaintext"
-            )
-            _PLAINTEXT_WARNING_LOGGED = True
-        return SecretManager(None)
+        raise EncryptionError("ENCRYPTION_KEY_REQUIRED")
     return SecretManager(settings.encryption_key)
 
 
@@ -54,8 +44,8 @@ def _get(db: Session, key: str) -> str | None:
     if key in ENCRYPTED_KEYS:
         try:
             return _get_secret_manager().decrypt(row.value)
-        except Exception as e:  # noqa: BLE001
-            logger.error("Failed to decrypt %s: %s", key, e)
+        except Exception:  # noqa: BLE001
+            logger.error("Failed to decrypt Mistral setting", setting=key)
             return None
     return row.value
 

@@ -1,7 +1,10 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
 import type { RuleKind, Severity } from "../types/domain";
+
+if (typeof localStorage !== "undefined") {
+  localStorage.removeItem("doc-reviewer-filters");
+}
 
 type FiltersState = {
   severities: Severity[];
@@ -34,9 +37,7 @@ type FiltersState = {
   setRuleCodeFilter: (v: string | null) => void;
 };
 
-export const useFiltersStore = create<FiltersState>()(
-  persist(
-    (set, get) => ({
+export const useFiltersStore = create<FiltersState>()((set, get) => ({
       severities: ["info", "warning", "error"],
       kinds: ["standard", "custom", "units", "layout"],
       hideAccepted: false,
@@ -91,8 +92,6 @@ export const useFiltersStore = create<FiltersState>()(
       clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
       setRuleCodeFilter: (v) => set({ ruleCodeFilter: v }),
     }),
-    { name: "doc-reviewer-filters" },
-  ),
 );
 
 /** Cible d'unite envoyee au backend a partir de la selection multiple :

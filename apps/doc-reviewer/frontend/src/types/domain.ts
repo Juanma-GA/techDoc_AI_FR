@@ -10,7 +10,7 @@ export type RuleKind =
   | "compiled_checklist";
 
 /** Provenance affichee/filtrable dans la liste des anomalies. */
-export type SourceKind = "norme" | "checklist" | "regle" | "transverse";
+export type SourceKind = "ai" | "norme" | "checklist" | "regle" | "transverse";
 
 export type RuleKindStored =
   | "regex_replace"
@@ -89,6 +89,7 @@ export type RejectionItem = {
   id: string;
   file: string;
   rule_code: string;
+  source_kind: SourceKind;
   severity: string;
   message: string;
   feedback: string;

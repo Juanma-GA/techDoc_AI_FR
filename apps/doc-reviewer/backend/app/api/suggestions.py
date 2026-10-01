@@ -1,7 +1,5 @@
 """Suggestions API — list / patch / bulk-status / apply / revert."""
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone
@@ -257,6 +255,7 @@ class RejectionItem(BaseModel):
     id: uuid.UUID
     file: str
     rule_code: str
+    source_kind: str
     severity: str
     message: str
     feedback: str
@@ -343,6 +342,11 @@ def rejections_summary(
             id=s.id,
             file=doc_names.get(s.document_id) or "document inconnu",
             rule_code=s.rule_code,
+            source_kind=(
+                "ai"
+                if s.source_kind == "ai" or s.rule_code in {"AI_SCAN", "FIGURE_COHERENCE"}
+                else s.source_kind
+            ),
             severity=s.severity,
             message=s.message or "",
             feedback=s.feedback or "",
@@ -359,7 +363,7 @@ def rejections_summary(
         except AppError as exc:
             logger.warning("rejections_synthese_skipped", code=exc.code)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("rejections_synthese_failed", error=type(exc).__name__, message=str(exc))
+            logger.warning("rejections_synthese_failed", error=type(exc).__name__)
 
     return RejectionsSummaryOut(
         total=len(rejected),

@@ -52,7 +52,12 @@ def _is_supported(name: str) -> bool:
     return base.lower().endswith(SUPPORTED_EXTS) and not base.startswith(".")
 
 
-def expand_uploads(items: list[tuple[str, bytes]]) -> tuple[list[tuple[str, bytes]], list[str]]:
+def expand_uploads(
+    items: list[tuple[str, bytes]],
+    *,
+    max_total_uncompressed: int = MAX_TOTAL_UNCOMPRESSED,
+    allow_empty: bool = False,
+) -> tuple[list[tuple[str, bytes]], list[str]]:
     """Etend les uploads en fichiers supportes : passe-plat pour `.pdf/.doc/.docx`,
     extraction recursive des `.zip`. Retourne `(fichiers [(nom, octets)], ignores)`.
     """
@@ -61,7 +66,7 @@ def expand_uploads(items: list[tuple[str, bytes]]) -> tuple[list[tuple[str, byte
     for fname, data in items:
         low = fname.lower()
         if low.endswith(".zip"):
-            d, i = _extract_zip(data)
+            d, i = _extract_zip(data, max_total_uncompressed=max_total_uncompressed)
             out.extend(d)
             ignored.extend(i)
         elif _is_supported(fname):
@@ -72,7 +77,7 @@ def expand_uploads(items: list[tuple[str, bytes]]) -> tuple[list[tuple[str, byte
             ignored.append(fname)
     if len(out) > MAX_FILES:
         raise AppError("TOO_MANY_FILES", f"Plus de {MAX_FILES} fichiers dans l'upload.", status_code=413)
-    if not out:
+    if not out and not allow_empty:
         raise AppError(
             "NO_SUPPORTED_FILE",
             "Aucun fichier .pdf / .doc / .docx trouve dans l'upload.",
@@ -81,7 +86,11 @@ def expand_uploads(items: list[tuple[str, bytes]]) -> tuple[list[tuple[str, byte
     return out, ignored
 
 
-def _extract_zip(data: bytes) -> tuple[list[tuple[str, bytes]], list[str]]:
+def _extract_zip(
+    data: bytes,
+    *,
+    max_total_uncompressed: int = MAX_TOTAL_UNCOMPRESSED,
+) -> tuple[list[tuple[str, bytes]], list[str]]:
     out: list[tuple[str, bytes]] = []
     ignored: list[str] = []
     total = 0
@@ -99,7 +108,7 @@ def _extract_zip(data: bytes) -> tuple[list[tuple[str, bytes]], list[str]]:
             if info.file_size > _max_single():
                 raise AppError("FILE_TOO_LARGE", f"{info.filename} (decompresse) trop volumineux.", status_code=413)
             total += info.file_size
-            if total > MAX_TOTAL_UNCOMPRESSED:
+            if total > max_total_uncompressed:
                 raise AppError("ZIP_TOO_LARGE", "Taille decompressee totale excessive.", status_code=413)
             out.append((_basename(info.filename), zf.read(info)))
     return out, ignored

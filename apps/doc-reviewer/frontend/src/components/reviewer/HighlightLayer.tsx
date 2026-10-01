@@ -1,5 +1,9 @@
 import { bboxToPercentRect, hasValidBbox } from "../../lib/bbox";
-import { localizedSuggestionMessage } from "../../lib/suggestionText";
+import {
+  isAiGeneratedSuggestion,
+  localizedRuleCode,
+  localizedSuggestionMessage,
+} from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 import { useTranslation } from "react-i18next";
 
@@ -49,12 +53,18 @@ export function HighlightLayer({
         const counter = total > 1 ? ` (${cur}/${total})` : "";
         const detectionOnly = !s.proposed_text || s.proposed_text === s.original_text;
         const message = localizedSuggestionMessage(s, t);
-        const label = `${s.rule_code}${counter} · ${message || ""}`;
+        const ruleCodeLabel = localizedRuleCode(s.rule_code, t);
+        const sourceKind = isAiGeneratedSuggestion(s.source_kind, s.rule_code, s.proposed_text)
+          ? "ai"
+          : s.source_kind;
+        const sourceLabel = t(`reviewer.source.${sourceKind}`);
+        const severityLabel = t(`reviewer.suggestion.severity.${s.severity}`);
+        const label = `${ruleCodeLabel}${counter} · ${sourceLabel} · ${message || ""}`;
         const proposedLine = detectionOnly
           ? t("rules.suggestionDetails.detectionOnly")
           : `${t("rules.suggestionDetails.proposed")} : ${s.proposed_text}`;
         const tooltip =
-          `${s.rule_code}${counter} · ${s.severity}\n` +
+          `${ruleCodeLabel}${counter} · ${sourceLabel} · ${severityLabel}\n` +
           `${message || ""}\n` +
           `${t("rules.suggestionDetails.original")} : ${s.original_text}\n` +
           `${proposedLine}`;

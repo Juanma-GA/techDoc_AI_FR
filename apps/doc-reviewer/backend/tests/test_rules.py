@@ -91,6 +91,32 @@ def test_suggest_rejects_when_scope_empty(client: TestClient) -> None:
     assert response.json()["code"] == "NO_DOCS_FOR_SUGGESTIONS"
 
 
+def test_suggest_from_files_rejects_excess_file_count_without_analysis(
+    client: TestClient,
+) -> None:
+    files = [
+        ("files", (f"synthetic-{index}.pdf", b"synthetic", "application/pdf"))
+        for index in range(21)
+    ]
+
+    response = client.post("/api/v1/rules/suggest/from-files", files=files)
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "RULE_SUGGEST_TOO_MANY_DOCUMENTS"
+
+
+def test_suggest_from_files_rejects_unreadable_input_without_partial_results(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/rules/suggest/from-files",
+        files={"files": ("synthetic.txt", b"SYNTHETIC-CONTENT", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "RULE_SUGGEST_INPUT_INCOMPLETE"
+
+
 def test_suggest_returns_filtered_rules(client: TestClient, sample_pdf_bytes: bytes) -> None:
     upload = client.post(
         "/api/v1/documents",

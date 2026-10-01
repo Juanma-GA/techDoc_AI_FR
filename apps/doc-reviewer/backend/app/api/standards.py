@@ -6,8 +6,6 @@ versions) are fully editable; they can be cloned from a built-in via
 the `POST /standards/{id}/versions` endpoint with a copied `catalog`.
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone

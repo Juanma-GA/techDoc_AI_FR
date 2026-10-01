@@ -56,6 +56,7 @@ class _TextTarget:
     bbox: _BBox | None = None
     target_id: str | None = None
     span_ranges: tuple[_SpanRange, ...] = ()
+    text_offset: int = 0
 
 
 @dataclass(frozen=True)
@@ -236,7 +237,12 @@ def evidence(
     if is_docx:
         location = DocxEvidenceLocation(target_id=target.target_id or str(target.raw_page))
     else:
-        location = PdfEvidenceLocation(bbox=observed_bbox(target, observed or target.text, pdf_pages))
+        evidence_text = observed or target.text
+        local_offset = target.text.find(evidence_text) if observed else 0
+        span_start = target.text_offset + max(local_offset, 0)
+        location = PdfEvidenceLocation(
+            bbox=observed_bbox(target, evidence_text, pdf_pages, span_start=span_start)
+        )
     return Evidence(page=target.page, location=location, observed_value=observed, expected_value=expected)
 
 
