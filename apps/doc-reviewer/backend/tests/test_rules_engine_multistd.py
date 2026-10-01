@@ -169,7 +169,7 @@ def test_layout_rules_are_disabled_by_default(monkeypatch) -> None:
         mat_v = _get_version(session, "MAT10000")
         monkeypatch.setattr(
             "app.core.rules_engine.layout_checks.run",
-            lambda path: calls.append(path) or [],
+            lambda path, **_kwargs: calls.append(path) or [],
         )
 
         run_all(_parsed("Texte neutre."), _doc("fr"), session, [mat_v], src_path="sample.pdf")
@@ -186,7 +186,7 @@ def test_layout_rules_require_explicit_opt_in(monkeypatch) -> None:
         mat_v = _get_version(session, "MAT10000")
         monkeypatch.setattr(
             "app.core.rules_engine.layout_checks.run",
-            lambda path: calls.append(path) or [],
+            lambda path, **_kwargs: calls.append(path) or [],
         )
 
         run_all(
@@ -269,7 +269,7 @@ def test_mistral_read_timeout_is_retried_once(monkeypatch) -> None:
             lambda _db: {
                 "api_key": "test-key",
                 "chat_model": "test-model",
-                "base_url": "https://example.invalid",
+                "base_url": "https://api.mistral.ai",
             },
         )
         monkeypatch.setattr(llm_suggester.httpx, "Client", _Client)
@@ -306,7 +306,7 @@ def test_ai_scan_continues_after_failed_page_group(monkeypatch) -> None:
 
         assert calls == 2
         assert [item.page for item in results] == [2]
-        assert warnings == ["Scan checklist/IA partiellement indisponible (LLM_REPHRASE_FAILED) : ReadTimeout"]
+        assert warnings == ["Scan IA partiellement indisponible : ReadTimeout"]
     finally:
         session.close()
 

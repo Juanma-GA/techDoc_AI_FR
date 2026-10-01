@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import fitz
@@ -191,9 +190,8 @@ def test_justified_pdf_paragraph_passes_from_rendered_geometry(tmp_path) -> None
     assert suggestions == []
 
 
-def test_example_pdf_surfaces_the_faulty_paragraph_as_detection_only() -> None:
-    pdf_path = Path(__file__).resolve().parents[2] / "79-30-02-01_test_erreur.pdf"
-    parsed = parse_pdf(pdf_path)
+def test_faulty_paragraph_surfaces_as_detection_only() -> None:
+    parsed = _three_line_pdf([509.8, 539.8, 161.8])
     document = SimpleNamespace(
         meta_revision_date="JUL 27/26",
         meta_first_issue_date=None,
