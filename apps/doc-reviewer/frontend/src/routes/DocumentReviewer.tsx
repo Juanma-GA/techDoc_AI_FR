@@ -1,9 +1,20 @@
-import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  CircleHelp,
+  CircleMinus,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PdfViewer } from "../components/reviewer/PdfViewer";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { IncompleteChecksNotice } from "../components/reviewer/IncompleteChecksNotice";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
@@ -33,6 +44,11 @@ export function DocumentReviewer() {
     document.data?.working_format === "pdf" ? documentId : undefined,
   );
   const analyze = useAnalyze(documentId, document.data);
+  const [pendingPageStatus, setPendingPageStatus] = useState<{
+    page: number;
+    isModified: boolean | null;
+    requiresChoice: boolean;
+  } | null>(null);
   const apply = useApplySuggestion(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
@@ -41,6 +57,7 @@ export function DocumentReviewer() {
   const setPdfVersion = useViewerStore((s) => s.setPdfVersion);
   const currentPage = useViewerStore((s) => s.currentPage);
   const setCurrentPage = useViewerStore((s) => s.setCurrentPage);
+  const currentPageStatus = analyze.pageStatuses.find((page) => page.page === currentPage);
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
   const zoom = useViewerStore((s) => s.zoom);
@@ -180,6 +197,37 @@ export function DocumentReviewer() {
             >
               <ChevronRight size={14} aria-hidden="true" />
             </button>
+            {currentPageStatus ? (
+              <button
+                type="button"
+                className="btn ghost small"
+                disabled={analyze.status === "running"}
+                onClick={() => {
+                  const requiresChoice = currentPageStatus.is_modified === null;
+                  setPendingPageStatus({
+                    page: currentPage,
+                    isModified: requiresChoice ? null : !currentPageStatus.is_modified,
+                    requiresChoice,
+                  });
+                }}
+              >
+                {currentPageStatus.is_modified === true ? (
+                  <CircleCheck size={14} aria-hidden="true" />
+                ) : currentPageStatus.is_modified === false ? (
+                  <CircleMinus size={14} aria-hidden="true" />
+                ) : (
+                  <CircleHelp size={14} aria-hidden="true" />
+                )}
+                {currentPageStatus.is_modified === true
+                  ? t("reviewer.pageStatus.modified")
+                  : currentPageStatus.is_modified === false
+                    ? t("reviewer.pageStatus.unchanged")
+                    : t("reviewer.pageStatus.unknown")}
+                {currentPageStatus.source === "manual" ? (
+                  <span className="hint">({t("reviewer.pageStatus.manual")})</span>
+                ) : null}
+              </button>
+            ) : null}
           </div>
 
           <div className="reviewer-toolbar-group reviewer-toolbar-actions">
@@ -242,6 +290,65 @@ export function DocumentReviewer() {
         onUnreject={handleUnreject}
         onUndo={handleUndo}
       />
+      <ConfirmDialog
+        open={pendingPageStatus !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPageStatus(null);
+        }}
+        title={
+          pendingPageStatus?.requiresChoice
+            ? t("reviewer.pageStatus.chooseTitle", { page: pendingPageStatus.page })
+            : t("reviewer.pageStatus.confirmTitle")
+        }
+        description={
+          pendingPageStatus
+            ? pendingPageStatus.isModified === null
+              ? t("reviewer.pageStatus.chooseDescription")
+              : pendingPageStatus.isModified
+                ? t("reviewer.pageStatus.confirmModified", { page: pendingPageStatus.page })
+                : t("reviewer.pageStatus.confirmUnchanged", { page: pendingPageStatus.page })
+            : undefined
+        }
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        confirmDisabled={pendingPageStatus?.isModified === null}
+        onConfirm={() => {
+          if (pendingPageStatus?.isModified !== null && pendingPageStatus) {
+            analyze.correctPageStatus(pendingPageStatus.page, pendingPageStatus.isModified);
+          }
+        }}
+      >
+        {pendingPageStatus?.requiresChoice ? (
+          <div className="row" role="group" aria-label={t("reviewer.pageStatus.chooseLabel")}>
+            <button
+              type="button"
+              className={pendingPageStatus.isModified === true ? "btn primary small" : "btn secondary small"}
+              aria-pressed={pendingPageStatus.isModified === true}
+              onClick={() =>
+                setPendingPageStatus((current) =>
+                  current ? { ...current, isModified: true } : null,
+                )
+              }
+            >
+              <CircleCheck size={14} aria-hidden="true" />
+              {t("reviewer.pageStatus.modified")}
+            </button>
+            <button
+              type="button"
+              className={pendingPageStatus.isModified === false ? "btn primary small" : "btn secondary small"}
+              aria-pressed={pendingPageStatus.isModified === false}
+              onClick={() =>
+                setPendingPageStatus((current) =>
+                  current ? { ...current, isModified: false } : null,
+                )
+              }
+            >
+              <CircleMinus size={14} aria-hidden="true" />
+              {t("reviewer.pageStatus.unchanged")}
+            </button>
+          </div>
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 }

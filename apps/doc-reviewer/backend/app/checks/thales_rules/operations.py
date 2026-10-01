@@ -442,6 +442,10 @@ def _findings(context: Any, parameters: Mapping[str, Any]) -> list[OperationResu
         raise ValueError("revision_consistency operation requires control")
 
     state = revision_state(parsed_pdf, getattr(runtime, "document", None))
+    targets = getattr(context, "targets", None)
+    target_pages = (
+        {target.raw_page for target in targets} if targets is not None else None
+    )
     return [
         OperationResult(
             status="FAIL",
@@ -454,6 +458,7 @@ def _findings(context: Any, parameters: Mapping[str, Any]) -> list[OperationResu
             bbox=finding.bbox,
         )
         for finding in revision.findings_for(state, control)
+        if target_pages is None or finding.page in target_pages
     ]
 
 

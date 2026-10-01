@@ -36,6 +36,15 @@ class PdfLine:
     direction: tuple[float, float] = (1.0, 0.0)
 
 
+@dataclass(frozen=True)
+class PdfWord:
+    text: str
+    bbox: tuple[float, float, float, float]
+    block_index: int
+    line_index: int
+    word_index: int
+
+
 @dataclass
 class ParsedPage:
     page: int  # 1-indexed
@@ -50,6 +59,7 @@ class ParsedPage:
     is_modified: bool | None = None
     lines: list[PdfLine] = field(default_factory=list)
     page_height: float = 0.0
+    words: list[PdfWord] = field(default_factory=list)
 
 
 @dataclass
@@ -100,6 +110,20 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
                                 size=float(span.get("size", 0.0)),
                             )
                         )
+            words: list[PdfWord] = []
+            for word in page.get_text("words"):
+                x0, y0, x1, y1, word_text, block_index, line_index, word_index = word
+                if not str(word_text).strip():
+                    continue
+                words.append(
+                    PdfWord(
+                        text=str(word_text),
+                        bbox=(float(x0), float(y0), float(x1), float(y1)),
+                        block_index=int(block_index),
+                        line_index=int(line_index),
+                        word_index=int(word_index),
+                    )
+                )
             pages.append(
                 ParsedPage(
                     page=idx,
@@ -108,6 +132,7 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
                     has_text_layer=bool(text.strip()),
                     lines=lines,
                     page_height=float(page.rect.height),
+                    words=words,
                 )
             )
             all_text.append(f"[PAGE: {idx}]\n{text}")

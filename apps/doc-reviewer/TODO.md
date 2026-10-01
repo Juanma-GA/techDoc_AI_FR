@@ -1,13 +1,12 @@
 FRONT :
 
-- DocumentReviewer.tsx utilise encore des caractères Unicode ◀ et ▶, en contradiction avec la règle locale interdisant les icônes Unicode.
+- Dans l'onglet "règles" il faut pas que quand on desactive ou active ça mette en bas la regle, faut qu'elle reste au meme endroit juste on voit que c'est désactivé quoi aussi simple que ça
 
 BACK :
 
 - execution "manual" pas relié jusqu'au user
 - L’exécution sémantique n’est pas intégrée au contrat CompiledRule --> divergence entre le modèle conceptuel et l’implémentation réelle; donc rajouter la possibilité de semantic qui sera un appel LLM en fonction du besoin semantique
 - Implémenter le PDF vers DOCX dans les exports possibles
-- La suppression de la regle checklist ne la supprime pas elle la rend juste pas active
 
 OTHER :
 
@@ -18,11 +17,29 @@ OTHER :
 
 - Ajouter l'ancienne version en input pour qu'il puisse detecter et comparer la LEP pour etre sur des R U N D
 
+- Vérifier que 250ms pour le regex suffit
+
+- Installer libre office (ou word je sais plus) pour la conversion en .docx ou .doc et la tester 
+
+- Faire une détection par exemple si le numéro CMM est noté 90% du temps X alors dire que le mapping n'est pas bon et il faut le vérifier et relancer l'analyse
+
+- Pourquoi ça met bcp de temps l'analyse avant de tout afficher ? ça passe de 5% à 100% direct apres 20 secondes au lieu d'analyser petit à petit et d'afficher le poucentage en meme temps
+
 PROBLEMES REGLES : 
 
-- CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT : Je comprend pas pourquoi dans "Page  1001" il détecte qu'il manque un espace alors que y'a bien les 2...
-Il peut y avoir des pages sur plusieurs page "1101-1 to 1101-2" qui correspondent enfait à 1101 Page 1 et 1102 Page 2 attention dans Highlights et LEP mais ducoup le tiret correspond pas à plusieurs pas : quand y'a juste marqué "Page  1101-1" c'est bien une seule page
+- Custom Revision Page Not In Lep : Page du document absente de la liste des pages effectives Page 801
+--> Pourquoi pour cette erreur il met une box en page 1 sur le logo et pas au niveau de la LEP. Et surtout pourquoi il détecte cette erreur alors qu'il y a bien la page 801 dans le LEP et existe bien dans le document...
 
-- CUSTOM_HIGHLIGHTS_PAGE_PAIRING : Pourquoi il detecte ici Page Highlights déclarée sans sa page paire ou impaire associée : INTRO 1101 Page 3 to INTRO Page 4
+- Custom Paragraph Justification : Il detecte actuellement des pb de justification sur "une seule ligne" est ce que c'est possible ça ? Si non, faire en sorte qu'il faut minimum 2 lignes à de
+
+- Custom Storage Note Page 10 : Règle non satisfaite : L'introduction ou les catégories NOTE de la page STORAGE sont absentes ou incorrectes. Élément attendu: "Pressure:" --> c'est pas la bonne page... il lis "STORAGE" sauf que ce n'est pas la page STORAGE, le pied de page est bien LEP PAge 2 et le titre de la page c'est "List of effective pages" souligné donc il devrait pas détecter que la page est STORAGE
+
+- Custom Introduction Shop Verification p.17 --> il dit qu'il manque le "Shop Verification: A. Verification of the procedures in this manual (1) The shop verification will be done at the first repair of the equipment." Alors qu'il y a bien écrit "Shop Verification 
+A. 
+Verification of the procedures in this manual 
+(1) 
+The shop verification will be done at the first repair of the 
+equipment." 
+Peut être pas les mêmes espaces et tout mais y'a bien écrit ce qu'il faut !
 
 - 

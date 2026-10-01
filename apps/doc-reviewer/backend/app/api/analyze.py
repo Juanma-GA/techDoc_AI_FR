@@ -19,7 +19,12 @@ from app.core.errors import AppError
 from app.core.document_context import missing_document_context
 from app.core.compiled_rules import RuleResult
 from app.core.logging import get_logger
-from app.core.page_range import filter_docx, filter_pdf, resolve_page_range
+from app.core.page_range import (
+    filter_docx,
+    filter_pdf_pages,
+    resolve_page_range,
+    select_pdf_page_numbers,
+)
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
@@ -30,6 +35,43 @@ from app.schemas import SuggestionOut
 
 router = APIRouter(tags=["analyze"])
 _logger = get_logger(__name__)
+
+
+def _parse_page_overrides(raw: str | None, page_count: int) -> dict[int, bool]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "Les statuts manuels des pages sont invalides.",
+            status_code=422,
+        ) from exc
+    if not isinstance(payload, dict):
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "Les statuts manuels des pages sont invalides.",
+            status_code=422,
+        )
+    overrides: dict[int, bool] = {}
+    for raw_page, is_modified in payload.items():
+        try:
+            page = int(raw_page)
+        except (TypeError, ValueError) as exc:
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Un numero de page corrige est invalide.",
+                status_code=422,
+            ) from exc
+        if not 1 <= page <= page_count or not isinstance(is_modified, bool):
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Un statut manuel de page est invalide.",
+                status_code=422,
+            )
+        overrides[page] = is_modified
+    return overrides
 
 
 @router.get("/documents/{document_id}/rule-results", response_model=list[RuleResult])
@@ -87,6 +129,19 @@ def analyze_stream(
         ge=1,
         description="Derniere page physique a analyser. Par defaut : derniere page du document.",
     ),
+    modified_only: bool = Query(
+        default=False,
+        description="N'analyser que les pages marquees comme modifiees ou indeterminees.",
+    ),
+    page_number: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Relancer une seule page apres correction manuelle de son statut.",
+    ),
+    page_overrides: Optional[str] = Query(
+        default=None,
+        description="JSON des statuts de page corriges manuellement, indexe par numero physique.",
+    ),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
     doc = db.get(Document, document_id)
@@ -119,12 +174,27 @@ def analyze_stream(
             detail={"fields": missing_context},
             status_code=409,
         )
-    resolved_first_page, resolved_last_page = resolve_page_range(
-        first_page,
-        last_page,
-        doc.page_count,
+    parsed_page_overrides = _parse_page_overrides(page_overrides, doc.page_count)
+    if page_number is not None:
+        resolve_page_range(page_number, page_number, doc.page_count)
+        if page_number not in parsed_page_overrides:
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Le statut manuel de la page a corriger est absent.",
+                status_code=422,
+            )
+        resolved_first_page, resolved_last_page = page_number, page_number
+    else:
+        resolved_first_page, resolved_last_page = resolve_page_range(
+            first_page,
+            last_page,
+            doc.page_count,
+        )
+    partial_page_range = (
+        page_number is not None
+        or resolved_first_page != 1
+        or resolved_last_page != doc.page_count
     )
-    partial_page_range = resolved_first_page != 1 or resolved_last_page != doc.page_count
     _logger.info(
         "analysis_requested",
         source_format=doc.source_format,
@@ -132,6 +202,8 @@ def analyze_stream(
         page_count=doc.page_count,
         first_page=resolved_first_page,
         last_page=resolved_last_page,
+        modified_only=modified_only,
+        page_number=page_number,
         checklist_enabled=checklist,
         vision_override=vision,
     )
@@ -171,12 +243,13 @@ def analyze_stream(
     # applied (undo needs the row) AND the ones rejected (they feed the memory
     # above and must persist their motif). Open / edited / accepted are
     # superseded by the fresh run so we wipe them.
-    db.execute(
-        delete(Suggestion).where(
-            Suggestion.document_id == document_id,
-            Suggestion.status.notin_(("applied", "rejected")),
+    if page_number is None:
+        db.execute(
+            delete(Suggestion).where(
+                Suggestion.document_id == document_id,
+                Suggestion.status.notin_(("applied", "rejected")),
+            )
         )
-    )
     sv_id = doc.standard_version_id
     # v2 multi-norm: parse the JSON list, fall back to the legacy single FK.
     try:
@@ -222,6 +295,9 @@ def analyze_stream(
             "analysis_scope": {
                 "first_page": resolved_first_page,
                 "last_page": resolved_last_page,
+                "modified_only": modified_only,
+                "page_number": page_number,
+                "page_overrides": parsed_page_overrides,
             },
             "metadata": {
                 "client_metadata": doc.client_metadata or {},
@@ -283,6 +359,10 @@ def analyze_stream(
     first_page_value = resolved_first_page
     last_page_value = resolved_last_page
     partial_page_range_value = partial_page_range
+    doc_page_count_value = doc.page_count
+    modified_only_value = modified_only
+    page_number_value = page_number
+    page_overrides_value = parsed_page_overrides
 
     async def event_gen():
         yield {
@@ -312,7 +392,6 @@ def analyze_stream(
                 parsed = filter_docx(parsed, first_page_value, last_page_value)
             else:
                 parsed = await asyncio.to_thread(parse_pdf, src_path)
-                parsed = filter_pdf(parsed, first_page_value, last_page_value)
             # `page.page_type` (le cas echeant) n'est peuple qu'une fois les
             # standards selectionnes connus : voir le classifieur invoque par
             # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
@@ -360,6 +439,82 @@ def analyze_stream(
                     if sv is not None:
                         versions.append(sv)
 
+                selected_page_numbers: list[int] = []
+                page_status_payload: list[dict[str, object]] = []
+                full_page_count = parsed.page_count if not is_docx_value else doc_page_count_value
+                if not is_docx_value:
+                    page_classifier = client_bundle.page_classifier
+                    if page_classifier is not None:
+                        for version in versions:
+                            if version.standard.code in client_bundle.standard_specs:
+                                page_classifier(parsed, _DocStub())
+                    for page in parsed.pages:
+                        if page.page in page_overrides_value:
+                            page.is_modified = page_overrides_value[page.page]
+                    page_status_payload = [
+                        {
+                            "page": page.page,
+                            "is_modified": page.is_modified,
+                            "source": "manual" if page.page in page_overrides_value else "detected",
+                        }
+                        for page in parsed.pages
+                    ]
+                    yield {
+                        "event": "page_statuses",
+                        "data": json.dumps({"pages": page_status_payload}),
+                    }
+                    selected_page_numbers = select_pdf_page_numbers(
+                        parsed,
+                        first_page=first_page_value,
+                        last_page=None if modified_only_value or page_number_value is not None else last_page_value,
+                        modified_only=modified_only_value,
+                        page_number=page_number_value,
+                    )
+                    cached_revision_state = getattr(parsed, "_thales_revision_state", None)
+                    parsed = filter_pdf_pages(parsed, selected_page_numbers)
+                    if cached_revision_state is not None:
+                        setattr(parsed, "_thales_revision_state", cached_revision_state)
+                else:
+                    selected_page_numbers = sorted({block.page for block in parsed.blocks})
+                partial_analysis_value = (
+                    partial_page_range_value
+                    if is_docx_value
+                    else selected_page_numbers != list(range(1, full_page_count + 1))
+                )
+
+                if page_number_value is not None:
+                    scoped_session.execute(
+                        delete(Suggestion).where(
+                            Suggestion.document_id == document_id_value,
+                            Suggestion.page == page_number_value,
+                            Suggestion.status.notin_(("applied", "rejected")),
+                        )
+                    )
+                    scoped_session.commit()
+
+                run_row = scoped_session.get(AnalysisRun, run_id_value)
+                if run_row is not None:
+                    try:
+                        context_payload = json.loads(run_row.context_snapshot_json or "{}")
+                    except (TypeError, ValueError):
+                        context_payload = {}
+                    context_payload["analysis_scope"] = {
+                        "first_page": first_page_value,
+                        "last_page": last_page_value,
+                        "modified_only": modified_only_value,
+                        "page_number": page_number_value,
+                        "selected_pages": selected_page_numbers,
+                        "page_overrides": page_overrides_value,
+                    }
+                    context_payload["page_statuses"] = page_status_payload
+                    run_row.context_snapshot_json = json.dumps(
+                        context_payload,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    scoped_session.commit()
+
                 # Le scan checklist/IA (une passe Mistral par page) domine
                 # generalement le temps d'une analyse : sans remontee de
                 # progression pendant ce calcul (execute dans un thread), la
@@ -384,7 +539,9 @@ def analyze_stream(
                         f"utilise le bundle actif {client_configuration.manifest.client_code} "
                         f"v{client_configuration.manifest.bundle_version}."
                     )
-                if partial_page_range_value and vision_override_value:
+                if modified_only_value and not selected_page_numbers and page_number_value is None:
+                    run_warnings.append("Aucune page modifiee detectee; aucune regle n'a ete executee.")
+                if partial_analysis_value and vision_override_value:
                     run_warnings.append(
                         "Analyse vision ignoree pour une plage partielle de pages"
                     )
@@ -416,31 +573,37 @@ def analyze_stream(
                         raws, parsed, document_id_value, run_id_value
                     )
                 else:
-                    task = asyncio.create_task(
-                        asyncio.to_thread(
-                            lambda: run_all(
-                                parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
-                                src_path=src_path,
-                                vision_enabled_override=(
-                                    False if partial_page_range_value else vision_override_value
-                                ),
-                                checklist_enabled=checklist_enabled_value,
-                                progress_cb=_on_progress,
-                                warnings=run_warnings,
-                                compiled_results=compiled_results,
-                                client_bundle=client_bundle,
+                    if parsed.pages:
+                        task = asyncio.create_task(
+                            asyncio.to_thread(
+                                lambda: run_all(
+                                    parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
+                                    src_path=src_path if not partial_analysis_value else None,
+                                    vision_enabled_override=(
+                                        vision_override_value
+                                        if not partial_analysis_value
+                                        else False
+                                    ),
+                                    checklist_enabled=checklist_enabled_value,
+                                    progress_cb=_on_progress,
+                                    warnings=run_warnings,
+                                    compiled_results=compiled_results,
+                                    client_bundle=client_bundle,
+                                )
                             )
                         )
-                    )
-                    while not task.done():
-                        try:
-                            pct = progress_q.get_nowait()
-                            yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
-                        except Empty:
-                            await asyncio.sleep(0.2)
-                    raws = await task
+                        while not task.done():
+                            try:
+                                pct = progress_q.get_nowait()
+                                yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
+                            except Empty:
+                                await asyncio.sleep(0.2)
+                        raws = await task
+                    else:
+                        raws = []
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
+                    rows = [row for row in rows if row.page in set(selected_page_numbers)]
                     # A ce stade, le classifieur du ClientBundle invoque par
                     # `run_all` a pu peupler `page.page_type`; on le capture ici.
                     page_types = {str(page.page): page.page_type for page in parsed.pages}

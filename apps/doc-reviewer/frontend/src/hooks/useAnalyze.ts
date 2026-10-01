@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { API_BASE_URL } from "../lib/api";
 import { useClientConfig } from "./useClientConfig";
@@ -21,6 +21,15 @@ export type AnalyzeOptions = {
   vision?: boolean;
   firstPage?: number;
   lastPage?: number;
+  modifiedOnly?: boolean;
+  pageNumber?: number;
+  pageOverrides?: Record<number, boolean>;
+};
+
+export type PageRevisionStatus = {
+  page: number;
+  is_modified: boolean | null;
+  source: "detected" | "manual";
 };
 
 export function useAnalyze(documentId: string | undefined, document?: Document) {
@@ -44,6 +53,13 @@ export function useAnalyze(documentId: string | undefined, document?: Document) 
   // erreur Mistral) : l'analyse se termine quand meme (statut "done"), mais
   // le resultat peut etre incomplet — ne doit jamais passer inaperçu.
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [pageStatuses, setPageStatuses] = useState<PageRevisionStatus[]>([]);
+  const [pageOverrides, setPageOverrides] = useState<Record<number, boolean>>({});
+
+  useEffect(() => {
+    setPageStatuses([]);
+    setPageOverrides({});
+  }, [documentId]);
 
   const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
@@ -65,6 +81,16 @@ export function useAnalyze(documentId: string | undefined, document?: Document) 
       if (options.vision !== undefined) params.set("vision", String(options.vision));
       if (options.firstPage !== undefined) params.set("first_page", String(options.firstPage));
       if (options.lastPage !== undefined) params.set("last_page", String(options.lastPage));
+      if (options.modifiedOnly !== undefined) {
+        params.set("modified_only", String(options.modifiedOnly));
+      }
+      if (options.pageNumber !== undefined) {
+        params.set("page_number", String(options.pageNumber));
+      }
+      const overrides = options.pageOverrides ?? pageOverrides;
+      if (Object.keys(overrides).length > 0) {
+        params.set("page_overrides", JSON.stringify(overrides));
+      }
       const url = `${API_BASE_URL}/documents/${documentId}/analyze?${params.toString()}`;
       const response = await fetch(url, {
         method: "POST",
@@ -121,6 +147,13 @@ export function useAnalyze(documentId: string | undefined, document?: Document) 
                 } catch {
                   /* ignore */
                 }
+              } else if (currentEvent === "page_statuses") {
+                try {
+                  const parsed = JSON.parse(data) as { pages?: PageRevisionStatus[] };
+                  if (Array.isArray(parsed.pages)) setPageStatuses(parsed.pages);
+                } catch {
+                  /* ignore */
+                }
               } else if (currentEvent === "done") {
                 setStatus("done");
                 setProgress(100);
@@ -153,7 +186,35 @@ export function useAnalyze(documentId: string | undefined, document?: Document) 
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [contextReady, documentId, qc, status, checklistActive]);
+  }, [contextReady, documentId, pageOverrides, qc, status, checklistActive]);
 
-  return { status, progress, error, quality, warnings, start, contextReady, missingContextFields };
+  const correctPageStatus = useCallback((pageNumber: number, isModified: boolean) => {
+    const nextOverrides = { ...pageOverrides, [pageNumber]: isModified };
+    setPageOverrides(nextOverrides);
+    setPageStatuses((current) =>
+      current.map((page) =>
+        page.page === pageNumber
+          ? { ...page, is_modified: isModified, source: "manual" }
+          : page,
+      ),
+    );
+    void start({
+      modifiedOnly: false,
+      pageNumber,
+      pageOverrides: nextOverrides,
+    });
+  }, [pageOverrides, start]);
+
+  return {
+    status,
+    progress,
+    error,
+    quality,
+    warnings,
+    pageStatuses,
+    start,
+    correctPageStatus,
+    contextReady,
+    missingContextFields,
+  };
 }

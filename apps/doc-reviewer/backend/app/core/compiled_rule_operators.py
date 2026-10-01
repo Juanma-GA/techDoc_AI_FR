@@ -1163,14 +1163,26 @@ def resolve_regex_pattern(
             missing_context.append(field)
             return match.group(0)
         if isinstance(raw, list):
-            return "(?:" + "|".join(re.escape(item) for item in raw) + ")"
-        escaped = re.escape(raw)
-        if field == "meta_first_pnr_number":
-            escaped = escaped.replace(r"\-", r"\s*-\s*")
-        return escaped
+            return "(?:" + "|".join(_regex_literal_with_layout_whitespace(item) for item in raw) + ")"
+        return _regex_literal_with_layout_whitespace(raw)
 
     resolved = _CONTEXT_TOKEN_RE.sub(replace_token, pattern)
     return resolved, context_fields, sorted(set(missing_context))
+
+
+def _regex_literal_with_layout_whitespace(value: str) -> str:
+    tokens = re.findall(r"\w+|[^\w\s]+", value.strip())
+    if not tokens:
+        return ""
+
+    pattern = [r"\s*".join(re.escape(character) for character in tokens[0])]
+    previous_is_word = tokens[0][0].isalnum() or tokens[0][0] == "_"
+    for token in tokens[1:]:
+        is_word = token[0].isalnum() or token[0] == "_"
+        pattern.append(r"\s+" if previous_is_word and is_word else r"\s*")
+        pattern.append(r"\s*".join(re.escape(character) for character in token))
+        previous_is_word = is_word
+    return "".join(pattern)
 
 
 def resolve_replacement_template(template: str | None, document: Any | None) -> str | None:

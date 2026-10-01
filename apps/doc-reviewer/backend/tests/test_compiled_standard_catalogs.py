@@ -687,6 +687,37 @@ def test_tp1_revision_number_matches_document_context_value() -> None:
     assert not_tp1_suggestions == []
 
 
+def test_tp1_revision_number_uses_visual_footer_order() -> None:
+    parsed = _tp1_revision_footer_pdf(
+        "First Issue: JUL 27/26\nRevision No.04"
+    )
+    first_issue_span = parsed.pages[0].spans[1]
+    revision_number_span = parsed.pages[0].spans[2]
+    parsed.pages[0].spans[1] = Span(
+        text=first_issue_span.text,
+        bbox=(40.0, 776.0, 300.0, 786.0),
+        page=first_issue_span.page,
+        font=first_issue_span.font,
+        size=first_issue_span.size,
+    )
+    parsed.pages[0].spans[2] = Span(
+        text=revision_number_span.text,
+        bbox=(40.0, 760.0, 300.0, 770.0),
+        page=revision_number_span.page,
+        font=revision_number_span.font,
+        size=revision_number_span.size,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [_rule("CUSTOM_TP1_REVISION_NUMBER")],
+        document=SimpleNamespace(meta_revision_number="04"),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
 def test_tp1_first_issue_date_matches_document_context_value() -> None:
     rule = _rule("CUSTOM_TP1_FIRST_ISSUE_DATE")
     document = SimpleNamespace(meta_first_issue_date="JUL 27/26")

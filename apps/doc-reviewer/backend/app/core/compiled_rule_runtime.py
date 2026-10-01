@@ -203,6 +203,13 @@ def scope_targets(
                 if span.bbox[1] > min_y + height * 0.25
                 and span.bbox[3] < max_y - height * 0.25
             ]
+        if target_spec.page_type == "TP1" and target_spec.region == "footer":
+            spans.sort(
+                key=lambda span: (
+                    (span.bbox[1] + span.bbox[3]) / 2,
+                    span.bbox[0],
+                )
+            )
         if spans:
             text_parts: list[str] = []
             span_ranges: list[_SpanRange] = []

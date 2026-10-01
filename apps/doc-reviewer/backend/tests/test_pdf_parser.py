@@ -79,3 +79,20 @@ def test_parse_pdf_preserves_line_layout_and_block_identity(tmp_path) -> None:
     assert len(parsed.pages[0].lines) >= 2
     assert len({line.block_index for line in parsed.pages[0].lines}) == 1
     assert all(line.bbox[2] > line.bbox[0] for line in parsed.pages[0].lines)
+
+
+def test_parse_pdf_preserves_word_geometry(tmp_path) -> None:
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=300)
+    page.insert_text((54, 80), "Page")
+    page.insert_text((90, 80), "1001")
+    out = tmp_path / "word-geometry.pdf"
+    doc.save(str(out))
+    doc.close()
+
+    parsed = parse_pdf(out)
+
+    assert [(word.text, word.bbox[0]) for word in parsed.pages[0].words] == [
+        ("Page", 54.0),
+        ("1001", 90.0),
+    ]

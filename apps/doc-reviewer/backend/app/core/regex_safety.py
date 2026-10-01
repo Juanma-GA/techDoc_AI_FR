@@ -7,9 +7,7 @@ import regex
 
 MAX_USER_REGEX_LENGTH = 2_048
 USER_REGEX_TIMEOUT_SECONDS = 0.25
-USER_REGEX_INCOMPLETE_WARNING = (
-    "Une ou plusieurs règles regex n'ont pas pu terminer; la couverture est réduite."
-)
+USER_REGEX_INCOMPLETE_WARNING = "analysis.warnings.regexIncomplete"
 
 
 class UserRegexPatternError(ValueError):
