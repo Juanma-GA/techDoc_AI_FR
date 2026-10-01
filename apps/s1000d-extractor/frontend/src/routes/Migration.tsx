@@ -438,6 +438,7 @@ export function Migration() {
   const brex = brexQuery.data ?? [];
   const docs = docsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
+  const steps = wiz?.steps ?? DEFAULT_STEPS;
 
   return (
     <>
@@ -744,7 +745,7 @@ export function Migration() {
           <>
             <div className="card">
               <div className="row" style={{ alignItems: "center" }}>
-                {(wiz.steps ?? DEFAULT_STEPS).map((s, i) => (
+                {steps.map((s, i) => (
                   <span key={s} style={{ display: "inline-flex", alignItems: "center" }}>
                     {i > 0 ? <span className="label">&nbsp;→&nbsp;</span> : null}
                     <span className={`badge ${s === wiz.step ? "ok" : ""}`}>
@@ -895,6 +896,16 @@ export function Migration() {
                   </p>
                 ) : null}
                 <div className="row" style={{ marginBottom: 10 }}>
+                  {steps.indexOf(wiz.step) > 0 ? (
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      disabled={busy}
+                      onClick={() => void wizAction("back")}
+                    >
+                      {t("common.back")}
+                    </button>
+                  ) : null}
                   <label>
                     <div className="label">{t("migration.split.level")}</div>
                     <select
@@ -1023,6 +1034,16 @@ export function Migration() {
                   ))}
                 </div>
                 <div className="row" style={{ marginTop: 12 }}>
+                  {steps.indexOf(wiz.step) > 0 ? (
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      disabled={busy}
+                      onClick={() => void wizAction("back")}
+                    >
+                      {t("common.back")}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="btn primary"
