@@ -11,6 +11,7 @@ describe("findInconclusiveResults", () => {
         rule_id: "RULE_UNKNOWN",
         rule_title: "Revision date",
         status: "INCONCLUSIVE",
+        inconclusive_pages: ["24", "26"],
         evidence: {
           page: "2",
           location: { type: "bbox", bbox: [0, 0, 0, 0] },
@@ -24,5 +25,6 @@ describe("findInconclusiveResults", () => {
     expect(findInconclusiveResults(results).map((result) => result.rule_title)).toEqual([
       "Revision date",
     ]);
+    expect(findInconclusiveResults(results)[0]?.inconclusive_pages).toEqual(["24", "26"]);
   });
 });

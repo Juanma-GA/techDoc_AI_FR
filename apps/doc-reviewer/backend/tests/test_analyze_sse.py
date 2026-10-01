@@ -30,6 +30,7 @@ def test_rule_results_include_human_readable_titles_from_synthetic_snapshot() ->
         "results": [
             {
                 "rule_id": "CHECKLIST_REVISION_DATE",
+                "inconclusive_pages": ["24", "26"],
                 "status": "INCONCLUSIVE",
                 "evidence": {
                     "page": "1",
@@ -48,6 +49,7 @@ def test_rule_results_include_human_readable_titles_from_synthetic_snapshot() ->
     assert len(results) == 1
     assert results[0].status == "INCONCLUSIVE"
     assert results[0].rule_title == "Revision date"
+    assert results[0].inconclusive_pages == ["24", "26"]
 
 
 def _set_document_context(client: TestClient, document_id: str) -> None:

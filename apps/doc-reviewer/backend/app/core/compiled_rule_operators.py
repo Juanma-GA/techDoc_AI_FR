@@ -629,10 +629,18 @@ def evaluate_rule(
         )
         if status != "PASS" and first_failure is None:
             first_failure = (status, target, observed, expected_repr)
+    inconclusive_pages = ctx.inconclusive_pages.pop(rule.id, [])
     if first_failure is not None:
         status, target, observed, expected_repr = first_failure
         result_evidence = evidence(target, observed, expected_repr, is_docx, pdf_pages)
-        return RuleResult(rule_id=rule.id, status=status, evidence=result_evidence)
+        return RuleResult(
+            rule_id=rule.id,
+            status=status,
+            evidence=result_evidence,
+            inconclusive_pages=[str(page) for page in inconclusive_pages]
+            if status == "INCONCLUSIVE"
+            else [],
+        )
     return RuleResult(
         rule_id=rule.id,
         status="PASS",
@@ -706,7 +714,7 @@ def evaluate_check(
         "highlights_holder",
         "highlights_document_type",
     }:
-        return evaluate_client_operation(check, targets, ctx)
+        return evaluate_client_operation(check, targets, ctx, rule_id)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -918,6 +926,7 @@ def evaluate_client_operation(
     check: Check,
     targets: list[_TextTarget],
     ctx: _EvalContext,
+    rule_id: str,
 ) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
     operation_name = check.operation
     parameters = check.operation_params
@@ -945,6 +954,8 @@ def evaluate_client_operation(
         targets=tuple(targets),
     )
     result = operation.execute(operation_context, parameters)
+    if result.inconclusive_pages:
+        ctx.inconclusive_pages[rule_id] = result.inconclusive_pages
     target = next(
         (item for item in targets if result.page is not None and item.raw_page == result.page),
         targets[0],

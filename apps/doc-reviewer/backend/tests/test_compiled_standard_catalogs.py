@@ -2653,10 +2653,22 @@ def test_copyright_position_matches_pdf_page_parity_and_coordinates() -> None:
         overrides: dict[int, tuple[float, float]] | None = None,
         *,
         missing_copyright_page: int | None = None,
+        no_text_layer_pages: set[int] | None = None,
     ) -> ParsedPdf:
         overrides = overrides or {}
+        no_text_layer_pages = no_text_layer_pages or set()
         pages = []
         for page_number, expected_position in page_positions.items():
+            if page_number in no_text_layer_pages:
+                pages.append(
+                    ParsedPage(
+                        page=page_number,
+                        text="",
+                        spans=[],
+                        has_text_layer=False,
+                    )
+                )
+                continue
             text = f"Page {page_number} body."
             spans = [
                 Span(
@@ -2717,6 +2729,13 @@ def test_copyright_position_matches_pdf_page_parity_and_coordinates() -> None:
     assert missing[0].status == "FAIL"
     assert missing[0].evidence is not None
     assert missing[0].evidence.page == "4"
+
+    blank_pages, _ = execute_pdf_rules(
+        build_pdf(no_text_layer_pages={2, 4}),
+        [rule],
+    )
+    assert blank_pages[0].status == "INCONCLUSIVE"
+    assert blank_pages[0].inconclusive_pages == ["2", "4"]
 
 
 def test_mat_reference_format_is_passed_and_failed_by_the_compiled_executor() -> None:

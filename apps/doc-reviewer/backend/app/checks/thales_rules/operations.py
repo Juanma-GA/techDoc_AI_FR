@@ -764,7 +764,7 @@ def _evaluate_copyright_position(
             expected=_COPYRIGHT_POSITION_EXPECTED,
         )
 
-    inconclusive_page: int | None = None
+    inconclusive_pages: list[int] = []
     for page in pages:
         expected_x_cm = (
             _COPYRIGHT_POSITION_ODD_X_CM
@@ -784,7 +784,7 @@ def _evaluate_copyright_position(
         ]
         if not copyright_spans:
             if not page.has_text_layer:
-                inconclusive_page = page.page
+                inconclusive_pages.append(page.page)
                 continue
             return OperationResult(
                 status="FAIL",
@@ -818,11 +818,12 @@ def _evaluate_copyright_position(
                 bbox=copyright_span.bbox,
             )
 
-    if inconclusive_page is not None:
+    if inconclusive_pages:
         return OperationResult(
             status="INCONCLUSIVE",
             expected=_COPYRIGHT_POSITION_EXPECTED,
-            page=inconclusive_page,
+            page=inconclusive_pages[0],
+            inconclusive_pages=inconclusive_pages,
         )
     return OperationResult(
         status="PASS",

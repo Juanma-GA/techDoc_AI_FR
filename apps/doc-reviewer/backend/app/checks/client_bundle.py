@@ -102,6 +102,7 @@ class OperationResult(_StrictModel):
     proposed: str | None = None
     span: tuple[int, int] | None = None
     page: int | None = Field(default=None, gt=0)
+    inconclusive_pages: list[int] = Field(default_factory=list)
     bbox: tuple[float, float, float, float] | None = None
     bbox_strategy: Literal[
         "text",

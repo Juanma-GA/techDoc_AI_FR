@@ -28,13 +28,22 @@ export function IncompleteChecksNotice({ results, isRunning }: Props) {
         {inconclusive.map((result) => {
           const codeLabel = localizedRuleCode(result.rule_id, t);
           const title = result.rule_title?.trim() || codeLabel;
+          const pages = result.inconclusive_pages?.length
+            ? result.inconclusive_pages
+            : result.evidence?.page
+              ? [result.evidence.page]
+              : [];
           return (
             <li key={result.rule_id}>
               <span>{title}</span>
               {result.rule_title ? <span className="label">{codeLabel}</span> : null}
-              {result.evidence?.page ? (
-                <span className="label">
-                  {t("reviewer.analysis.incomplete.page", { page: result.evidence.page })}
+              {pages.length > 0 ? (
+                <span className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  {pages.map((page) => (
+                    <span className="badge info" key={`${result.rule_id}-${page}`}>
+                      {t("reviewer.analysis.incomplete.page", { page })}
+                    </span>
+                  ))}
                 </span>
               ) : null}
             </li>

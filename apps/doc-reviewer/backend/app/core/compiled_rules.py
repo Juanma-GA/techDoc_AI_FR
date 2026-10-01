@@ -388,6 +388,7 @@ class RuleResult(StrictModel):
     rule_title: str | None = None
     status: Literal["PASS", "FAIL", "MANUAL", "UNSUPPORTED", "INCONCLUSIVE"]
     evidence: Evidence | None = None
+    inconclusive_pages: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence(self) -> RuleResult:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -71,6 +71,7 @@ class _EvalContext:
     db: Session | None
     client_operations: Mapping[str, Any] | None = None
     client_entities: Mapping[str, str] | None = None
+    inconclusive_pages: dict[str, list[int]] = field(default_factory=dict)
     # Required by the operators whose verdict spans the whole document
     # (cross-page consistency); None on the docx pipeline.
     parsed_pdf: ParsedPdf | None = None
