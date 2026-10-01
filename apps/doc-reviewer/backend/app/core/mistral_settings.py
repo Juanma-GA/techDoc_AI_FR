@@ -45,7 +45,7 @@ def _get(db: Session, key: str) -> str | None:
         try:
             return _get_secret_manager().decrypt(row.value)
         except Exception:  # noqa: BLE001
-            logger.error("Failed to decrypt Mistral setting", setting=key)
+            logger.error("Failed to decrypt Mistral setting %s", key)
             return None
     return row.value
 

@@ -67,8 +67,18 @@ if "%USE_EMBED%"=="0" (
     set "PYTHON=python"
 )
 
-REM ---- Install deps une seule fois (marker .installed) ---------------------
-if not exist "%INSTALLED_MARK%" (
+REM ---- Install deps si pyproject.toml a change ------------------------------
+set "DEPS_HASH="
+for /f "tokens=*" %%H in ('powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 -LiteralPath pyproject.toml).Hash"') do set "DEPS_HASH=%%H"
+if not defined DEPS_HASH (
+    echo [erreur] Impossible de calculer l'empreinte de pyproject.toml.
+    pause
+    exit /b 1
+)
+set "INSTALLED_HASH="
+if exist "%INSTALLED_MARK%" set /p INSTALLED_HASH=<"%INSTALLED_MARK%"
+if /i "%INSTALLED_HASH%"=="%DEPS_HASH%" goto deps_ready
+
     echo [setup] Installation des dependances Python ^(1 a 3 min^)...
     "%PYTHON%" -m pip install --upgrade pip >nul
     "%PYTHON%" -m pip install -e .
@@ -77,9 +87,9 @@ if not exist "%INSTALLED_MARK%" (
         pause
         exit /b 1
     )
-    type nul > "%INSTALLED_MARK%"
+    >"%INSTALLED_MARK%" echo %DEPS_HASH%
     echo [setup] OK.
-)
+:deps_ready
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------
 echo [setup] Verification du schema DB ^(alembic^)...

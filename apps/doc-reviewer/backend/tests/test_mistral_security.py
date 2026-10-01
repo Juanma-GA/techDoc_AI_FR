@@ -1,8 +1,11 @@
 """Mistral URL and network safety tests use synthetic configuration only."""
 
+from typing import cast
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.api import settings as settings_api
 from app.core import llm_suggester, mistral_vision
@@ -262,6 +265,23 @@ def test_secret_manager_without_key_refuses_plaintext_round_trip() -> None:
 
     with pytest.raises(EncryptionError):
         manager.encrypt("SYNTHETIC-SECRET")
+
+
+def test_mistral_setting_without_encryption_key_logs_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(mistral_settings.settings, "encryption_key", "")
+
+    class StoredSetting:
+        value = "encrypted-value"
+
+    class StoredSettings:
+        def get(self, _model: object, _key: str) -> StoredSetting:
+            return StoredSetting()
+
+    assert mistral_settings._get(cast(Session, StoredSettings()), "api_key") is None
+    assert "Failed to decrypt Mistral setting api_key" in caplog.text
 
 
 def test_rule_suggestions_disabled_are_explicit_and_offline(
