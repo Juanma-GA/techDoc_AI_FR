@@ -119,11 +119,40 @@ def _convert_libreoffice(soffice: str, src: Path, outdir: Path) -> Path | None:
     return out if out.exists() else None
 
 
+# msoAutomationSecurityForceDisable : aucune macro (VBA, AutoOpen,
+# Document_Open, modele attache distant .dotm) ne s'execute a l'ouverture.
+# Le defaut d'une instance Word pilotee par COM est msoAutomationSecurityLow
+# (= macros ACTIVEES) : un .doc/.docx non fiable ouvert ici executait son code
+# avec les droits de l'utilisateur.
+_MSO_AUTOMATION_SECURITY_FORCE_DISABLE = 3
+# Mot de passe factice : un document protege echoue immediatement au lieu
+# d'ouvrir une boite de dialogue invisible qui bloquerait la conversion.
+_WORD_DUMMY_PASSWORD = "doc-reviewer-no-password"
+
+
+def _harden_word(word: object) -> None:
+    """Desactive les macros et les automatismes de Word AVANT toute ouverture.
+
+    Leve si le reglage n'a pas pu etre applique : on prefere echouer la
+    conversion plutot qu'ouvrir un document non fiable avec les macros actives.
+    """
+    word.AutomationSecurity = _MSO_AUTOMATION_SECURITY_FORCE_DISABLE  # type: ignore[attr-defined]
+    if word.AutomationSecurity != _MSO_AUTOMATION_SECURITY_FORCE_DISABLE:  # type: ignore[attr-defined]
+        raise RuntimeError("Word AutomationSecurity n'a pas pu etre force a 'desactive'.")
+    word.Visible = False  # type: ignore[attr-defined]
+    word.DisplayAlerts = 0  # type: ignore[attr-defined]  # wdAlertsNone
+
+
 def _word_export_pdf(src: Path, out: Path) -> tuple[Path | None, str | None]:
     """Export PDF via Word COM (ExportAsFixedFormat). Rendu Word EXACT, et l'export
     PDF n'est PAS bloque par la politique Office (contrairement au SaveAs .docx).
-    Word ouvre aussi bien un .doc qu'un .docx. Tourne dans un thread COM dedie
-    (CoInitialize) pour ne pas polluer la boucle async d'uvicorn.
+    Word ouvre aussi bien un .doc qu'un .docx. Appele depuis un thread du pool
+    FastAPI (endpoints synchrones) ; chaque appel initialise son propre
+    appartement COM (CoInitialize / CoUninitialize).
+
+    Les documents traites ne sont pas fiables : macros forcees a « desactive »
+    (cf. `_harden_word`), ouverture en lecture seule, sans conversion ni
+    reparation, liens non mis a jour.
     """
     try:
         import pythoncom  # type: ignore[import-untyped]
@@ -134,10 +163,17 @@ def _word_export_pdf(src: Path, out: Path) -> tuple[Path | None, str | None]:
     try:
         pythoncom.CoInitialize()
         word = win32com.client.DispatchEx("Word.Application")
-        word.Visible = False
-        word.DisplayAlerts = 0
+        _harden_word(word)
         doc = word.Documents.Open(
-            FileName=str(src), ConfirmConversions=False, ReadOnly=True, AddToRecentFiles=False
+            FileName=str(src),
+            ConfirmConversions=False,
+            ReadOnly=True,
+            AddToRecentFiles=False,
+            PasswordDocument=_WORD_DUMMY_PASSWORD,
+            PasswordTemplate=_WORD_DUMMY_PASSWORD,
+            Revert=False,
+            OpenAndRepair=False,
+            NoEncodingDialog=True,
         )
         try:
             doc.ExportAsFixedFormat(OutputFileName=str(out), ExportFormat=17)  # 17 = wdExportFormatPDF
