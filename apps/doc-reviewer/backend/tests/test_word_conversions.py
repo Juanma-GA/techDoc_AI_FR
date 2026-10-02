@@ -363,3 +363,29 @@ def test_content_that_is_not_the_announced_format_never_reaches_word(
 
     assert err.value.code == "DOC_INVALID" and err.value.status_code == 400
     assert word.events == []  # Word was never started
+
+
+def _crash_on_close(monkeypatch: pytest.MonkeyPatch) -> None:
+    def close(self, _save: bool) -> None:
+        self._word.events.append("close")
+        raise RuntimeError("(-2147417848, 'The object invoked has disconnected from its clients.')")
+
+    monkeypatch.setattr(_Doc, "Close", close)
+
+
+def test_word_crashing_on_close_after_writing_keeps_the_result(fake_word, monkeypatch) -> None:
+    word = fake_word(_Word())
+    _crash_on_close(monkeypatch)
+
+    pdf, engine = doc_convert.doc_to_pdf_bytes(DOC, ".doc")
+
+    assert pdf.startswith(b"%PDF") and engine == "word"
+    assert word.events.count("export(17)") == 1  # no retry: the file was complete
+
+
+def test_word_crashing_before_the_file_is_written_is_a_failure(fake_word, monkeypatch) -> None:
+    fake_word(_Word(mandatory_label=True))  # SaveAs2 .docx refused, then Close crashes too
+    _crash_on_close(monkeypatch)
+
+    with pytest.raises(AppError):
+        doc_convert.office_to_docx_bytes(DOC, ".doc")

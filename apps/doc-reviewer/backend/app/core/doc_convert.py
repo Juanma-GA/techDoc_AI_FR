@@ -386,6 +386,11 @@ def _word_convert(src: Path, out: Path, target: str) -> tuple[Path | None, str |
 
 def _word_convert_once(src: Path, out: Path, target: str) -> tuple[Path | None, str | None]:
     watch: dict[str, bool] = {}
+    # Passe a True des que l'export / l'enregistrement a RENDU la main : le
+    # fichier de sortie est alors complet. Word plante parfois a la fermeture
+    # de certains documents (deconnexion COM pendant Close/Quit) : ce plantage
+    # ne doit pas jeter une conversion deja reussie.
+    written = False
     try:
         with _word_session(watch) as word:
             if src.suffix.lower() == ".pdf":
@@ -401,11 +406,18 @@ def _word_convert_once(src: Path, out: Path, target: str) -> tuple[Path | None, 
                     doc.SaveAs2(FileName=str(out), FileFormat=_WD_FORMAT_DOC)
                 else:
                     raise ValueError(f"format cible inconnu: {target}")
+                written = True
             finally:
                 doc.Close(False)
     except _WordUnavailableError as exc:
         return None, str(exc)
     except Exception as exc:
+        if written and not watch.get("fired") and out.exists() and out.stat().st_size > 0:
+            log.warning(
+                "Word s'est deconnecte a la fermeture (%s -> %s) apres avoir ecrit le fichier : "
+                "conversion conservee (%r)", src.suffix, target, exc,
+            )
+            return out, None
         log.warning("conversion Word (%s -> %s) echouee: %r", src.suffix, target, exc)
         if watch.get("fired"):
             limit = settings.word_convert_timeout_seconds
