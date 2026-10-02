@@ -66,6 +66,16 @@ _PARAGRAPH_LIST_ITEM_MARKER = re.compile(
 )
 _PARAGRAPH_TABLE_HEADER_MARKER = re.compile(r"^\s*[A-Z][A-Z0-9 /&()_\-]{1,}\s*$")
 _TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
+_CHAPTER_HEADING_RE = re.compile(r"^\s*(?P<number>\d+)\.\s+(?P<title>.+?)\s*$")
+_CHAPTER_TITLE_CONNECTORS = frozenset(
+    {
+        "a", "an", "and", "as", "at", "by", "de", "des", "du", "et",
+        "for", "from", "in", "la", "le", "les", "of", "on", "or",
+        "the", "to", "with",
+    }
+)
+_DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
+_ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
 
 
 def shop_verification_text(document: object | None) -> str:
@@ -716,6 +726,229 @@ def _suggest_highlights_document_type(
     return results
 
 
+def _chapter_heading(line: PdfLine) -> tuple[int, str] | None:
+    match = _CHAPTER_HEADING_RE.match(line.text)
+    if match is None:
+        return None
+    title = match.group("title").strip()
+    words = re.findall(r"[^\W_]+", title)
+    title_case = bool(words) and all(
+        word[0].isupper() or word.casefold() in _CHAPTER_TITLE_CONNECTORS
+        for word in words
+    )
+    if not title or title[-1] in ".!?;:" or not (title.isupper() or title_case):
+        return None
+    return int(match.group("number")), title
+
+
+def _chapter_sequence_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0
+    if (
+        not parsed_pdf.pages
+        or parsed_pdf.pages[0].page != 1
+        or parsed_pdf.pages[-1].page != parsed_pdf.page_count
+    ):
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    text_by_page = {target.raw_page: target.text for target in targets}
+    headings_by_chapter: dict[
+        str, list[tuple[int, ParsedPage, PdfLine, str]]
+    ] = defaultdict(list)
+    for page in parsed_pdf.pages:
+        if target_pages and page.page not in target_pages:
+            continue
+        page_text = page.text or ""
+        if (
+            _TABLE_OF_CONTENTS_MARKER.search(page_text)
+            or revision._is_highlights_page(page)
+            or revision._is_lep_page(page)
+            or revision._is_ror_page(page)
+            or page.page_type in {"TP1", "TP2", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"}
+        ):
+            continue
+        footer = revision.extract_footer(page)
+        page_key = footer.page_key if footer is not None else None
+        if page_key is None or re.fullmatch(r"\d{3,4}", page_key) is None:
+            continue
+        chapter = page_key[:-2]
+        for line in sorted(page.lines, key=lambda item: (item.bbox[1], item.bbox[0])):
+            heading = _chapter_heading(line)
+            if heading is None:
+                continue
+            number, title = heading
+            headings_by_chapter[chapter].append((number, page, line, title))
+
+    findings: list[OperationResult] = []
+    candidate_count = 0
+    for chapter, headings in headings_by_chapter.items():
+        expected_number = 1
+        for number, page, line, title in headings:
+            candidate_count += 1
+            if number == expected_number:
+                expected_number += 1
+                continue
+            original = line.text.strip()
+            start = text_by_page.get(page.page, "").find(original)
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=original,
+                    expected=f"{expected_number}. {title}",
+                    message=(
+                        f"Ordre des chapitres incoherent dans la serie {chapter}: "
+                        f"numero attendu {expected_number}, trouve {number}."
+                    ),
+                    original=original,
+                    proposed=f"{expected_number}. {title}",
+                    span=(start, start + len(original)) if start >= 0 else None,
+                    page=page.page,
+                    bbox=line.bbox,
+                )
+            )
+            if number > expected_number:
+                expected_number = number + 1
+    return findings, candidate_count
+
+
+def _highlights_description_findings(
+    context: Any,
+    control: str,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    text_by_page = {target.raw_page: target.text for target in targets}
+    entries = [
+        entry
+        for page in parsed_pdf.pages
+        if not target_pages or page.page in target_pages
+        for entry in revision.extract_highlights(page)
+    ]
+    if not entries:
+        return [], 0
+
+    findings: list[OperationResult] = []
+    reported_illustrated_lists: set[tuple[int, str]] = set()
+    for entry in entries:
+        if control == "highlights_deleted_description":
+            if entry.status != "D" or _DELETED_DESCRIPTION_RE.search(entry.description):
+                continue
+            expected = "Chapter deleted ou Page deleted"
+            message = (
+                f"La ligne D « {entry.pages_text} » doit avoir la description "
+                "« Chapter deleted » ou « Page deleted » en face."
+            )
+            original = entry.description
+            bbox = entry.description_bbox
+        elif control == "highlights_revised_description":
+            if entry.status != "R":
+                continue
+            illustrated_parts_list = bool(
+                _ILLUSTRATED_PARTS_LIST_RE.search(entry.subject)
+            )
+            description = (
+                entry.description
+                or (entry.subject_description if illustrated_parts_list else "")
+            )
+            if any(character.isalnum() for character in description):
+                continue
+            if illustrated_parts_list:
+                group_key = (entry.page, entry.subject.casefold())
+                if group_key in reported_illustrated_lists:
+                    continue
+                reported_illustrated_lists.add(group_key)
+                expected = "Description de changement sur la ligne Illustrated Parts List"
+                message = (
+                    "Les lignes R de l'Illustrated Parts List peuvent rester sans "
+                    "description si celle-ci figure en face de leur rubrique."
+                )
+                bbox = entry.subject_description_bbox or entry.description_bbox
+            else:
+                expected = "Description of Change"
+                message = (
+                    f"La ligne R « {entry.pages_text} » doit avoir une description "
+                    "dans la colonne Description of Change."
+                )
+                bbox = entry.description_bbox
+            original = entry.description
+        else:
+            raise ValueError(f"unknown document_structure control: {control}")
+
+        start = text_by_page.get(entry.page, "").find(original) if original else -1
+        findings.append(
+            OperationResult(
+                status="FAIL",
+                observed=original or None,
+                expected=expected,
+                message=message,
+                original=original,
+                proposed=expected,
+                span=(start, start + len(original)) if start >= 0 else (0, 0),
+                page=entry.page,
+                bbox=bbox,
+            )
+        )
+    return findings, len(entries)
+
+
+def _document_structure_findings(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> tuple[list[OperationResult], int, str]:
+    control = parameters.get("control")
+    if control == "chapter_sequence":
+        findings, checked = _chapter_sequence_findings(context)
+        expected = "Chapitres numerotes dans l'ordre 1, 2, 3..."
+    elif control in {
+        "highlights_deleted_description",
+        "highlights_revised_description",
+    }:
+        findings, checked = _highlights_description_findings(context, control)
+        expected = (
+            "Chapter deleted ou Page deleted"
+            if control == "highlights_deleted_description"
+            else "Une description de modification"
+        )
+    else:
+        raise ValueError(f"unknown document_structure control: {control}")
+    return findings, checked, expected
+
+
+def _evaluate_document_structure(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> OperationResult:
+    findings, checked, expected = _document_structure_findings(context, parameters)
+    if findings:
+        return findings[0]
+    if checked == 0:
+        return OperationResult(status="INCONCLUSIVE", expected=expected)
+    targets = getattr(context, "targets", ())
+    return OperationResult(
+        status="PASS",
+        expected=expected,
+        page=targets[-1].raw_page if targets else None,
+    )
+
+
+def _suggest_document_structure(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> list[OperationResult]:
+    findings, _checked, _expected = _document_structure_findings(context, parameters)
+    return findings
+
+
 def _evaluate_highlights_legend_footer(
     context: Any,
     _parameters: Mapping[str, Any],
@@ -916,6 +1149,11 @@ COPYRIGHT_POSITION = ClientOperation(
     name="copyright_position",
     execute=_evaluate_copyright_position,
 )
+DOCUMENT_STRUCTURE = ClientOperation(
+    name="document_structure",
+    execute=_evaluate_document_structure,
+    suggestions=_suggest_document_structure,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -926,5 +1164,6 @@ OPERATIONS = {
         PARAGRAPH_JUSTIFICATION,
         HIGHLIGHTS_LEGEND_FOOTER,
         COPYRIGHT_POSITION,
+        DOCUMENT_STRUCTURE,
     )
 }

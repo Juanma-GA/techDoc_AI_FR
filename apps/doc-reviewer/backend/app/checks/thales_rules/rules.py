@@ -451,6 +451,100 @@ CUSTOM_HIGHLIGHTS_REVISION_HEADER = rule(
     },
 )
 
+CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION = rule(
+    code="CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION",
+    name="Description obligatoire pour les suppressions des Highlights",
+    description=(
+        "Toute ligne D des Highlights doit porter en face la mention "
+        "Chapter deleted ou Page deleted."
+    ),
+    message="La suppression des Highlights ne porte pas la mention attendue.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_deleted_description"},
+        )
+    ],
+    failure_message="Description de suppression absente ou incorrecte dans les Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "Every D row in Highlights must have 'Chapter deleted' or "
+                "'Page deleted' in its description."
+            ),
+            "message": "The Highlights deletion row is missing the required description.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION = rule(
+    code="CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION",
+    name="Description obligatoire pour les lignes R des Highlights",
+    description=(
+        "Toute ligne R des Highlights doit avoir une description en face. "
+        "Pour l'Illustrated Parts List, la description peut figurer en face "
+        "de sa rubrique et s'appliquer aux lignes R suivantes."
+    ),
+    message="Une ligne R des Highlights ne porte pas de description.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_revised_description"},
+        )
+    ],
+    failure_message="Description de modification absente dans les Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "Every R row in Highlights must have a description, except that "
+                "Illustrated Parts List may use the description on its section row."
+            ),
+            "message": "A revised Highlights row is missing its description.",
+        }
+    },
+)
+
+CUSTOM_CHAPTER_NUMBER_SEQUENCE = rule(
+    code="CUSTOM_CHAPTER_NUMBER_SEQUENCE",
+    name="Ordre des chapitres numerotes",
+    description=(
+        "Dans chaque serie de pages de chapitre, les titres numerotes "
+        "1., 2., 3., etc. doivent se suivre sans omission ni inversion."
+    ),
+    message="L'ordre de numerotation des chapitres est incoherent.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "chapter_sequence"},
+        )
+    ],
+    failure_message="Ordre des chapitres numerotes incoherent.",
+    translations={
+        "en": {
+            "description": (
+                "Within each chapter page series, numbered headings such as "
+                "1., 2., 3., etc. must follow in order without gaps or reversals."
+            ),
+            "message": "The numbered chapter headings are out of order.",
+        }
+    },
+)
+
 CUSTOM_HIGHLIGHTS_ATA_NUMBER = rule(
     code="CUSTOM_HIGHLIGHTS_ATA_NUMBER",
     name="Numero ATA present sur la premiere page Highlights",
@@ -2025,6 +2119,9 @@ RULE_DEFINITIONS = (
     CUSTOM_TP1_REVISION_NUMBER,
     CUSTOM_TP1_FIRST_ISSUE_DATE,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
+    CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION,
+    CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION,
+    CUSTOM_CHAPTER_NUMBER_SEQUENCE,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
     CUSTOM_HIGHLIGHTS_HOLDER,
     CUSTOM_HIGHLIGHTS_ATA_NUMBER,

@@ -28,7 +28,7 @@ edit.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfWord, Span
 
@@ -118,6 +118,10 @@ class HighlightsEntry:
     bbox: tuple[float, float, float, float]
     status_bbox: tuple[float, float, float, float]
     page_number_x: float | None = None
+    description: str = ""
+    description_bbox: tuple[float, float, float, float] | None = None
+    subject_description: str = ""
+    subject_description_bbox: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -321,6 +325,30 @@ def _merge_bbox(spans: list[Span]) -> tuple[float, float, float, float]:
         max(span.bbox[2] for span in spans),
         max(span.bbox[3] for span in spans),
     )
+
+
+def _merge_bbox_values(
+    first: tuple[float, float, float, float] | None,
+    second: tuple[float, float, float, float] | None,
+) -> tuple[float, float, float, float] | None:
+    if first is None:
+        return second
+    if second is None:
+        return first
+    return (
+        min(first[0], second[0]),
+        min(first[1], second[1]),
+        max(first[2], second[2]),
+        max(first[3], second[3]),
+    )
+
+
+def _append_highlights_text(first: str, second: str) -> str:
+    if not first:
+        return second.strip()
+    if not second:
+        return first.strip()
+    return f"{first.rstrip()} {second.lstrip()}".strip()
 
 
 def _join_cell(spans: list[Span]) -> str:
@@ -554,7 +582,10 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
     entries: list[HighlightsEntry] = []
     subject = ""
     pending: list[str] = []
+    subject_description = ""
+    subject_description_bbox: tuple[float, float, float, float] | None = None
     previous_was_subject = False
+    page_width = max((span.bbox[2] for span in page.spans), default=status_max + 100.0)
     for row in rows[header_index + 1 :]:
         status_cells = [
             span
@@ -568,19 +599,61 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
             for span in row
             if span.bbox[0] < status_max and id(span) not in status_ids
         ]
+        description_cells = [span for span in row if span.bbox[0] >= status_max]
+        description_text = _join_raw_cell(description_cells)
         if not pages_cells:
-            previous_was_subject = False
+            if description_cells and previous_was_subject:
+                subject_description = _append_highlights_text(
+                    subject_description, description_text
+                )
+                subject_description_bbox = _merge_bbox_values(
+                    subject_description_bbox, _merge_bbox(description_cells)
+                )
+            elif description_cells and entries:
+                previous = entries[-1]
+                entries[-1] = replace(
+                    previous,
+                    description=_append_highlights_text(
+                        previous.description, description_text
+                    ),
+                    description_bbox=_merge_bbox_values(
+                        previous.description_bbox, _merge_bbox(description_cells)
+                    ),
+                )
+            else:
+                previous_was_subject = False
             continue
         if not status_cells:
             if not previous_was_subject:
                 pending = []
+                subject_description = ""
+                subject_description_bbox = None
             pending.append(_join_cell(pages_cells))
             subject = _join_subject(pending)
+            if description_cells:
+                subject_description = _append_highlights_text(
+                    subject_description, description_text
+                )
+                subject_description_bbox = _merge_bbox_values(
+                    subject_description_bbox, _merge_bbox(description_cells)
+                )
+            else:
+                row_bbox = _merge_bbox(pages_cells)
+                subject_description_bbox = _merge_bbox_values(
+                    subject_description_bbox,
+                    (status_max, row_bbox[1], page_width, row_bbox[3]),
+                )
             previous_was_subject = True
             continue
         previous_was_subject = False
         pages_text = _join_raw_cell(pages_cells)
         pages_bbox = _merge_bbox(pages_cells)
+        row_bbox = _merge_bbox([*pages_cells, *status_cells])
+        description_bbox = (
+            _merge_bbox(description_cells)
+            if description_cells
+            else (status_max, row_bbox[1], page_width, row_bbox[3])
+        )
         entries.append(
             HighlightsEntry(
                 subject=subject,
@@ -591,6 +664,10 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
                 bbox=pages_bbox,
                 status_bbox=status_cells[0].bbox,
                 page_number_x=_highlights_page_number_x(page, pages_bbox),
+                description=description_text,
+                description_bbox=description_bbox,
+                subject_description=subject_description,
+                subject_description_bbox=subject_description_bbox,
             )
         )
     return entries

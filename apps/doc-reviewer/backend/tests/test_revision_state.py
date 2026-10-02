@@ -253,6 +253,41 @@ def test_highlights_page_range_keeps_spans_past_the_header_boundary() -> None:
     assert entry.page_keys == ("INTRO 1", "INTRO 2")
 
 
+def test_highlights_extracts_row_and_illustrated_parts_list_descriptions() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation", 285.0, 100.0, 1),
+            _span("Description of Change", 366.0, 100.0, 1),
+            _span("Illustrated Parts List", 90.7, 120.0, 1),
+            _span("Revised to reflect", 366.0, 120.0, 1),
+            _span("this revision.", 480.0, 120.0, 1),
+            _span("INTRO 1101 Page 1 to INTRO Page 2", 90.7, 140.0, 1),
+            _span("R", 322.2, 140.0, 1),
+            _span("INTRO 1101 Page 3 to INTRO Page 4", 90.7, 160.0, 1),
+            _span("R", 322.2, 160.0, 1),
+            _span("Repair", 90.7, 180.0, 1),
+            _span("Page 601", 90.7, 200.0, 1),
+            _span("D", 322.2, 200.0, 1),
+            _span("Chapter deleted", 366.0, 200.0, 1),
+        ],
+    )
+
+    entries = revision.extract_highlights(page)
+
+    assert len(entries) == 3
+    assert entries[0].subject == "Illustrated Parts List"
+    assert entries[0].subject_description == "Revised to reflect this revision."
+    assert entries[0].description == ""
+    assert entries[0].subject_description_bbox is not None
+    assert entries[1].status == "R"
+    assert entries[1].subject_description == "Revised to reflect this revision."
+    assert entries[1].description == ""
+    assert entries[2].status == "D"
+    assert entries[2].description == "Chapter deleted"
+
+
 def test_compound_highlights_lep_and_footer_names_match() -> None:
     highlights = _highlights_page(
         [

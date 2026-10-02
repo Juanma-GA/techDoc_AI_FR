@@ -61,6 +61,72 @@ def _pdf(text: str) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
+def _highlights_structure_pdf(rows: list[tuple[str, str, str]]) -> ParsedPdf:
+    spans = [
+        Span("Chapter/Section and Page No", (54.0, 95.0, 200.0, 105.0), 1, "Arial", 10.0),
+        Span("Designation", (285.0, 95.0, 330.0, 105.0), 1, "Arial", 10.0),
+        Span("Description of Change", (366.0, 95.0, 480.0, 105.0), 1, "Arial", 10.0),
+    ]
+    for index, (pages, status, description) in enumerate(rows):
+        y = 130.0 + index * 20.0
+        if pages:
+            spans.append(
+                Span(pages, (90.7, y, 250.0, y + 10.0), 1, "Arial", 10.0)
+            )
+        if status:
+            spans.append(
+                Span(status, (322.2, y, 328.2, y + 10.0), 1, "Arial", 10.0)
+            )
+        if description:
+            spans.append(
+                Span(description, (366.0, y, 560.0, y + 10.0), 1, "Arial", 10.0)
+            )
+    text = "\n".join(span.text for span in spans)
+    page = ParsedPage(
+        page=1,
+        text=text,
+        spans=spans,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def _numbered_chapter_pdf(pages: list[tuple[str, list[str]]]) -> ParsedPdf:
+    parsed_pages = []
+    for physical_page, (page_key, headings) in enumerate(pages, start=1):
+        spans = []
+        lines = []
+        for index, heading in enumerate(headings):
+            y = 130.0 + index * 24.0
+            bbox = (86.0, y, 500.0, y + 14.0)
+            lines.append(PdfLine(heading, bbox, block_index=1, line_index=index))
+            spans.append(Span(heading, bbox, physical_page, "Arial", 12.0))
+        spans.extend(
+            [
+                Span("THALES AVS FRANCE SAS", (85.0, 755.0, 220.0, 765.0), physical_page, "Arial", 9.0),
+                Span(f"Page {page_key}", (500.0, 755.0, 560.0, 765.0), physical_page, "Arial", 9.0),
+                Span("JUL 27/26", (500.0, 771.0, 560.0, 781.0), physical_page, "Arial", 9.0),
+            ]
+        )
+        text = "\n".join([*headings, "THALES AVS FRANCE SAS", f"Page {page_key}", "JUL 27/26"])
+        parsed_pages.append(
+            ParsedPage(
+                page=physical_page,
+                text=text,
+                spans=spans,
+                lines=lines,
+                page_height=792.0,
+            )
+        )
+    full_text = "\n".join(page.text for page in parsed_pages)
+    return ParsedPdf(
+        page_count=len(parsed_pages),
+        pages=parsed_pages,
+        full_text=full_text,
+        is_signed=False,
+    )
+
+
 def _cmm_footer_pdf(footer: str, *, cmm_size: float = 8.0) -> ParsedPdf:
     body = "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00."
     text = f"{body}\n{footer}"
@@ -1997,6 +2063,116 @@ def test_shop_verification_changes_with_the_mapping_manufacturer() -> None:
     assert invalid_suggestions[0].page == 1
     assert invalid_suggestions[0].proposed == airbus_text
     assert "Airbus" in invalid_suggestions[0].message
+
+
+def test_deleted_highlights_require_chapter_or_page_deleted_description() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION")
+
+    for description in ("Chapter deleted", "Page deleted"):
+        results, suggestions = execute_pdf_rules(
+            _highlights_structure_pdf(
+                [("Repair", "", ""), ("Pages 601 to 602", "D", description)]
+            ),
+            [rule],
+        )
+        assert results[0].status == "PASS"
+        assert suggestions == []
+
+    results, suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Repair", "", ""), ("Pages 601 to 602", "D", "Removed from the manual")]
+        ),
+        [rule],
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].page == 1
+    assert suggestions[0].bbox[0] >= 300.0
+
+
+def test_revised_highlights_require_description_with_illustrated_parts_list_exception() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION")
+    ordinary_missing, missing_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Repair", "", ""), ("Page 601", "R", "")]
+        ),
+        [rule],
+    )
+    ordinary_present, present_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Repair", "", ""), ("Page 601", "R", "Corrected assembly instruction")]
+        ),
+        [rule],
+    )
+    illustrated_list, illustrated_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [
+                ("Illustrated Parts List", "", "Revised to reflect this revision."),
+                ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
+                ("NI/NUM 1101 Page 1", "R", ""),
+            ]
+        ),
+        [rule],
+    )
+    illustrated_missing, illustrated_missing_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [
+                ("Illustrated Parts List", "", ""),
+                ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
+                ("NI/NUM 1101 Page 1", "R", ""),
+            ]
+        ),
+        [rule],
+    )
+
+    assert ordinary_missing[0].status == "FAIL"
+    assert len(missing_suggestions) == 1
+    assert ordinary_present[0].status == "PASS"
+    assert present_suggestions == []
+    assert illustrated_list[0].status == "PASS"
+    assert illustrated_suggestions == []
+    assert illustrated_missing[0].status == "FAIL"
+    assert len(illustrated_missing_suggestions) == 1
+
+
+def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    valid, valid_suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [
+                ("501", ["1. INFORMATION", "2. MECHANICAL ASSEMBLY"]),
+                ("502", ["3. CHECKING AND ADJUSTMENTS"]),
+            ]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [("701", ["1. INFORMATION"]), ("702", ["3. LEAK TESTS"])]
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].page == 2
+    assert invalid_suggestions[0].proposed == "2. LEAK TESTS"
+
+
+def test_chapter_number_sequence_ignores_numbered_prose() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    results, suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [("501", ["1. Replace the seal immediately."])]
+        ),
+        [rule],
+    )
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
 
 
 def test_shop_verification_accepts_numbered_heading_and_reflowed_text() -> None:
