@@ -22,8 +22,6 @@ HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / "state.json"
 OUTPUT_DIR = HERE / "outputs"
 
-PDF_TEST="C:\\PROJECTS\\TECHDOC\\doc-reviewer-v0.1.0-20260902\\Docs_test\\79-30-02-01_test_erreur.pdf"
-
 
 def base_url() -> str:
     return os.environ.get("DOC_REVIEWER_BASE_URL", "http://127.0.0.1:8003").rstrip("/")

@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-from types import SimpleNamespace
-
 import fitz
 
 from app.checks.client_registry import load_active_client_configuration
-from app.checks.thales_rules.page_classifier import classify_pages
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span, parse_pdf
 
@@ -191,35 +187,33 @@ def test_justified_pdf_paragraph_passes_from_rendered_geometry(tmp_path) -> None
     assert suggestions == []
 
 
-def test_example_pdf_surfaces_the_faulty_paragraph_as_detection_only() -> None:
-    pdf_path = Path(__file__).resolve().parents[2] / "79-30-02-01_test_erreur.pdf"
-    parsed = parse_pdf(pdf_path)
-    document = SimpleNamespace(
-        meta_revision_date="JUL 27/26",
-        meta_first_issue_date=None,
-        meta_last_issue_date=None,
-        meta_cmm_number="79-30-01",
+def test_rendered_faulty_paragraph_is_surfaced_as_detection_only(tmp_path) -> None:
+    # Synthetic stand-in for the client manual page (never commit client documents).
+    doc = fitz.open()
+    pdf_page = doc.new_page(width=612, height=792)
+    pdf_page.insert_textbox(
+        fitz.Rect(107.8, 140, 540, 260),
+        "Faulty parts should be replaced by approved spares only. After any component "
+        "has been renewed or repaired, carry out the full procedure in TESTING AND "
+        "FAULT ISOLATION before the unit is returned to service.",
+        fontname="helv",
+        fontsize=10,
+        align=fitz.TEXT_ALIGN_LEFT,
     )
-    classify_pages(parsed, document)
+    path = tmp_path / "faulty-paragraph.pdf"
+    doc.save(str(path))
+    doc.close()
 
-    page = next(
-        page for page in parsed.pages if "faulty parts should be replaced" in page.text.casefold()
-    )
-    results, suggestions = execute_pdf_rules(
-        parsed,
-        [_RULE],
-        document=document,
-        client_operations=_CONFIGURATION.bundle.operations,
-        client_entities=_CONFIGURATION.bundle.mapping.entities,
-    )
+    parsed = parse_pdf(path)
+    parsed.pages[0].is_modified = True
+    page = parsed.pages[0]
+    results, suggestions = _run_rule(parsed)
     finding = next(
         suggestion
         for suggestion in suggestions
-        if suggestion.page == page.page
-        and "Faulty parts should be replaced" in suggestion.original
+        if "Faulty parts should be replaced" in suggestion.original
     )
 
-    assert page.is_modified is True
     assert results[0].status == "FAIL"
     assert len(suggestions) == 1
     assert suggestions[0].page == page.page
