@@ -74,7 +74,7 @@ def test_text_llm_call_logs_payload_and_response_without_api_key(monkeypatch, ca
     monkeypatch.setattr(llm_suggester, "get_llm_enabled", lambda db: True)
     monkeypatch.setattr(
         llm_suggester,
-        "get_effective",
+        "get_endpoint",
         lambda db: {
             "api_key": "sk-secret-test-value",
             "base_url": "https://example.test",

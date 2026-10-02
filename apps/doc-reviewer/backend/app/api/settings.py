@@ -14,6 +14,7 @@ from app.core.mistral_settings import (
     get_checklist_ai_scan,
     get_checklist_context,
     get_effective,
+    get_endpoint,
     get_feedback_enabled,
     get_llm_enabled,
     get_llm_max_calls,
@@ -33,6 +34,7 @@ from app.core.mistral_settings import (
     set_verify_passes,
     set_vision_enabled,
 )
+from app.core.errors import AppError
 from app.db.session import get_db
 from app.schemas import (
     ChecklistContextIn,
@@ -133,6 +135,12 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
     if not s["api_key"]:
         set_llm_tested(db, False)
         return TestConnectionOut(ok=False, message="Aucune clé API configurée.", models=[])
+    try:
+        # Aucune requete (donc aucune cle) vers une URL hors liste blanche.
+        s = get_endpoint(db)
+    except AppError as exc:
+        set_llm_tested(db, False)
+        return TestConnectionOut(ok=False, message=exc.message, models=[])
     try:
         with httpx.Client(timeout=10.0) as client:
             r = client.get(

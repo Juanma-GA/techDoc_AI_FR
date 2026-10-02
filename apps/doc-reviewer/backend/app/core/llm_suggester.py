@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.mistral_settings import get_endpoint, get_llm_enabled
 from app.core.logging import sanitize_llm_debug
 from app.core.fallback_rules import FallbackNLPRules
 
@@ -123,7 +123,7 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
             "Les suggestions IA sont desactivees dans Parametres.",
             status_code=400,
         )
-    s = get_effective(db)
+    s = get_endpoint(db)
     if not s["api_key"]:
         raise AppError(
             "MISTRAL_NOT_CONFIGURED",

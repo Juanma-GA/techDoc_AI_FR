@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.logging import sanitize_llm_debug
-from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.mistral_settings import get_endpoint, get_llm_enabled
 
 # Inject the OS trust store — same trick used by the chat client so
 # corporate SSL proxies don't sink the multimodal call.
@@ -70,7 +70,7 @@ def _call_mistral_vision(db: Session, messages: list[dict], *, response_format: 
             "Les analyses IA sont desactivees dans Parametres.",
             status_code=400,
         )
-    s = get_effective(db)
+    s = get_endpoint(db)
     if not s["api_key"]:
         raise AppError(
             "MISTRAL_NOT_CONFIGURED",
