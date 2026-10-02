@@ -1,6 +1,10 @@
 @echo off
-chcp 65001 >nul
 setlocal
+
+REM ---- Durcissement : outils systeme par chemin absolu, Python -s (cf. _run.bat)
+set "NoDefaultCurrentDirectoryInExePath=1"
+set "SYS32=%SystemRoot%\System32"
+"%SYS32%\chcp.com" 65001 >nul
 
 REM ===========================================================================
 REM  Doc Reviewer - Lancement local
@@ -34,7 +38,7 @@ if exist "%EMBED_PY%" (
     set "INSTALLED_MARK=%~dp0..\..\python-embed\.docreviewer_installed"
     echo [info] Python embarque detecte: aucun pre-requis necessaire.
 ) else (
-    where python >nul 2>nul
+    "%SYS32%\where.exe" python >nul 2>nul
     if errorlevel 1 (
         echo [erreur] Python introuvable.
         echo          Installe Python 3.11+ depuis https://www.python.org/downloads/
@@ -68,10 +72,17 @@ if "%USE_EMBED%"=="0" (
 )
 
 REM ---- Install deps une seule fois (marker .installed) ---------------------
+REM  Package partageable : dependances deja installees (marker present). Sinon :
+REM  versions ET empreintes figees (requirements.lock.txt, --require-hashes).
 if not exist "%INSTALLED_MARK%" (
-    echo [setup] Installation des dependances Python ^(1 a 3 min^)...
-    "%PYTHON%" -m pip install --upgrade pip >nul
-    "%PYTHON%" -m pip install -e .
+    echo [setup] Installation des dependances Python verrouillees ^(1 a 3 min^)...
+    "%PYTHON%" -s -m pip install --require-hashes --no-deps -r requirements.lock.txt
+    if errorlevel 1 (
+        echo [erreur] Echec installation des deps.
+        pause
+        exit /b 1
+    )
+    "%PYTHON%" -s -m pip install --no-deps -e .
     if errorlevel 1 (
         echo [erreur] Echec installation des deps.
         pause
@@ -83,7 +94,7 @@ if not exist "%INSTALLED_MARK%" (
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------
 echo [setup] Verification du schema DB ^(alembic^)...
-"%PYTHON%" -m alembic upgrade head
+"%PYTHON%" -s -m alembic upgrade head
 if errorlevel 1 (
     echo [erreur] Echec migrations Alembic.
     pause
@@ -95,7 +106,7 @@ set /a PORT_TRY=%PORT%
 set /a PORT_MAX=%PORT% + 20
 
 :find_port
-netstat -ano | findstr ":%PORT_TRY%" | findstr "LISTENING" >nul 2>nul
+"%SYS32%\NETSTAT.EXE" -ano | "%SYS32%\findstr.exe" ":%PORT_TRY%" | "%SYS32%\findstr.exe" "LISTENING" >nul 2>nul
 if errorlevel 1 goto :port_ok
 set /a PORT_TRY=PORT_TRY + 1
 if %PORT_TRY% GTR %PORT_MAX% goto :no_port
@@ -116,7 +127,7 @@ echo.
 echo [run] Backend sur http://127.0.0.1:%PORT%/
 echo.
 
-"%PYTHON%" -m uvicorn app.main:app --host 127.0.0.1 --port %PORT%
+"%PYTHON%" -s -m uvicorn app.main:app --host 127.0.0.1 --port %PORT%
 
 echo.
 echo [info] uvicorn arrete.
