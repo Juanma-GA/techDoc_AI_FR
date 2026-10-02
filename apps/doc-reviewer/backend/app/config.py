@@ -76,6 +76,18 @@ class Settings(BaseSettings):
     # (compatible Mistral) est approuve.
     mistral_allowed_base_urls: CsvList = ["https://api.mistral.ai"]
 
+    # Moteur des conversions .doc/.docx/PDF. "auto" : Microsoft Word, puis
+    # LibreOffice s'il est installe ; "word" ou "libreoffice" : ce moteur seul.
+    office_converter: Literal["auto", "word", "libreoffice"] = "auto"
+    # Identifiant (GUID) de l'etiquette de confidentialite Microsoft Purview
+    # posee sur un .docx produit par conversion quand le document n'en porte
+    # pas deja une. Obligatoire sur un poste ou l'etiquetage est impose (Word
+    # refuse sinon d'enregistrer le .docx). Valeur choisie par l'IT.
+    word_sensitivity_label_id: str = ""
+    # Delai au-dela duquel une conversion Word est consideree bloquee (boite de
+    # dialogue invisible) : l'instance WINWORD de la conversion est arretee.
+    word_convert_timeout_seconds: int = 180
+
     @field_validator(
         "cors_origins", "allowed_hosts", "mistral_allowed_base_urls", mode="before"
     )

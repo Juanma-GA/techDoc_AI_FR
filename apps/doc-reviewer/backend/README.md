@@ -14,8 +14,29 @@ with the source, working format, correction state, and installed converters.
 `GET /api/v1/documents/{id}/export?format=original|corrected|pdf|docx|doc`
 downloads an explicit output. `?format=commented` produces the commented PDF
 without applying corrections. For DOCX, this renders a temporary PDF and does
-not replace the DOCX working version. DOCX-to-DOC is only available when
-LibreOffice is installed and may lose layout fidelity.
+not replace the DOCX working version. DOCX-to-DOC may lose layout fidelity.
+
+## Conversions (Microsoft Word)
+
+Every conversion (`.doc`/`.docx` → PDF, `.doc` → `.docx`, `.docx` → `.doc`,
+PDF → `.docx`/`.doc`) runs through the desktop Microsoft Word of the laptop
+(COM automation, macros forced off). LibreOffice is optional: it is only tried
+when Word is absent or fails (`OFFICE_CONVERTER=auto`), or used alone
+(`OFFICE_CONVERTER=libreoffice`).
+
+Where Microsoft Purview makes a sensitivity label mandatory, Word refuses to
+save an unlabelled `.docx`. Set `WORD_SENSITIVITY_LABEL_ID` (label GUID, see
+`.env.example`): it is applied to converted `.docx` files that carry no label;
+an existing label is always kept. A conversion stuck longer than
+`WORD_CONVERT_TIMEOUT_SECONDS` has its own WINWORD instance stopped.
+
+Real-Word tests (opt-in, Windows with Word):
+
+```bat
+set DR_TEST_REAL_WORD=1
+set WORD_SENSITIVITY_LABEL_ID=<label GUID>
+python -m pytest tests\test_word_real.py -v
+```
 
 Example:
 
