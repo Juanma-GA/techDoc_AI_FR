@@ -1039,7 +1039,49 @@ def test_page_absent_from_the_lep_is_reported() -> None:
     parsed.pages.append(_page(6, _footer(6, "Page 601", "JUL 66")))
     parsed.page_count = 6
 
+    state = _state(parsed)
+    findings = [finding for finding in state.findings if finding.control == revision.PAGE_NOT_IN_LEP]
+
     assert _codes(parsed) == [revision.PAGE_NOT_IN_LEP]
+    assert len(findings) == 1
+    assert findings[0].bbox == state.footers[-1].label_bbox
+
+
+def test_lep_page_ids_fused_with_subject_spans_are_still_extracted() -> None:
+    page = _lep_page(
+        left=[
+            ("Trouble Shooting", "801", "AUG 30/75"),
+            ("", "802", "AUG 30/75"),
+            ("Special Equipment", "1001", "JUL 30/26 *"),
+            ("and Tooling", "1002", "AUG 30/75"),
+        ],
+        right=[],
+        page=2,
+    )
+    merged_ids = {"Trouble Shooting": "801", "Special Equipment": "1001"}
+    spans = []
+    for span in page.spans:
+        if span.text in merged_ids:
+            spans.append(
+                _span(
+                    f"{span.text} {merged_ids[span.text]}",
+                    span.bbox[0],
+                    (span.bbox[1] + span.bbox[3]) / 2,
+                    page.page,
+                )
+            )
+        elif span.text not in merged_ids.values():
+            spans.append(span)
+    page.spans = spans
+    page.text = "\n".join(span.text for span in spans)
+
+    entries, _subject = revision.extract_lep(page)
+    subject_by_page = {entry.page_key: entry.subject for entry in entries}
+
+    assert subject_by_page["801"] == "Trouble Shooting"
+    assert subject_by_page["802"] == "Trouble Shooting"
+    assert subject_by_page["1001"] == "Special Equipment"
+    assert subject_by_page["1002"] == "Special Equipment and Tooling"
 
 
 def test_ambiguous_page_number_listed_in_lep_is_not_reported_absent() -> None:

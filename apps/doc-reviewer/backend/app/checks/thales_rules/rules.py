@@ -155,10 +155,20 @@ _THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
     (r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40", "Tel : +33 (0)5 24 44 77 40"),
     (r"www\.thalesgroup\.com", "www.thalesgroup.com"),
 )
-_REPAIR_RELATIVE_HUMIDITY_PATTERN = re.escape(_REPAIR_RELATIVE_HUMIDITY).replace(
-    r"\ ", r"\s+"
+_REPAIR_RELATIVE_HUMIDITY_PATTERN = (
+    "(?i:"
+    + re.escape(_REPAIR_RELATIVE_HUMIDITY)
+    .replace(r"\ ", r"\s+")
+    .replace("procedure", r"proc(?:e|\u00e9|\uFFFD)dure")
+    + ")"
 )
-_STORAGE_TEMPERATURE_PATTERN = re.escape(_STORAGE_TEMPERATURE).replace(r"\ ", r"\s+")
+_STORAGE_TEMPERATURE_PATTERN = (
+    "(?i:"
+    + re.escape(_STORAGE_TEMPERATURE)
+    .replace(r"\ ", r"\s+")
+    .replace("–", r"[-\u2010-\u2015\u2212\uFFFD]")
+    + ")"
+)
 _NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
 
 

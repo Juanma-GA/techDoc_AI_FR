@@ -1881,7 +1881,7 @@ def test_tp1_page_type_is_read_from_anywhere_in_the_footer_band() -> None:
 
 def test_repair_testing_storage_page_types_require_standalone_headings() -> None:
     parsed = ParsedPdf(
-        page_count=4,
+        page_count=5,
         pages=[
             ParsedPage(page=1, text="REPAIR\nNOTE\nPressure:"),
             ParsedPage(page=2, text="TESTING\nNOTE\nTemperature:"),
@@ -1911,7 +1911,7 @@ def test_repair_testing_storage_page_types_require_standalone_headings() -> None
 
 def test_note_page_classifier_does_not_misclassify_contents_or_override_highlights() -> None:
     parsed = ParsedPdf(
-        page_count=2,
+        page_count=4,
         pages=[
             ParsedPage(
                 page=1,
@@ -1922,6 +1922,18 @@ def test_note_page_classifier_does_not_misclassify_contents_or_override_highligh
                 text="Highlights Page 2\nRepair\nTesting\nStorage",
                 page_type=HIGHLIGHTS_PAGE_TYPE,
             ),
+            ParsedPage(
+                page=3,
+                text="LIST OF EFFECTIVE PAGES\nSUBJECT\nPAGE\nDATE\nStorage\n901",
+            ),
+            ParsedPage(
+                page=4,
+                text="TABLE OF CONTENTS\nStorage\n901",
+            ),
+            ParsedPage(
+                page=5,
+                text="STORAGE INSTRUCTIONS\n1. STORAGE\nNOTE: During storage operations",
+            ),
         ],
         full_text="",
         is_signed=False,
@@ -1929,7 +1941,13 @@ def test_note_page_classifier_does_not_misclassify_contents_or_override_highligh
 
     page_types = identify_note_pages(parsed)
 
-    assert page_types == {"1": None, "2": HIGHLIGHTS_PAGE_TYPE}
+    assert page_types == {
+        "1": None,
+        "2": HIGHLIGHTS_PAGE_TYPE,
+        "3": None,
+        "4": None,
+        "5": "STORAGE",
+    }
 
 
 def test_introduction_page_classifier_uses_the_standalone_heading() -> None:
@@ -1979,6 +1997,25 @@ def test_shop_verification_changes_with_the_mapping_manufacturer() -> None:
     assert invalid_suggestions[0].page == 1
     assert invalid_suggestions[0].proposed == airbus_text
     assert "Airbus" in invalid_suggestions[0].message
+
+
+def test_shop_verification_accepts_numbered_heading_and_reflowed_text() -> None:
+    rule = _rule("CUSTOM_INTRODUCTION_SHOP_VERIFICATION")
+    observed = (
+        "INTRODUCTION\n1. Shop Verification\nA.\n"
+        "Verification of the procedures in this manual\n(1)\n"
+        "The shop verification will be done at the first repair of the\n"
+        "equipment."
+    )
+
+    results, suggestions = execute_pdf_rules(
+        _note_page_pdf(observed, INTRODUCTION_PAGE_TYPE),
+        [rule],
+        document=SimpleNamespace(meta_manufacturer="Airbus"),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_missing_shop_verification_uses_the_central_blank_area_for_its_bbox() -> None:
@@ -2145,6 +2182,18 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
         ),
         [storage_rule],
     )
+    accented_repair_rh = repair_rh.replace("procedure.", "proc\u00e9dure.")
+    replacement_temperature = storage_temperature.replace("–", "\uFFFD").replace(
+        "Assemblies", "assemblies"
+    )
+    storage_text_variants, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"STORAGE\n{storage_note_intro}\nPressure: 1 bar\n"
+            f"{accented_repair_rh}\n{replacement_temperature}",
+            STORAGE_PAGE_TYPE,
+        ),
+        [storage_rule],
+    )
 
     assert repair_valid[0].status == "PASS"
     assert repair_outside_note[0].status == "FAIL"
@@ -2157,6 +2206,7 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     assert testing_wrong_rh[0].status == "FAIL"
     assert storage_valid[0].status == "PASS"
     assert storage_wrong_temperature[0].status == "FAIL"
+    assert storage_text_variants[0].status == "PASS"
 
 
 def test_note_suggestions_ignore_list_markers_and_anchor_missing_storage_paragraph() -> None:

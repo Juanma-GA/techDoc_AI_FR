@@ -660,25 +660,45 @@ def _lep_group_entries(
         page_cells = [span for span in cells if subject_max <= span.bbox[0] < page_max]
         date_cells = [span for span in cells if span.bbox[0] >= page_max]
 
+        fused_page_key = None
+        subject_text = _join_cell(subject_cells)
+        if (
+            subject_cells
+            and not page_cells
+            and date_cells
+            and any(
+                span.bbox[2] >= page_x - _COLUMN_TOLERANCE
+                for span in subject_cells
+            )
+        ):
+            fused_page = re.fullmatch(
+                r"(?P<subject>.+?)\s+(?P<page>\d+(?:-\d+)*)",
+                subject_text,
+            )
+            if fused_page is not None:
+                fused_page_key = normalize_page_key(fused_page.group("page"))
+                if fused_page_key is not None:
+                    subject_text = fused_page.group("subject").rstrip()
+
         if subject_cells:
             if not subject_continues:
                 pending = []
-            pending.append(_join_cell(subject_cells))
+            pending.append(subject_text)
             subject_continues = True
         else:
             subject_continues = False
         if pending:
             subject = _join_subject(pending)
 
-        if not page_cells or not date_cells:
+        if not date_cells or (not page_cells and fused_page_key is None):
             continue
         # A subject line sharing its row with an entry only wraps onto the
         # next row when it reads unfinished; otherwise the next subject line
         # starts a new section (« Cleaning » then « Inspection »).
-        if subject_continues:
+        if subject_continues and fused_page_key is None:
             subject_continues = pending[-1].rstrip().endswith(("-", ","))
 
-        page_key = normalize_page_key(
+        page_key = fused_page_key or normalize_page_key(
             " ".join(part for part in (_join_cell(prefix_cells), _join_cell(page_cells)) if part)
         )
         if page_key is None:
@@ -1449,7 +1469,7 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
                         original=footer.label_text,
                         proposed="",
                         page=footer.page,
-                        bbox=None,
+                        bbox=footer.label_bbox or footer.page_number_bbox,
                     )
                 )
             continue

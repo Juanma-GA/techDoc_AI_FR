@@ -60,6 +60,12 @@ _COPYRIGHT_POSITION_EXPECTED = (
 _JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
 _JUSTIFICATION_MIN_LINE_CHARACTERS = 24
 _JUSTIFICATION_HORIZONTAL_TOLERANCE = 3.0
+_JUSTIFICATION_MULTICOLUMN_TOLERANCE = 40.0
+_PARAGRAPH_LIST_ITEM_MARKER = re.compile(
+    r"^\s*(?:[-*]|\u2022|\u2013|\u2014|\(\d+\)|\d+[.)]|[A-Z][.)])\s+"
+)
+_PARAGRAPH_TABLE_HEADER_MARKER = re.compile(r"^\s*[A-Z][A-Z0-9 /&()_\-]{1,}\s*$")
+_TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
 
 
 def shop_verification_text(document: object | None) -> str:
@@ -72,7 +78,10 @@ def shop_verification_text(document: object | None) -> str:
 
 
 def shop_verification_section(text: str) -> str:
-    start_match = re.search(r"(?im)^\s*Shop\s+Verification\s*:\s*", text)
+    start_match = re.search(
+        r"(?im)^\s*(?:\d+(?:\.\d+)*[.)]?\s+)?Shop\s+Verification\s*:?\s*",
+        text,
+    )
     if start_match is None:
         return ""
     end_match = re.search(r"(?im)^\s*\d+\.\s+[A-Z]", text[start_match.end() :])
@@ -81,8 +90,8 @@ def shop_verification_section(text: str) -> str:
 
 
 def shop_verification_matches(text: str, expected: str) -> bool:
-    observed = " ".join(shop_verification_section(text).split()).casefold()
-    expected_normalized = " ".join(expected.split()).casefold()
+    observed = " ".join(re.findall(r"[a-z0-9]+", shop_verification_section(text).casefold()))
+    expected_normalized = " ".join(re.findall(r"[a-z0-9]+", expected.casefold()))
     return bool(observed) and expected_normalized in observed
 
 
@@ -288,8 +297,11 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
 
     paragraphs: list[list[PdfLine]] = []
     for block_lines in lines_by_block.values():
+        ordered_lines = sorted(block_lines, key=lambda item: item.line_index)
+        if _pdf_block_has_repeated_columns(ordered_lines):
+            continue
         current: list[PdfLine] = []
-        for line in sorted(block_lines, key=lambda item: item.line_index):
+        for line in ordered_lines:
             if current:
                 previous = current[-1]
                 line_height = max(
@@ -297,13 +309,39 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
                     line.bbox[3] - line.bbox[1],
                     1.0,
                 )
-                if line.bbox[1] - previous.bbox[1] > max(18.0, line_height * 1.8):
+                if (
+                    line.bbox[1] - previous.bbox[1] > max(18.0, line_height * 1.8)
+                    or _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
+                    or _PARAGRAPH_TABLE_HEADER_MARKER.match(line.text) is not None
+                ):
                     paragraphs.append(current)
                     current = []
             current.append(line)
         if current:
             paragraphs.append(current)
     return paragraphs
+
+
+def _pdf_block_has_repeated_columns(lines: list[PdfLine]) -> bool:
+    visual_rows: list[list[PdfLine]] = []
+    row_centers: list[float] = []
+    for line in sorted(lines, key=lambda item: (item.bbox[1], item.bbox[0])):
+        center_y = (line.bbox[1] + line.bbox[3]) / 2
+        if row_centers and abs(center_y - row_centers[-1]) <= 3.0:
+            visual_rows[-1].append(line)
+        else:
+            visual_rows.append([line])
+            row_centers.append(center_y)
+
+    wide_gap_rows = 0
+    for row in visual_rows:
+        row_lines = sorted(row, key=lambda item: item.bbox[0])
+        if any(
+            current.bbox[0] - previous.bbox[2] > _JUSTIFICATION_MULTICOLUMN_TOLERANCE
+            for previous, current in zip(row_lines, row_lines[1:])
+        ):
+            wide_gap_rows += 1
+    return wide_gap_rows >= 2
 
 
 def _paragraph_justification_issue(
@@ -354,6 +392,14 @@ def _paragraph_justification_findings(
     checked_paragraphs = 0
     findings: list[OperationResult] = []
     for page in pages:
+        page_text = page.text or ""
+        if (
+            _TABLE_OF_CONTENTS_MARKER.search(page_text)
+            or revision._is_lep_page(page)
+            or revision._is_highlights_page(page)
+            or revision._is_ror_page(page)
+        ):
+            continue
         for paragraph in _paragraphs_from_pdf_page(page):
             assessment = _paragraph_justification_issue(paragraph)
             if assessment is None:

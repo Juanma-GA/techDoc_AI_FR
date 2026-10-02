@@ -23,7 +23,7 @@ STORAGE_PAGE_TYPE = "STORAGE"
 
 _NOTE_PAGE_TYPES = (REPAIR_PAGE_TYPE, TESTING_PAGE_TYPE, STORAGE_PAGE_TYPE)
 _PAGE_TYPE_MARKERS = {
-    page_type: re.compile(rf"(?im)^\s*{page_type}\s*$")
+    page_type: re.compile(rf"(?im)^\s*(?:\d+(?:\.\d+)*[.)]?\s+)?{page_type}\s*$")
     for page_type in _NOTE_PAGE_TYPES
 }
 _HIGHLIGHTS_PAGE_1_MARKER = re.compile(r"(?i)\bHighlights\s+Page\s+1\b")
@@ -126,6 +126,11 @@ def identify_note_pages(parsed: ParsedPdf) -> dict[str, str | None]:
     """Classify NOTE pages from a standalone REPAIR/TESTING/STORAGE heading."""
     page_types: dict[str, str | None] = {}
     for page in parsed.pages:
+        if revision._is_lep_page(page) or _TABLE_OF_CONTENTS_MARKER.search(page.text or ""):
+            if page.page_type in _NOTE_PAGE_TYPES:
+                page.page_type = None
+            page_types[str(page.page)] = page.page_type
+            continue
         detected_types = [
             page_type
             for page_type, marker in _PAGE_TYPE_MARKERS.items()
