@@ -75,8 +75,9 @@ _SOFFICE_PORTABLE_GLOBS = [
 
 
 def _find_soffice() -> str | None:
-    # 1) Override explicite (chemin direct vers soffice.exe ou son dossier).
-    env = os.environ.get("DR_SOFFICE_PATH", "").strip().strip('"')
+    # 1) Override explicite (chemin direct vers soffice.exe ou son dossier),
+    #    depuis backend\.env ou l'environnement.
+    env = (settings.dr_soffice_path or os.environ.get("DR_SOFFICE_PATH", "")).strip().strip('"')
     if env:
         p = Path(env)
         if p.is_dir():

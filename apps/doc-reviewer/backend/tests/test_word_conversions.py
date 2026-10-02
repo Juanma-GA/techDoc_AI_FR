@@ -399,3 +399,12 @@ def test_libreoffice_opens_a_pdf_in_writer(suffix, imports_as_writer) -> None:
     )
     assert ("--infilter=writer_pdf_import" in cmd) is imports_as_writer
     assert cmd[-5:] == ["--convert-to", "docx", "--outdir", "out", f"input{suffix}"]
+
+
+def test_soffice_path_from_the_settings_file(tmp_path, monkeypatch) -> None:
+    """DR_SOFFICE_PATH written in backend/.env (not only the environment) is used."""
+    exe = tmp_path / "soffice.exe"
+    exe.write_bytes(b"")
+    monkeypatch.delenv("DR_SOFFICE_PATH", raising=False)
+    monkeypatch.setattr(settings, "dr_soffice_path", str(tmp_path))
+    assert doc_convert._find_soffice() == str(exe)

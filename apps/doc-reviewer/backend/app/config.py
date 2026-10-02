@@ -87,6 +87,9 @@ class Settings(BaseSettings):
     # Delai au-dela duquel une conversion Word est consideree bloquee (boite de
     # dialogue invisible) : l'instance WINWORD de la conversion est arretee.
     word_convert_timeout_seconds: int = 180
+    # Chemin de soffice.exe (ou de son dossier) quand LibreOffice n'est ni sur
+    # le PATH, ni dans Program Files, ni portable a un emplacement connu.
+    dr_soffice_path: str = ""
 
     @field_validator(
         "cors_origins", "allowed_hosts", "mistral_allowed_base_urls", mode="before"
