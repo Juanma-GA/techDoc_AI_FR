@@ -20,10 +20,26 @@ LibreOffice is installed and may lose layout fidelity.
 Example:
 
 ```bash
-curl -F "file=@manual.docx" http://127.0.0.1:8003/api/v1/documents
+curl -H "X-Requested-With: doc-reviewer" -F "file=@manual.docx" http://127.0.0.1:8003/api/v1/documents
 curl http://127.0.0.1:8003/api/v1/documents/<id>/exports
 curl -o manual_commente.pdf "http://127.0.0.1:8003/api/v1/documents/<id>/export?format=commented"
 ```
+
+## Sécurité locale (sans authentification)
+
+L'API n'a pas de login : elle est protégée par `app/core/request_guard.py`.
+
+- Toute requête de modification (POST/PUT/PATCH/DELETE) exige l'en-tête
+  `X-Requested-With: doc-reviewer` (le front l'envoie ; à ajouter dans les
+  scripts et `curl`). Un en-tête `Origin` étranger est refusé.
+- L'en-tête `Host` doit être `localhost`, `127.0.0.1`, `[::1]` ou figurer dans
+  `ALLOWED_HOSTS` (anti DNS-rebinding).
+- Une requête relayée par un proxy (`X-Forwarded-For`, `Forwarded`…) ou reçue
+  sur une adresse non-bouclage est refusée (403 `EXPOSURE_NOT_ALLOWED`) tant que
+  `BEHIND_AUTH_PROXY=true` n'atteste pas un reverse proxy authentifiant ; dans ce
+  cas `ENCRYPTION_KEY` et des `CORS_ORIGINS` de production sont obligatoires.
+- La clé Mistral n'est envoyée qu'aux URL de `MISTRAL_ALLOWED_BASE_URLS`
+  (défaut `https://api.mistral.ai`) ; changer l'URL impose de ressaisir la clé.
 
 ## Démarrage local (dev)
 
