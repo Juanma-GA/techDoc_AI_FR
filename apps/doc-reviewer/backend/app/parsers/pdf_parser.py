@@ -68,6 +68,7 @@ class ParsedPdf:
     pages: list[ParsedPage]
     full_text: str
     is_signed: bool
+    full_document_pages: list[ParsedPage] | None = None
 
 
 def parse_pdf(path: str | Path) -> ParsedPdf:

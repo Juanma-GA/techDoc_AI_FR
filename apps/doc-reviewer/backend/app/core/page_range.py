@@ -32,11 +32,15 @@ def filter_pdf(parsed: ParsedPdf, first_page: int, last_page: int) -> ParsedPdf:
 def filter_pdf_pages(parsed: ParsedPdf, page_numbers: list[int]) -> ParsedPdf:
     selected = set(page_numbers)
     pages = [page for page in parsed.pages if page.page in selected]
+    full_document_pages = parsed.full_document_pages
+    if full_document_pages is None:
+        full_document_pages = parsed.pages
     return ParsedPdf(
         page_count=len(pages),
         pages=pages,
         full_text="\n".join(f"[PAGE: {page.page}]\n{page.text}" for page in pages),
         is_signed=parsed.is_signed,
+        full_document_pages=full_document_pages,
     )
 
 

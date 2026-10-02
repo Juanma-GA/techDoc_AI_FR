@@ -952,6 +952,130 @@ def test_compiled_highlights_status_rule_comments_on_the_designation_cell() -> N
     assert status_raws[0].severity == "warning"
 
 
+def test_invalid_highlights_designation_is_reported_on_its_cell() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "X"),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "X"
+    assert findings[0].bbox is not None
+    assert "R, N, U ou D" in findings[0].message
+
+
+def test_deleted_highlights_status_conflicts_with_page_still_in_current_document() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "D"),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "D"
+    assert findings[0].bbox is not None
+    assert "401" in findings[0].message
+
+
+def test_deleted_status_is_checked_even_without_an_extracted_lep() -> None:
+    highlights = _highlights_page(
+        [
+            ("Repair", "Page 601", "D"),
+        ]
+    )
+    parsed = _document(
+        [
+            highlights,
+            _page(2, _footer(2, "Page 601", "JUL 66")),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "D"
+    assert "601" in findings[0].message
+
+
+def test_deleted_status_accepts_blank_lep_entries_without_current_pages() -> None:
+    parsed = _document(
+        [
+            _highlights_page(
+                [
+                    ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                    ("List of Approved Repairs", "LAR Page 1 to LAR Page 2", "D"),
+                ]
+            ),
+            _lep_page(
+                left=[
+                    ("List of Approved Repairs", "LAR 1", "Blank *"),
+                    ("", "LAR 2", "Blank *"),
+                ],
+                right=[],
+                page=2,
+            ),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert findings == []
+
+
+def test_deleted_status_accepts_deleted_lep_placeholders_without_current_pages() -> None:
+    parsed = _document(
+        [
+            _highlights_page(
+                [
+                    ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                    ("List of Approved Repairs", "LAR Page 1 to LAR Page 2", "D"),
+                ]
+            ),
+            _lep_page(
+                left=[
+                    ("List of Approved Repairs", "LAR 1", "Deleted *"),
+                    ("", "LAR 2", "Deleted *"),
+                ],
+                right=[],
+                page=2,
+            ),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert findings == []
+
+
 def test_highlights_u_matches_unstarred_previous_lep_and_footer_dates() -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(
@@ -1048,6 +1172,22 @@ def test_footer_date_must_match_the_revision_on_a_modified_page() -> None:
         "JAN 27/26",
         _REVISION_DATE,
     )
+
+
+def test_footer_page_number_rejects_two_numbers_and_suggests_the_first() -> None:
+    parsed = _consistent_document()
+    parsed.pages[2] = _page(3, _footer(3, "Page 25/26", _REVISION_DATE))
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.FOOTER_PAGE_NUMBER and finding.page == 3
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "Page 25/26"
+    assert findings[0].proposed == "Page 25"
+    assert findings[0].bbox is not None
 
 
 def test_unchanged_page_keeps_its_own_date_in_the_footer() -> None:

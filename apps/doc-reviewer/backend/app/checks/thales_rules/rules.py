@@ -545,6 +545,75 @@ CUSTOM_CHAPTER_NUMBER_SEQUENCE = rule(
     },
 )
 
+CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES",
+    name="Code sans parentheses dans la LIST OF MATERIALS",
+    description=(
+        "La colonne CODE du tableau LIST OF MATERIALS ne doit contenir "
+        "aucune parenthese. Les parentheses dans les autres colonnes ne sont pas controlees."
+    ),
+    message="Un code de la LIST OF MATERIALS contient des parentheses.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_code_parentheses"},
+        )
+    ],
+    failure_message="La colonne CODE de la LIST OF MATERIALS ne doit pas contenir de parentheses.",
+    translations={
+        "en": {
+            "description": (
+                "The CODE column in the LIST OF MATERIALS table must not contain "
+                "parentheses. Parentheses in other columns are not checked."
+            ),
+            "message": "A LIST OF MATERIALS code contains parentheses.",
+        }
+    },
+)
+
+CUSTOM_NI_PART_NUMBER_ORDER = rule(
+    code="CUSTOM_NI_PART_NUMBER_ORDER",
+    name="Numerical Index trie par Part Number croissant",
+    description=(
+        "Dans le Numerical Index, les Part Numbers de la colonne Part Number "
+        "doivent etre en ordre alphanumerique lexicographique, sans tenir compte "
+        "de la casse, y compris entre les pages consecutives. Les references qui "
+        "commencent par une lettre precedent celles qui commencent par un chiffre."
+    ),
+    message="Les Part Numbers du Numerical Index ne sont pas en ordre croissant.",
+    kind="field_required",
+    severity="warning",
+    target=RuleTarget(
+        page="all",
+        region="full_page",
+        page_type="NUMERICAL_INDEX",
+    ),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "ni_part_number_order"},
+        )
+    ],
+    failure_message="La colonne Part Number du Numerical Index doit etre en ordre croissant.",
+    translations={
+        "en": {
+            "description": (
+                "Alphanumeric values in the Numerical Index Part Number column must "
+                "be in case-insensitive lexicographic order, including across "
+                "consecutive pages. Letter-prefixed values precede digit-prefixed values."
+            ),
+            "message": "The Numerical Index Part Numbers are not in ascending order.",
+        }
+    },
+)
+
 CUSTOM_HIGHLIGHTS_ATA_NUMBER = rule(
     code="CUSTOM_HIGHLIGHTS_ATA_NUMBER",
     name="Numero ATA present sur la premiere page Highlights",
@@ -899,7 +968,8 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
     code="CUSTOM_FOOTER_PAGE_NUMBER",
     name="Numero de page present et conforme dans le pied de page",
     description=(
-        "Chaque page doit afficher son numero dans le pied de page. Les pages "
+        "Chaque page doit afficher un seul numero dans le pied de page, sans "
+        "forme combinee telle que Page 25/26. Les pages "
         "LEP, ROR, Highlights et Title Page sont verifiees contre leur prefixe "
         "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.)."
     ),
@@ -915,12 +985,13 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
             operation_params={"control": "footer_page_number"},
         ),
     ],
-    failure_message="numero de page absent ou incoherent dans le pied de page.",
+    failure_message="numero de page absent, multiple ou incoherent dans le pied de page.",
     only_if=Condition(field="meta_revision_date", state="present"),
     translations={
         "en": {
             "description": (
-                "Every page must show its number in the footer. LEP, ROR, Highlights, "
+                "Every page must show one page number in the footer, not a combined "
+                "label such as Page 25/26. LEP, ROR, Highlights, "
                 "and Title Page pages are checked against their expected prefix and order."
             ),
             "message": "The footer page number is missing or incorrect.",
@@ -1732,9 +1803,10 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
     code="CUSTOM_REVISION_HIGHLIGHTS_STATUS",
     name="Designation Highlights coherente avec la LEP et le pied de page",
     description=(
-        "La designation R, N ou U des Highlights doit etre coherente avec "
-        "l'etoile et la date de la LEP ainsi qu'avec la date du pied de page. "
-        "Sans la LEP precedente, le controle ne peut pas departager R et N."
+        "La colonne Designation doit utiliser R, N, U ou D. Le controle verifie "
+        "la coherence des statuts avec la LEP et le pied de page; une page D ne "
+        "doit plus figurer dans la LEP ni dans le document courant. Sans la LEP "
+        "precedente, il ne peut pas departager R et N."
     ),
     message="La designation Highlights est incoherente avec les pages effectives.",
     kind="field_required",
@@ -1749,15 +1821,17 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
         )
     ],
     failure_message=(
-        "designation Highlights incoherente avec l'etoile ou les dates LEP/pied de page."
+        "designation Highlights invalide ou incoherente avec la LEP, le pied de "
+        "page ou la presence de la page."
     ),
     only_if=Condition(field="meta_revision_date", state="present"),
     translations={
         "en": {
             "description": (
-                "The R, N, or U Highlights designation must agree with the LEP star "
-                "and date and the page footer date. Without the previous LEP, this "
-                "check cannot distinguish R from N."
+                "Highlights Designation must be R, N, U, or D. The designation must "
+                "agree with the LEP and footer; a D page must no longer appear in "
+                "the current LEP or document. Without the previous LEP, this check "
+                "cannot distinguish R from N."
             ),
             "message": "The Highlights designation conflicts with the effective-page evidence.",
         }
@@ -2122,6 +2196,8 @@ RULE_DEFINITIONS = (
     CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION,
     CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION,
     CUSTOM_CHAPTER_NUMBER_SEQUENCE,
+    CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
+    CUSTOM_NI_PART_NUMBER_ORDER,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
     CUSTOM_HIGHLIGHTS_HOLDER,
     CUSTOM_HIGHLIGHTS_ATA_NUMBER,

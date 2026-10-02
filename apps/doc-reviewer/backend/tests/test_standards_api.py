@@ -124,6 +124,8 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION": "error",
         "CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION": "error",
         "CUSTOM_CHAPTER_NUMBER_SEQUENCE": "warning",
+        "CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES": "error",
+        "CUSTOM_NI_PART_NUMBER_ORDER": "warning",
         "CUSTOM_HIGHLIGHTS_ATA_NUMBER": "error",
         "CUSTOM_HIGHLIGHTS_PNR_HEADER": "error",
         "CUSTOM_PNR_PAGE_VALUE": "error",

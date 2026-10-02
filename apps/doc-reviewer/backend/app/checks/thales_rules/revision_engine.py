@@ -87,6 +87,7 @@ _RANGE_SPLIT_RE = re.compile(
     r"(?i)\s+(?:to|thru|through)\s+|\s+[-–—]\s+|(?<=\d)[–—](?=\d)"
 )
 _BLANK_RE = re.compile(r"(?i)^blank\b")
+_DELETED_LEP_RE = re.compile(r"(?i)^deleted\b")
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,14 @@ class HighlightsEntry:
     description_bbox: tuple[float, float, float, float] | None = None
     subject_description: str = ""
     subject_description_bbox: tuple[float, float, float, float] | None = None
+
+
+@dataclass(frozen=True)
+class InvalidHighlightsDesignation:
+    designation: str
+    pages_text: str
+    page: int
+    bbox: tuple[float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -184,6 +193,9 @@ class RevisionState:
     highlights_pages: tuple[int, ...] = ()
     lep_pages: tuple[int, ...] = ()
     highlights: list[HighlightsEntry] = field(default_factory=list)
+    invalid_highlights_designations: list[InvalidHighlightsDesignation] = field(
+        default_factory=list
+    )
     lep: list[LepEntry] = field(default_factory=list)
     ror_entries: list[RorEntry] = field(default_factory=list)
     footers: list[PageFooter] = field(default_factory=list)
@@ -545,7 +557,7 @@ def page_key_prefix(page_key: str | None) -> str:
 # --------------------------------------------------------------------------
 
 
-def _highlights_header(rows: list[list[Span]]) -> tuple[int, float, float] | None:
+def _highlights_header(rows: list[list[Span]]) -> tuple[int, float, float, float] | None:
     """Locate the Highlights header row and its two column boundaries."""
     for index, row in enumerate(rows):
         designation = next(
@@ -567,7 +579,7 @@ def _highlights_header(rows: list[list[Span]]) -> tuple[int, float, float] | Non
         # boundary taken on the header's right edge misclassifies them.
         pages_max = (pages.bbox[0] + designation.bbox[0]) / 2
         status_max = (designation.bbox[0] + change.bbox[0]) / 2
-        return index, pages_max, status_max
+        return index, pages_max, status_max, designation.bbox[0]
     return None
 
 
@@ -577,7 +589,7 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
     header = _highlights_header(rows)
     if header is None:
         return []
-    header_index, pages_max, status_max = header
+    header_index, pages_max, status_max, designation_x = header
 
     entries: list[HighlightsEntry] = []
     subject = ""
@@ -587,17 +599,21 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
     previous_was_subject = False
     page_width = max((span.bbox[2] for span in page.spans), default=status_max + 100.0)
     for row in rows[header_index + 1 :]:
-        status_cells = [
+        designation_cells = [
             span
             for span in row
-            if pages_max <= span.bbox[0] < status_max
-            and span.text.strip().upper() in _HIGHLIGHTS_STATUSES
+            if designation_x - _COLUMN_TOLERANCE <= span.bbox[0] < status_max
         ]
-        status_ids = {id(span) for span in status_cells}
+        status_cells = [
+            span
+            for span in designation_cells
+            if span.text.strip().upper() in _HIGHLIGHTS_STATUSES
+        ]
+        designation_ids = {id(span) for span in designation_cells}
         pages_cells = [
             span
             for span in row
-            if span.bbox[0] < status_max and id(span) not in status_ids
+            if span.bbox[0] < status_max and id(span) not in designation_ids
         ]
         description_cells = [span for span in row if span.bbox[0] >= status_max]
         description_text = _join_raw_cell(description_cells)
@@ -624,6 +640,9 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
                 previous_was_subject = False
             continue
         if not status_cells:
+            if designation_cells:
+                previous_was_subject = False
+                continue
             if not previous_was_subject:
                 pending = []
                 subject_description = ""
@@ -671,6 +690,47 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
             )
         )
     return entries
+
+
+def extract_invalid_highlights_designations(
+    page: ParsedPage,
+) -> list[InvalidHighlightsDesignation]:
+    rows = visual_rows(page.spans)
+    header = _highlights_header(rows)
+    if header is None:
+        return []
+    header_index, _pages_max, status_max, designation_x = header
+
+    invalid: list[InvalidHighlightsDesignation] = []
+    for row in rows[header_index + 1 :]:
+        page_cells = [
+            span
+            for span in row
+            if span.bbox[0] < designation_x - _COLUMN_TOLERANCE
+        ]
+        designation_cells = [
+            span
+            for span in row
+            if designation_x - _COLUMN_TOLERANCE <= span.bbox[0] < status_max
+        ]
+        if not page_cells or not designation_cells:
+            continue
+        pages_text = _join_raw_cell(page_cells)
+        if not expand_page_range(pages_text):
+            continue
+        designation = _join_raw_cell(designation_cells)
+        normalized = re.sub(r"\s+", "", designation).upper()
+        if normalized in _HIGHLIGHTS_STATUSES:
+            continue
+        invalid.append(
+            InvalidHighlightsDesignation(
+                designation=designation,
+                pages_text=pages_text,
+                page=page.page,
+                bbox=_merge_bbox(designation_cells),
+            )
+        )
+    return invalid
 
 
 # --------------------------------------------------------------------------
@@ -1042,6 +1102,12 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
             else _join_cell(label_parts)
         )
         candidate = normalize_page_key(candidate_text)
+        if candidate is None and _MULTIPLE_PAGE_NUMBERS_RE.fullmatch(
+            candidate_text.strip()
+        ):
+            label_row = label_parts
+            label_text = candidate_text
+            break
         if candidate is not None:
             label_row = label_parts
             label_text = candidate_text
@@ -1208,6 +1274,9 @@ def build_revision_state(parsed: ParsedPdf, document: object) -> RevisionState:
         if _is_highlights_page(page):
             highlights_pages.append(page.page)
             state.highlights.extend(extract_highlights(page))
+            state.invalid_highlights_designations.extend(
+                extract_invalid_highlights_designations(page)
+            )
         elif _is_lep_page(page):
             lep_pages.append(page.page)
             entries, subject = extract_lep(page, subject)
@@ -1295,6 +1364,10 @@ ROR_INSERTION_DATE = "ror_insertion_date"
 ROR_REVISION_DATE = "ror_revision_date"
 
 _PAGE_LABEL_RE = re.compile(r"(?i)^(?P<word>pages?)(?P<gap>\s+)(?P<rest>\S.*)$")
+_MULTIPLE_PAGE_NUMBERS_RE = re.compile(
+    r"(?i)^(?P<prefix>.*?\bpages?)\s+(?P<first>\d+(?:-\d+)?)"
+    r"\s*/\s*\d+(?:-\d+)?$"
+)
 _PAGE_LABEL_ALIGNMENT_TOLERANCE = 2.0
 
 
@@ -1449,11 +1522,43 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
 
 def _highlights_status_findings(state: RevisionState) -> list[RevisionFinding]:
     revision = state.revision_date
-    assert revision is not None
     footer_by_key = state.footer_by_key
     findings: list[RevisionFinding] = []
 
     for entry in state.highlights:
+        if entry.status == "D":
+            present_in_lep = [
+                key
+                for key in entry.page_keys
+                if any(
+                    not lep_entry.is_blank
+                    and not _DELETED_LEP_RE.match(lep_entry.date_text)
+                    for lep_entry in state.lep_entries_for_key(key)
+                )
+            ]
+            present_in_document = [
+                key for key in entry.page_keys if key in footer_by_key
+            ]
+            present = sorted(set(present_in_lep + present_in_document))
+            if not present:
+                continue
+            findings.append(
+                RevisionFinding(
+                    control=HIGHLIGHTS_STATUS_CONSISTENCY,
+                    message=(
+                        f"Les Highlights déclarent « {entry.pages_text} » comme "
+                        f"supprimée (D), mais {', '.join(present)} figure encore "
+                        "dans la LEP ou le document courant."
+                    ),
+                    original=entry.status,
+                    proposed="",
+                    page=entry.page,
+                    bbox=entry.status_bbox,
+                )
+            )
+            continue
+        if revision is None:
+            continue
         if entry.status not in _MODIFIED_STATUSES | {"U"}:
             continue
         conflicting_pages: list[str] = []
@@ -1521,6 +1626,26 @@ def _highlights_status_findings(state: RevisionState) -> list[RevisionFinding]:
             )
         )
     return findings
+
+
+def _invalid_highlights_designation_findings(
+    state: RevisionState,
+) -> list[RevisionFinding]:
+    return [
+        RevisionFinding(
+            control=HIGHLIGHTS_STATUS_CONSISTENCY,
+            message=(
+                f"La désignation « {issue.designation} » des Highlights pour "
+                f"« {issue.pages_text} » n'est pas valide. Valeurs autorisées : "
+                "R, N, U ou D."
+            ),
+            original=issue.designation,
+            proposed="",
+            page=issue.page,
+            bbox=issue.bbox,
+        )
+        for issue in state.invalid_highlights_designations
+    ]
 
 
 def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
@@ -1647,6 +1772,34 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
 
     for footer in state.footers:
         expected_key = expected.get(footer.page)
+        multiple_numbers = _MULTIPLE_PAGE_NUMBERS_RE.fullmatch(
+            footer.label_text.strip()
+        )
+        if multiple_numbers is not None:
+            prefix = re.sub(
+                r"(?i)\bpages?$",
+                "Page",
+                multiple_numbers.group("prefix").strip(),
+            )
+            proposed = (
+                _display_page_key(expected_key)
+                if expected_key is not None
+                else f"{prefix} {multiple_numbers.group('first')}"
+            )
+            findings.append(
+                RevisionFinding(
+                    control=FOOTER_PAGE_NUMBER,
+                    message=(
+                        f"Le pied de page doit contenir un seul numero : "
+                        f"« {footer.label_text} » doit devenir « {proposed} »."
+                    ),
+                    original=footer.label_text,
+                    proposed=proposed,
+                    page=footer.page,
+                    bbox=footer.label_bbox,
+                )
+            )
+            continue
         if expected_key is not None:
             if footer.observed_page_key == expected_key:
                 continue
@@ -1902,11 +2055,13 @@ def _ror_revision_findings(state: RevisionState) -> list[RevisionFinding]:
 
 def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     """Cross-check Highlights, LEP and footers, one finding per divergence."""
-    findings: list[RevisionFinding] = []
+    findings: list[RevisionFinding] = (
+        _invalid_highlights_designation_findings(state)
+        + _highlights_status_findings(state)
+    )
     if state.available:
         findings.extend(
-            _highlights_status_findings(state)
-            + _lep_findings(state)
+            _lep_findings(state)
             + _footer_findings(state)
             + _footer_page_number_findings(state)
             + _missing_page_findings(state)

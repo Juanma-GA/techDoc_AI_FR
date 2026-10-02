@@ -76,6 +76,14 @@ _CHAPTER_TITLE_CONNECTORS = frozenset(
 )
 _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
 _ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
+_LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
+_SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
+_NUMERICAL_INDEX_PAGE_RE = re.compile(
+    r"(?i)^NI/NUM\s+(?P<manual>.+?)\s+(?P<page>\d+)$"
+)
+_NI_HEADER_LABELS = frozenset(
+    {"PART NUMBER", "AIRLINE", "STOCK NO.", "FIGURE", "ITEM", "TTL", "REQ"}
+)
 
 
 def shop_verification_text(document: object | None) -> str:
@@ -396,6 +404,8 @@ def _paragraph_justification_findings(
         return [], 0, []
 
     targets = tuple(getattr(context, "targets", ()))
+    if not targets:
+        return [], 0
     target_pages = {target.raw_page for target in targets}
     pages = [page for page in parsed_pdf.pages if page.page in target_pages]
     text_by_page = {target.raw_page: target.text for target in targets}
@@ -741,6 +751,21 @@ def _chapter_heading(line: PdfLine) -> tuple[int, str] | None:
     return int(match.group("number")), title
 
 
+def _complete_pdf_pages(parsed_pdf: ParsedPdf) -> list[ParsedPage]:
+    return (
+        parsed_pdf.full_document_pages
+        if parsed_pdf.full_document_pages is not None
+        else parsed_pdf.pages
+    )
+
+
+def _ni_part_number_sort_key(value: str) -> tuple[int, str]:
+    normalized = re.sub(r"[\u2010-\u2015\u2212]", "-", value.strip().casefold())
+    first_character = next((character for character in normalized if character.isalnum()), "")
+    prefix_group = 0 if first_character.isalpha() else 1
+    return prefix_group, normalized
+
+
 def _chapter_sequence_findings(
     context: Any,
 ) -> tuple[list[OperationResult], int]:
@@ -748,22 +773,23 @@ def _chapter_sequence_findings(
     parsed_pdf = getattr(runtime, "parsed_pdf", None)
     if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
         return [], 0
+    document_pages = _complete_pdf_pages(parsed_pdf)
     if (
-        not parsed_pdf.pages
-        or parsed_pdf.pages[0].page != 1
-        or parsed_pdf.pages[-1].page != parsed_pdf.page_count
+        not document_pages
+        or document_pages[0].page != 1
+        or document_pages[-1].page != len(document_pages)
     ):
         return [], 0
 
     targets = tuple(getattr(context, "targets", ()))
     target_pages = {target.raw_page for target in targets}
+    if not target_pages:
+        return [], 0
     text_by_page = {target.raw_page: target.text for target in targets}
     headings_by_chapter: dict[
         str, list[tuple[int, ParsedPage, PdfLine, str]]
     ] = defaultdict(list)
-    for page in parsed_pdf.pages:
-        if target_pages and page.page not in target_pages:
-            continue
+    for page in document_pages:
         page_text = page.text or ""
         if (
             _TABLE_OF_CONTENTS_MARKER.search(page_text)
@@ -793,6 +819,10 @@ def _chapter_sequence_findings(
             candidate_count += 1
             if number == expected_number:
                 expected_number += 1
+                continue
+            if page.page not in target_pages:
+                if number > expected_number:
+                    expected_number = number + 1
                 continue
             original = line.text.strip()
             start = text_by_page.get(page.page, "").find(original)
@@ -901,6 +931,290 @@ def _highlights_description_findings(
     return findings, len(entries)
 
 
+def _list_materials_code_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    text_by_page = {target.raw_page: target.text for target in targets}
+    findings: list[OperationResult] = []
+    checked_pages = 0
+    for page in parsed_pdf.pages:
+        if target_pages and page.page not in target_pages:
+            continue
+        footer = revision.extract_footer(page)
+        if (
+            footer is None
+            or revision.page_key_prefix(footer.page_key).casefold() != "lm"
+            or _LIST_OF_MATERIALS_TITLE_RE.search(page.text or "") is None
+        ):
+            continue
+
+        designation_header = next(
+            (span for span in page.spans if span.text.strip().upper() == "DESIGNATION"),
+            None,
+        )
+        code_header = next(
+            (span for span in page.spans if span.text.strip().upper() == "CODE"),
+            None,
+        )
+        suppliers_header = next(
+            (span for span in page.spans if _SUPPLIERS_HEADER_RE.match(span.text.strip())),
+            None,
+        )
+        if designation_header is None or code_header is None or suppliers_header is None:
+            continue
+
+        designation_center = (designation_header.bbox[0] + designation_header.bbox[2]) / 2
+        code_center = (code_header.bbox[0] + code_header.bbox[2]) / 2
+        suppliers_center = (suppliers_header.bbox[0] + suppliers_header.bbox[2]) / 2
+        column_left = (designation_center + code_center) / 2
+        column_right = (code_center + suppliers_center) / 2
+        header_bottom = max(
+            designation_header.bbox[3],
+            code_header.bbox[3],
+            suppliers_header.bbox[3],
+        )
+        designation_data = [
+            span
+            for span in page.spans
+            if (span.bbox[0] + span.bbox[2]) / 2 < column_left
+            and span.bbox[1] > header_bottom
+            and span.text.strip()
+        ]
+        if not designation_data:
+            continue
+        first_data_top = min(span.bbox[1] for span in designation_data)
+        checked_pages += 1
+
+        for row in revision.visual_rows(page.spans):
+            if min(span.bbox[1] for span in row) < first_data_top - 3.0:
+                continue
+            for span in row:
+                center_x = (span.bbox[0] + span.bbox[2]) / 2
+                if (
+                    not column_left <= center_x < column_right
+                    or not any(character in span.text for character in "()")
+                ):
+                    continue
+                original = span.text.strip()
+                start = text_by_page.get(page.page, "").find(original)
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=original,
+                        expected="Code sans parentheses",
+                        message=(
+                            f"Le code « {original} » de la page LM doit etre ecrit "
+                            "sans parentheses."
+                        ),
+                        original=original,
+                        proposed=original.replace("(", "").replace(")", ""),
+                        span=(start, start + len(original)) if start >= 0 else None,
+                        page=page.page,
+                        bbox=span.bbox,
+                    )
+                )
+    return findings, checked_pages
+
+
+def _numerical_index_order_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0
+    document_pages = _complete_pdf_pages(parsed_pdf)
+    if (
+        not document_pages
+        or document_pages[0].page != 1
+        or document_pages[-1].page != len(document_pages)
+    ):
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    if not target_pages:
+        return [], 0
+    text_by_page = {target.raw_page: target.text for target in targets}
+    index_pages: list[tuple[str, int, ParsedPage, float]] = []
+    for page in document_pages:
+        footer = revision.extract_footer(page)
+        if footer is None or footer.page_key is None:
+            continue
+        page_match = _NUMERICAL_INDEX_PAGE_RE.fullmatch(footer.page_key)
+        if page_match is None:
+            continue
+        part_headers = [
+            span
+            for span in page.spans
+            if span.text.strip().upper() == "PART NUMBER"
+        ]
+        if not part_headers:
+            continue
+        part_header = min(part_headers, key=lambda span: span.bbox[0])
+        header_center = (part_header.bbox[1] + part_header.bbox[3]) / 2
+        part_center_x = (part_header.bbox[0] + part_header.bbox[2]) / 2
+        following_headers = [
+            span
+            for span in page.spans
+            if (
+                (span.bbox[0] + span.bbox[2]) / 2 > part_center_x + 5.0
+                and abs((span.bbox[1] + span.bbox[3]) / 2 - header_center) <= 50.0
+                and (
+                    span.text.strip().upper() in _NI_HEADER_LABELS
+                    or span.text.strip().upper().startswith("CH-SECT")
+                )
+            )
+        ]
+        if not following_headers:
+            continue
+        next_header = min(
+            following_headers,
+            key=lambda span: (span.bbox[0] + span.bbox[2]) / 2,
+        )
+        next_center_x = (next_header.bbox[0] + next_header.bbox[2]) / 2
+        column_right = (part_center_x + next_center_x) / 2
+
+        header_spans = [
+            span
+            for span in page.spans
+            if (
+                abs((span.bbox[1] + span.bbox[3]) / 2 - header_center) <= 60.0
+                and (
+                    span.text.strip().upper() in _NI_HEADER_LABELS
+                    or span.text.strip().upper().startswith("CH-SECT")
+                )
+            )
+        ]
+        header_bottom = max(span.bbox[3] for span in [part_header, *header_spans])
+        index_pages.append(
+            (
+                page_match.group("manual").casefold(),
+                int(page_match.group("page")),
+                page,
+                column_right,
+            )
+        )
+
+    checked_numbers = 0
+    part_numbers_by_manual: dict[
+        str,
+        list[
+            tuple[
+                str,
+                tuple[int, str],
+                ParsedPage,
+                tuple[float, float, float, float],
+            ]
+        ],
+    ] = defaultdict(list)
+    for manual, _ordinal, page, column_right in sorted(
+        index_pages, key=lambda item: (item[0], item[1])
+    ):
+        part_headers = [
+            span
+            for span in page.spans
+            if span.text.strip().upper() == "PART NUMBER"
+        ]
+        if not part_headers:
+            continue
+        part_header = min(part_headers, key=lambda span: span.bbox[0])
+        header_center = (part_header.bbox[1] + part_header.bbox[3]) / 2
+        header_spans = [
+            span
+            for span in page.spans
+            if (
+                abs((span.bbox[1] + span.bbox[3]) / 2 - header_center) <= 60.0
+                and (
+                    span.text.strip().upper() in _NI_HEADER_LABELS
+                    or span.text.strip().upper().startswith("CH-SECT")
+                )
+            )
+        ]
+        header_bottom = max(span.bbox[3] for span in [part_header, *header_spans])
+        for row in revision.visual_rows(page.spans):
+            if (
+                min(span.bbox[1] for span in row) <= header_bottom
+                or (
+                    page.page_height > 0
+                    and max(span.bbox[3] for span in row) > page.page_height * 0.94
+                )
+            ):
+                continue
+            part_spans = [
+                span
+                for span in row
+                if (span.bbox[0] + span.bbox[2]) / 2 < column_right
+            ]
+            part_number = "".join(span.text.strip() for span in part_spans)
+            if not any(character.isalnum() for character in part_number):
+                continue
+            part_number_key = _ni_part_number_sort_key(part_number)
+            checked_numbers += 1
+            bbox = (
+                min(span.bbox[0] for span in part_spans),
+                min(span.bbox[1] for span in part_spans),
+                max(span.bbox[2] for span in part_spans),
+                max(span.bbox[3] for span in part_spans),
+            )
+            part_numbers_by_manual[manual].append(
+                (part_number, part_number_key, page, bbox)
+            )
+
+    findings: list[OperationResult] = []
+    for manual, entries in part_numbers_by_manual.items():
+        sequence_lengths = [1] * len(entries)
+        predecessors = [-1] * len(entries)
+        for index, (_part_number, part_number_key, _page, _bbox) in enumerate(entries):
+            for previous_index in range(index):
+                if (
+                    entries[previous_index][1] <= part_number_key
+                    and sequence_lengths[previous_index] + 1 > sequence_lengths[index]
+                ):
+                    sequence_lengths[index] = sequence_lengths[previous_index] + 1
+                    predecessors[index] = previous_index
+
+        in_order: set[int] = set()
+        index = (
+            max(range(len(sequence_lengths)), key=sequence_lengths.__getitem__)
+            if sequence_lengths
+            else -1
+        )
+        while index >= 0:
+            in_order.add(index)
+            index = predecessors[index]
+
+        for index, (part_number, _key, page, bbox) in enumerate(entries):
+            if index in in_order or page.page not in target_pages:
+                continue
+            start = text_by_page.get(page.page, "").find(part_number)
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=part_number,
+                    expected="Part Number en ordre alphanumerique croissant",
+                    message=(
+                        f"Le Part Number « {part_number} » de la page NI/NUM "
+                        f"{manual} est hors de la sous-sequence alphanumerique "
+                        "croissante et doit etre repositionne."
+                    ),
+                    original=part_number,
+                    proposed="",
+                    span=(start, start + len(part_number)) if start >= 0 else None,
+                    page=page.page,
+                    bbox=bbox,
+                )
+            )
+    return findings, checked_numbers
+
+
 def _document_structure_findings(
     context: Any,
     parameters: Mapping[str, Any],
@@ -919,6 +1233,12 @@ def _document_structure_findings(
             if control == "highlights_deleted_description"
             else "Une description de modification"
         )
+    elif control == "list_materials_code_parentheses":
+        findings, checked = _list_materials_code_findings(context)
+        expected = "Code de la LIST OF MATERIALS sans parentheses"
+    elif control == "ni_part_number_order":
+        findings, checked = _numerical_index_order_findings(context)
+        expected = "Part Number numeriques en ordre croissant"
     else:
         raise ValueError(f"unknown document_structure control: {control}")
     return findings, checked, expected
