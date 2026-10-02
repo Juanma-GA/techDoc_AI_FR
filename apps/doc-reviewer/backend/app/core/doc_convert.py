@@ -33,6 +33,7 @@ dependent du moteur de rendu.
 from __future__ import annotations
 
 import glob
+import io
 import logging
 import os
 import shutil
@@ -40,6 +41,7 @@ import subprocess
 import tempfile
 import threading
 import uuid
+import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -452,6 +454,37 @@ def _label_hint(errors: list[str], target: str) -> str:
     return ""
 
 
+_OLE2_MAGIC = bytes.fromhex("D0CF11E0A1B11AE1")  # Word 97-2003 (.doc)
+
+
+def _require_genuine_format(data: bytes, suffix: str) -> None:
+    """Le contenu doit etre du format annonce par l'extension AVANT d'etre
+    confie a Word. Word ouvre n'importe quoi (RTF, HTML, MHT, texte) renomme en
+    `.doc` : des formats historiquement porteurs d'exploits (equation editor,
+    ms-msdt...) qui n'ont rien a faire dans une revue documentaire."""
+    if suffix == ".doc":
+        genuine = data.startswith(_OLE2_MAGIC)
+    elif suffix == ".docx":
+        genuine = data.startswith(b"PK")
+        if genuine:
+            try:
+                with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                    genuine = "[Content_Types].xml" in archive.namelist()
+            except zipfile.BadZipFile:
+                genuine = False
+    elif suffix == ".pdf":
+        genuine = data[:1024].lstrip().startswith(b"%PDF-")
+    else:
+        genuine = False
+    if not genuine:
+        raise AppError(
+            "DOC_INVALID",
+            f"Le fichier n'est pas un {suffix} valide (contenu d'un autre format). "
+            "Ouvrez-le dans Word et enregistrez-le en .docx avant de le soumettre.",
+            status_code=400,
+        )
+
+
 def _convert(data: bytes, suffix: str, target: str) -> tuple[bytes | None, str | None, list[str]]:
     """Ecrit `data` dans %TEMP% puis essaie chaque moteur. Retourne
     `(octets, moteur, erreurs)`.
@@ -459,7 +492,8 @@ def _convert(data: bytes, suffix: str, target: str) -> tuple[bytes | None, str |
     Le fichier de travail vit dans `%TEMP%` (dossier local hors OneDrive) :
     l'automation Word echoue vers un dossier synchronise OneDrive.
     """
-    suffix = suffix if suffix.startswith(".") else f".{suffix}"
+    suffix = (suffix if suffix.startswith(".") else f".{suffix}").lower()
+    _require_genuine_format(data, suffix)
     tmp = Path(tempfile.mkdtemp(prefix="dr_conv_"))
     src = tmp / f"input{suffix}"
     src.write_bytes(data)
