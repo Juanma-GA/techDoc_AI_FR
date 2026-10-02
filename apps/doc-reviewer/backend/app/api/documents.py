@@ -27,6 +27,7 @@ from app.core.document_context import (
 )
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
+from app.core.security import read_upload_limited
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Document, EditHistory, StandardVersion
 from app.db.session import get_db
@@ -399,7 +400,7 @@ def upload_document(
             "Les archives .zip doivent etre envoyees via /documents/batch",
             status_code=400,
         )
-    data = file.file.read()
+    data = read_upload_limited(file, settings.max_upload_size_bytes)
     prepared = ingest.prepare_document(name, data)
     if prepared.working_format == "docx":
         return _persist_docx(
@@ -450,7 +451,10 @@ def upload_documents_batch(
         db,
         request.app.state.client_configuration,
     )
-    raw_items = [(f.filename or "upload", f.file.read()) for f in files]
+    raw_items = [
+        (f.filename or "upload", read_upload_limited(f, settings.max_upload_size_bytes))
+        for f in files
+    ]
     expanded, ignored = ingest.expand_uploads(raw_items)
 
     created: list[dict] = []

@@ -59,11 +59,37 @@ def validate_pdf_bytes(raw: bytes, max_size: int) -> None:
         )
 
 
+_READ_CHUNK = 1024 * 1024
+
+
+def read_upload_limited(upload: UploadFile, max_size: int) -> bytes:
+    """Lit un fichier uploade par blocs et s'arrete des que `max_size` est depasse.
+
+    `upload.file.read()` chargeait le fichier ENTIER en memoire avant que la
+    taille maximale ne soit verifiee : la limite MAX_UPLOAD_SIZE_MB ne protegeait
+    donc pas la memoire du poste. Ici, au plus `max_size` + un bloc est lu.
+    """
+    buffer = bytearray()
+    while True:
+        chunk = upload.file.read(_READ_CHUNK)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > max_size:
+            name = safe_filename(upload.filename)
+            raise AppError(
+                "FILE_TOO_LARGE",
+                f"{name} depasse la taille max ({max_size // (1024 * 1024)} Mo).",
+                status_code=413,
+            )
+    return bytes(buffer)
+
+
 def read_and_validate_pdf(upload: UploadFile, max_size: int) -> tuple[bytes, str]:
     safe_name = safe_filename(upload.filename)
     ext = Path(safe_name).suffix.lower()
     if ext != ".pdf":
         raise AppError("UPLOAD_BAD_EXT", "Extension non supportée — PDF uniquement", status_code=400)
-    raw = upload.file.read()
+    raw = read_upload_limited(upload, max_size)
     validate_pdf_bytes(raw, max_size)
     return raw, safe_name
