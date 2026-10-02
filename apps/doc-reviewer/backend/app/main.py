@@ -29,6 +29,7 @@ from app.checks.client_registry import (
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
+from app.core.request_guard import CSRF_HEADER, RequestGuardMiddleware
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
 from app.db.seed import sync_user_standard
 from app.db.session import SessionLocal
@@ -53,13 +54,48 @@ def _is_local_origin(origin: str) -> bool:
     return "localhost" in o or "127.0.0.1" in o or "[::1]" in o
 
 
+def _is_exposed_deployment() -> bool:
+    """Deploiement expose = bind non local, OU instance declaree derriere un
+    reverse proxy (BEHIND_AUTH_PROXY) meme si uvicorn reste sur 127.0.0.1 —
+    cas d'un nginx place devant l'application dans le meme hote/conteneur."""
+    return not _is_local_bind() or settings.behind_auth_proxy
+
+
+def _validate_encryption_key() -> None:
+    """Une ENCRYPTION_KEY fournie mais invalide est refusee dans TOUS les modes :
+    sinon la cle Mistral stockee devenait silencieusement indechiffrable (lue
+    comme « absente ») au lieu d'echouer clairement."""
+    if not settings.encryption_key:
+        return
+    from app.core.encryption import EncryptionError, SecretManager
+
+    try:
+        SecretManager(settings.encryption_key)
+    except EncryptionError as exc:
+        raise RuntimeError(
+            "ENCRYPTION_KEY invalide (cle Fernet attendue : 32 octets en base64 "
+            "url-safe, 44 caracteres). Generer une cle via "
+            "app.core.encryption.generate_key()."
+        ) from exc
+
+
 def _validate_security_posture() -> None:
-    """Refuse de demarrer en posture deploiement (bind expose) si les protections
-    sensibles ne sont pas configurees. Inerte en local (bind 127.0.0.1)."""
-    if _is_local_bind():
+    """Refuse de demarrer en posture deploiement (bind expose ou reverse proxy)
+    si les protections sensibles ne sont pas configurees. Inerte en local
+    (bind 127.0.0.1 sans proxy) ; l'exposition non declaree est en plus
+    bloquee requete par requete par `core.request_guard`."""
+    _validate_encryption_key()
+    if not _is_exposed_deployment():
         return
 
     problems: list[str] = []
+    if not settings.behind_auth_proxy:
+        problems.append(
+            "BEHIND_AUTH_PROXY non atteste : l'application n'a aucune "
+            "authentification integree et ne doit etre exposee que derriere un "
+            "reverse proxy authentifiant (SSO). Mettre BEHIND_AUTH_PROXY=true "
+            "uniquement si c'est le cas."
+        )
     if not settings.encryption_configured:
         problems.append(
             "ENCRYPTION_KEY manquante ou trop courte : la cle Mistral serait "
@@ -73,8 +109,9 @@ def _validate_security_posture() -> None:
         )
     if problems:
         raise RuntimeError(
-            "Posture de securite invalide pour un bind expose ("
-            f"BIND_HOST={settings.bind_host}) :\n  - " + "\n  - ".join(problems)
+            "Posture de securite invalide pour un deploiement expose ("
+            f"BIND_HOST={settings.bind_host}, BEHIND_AUTH_PROXY="
+            f"{settings.behind_auth_proxy}) :\n  - " + "\n  - ".join(problems)
         )
 
 
@@ -98,10 +135,13 @@ def create_app() -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-Requested-With", REQUEST_ID_HEADER],
+        allow_headers=["Content-Type", "Authorization", CSRF_HEADER, REQUEST_ID_HEADER],
         expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(RequestIdMiddleware)
+    # Ajoute en DERNIER = middleware le plus externe : Host / Origin / en-tete
+    # anti-CSRF / exposition sont verifies avant tout traitement (CORS compris).
+    app.add_middleware(RequestGuardMiddleware)
 
     register_error_handlers(app)
 
@@ -162,7 +202,10 @@ def _mount_frontend(app: FastAPI) -> None:
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
 
-        candidate = (FRONTEND_DIST / full_path).resolve()
+        relative = _safe_dist_relative_path(full_path)
+        if relative is None:
+            raise HTTPException(status_code=404)
+        candidate = FRONTEND_DIST.joinpath(*relative).resolve()
         try:
             candidate.relative_to(dist_resolved)
         except ValueError as exc:
@@ -173,6 +216,28 @@ def _mount_frontend(app: FastAPI) -> None:
         if not index_html.exists():
             raise HTTPException(status_code=500, detail="frontend dist incomplete")
         return FileResponse(index_html, headers=no_cache)
+
+
+def _safe_dist_relative_path(full_path: str) -> tuple[str, ...] | None:
+    """Valide LEXICALEMENT un chemin d'URL avant tout acces disque.
+
+    Le controle `relative_to` apres `resolve()` arrivait trop tard sous Windows :
+    `/%5C%5Chote%5Cpartage` donne `\\\\hote\\partage`, un chemin UNC que
+    `resolve()` / `is_file()` ouvrent -> connexion SMB sortante et fuite du hash
+    NTLM de l'utilisateur, declenchable par une simple balise <img> d'un site
+    tiers. On refuse donc separateurs Windows, lecteurs, flux NTFS (`:`),
+    octets nuls, chemins absolus et segments `..` sans toucher au disque.
+    """
+    if not full_path:
+        return ()
+    if any(ch in full_path for ch in ("\\", ":", "\x00")):
+        return None
+    if full_path.startswith("/"):
+        return None
+    parts = tuple(part for part in full_path.split("/") if part not in ("", "."))
+    if any(part == ".." for part in parts):
+        return None
+    return parts
 
 
 def _mount_missing_dist(app: FastAPI) -> None:
