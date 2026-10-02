@@ -112,6 +112,20 @@ _LO_PROFILE = Path(tempfile.gettempdir()) / "dr_lo_profile"
 _SOFFICE_LOCK = threading.Lock()
 
 
+def _libreoffice_command(soffice: str, src: Path, outdir: Path, target_format: str) -> list[str]:
+    cmd = [
+        soffice,
+        f"-env:UserInstallation={_LO_PROFILE.as_uri()}",
+        "--headless",
+        "--norestore",
+    ]
+    # Un PDF s'ouvre par defaut dans Draw, qui n'a aucun filtre d'export
+    # .docx/.doc ("no export filter") : on force l'import Writer.
+    if src.suffix.lower() == ".pdf":
+        cmd.append("--infilter=writer_pdf_import")
+    return [*cmd, "--convert-to", target_format, "--outdir", str(outdir), str(src)]
+
+
 def _convert_libreoffice_format(src: Path, outdir: Path, target_format: str) -> Path | None:
     """Convertit `src` vers `target_format` ("pdf", "docx", "doc") via LibreOffice headless."""
     soffice = _find_soffice()
@@ -120,17 +134,7 @@ def _convert_libreoffice_format(src: Path, outdir: Path, target_format: str) -> 
     try:
         with _SOFFICE_LOCK:
             result = subprocess.run(
-                [
-                    soffice,
-                    f"-env:UserInstallation={_LO_PROFILE.as_uri()}",
-                    "--headless",
-                    "--norestore",
-                    "--convert-to",
-                    target_format,
-                    "--outdir",
-                    str(outdir),
-                    str(src),
-                ],
+                _libreoffice_command(soffice, src, outdir, target_format),
                 check=True,
                 capture_output=True,
                 timeout=180,
@@ -519,7 +523,10 @@ def _convert(data: bytes, suffix: str, target: str) -> tuple[bytes | None, str |
                 lo_dir = tmp / "lo"
                 lo_dir.mkdir(exist_ok=True)
                 produced = _convert_libreoffice_format(src, lo_dir, target)
-                error = None if produced else "LibreOffice absent ou conversion en echec"
+                error = None if produced else (
+                    "conversion en echec (voir le journal)" if _find_soffice()
+                    else "LibreOffice introuvable (installer LibreOffice ou definir DR_SOFFICE_PATH)"
+                )
             if produced is not None and produced.exists():
                 return produced.read_bytes(), engine, errors
             errors.append(f"{engine}: {error}")

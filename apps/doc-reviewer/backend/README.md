@@ -16,13 +16,21 @@ downloads an explicit output. `?format=commented` produces the commented PDF
 without applying corrections. For DOCX, this renders a temporary PDF and does
 not replace the DOCX working version. DOCX-to-DOC may lose layout fidelity.
 
-## Conversions (Microsoft Word)
+## Conversions (Microsoft Word or LibreOffice)
 
 Every conversion (`.doc`/`.docx` → PDF, `.doc` → `.docx`, `.docx` → `.doc`,
-PDF → `.docx`/`.doc`) runs through the desktop Microsoft Word of the laptop
-(COM automation, macros forced off). LibreOffice is optional: it is only tried
-when Word is absent or fails (`OFFICE_CONVERTER=auto`), or used alone
-(`OFFICE_CONVERTER=libreoffice`).
+PDF → `.docx`/`.doc`) runs through one of two engines, chosen by
+`OFFICE_CONVERTER`:
+
+| Value | Engine |
+|---|---|
+| `auto` (default) | Microsoft Word, then LibreOffice if Word is absent or fails |
+| `word` | Microsoft Word only (COM automation, macros forced off) |
+| `libreoffice` | LibreOffice only (no Word needed). Found on PATH, in Program Files, as a portable copy, or at `DR_SOFFICE_PATH` |
+
+Both engines are supported and tested; the installation guide exists in a Word
+edition and a LibreOffice edition. `.docx` files produced by LibreOffice carry
+no sensitivity label.
 
 Where Microsoft Purview makes a sensitivity label mandatory, Word refuses to
 save an unlabelled `.docx`. Set `WORD_SENSITIVITY_LABEL_ID` (label GUID, see
@@ -36,6 +44,13 @@ Real-Word tests (opt-in, Windows with Word):
 set DR_TEST_REAL_WORD=1
 set WORD_SENSITIVITY_LABEL_ID=<label GUID>
 python -m pytest tests\test_word_real.py -v
+```
+
+Real-LibreOffice tests (opt-in, LibreOffice installed or `DR_SOFFICE_PATH` set):
+
+```bat
+set DR_TEST_REAL_LIBREOFFICE=1
+python -m pytest tests\test_libreoffice_real.py -v
 ```
 
 Example:

@@ -31,7 +31,7 @@ The Vite development proxy and CORS configuration use the same port.
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is optional for checklist rules. Microsoft Word (desktop, Microsoft 365) performs every document conversion; LibreOffice is optional. On a tenant with mandatory sensitivity labels, set `WORD_SENSITIVITY_LABEL_ID` (see `backend/README.md`).
+Python 3.11+, Node 20, and pnpm 9. Mistral is optional for checklist rules. Document conversions need either Microsoft Word (desktop, Microsoft 365) or LibreOffice, chosen with `OFFICE_CONVERTER` (default: Word, then LibreOffice). With Word on a tenant with mandatory sensitivity labels, set `WORD_SENSITIVITY_LABEL_ID` (see `backend/README.md`).
 
 ## Start On Windows
 

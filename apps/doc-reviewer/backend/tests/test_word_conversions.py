@@ -389,3 +389,13 @@ def test_word_crashing_before_the_file_is_written_is_a_failure(fake_word, monkey
 
     with pytest.raises(AppError):
         doc_convert.office_to_docx_bytes(DOC, ".doc")
+
+
+@pytest.mark.parametrize(("suffix", "imports_as_writer"), [(".pdf", True), (".doc", False), (".docx", False)])
+def test_libreoffice_opens_a_pdf_in_writer(suffix, imports_as_writer) -> None:
+    """LibreOffice opens a PDF in Draw, which cannot export .docx/.doc."""
+    cmd = doc_convert._libreoffice_command(
+        "soffice", pathlib.Path(f"input{suffix}"), pathlib.Path("out"), "docx"
+    )
+    assert ("--infilter=writer_pdf_import" in cmd) is imports_as_writer
+    assert cmd[-5:] == ["--convert-to", "docx", "--outdir", "out", f"input{suffix}"]
