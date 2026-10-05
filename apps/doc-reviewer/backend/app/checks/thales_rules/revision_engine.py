@@ -1227,7 +1227,7 @@ def _special_footer_section(page: ParsedPage) -> str | None:
     return None
 
 
-def build_revision_state(parsed: ParsedPdf, document: object) -> RevisionState:
+def build_revision_state(parsed: ParsedPdf, document: object | None) -> RevisionState:
     """Extract the three sources and mark every parsed page as modified or not.
 
     Unmatched pages default to unchanged when all three revision sources are
@@ -1626,6 +1626,72 @@ def _highlights_status_findings(state: RevisionState) -> list[RevisionFinding]:
             )
         )
     return findings
+
+
+def _highlights_previous_revision_findings(
+    current: RevisionState,
+    previous: RevisionState,
+) -> list[RevisionFinding]:
+    """Check Highlights designations against pages in the previous LEP."""
+    if not previous.lep:
+        return []
+
+    findings: list[RevisionFinding] = []
+    for entry in current.highlights:
+        if _LEP_TITLE_RE.search(entry.subject):
+            continue
+        page_keys = [
+            key for key in entry.page_keys
+            if page_key_prefix(key) != "LEP"
+        ]
+        if not page_keys or entry.status not in _HIGHLIGHTS_STATUSES:
+            continue
+
+        previous_presence = {
+            key: _previous_lep_page_presence(previous, key)
+            for key in page_keys
+        }
+        if entry.status == "N":
+            conflicting_pages = sorted(
+                key for key, present in previous_presence.items() if present is True
+            )
+            expected = "R ou U"
+            detail = "figure déjà dans la LEP N-1"
+        else:
+            conflicting_pages = sorted(
+                key for key, present in previous_presence.items() if present is False
+            )
+            expected = "N" if entry.status in {"R", "U"} else "une page présente en N-1"
+            detail = "ne figure pas dans la LEP N-1"
+        if not conflicting_pages:
+            continue
+
+        findings.append(
+            RevisionFinding(
+                control=HIGHLIGHTS_STATUS_CONSISTENCY,
+                message=(
+                    f"La désignation « {entry.status} » des Highlights pour "
+                    f"« {entry.pages_text} » est incohérente avec la LEP N-1 : "
+                    f"{', '.join(conflicting_pages)} {detail}. "
+                    f"Vérifier la désignation (attendu : {expected})."
+                ),
+                original=entry.status,
+                proposed="",
+                page=entry.page,
+                bbox=entry.status_bbox,
+            )
+        )
+    return findings
+
+
+def _previous_lep_page_presence(previous: RevisionState, page_key: str) -> bool | None:
+    entries = previous.lep_entries_for_key(page_key)
+    if len(entries) > 1:
+        return None
+    if not entries:
+        return False
+    entry = entries[0]
+    return not entry.is_blank and not _DELETED_LEP_RE.match(entry.date_text)
 
 
 def _invalid_highlights_designation_findings(

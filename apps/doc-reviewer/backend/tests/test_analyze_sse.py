@@ -114,6 +114,100 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     assert any(r["rule_kind"] == "units" for r in rows)
 
 
+def test_analyze_accepts_previous_revision_pdf(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+    monkeypatch,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    captured_previous: list = []
+
+    def capture_previous(*_args, **kwargs):
+        captured_previous.append(kwargs["previous_revision_pdf"])
+        return []
+
+    monkeypatch.setattr(analyze_api, "run_all", capture_previous)
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        files={
+            "previous_revision_file": (
+                "manual-rev-00.pdf",
+                sample_pdf_bytes,
+                "application/pdf",
+            )
+        },
+    ) as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes())
+
+    assert b"done" in body
+    assert len(captured_previous) == 1
+    assert captured_previous[0].page_count == 1
+
+
+def test_analyze_rejects_non_pdf_previous_revision(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    response = client.post(
+        f"/api/v1/documents/{document_id}/analyze",
+        files={
+            "previous_revision_file": (
+                "manual-rev-00.docx",
+                sample_pdf_bytes,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "PREVIOUS_REVISION_BAD_FORMAT"
+
+
+def test_analyze_rejects_invalid_pdf_previous_revision(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    response = client.post(
+        f"/api/v1/documents/{document_id}/analyze",
+        files={
+            "previous_revision_file": (
+                "manual-rev-00.pdf",
+                b"not a PDF",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "PREVIOUS_REVISION_INVALID_PDF"
+
+
 def test_manual_page_rerun_preserves_suggestions_on_other_pages(
     client: TestClient,
 ) -> None:

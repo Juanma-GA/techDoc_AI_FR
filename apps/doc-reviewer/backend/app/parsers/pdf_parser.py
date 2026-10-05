@@ -71,8 +71,8 @@ class ParsedPdf:
     full_document_pages: list[ParsedPage] | None = None
 
 
-def parse_pdf(path: str | Path) -> ParsedPdf:
-    doc = fitz.open(str(path))
+def parse_pdf(path: str | Path | bytes) -> ParsedPdf:
+    doc = fitz.open(stream=path, filetype="pdf") if isinstance(path, bytes) else fitz.open(str(path))
     try:
         is_signed = _has_digital_signature(doc)
         pages: list[ParsedPage] = []

@@ -25,21 +25,16 @@ OTHER :
 
 - Pourquoi ça met bcp de temps l'analyse avant de tout afficher ? ça passe de 5% à 100% direct apres 20 secondes au lieu d'analyser petit à petit et d'afficher le poucentage en meme temps
 
-PROBLEMES REGLES : 
 
-- Custom Revision Page Not In Lep : Page du document absente de la liste des pages effectives Page 801
---> Pourquoi pour cette erreur il met une box en page 1 sur le logo et pas au niveau de la LEP. Et surtout pourquoi il détecte cette erreur alors qu'il y a bien la page 801 dans le LEP et existe bien dans le document...
+21-33-13 : 
+JUL 30/26
+JUL 30/73
+AUG 30/75
+05
+33140-02
 
-- Custom Paragraph Justification : Il detecte actuellement des pb de justification sur "une seule ligne" est ce que c'est possible ça ? Si non, faire en sorte qu'il faut minimum 2 lignes à de
-
-- Custom Storage Note Page 10 : Règle non satisfaite : L'introduction ou les catégories NOTE de la page STORAGE sont absentes ou incorrectes. Élément attendu: "Pressure:" --> c'est pas la bonne page... il lis "STORAGE" sauf que ce n'est pas la page STORAGE, le pied de page est bien LEP PAge 2 et le titre de la page c'est "List of effective pages" souligné donc il devrait pas détecter que la page est STORAGE
-
-- Custom Introduction Shop Verification p.17 --> il dit qu'il manque le "Shop Verification: A. Verification of the procedures in this manual (1) The shop verification will be done at the first repair of the equipment." Alors qu'il y a bien écrit "Shop Verification 
-A. 
-Verification of the procedures in this manual 
-(1) 
-The shop verification will be done at the first repair of the 
-equipment." 
-Peut être pas les mêmes espaces et tout mais y'a bien écrit ce qu'il faut !
-
-- 
+79-30-02:
+JUL 27/26
+JUL 66
+01
+1-879-SB

@@ -952,6 +952,82 @@ def test_compiled_highlights_status_rule_comments_on_the_designation_cell() -> N
     assert status_raws[0].severity == "warning"
 
 
+def test_compiled_highlights_status_rule_uses_previous_lep() -> None:
+    current = _consistent_document()
+    current.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Page 401", "N"),
+            ("Assembly", "Page 503", "R"),
+            ("Deleted page", "Page 502", "D"),
+            ("New page", "Page 504", "N"),
+            ("Old unchanged page", "Page 406", "U"),
+            ("Missing old unchanged page", "Page 505", "U"),
+            ("Missing deleted page", "Page 506", "D"),
+        ]
+    )
+    previous = _document(
+        [
+            _lep_page(
+                left=[
+                    ("Repair", "401", "JUL 66"),
+                    ("Old unchanged page", "406", "JUL 66"),
+                ],
+                right=[("Deleted page", "502", "JUL 66")],
+            )
+        ]
+    )
+    status_rule = next(
+        rule for rule in _REVISION_RULES if rule.id == "CUSTOM_REVISION_HIGHLIGHTS_STATUS"
+    )
+
+    _results, raws = execute_pdf_rules(
+        current,
+        [status_rule],
+        document=_DOCUMENT,
+        previous_revision_pdf=previous,
+    )
+    status_raws = [raw for raw in raws if raw.rule_code == status_rule.id]
+
+    assert sorted((raw.original, raw.page) for raw in status_raws) == [
+        ("D", 1),
+        ("N", 1),
+        ("R", 1),
+        ("U", 1),
+    ]
+    assert all("LEP N-1" in raw.message for raw in status_raws)
+
+
+def test_compiled_highlights_status_rule_skips_ambiguous_previous_lep_pages() -> None:
+    current = _consistent_document()
+    current.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Page 401", "N"),
+        ]
+    )
+    previous = _document(
+        [
+            _lep_page(
+                left=[("Repair", "401", "JUL 66")],
+                right=[("Assembly", "401", "JUL 66")],
+            )
+        ]
+    )
+    status_rule = next(
+        rule for rule in _REVISION_RULES if rule.id == "CUSTOM_REVISION_HIGHLIGHTS_STATUS"
+    )
+
+    _results, raws = execute_pdf_rules(
+        current,
+        [status_rule],
+        document=_DOCUMENT,
+        previous_revision_pdf=previous,
+    )
+
+    assert not any(raw.rule_code == status_rule.id for raw in raws)
+
+
 def test_invalid_highlights_designation_is_reported_on_its_cell() -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(

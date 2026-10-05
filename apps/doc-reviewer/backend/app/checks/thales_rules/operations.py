@@ -10,6 +10,7 @@ from typing import Any
 
 from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
+from .revision_engine import _highlights_previous_revision_findings
 from .rules import (
     DOCUMENT_TYPE_PATTERN,
     DOCUMENT_TYPES,
@@ -508,6 +509,15 @@ def _findings(context: Any, parameters: Mapping[str, Any]) -> list[OperationResu
         raise ValueError("revision_consistency operation requires control")
 
     state = revision_state(parsed_pdf, getattr(runtime, "document", None))
+    previous_parsed_pdf = getattr(runtime, "previous_revision_pdf", None)
+    previous_state = (
+        revision_state(previous_parsed_pdf, None)
+        if previous_parsed_pdf is not None
+        else None
+    )
+    findings = revision.findings_for(state, control)
+    if control == revision.HIGHLIGHTS_STATUS_CONSISTENCY and previous_state is not None:
+        findings.extend(_highlights_previous_revision_findings(state, previous_state))
     targets = getattr(context, "targets", None)
     target_pages = (
         {target.raw_page for target in targets} if targets is not None else None
@@ -523,7 +533,7 @@ def _findings(context: Any, parameters: Mapping[str, Any]) -> list[OperationResu
             page=finding.page,
             bbox=finding.bbox,
         )
-        for finding in revision.findings_for(state, control)
+        for finding in findings
         if target_pages is None or finding.page in target_pages
     ]
 
@@ -538,6 +548,17 @@ def _evaluate_revision_consistency(
     runtime = getattr(context, "runtime", context)
     if getattr(runtime, "is_docx", False) or getattr(runtime, "parsed_pdf", None) is None:
         return OperationResult(status="INCONCLUSIVE", expected=control)
+    previous_parsed_pdf = getattr(runtime, "previous_revision_pdf", None)
+    if (
+        control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+        and previous_parsed_pdf is not None
+        and not revision_state(previous_parsed_pdf, None).lep
+    ):
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=control,
+            message="La LEP du PDF N-1 est absente ou inexploitable; la comparaison est ignorée.",
+        )
 
     findings = _findings(context, parameters)
     return findings[0] if findings else OperationResult(status="PASS", expected=control)

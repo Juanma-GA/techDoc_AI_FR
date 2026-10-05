@@ -5,16 +5,19 @@ import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from queue import Empty, SimpleQueue
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+import fitz
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.checks.client_registry import active_standard_versions
+from app.config import settings
 from app.core.errors import AppError
 from app.core.document_context import missing_document_context
 from app.core.compiled_rules import RuleResult
@@ -26,6 +29,7 @@ from app.core.page_range import (
     select_pdf_page_numbers,
 )
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
+from app.core.security import read_upload_bounded
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
 from app.db.session import SessionLocal, get_db
@@ -142,11 +146,54 @@ def analyze_stream(
         default=None,
         description="JSON des statuts de page corriges manuellement, indexe par numero physique.",
     ),
+    previous_revision_file: UploadFile | None = File(
+        default=None,
+        description="PDF optionnel du CMM de revision N-1 pour les controles comparatifs.",
+    ),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    previous_revision_bytes: bytes | None = None
+    if previous_revision_file is not None:
+        if doc.working_format != "pdf":
+            raise AppError(
+                "PREVIOUS_REVISION_UNSUPPORTED",
+                "La comparaison avec le CMM N-1 est disponible uniquement pour les PDF.",
+                status_code=422,
+            )
+        filename = previous_revision_file.filename or ""
+        if Path(filename).suffix.lower() != ".pdf":
+            raise AppError(
+                "PREVIOUS_REVISION_BAD_FORMAT",
+                "Le CMM N-1 doit être fourni au format PDF.",
+                status_code=400,
+            )
+        previous_revision_bytes = read_upload_bounded(
+            previous_revision_file,
+            settings.max_upload_size_bytes,
+        )
+        try:
+            with fitz.open(stream=previous_revision_bytes, filetype="pdf") as previous_pdf:
+                previous_page_count = previous_pdf.page_count
+        except Exception as exc:  # noqa: BLE001
+            raise AppError(
+                "PREVIOUS_REVISION_INVALID_PDF",
+                "Le PDF du CMM N-1 est illisible.",
+                status_code=400,
+            ) from exc
+        if previous_page_count < 1:
+            raise AppError(
+                "PREVIOUS_REVISION_INVALID_PDF",
+                "Le PDF du CMM N-1 ne contient aucune page.",
+                status_code=400,
+            )
+    previous_revision_sha256 = (
+        hashlib.sha256(previous_revision_bytes).hexdigest()
+        if previous_revision_bytes is not None
+        else None
+    )
     client_configuration = request.app.state.client_configuration
     client_bundle = client_configuration.bundle
     previous_run = db.scalar(
@@ -299,6 +346,11 @@ def analyze_stream(
                 "page_number": page_number,
                 "page_overrides": parsed_page_overrides,
             },
+            "previous_revision": (
+                {"sha256": previous_revision_sha256}
+                if previous_revision_sha256 is not None
+                else None
+            ),
             "metadata": {
                 "client_metadata": doc.client_metadata or {},
                 "meta_cmm_number": doc.meta_cmm_number,
@@ -333,6 +385,7 @@ def analyze_stream(
     document_id_value = document_id
     run_id_value = run.id
     src_path = str(src)
+    previous_revision_bytes_value = previous_revision_bytes
     target_unit = doc.target_unit_system
     # Portail qualite : etat de revuabilite (homogene tous formats), signale en
     # tete de flux pour qu'un document non exploitable (scan sans couche texte)
@@ -392,6 +445,11 @@ def analyze_stream(
                 parsed = filter_docx(parsed, first_page_value, last_page_value)
             else:
                 parsed = await asyncio.to_thread(parse_pdf, src_path)
+            previous_parsed = (
+                await asyncio.to_thread(parse_pdf, previous_revision_bytes_value)
+                if previous_revision_bytes_value is not None
+                else None
+            )
             # `page.page_type` (le cas echeant) n'est peuple qu'une fois les
             # standards selectionnes connus : voir le classifieur invoque par
             # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
@@ -589,6 +647,7 @@ def analyze_stream(
                                     warnings=run_warnings,
                                     compiled_results=compiled_results,
                                     client_bundle=client_bundle,
+                                    previous_revision_pdf=previous_parsed,
                                 )
                             )
                         )

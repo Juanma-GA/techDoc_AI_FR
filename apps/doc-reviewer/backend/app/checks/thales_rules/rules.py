@@ -1804,9 +1804,9 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
     name="Designation Highlights coherente avec la LEP et le pied de page",
     description=(
         "La colonne Designation doit utiliser R, N, U ou D. Le controle verifie "
-        "la coherence des statuts avec la LEP et le pied de page; une page D ne "
-        "doit plus figurer dans la LEP ni dans le document courant. Sans la LEP "
-        "precedente, il ne peut pas departager R et N."
+        "la coherence des statuts avec la LEP et le pied de page. Si le PDF N-1 "
+        "est fourni, N doit etre absent de sa LEP, tandis que R, U et D doivent "
+        "y figurer; une page D ne doit plus figurer dans la LEP ni le document courant."
     ),
     message="La designation Highlights est incoherente avec les pages effectives.",
     kind="field_required",
@@ -1830,8 +1830,8 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
             "description": (
                 "Highlights Designation must be R, N, U, or D. The designation must "
                 "agree with the LEP and footer; a D page must no longer appear in "
-                "the current LEP or document. Without the previous LEP, this check "
-                "cannot distinguish R from N."
+                "the current LEP or document. When the previous PDF is provided, "
+                "N must be absent from its LEP, while R, U, and D must be present."
             ),
             "message": "The Highlights designation conflicts with the effective-page evidence.",
         }

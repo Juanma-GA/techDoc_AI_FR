@@ -75,6 +75,7 @@ class _EvalContext:
     # Required by the operators whose verdict spans the whole document
     # (cross-page consistency); None on the docx pipeline.
     parsed_pdf: ParsedPdf | None = None
+    previous_revision_pdf: ParsedPdf | None = None
 
 
 def document_metadata(document: Any | None) -> dict[str, str]:

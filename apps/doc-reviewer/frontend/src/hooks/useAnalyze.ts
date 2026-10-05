@@ -32,7 +32,11 @@ export type PageRevisionStatus = {
   source: "detected" | "manual";
 };
 
-export function useAnalyze(documentId: string | undefined, document?: Document) {
+export function useAnalyze(
+  documentId: string | undefined,
+  document?: Document,
+  previousRevisionFile?: File | null,
+) {
   const qc = useQueryClient();
   const clientConfig = useClientConfig();
   const legacyChecklistActive = useFiltersStore((s) => s.checklistActive);
@@ -92,9 +96,14 @@ export function useAnalyze(documentId: string | undefined, document?: Document) 
         params.set("page_overrides", JSON.stringify(overrides));
       }
       const url = `${API_BASE_URL}/documents/${documentId}/analyze?${params.toString()}`;
+      const body = new FormData();
+      if (previousRevisionFile) {
+        body.append("previous_revision_file", previousRevisionFile);
+      }
       const response = await fetch(url, {
         method: "POST",
         headers: { Accept: "text/event-stream" },
+        body: previousRevisionFile ? body : undefined,
       });
       if (!response.ok || !response.body) {
         let message = `HTTP ${response.status}`;
@@ -186,7 +195,7 @@ export function useAnalyze(documentId: string | undefined, document?: Document) 
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [contextReady, documentId, pageOverrides, qc, status, checklistActive]);
+  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive]);
 
   const correctPageStatus = useCallback((pageNumber: number, isModified: boolean) => {
     const nextOverrides = { ...pageOverrides, [pageNumber]: isModified };
