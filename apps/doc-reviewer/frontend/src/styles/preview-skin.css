@@ -313,6 +313,7 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .pdf-highlight { position: absolute; box-sizing: border-box; min-width: 0; min-height: 0; margin: 0; padding: 0; line-height: 0; appearance: none; border: 2px solid var(--warning); background: rgba(217, 119, 6, 0.12); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
 .pdf-highlight:hover, .pdf-highlight.active { background: rgba(37, 99, 235, 0.2); border-color: var(--brand); }
 .pdf-highlight.error { border-color: var(--danger); background: rgba(220, 38, 38, 0.12); }
+.pdf-highlight.error.active { border-color: var(--brand); background: rgba(37, 99, 235, 0.2); }
 
 /* Item de suggestion dans le panneau */
 .suggestion { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-2); transition: border-color 0.12s, box-shadow 0.12s, background 0.12s; }
