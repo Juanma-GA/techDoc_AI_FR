@@ -86,11 +86,13 @@ export function Validation() {
   const importedGenerated = useRef<string | null>(null);
   const [items, setItems] = useState<ValidationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [errorsOnly, setErrorsOnly] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const selected = items.find((item) => item.id === selectedId) ?? null;
+  const visibleItems = errorsOnly ? items.filter((item) => item.error_count > 0) : items;
+  const selected = visibleItems.find((item) => item.id === selectedId) ?? visibleItems[0] ?? null;
 
   const updateFromResults = (entries: ValidationItem[], results: DmValidationResult[]) => {
     const updated = new Map(
@@ -288,6 +290,16 @@ export function Validation() {
         <span className="badge info">
           {t("validation.summary.unverifiable", { count: unverifiableCount })}
         </span>
+        {items.length ? (
+          <label className="validation-error-filter">
+            <input
+              type="checkbox"
+              checked={errorsOnly}
+              onChange={(event) => setErrorsOnly(event.currentTarget.checked)}
+            />
+            <span>{t("validation.filterErrorsOnly")}</span>
+          </label>
+        ) : null}
         {pendingCount ? (
           <span className="validation-pending label">
             <Loader2 aria-hidden="true" className="validation-spin" size={14} />
@@ -310,8 +322,8 @@ export function Validation() {
 
       <div className="validation-grid">
         <section className="card validation-list-panel">
-          <h2 className="card-title">{t("validation.listTitle", { count: items.length })}</h2>
-          {items.length ? (
+          <h2 className="card-title">{t("validation.listTitle", { count: visibleItems.length })}</h2>
+          {visibleItems.length ? (
             <div className="validation-table-scroll">
               <table className="validation-table">
                 <thead>
@@ -325,11 +337,19 @@ export function Validation() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {visibleItems.map((item) => (
                     <tr
                       key={item.id}
-                      className={item.id === selectedId ? "is-selected" : ""}
-                      aria-selected={item.id === selectedId}
+                      className={item.id === selected?.id ? "is-selected" : ""}
+                      aria-selected={item.id === selected?.id}
+                      tabIndex={0}
+                      onClick={() => setSelectedId(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        setSelectedId(item.id);
+                      }}
                     >
                       <td>
                         <span className={`badge ${statusClass(item.status)}`}>
@@ -378,8 +398,17 @@ export function Validation() {
             </div>
           ) : (
             <div className="validation-empty-list">
-              <FileUp aria-hidden="true" size={24} />
-              <span>{t("validation.emptyList")}</span>
+              {items.length ? (
+                <>
+                  <CheckCircle2 aria-hidden="true" size={24} />
+                  <span>{t("validation.noErrorsToShow")}</span>
+                </>
+              ) : (
+                <>
+                  <FileUp aria-hidden="true" size={24} />
+                  <span>{t("validation.emptyList")}</span>
+                </>
+              )}
             </div>
           )}
         </section>

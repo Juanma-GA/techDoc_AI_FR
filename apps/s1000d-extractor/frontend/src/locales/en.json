@@ -227,6 +227,8 @@
     "brexDisabledHelp": "BREX validation will be added separately.",
     "clear": "Clear list",
     "emptyList": "Import one or more XML DMs to begin.",
+    "filterErrorsOnly": "DMs with errors only",
+    "noErrorsToShow": "No DMs contain errors.",
     "listTitle": "Documents ({{count}})",
     "pending": "Validation in progress ({{count}})",
     "remove": "Remove this DM",
