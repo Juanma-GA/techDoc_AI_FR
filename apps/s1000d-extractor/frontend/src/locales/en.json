@@ -257,6 +257,7 @@
       "unverifiable": "{{count}} unverifiable"
     },
     "detail": {
+      "panelTitle": "Result",
       "checking": "Validating XML against the local schema…",
       "valid": "The DM is valid.",
       "chooseIssue": "The S1000D Issue could not be detected. Choose a version to start validation.",

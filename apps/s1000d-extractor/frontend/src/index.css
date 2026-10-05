@@ -131,6 +131,8 @@
 
   .validation-list-panel,
   .validation-detail-panel {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     min-height: 360px;
   }
@@ -238,12 +240,25 @@
   .validation-empty-list,
   .validation-empty-detail {
     display: flex;
+    flex: 1;
     align-items: center;
     justify-content: center;
     gap: 10px;
     min-height: 260px;
     color: var(--fg-dim, inherit);
     text-align: center;
+  }
+
+  .validation-empty-drop {
+    padding: 16px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .validation-empty-drop.is-dragging {
+    border-color: var(--accent, currentColor);
+    background: color-mix(in srgb, currentColor 6%, transparent);
   }
 
   .validation-detail-panel {

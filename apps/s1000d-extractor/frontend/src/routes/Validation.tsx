@@ -89,6 +89,7 @@ export function Validation() {
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [listDragging, setListDragging] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const visibleItems = errorsOnly ? items.filter((item) => item.error_count > 0) : items;
@@ -397,7 +398,29 @@ export function Validation() {
               </table>
             </div>
           ) : (
-            <div className="validation-empty-list">
+            <div
+              className={`validation-empty-list${items.length === 0 ? " validation-empty-drop" : ""}${listDragging ? " is-dragging" : ""}`}
+              onDragEnter={(event) => {
+                if (items.length) return;
+                event.preventDefault();
+                setListDragging(true);
+              }}
+              onDragOver={(event) => {
+                if (items.length) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
+              onDragLeave={(event) => {
+                if (items.length || event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                setListDragging(false);
+              }}
+              onDrop={(event) => {
+                if (items.length) return;
+                event.preventDefault();
+                setListDragging(false);
+                importFiles(Array.from(event.dataTransfer.files));
+              }}
+            >
               {items.length ? (
                 <>
                   <CheckCircle2 aria-hidden="true" size={24} />
@@ -483,10 +506,13 @@ export function Validation() {
               ) : null}
             </>
           ) : (
-            <div className="validation-empty-detail">
-              <CheckCircle2 aria-hidden="true" size={24} />
-              <span>{t("validation.detail.selectDm")}</span>
-            </div>
+            <>
+              <h2 className="card-title">{t("validation.detail.panelTitle")}</h2>
+              <div className="validation-empty-detail">
+                <CheckCircle2 aria-hidden="true" size={24} />
+                <span>{t("validation.detail.selectDm")}</span>
+              </div>
+            </>
           )}
         </aside>
       </div>

@@ -257,6 +257,7 @@
       "unverifiable": "{{count}} non vérifiable(s)"
     },
     "detail": {
+      "panelTitle": "Résultat",
       "checking": "Validation du XML contre le schéma local…",
       "valid": "Le DM est valide.",
       "chooseIssue": "L’Issue S1000D n’a pas été détectée. Choisis une version pour lancer le contrôle.",
