@@ -7,6 +7,7 @@
   "nav": {
     "home": "Accueil",
     "migration": "Migration",
+    "validation": "Validation",
     "architecture": "Architecture",
     "data": "Données",
     "settings": "Paramètres",
@@ -205,6 +206,7 @@
     "generate": {
       "title": "Data Modules générés ({{count}})",
       "pmc": "Télécharger la PMC",
+      "validate": "Vérifier les DM",
       "violations": "{{count}} viol.",
       "missingFields": "{{count}} rubrique(s) template vide(s)",
       "cirUnresolved": "{{count}} réf. CIR non résolue(s)",
@@ -212,6 +214,53 @@
       "images": "Illustrations extraites ({{count}})",
       "imageAlt": "Illustration extraite {{index}}",
       "zip": "Télécharger tout (ZIP)"
+    }
+  },
+  "validation": {
+    "title": "Validation des Data Modules",
+    "subtitle": "Contrôle XML et XSD déterministe, sans traitement IA.",
+    "dropTitle": "Dépose des fichiers XML ici",
+    "dropHelp": "Plusieurs DM peuvent être vérifiés ensemble.",
+    "selectFiles": "Importer des fichiers",
+    "selectFolder": "Importer un dossier",
+    "brexDisabled": "BREX · bientôt",
+    "brexDisabledHelp": "La validation BREX sera ajoutée séparément.",
+    "clear": "Vider la liste",
+    "emptyList": "Importe un ou plusieurs DM XML pour commencer.",
+    "listTitle": "Documents ({{count}})",
+    "pending": "Validation en cours ({{count}})",
+    "remove": "Retirer ce DM",
+    "chooseIssue": "Choisir l’Issue",
+    "chooseIssueFor": "Choisir l’Issue S1000D pour {{filename}}",
+    "line": "Ligne {{line}}",
+    "columns": {
+      "parsing": "Parsing",
+      "dmc": "DMC",
+      "version": "Version",
+      "schema": "Schéma",
+      "errorType": "Type erreur",
+      "errorCount": "Nombre d’erreurs"
+    },
+    "status": {
+      "checking": "Contrôle",
+      "valid": "Valide",
+      "invalid": "Erreurs",
+      "needs_issue": "Issue requise",
+      "unverifiable": "Non vérifiable"
+    },
+    "summary": {
+      "documents": "{{count}} DM",
+      "valid": "{{count}} valide(s)",
+      "invalid": "{{count}} en erreur",
+      "unverifiable": "{{count}} non vérifiable(s)"
+    },
+    "detail": {
+      "checking": "Validation du XML contre le schéma local…",
+      "valid": "Le DM est valide.",
+      "chooseIssue": "L’Issue S1000D n’a pas été détectée. Choisis une version pour lancer le contrôle.",
+      "unverifiable": "La validation XSD n’a pas pu être effectuée. Consulte le détail ci-dessous.",
+      "violations": "Violations ({{count}})",
+      "selectDm": "Sélectionne un DM pour consulter son résultat."
     }
   }
 }

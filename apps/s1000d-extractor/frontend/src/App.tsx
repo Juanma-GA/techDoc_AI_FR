@@ -6,10 +6,12 @@ import { LlmBadge } from "./components/LlmBadge";
 import { Data } from "./routes/Data";
 import { Migration } from "./routes/Migration";
 import { Settings } from "./routes/Settings";
+import { Validation } from "./routes/Validation";
 import { Versioning } from "./routes/Versioning";
 
 const navItems = [
   { to: "/migration", labelKey: "nav.migration" },
+  { to: "/validation", labelKey: "nav.validation" },
   { to: "/data", labelKey: "nav.data" },
   { to: "/settings", labelKey: "nav.settings" },
   { to: "/versioning", labelKey: "nav.versioning" },
@@ -53,6 +55,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/migration" replace />} />
         <Route path="/data" element={<Data />} />
+        <Route path="/validation" element={<Validation />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/versioning" element={<Versioning />} />
       </Routes>

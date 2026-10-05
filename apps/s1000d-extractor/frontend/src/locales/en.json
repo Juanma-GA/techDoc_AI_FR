@@ -7,6 +7,7 @@
   "nav": {
     "home": "Home",
     "migration": "Migration",
+    "validation": "Validation",
     "architecture": "Architecture",
     "data": "Data",
     "settings": "Settings",
@@ -205,6 +206,7 @@
     "generate": {
       "title": "Generated Data Modules ({{count}})",
       "pmc": "Download the PMC",
+      "validate": "Validate DMs",
       "violations": "{{count}} viol.",
       "missingFields": "{{count}} empty template section(s)",
       "cirUnresolved": "{{count}} unresolved CIR ref(s)",
@@ -212,6 +214,53 @@
       "images": "Extracted illustrations ({{count}})",
       "imageAlt": "Extracted illustration {{index}}",
       "zip": "Download all (ZIP)"
+    }
+  },
+  "validation": {
+    "title": "Data Module validation",
+    "subtitle": "Deterministic XML and XSD checks, with no AI processing.",
+    "dropTitle": "Drop XML files here",
+    "dropHelp": "Multiple DMs can be checked together.",
+    "selectFiles": "Import files",
+    "selectFolder": "Import folder",
+    "brexDisabled": "BREX · coming later",
+    "brexDisabledHelp": "BREX validation will be added separately.",
+    "clear": "Clear list",
+    "emptyList": "Import one or more XML DMs to begin.",
+    "listTitle": "Documents ({{count}})",
+    "pending": "Validation in progress ({{count}})",
+    "remove": "Remove this DM",
+    "chooseIssue": "Choose Issue",
+    "chooseIssueFor": "Choose the S1000D Issue for {{filename}}",
+    "line": "Line {{line}}",
+    "columns": {
+      "parsing": "Parsing",
+      "dmc": "DMC",
+      "version": "Version",
+      "schema": "Schema",
+      "errorType": "Error type",
+      "errorCount": "Error count"
+    },
+    "status": {
+      "checking": "Checking",
+      "valid": "Valid",
+      "invalid": "Errors",
+      "needs_issue": "Issue required",
+      "unverifiable": "Unverifiable"
+    },
+    "summary": {
+      "documents": "{{count}} DMs",
+      "valid": "{{count}} valid",
+      "invalid": "{{count}} with errors",
+      "unverifiable": "{{count}} unverifiable"
+    },
+    "detail": {
+      "checking": "Validating XML against the local schema…",
+      "valid": "The DM is valid.",
+      "chooseIssue": "The S1000D Issue could not be detected. Choose a version to start validation.",
+      "unverifiable": "XSD validation could not be completed. See the details below.",
+      "violations": "Violations ({{count}})",
+      "selectDm": "Select a DM to inspect its result."
     }
   }
 }

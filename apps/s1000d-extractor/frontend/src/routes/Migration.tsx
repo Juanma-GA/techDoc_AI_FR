@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 
 import { DmPreview } from "../components/DmPreview";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
@@ -153,6 +155,7 @@ function WizNode({
 
 export function Migration() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const brexQuery = useQuery({ queryKey: ["brex"], queryFn: brexApi.list });
   const docsQuery = useQuery({ queryKey: ["s1000d-docs"], queryFn: documentsApi.list });
@@ -771,6 +774,23 @@ export function Migration() {
                       </a>
                     ) : null}
                   </>
+                ) : null}
+                {wiz.step === "generate" && docId && wiz.dms.some((dm) => dm.has_xml) ? (
+                  <button
+                    type="button"
+                    className="btn primary small"
+                    style={{ marginLeft: wiz.resources?.dmrl_count ? undefined : "auto" }}
+                    onClick={() => navigate("/validation", {
+                      state: {
+                        generated: {
+                          documentId: docId,
+                          dmIds: wiz.dms.filter((dm) => dm.has_xml).map((dm) => dm.dm_id),
+                        },
+                      },
+                    })}
+                  >
+                    <ShieldCheck aria-hidden="true" size={15} /> {t("migration.generate.validate")}
+                  </button>
                 ) : null}
               </div>
             </div>

@@ -21,3 +21,314 @@
     @apply font-mono text-label uppercase text-fg-dim;
   }
 }
+
+@layer components {
+  .validation-page {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .validation-import {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 16px;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .validation-import.is-dragging {
+    border-color: var(--accent, currentColor);
+    background: color-mix(in srgb, currentColor 6%, transparent);
+  }
+
+  .validation-hidden-input {
+    display: none;
+  }
+
+  .validation-drop-copy,
+  .validation-import-actions,
+  .validation-summary,
+  .validation-pending,
+  .validation-detail-heading,
+  .validation-detail-title,
+  .validation-violation-meta {
+    display: flex;
+    align-items: center;
+  }
+
+  .validation-drop-copy {
+    gap: 12px;
+  }
+
+  .validation-drop-copy > div,
+  .validation-detail-title {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .validation-drop-copy strong {
+    font-size: 1rem;
+  }
+
+  .validation-import-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .validation-import-actions .btn,
+  .validation-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .validation-summary {
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 28px;
+  }
+
+  .validation-pending {
+    gap: 6px;
+    margin-left: 4px;
+  }
+
+  .validation-clear {
+    margin-left: auto;
+  }
+
+  .validation-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+    align-items: start;
+    gap: 14px;
+    min-width: 0;
+  }
+
+  .validation-list-panel,
+  .validation-detail-panel {
+    min-width: 0;
+    min-height: 360px;
+  }
+
+  .validation-table-scroll {
+    overflow: auto;
+    max-height: min(68vh, 680px);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+
+  .validation-table {
+    width: 100%;
+    min-width: 760px;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.86rem;
+  }
+
+  .validation-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 8px 9px;
+    background: var(--surface, Canvas);
+    border-bottom: 1px solid var(--border);
+    color: var(--fg-dim, inherit);
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .validation-table td {
+    padding: 8px 9px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+
+  .validation-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .validation-table tbody tr.is-selected {
+    background: color-mix(in srgb, currentColor 6%, transparent);
+  }
+
+  .validation-table .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .validation-row-select {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 240px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .validation-row-select strong,
+  .validation-row-select small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .validation-row-select small {
+    color: var(--fg-dim, inherit);
+    opacity: 0.75;
+  }
+
+  .validation-issue-select {
+    width: 104px;
+    min-width: 104px;
+    padding: 4px 6px;
+  }
+
+  .validation-error-type {
+    max-width: 150px;
+    overflow-wrap: anywhere;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
+  }
+
+  .validation-count-cell {
+    text-align: center;
+  }
+
+  .validation-empty-list,
+  .validation-empty-detail {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 260px;
+    color: var(--fg-dim, inherit);
+    text-align: center;
+  }
+
+  .validation-detail-panel {
+    position: sticky;
+    top: 12px;
+  }
+
+  .validation-detail-heading {
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .validation-detail-title .card-title {
+    margin: 3px 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .validation-filename {
+    overflow-wrap: anywhere;
+    text-transform: none;
+  }
+
+  .validation-remove {
+    flex: 0 0 auto;
+  }
+
+  .validation-state-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin: 14px 0;
+    line-height: 1.45;
+  }
+
+  .validation-state-message.is-valid {
+    font-weight: 600;
+  }
+
+  .validation-violations {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .validation-violations h3 {
+    margin: 0 0 2px;
+  }
+
+  .validation-violation {
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 3px;
+  }
+
+  .validation-violation-meta {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .validation-violation p {
+    margin: 8px 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .validation-error-path {
+    display: block;
+    margin-top: 6px;
+    overflow-wrap: anywhere;
+    color: var(--fg-dim, inherit);
+    white-space: normal;
+  }
+
+  .validation-spin {
+    animation: validation-spin 1s linear infinite;
+  }
+
+  @keyframes validation-spin {
+    to { transform: rotate(360deg); }
+  }
+}
+
+@media (max-width: 1000px) {
+  .validation-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .validation-detail-panel {
+    position: static;
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 700px) {
+  .validation-import {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .validation-import-actions {
+    justify-content: flex-start;
+  }
+
+  .validation-clear {
+    margin-left: 0;
+  }
+}

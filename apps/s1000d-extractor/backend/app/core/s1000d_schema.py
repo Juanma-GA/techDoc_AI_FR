@@ -11,6 +11,7 @@ entre les deux (heritage du redesign Issue 4.0).
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from lxml import etree
@@ -55,6 +56,14 @@ def _find_dm_xsd(issue: str, dm_type: str | None = None) -> Path | None:
     d = _issue_dir(issue)
     if not d.is_dir():
         return None
+    schema_stem = {
+        "descriptive": "descript",
+        "procedural": "proced",
+    }.get((dm_type or "").lower(), (dm_type or "").lower().removesuffix(".xsd"))
+    if schema_stem and re.fullmatch(r"[a-z][a-z0-9_-]*", schema_stem):
+        explicit = d / f"{schema_stem}.xsd"
+        if explicit.is_file():
+            return explicit
     preferred = "proced*.xsd" if dm_type == "procedural" else "descript*.xsd"
     # Le type du DM choisit le schema correspondant ; le premier schema reste
     # un repli pour les anciennes installations mono-XSD.
@@ -66,7 +75,7 @@ def _find_dm_xsd(issue: str, dm_type: str | None = None) -> Path | None:
 
 
 def validate_xsd(
-    xml: str,
+    xml: str | bytes,
     issue: str,
     *,
     dm_type: str | None = None,
@@ -103,7 +112,11 @@ def validate_xsd(
     if schema.validate(doc):
         return []
     return [
-        _v("error", "XSD", e.message, e.path or "/")
+        {
+            **_v("error", "XSD", e.message, e.path or "/"),
+            "line": e.line or None,
+            "column": e.column or None,
+        }
         for e in schema.error_log  # type: ignore[union-attr]
     ]
 

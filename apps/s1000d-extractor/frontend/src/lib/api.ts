@@ -185,15 +185,39 @@ export type DmPreview = { head: PreviewSnippet[]; tail: PreviewSnippet[]; total:
 
 export type WizardDm = {
   dm_id: string;
+  dmc?: string;
   title: string;
   dm_type: string;
   node_count: number;
   tree: TreeNode;
   violation_count: number;
+  has_xml?: boolean;
   preview?: DmPreview;
   missing_fields?: string[];
   cir_unresolved?: string[];
   is_orphan?: boolean;
+};
+
+export type DmValidationStatus = "valid" | "invalid" | "needs_issue" | "unverifiable";
+
+export type DmValidationViolation = {
+  severity: "error" | "warning" | "info";
+  rule: string;
+  message: string;
+  path: string;
+  line?: number | null;
+  column?: number | null;
+};
+
+export type DmValidationResult = {
+  filename: string;
+  dmc: string;
+  issue: string | null;
+  schema: string | null;
+  status: DmValidationStatus;
+  error_count: number;
+  violations: DmValidationViolation[];
+  message?: string;
 };
 
 export type WizardResources = {
@@ -326,10 +350,53 @@ export const wizardApi = {
     }),
   dmXmlUrl: (docId: string, dmId: string) =>
     `${API_BASE}/documents/${docId}/wizard/dm/${dmId}/xml`,
+  downloadDmFile: async (docId: string, dmId: string): Promise<File> => {
+    const response = await fetch(
+      `${API_BASE}/documents/${encodeURIComponent(docId)}/wizard/dm/${encodeURIComponent(dmId)}/xml`,
+    );
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as ApiError | null;
+      throw new Error(error?.message || response.statusText || "Erreur");
+    }
+    const disposition = response.headers.get("Content-Disposition");
+    const filename = disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? `${dmId}.xml`;
+    return new File([await response.blob()], filename, { type: "application/xml" });
+  },
   zipUrl: (docId: string) => `${API_BASE}/documents/${docId}/wizard/zip`,
   images: (docId: string) => api<string[]>(`/documents/${docId}/wizard/images`),
   imageUrl: (docId: string, name: string) =>
     `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}`,
+};
+
+export const validationApi = {
+  validate: async (
+    files: File[],
+    issueOverrides: Array<string | null> = [],
+    filenames: string[] = [],
+  ): Promise<{ results: DmValidationResult[] }> => {
+    const form = new FormData();
+    files.forEach((file, index) => {
+      form.append("files", file, filenames[index] || file.webkitRelativePath || file.name);
+    });
+    form.append("issue_overrides", JSON.stringify(issueOverrides));
+
+    const headers: Record<string, string> = {};
+    if (_currentRequestId) headers["X-Request-Id"] = _currentRequestId;
+    const response = await fetch(`${API_BASE}/validation/dms`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const responseRequestId = response.headers.get("X-Request-Id");
+    if (responseRequestId) _currentRequestId = responseRequestId;
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as
+        | (ApiError & { detail?: string })
+        | null;
+      throw new Error(error?.message || error?.detail || response.statusText || "Erreur");
+    }
+    return (await response.json()) as { results: DmValidationResult[] };
+  },
 };
 
 /**
