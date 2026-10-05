@@ -134,6 +134,13 @@ class InvalidHighlightsDesignation:
 
 
 @dataclass(frozen=True)
+class MissingHighlightsDesignation:
+    pages_text: str
+    page: int
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
 class LepEntry:
     subject: str
     page_key: str
@@ -194,6 +201,9 @@ class RevisionState:
     lep_pages: tuple[int, ...] = ()
     highlights: list[HighlightsEntry] = field(default_factory=list)
     invalid_highlights_designations: list[InvalidHighlightsDesignation] = field(
+        default_factory=list
+    )
+    missing_highlights_designations: list[MissingHighlightsDesignation] = field(
         default_factory=list
     )
     lep: list[LepEntry] = field(default_factory=list)
@@ -720,7 +730,7 @@ def extract_invalid_highlights_designations(
             continue
         designation = _join_raw_cell(designation_cells)
         normalized = re.sub(r"\s+", "", designation).upper()
-        if normalized in _HIGHLIGHTS_STATUSES:
+        if not normalized or normalized in _HIGHLIGHTS_STATUSES:
             continue
         invalid.append(
             InvalidHighlightsDesignation(
@@ -731,6 +741,48 @@ def extract_invalid_highlights_designations(
             )
         )
     return invalid
+
+
+def extract_missing_highlights_designations(
+    page: ParsedPage,
+) -> list[MissingHighlightsDesignation]:
+    rows = visual_rows(page.spans)
+    header = _highlights_header(rows)
+    if header is None:
+        return []
+    header_index, _pages_max, status_max, designation_x = header
+
+    missing: list[MissingHighlightsDesignation] = []
+    for row in rows[header_index + 1 :]:
+        page_cells = [
+            span
+            for span in row
+            if span.bbox[0] < designation_x - _COLUMN_TOLERANCE
+        ]
+        designation_cells = [
+            span
+            for span in row
+            if designation_x - _COLUMN_TOLERANCE <= span.bbox[0] < status_max
+        ]
+        if not page_cells or any(span.text.strip() for span in designation_cells):
+            continue
+        pages_text = _join_raw_cell(page_cells)
+        if not expand_page_range(pages_text):
+            continue
+        pages_bbox = _merge_bbox(page_cells)
+        missing.append(
+            MissingHighlightsDesignation(
+                pages_text=pages_text,
+                page=page.page,
+                bbox=(
+                    designation_x - _COLUMN_TOLERANCE,
+                    pages_bbox[1],
+                    status_max,
+                    pages_bbox[3],
+                ),
+            )
+        )
+    return missing
 
 
 # --------------------------------------------------------------------------
@@ -1277,6 +1329,9 @@ def build_revision_state(parsed: ParsedPdf, document: object | None) -> Revision
             state.invalid_highlights_designations.extend(
                 extract_invalid_highlights_designations(page)
             )
+            state.missing_highlights_designations.extend(
+                extract_missing_highlights_designations(page)
+            )
         elif _is_lep_page(page):
             lep_pages.append(page.page)
             entries, subject = extract_lep(page, subject)
@@ -1354,6 +1409,7 @@ BLANK_LEP_STAR = "blank_lep_star"
 LEP_DATE = "lep_date"
 FOOTER_DATE = "footer_date"
 HIGHLIGHTS_STATUS_CONSISTENCY = "highlights_status_consistency"
+HIGHLIGHTS_DESIGNATION_REQUIRED = "highlights_designation_required"
 UNDECLARED_PAGE = "undeclared_page"
 PAGE_NOT_IN_LEP = "page_not_in_lep"
 MODIFIED_PAGE_ABSENT = "modified_page_absent"
@@ -1711,6 +1767,25 @@ def _invalid_highlights_designation_findings(
             bbox=issue.bbox,
         )
         for issue in state.invalid_highlights_designations
+    ]
+
+
+def _missing_highlights_designation_findings(
+    state: RevisionState,
+) -> list[RevisionFinding]:
+    return [
+        RevisionFinding(
+            control=HIGHLIGHTS_DESIGNATION_REQUIRED,
+            message=(
+                f"La ligne des Highlights pour « {issue.pages_text} » "
+                "ne comporte pas de désignation (R, N, U ou D)."
+            ),
+            original="",
+            proposed="",
+            page=issue.page,
+            bbox=issue.bbox,
+        )
+        for issue in state.missing_highlights_designations
     ]
 
 
@@ -2122,7 +2197,8 @@ def _ror_revision_findings(state: RevisionState) -> list[RevisionFinding]:
 def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     """Cross-check Highlights, LEP and footers, one finding per divergence."""
     findings: list[RevisionFinding] = (
-        _invalid_highlights_designation_findings(state)
+        _missing_highlights_designation_findings(state)
+        + _invalid_highlights_designation_findings(state)
         + _highlights_status_findings(state)
     )
     if state.available:

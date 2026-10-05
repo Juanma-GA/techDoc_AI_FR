@@ -101,7 +101,8 @@ def _highlights_page(rows: list[tuple[str, str, str]], page: int = 1) -> ParsedP
     for subject, pages_text, status in rows:
         spans.append(_span(subject, 90.7, y, page))
         spans.append(_span(pages_text, 90.7, y + 14.0, page))
-        spans.append(_span(status, 322.2, y + 14.0, page))
+        if status:
+            spans.append(_span(status, 322.2, y + 14.0, page))
         spans.append(_span("Updated.", 366.4, y + 14.0, page))
         y += 42.0
     spans.extend(_footer(page, "Highlights Page 1", _REVISION_DATE))
@@ -1047,6 +1048,32 @@ def test_invalid_highlights_designation_is_reported_on_its_cell() -> None:
     assert findings[0].original == "X"
     assert findings[0].bbox is not None
     assert "R, N, U ou D" in findings[0].message
+
+
+def test_highlights_page_row_without_designation_is_reported() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", ""),
+            ("Avionics", "Pages 403 to 404", "   "),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    missing = [
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED"
+    ]
+
+    assert len(missing) == 2
+    assert missing[0].page == 1
+    assert missing[0].bbox is not None
+    assert missing[0].severity == "error"
+    assert not any(
+        raw.rule_code == "CUSTOM_REVISION_HIGHLIGHTS_STATUS" for raw in raws
+    )
 
 
 def test_deleted_highlights_status_conflicts_with_page_still_in_current_document() -> None:

@@ -1838,6 +1838,38 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
     },
 )
 
+CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED = rule(
+    code="CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED",
+    name="Designation obligatoire pour chaque ligne de pages des Highlights",
+    description=(
+        "Chaque ligne des Highlights qui contient une plage de pages doit avoir "
+        "une designation R, N, U ou D."
+    ),
+    message="Une ligne de pages des Highlights n'a pas de designation.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "highlights_designation_required"},
+        )
+    ],
+    failure_message="Designation absente pour une ligne de pages des Highlights.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every Highlights row containing a page range must have an "
+                "R, N, U, or D designation."
+            ),
+            "message": "A Highlights page row is missing its designation.",
+        }
+    },
+)
+
 CUSTOM_REVISION_LEP_BLANK_STAR = rule(
     code="CUSTOM_REVISION_LEP_BLANK_STAR",
     name="Etoile LEP des pages Blank selon le statut New de la page impaire",
@@ -2168,6 +2200,7 @@ REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_LEP_STAR,
     CUSTOM_REVISION_UNDECLARED_STAR,
     CUSTOM_REVISION_HIGHLIGHTS_STATUS,
+    CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED,
     CUSTOM_REVISION_LEP_BLANK_STAR,
     CUSTOM_REVISION_LEP_DATE,
     CUSTOM_REVISION_FOOTER_DATE,
