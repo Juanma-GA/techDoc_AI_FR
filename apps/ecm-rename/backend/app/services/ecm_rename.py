@@ -1,0 +1,193 @@
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from app.core.errors import AppError
+from app.services.ecm_rename_pdf import column_values, extract_fields, list_pdf_files, read_pdf_text
+from app.services.ecm_rename_tracker import (
+    append_tracker_rows,
+    find_tracker_layout,
+    load_tracker,
+    restore_tracker,
+    save_tracker,
+)
+
+
+INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+
+def _app_error(code: str, message: str, status_code: int = 400) -> AppError:
+    return AppError(code=code, message=message, status_code=status_code)
+
+
+def _user_path(value: str, label: str, *, must_exist: bool) -> Path:
+    cleaned = value.strip().strip('"')
+    if not cleaned:
+        raise _app_error("INVALID_PATH", f"{label} ne peut pas être vide.")
+    expanded = os.path.expandvars(cleaned)
+    path = Path(expanded).expanduser()
+    if not path.is_absolute():
+        raise _app_error("INVALID_PATH", f"{label} doit être un chemin absolu.")
+    try:
+        return path.resolve(strict=must_exist)
+    except (OSError, RuntimeError) as exc:
+        raise _app_error("PATH_NOT_FOUND", f"{label} est introuvable ou inaccessible.") from exc
+
+
+def _tracker_path(value: str, *, must_exist: bool) -> Path:
+    path = _user_path(value, "Le tracker Excel", must_exist=must_exist)
+    if path.suffix.casefold() not in {".xlsx", ".xlsm"}:
+        raise _app_error("UNSUPPORTED_TRACKER", "Le tracker doit être au format .xlsx ou .xlsm.")
+    if must_exist and not path.is_file():
+        raise _app_error("TRACKER_NOT_FOUND", "Le tracker Excel sélectionné est introuvable.")
+    return path
+
+
+def preview_batch(
+    source_path: str,
+    tracker_path: str,
+    sheet_name: str | None = None,
+    header_row: int | None = None,
+) -> dict[str, Any]:
+    source = _user_path(source_path, "La source PDF", must_exist=True)
+    tracker = _tracker_path(tracker_path, must_exist=True)
+    files = list_pdf_files(source)
+    workbook = load_tracker(tracker, read_only=True, data_only=True)
+    try:
+        sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
+        records = []
+        for pdf_path in files:
+            text = read_pdf_text(pdf_path)
+            fields, labels = extract_fields(text)
+            records.append(
+                {
+                    "source_path": str(pdf_path),
+                    "file_name": pdf_path.name,
+                    "reference": fields["reference"],
+                    "revision": fields["revision"],
+                    "subject": fields["subject"],
+                    "tracker_values": column_values(columns, fields, labels),
+                }
+            )
+        return {
+            "source_path": str(source),
+            "tracker_path": str(tracker),
+            "sheet_names": list(workbook.sheetnames),
+            "sheet_name": sheet.title,
+            "header_row": selected_header_row,
+            "columns": columns,
+            "records": records,
+        }
+    finally:
+        workbook.close()
+
+
+def _safe_folder_name(reference: str, revision: str, subject: str) -> str:
+    raw_name = "-".join(part.strip() for part in (reference, revision, subject) if part.strip())
+    safe_name = INVALID_FILENAME_CHARS.sub("_", raw_name).rstrip(" .")
+    safe_name = re.sub(r"\s+", " ", safe_name)
+    if not reference.strip() or not subject.strip() or not safe_name:
+        raise _app_error("MISSING_FOLDER_METADATA", "La référence et le sujet sont requis pour créer le dossier.")
+    if len(safe_name) > 180:
+        raise _app_error("FOLDER_NAME_TOO_LONG", "Le nom de dossier dépasse 180 caractères. Raccourcis le sujet.")
+    return safe_name
+
+
+def process_batch(
+    source_path: str,
+    tracker_path: str,
+    output_path: str,
+    sheet_name: str,
+    header_row: int,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    source = _user_path(source_path, "La source PDF", must_exist=True)
+    tracker = _tracker_path(tracker_path, must_exist=True)
+    output = _user_path(output_path, "Le dossier de sortie", must_exist=False)
+    if output.exists() and not output.is_dir():
+        raise _app_error("INVALID_OUTPUT", "Le chemin de sortie existe mais n'est pas un dossier.")
+    if source.is_dir() and output == source:
+        raise _app_error("INVALID_OUTPUT", "Choisis un dossier de sortie différent du dossier source des PDF.")
+
+    files = list_pdf_files(source)
+    file_by_path = {str(path.resolve()): path for path in files}
+    record_paths = [str(Path(record["source_path"]).resolve()) for record in records]
+    if len(record_paths) != len(set(record_paths)) or set(record_paths) != set(file_by_path):
+        raise _app_error("STALE_PREVIEW", "La liste des PDF a changé. Relance l'analyse avant de créer les dossiers.")
+
+    folder_names: list[str] = []
+    for record in records:
+        if len(record["tracker_values"]) == 0:
+            raise _app_error("INVALID_TRACKER_VALUES", "Les valeurs de tracker sont incomplètes.")
+        folder_names.append(
+            _safe_folder_name(record["reference"], record["revision"], record["subject"])
+        )
+    if len(folder_names) != len(set(folder_names)):
+        raise _app_error("DUPLICATE_FOLDER", "Plusieurs PDF produiraient le même nom de dossier.")
+    destinations = [output / name for name in folder_names]
+    conflicts = [path.name for path in destinations if path.exists()]
+    if conflicts:
+        raise _app_error("OUTPUT_EXISTS", f"Un dossier de sortie existe déjà : {', '.join(conflicts)}", 409)
+
+    stat_before = tracker.stat()
+    workbook = load_tracker(tracker, read_only=False)
+    stage_root: Path | None = None
+    backup: Path | None = None
+    tracker_replaced = False
+    created_destinations: list[Path] = []
+    try:
+        sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
+        if any(len(record["tracker_values"]) != len(columns) for record in records):
+            raise _app_error("STALE_PREVIEW", "Les colonnes du tracker ont changé. Relance l'analyse.")
+
+        output.mkdir(parents=True, exist_ok=True)
+        stage_root = Path(tempfile.mkdtemp(prefix=".ecm-rename-", dir=output))
+        for record, folder_name in zip(records, folder_names, strict=True):
+            staged_folder = stage_root / folder_name
+            staged_folder.mkdir()
+            shutil.copy2(file_by_path[str(Path(record["source_path"]).resolve())], staged_folder / file_by_path[str(Path(record["source_path"]).resolve())].name)
+
+        append_tracker_rows(sheet, selected_header_row, columns, records)
+
+        current_stat = tracker.stat()
+        if (current_stat.st_mtime_ns, current_stat.st_size) != (stat_before.st_mtime_ns, stat_before.st_size):
+            raise _app_error("TRACKER_CHANGED", "Le tracker a changé pendant l'analyse. Relance l'opération.", 409)
+
+        backup = save_tracker(workbook, tracker)
+        tracker_replaced = True
+
+        for folder_name, destination in zip(folder_names, destinations, strict=True):
+            os.replace(stage_root / folder_name, destination)
+            created_destinations.append(destination)
+
+        return {
+            "created_folders": [str(path) for path in destinations],
+            "tracker_path": str(tracker),
+            "backup_path": str(backup),
+            "rows_written": len(records),
+        }
+    except AppError:
+        if tracker_replaced and backup is not None:
+            restore_tracker(backup, tracker)
+        for destination in created_destinations:
+            shutil.rmtree(destination, ignore_errors=True)
+        raise
+    except Exception as exc:  # noqa: BLE001
+        if tracker_replaced and backup is not None:
+            restore_tracker(backup, tracker)
+        for destination in created_destinations:
+            shutil.rmtree(destination, ignore_errors=True)
+        raise _app_error(
+            "PROCESS_FAILED",
+            "La création a échoué. Vérifie les droits sur les dossiers et que le tracker Excel est fermé.",
+            500,
+        ) from exc
+    finally:
+        workbook.close()
+        if stage_root is not None:
+            shutil.rmtree(stage_root, ignore_errors=True)
