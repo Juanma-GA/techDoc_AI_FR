@@ -39,7 +39,7 @@ The Vite development proxy and CORS configuration use the same port.
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is optional for checklist rules. Word or LibreOffice is needed for supported Word-to-PDF conversions.
+Python 3.11+, Node 20, and pnpm 9. Mistral is optional for checklist rules. Document conversions need either Microsoft Word (desktop, Microsoft 365) or LibreOffice, chosen with `OFFICE_CONVERTER` (default: Word, then LibreOffice). With Word on a tenant with mandatory sensitivity labels, set `WORD_SENSITIVITY_LABEL_ID` (see `backend/README.md`).
 
 ## Start On Windows
 
@@ -82,8 +82,9 @@ remain available.
 - `.doc` is preserved as the original and converted to DOCX for review.
 - PDF, commented PDF, corrected DOCX, corrected DOC, and other converted
 	outputs are listed by `GET /api/v1/documents/{id}/exports`.
-- PDF-to-DOCX and Word-to-DOC conversions require LibreOffice and are marked
-	as potentially degraded in the reviewer before download.
+- PDF-to-DOCX and Word-to-DOC conversions use Microsoft Word (or LibreOffice
+	when configured) and are marked as potentially degraded in the reviewer
+	before download.
 
 ## Tests
 

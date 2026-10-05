@@ -68,7 +68,7 @@ def test_settings_reject_untrusted_mistral_url(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
-    assert response.json()["code"] == "MISTRAL_URL_NOT_ALLOWED"
+    assert response.json()["code"] == "MISTRAL_BASE_URL_NOT_ALLOWED"
 
 
 def test_mistral_test_does_not_follow_redirects(
@@ -95,16 +95,14 @@ def test_mistral_test_does_not_follow_redirects(
 
     monkeypatch.setattr(settings_api.httpx, "Client", mock_client)
     monkeypatch.setattr(settings_api, "get_llm_enabled", lambda _db: True)
-    monkeypatch.setattr(
-        settings_api,
-        "get_effective",
-        lambda _db: {
-            "api_key": "synthetic-key",
-            "base_url": "https://api.mistral.ai",
-            "chat_model": "synthetic-model",
-            "vision_model": "synthetic-model",
-        },
-    )
+    synthetic_settings = {
+        "api_key": "synthetic-key",
+        "base_url": "https://api.mistral.ai",
+        "chat_model": "synthetic-model",
+        "vision_model": "synthetic-model",
+    }
+    monkeypatch.setattr(settings_api, "get_effective", lambda _db: synthetic_settings)
+    monkeypatch.setattr(settings_api, "get_endpoint", lambda _db: synthetic_settings)
     monkeypatch.setattr(settings_api, "set_llm_tested", lambda *_args: None)
 
     response = client.post("/api/v1/settings/mistral/test")
@@ -132,7 +130,7 @@ def test_invalid_runtime_url_never_creates_http_client(
 
     monkeypatch.setattr(module, "get_llm_enabled", lambda _db: True)
     monkeypatch.setattr(
-        module,
+        mistral_settings,
         "get_effective",
         lambda _db: {
             "api_key": "synthetic-key",
@@ -161,16 +159,6 @@ def test_disabled_runtime_helpers_never_create_http_client(
 ) -> None:
     monkeypatch.setattr(module, "get_llm_enabled", lambda _db: False)
     monkeypatch.setattr(
-        module,
-        "get_effective",
-        lambda _db: {
-            "api_key": "SYNTHETIC-KEY",
-            "base_url": "https://api.mistral.ai",
-            "chat_model": "synthetic-model",
-            "vision_model": "synthetic-model",
-        },
-    )
-    monkeypatch.setattr(
         module.httpx,
         "Client",
         lambda *_args, **_kwargs: pytest.fail("disabled LLM opened an HTTP client"),
@@ -196,7 +184,7 @@ def test_unconfigured_runtime_helpers_never_create_http_client(
 ) -> None:
     monkeypatch.setattr(module, "get_llm_enabled", lambda _db: True)
     monkeypatch.setattr(
-        module,
+        mistral_settings,
         "get_effective",
         lambda _db: {
             "api_key": "",

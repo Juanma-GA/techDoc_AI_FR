@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-
 import fitz
 
 from app.checks.client_registry import load_active_client_configuration
@@ -325,6 +324,40 @@ def test_faulty_paragraph_surfaces_as_detection_only() -> None:
     )
 
     assert page.is_modified is True
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].page == page.page
+    assert finding.original == finding.proposed
+    assert finding.bbox[2] > finding.bbox[0]
+
+
+def test_rendered_faulty_paragraph_is_surfaced_as_detection_only(tmp_path) -> None:
+    # Synthetic stand-in for the client manual page (never commit client documents).
+    doc = fitz.open()
+    pdf_page = doc.new_page(width=612, height=792)
+    pdf_page.insert_textbox(
+        fitz.Rect(107.8, 140, 540, 260),
+        "Faulty parts should be replaced by approved spares only. After any component "
+        "has been renewed or repaired, carry out the full procedure in TESTING AND "
+        "FAULT ISOLATION before the unit is returned to service.",
+        fontname="helv",
+        fontsize=10,
+        align=fitz.TEXT_ALIGN_LEFT,
+    )
+    path = tmp_path / "faulty-paragraph.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    parsed = parse_pdf(path)
+    parsed.pages[0].is_modified = True
+    page = parsed.pages[0]
+    results, suggestions = _run_rule(parsed)
+    finding = next(
+        suggestion
+        for suggestion in suggestions
+        if "Faulty parts should be replaced" in suggestion.original
+    )
+
     assert results[0].status == "FAIL"
     assert len(suggestions) == 1
     assert suggestions[0].page == page.page

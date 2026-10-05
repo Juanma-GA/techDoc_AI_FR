@@ -77,9 +77,26 @@ def _seed_builtin_standards() -> None:
         session.close()
 
 
+LOCAL_BASE_URL = "http://127.0.0.1:8003"
+
+
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app())
+    """Client se comportant comme le front servi en local : Host de bouclage et
+    en-tete anti-CSRF envoye sur chaque requete (cf. core.request_guard)."""
+    from app.core.request_guard import CSRF_HEADER, CSRF_HEADER_VALUE
+
+    return TestClient(
+        create_app(),
+        base_url=LOCAL_BASE_URL,
+        headers={CSRF_HEADER: CSRF_HEADER_VALUE},
+    )
+
+
+@pytest.fixture
+def bare_client() -> TestClient:
+    """Client SANS l'en-tete anti-CSRF (simule une requete forgee par un site tiers)."""
+    return TestClient(create_app(), base_url=LOCAL_BASE_URL)
 
 
 @pytest.fixture(autouse=True)

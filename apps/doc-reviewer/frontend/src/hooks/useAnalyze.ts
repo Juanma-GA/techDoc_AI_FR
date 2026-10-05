@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
-import { API_BASE_URL } from "../lib/api";
+import { API_BASE_URL, CSRF_HEADERS } from "../lib/api";
 import { useClientConfig } from "./useClientConfig";
 import { useFiltersStore } from "../stores/filtersStore";
 import { missingDocumentContext } from "../types/domain";
@@ -102,7 +102,7 @@ export function useAnalyze(
       }
       const response = await fetch(url, {
         method: "POST",
-        headers: { Accept: "text/event-stream" },
+        headers: { Accept: "text/event-stream", ...CSRF_HEADERS },
         body: previousRevisionFile ? body : undefined,
       });
       if (!response.ok || !response.body) {

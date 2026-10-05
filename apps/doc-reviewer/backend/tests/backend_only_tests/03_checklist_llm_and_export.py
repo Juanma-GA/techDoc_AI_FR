@@ -15,6 +15,9 @@ from pathlib import Path
 import fitz
 import httpx
 
+# En-tete anti-CSRF exige par le backend sur les requetes de modification.
+CSRF_HEADERS = {"X-Requested-With": "doc-reviewer"}
+
 HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / "state.json"
 OUTPUT_DIR = HERE / "outputs"
@@ -125,7 +128,7 @@ def main() -> None:
     if not args.checklist.is_file():
         raise SystemExit(f"Checklist introuvable: {args.checklist}")
     state = load_state()
-    with httpx.Client(timeout=args.timeout) as client:
+    with httpx.Client(timeout=args.timeout, headers=CSRF_HEADERS) as client:
         inspect_settings(client, state)
         import_and_activate(client, state, args.checklist)
         run_checklist_analysis(client, state, args.timeout)
