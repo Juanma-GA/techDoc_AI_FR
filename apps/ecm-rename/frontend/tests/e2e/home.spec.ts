@@ -50,7 +50,6 @@ test("ECM Rename workspace renders", async ({ page }) => {
       body: JSON.stringify({
         created_folders: ["C:\\ECM\\sortie\\ECN-42-A-Cooling unit"],
         tracker_path: "C:\\ECM\\tracker.xlsx",
-        backup_path: "C:\\ECM\\Tracker_backup_20261005.xlsx",
         rows_written: 1,
       }),
     }),
@@ -80,10 +79,13 @@ test("ECM Rename workspace renders", async ({ page }) => {
   );
   await page.getByRole("button", { name: /Analyser les PDF|Analyze PDFs/ }).click();
   await expect(page.getByRole("heading", { name: /Prévisualisation et corrections|Preview and corrections/ })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Référence|Reference/ }).first()).toHaveValue("ECN-42");
+  await expect(page.getByRole("textbox", { name: /Révision|Revision/ }).first()).toHaveValue("A");
+  await expect(page.getByRole("textbox", { name: /Sujet|Subject/ }).first()).toHaveValue("Cooling unit");
   await page.getByRole("button", { name: /Créer les dossiers et mettre à jour le tracker|Create folders and update tracker/ }).click();
   await page.getByRole("button", { name: /Cliquer encore pour confirmer|Click again to confirm/ }).click();
   await expect(page.getByRole("heading", { name: /Résultat de l'opération|Operation result/ })).toBeVisible();
-  await expect(page.getByText("C:\\ECM\\Tracker_backup_20261005.xlsx", { exact: true })).toBeVisible();
+  await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\sortie\\ECN-42-A-Cooling unit", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "EN" }).click();

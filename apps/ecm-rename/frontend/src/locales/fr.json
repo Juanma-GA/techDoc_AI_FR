@@ -27,7 +27,7 @@
     "browse_failed": "Impossible d'ouvrir le sélecteur de fichiers.",
     "paths_load_failed": "Impossible de charger les chemins mémorisés.",
     "paths_save_failed": "Impossible d'enregistrer les chemins mémorisés.",
-    "write_notice": "Le tracker d'origine sera modifié après confirmation. Une sauvegarde sera créée à côté.",
+    "write_notice": "Après confirmation, le PDF sera copié dans le dossier choisi et une ligne sera ajoutée au tracker. Les lignes existantes et les propriétés du classeur sont préservées.",
     "analyze": "Analyser les PDF",
     "analyzing": "Analyse en cours",
     "reanalyze": "Ré-analyser",
@@ -50,7 +50,6 @@
     "process_success": "{{count}} ligne(s) ajoutée(s).",
     "result_title": "Résultat de l'opération",
     "tracker_updated": "Tracker mis à jour",
-    "backup_created": "Sauvegarde du tracker",
     "created_folders": "Dossiers créés",
     "unknown_error": "Une erreur inattendue est survenue. Vérifie les chemins et réessaie."
   },

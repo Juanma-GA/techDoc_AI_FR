@@ -73,7 +73,6 @@ export type ProcessRequest = {
 export type ProcessDto = {
   created_folders: string[];
   tracker_path: string;
-  backup_path: string;
   rows_written: number;
 };
 

@@ -16,10 +16,6 @@ export function ProcessResult({ result }: { result: ProcessDto }) {
           <dt className="label">{t("home.tracker_updated")}</dt>
           <dd className="mt-1 break-all font-mono text-sm text-fg">{result.tracker_path}</dd>
         </div>
-        <div className="min-w-0">
-          <dt className="label">{t("home.backup_created")}</dt>
-          <dd className="mt-1 break-all font-mono text-sm text-fg">{result.backup_path}</dd>
-        </div>
       </dl>
       <h3 className="label mt-4">{t("home.created_folders")}</h3>
       <ul className="mt-2 flex flex-col gap-2">

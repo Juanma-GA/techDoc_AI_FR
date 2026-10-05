@@ -18,7 +18,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ## Dépendances métier
 
 - PyMuPDF lit le texte déjà présent dans les PDF ; aucun OCR n'est lancé.
-- openpyxl lit et met à jour les trackers `.xlsx` et `.xlsm`.
+- openpyxl lit les trackers `.xlsx` et `.xlsm` ; l'écriture ne remplace que la feuille ciblée et les plages de tableaux concernées, sans réécrire les autres éléments du classeur.
 - Les fichiers ne sont écrits qu'après confirmation dans l'interface.
 
 ## Layout

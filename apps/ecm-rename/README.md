@@ -13,8 +13,9 @@ POC fonctionnel sur données synthétiques. L'extraction doit encore être véri
 - Permet de sélectionner via le sélecteur système ou de saisir un chemin vers un PDF ou un dossier contenant des PDF (lecture non récursive), un tracker `.xlsx`/`.xlsm` et un dossier de sortie.
 - Extrait les champs identifiés par libellés texte : référence GKN, révision, sujet, titre, auteur, réponse demandée et actions ouvertes du Module 3.
 - Affiche une prévisualisation corrigeable, les colonnes détectées du tracker, l'onglet et la ligne d'en-têtes.
+- Affiche une prévisualisation corrigeable des champs extraits et du nom de dossier prévu.
 - Après double confirmation, crée un dossier `{Reference}-{Revision}-{Subject}`, y copie le PDF et ajoute une ligne au tracker.
-- Crée une sauvegarde du tracker à côté du fichier original avant toute mise à jour.
+- Ne réécrit que la feuille ciblée et les plages des tableaux concernés ; les autres parties du classeur et ses propriétés sont préservées. Aucune sauvegarde secondaire n'est créée.
 
 ## Port
 
@@ -54,7 +55,7 @@ FastAPI sert l'application React compilée depuis `frontend/dist/` à `/`. Si le
 
 ## Persistence
 
-Les PDF ne sont pas copiés avant la confirmation. Le tracker choisi est mis à jour en place après création d'une sauvegarde horodatée. Les fichiers métier ne sont pas conservés dans la base SQLite ; celle-ci sert à la configuration standard de l'app.
+Le tracker choisi est mis à jour en place après confirmation ; les PDF sont copiés dans les dossiers créés. Aucune sauvegarde secondaire n'est créée. Les fichiers métier ne sont pas conservés dans la base SQLite ; celle-ci sert à la configuration standard de l'app.
 Les PDF et trackers ne sont pas conservés dans la base SQLite. La table `path_preferences`, gérée par Alembic, mémorise localement le dernier chemin source, le tracker et le dossier de sortie.
 
 ## LLM Configuration

@@ -13,10 +13,8 @@ from app.services.ecm_rename_tracker import (
     append_tracker_rows,
     find_tracker_layout,
     load_tracker,
-    restore_tracker,
     save_tracker,
 )
-
 
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -92,9 +90,15 @@ def _safe_folder_name(reference: str, revision: str, subject: str) -> str:
     safe_name = INVALID_FILENAME_CHARS.sub("_", raw_name).rstrip(" .")
     safe_name = re.sub(r"\s+", " ", safe_name)
     if not reference.strip() or not subject.strip() or not safe_name:
-        raise _app_error("MISSING_FOLDER_METADATA", "La référence et le sujet sont requis pour créer le dossier.")
+        raise _app_error(
+            "MISSING_FOLDER_METADATA",
+            "La référence et le sujet sont requis pour créer le dossier.",
+        )
     if len(safe_name) > 180:
-        raise _app_error("FOLDER_NAME_TOO_LONG", "Le nom de dossier dépasse 180 caractères. Raccourcis le sujet.")
+        raise _app_error(
+            "FOLDER_NAME_TOO_LONG",
+            "Le nom de dossier dépasse 180 caractères. Raccourcis le sujet.",
+        )
     return safe_name
 
 
@@ -112,22 +116,26 @@ def process_batch(
     if output.exists() and not output.is_dir():
         raise _app_error("INVALID_OUTPUT", "Le chemin de sortie existe mais n'est pas un dossier.")
     if source.is_dir() and output == source:
-        raise _app_error("INVALID_OUTPUT", "Choisis un dossier de sortie différent du dossier source des PDF.")
+        raise _app_error(
+            "INVALID_OUTPUT",
+            "Choisis un dossier de sortie différent du dossier source des PDF.",
+        )
 
     files = list_pdf_files(source)
     file_by_path = {str(path.resolve()): path for path in files}
     record_paths = [str(Path(record["source_path"]).resolve()) for record in records]
     if len(record_paths) != len(set(record_paths)) or set(record_paths) != set(file_by_path):
-        raise _app_error("STALE_PREVIEW", "La liste des PDF a changé. Relance l'analyse avant de créer les dossiers.")
+        raise _app_error(
+            "STALE_PREVIEW",
+            "La liste des PDF a changé. Relance l'analyse avant l'ajout au tracker.",
+        )
 
     folder_names: list[str] = []
     for record in records:
         if len(record["tracker_values"]) == 0:
             raise _app_error("INVALID_TRACKER_VALUES", "Les valeurs de tracker sont incomplètes.")
-        folder_names.append(
-            _safe_folder_name(record["reference"], record["revision"], record["subject"])
-        )
-    if len(folder_names) != len(set(folder_names)):
+        folder_names.append(_safe_folder_name(record["reference"], record["revision"], record["subject"]))
+    if len({name.casefold() for name in folder_names}) != len(folder_names):
         raise _app_error("DUPLICATE_FOLDER", "Plusieurs PDF produiraient le même nom de dossier.")
     destinations = [output / name for name in folder_names]
     conflicts = [path.name for path in destinations if path.exists()]
@@ -137,8 +145,6 @@ def process_batch(
     stat_before = tracker.stat()
     workbook = load_tracker(tracker, read_only=False)
     stage_root: Path | None = None
-    backup: Path | None = None
-    tracker_replaced = False
     created_destinations: list[Path] = []
     try:
         sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
@@ -148,38 +154,37 @@ def process_batch(
         output.mkdir(parents=True, exist_ok=True)
         stage_root = Path(tempfile.mkdtemp(prefix=".ecm-rename-", dir=output))
         for record, folder_name in zip(records, folder_names, strict=True):
+            source_file = file_by_path[str(Path(record["source_path"]).resolve())]
             staged_folder = stage_root / folder_name
             staged_folder.mkdir()
-            shutil.copy2(file_by_path[str(Path(record["source_path"]).resolve())], staged_folder / file_by_path[str(Path(record["source_path"]).resolve())].name)
+            shutil.copy2(source_file, staged_folder / source_file.name)
 
-        append_tracker_rows(sheet, selected_header_row, columns, records)
+        appended_rows = append_tracker_rows(sheet, selected_header_row, columns, records)
 
         current_stat = tracker.stat()
         if (current_stat.st_mtime_ns, current_stat.st_size) != (stat_before.st_mtime_ns, stat_before.st_size):
-            raise _app_error("TRACKER_CHANGED", "Le tracker a changé pendant l'analyse. Relance l'opération.", 409)
-
-        backup = save_tracker(workbook, tracker)
-        tracker_replaced = True
+            raise _app_error(
+                "TRACKER_CHANGED",
+                "Le tracker a changé pendant l'analyse. Relance l'opération.",
+                409,
+            )
 
         for folder_name, destination in zip(folder_names, destinations, strict=True):
             os.replace(stage_root / folder_name, destination)
             created_destinations.append(destination)
 
+        save_tracker(tracker, sheet, columns, appended_rows)
+
         return {
             "created_folders": [str(path) for path in destinations],
             "tracker_path": str(tracker),
-            "backup_path": str(backup),
             "rows_written": len(records),
         }
     except AppError:
-        if tracker_replaced and backup is not None:
-            restore_tracker(backup, tracker)
         for destination in created_destinations:
             shutil.rmtree(destination, ignore_errors=True)
         raise
-    except Exception as exc:  # noqa: BLE001
-        if tracker_replaced and backup is not None:
-            restore_tracker(backup, tracker)
+    except Exception as exc:
         for destination in created_destinations:
             shutil.rmtree(destination, ignore_errors=True)
         raise _app_error(

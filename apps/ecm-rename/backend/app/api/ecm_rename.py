@@ -11,7 +11,6 @@ from app.db.session import get_db
 from app.services.ecm_rename import preview_batch, process_batch
 from app.services.path_picker import BrowseKind, BrowseLanguage, choose_path
 
-
 router = APIRouter(prefix="/ecm-rename", tags=["ecm-rename"])
 
 
@@ -67,7 +66,6 @@ class ProcessRequest(BaseModel):
 class ProcessResponse(BaseModel):
     created_folders: list[str]
     tracker_path: str
-    backup_path: str
     rows_written: int
 
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from zipfile import ZipFile
+
 import fitz
 import pytest
 from openpyxl import Workbook, load_workbook
+from openpyxl.worksheet.table import Table
 
 from app.services.path_picker import BrowseKind
-
 
 HEADERS = [
     "Reference",
@@ -135,12 +137,41 @@ def test_preview_extracts_primary_fields_before_reply_section(client, tmp_path) 
     assert record["subject"] == "Example subject"
 
 
-def test_process_creates_folder_copies_pdf_and_appends_tracker_row(client, tmp_path) -> None:
+def test_process_creates_folder_and_appends_tracker_row_without_changing_metadata(client, tmp_path) -> None:
     pdf_path = tmp_path / "ECM-TEST.pdf"
     tracker_path = tmp_path / "Tracker.xlsx"
     output_path = tmp_path / "output"
     _write_pdf(pdf_path, PDF_TEXT)
     _write_tracker(tracker_path)
+    existing_row = [
+        "EXISTING-001",
+        "A",
+        "Existing subject",
+        "Existing title",
+        "Existing author",
+        "No",
+        "No action",
+    ]
+    workbook = load_workbook(tracker_path)
+    workbook.active.append(existing_row)
+    workbook.active.add_table(Table(displayName="ECMRecords", ref="A1:G2"))
+    untouched_sheet = workbook.create_sheet("Untouched")
+    untouched_sheet["A1"] = "Keep this sheet unchanged"
+    workbook.properties.creator = "Existing owner"
+    workbook.save(tracker_path)
+    workbook.close()
+    with ZipFile(tracker_path, "a") as archive:
+        archive.writestr("customXml/item1.xml", b"<customXml>Preserve this part</customXml>")
+    with ZipFile(tracker_path) as archive:
+        untouched_parts = {
+            name: archive.read(name)
+            for name in archive.namelist()
+            if name not in {"xl/worksheets/sheet1.xml", "xl/tables/table1.xml"}
+        }
+    workbook = load_workbook(tracker_path)
+    original_modified = workbook.properties.modified
+    workbook.close()
+    original_pdf = pdf_path.read_bytes()
 
     preview = client.post(
         "/api/v1/ecm-rename/preview",
@@ -160,7 +191,15 @@ def test_process_creates_folder_copies_pdf_and_appends_tracker_row(client, tmp_p
             "output_path": str(output_path),
             "sheet_name": preview["sheet_name"],
             "header_row": preview["header_row"],
-            "records": [record],
+            "records": [
+                {
+                    "source_path": record["source_path"],
+                    "reference": record["reference"],
+                    "revision": record["revision"],
+                    "subject": record["subject"],
+                    "tracker_values": record["tracker_values"],
+                }
+            ],
         },
     )
 
@@ -168,16 +207,29 @@ def test_process_creates_folder_copies_pdf_and_appends_tracker_row(client, tmp_p
     result = response.json()
     expected_folder = output_path / "GKN-ECN-123-A@3-Cooling unit revised"
     assert expected_folder.is_dir()
-    assert (expected_folder / pdf_path.name).read_bytes() == pdf_path.read_bytes()
+    assert (expected_folder / pdf_path.name).read_bytes() == original_pdf
+    assert pdf_path.read_bytes() == original_pdf
     assert result["rows_written"] == 1
-    assert result["backup_path"]
+    assert result["tracker_path"] == str(tracker_path)
+    assert result["created_folders"] == [str(expected_folder)]
+    with ZipFile(tracker_path) as archive:
+        assert {
+            name: archive.read(name)
+            for name in archive.namelist()
+            if name not in {"xl/worksheets/sheet1.xml", "xl/tables/table1.xml"}
+        } == untouched_parts
 
     workbook = load_workbook(tracker_path, data_only=True)
     try:
-        assert list(workbook.active.values)[1] == tuple(record["tracker_values"])
+        rows = list(workbook.active.values)
+        assert rows[1] == tuple(existing_row)
+        assert rows[2] == tuple(record["tracker_values"])
+        assert workbook.properties.creator == "Existing owner"
+        assert workbook.properties.modified == original_modified
+        assert workbook["ECM Tracker"].tables["ECMRecords"].ref == "A1:G3"
     finally:
         workbook.close()
-    assert list(tmp_path.glob("Tracker_backup_*.xlsx"))
+    assert not list(tmp_path.glob("Tracker_backup_*.xlsx"))
 
 
 def test_preview_rejects_scanned_pdf_without_ocr(client, tmp_path) -> None:
