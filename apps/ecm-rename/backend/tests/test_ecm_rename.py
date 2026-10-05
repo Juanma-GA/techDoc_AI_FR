@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import fitz
+import pytest
 from openpyxl import Workbook, load_workbook
+
+from app.services.path_picker import BrowseKind
 
 
 HEADERS = [
@@ -151,3 +154,77 @@ def test_preview_scans_multiple_pdfs_in_selected_folder(client, tmp_path) -> Non
     assert [record["file_name"] for record in body["records"]] == ["ECN-A.pdf", "ECN-B.pdf"]
     assert [record["reference"] for record in body["records"]] == ["GKN-ECN-123", "GKN-ECN-124"]
     assert all(record["tracker_values"][-1] == "Update drawing" for record in body["records"])
+
+
+@pytest.mark.parametrize(
+    ("kind", "selected_path"),
+    [
+        ("source_file", r"C:\ECM\ECN.pdf"),
+        ("source_directory", r"C:\ECM\à traiter"),
+        ("tracker_file", r"C:\ECM\tracker.xlsx"),
+        ("output_directory", r"C:\ECM\sortie"),
+        ("output_directory", ""),
+    ],
+)
+def test_browse_path_uses_native_picker_and_returns_selection(
+    client, monkeypatch, kind: str, selected_path: str
+) -> None:
+    from app.api import ecm_rename as ecm_rename_route
+
+    picker_calls = []
+
+    def select_path(request_kind: str, current_path: str | None, language: str) -> str:
+        picker_calls.append((request_kind, current_path, language))
+        return selected_path
+
+    monkeypatch.setattr(ecm_rename_route, "choose_path", select_path)
+
+    response = client.post(
+        "/api/v1/ecm-rename/browse",
+        json={"kind": kind, "current_path": r"C:\ECM", "language": "fr"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"path": selected_path or None}
+    assert picker_calls == [(kind, r"C:\ECM", "fr")]
+
+
+@pytest.mark.parametrize(
+    ("kind", "selected_path"),
+    [
+        ("source_file", r"C:\ECM\ECN.pdf"),
+        ("source_directory", r"C:\ECM\à traiter"),
+        ("tracker_file", r"C:\ECM\tracker.xlsx"),
+        ("output_directory", ""),
+    ],
+)
+def test_windows_picker_uses_powershell_without_exposing_other_environment(
+    monkeypatch, kind: BrowseKind, selected_path: str
+) -> None:
+    import subprocess
+
+    from app.services import path_picker
+
+    captured = {}
+    powershell_path = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
+    monkeypatch.setattr(
+        path_picker.shutil,
+        "which",
+        lambda name: powershell_path if name == "powershell.exe" else None,
+    )
+
+    def run_picker(command, **options):
+        captured["command"] = command
+        captured["options"] = options
+        return subprocess.CompletedProcess(command, 0, stdout=f"{selected_path}\r\n", stderr="")
+
+    monkeypatch.setattr(path_picker.subprocess, "run", run_picker)
+
+    result = path_picker._pick_with_windows(kind, "Select", "en", r"C:\ECM")
+
+    assert result == selected_path or result is None
+    assert "-STA" in captured["command"]
+    assert captured["options"]["env"]["ECM_RENAME_PICKER_KIND"] == kind
+    assert captured["options"]["env"]["ECM_RENAME_PICKER_INITIAL_DIRECTORY"] == r"C:\ECM"
+    assert "MISTRAL_API_KEY" not in captured["options"]["env"]

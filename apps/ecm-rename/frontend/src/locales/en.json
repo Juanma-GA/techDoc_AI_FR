@@ -6,17 +6,8 @@
     "navigation": "Main navigation",
     "language": "Language"
   },
-  "llm": {
-    "label": "LLM",
-    "title": "LLM configuration status",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "UNTESTED",
-    "noKey": "NO KEY"
-  },
   "nav": {
     "home": "Home",
-    "data": "Data",
     "settings": "Settings"
   },
   "home": {
@@ -25,11 +16,15 @@
     "inputs_title": "Inputs and destination",
     "source": "PDF or folder containing PDFs",
     "source_placeholder": "C:\\ECM\\ECN.pdf or C:\\ECM\\to process",
+    "browse_pdf": "Select a PDF",
+    "browse_source_folder": "Select a source folder",
     "tracker": "Excel tracker",
     "tracker_placeholder": "C:\\ECM\\tracker.xlsx",
+    "browse_tracker": "Select the Excel tracker",
     "output": "Output folder",
     "output_placeholder": "C:\\ECM\\processed ECMs",
-    "text_only_notice": "Extraction reads selectable PDF text only. OCR is not used.",
+    "browse_output_folder": "Select the output folder",
+    "browse_failed": "Unable to open the file picker.",
     "write_notice": "The original tracker is updated after confirmation. A backup is created beside it.",
     "analyze": "Analyze PDFs",
     "analyzing": "Analyzing",
@@ -51,36 +46,13 @@
     "confirm": "Click again to confirm",
     "processing": "Creating output",
     "process_success": "{{count}} row(s) added.",
+    "result_title": "Operation result",
+    "tracker_updated": "Updated tracker",
+    "backup_created": "Tracker backup",
+    "created_folders": "Created folders",
     "unknown_error": "An unexpected error occurred. Check the paths and try again."
   },
-  "data": {
-    "title": "Latest operation",
-    "subtitle": "Result of the most recent ECM run.",
-    "empty": "No operation has been created in this session.",
-    "rows": "{{count}} row(s) added",
-    "tracker": "Updated tracker",
-    "backup": "Tracker backup",
-    "folders": "Created folders"
-  },
   "settings": {
-    "title": "Settings",
-    "subtitle": "Shared application foundation settings.",
-    "llm_title": "Artificial intelligence",
-    "llm_label": "LLM enabled",
-    "llm_help": "The ECM workflow does not use an LLM. Turning this switch off retains the key and blocks AI calls from the shared foundation.",
-    "mistral_title": "Mistral configuration",
-    "configured": "CONFIGURED",
-    "not_configured": "NOT CONFIGURED",
-    "api_key": "Mistral API key",
-    "api_key_placeholder": "Enter API key",
-    "api_key_kept": "A key is already stored. Leave empty to keep it.",
-    "base_url": "Base URL",
-    "chat_model": "Chat model",
-    "embed_model": "Embedding model",
-    "save": "Save",
-    "test_connection": "Test connection",
-    "saved": "Settings saved.",
-    "connection_ok": "Connection OK ({{count}} models available).",
-    "connection_failed": "Failed: {{error}}"
+    "title": "Settings"
   }
 }

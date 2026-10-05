@@ -1,11 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const baseURL = `http://127.0.0.1:${process.env.ECM_RENAME_E2E_PORT ?? "5173"}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
   retries: 0,
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL,
     trace: "on-first-retry",
   },
   projects: [
@@ -13,7 +15,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "pnpm dev",
-    url: "http://127.0.0.1:5173",
+    url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },

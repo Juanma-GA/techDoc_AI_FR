@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.services.ecm_rename import preview_batch, process_batch
+from app.services.path_picker import BrowseKind, BrowseLanguage, choose_path
 
 
 router = APIRouter(prefix="/ecm-rename", tags=["ecm-rename"])
@@ -65,6 +66,21 @@ class ProcessResponse(BaseModel):
     tracker_path: str
     backup_path: str
     rows_written: int
+
+
+class BrowseRequest(BaseModel):
+    kind: BrowseKind
+    current_path: str | None = None
+    language: BrowseLanguage = "fr"
+
+
+class BrowseResponse(BaseModel):
+    path: str | None
+
+
+@router.post("/browse", response_model=BrowseResponse)
+def browse_path(payload: BrowseRequest) -> BrowseResponse:
+    return BrowseResponse(path=choose_path(payload.kind, payload.current_path, payload.language) or None)
 
 
 @router.post("/preview", response_model=PreviewResponse)

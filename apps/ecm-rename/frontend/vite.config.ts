@@ -2,6 +2,9 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
+const e2ePort = process.env.ECM_RENAME_E2E_PORT;
+const apiProxyTarget = process.env.ECM_RENAME_API_PROXY_TARGET ?? "http://127.0.0.1:8009";
+
 export default defineConfig(({ command }) => ({
   plugins: [react()],
   resolve: {
@@ -15,9 +18,10 @@ export default defineConfig(({ command }) => ({
   base: command === "build" ? (process.env.VITE_BASE ?? "/") : "/",
   server: {
     host: "127.0.0.1",
-    port: 5173,
+    port: Number(e2ePort ?? 5173),
+    strictPort: e2ePort !== undefined,
     proxy: {
-      "/api": "http://127.0.0.1:8009",
+      "/api": apiProxyTarget,
     },
   },
   test: {

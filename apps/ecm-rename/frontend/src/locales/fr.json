@@ -6,17 +6,8 @@
     "navigation": "Navigation principale",
     "language": "Langue"
   },
-  "llm": {
-    "label": "LLM",
-    "title": "État de configuration du LLM",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "À TESTER",
-    "noKey": "NO KEY"
-  },
   "nav": {
     "home": "Accueil",
-    "data": "Données",
     "settings": "Paramètres"
   },
   "home": {
@@ -25,11 +16,15 @@
     "inputs_title": "Entrées et destination",
     "source": "PDF ou dossier contenant les PDF",
     "source_placeholder": "C:\\ECM\\ECN.pdf ou C:\\ECM\\à traiter",
+    "browse_pdf": "Sélectionner un PDF",
+    "browse_source_folder": "Sélectionner un dossier source",
     "tracker": "Tracker Excel",
     "tracker_placeholder": "C:\\ECM\\tracker.xlsx",
+    "browse_tracker": "Sélectionner le tracker Excel",
     "output": "Dossier de sortie",
     "output_placeholder": "C:\\ECM\\ECM traités",
-    "text_only_notice": "Extraction limitée au texte sélectionnable des PDF. Aucun OCR n'est utilisé.",
+    "browse_output_folder": "Sélectionner le dossier de sortie",
+    "browse_failed": "Impossible d'ouvrir le sélecteur de fichiers.",
     "write_notice": "Le tracker d'origine sera modifié après confirmation. Une sauvegarde sera créée à côté.",
     "analyze": "Analyser les PDF",
     "analyzing": "Analyse en cours",
@@ -51,36 +46,13 @@
     "confirm": "Cliquer encore pour confirmer",
     "processing": "Création en cours",
     "process_success": "{{count}} ligne(s) ajoutée(s).",
+    "result_title": "Résultat de l'opération",
+    "tracker_updated": "Tracker mis à jour",
+    "backup_created": "Sauvegarde du tracker",
+    "created_folders": "Dossiers créés",
     "unknown_error": "Une erreur inattendue est survenue. Vérifie les chemins et réessaie."
   },
-  "data": {
-    "title": "Dernière opération",
-    "subtitle": "Résultat du dernier traitement ECM.",
-    "empty": "Aucune opération n'a été créée dans cette session.",
-    "rows": "{{count}} ligne(s) ajoutée(s)",
-    "tracker": "Tracker mis à jour",
-    "backup": "Sauvegarde du tracker",
-    "folders": "Dossiers créés"
-  },
   "settings": {
-    "title": "Paramètres",
-    "subtitle": "Configuration du socle commun de l'application.",
-    "llm_title": "Intelligence artificielle",
-    "llm_label": "LLM activé",
-    "llm_help": "Le traitement ECM n'utilise pas de LLM. Désactiver ce commutateur conserve la clé et bloque les appels IA du socle commun.",
-    "mistral_title": "Configuration Mistral",
-    "configured": "CONFIGURÉE",
-    "not_configured": "NON CONFIGURÉE",
-    "api_key": "Clé API Mistral",
-    "api_key_placeholder": "Saisir la clé API",
-    "api_key_kept": "Une clé est déjà enregistrée. Laisser vide pour la conserver.",
-    "base_url": "URL de base",
-    "chat_model": "Modèle de chat",
-    "embed_model": "Modèle d'embeddings",
-    "save": "Enregistrer",
-    "test_connection": "Tester la connexion",
-    "saved": "Paramètres enregistrés.",
-    "connection_ok": "Connexion OK ({{count}} modèles disponibles).",
-    "connection_failed": "Échec : {{error}}"
+    "title": "Paramètres"
   }
 }

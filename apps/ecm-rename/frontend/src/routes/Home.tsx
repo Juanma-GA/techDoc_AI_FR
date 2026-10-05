@@ -6,11 +6,14 @@ import { useTranslation } from "react-i18next";
 
 import {
   ecmRenameApi,
+  type BrowseKind,
   type PreviewDto,
   type PreviewRequest,
   type ProcessDto,
   type TrackerField,
 } from "../lib/api";
+import { PathPickerField } from "./PathPickerField";
+import { ProcessResult } from "./ProcessResult";
 
 type FolderField = Extract<TrackerField, "reference" | "revision" | "subject">;
 
@@ -30,8 +33,14 @@ function folderName(record: PreviewDto["records"][number]): string {
     .join("-");
 }
 
-export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => void }) {
-  const { t } = useTranslation();
+type HomeProps = {
+  result: ProcessDto | null;
+  onProcessed: (result: ProcessDto) => void;
+  onClearResult: () => void;
+};
+
+export function Home({ result, onProcessed, onClearResult }: HomeProps) {
+  const { t, i18n } = useTranslation();
   const [sourcePath, setSourcePath] = useState("");
   const [trackerPath, setTrackerPath] = useState("");
   const [outputPath, setOutputPath] = useState("");
@@ -56,6 +65,26 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
     onSuccess: onProcessed,
   });
 
+  const browseMutation = useMutation({
+    mutationFn: ecmRenameApi.browse,
+    onSuccess: ({ path }, request) => {
+      if (!path) return;
+      if (request.kind === "source_file" || request.kind === "source_directory") {
+        setSourcePath(path);
+        clearPreview();
+        return;
+      }
+      if (request.kind === "tracker_file") {
+        setTrackerPath(path);
+        clearPreview();
+        return;
+      }
+      setOutputPath(path);
+      processMutation.reset();
+      setConfirmationArmed(false);
+    },
+  });
+
   useEffect(() => {
     if (!confirmationArmed) return;
     const timeout = window.setTimeout(() => setConfirmationArmed(false), 3000);
@@ -74,6 +103,7 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
   );
 
   function clearPreview() {
+    onClearResult();
     setPreview(null);
     setSheetName("");
     setHeaderRow("");
@@ -83,13 +113,26 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
   }
 
   function analyze() {
+    onClearResult();
     const request: PreviewRequest = {
       source_path: sourcePath.trim(),
       tracker_path: trackerPath.trim(),
     };
     if (sheetName) request.sheet_name = sheetName;
+    onClearResult();
     if (preview && headerRow) request.header_row = Number(headerRow);
     previewMutation.mutate(request);
+  }
+
+  function browse(kind: BrowseKind) {
+    const currentPath =
+      kind === "source_file" || kind === "source_directory"
+        ? sourcePath
+        : kind === "tracker_file"
+          ? trackerPath
+          : outputPath;
+    const language = i18n.resolvedLanguage?.startsWith("en") ? "en" : "fr";
+    browseMutation.mutate({ kind, current_path: currentPath || undefined, language });
   }
 
   function updateFolderField(recordIndex: number, field: FolderField, value: string) {
@@ -168,59 +211,62 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className="label">{t("home.source")}</span>
-              <Input
-                autoComplete="off"
-                spellCheck={false}
-                disabled={previewMutation.isPending || processMutation.isPending}
-                value={sourcePath}
-                placeholder={t("home.source_placeholder")}
-                onChange={(event) => {
-                  setSourcePath(event.currentTarget.value);
-                  clearPreview();
-                }}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="label">{t("home.tracker")}</span>
-              <Input
-                autoComplete="off"
-                spellCheck={false}
-                disabled={previewMutation.isPending || processMutation.isPending}
-                value={trackerPath}
-                placeholder={t("home.tracker_placeholder")}
-                onChange={(event) => {
-                  setTrackerPath(event.currentTarget.value);
-                  clearPreview();
-                }}
-              />
-            </label>
-            <label className="flex flex-col gap-1 md:col-span-2">
-              <span className="label">{t("home.output")}</span>
-              <Input
-                autoComplete="off"
-                spellCheck={false}
-                disabled={processMutation.isPending}
-                value={outputPath}
+            <PathPickerField
+              field="source"
+              label={t("home.source")}
+              placeholder={t("home.source_placeholder")}
+              value={sourcePath}
+              disabled={previewMutation.isPending || processMutation.isPending || browseMutation.isPending}
+              onChange={(value) => {
+                setSourcePath(value);
+                clearPreview();
+              }}
+              onBrowse={browse}
+            />
+            <PathPickerField
+              field="tracker"
+              label={t("home.tracker")}
+              placeholder={t("home.tracker_placeholder")}
+              value={trackerPath}
+              disabled={previewMutation.isPending || processMutation.isPending || browseMutation.isPending}
+              onChange={(value) => {
+                setTrackerPath(value);
+                clearPreview();
+              }}
+              onBrowse={browse}
+            />
+            <div className="md:col-span-2">
+              <PathPickerField
+                field="output"
+                label={t("home.output")}
                 placeholder={t("home.output_placeholder")}
-                onChange={(event) => {
-                  setOutputPath(event.currentTarget.value);
+                value={outputPath}
+                disabled={processMutation.isPending || browseMutation.isPending}
+                onChange={(value) => {
+                  setOutputPath(value);
+                  onClearResult();
                   processMutation.reset();
                   setConfirmationArmed(false);
                 }}
+                onBrowse={browse}
               />
-            </label>
+            </div>
           </div>
 
-          <p className="text-sm text-warning">{t("home.text_only_notice")}</p>
+          {browseMutation.error && (
+            <p className="text-sm text-danger" role="alert">
+              {errorMessage(browseMutation.error, t("home.browse_failed"))}
+            </p>
+          )}
           <p className="text-sm text-fg-dim">{t("home.write_notice")}</p>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="primary"
-              disabled={!sourcePath.trim() || !trackerPath.trim() || previewMutation.isPending}
+              disabled={
+                !sourcePath.trim() || !trackerPath.trim() || previewMutation.isPending || browseMutation.isPending
+              }
               onClick={analyze}
             >
               {previewMutation.isPending ? (
@@ -331,7 +377,7 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
               type="button"
               variant="primary"
               className="max-w-full whitespace-normal text-left"
-              disabled={!readyToProcess || processMutation.isPending}
+              disabled={!readyToProcess || processMutation.isPending || browseMutation.isPending}
               onClick={confirmProcess}
             >
               <FolderPlus aria-hidden="true" className="h-4 w-4" />
@@ -341,11 +387,6 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
                   ? t("home.confirm")
                   : t("home.process")}
             </Button>
-            {processMutation.isSuccess && (
-              <p className="text-sm text-success" role="status">
-                {t("home.process_success", { count: processMutation.data.rows_written })}
-              </p>
-            )}
             {processMutation.error && (
               <p className="text-sm text-danger" role="alert">
                 {errorMessage(processMutation.error, t("home.unknown_error"))}
@@ -354,6 +395,7 @@ export function Home({ onProcessed }: { onProcessed: (result: ProcessDto) => voi
           </div>
         </section>
       )}
+      {result && <ProcessResult result={result} />}
     </div>
   );
 }

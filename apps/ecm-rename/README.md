@@ -10,7 +10,7 @@ POC fonctionnel sur données synthétiques. L'extraction doit encore être véri
 
 ## Features
 
-- Accepte un chemin vers un PDF ou un dossier contenant des PDF (lecture non récursive), un tracker `.xlsx`/`.xlsm` et un dossier de sortie.
+- Permet de sélectionner via le sélecteur système ou de saisir un chemin vers un PDF ou un dossier contenant des PDF (lecture non récursive), un tracker `.xlsx`/`.xlsm` et un dossier de sortie.
 - Extrait les champs identifiés par libellés texte : référence GKN, révision, sujet, titre, auteur, réponse demandée et actions ouvertes du Module 3.
 - Affiche une prévisualisation corrigeable, les colonnes détectées du tracker, l'onglet et la ligne d'en-têtes.
 - Après double confirmation, crée un dossier `{Reference}-{Revision}-{Subject}`, y copie le PDF et ajoute une ligne au tracker.
@@ -58,7 +58,7 @@ Les PDF ne sont pas copiés avant la confirmation. Le tracker choisi est mis à 
 
 ## LLM Configuration
 
-Le traitement ECM n'utilise ni LLM, ni API externe, ni OCR. Les endpoints et l'écran de configuration Mistral proviennent du socle standard mais ne sont pas requis par ce workflow.
+Le traitement ECM n'utilise ni LLM, ni API externe, ni OCR. Les endpoints Mistral du socle standard restent présents dans le backend, mais l'interface ne propose aucune configuration IA.
 
 ## Tests
 
@@ -76,7 +76,7 @@ Le traitement ECM n'utilise ni LLM, ni API externe, ni OCR. Les endpoints et l'�
 
 ## Standard Deviations
 
-None.
+- L'onglet Données est retiré du parcours; la confirmation du résultat reste affichée sur Accueil.
 
 ## Technical References
 
