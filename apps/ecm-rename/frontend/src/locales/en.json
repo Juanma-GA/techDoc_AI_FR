@@ -25,6 +25,8 @@
     "output_placeholder": "C:\\ECM\\processed ECMs",
     "browse_output_folder": "Select the output folder",
     "browse_failed": "Unable to open the file picker.",
+    "paths_load_failed": "Unable to load saved paths.",
+    "paths_save_failed": "Unable to save paths.",
     "write_notice": "The original tracker is updated after confirmation. A backup is created beside it.",
     "analyze": "Analyze PDFs",
     "analyzing": "Analyzing",

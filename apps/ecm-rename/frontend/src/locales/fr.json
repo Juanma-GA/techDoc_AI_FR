@@ -25,6 +25,8 @@
     "output_placeholder": "C:\\ECM\\ECM traités",
     "browse_output_folder": "Sélectionner le dossier de sortie",
     "browse_failed": "Impossible d'ouvrir le sélecteur de fichiers.",
+    "paths_load_failed": "Impossible de charger les chemins mémorisés.",
+    "paths_save_failed": "Impossible d'enregistrer les chemins mémorisés.",
     "write_notice": "Le tracker d'origine sera modifié après confirmation. Une sauvegarde sera créée à côté.",
     "analyze": "Analyser les PDF",
     "analyzing": "Analyse en cours",

@@ -46,6 +46,33 @@ def _write_tracker(path) -> None:
     workbook.save(path)
 
 
+def test_path_preferences_are_persisted(client) -> None:
+    empty = client.get("/api/v1/ecm-rename/paths")
+
+    assert empty.status_code == 200
+    assert empty.json() == {"source_path": "", "tracker_path": "", "output_path": ""}
+
+    paths = {
+        "source_path": r"C:\ECM\to process",
+        "tracker_path": r"C:\ECM\tracker.xlsx",
+        "output_path": r"C:\ECM\processed",
+    }
+    saved = client.put("/api/v1/ecm-rename/paths", json=paths)
+    loaded = client.get("/api/v1/ecm-rename/paths")
+
+    assert saved.status_code == 200
+    assert saved.json() == paths
+    assert loaded.status_code == 200
+    assert loaded.json() == paths
+
+    changed_paths = {**paths, "output_path": r"C:\ECM\final"}
+    updated = client.put("/api/v1/ecm-rename/paths", json=changed_paths)
+
+    assert updated.status_code == 200
+    assert updated.json() == changed_paths
+    assert client.get("/api/v1/ecm-rename/paths").json() == changed_paths
+
+
 def test_preview_extracts_text_and_tracker_values(client, tmp_path) -> None:
     pdf_path = tmp_path / "ECM-TEST.pdf"
     tracker_path = tmp_path / "Tracker.xlsx"
@@ -73,6 +100,39 @@ def test_preview_extracts_text_and_tracker_values(client, tmp_path) -> None:
         "Yes",
         "Update drawing",
     ]
+
+
+def test_preview_extracts_primary_fields_before_reply_section(client, tmp_path) -> None:
+    pdf_path = tmp_path / "ECM-FORM.pdf"
+    tracker_path = tmp_path / "Tracker.xlsx"
+    form_text = "\n".join(
+        [
+            "CM-NO.:",
+            "DOC-001",
+            "COORDINATION MEMO",
+            "Revision",
+            "00",
+            "REPLY TO CM-NO.:",
+            "Revision",
+            "REFERENCE-002",
+            "02",
+            "SUBJECT",
+            "Example subject",
+        ]
+    )
+    _write_pdf(pdf_path, form_text)
+    _write_tracker(tracker_path)
+
+    response = client.post(
+        "/api/v1/ecm-rename/preview",
+        json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
+    )
+
+    assert response.status_code == 200
+    record = response.json()["records"][0]
+    assert record["reference"] == "DOC-001"
+    assert record["revision"] == "00"
+    assert record["subject"] == "Example subject"
 
 
 def test_process_creates_folder_copies_pdf_and_appends_tracker_row(client, tmp_path) -> None:

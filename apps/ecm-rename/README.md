@@ -55,6 +55,7 @@ FastAPI sert l'application React compilée depuis `frontend/dist/` à `/`. Si le
 ## Persistence
 
 Les PDF ne sont pas copiés avant la confirmation. Le tracker choisi est mis à jour en place après création d'une sauvegarde horodatée. Les fichiers métier ne sont pas conservés dans la base SQLite ; celle-ci sert à la configuration standard de l'app.
+Les PDF et trackers ne sont pas conservés dans la base SQLite. La table `path_preferences`, gérée par Alembic, mémorise localement le dernier chemin source, le tracker et le dossier de sortie.
 
 ## LLM Configuration
 

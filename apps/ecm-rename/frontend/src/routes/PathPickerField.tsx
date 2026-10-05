@@ -15,6 +15,7 @@ type PathPickerFieldProps = {
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
+  onBlur: () => void;
   onBrowse: (kind: BrowseKind) => void;
 };
 
@@ -25,6 +26,7 @@ export function PathPickerField({
   value,
   disabled,
   onChange,
+  onBlur,
   onBrowse,
 }: PathPickerFieldProps) {
   const { t } = useTranslation();
@@ -70,6 +72,7 @@ export function PathPickerField({
           value={value}
           placeholder={placeholder}
           onChange={(event) => onChange(event.currentTarget.value)}
+          onBlur={onBlur}
         />
         {actions.map(({ kind, label: actionLabel, icon }) => (
           <Button

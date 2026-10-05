@@ -84,8 +84,16 @@ export type BrowseRequest = {
   language: "fr" | "en";
 };
 export type BrowseResponse = { path: string | null };
+export type PathPreferencesDto = {
+  source_path: string;
+  tracker_path: string;
+  output_path: string;
+};
 
 export const ecmRenameApi = {
+  getPathPreferences: () => api<PathPreferencesDto>("/ecm-rename/paths"),
+  savePathPreferences: (body: PathPreferencesDto) =>
+    api<PathPreferencesDto>("/ecm-rename/paths", { method: "PUT", body: JSON.stringify(body) }),
   browse: (body: BrowseRequest) =>
     api<BrowseResponse>("/ecm-rename/browse", { method: "POST", body: JSON.stringify(body) }),
   preview: (body: PreviewRequest) =>

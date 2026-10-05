@@ -19,6 +19,7 @@ FIELD_ALIASES = {
         "ecn reference",
         "document reference",
         "document number",
+        "cm no",
     },
     "revision": {"revision", "revision number", "revision @", "rev", "rev number"},
     "subject": {"subject", "sujet", "objet", "ecn subject"},
@@ -60,6 +61,19 @@ def normalize_label(value: str) -> str:
 
 def field_for_label(label: str) -> str | None:
     return ALIAS_TO_FIELD.get(normalize_label(label))
+
+
+def _split_known_label_value(line: str) -> tuple[str, str] | None:
+    match = LABEL_VALUE_PATTERN.match(line)
+    if match:
+        return match.group("label").strip(), match.group("value").strip()
+
+    words = line.split()
+    for label_end in range(len(words), 0, -1):
+        label = " ".join(words[:label_end]).rstrip(":")
+        if field_for_label(label):
+            return label, " ".join(words[label_end:]).strip()
+    return None
 
 
 def list_pdf_files(source: Path) -> list[Path]:
@@ -107,12 +121,22 @@ def read_pdf_text(path: Path) -> str:
 def extract_fields(text: str) -> tuple[dict[str, str], dict[str, str]]:
     fields = {field: "" for field in FIELD_ALIASES}
     label_values: dict[str, str] = {}
-    for line in text.splitlines():
-        match = LABEL_VALUE_PATTERN.match(line)
-        if not match:
+    lines = text.splitlines()
+    for line_index, line in enumerate(lines):
+        parts = _split_known_label_value(line)
+        if not parts:
             continue
-        label = match.group("label").strip()
-        value = match.group("value").strip()
+        label, value = parts
+        if not value:
+            for candidate in lines[line_index + 1 :]:
+                candidate = candidate.strip()
+                if not candidate:
+                    continue
+                next_parts = _split_known_label_value(candidate)
+                if next_parts and field_for_label(next_parts[0]):
+                    continue
+                value = candidate
+                break
         if not value:
             continue
         normalized_label = normalize_label(label)

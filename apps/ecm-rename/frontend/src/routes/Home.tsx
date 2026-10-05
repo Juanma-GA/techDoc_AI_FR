@@ -4,6 +4,7 @@ import { FileSearch, FolderPlus, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { usePathPreferences } from "../hooks/usePathPreferences";
 import {
   ecmRenameApi,
   type BrowseKind,
@@ -41,9 +42,12 @@ type HomeProps = {
 
 export function Home({ result, onProcessed, onClearResult }: HomeProps) {
   const { t, i18n } = useTranslation();
-  const [sourcePath, setSourcePath] = useState("");
-  const [trackerPath, setTrackerPath] = useState("");
-  const [outputPath, setOutputPath] = useState("");
+  const pathPreferences = usePathPreferences();
+  const {
+    source_path: sourcePath,
+    tracker_path: trackerPath,
+    output_path: outputPath,
+  } = pathPreferences.paths;
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState("");
   const [preview, setPreview] = useState<PreviewDto | null>(null);
@@ -70,16 +74,16 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
     onSuccess: ({ path }, request) => {
       if (!path) return;
       if (request.kind === "source_file" || request.kind === "source_directory") {
-        setSourcePath(path);
+        pathPreferences.savePaths({ source_path: path });
         clearPreview();
         return;
       }
       if (request.kind === "tracker_file") {
-        setTrackerPath(path);
+        pathPreferences.savePaths({ tracker_path: path });
         clearPreview();
         return;
       }
-      setOutputPath(path);
+      pathPreferences.savePaths({ output_path: path });
       processMutation.reset();
       setConfirmationArmed(false);
     },
@@ -216,11 +220,17 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
               label={t("home.source")}
               placeholder={t("home.source_placeholder")}
               value={sourcePath}
-              disabled={previewMutation.isPending || processMutation.isPending || browseMutation.isPending}
+              disabled={
+                pathPreferences.isLoading ||
+                previewMutation.isPending ||
+                processMutation.isPending ||
+                browseMutation.isPending
+              }
               onChange={(value) => {
-                setSourcePath(value);
+                pathPreferences.setPath("source_path", value);
                 clearPreview();
               }}
+              onBlur={() => pathPreferences.savePaths()}
               onBrowse={browse}
             />
             <PathPickerField
@@ -228,11 +238,17 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
               label={t("home.tracker")}
               placeholder={t("home.tracker_placeholder")}
               value={trackerPath}
-              disabled={previewMutation.isPending || processMutation.isPending || browseMutation.isPending}
+              disabled={
+                pathPreferences.isLoading ||
+                previewMutation.isPending ||
+                processMutation.isPending ||
+                browseMutation.isPending
+              }
               onChange={(value) => {
-                setTrackerPath(value);
+                pathPreferences.setPath("tracker_path", value);
                 clearPreview();
               }}
+              onBlur={() => pathPreferences.savePaths()}
               onBrowse={browse}
             />
             <div className="md:col-span-2">
@@ -241,18 +257,29 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
                 label={t("home.output")}
                 placeholder={t("home.output_placeholder")}
                 value={outputPath}
-                disabled={processMutation.isPending || browseMutation.isPending}
+                disabled={pathPreferences.isLoading || processMutation.isPending || browseMutation.isPending}
                 onChange={(value) => {
-                  setOutputPath(value);
+                  pathPreferences.setPath("output_path", value);
                   onClearResult();
                   processMutation.reset();
                   setConfirmationArmed(false);
                 }}
+                onBlur={() => pathPreferences.savePaths()}
                 onBrowse={browse}
               />
             </div>
           </div>
 
+          {pathPreferences.loadError && (
+            <p className="text-sm text-danger" role="alert">
+              {errorMessage(pathPreferences.loadError, t("home.paths_load_failed"))}
+            </p>
+          )}
+          {pathPreferences.saveError && (
+            <p className="text-sm text-danger" role="alert">
+              {errorMessage(pathPreferences.saveError, t("home.paths_save_failed"))}
+            </p>
+          )}
           {browseMutation.error && (
             <p className="text-sm text-danger" role="alert">
               {errorMessage(browseMutation.error, t("home.browse_failed"))}
