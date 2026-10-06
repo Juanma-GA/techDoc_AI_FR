@@ -12,7 +12,7 @@ describe("ecmRenameApi", () => {
     const fetchMock = vi.fn().mockResolvedValue(response);
     vi.stubGlobal("fetch", fetchMock);
     const request = {
-      kind: "source_file" as const,
+      kind: "source_files" as const,
       current_path: "C:\\ECM",
       language: "fr" as const,
     };

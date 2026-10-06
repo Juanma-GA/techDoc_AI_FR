@@ -46,15 +46,37 @@ def _tracker_path(value: str, *, must_exist: bool) -> Path:
     return path
 
 
+def _pdf_sources(value: str) -> tuple[Path | None, list[Path], str]:
+    entries = [entry.strip().strip('"') for entry in value.splitlines() if entry.strip()]
+    if not entries:
+        raise _app_error("INVALID_PATH", "La source PDF ne peut pas être vide.")
+
+    sources = [_user_path(entry, "La source PDF", must_exist=True) for entry in entries]
+    if len(sources) == 1:
+        source = sources[0]
+        return source, list_pdf_files(source), str(source)
+
+    if any(not source.is_file() for source in sources):
+        raise _app_error(
+            "INVALID_PDF_SOURCE",
+            "Sélectionne plusieurs fichiers PDF ou un seul dossier source.",
+        )
+
+    files = [file for source in sources for file in list_pdf_files(source)]
+    if len(set(files)) != len(files):
+        raise _app_error("DUPLICATE_PDF_SOURCE", "Un même PDF est sélectionné plusieurs fois.")
+    files.sort(key=lambda path: (path.name.casefold(), str(path).casefold()))
+    return None, files, "\n".join(str(path) for path in files)
+
+
 def preview_batch(
     source_path: str,
     tracker_path: str,
     sheet_name: str | None = None,
     header_row: int | None = None,
 ) -> dict[str, Any]:
-    source = _user_path(source_path, "La source PDF", must_exist=True)
+    _, files, normalized_source_path = _pdf_sources(source_path)
     tracker = _tracker_path(tracker_path, must_exist=True)
-    files = list_pdf_files(source)
     with open_tracker(tracker, read_only=True) as workbook:
         sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
         records = []
@@ -72,7 +94,7 @@ def preview_batch(
                 }
             )
         return {
-            "source_path": str(source),
+            "source_path": normalized_source_path,
             "tracker_path": str(tracker),
             "sheet_names": [item.name for item in workbook.sheets],
             "sheet_name": sheet.name,
@@ -104,17 +126,16 @@ def create_folders_batch(
     output_path: str,
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    source = _user_path(source_path, "La source PDF", must_exist=True)
+    source, files, _ = _pdf_sources(source_path)
     output = _user_path(output_path, "Le dossier de sortie", must_exist=False)
     if output.exists() and not output.is_dir():
         raise _app_error("INVALID_OUTPUT", "Le chemin de sortie existe mais n'est pas un dossier.")
-    if source.is_dir() and output == source:
+    if source is not None and source.is_dir() and output == source:
         raise _app_error(
             "INVALID_OUTPUT",
             "Choisis un dossier de sortie différent du dossier source des PDF.",
         )
 
-    files = list_pdf_files(source)
     file_by_path = {str(path.resolve()): path for path in files}
     record_paths = [str(Path(record["source_path"]).resolve()) for record in records]
     if len(record_paths) != len(set(record_paths)) or set(record_paths) != set(file_by_path):

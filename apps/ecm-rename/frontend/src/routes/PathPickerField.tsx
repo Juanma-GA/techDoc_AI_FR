@@ -31,14 +31,18 @@ export function PathPickerField({
 }: PathPickerFieldProps) {
   const { t } = useTranslation();
   const inputId = `ecm-rename-${field}-path`;
+  const sourcePaths = field === "source" ? value.split(/\r?\n/).filter(Boolean) : [];
+  const hasMultipleSourcePaths = sourcePaths.length > 1;
+  const inputValue = hasMultipleSourcePaths
+    ? t("home.selected_pdf_count", { count: sourcePaths.length })
+    : value;
   const actions: BrowseAction[] =
     field === "source"
       ? [
-          { kind: "source_file", label: "home.browse_pdf", icon: <FileText aria-hidden="true" className="h-4 w-4" /> },
           {
-            kind: "source_directory",
-            label: "home.browse_source_folder",
-            icon: <FolderOpen aria-hidden="true" className="h-4 w-4" />,
+            kind: "source_files",
+            label: "home.browse_pdf",
+            icon: <FileText aria-hidden="true" className="h-4 w-4" />,
           },
         ]
       : field === "tracker"
@@ -69,7 +73,8 @@ export function PathPickerField({
           autoComplete="off"
           spellCheck={false}
           disabled={disabled}
-          value={value}
+          value={inputValue}
+          title={hasMultipleSourcePaths ? sourcePaths.join("\n") : undefined}
           placeholder={placeholder}
           onChange={(event) => onChange(event.currentTarget.value)}
           onBlur={onBlur}

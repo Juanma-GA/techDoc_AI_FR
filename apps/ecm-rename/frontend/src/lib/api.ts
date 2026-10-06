@@ -79,13 +79,13 @@ export type AppendTrackerDto = {
   rows_written: number;
 };
 
-export type BrowseKind = "source_file" | "source_directory" | "tracker_file" | "output_directory";
+export type BrowseKind = "source_files" | "source_directory" | "tracker_file" | "output_directory";
 export type BrowseRequest = {
   kind: BrowseKind;
   current_path?: string;
   language: "fr" | "en";
 };
-export type BrowseResponse = { path: string | null };
+export type BrowseResponse = { paths: string[] };
 export type PathPreferencesDto = {
   source_path: string;
   tracker_path: string;

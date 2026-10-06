@@ -8,17 +8,17 @@ from typing import Any, Literal
 
 from app.core.errors import AppError
 
-BrowseKind = Literal["source_file", "source_directory", "tracker_file", "output_directory"]
+BrowseKind = Literal["source_files", "source_directory", "tracker_file", "output_directory"]
 BrowseLanguage = Literal["fr", "en"]
 
 _TITLES: dict[BrowseKind, dict[BrowseLanguage, str]] = {
-    "source_file": {"fr": "Sélectionner un PDF", "en": "Select a PDF"},
+    "source_files": {"fr": "Sélectionner des PDF", "en": "Select PDFs"},
     "source_directory": {"fr": "Sélectionner le dossier source", "en": "Select the source folder"},
     "tracker_file": {"fr": "Sélectionner le tracker Excel", "en": "Select the Excel tracker"},
     "output_directory": {"fr": "Sélectionner le dossier de sortie", "en": "Select the output folder"},
 }
 _FILE_FILTERS: dict[BrowseKind, dict[BrowseLanguage, str]] = {
-    "source_file": {
+    "source_files": {
         "fr": "Fichiers PDF (*.pdf)|*.pdf|Tous les fichiers (*.*)|*.*",
         "en": "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
     },
@@ -37,16 +37,20 @@ $kind = $env:ECM_RENAME_PICKER_KIND
 $title = $env:ECM_RENAME_PICKER_TITLE
 $initialDirectory = $env:ECM_RENAME_PICKER_INITIAL_DIRECTORY
 
-if ($kind -eq 'source_file' -or $kind -eq 'tracker_file') {
+if ($kind -eq 'source_files' -or $kind -eq 'tracker_file') {
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
     $dialog.Title = $title
     $dialog.Filter = $env:ECM_RENAME_PICKER_FILTER
-    $dialog.Multiselect = $false
+    $dialog.Multiselect = ($kind -eq 'source_files')
     if ($initialDirectory -and (Test-Path -LiteralPath $initialDirectory -PathType Container)) {
         $dialog.InitialDirectory = $initialDirectory
     }
     if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        [Console]::WriteLine($dialog.FileName)
+        if ($kind -eq 'source_files') {
+            $dialog.FileNames | ForEach-Object { [Console]::WriteLine($_) }
+        } else {
+            [Console]::WriteLine($dialog.FileName)
+        }
     }
     $dialog.Dispose()
     exit 0
@@ -69,7 +73,8 @@ def _initial_directory(value: str | None) -> str | None:
     if not value:
         return None
     try:
-        path = Path(os.path.expandvars(value.strip().strip('"'))).expanduser()
+        first_path = next((line.strip() for line in value.splitlines() if line.strip()), value)
+        path = Path(os.path.expandvars(first_path.strip().strip('"'))).expanduser()
         if path.is_file() or not path.exists():
             path = path.parent
         return str(path) if path.is_dir() else None
@@ -86,7 +91,7 @@ def _pick_with_windows(
     title: str,
     language: BrowseLanguage,
     initial_directory: str | None,
-) -> str | None:
+) -> list[str] | None:
     executable = shutil.which("powershell.exe") or shutil.which("powershell")
     if not executable:
         raise AppError(
@@ -141,7 +146,8 @@ def _pick_with_windows(
             "Impossible d'ouvrir le sélecteur de fichiers.",
             status_code=503,
         )
-    return result.stdout.rstrip("\r\n") or None
+    selected_paths = [line for line in result.stdout.splitlines() if line]
+    return selected_paths or None
 
 
 def _pick_with_tk(
@@ -149,7 +155,7 @@ def _pick_with_tk(
     title: str,
     language: BrowseLanguage,
     initial_directory: str | None,
-) -> str | None:
+) -> list[str] | None:
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -165,15 +171,16 @@ def _pick_with_tk(
         options["initialdir"] = initial_directory
     root: tk.Tk | None = None
     selected_path = ""
+    selected_paths: tuple[str, ...] = ()
     try:
         root = tk.Tk()
         root.withdraw()
         root.attributes("-topmost", True)
         options["parent"] = root
-        if kind == "source_file":
+        if kind == "source_files":
             file_label = "PDF files" if language == "en" else "Fichiers PDF"
             all_label = "All files" if language == "en" else "Tous les fichiers"
-            selected_path = filedialog.askopenfilename(
+            selected_paths = filedialog.askopenfilenames(
                 **options,
                 filetypes=((file_label, "*.pdf"), (all_label, "*.*")),
             )
@@ -201,10 +208,12 @@ def _pick_with_tk(
                 root.destroy()
             except tk.TclError:
                 pass
-    return selected_path or None
+    if kind == "source_files":
+        return list(selected_paths) or None
+    return [selected_path] if selected_path else None
 
 
-def choose_path(kind: BrowseKind, current_path: str | None, language: BrowseLanguage) -> str | None:
+def choose_path(kind: BrowseKind, current_path: str | None, language: BrowseLanguage) -> list[str] | None:
     title = _TITLES[kind][language]
     initial_directory = _initial_directory(current_path)
     if _is_windows_runtime():

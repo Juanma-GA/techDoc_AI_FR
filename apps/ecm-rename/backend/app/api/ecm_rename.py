@@ -87,7 +87,7 @@ class BrowseRequest(BaseModel):
 
 
 class BrowseResponse(BaseModel):
-    path: str | None
+    paths: list[str] = Field(default_factory=list)
 
 
 class PathPreferences(BaseModel):
@@ -123,7 +123,7 @@ def write_paths(payload: PathPreferences, db: Session = Depends(get_db)) -> Path
 
 @router.post("/browse", response_model=BrowseResponse)
 def browse_path(payload: BrowseRequest) -> BrowseResponse:
-    return BrowseResponse(path=choose_path(payload.kind, payload.current_path, payload.language) or None)
+    return BrowseResponse(paths=choose_path(payload.kind, payload.current_path, payload.language) or [])
 
 
 @router.post("/preview", response_model=PreviewResponse)

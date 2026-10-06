@@ -1,26 +1,37 @@
 import { expect, test } from "@playwright/test";
 
 test("ECM Rename workspace renders", async ({ page }) => {
-  await page.route("**/api/v1/ecm-rename/browse", (route) =>
+  await page.route("**/api/v1/ecm-rename/paths", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        path: {
-          source_file: "C:\\ECM\\ECN.pdf",
-          source_directory: "C:\\ECM\\à traiter",
-          tracker_file: "C:\\ECM\\tracker.xlsx",
-          output_directory: "C:\\ECM\\sortie",
-        }[route.request().postDataJSON().kind as string] ?? null,
-      }),
+      body:
+        route.request().method() === "PUT"
+          ? (route.request().postData() ?? "{}")
+          : JSON.stringify({ source_path: "", tracker_path: "", output_path: "" }),
     }),
   );
-  await page.route("**/api/v1/ecm-rename/preview", (route) =>
-    route.fulfill({
+  await page.route("**/api/v1/ecm-rename/browse", (route) => {
+    const selections: Record<string, string[]> = {
+      source_files: ["C:\\ECM\\ECN-A.pdf", "C:\\ECM\\ECN-B.pdf"],
+      source_directory: ["C:\\ECM\\à traiter"],
+      tracker_file: ["C:\\ECM\\tracker.xlsx"],
+      output_directory: ["C:\\ECM\\sortie"],
+    };
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ paths: selections[route.request().postDataJSON().kind as string] ?? [] }),
+    });
+  });
+  let analyzedSourcePath = "";
+  await page.route("**/api/v1/ecm-rename/preview", async (route) => {
+    analyzedSourcePath = route.request().postDataJSON().source_path as string;
+    await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        source_path: "C:\\ECM\\à traiter",
+        source_path: analyzedSourcePath,
         tracker_path: "C:\\ECM\\tracker.xlsx",
         sheet_names: ["ECM Tracker"],
         sheet_name: "ECM Tracker",
@@ -32,23 +43,34 @@ test("ECM Rename workspace renders", async ({ page }) => {
         ],
         records: [
           {
-            source_path: "C:\\ECM\\à traiter\\ECN.pdf",
-            file_name: "ECN.pdf",
+            source_path: "C:\\ECM\\ECN-A.pdf",
+            file_name: "ECN-A.pdf",
             reference: "ECN-42",
             revision: "A",
             subject: "Cooling unit",
             tracker_values: ["ECN-42", "A", "Cooling unit"],
           },
+          {
+            source_path: "C:\\ECM\\ECN-B.pdf",
+            file_name: "ECN-B.pdf",
+            reference: "ECN-44",
+            revision: "B",
+            subject: "Actuator update",
+            tracker_values: ["ECN-44", "B", "Actuator update"],
+          },
         ],
       }),
-    }),
-  );
+    });
+  });
   await page.route("**/api/v1/ecm-rename/folders", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        created_folders: ["C:\\ECM\\sortie\\ECN-42-A-Cooling unit"],
+        created_folders: [
+          "C:\\ECM\\sortie\\ECN-42-A-Cooling unit",
+          "C:\\ECM\\sortie\\ECN-44-B-Actuator update",
+        ],
         existing_folders: [],
       }),
     }),
@@ -59,7 +81,7 @@ test("ECM Rename workspace renders", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify({
         tracker_path: "C:\\ECM\\tracker.xlsx",
-        rows_written: 1,
+        rows_written: 2,
       }),
     }),
   );
@@ -70,14 +92,13 @@ test("ECM Rename workspace renders", async ({ page }) => {
   await expect(
     page.getByText(/Extraction limitée au texte sélectionnable|Extraction reads selectable PDF text only/),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: /Sélectionner un PDF|Select a PDF/ }).click();
-  await expect(
-    page.getByRole("textbox", { name: /PDF ou dossier contenant les PDF|PDF or folder containing PDFs/ }),
-  ).toHaveValue("C:\\ECM\\ECN.pdf");
-  await page.getByRole("button", { name: /Sélectionner un dossier source|Select a source folder/ }).click();
-  await expect(
-    page.getByRole("textbox", { name: /PDF ou dossier contenant les PDF|PDF or folder containing PDFs/ }),
-  ).toHaveValue("C:\\ECM\\à traiter");
+  const sourceField = page.getByRole("textbox", {
+    name: /PDF ou dossier contenant les PDF|PDF or folder containing PDFs/,
+  });
+  await expect(page.getByRole("button", { name: /Sélectionner un ou plusieurs PDF|Select one or more PDFs/ })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /Sélectionner un dossier source|Select a source folder/ })).toHaveCount(0);
+  await page.getByRole("button", { name: /Sélectionner un ou plusieurs PDF|Select one or more PDFs/ }).click();
+  await expect(sourceField).toHaveValue(/2 PDF sélectionnés|2 PDFs selected/);
   await page.getByRole("button", { name: /Sélectionner le tracker Excel|Select the Excel tracker/ }).click();
   await expect(page.getByRole("textbox", { name: /Tracker Excel|Excel tracker/ })).toHaveValue(
     "C:\\ECM\\tracker.xlsx",
@@ -87,6 +108,7 @@ test("ECM Rename workspace renders", async ({ page }) => {
     "C:\\ECM\\sortie",
   );
   await page.getByRole("button", { name: /Analyser les PDF|Analyze PDFs/ }).click();
+  expect(analyzedSourcePath).toBe("C:\\ECM\\ECN-A.pdf\nC:\\ECM\\ECN-B.pdf");
   await expect(page.getByRole("heading", { name: /Prévisualisation et corrections|Preview and corrections/ })).toBeVisible();
   await expect(page.getByRole("textbox", { name: /Référence|Reference/ }).first()).toHaveValue("ECN-42");
   await expect(page.getByRole("textbox", { name: /Révision|Revision/ }).first()).toHaveValue("A");
@@ -95,6 +117,7 @@ test("ECM Rename workspace renders", async ({ page }) => {
   await expect(page.getByRole("button", { name: /Terminé|Done/ })).toBeDisabled();
   await expect(page.getByRole("heading", { name: /Résultat de l'opération|Operation result/ })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\sortie\\ECN-42-A-Cooling unit", { exact: true })).toBeVisible();
+  await expect(page.getByText("C:\\ECM\\sortie\\ECN-44-B-Actuator update", { exact: true })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /Ajouter les lignes au tracker|Add rows to tracker/ }).click();
   await expect(page.getByRole("button", { name: /Ajouté|Added/ })).toBeDisabled();

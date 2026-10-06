@@ -89,19 +89,19 @@ export function Home({
 
   const browseMutation = useMutation({
     mutationFn: ecmRenameApi.browse,
-    onSuccess: ({ path }, request) => {
-      if (!path) return;
-      if (request.kind === "source_file" || request.kind === "source_directory") {
-        pathPreferences.savePaths({ source_path: path });
+    onSuccess: ({ paths }, request) => {
+      if (paths.length === 0) return;
+      if (request.kind === "source_files" || request.kind === "source_directory") {
+        pathPreferences.savePaths({ source_path: paths.join("\n") });
         clearPreview();
         return;
       }
       if (request.kind === "tracker_file") {
-        pathPreferences.savePaths({ tracker_path: path });
+        pathPreferences.savePaths({ tracker_path: paths[0] ?? "" });
         clearPreview();
         return;
       }
-      pathPreferences.savePaths({ output_path: path });
+      pathPreferences.savePaths({ output_path: paths[0] ?? "" });
       onClearFolderResult();
       folderMutation.reset();
     },
@@ -148,7 +148,7 @@ export function Home({
 
   function browse(kind: BrowseKind) {
     const currentPath =
-      kind === "source_file" || kind === "source_directory"
+      kind === "source_files" || kind === "source_directory"
         ? sourcePath
         : kind === "tracker_file"
           ? trackerPath

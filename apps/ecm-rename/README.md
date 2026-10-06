@@ -10,7 +10,7 @@ POC fonctionnel sur données synthétiques. L'extraction doit encore être véri
 
 ## Features
 
-- Permet de sélectionner via le sélecteur système ou de saisir un chemin vers un PDF ou un dossier contenant des PDF (lecture non récursive), un tracker `.xlsx`/`.xlsm` et un dossier de sortie.
+- Permet de sélectionner un ou plusieurs PDF à la fois via le sélecteur système, ou de saisir un chemin vers un PDF ou un dossier contenant des PDF (lecture non récursive), un tracker `.xlsx`/`.xlsm` et un dossier de sortie.
 - Extrait les champs identifiés par libellés texte : référence GKN, révision, sujet, titre, auteur, réponse demandée et actions ouvertes du Module 3.
 - Affiche une prévisualisation corrigeable, les colonnes détectées du tracker, l'onglet et la ligne d'en-têtes.
 - Affiche une prévisualisation corrigeable des champs extraits et du nom de dossier prévu.
