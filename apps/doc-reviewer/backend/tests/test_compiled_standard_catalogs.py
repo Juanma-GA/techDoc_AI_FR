@@ -35,7 +35,7 @@ from app.core.page_range import filter_pdf_pages
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfBookmark, PdfLine, Span
 
 
 _TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
@@ -2266,6 +2266,66 @@ def test_chapter_sequence_uses_full_document_for_a_single_page_analysis() -> Non
     assert suggestions[0].proposed == "2. LEAK TESTS"
 
 
+def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
+    rule = _rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")
+    pages = [
+        ParsedPage(page=1, text="INTRODUCTION"),
+        ParsedPage(page=2, text="REPAIR PROCEDURE"),
+    ]
+    valid = ParsedPdf(
+        page_count=2,
+        pages=pages,
+        full_text="INTRODUCTION\nREPAIR PROCEDURE",
+        is_signed=False,
+        bookmarks=[
+            PdfBookmark(title="INTRODUCTION", page=1),
+            PdfBookmark(title="REPAIR PROCEDURE", page=2),
+        ],
+    )
+    invalid = ParsedPdf(
+        page_count=2,
+        pages=pages,
+        full_text="INTRODUCTION\nREPAIR PROCEDURE",
+        is_signed=False,
+        bookmarks=[PdfBookmark(title="REPAIR PROCEDURE", page=1)],
+    )
+
+    valid_results, valid_suggestions = execute_pdf_rules(valid, [rule])
+    invalid_results, invalid_suggestions = execute_pdf_rules(invalid, [rule])
+
+    assert valid_results[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid_results[0].status == "FAIL"
+    assert [(item.page, item.original, item.proposed) for item in invalid_suggestions] == [
+        (1, "REPAIR PROCEDURE", "")
+    ]
+
+
+def test_pdf_bookmark_title_page_and_textless_destinations_are_inconclusive() -> None:
+    rule = _rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")
+    parsed = ParsedPdf(
+        page_count=3,
+        pages=[
+            ParsedPage(page=1, text="COMPONENT MAINTENANCE MANUAL"),
+            ParsedPage(page=2, text="REPAIR PROCEDURE"),
+            ParsedPage(page=3, text="", has_text_layer=False),
+        ],
+        full_text="COMPONENT MAINTENANCE MANUAL\nREPAIR PROCEDURE\n",
+        is_signed=False,
+        bookmarks=[
+            PdfBookmark(title="TITLE PAGE", page=1),
+            PdfBookmark(title="WRONG TITLE", page=2),
+            PdfBookmark(title="DISASSEMBLY", page=3),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [rule])
+
+    assert results[0].status == "FAIL"
+    assert results[0].inconclusive_pages == ["1", "3"]
+    assert [(item.page, item.original) for item in suggestions] == [(2, "WRONG TITLE")]
+
+
 def test_list_of_materials_code_rule_only_checks_the_code_column() -> None:
     rule = _rule("CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES")
     parsed = _list_materials_code_pdf(
@@ -2286,6 +2346,29 @@ def test_list_of_materials_code_rule_only_checks_the_code_column() -> None:
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].original == "(pa-pa-024)"
     assert invalid_suggestions[0].proposed == "pa-pa-024"
+
+
+def test_list_of_materials_code_must_not_contain_uppercase_letters() -> None:
+    rule = _rule("CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE")
+    valid, valid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [("RED PAINT", "pa-pa-024", "SUPPLIER ABC")]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [("RED PAINT", "PA-PA-024", "SUPPLIER ABC")]
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("PA-PA-024", "pa-pa-024")
+    ]
 
 
 def test_numerical_index_part_numbers_are_sorted_across_logical_pages() -> None:
@@ -2886,6 +2969,28 @@ def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion()
     )
 
 
+def test_temperature_ranges_use_deg_c_only_after_the_second_value() -> None:
+    rule = _rule("CUSTOM_TEMPERATURE_RANGE_FORMAT")
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 deg. C (59 to 95 deg. F)"),
+        [rule],
+    )
+    invalid_cases = (
+        "Temperature: 15 deg. C to 35 deg. C",
+        "Temperature: 15 C to 35 deg. C",
+        "Temperature: 15 to 35 C",
+        "Temperature: 15 to 35",
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    for text in invalid_cases:
+        results, suggestions = execute_pdf_rules(_pdf(text), [rule])
+        assert results[0].status == "FAIL", text
+        assert len(suggestions) == 1, text
+        assert suggestions[0].proposed == "", text
+
+
 def test_bar_pressure_requires_a_parenthesized_psi_conversion() -> None:
     rule = _rule("CUSTOM_BAR_PSI_CONVERSION")
     valid, valid_suggestions = execute_pdf_rules(
@@ -3016,6 +3121,22 @@ def test_legacy_thales_references_are_proposed_as_thales() -> None:
         "thomson",
     ]
     assert {item.proposed for item in invalid_suggestions} == {"THALES"}
+
+
+def test_identification_is_replaced_with_indicator() -> None:
+    rule = _rule("CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR")
+
+    valid, valid_suggestions = execute_pdf_rules(_pdf("Use the indicator."), [rule])
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _pdf("Check the identification number."), [rule]
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("identification", "indicator")
+    ]
 
 
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:

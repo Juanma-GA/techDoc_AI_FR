@@ -59,6 +59,7 @@ _COPYRIGHT_POSITION_EXPECTED = (
     "x=1.76 cm, y=26.51 cm (tolerance +/- 0.10 cm)"
 )
 _JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
+_PDF_BOOKMARK_EXPECTED = "Titre du signet present sur la page cible"
 _JUSTIFICATION_MIN_LINE_CHARACTERS = 24
 _JUSTIFICATION_HORIZONTAL_TOLERANCE = 3.0
 _JUSTIFICATION_MULTICOLUMN_TOLERANCE = 40.0
@@ -955,6 +956,7 @@ def _highlights_description_findings(
 
 def _list_materials_code_findings(
     context: Any,
+    control: str,
 ) -> tuple[list[OperationResult], int]:
     runtime = getattr(context, "runtime", context)
     parsed_pdf = getattr(runtime, "parsed_pdf", None)
@@ -1021,22 +1023,38 @@ def _list_materials_code_findings(
                 center_x = (span.bbox[0] + span.bbox[2]) / 2
                 if (
                     not column_left <= center_x < column_right
-                    or not any(character in span.text for character in "()")
                 ):
                     continue
                 original = span.text.strip()
+                if control == "list_materials_code_parentheses":
+                    if not any(character in original for character in "()"):
+                        continue
+                    expected = "Code sans parentheses"
+                    message = (
+                        f"Le code « {original} » de la page LM doit etre ecrit "
+                        "sans parentheses."
+                    )
+                    proposed = original.replace("(", "").replace(")", "")
+                elif control == "list_materials_code_lowercase":
+                    if not any(character.isupper() for character in original):
+                        continue
+                    expected = "Code en minuscules"
+                    message = (
+                        f"Le code « {original} » de la page LM doit etre ecrit "
+                        "sans lettres majuscules."
+                    )
+                    proposed = original.lower()
+                else:
+                    raise ValueError(f"unknown LIST OF MATERIALS control: {control}")
                 start = text_by_page.get(page.page, "").find(original)
                 findings.append(
                     OperationResult(
                         status="FAIL",
                         observed=original,
-                        expected="Code sans parentheses",
-                        message=(
-                            f"Le code « {original} » de la page LM doit etre ecrit "
-                            "sans parentheses."
-                        ),
+                        expected=expected,
+                        message=message,
                         original=original,
-                        proposed=original.replace("(", "").replace(")", ""),
+                        proposed=proposed,
                         span=(start, start + len(original)) if start >= 0 else None,
                         page=page.page,
                         bbox=span.bbox,
@@ -1255,9 +1273,16 @@ def _document_structure_findings(
             if control == "highlights_deleted_description"
             else "Une description de modification"
         )
-    elif control == "list_materials_code_parentheses":
-        findings, checked = _list_materials_code_findings(context)
-        expected = "Code de la LIST OF MATERIALS sans parentheses"
+    elif control in {
+        "list_materials_code_parentheses",
+        "list_materials_code_lowercase",
+    }:
+        findings, checked = _list_materials_code_findings(context, control)
+        expected = (
+            "Code de la LIST OF MATERIALS sans parentheses"
+            if control == "list_materials_code_parentheses"
+            else "Code de la LIST OF MATERIALS en minuscules"
+        )
     elif control == "ni_part_number_order":
         findings, checked = _numerical_index_order_findings(context)
         expected = "Part Number numeriques en ordre croissant"
@@ -1281,6 +1306,110 @@ def _evaluate_document_structure(
         expected=expected,
         page=targets[-1].raw_page if targets else None,
     )
+
+
+def _pdf_bookmark_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int, list[int]]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0, []
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    pages_by_number = {page.page: page for page in parsed_pdf.pages}
+    findings: list[OperationResult] = []
+    checked = 0
+    inconclusive_pages: set[int] = set()
+    for bookmark in parsed_pdf.bookmarks:
+        page = pages_by_number.get(bookmark.page)
+        if page is None:
+            if bookmark.page < 1 or not parsed_pdf.pages:
+                continue
+            page = parsed_pdf.pages[0]
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=bookmark.title or "(signet sans titre)",
+                    expected=_PDF_BOOKMARK_EXPECTED,
+                    message=(
+                        f"Le signet « {bookmark.title or '(sans titre)'} » pointe "
+                        f"vers la page inexistante {bookmark.page}."
+                    ),
+                    original=bookmark.title or "(signet sans titre)",
+                    proposed="",
+                    page=page.page,
+                )
+            )
+            checked += 1
+            continue
+        if target_pages and page.page not in target_pages:
+            continue
+        title = " ".join(bookmark.title.split()).casefold()
+        if not title or not page.has_text_layer or not page.text.strip():
+            inconclusive_pages.add(page.page)
+            continue
+
+        checked += 1
+        page_text = " ".join(page.text.split()).casefold()
+        if title in page_text:
+            continue
+        if title == "title page":
+            inconclusive_pages.add(page.page)
+            continue
+        findings.append(
+            OperationResult(
+                status="FAIL",
+                observed=bookmark.title,
+                expected=_PDF_BOOKMARK_EXPECTED,
+                message=(
+                    f"Le signet « {bookmark.title} » pointe vers la page {page.page}, "
+                    "mais son titre n'apparait pas dans le texte de cette page."
+                ),
+                original=bookmark.title,
+                proposed="",
+                page=page.page,
+            )
+        )
+    return findings, checked, sorted(inconclusive_pages)
+
+
+def _evaluate_pdf_bookmarks(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> OperationResult:
+    findings, checked, inconclusive_pages = _pdf_bookmark_findings(context)
+    if findings:
+        findings[0].inconclusive_pages = inconclusive_pages
+        return findings[0]
+    if inconclusive_pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PDF_BOOKMARK_EXPECTED,
+            inconclusive_pages=inconclusive_pages,
+        )
+    if checked == 0:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PDF_BOOKMARK_EXPECTED,
+            inconclusive_pages=inconclusive_pages,
+        )
+    targets = getattr(context, "targets", ())
+    return OperationResult(
+        status="PASS",
+        expected=_PDF_BOOKMARK_EXPECTED,
+        page=targets[-1].raw_page if targets else None,
+        inconclusive_pages=inconclusive_pages,
+    )
+
+
+def _suggest_pdf_bookmarks(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> list[OperationResult]:
+    findings, _checked, _inconclusive_pages = _pdf_bookmark_findings(context)
+    return findings
 
 
 def _suggest_document_structure(
@@ -1496,6 +1625,11 @@ DOCUMENT_STRUCTURE = ClientOperation(
     execute=_evaluate_document_structure,
     suggestions=_suggest_document_structure,
 )
+PDF_BOOKMARKS = ClientOperation(
+    name="pdf_bookmarks",
+    execute=_evaluate_pdf_bookmarks,
+    suggestions=_suggest_pdf_bookmarks,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -1507,5 +1641,6 @@ OPERATIONS = {
         HIGHLIGHTS_LEGEND_FOOTER,
         COPYRIGHT_POSITION,
         DOCUMENT_STRUCTURE,
+        PDF_BOOKMARKS,
     )
 }

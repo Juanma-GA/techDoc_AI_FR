@@ -45,6 +45,12 @@ class PdfWord:
     word_index: int
 
 
+@dataclass(frozen=True)
+class PdfBookmark:
+    title: str
+    page: int
+
+
 @dataclass
 class ParsedPage:
     page: int  # 1-indexed
@@ -69,12 +75,17 @@ class ParsedPdf:
     full_text: str
     is_signed: bool
     full_document_pages: list[ParsedPage] | None = None
+    bookmarks: list[PdfBookmark] = field(default_factory=list)
 
 
 def parse_pdf(path: str | Path | bytes) -> ParsedPdf:
     doc = fitz.open(stream=path, filetype="pdf") if isinstance(path, bytes) else fitz.open(str(path))
     try:
         is_signed = _has_digital_signature(doc)
+        bookmarks = [
+            PdfBookmark(title=str(title or ""), page=int(page_number))
+            for _level, title, page_number in doc.get_toc(simple=True)
+        ]
         pages: list[ParsedPage] = []
         all_text: list[str] = []
 
@@ -143,6 +154,7 @@ def parse_pdf(path: str | Path | bytes) -> ParsedPdf:
             pages=pages,
             full_text="\n".join(all_text),
             is_signed=is_signed,
+            bookmarks=bookmarks,
         )
     finally:
         doc.close()

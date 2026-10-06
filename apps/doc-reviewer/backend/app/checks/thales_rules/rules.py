@@ -126,6 +126,24 @@ _TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN = (
     r"(?!\s*\(\s*[+-]?\d+(?:[.,]\d+)?"
     r"(?:\s+to\s+[+-]?\d+(?:[.,]\d+)?)?\s+deg\.\s*F\s*\))"
 )
+_TEMPERATURE_RANGE_UNIT_IN_MIDDLE_PATTERN = (
+    r"(?i)(?P<label>\bTemperature\s*:\s*)"
+    r"(?P<lower>[+-]?\d+(?:[.,]\d+)?)\s*"
+    r"(?:deg\.\s*|\u00b0\s*)?C\s+to\s+"
+    r"(?P<upper>[+-]?\d+(?:[.,]\d+)?)"
+    r"(?![\d.,])"
+    r"(?:\s*(?:deg\.\s*|\u00b0\s*)?C)?"
+)
+_TEMPERATURE_RANGE_MISSING_CELSIUS_PATTERN = (
+    r"(?i)(?P<label>\bTemperature\s*:\s*)"
+    r"(?P<lower>[+-]?\d+(?:[.,]\d+)?)\s+to\s+"
+    r"(?P<upper>[+-]?\d+(?:[.,]\d+)?)"
+    r"(?![\d.,])"
+    r"(?!\s+deg\.\s*C\b)"
+    r"(?!\s+deg\.\s*F\b)"
+    r"(?!\s*\u00b0\s*C\b)"
+    r"(?:\s*C)?"
+)
 _NOTE_INTRODUCTION_TEXT = {
     "REPAIR": (
         "During repair operations, make sure that the environmental conditions "
@@ -572,6 +590,37 @@ CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES = rule(
                 "parentheses. Parentheses in other columns are not checked."
             ),
             "message": "A LIST OF MATERIALS code contains parentheses.",
+        }
+    },
+)
+
+CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE",
+    name="Codes de la LIST OF MATERIALS en minuscules",
+    description=(
+        "Aucune lettre majuscule n'est autorisee dans la colonne CODE du tableau "
+        "LIST OF MATERIALS."
+    ),
+    message="Les codes de la LIST OF MATERIALS doivent etre en minuscules.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_code_lowercase"},
+        )
+    ],
+    failure_message="La colonne CODE de la LIST OF MATERIALS doit etre en minuscules.",
+    translations={
+        "en": {
+            "description": (
+                "Uppercase letters are not allowed in the CODE column of the "
+                "LIST OF MATERIALS table."
+            ),
+            "message": "LIST OF MATERIALS codes must use lowercase letters.",
         }
     },
 )
@@ -1568,6 +1617,36 @@ CUSTOM_COPYRIGHT_POSITION = rule(
     },
 )
 
+CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
+    code="CUSTOM_PDF_BOOKMARK_TITLE_MATCH",
+    name="Titre des signets PDF present sur la page cible",
+    description=(
+        "Le titre de chaque signet PDF doit apparaitre dans le texte de la page "
+        "vers laquelle le signet renvoie."
+    ),
+    message="Le titre du signet PDF ne correspond pas au contenu de sa page cible.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="pdf_bookmarks",
+        )
+    ],
+    failure_message="Le titre d'un signet PDF est absent de sa page cible.",
+    translations={
+        "en": {
+            "description": (
+                "The title of each PDF bookmark must appear in the text of its "
+                "destination page."
+            ),
+            "message": "The PDF bookmark title does not match the content of its destination page.",
+        }
+    },
+)
+
 CUSTOM_NO_DEGREE_C_SYMBOL = rule(
     code="CUSTOM_NO_DEGREE_C_SYMBOL",
     name="Unite de temperature C ecrite au format deg. C",
@@ -1679,6 +1758,41 @@ CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
     },
 )
 
+CUSTOM_TEMPERATURE_RANGE_FORMAT = rule(
+    code="CUSTOM_TEMPERATURE_RANGE_FORMAT",
+    name="Plages de temperature au format X to X deg. C",
+    description=(
+        "Une plage de temperature Celsius doit s'ecrire X to X deg. C : l'unite "
+        "apparait apres la seconde valeur, sans C au milieu."
+    ),
+    message="La plage de temperature doit etre au format X to X deg. C.",
+    kind="regex_flag",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=_TEMPERATURE_RANGE_UNIT_IN_MIDDLE_PATTERN,
+        ),
+        Check(
+            field="text",
+            operator="regex",
+            expected=_TEMPERATURE_RANGE_MISSING_CELSIUS_PATTERN,
+        ),
+    ],
+    failure_message="Plage de temperature Celsius hors du format X to X deg. C.",
+    translations={
+        "en": {
+            "description": (
+                "A Celsius temperature range must use X to X deg. C: the unit "
+                "appears after the second value, with no C in the middle."
+            ),
+            "message": "The temperature range must use the X to X deg. C format.",
+        }
+    },
+)
+
 CUSTOM_FORBIDDEN_CONSUMABLES = rule(
     code="CUSTOM_FORBIDDEN_CONSUMABLES",
     name="Consommables a supprimer",
@@ -1731,6 +1845,36 @@ CUSTOM_REPLACE_LEGACY_NAMES = rule(
                 "with THALES."
             ),
             "message": "A legacy reference must be replaced with THALES.",
+        }
+    },
+)
+
+CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR = rule(
+    code="CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR",
+    name="Identification a remplacer par indicator",
+    description=(
+        "Le terme identification doit etre remplace par indicator dans le contenu "
+        "des pages modifiees."
+    ),
+    message="Remplacer identification par indicator.",
+    kind="regex_flag",
+    severity="warning",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=r"(?i)\bidentification\b",
+            replacement="indicator",
+        ),
+    ],
+    failure_message="Le terme identification doit etre remplace par indicator.",
+    translations={
+        "en": {
+            "description": (
+                "Replace the term identification with indicator in modified-page content."
+            ),
+            "message": "Replace identification with indicator.",
         }
     },
 )
@@ -2223,6 +2367,7 @@ RULE_DEFINITIONS = (
     CUSTOM_TP2_IMPORTANT_NOTICE,
     CUSTOM_TITLE_PAGE_COPYRIGHT,
     CUSTOM_COPYRIGHT_POSITION,
+    CUSTOM_PDF_BOOKMARK_TITLE_MATCH,
     CUSTOM_TP1_REVISION_NUMBER,
     CUSTOM_TP1_FIRST_ISSUE_DATE,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
@@ -2230,6 +2375,7 @@ RULE_DEFINITIONS = (
     CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION,
     CUSTOM_CHAPTER_NUMBER_SEQUENCE,
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
+    CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
     CUSTOM_NI_PART_NUMBER_ORDER,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
     CUSTOM_HIGHLIGHTS_HOLDER,
@@ -2250,6 +2396,7 @@ RULE_DEFINITIONS = (
     CUSTOM_ENUMERATION_PUNCTUATION_SWAP,
     CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_TEMPERATURE_FAHRENHEIT,
+    CUSTOM_TEMPERATURE_RANGE_FORMAT,
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_PASCAL_INHG_CONVERSION,
     CUSTOM_METRIC_LENGTH_INCH_CONVERSION,
@@ -2257,6 +2404,7 @@ RULE_DEFINITIONS = (
     CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION,
     CUSTOM_FORBIDDEN_CONSUMABLES,
     CUSTOM_REPLACE_LEGACY_NAMES,
+    CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,
 )

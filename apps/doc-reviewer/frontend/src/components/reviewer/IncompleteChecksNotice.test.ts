@@ -19,12 +19,23 @@ describe("findInconclusiveResults", () => {
           expected_value: null,
         },
       },
+      {
+        rule_id: "RULE_PARTIAL_FAILURE",
+        rule_title: "Bookmark destinations",
+        status: "FAIL",
+        inconclusive_pages: ["31"],
+        evidence: null,
+      },
       { rule_id: "RULE_FAIL", rule_title: "Failed check", status: "FAIL", evidence: null },
     ];
 
     expect(findInconclusiveResults(results).map((result) => result.rule_title)).toEqual([
       "Revision date",
+      "Bookmark destinations",
     ]);
-    expect(findInconclusiveResults(results)[0]?.inconclusive_pages).toEqual(["24", "26"]);
+    expect(findInconclusiveResults(results).map((result) => result.inconclusive_pages)).toEqual([
+      ["24", "26"],
+      ["31"],
+    ]);
   });
 });

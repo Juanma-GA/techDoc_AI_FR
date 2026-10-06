@@ -96,3 +96,20 @@ def test_parse_pdf_preserves_word_geometry(tmp_path) -> None:
         ("Page", 54.0),
         ("1001", 90.0),
     ]
+
+
+def test_parse_pdf_preserves_bookmark_titles_and_destinations(tmp_path) -> None:
+    doc = fitz.open()
+    doc.new_page(width=400, height=300)
+    doc.new_page(width=400, height=300)
+    doc.set_toc([[1, "INTRODUCTION", 1], [1, "REPAIR", 2]])
+    out = tmp_path / "bookmarks.pdf"
+    doc.save(str(out))
+    doc.close()
+
+    parsed = parse_pdf(out)
+
+    assert [(bookmark.title, bookmark.page) for bookmark in parsed.bookmarks] == [
+        ("INTRODUCTION", 1),
+        ("REPAIR", 2),
+    ]

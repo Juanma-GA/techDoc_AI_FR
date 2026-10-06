@@ -637,9 +637,14 @@ def evaluate_rule(
             rule_id=rule.id,
             status=status,
             evidence=result_evidence,
-            inconclusive_pages=[str(page) for page in inconclusive_pages]
-            if status == "INCONCLUSIVE"
-            else [],
+            inconclusive_pages=[str(page) for page in inconclusive_pages],
+        )
+    if inconclusive_pages:
+        return RuleResult(
+            rule_id=rule.id,
+            status="INCONCLUSIVE",
+            evidence=evidence(last_target, last_observed, last_expected, is_docx, pdf_pages),
+            inconclusive_pages=[str(page) for page in inconclusive_pages],
         )
     return RuleResult(
         rule_id=rule.id,
