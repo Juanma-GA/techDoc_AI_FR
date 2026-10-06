@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,7 @@ def test_dependency_hash_uses_direct_absolute_powershell(name: str) -> None:
     assert "for /f" not in line.lower()
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="requires cmd.exe (Windows only); CI runs on ubuntu-latest")
 @pytest.mark.parametrize("name", RUNNERS)
 def test_dependency_hash_command_runs_in_cmd(name: str, tmp_path: Path) -> None:
     command = next(line for line in _code_lines(name) if "Get-FileHash" in line)
