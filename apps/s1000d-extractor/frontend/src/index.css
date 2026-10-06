@@ -5,6 +5,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
   html,
   body,
   #root {

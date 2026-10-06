@@ -37,7 +37,7 @@ test.describe("Doc Reviewer smoke", () => {
     await page.goto("/rules");
 
     await expect(page.getByRole("heading", { name: "THALES" })).toBeVisible();
-    await expect(page.getByText("CUSTOM_CMM_NUMBER", { exact: true })).toBeVisible();
+    await expect(page.getByText("Custom Cmm Number", { exact: true })).toBeVisible();
     await expect(page.locator(".rules-table input[type=checkbox]")).toHaveCount(1);
     await expect(page.getByText(/Checklist import/i)).toHaveCount(0);
   });

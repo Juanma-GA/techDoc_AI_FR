@@ -71,26 +71,44 @@ if "%USE_EMBED%"=="0" (
     set "PYTHON=python"
 )
 
-REM ---- Install deps une seule fois (marker .installed) ---------------------
-REM  Package partageable : dependances deja installees (marker present). Sinon :
-REM  versions ET empreintes figees (requirements.lock.txt, --require-hashes).
-if not exist "%INSTALLED_MARK%" (
-    echo [setup] Installation des dependances Python verrouillees ^(1 a 3 min^)...
-    "%PYTHON%" -s -m pip install --require-hashes --no-deps -r requirements.lock.txt
-    if errorlevel 1 (
-        echo [erreur] Echec installation des deps.
-        pause
-        exit /b 1
-    )
-    "%PYTHON%" -s -m pip install --no-deps -e .
-    if errorlevel 1 (
-        echo [erreur] Echec installation des deps.
-        pause
-        exit /b 1
-    )
-    type nul > "%INSTALLED_MARK%"
-    echo [setup] OK.
+REM ---- Dependencies: skip preinstalled embed, refresh changed local env -----
+if "%USE_EMBED%"=="1" if exist "%INSTALLED_MARK%" goto deps_ready
+set "DEPS_HASH="
+set "DEPS_HASH_FILE=%TEMP%\docreviewer_deps_hash_%RANDOM%_%RANDOM%.txt"
+"%SYS32%\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "$ErrorActionPreference='Stop'; $p=(Get-FileHash -Algorithm SHA256 -LiteralPath pyproject.toml).Hash; $l=(Get-FileHash -Algorithm SHA256 -LiteralPath requirements.lock.txt).Hash; $p+$l" > "%DEPS_HASH_FILE%"
+if errorlevel 1 (
+    del "%DEPS_HASH_FILE%" >nul 2>nul
+    echo [erreur] Impossible de calculer l'empreinte des dependances.
+    pause
+    exit /b 1
 )
+set /p DEPS_HASH=<"%DEPS_HASH_FILE%"
+del "%DEPS_HASH_FILE%" >nul 2>nul
+if not defined DEPS_HASH (
+    echo [erreur] Impossible de calculer l'empreinte des dependances.
+    pause
+    exit /b 1
+)
+set "INSTALLED_HASH="
+if exist "%INSTALLED_MARK%" set /p INSTALLED_HASH=<"%INSTALLED_MARK%"
+if /i "%INSTALLED_HASH%"=="%DEPS_HASH%" goto deps_ready
+
+echo [setup] Installation des dependances Python verrouillees ^(1 a 3 min^)...
+"%PYTHON%" -s -m pip install --require-hashes --no-deps -r requirements.lock.txt
+if errorlevel 1 (
+    echo [erreur] Echec installation des deps.
+    pause
+    exit /b 1
+)
+"%PYTHON%" -s -m pip install --no-deps -e .
+if errorlevel 1 (
+    echo [erreur] Echec installation des deps.
+    pause
+    exit /b 1
+)
+>"%INSTALLED_MARK%" echo %DEPS_HASH%
+echo [setup] OK.
+:deps_ready
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------
 echo [setup] Verification du schema DB ^(alembic^)...

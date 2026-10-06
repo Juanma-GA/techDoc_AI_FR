@@ -4,6 +4,7 @@ import { useFiltersStore } from "./filtersStore";
 
 describe("filtersStore — standard selection", () => {
   beforeEach(() => {
+    localStorage.removeItem("doc-reviewer-filters");
     useFiltersStore.setState({
       lastStandardId: null,
       lastStandardVersionId: null,
@@ -11,7 +12,7 @@ describe("filtersStore — standard selection", () => {
     });
   });
 
-  it("persists the last (standard, version) chosen at upload", () => {
+  it("tracks the last (standard, version) chosen at upload in memory", () => {
     useFiltersStore.getState().setLastStandard("std-abc", "ver-1");
     expect(useFiltersStore.getState().lastStandardId).toBe("std-abc");
     expect(useFiltersStore.getState().lastStandardVersionId).toBe("ver-1");
@@ -33,5 +34,12 @@ describe("filtersStore — standard selection", () => {
       "current",
       "current-2",
     ]);
+  });
+
+  it("does not persist analysis targets or filters in browser storage", () => {
+    useFiltersStore.getState().setChecklistActive(true);
+    useFiltersStore.getState().toggleTargetUnit("metric");
+
+    expect(localStorage.getItem("doc-reviewer-filters")).toBeNull();
   });
 });

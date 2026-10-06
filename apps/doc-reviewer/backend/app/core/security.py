@@ -1,5 +1,4 @@
-"""Upload security helpers — sanitize filenames, magic-bytes MIME validation,
-path-traversal guard. PDF-only for this app."""
+"""Security helpers for file handling and outbound service URLs."""
 
 from __future__ import annotations
 
@@ -62,13 +61,36 @@ def validate_pdf_bytes(raw: bytes, max_size: int) -> None:
 _READ_CHUNK = 1024 * 1024
 
 
-def read_upload_limited(upload: UploadFile, max_size: int) -> bytes:
-    """Lit un fichier uploade par blocs et s'arrete des que `max_size` est depasse.
+def _raise_upload_too_large(upload: UploadFile, max_size: int) -> None:
+    name = safe_filename(upload.filename)
+    raise AppError(
+        "FILE_TOO_LARGE",
+        f"{name} depasse la taille max ({max_size // (1024 * 1024)} Mo).",
+        status_code=413,
+    )
 
-    `upload.file.read()` chargeait le fichier ENTIER en memoire avant que la
-    taille maximale ne soit verifiee : la limite MAX_UPLOAD_SIZE_MB ne protegeait
-    donc pas la memoire du poste. Ici, au plus `max_size` + un bloc est lu.
+
+def _check_upload_size(upload: UploadFile, max_size: int) -> None:
+    size = getattr(upload, "size", None)
+    if size is None:
+        file = upload.file
+        try:
+            position = file.tell()
+            file.seek(0, 2)
+            size = file.tell()
+            file.seek(position)
+        except (AttributeError, OSError, ValueError):
+            size = None
+    if size is not None and size > max_size:
+        _raise_upload_too_large(upload, max_size)
+
+
+def read_upload_limited(upload: UploadFile, max_size: int) -> bytes:
+    """Read an upload in bounded chunks and stop as soon as it exceeds the limit.
+
+    At most `max_size` plus one chunk is read when the size is not known in advance.
     """
+    _check_upload_size(upload, max_size)
     buffer = bytearray()
     while True:
         chunk = upload.file.read(_READ_CHUNK)
@@ -76,13 +98,20 @@ def read_upload_limited(upload: UploadFile, max_size: int) -> bytes:
             break
         buffer.extend(chunk)
         if len(buffer) > max_size:
-            name = safe_filename(upload.filename)
-            raise AppError(
-                "FILE_TOO_LARGE",
-                f"{name} depasse la taille max ({max_size // (1024 * 1024)} Mo).",
-                status_code=413,
-            )
+            _raise_upload_too_large(upload, max_size)
     return bytes(buffer)
+
+
+def read_upload_bounded(upload: UploadFile, max_size: int) -> bytes:
+    return read_upload_limited(upload, max_size)
+
+
+async def read_upload_bounded_async(upload: UploadFile, max_size: int) -> bytes:
+    _check_upload_size(upload, max_size)
+    raw = await upload.read(max_size + 1)
+    if len(raw) > max_size:
+        _raise_upload_too_large(upload, max_size)
+    return raw
 
 
 def read_and_validate_pdf(upload: UploadFile, max_size: int) -> tuple[bytes, str]:

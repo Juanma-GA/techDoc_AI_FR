@@ -10,6 +10,10 @@ export type AppShellProps = {
   brandTitle?: string;
   navigation: ReactNode;
   navigationLabel?: string;
+  /** Translated aria-label for the sidebar theme toggle. AppShell has no
+   * language of its own — pass the caller's i18next-translated string, or
+   * the English default renders regardless of the app's current locale. */
+  themeToggleLabel?: string;
   llmStatus?: ReactNode;
   headerStart?: ReactNode;
   sidebarTop?: ReactNode;
@@ -26,6 +30,7 @@ export function AppShell({
   brandTitle,
   navigation,
   navigationLabel = "Main navigation",
+  themeToggleLabel,
   llmStatus,
   headerStart,
   sidebarTop,
@@ -50,7 +55,10 @@ export function AppShell({
               <span className="ui-sidebar-version">{normalizedVersion}</span>
             ) : null}
           </div>
-          <ThemeToggle className="ui-sidebar-theme-toggle h-[28px] w-[28px]" />
+          <ThemeToggle
+            className="ui-sidebar-theme-toggle h-[28px] w-[28px]"
+            aria-label={themeToggleLabel}
+          />
         </header>
 
         {sidebarTop}

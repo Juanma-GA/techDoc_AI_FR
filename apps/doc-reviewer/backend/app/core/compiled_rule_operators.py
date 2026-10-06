@@ -24,6 +24,11 @@ from app.core.compiled_rules import (
 )
 from app.parsers.pdf_parser import ParsedPage
 from app.core.logging import get_logger
+from app.core.regex_safety import (
+    USER_REGEX_TIMEOUT_SECONDS,
+    UserRegexPatternError,
+    compile_user_regex,
+)
 
 from app.core.compiled_rule_runtime import (
     _ENTITY_PATTERNS,
@@ -619,18 +624,28 @@ def evaluate_rule(
             "compiled_check_evaluated",
             rule_id=rule.id,
             check_index=check_index,
-            check=check.model_dump(mode="json"),
             status=status,
             page=target.page,
-            observed=observed,
-            expected=expected_repr,
         )
         if status != "PASS" and first_failure is None:
             first_failure = (status, target, observed, expected_repr)
+    inconclusive_pages = ctx.inconclusive_pages.pop(rule.id, [])
     if first_failure is not None:
         status, target, observed, expected_repr = first_failure
         result_evidence = evidence(target, observed, expected_repr, is_docx, pdf_pages)
-        return RuleResult(rule_id=rule.id, status=status, evidence=result_evidence)
+        return RuleResult(
+            rule_id=rule.id,
+            status=status,
+            evidence=result_evidence,
+            inconclusive_pages=[str(page) for page in inconclusive_pages],
+        )
+    if inconclusive_pages:
+        return RuleResult(
+            rule_id=rule.id,
+            status="INCONCLUSIVE",
+            evidence=evidence(last_target, last_observed, last_expected, is_docx, pdf_pages),
+            inconclusive_pages=[str(page) for page in inconclusive_pages],
+        )
     return RuleResult(
         rule_id=rule.id,
         status="PASS",
@@ -704,7 +719,7 @@ def evaluate_check(
         "highlights_holder",
         "highlights_document_type",
     }:
-        return evaluate_client_operation(check, targets, ctx)
+        return evaluate_client_operation(check, targets, ctx, rule_id)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -836,8 +851,12 @@ def field_value(
             return None
         return text[start.start() : end.end()].strip()
     pattern_text = (client_entities or {}).get(field)
-    pattern = re.compile(pattern_text) if pattern_text is not None else _ENTITY_PATTERNS.get(field)
-    match = pattern.search(text) if pattern else None
+    if pattern_text is not None:
+        pattern = compile_user_regex(pattern_text)
+        match = pattern.search(text, timeout=USER_REGEX_TIMEOUT_SECONDS)
+    else:
+        pattern = _ENTITY_PATTERNS.get(field)
+        match = pattern.search(text) if pattern else None
     return match.group(1).strip() if match else None
 
 
@@ -912,6 +931,7 @@ def evaluate_client_operation(
     check: Check,
     targets: list[_TextTarget],
     ctx: _EvalContext,
+    rule_id: str,
 ) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
     operation_name = check.operation
     parameters = check.operation_params
@@ -939,6 +959,8 @@ def evaluate_client_operation(
         targets=tuple(targets),
     )
     result = operation.execute(operation_context, parameters)
+    if result.inconclusive_pages:
+        ctx.inconclusive_pages[rule_id] = result.inconclusive_pages
     target = next(
         (item for item in targets if result.page is not None and item.raw_page == result.page),
         targets[0],
@@ -1080,34 +1102,23 @@ def evaluate_regex(
     if missing_context:
         return "INCONCLUSIVE", values[0][0], None, expected
     try:
-        pattern = re.compile(resolved_pattern)
-    except re.error:
+        pattern = compile_user_regex(resolved_pattern)
+    except UserRegexPatternError:
         return "INCONCLUSIVE", values[0][0], None, expected
 
     first_match: tuple[_TextTarget, re.Match[str]] | None = None
     for target, value in values:
         text = value or ""
-        matches = list(pattern.finditer(text))
+        try:
+            matches = list(pattern.finditer(text, timeout=USER_REGEX_TIMEOUT_SECONDS))
+        except TimeoutError:
+            _logger.warning("compiled_regex_timeout", rule_id=rule_id, page=target.page)
+            return "INCONCLUSIVE", target, None, expected
         _logger.info(
             "compiled_regex_evaluated",
             rule_id=rule_id,
             page=target.page,
-            pattern=resolved_pattern,
             match_count=len(matches),
-            document_metadata={
-                field: str(raw).strip()
-                for field in (
-                    "meta_revision_date",
-                    "meta_cmm_number",
-                    "meta_first_issue_date",
-                    "meta_last_issue_date",
-                    "meta_revision_number",
-                    "meta_pnr_number",
-                    "meta_manufacturer",
-                    "document_language",
-                )
-                if (raw := getattr(ctx.document, field, None)) is not None and str(raw).strip()
-            },
         )
         if matches and first_match is None:
             first_match = (target, matches[0])
@@ -1118,12 +1129,26 @@ def evaluate_regex(
             return "FAIL", target, match.group(0), expected
         return "PASS", values[0][0], None, expected
     if check.require_all:
-        missing_target = next(
-            (target for target, _value in values if not pattern.search(_value or "")),
-            None,
-        )
+        try:
+            missing_target = next(
+                (
+                    target
+                    for target, _value in values
+                    if not pattern.search(_value or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                ),
+                None,
+            )
+        except TimeoutError:
+            return "INCONCLUSIVE", values[0][0], None, expected
         if missing_target is None:
-            target, match = first_match or (values[0][0], pattern.search(values[0][1] or ""))
+            if first_match is not None:
+                target, match = first_match
+            else:
+                target = values[0][0]
+                try:
+                    match = pattern.search(values[0][1] or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                except TimeoutError:
+                    return "INCONCLUSIVE", target, None, expected
             return "PASS", target, match.group(0) if match is not None else None, expected
         return "FAIL", missing_target, None, expected
     if first_match is not None:
@@ -1150,14 +1175,26 @@ def resolve_regex_pattern(
             missing_context.append(field)
             return match.group(0)
         if isinstance(raw, list):
-            return "(?:" + "|".join(re.escape(item) for item in raw) + ")"
-        escaped = re.escape(raw)
-        if field == "meta_first_pnr_number":
-            escaped = escaped.replace(r"\-", r"\s*-\s*")
-        return escaped
+            return "(?:" + "|".join(_regex_literal_with_layout_whitespace(item) for item in raw) + ")"
+        return _regex_literal_with_layout_whitespace(raw)
 
     resolved = _CONTEXT_TOKEN_RE.sub(replace_token, pattern)
     return resolved, context_fields, sorted(set(missing_context))
+
+
+def _regex_literal_with_layout_whitespace(value: str) -> str:
+    tokens = re.findall(r"\w+|[^\w\s]+", value.strip())
+    if not tokens:
+        return ""
+
+    pattern = [r"\s*".join(re.escape(character) for character in tokens[0])]
+    previous_is_word = tokens[0][0].isalnum() or tokens[0][0] == "_"
+    for token in tokens[1:]:
+        is_word = token[0].isalnum() or token[0] == "_"
+        pattern.append(r"\s+" if previous_is_word and is_word else r"\s*")
+        pattern.append(r"\s*".join(re.escape(character) for character in token))
+        previous_is_word = is_word
+    return "".join(pattern)
 
 
 def resolve_replacement_template(template: str | None, document: Any | None) -> str | None:

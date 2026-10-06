@@ -8,6 +8,8 @@ import fitz
 import pytest
 
 from app.checks import vision_checks
+from app.core import mistral_vision
+from app.core.errors import AppError
 from app.parsers.pdf_parser import extract_images
 
 
@@ -52,11 +54,11 @@ def test_extract_images_no_caption_returns_empty_string(tmp_path) -> None:
 def test_extract_images_cap_enforced(tmp_path) -> None:
     """`max_per_doc` is respected — cost guard for the vision pipeline."""
     doc = fitz.open()
-    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 16, 16))
-    pix.set_rect(pix.irect, (0, 0, 255))
-    png = pix.tobytes("png")
     page = doc.new_page(width=400, height=600)
     for i in range(5):
+        pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 16, 16))
+        pix.set_rect(pix.irect, (i * 35, 0, 255 - i * 30))
+        png = pix.tobytes("png")
         page.insert_image(fitz.Rect(20, 20 + i * 100, 80, 80 + i * 100), stream=png)
     out = tmp_path / "five.pdf"
     doc.save(str(out))
@@ -64,6 +66,17 @@ def test_extract_images_cap_enforced(tmp_path) -> None:
 
     imgs = extract_images(str(out), max_per_doc=3)
     assert len(imgs) == 3
+
+    warnings: list[str] = []
+    vision_checks.run(
+        db=None,  # type: ignore[arg-type]
+        src_path=str(out),
+        max_images=3,
+        enable_mistral=False,
+        warnings=warnings,
+    )
+    assert len(warnings) == 1
+    assert "images restantes" in warnings[0]
 
 
 def test_vision_checks_emits_no_caption_when_caption_missing(tmp_path) -> None:
@@ -106,6 +119,37 @@ def test_vision_checks_pipeline_with_mocked_mistral(tmp_path) -> None:
     assert legible.proposed == ""  # detection-only
 
 
+def test_invalid_vision_json_is_incomplete_without_retaining_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response_marker = "SYNTHETIC-RAW-VISION-RESPONSE"
+    monkeypatch.setattr(mistral_vision, "_call_mistral_vision", lambda *_args, **_kwargs: response_marker)
+
+    with pytest.raises(AppError) as exc_info:
+        mistral_vision.check_figure_compliance(object(), b"synthetic-image", [{"id": "RULE"}])
+
+    assert exc_info.value.code == "VISION_RESPONSE_INVALID"
+    assert response_marker not in exc_info.value.message
+
+
+def test_description_failure_marks_vision_coverage_incomplete(tmp_path) -> None:
+    path = _pdf_with_image(tmp_path, with_caption=True)
+    warnings: list[str] = []
+
+    with patch.object(vision_checks, "check_figure_compliance", return_value={"results": []}), \
+         patch.object(vision_checks, "describe_image", side_effect=AppError("VISION_CALL_FAILED", "synthetic")):
+        result = vision_checks.run(
+            db=None,  # type: ignore[arg-type]
+            src_path=path,
+            enable_mistral=True,
+            warnings=warnings,
+        )
+
+    assert result == []
+    assert len(warnings) == 1
+    assert "couverture est réduite" in warnings[0]
+
+
 def test_run_all_respects_vision_override(tmp_path) -> None:
     """`vision_enabled_override=False` skips the vision pipeline even
     when the global `vision.enabled` flag is on. Conversely, `=True`
@@ -126,7 +170,7 @@ def test_run_all_respects_vision_override(tmp_path) -> None:
 
     with _patch.object(rules_engine, "_merge_catalogs", return_value=[]), \
          _patch.object(rules_engine, "_run_ai_custom", return_value=[]), \
-         _patch.object(rules_engine, "_enrich_with_ai", side_effect=lambda raws, db: raws), \
+         _patch.object(rules_engine, "_enrich_with_ai", side_effect=lambda raws, db, **_kwargs: raws), \
          _patch.object(rules_engine, "get_vision_enabled", return_value=True) as mock_get_enabled, \
          _patch.object(rules_engine.vision_checks, "run", return_value=[]) as mock_vision_run, \
          _patch.object(rules_engine.custom_rules, "run", return_value=[]), \

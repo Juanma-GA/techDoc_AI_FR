@@ -5,6 +5,8 @@ utilisateur, dependances jamais resolues depuis PyPI sans empreintes."""
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -52,6 +54,47 @@ def test_dependencies_are_installed_from_the_hash_lock_only(name: str) -> None:
     assert "install --upgrade pip" not in code
     assert re.search(r"pip install -e \.\s*$", code, re.MULTILINE) is None
     assert "pip install --no-deps -e ." in code
+
+
+@pytest.mark.parametrize("name", RUNNERS)
+def test_dependency_hash_uses_direct_absolute_powershell(name: str) -> None:
+    line = next(line for line in _code_lines(name) if "Get-FileHash" in line)
+    assert line.startswith(r'"%SYS32%\WindowsPowerShell\v1.0\powershell.exe"')
+    assert "for /f" not in line.lower()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires cmd.exe (Windows only); CI runs on ubuntu-latest")
+@pytest.mark.parametrize("name", RUNNERS)
+def test_dependency_hash_command_runs_in_cmd(name: str, tmp_path: Path) -> None:
+    command = next(line for line in _code_lines(name) if "Get-FileHash" in line)
+    script = tmp_path / "check_hash.cmd"
+    hash_file = tmp_path / "dependency.hash"
+    script.write_text(
+        "\r\n".join(
+            (
+                "@echo off",
+                'set "SYS32=%SystemRoot%\\System32"',
+                f'set "DEPS_HASH_FILE={hash_file}"',
+                f'cd /d "{APP_DIR / "backend"}"',
+                command,
+                'if errorlevel 1 exit /b 1',
+                'set /p DEPS_HASH=<"%DEPS_HASH_FILE%"',
+                'del "%DEPS_HASH_FILE%" >nul 2>nul',
+                'echo HASH=%DEPS_HASH%',
+            )
+        ),
+        encoding="ascii",
+    )
+    result = subprocess.run(
+        ["cmd.exe", "/d", "/c", str(script)],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert re.search(r"HASH=[0-9a-fA-F]{128}", result.stdout), result.stdout + result.stderr
 
 
 def test_start_bat_uses_comspec() -> None:

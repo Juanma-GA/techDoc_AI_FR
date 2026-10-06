@@ -5,7 +5,11 @@ import { useTranslation } from "react-i18next";
 import { DiffInline } from "../DiffInline";
 import { SeverityBadge } from "../SeverityBadge";
 import { UnitChip } from "../UnitChip";
-import { localizedSuggestionMessage } from "../../lib/suggestionText";
+import {
+  isAiGeneratedSuggestion,
+  localizedRuleCode,
+  localizedSuggestionMessage,
+} from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 
 type Props = {
@@ -35,6 +39,14 @@ export function SuggestionItem({
 }: Props) {
   const { t } = useTranslation();
   const message = localizedSuggestionMessage(suggestion, t);
+  const ruleCodeLabel = localizedRuleCode(suggestion.rule_code, t);
+  const sourceKind = isAiGeneratedSuggestion(
+    suggestion.source_kind,
+    suggestion.rule_code,
+    suggestion.proposed_text,
+  )
+    ? "ai"
+    : suggestion.source_kind;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(suggestion.proposed_text);
   const [feedbackDraft, setFeedbackDraft] = useState(suggestion.feedback ?? "");
@@ -55,10 +67,10 @@ export function SuggestionItem({
         <SeverityBadge severity={suggestion.severity} />
         {suggestion.rule_kind === "units" ? <UnitChip /> : null}
         <span className="suggestion-loc">
-          p.{suggestion.page} · {suggestion.rule_code}
+          p.{suggestion.page} · {ruleCodeLabel}
         </span>
-        <span className="badge default" title={t(`source.${suggestion.source_kind}`)}>
-          {t(`source.${suggestion.source_kind}`)}
+        <span className="badge default" title={t(`reviewer.source.${sourceKind}`)}>
+          {t(`reviewer.source.${sourceKind}`)}
         </span>
         {isApplied ? (
           <span className="badge ok" style={{ marginLeft: "auto" }}>

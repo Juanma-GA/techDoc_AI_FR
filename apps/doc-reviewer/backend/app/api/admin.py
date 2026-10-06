@@ -18,8 +18,6 @@ deliberately have no authentication gate. Don't expose them on a
 public bind.
 """
 
-from __future__ import annotations
-
 import os
 import shutil
 import stat
@@ -76,9 +74,7 @@ def _remove_storage_dir(storage_dir: str) -> bool:
     except OSError as exc:
         _logger.warning(
             "admin_storage_cleanup_failed",
-            path=str(target),
             error=type(exc).__name__,
-            message=str(exc),
         )
         return False
 
@@ -148,9 +144,7 @@ def reset_all(db: Session = Depends(get_db)) -> dict:
             except OSError as exc:
                 _logger.warning(
                     "admin_orphan_cleanup_failed",
-                    path=str(child),
                     error=type(exc).__name__,
-                    message=str(exc),
                 )
 
     _logger.info(

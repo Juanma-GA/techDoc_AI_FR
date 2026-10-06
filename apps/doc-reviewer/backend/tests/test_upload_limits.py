@@ -1,16 +1,22 @@
-"""Uploads : lecture bornee par MAX_UPLOAD_SIZE_MB et endpoints bloquants
-executes hors de la boucle asynchrone."""
+"""Tests for bounded upload reads and synchronous blocking endpoints."""
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import io
 
 import pytest
+from starlette.datastructures import UploadFile
 from fastapi.testclient import TestClient
 
 from app.config import settings
 from app.core.errors import AppError
+from app.core.security import (
+    read_upload_bounded,
+    read_upload_bounded_async,
+    read_upload_limited,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -18,24 +24,58 @@ from app.core.errors import AppError
 # ---------------------------------------------------------------------------
 
 
-class _CountingFile(io.BytesIO):
+class TrackingFile(io.BytesIO):
     def __init__(self, data: bytes) -> None:
         super().__init__(data)
         self.bytes_read = 0
+        self.read_calls = 0
 
     def read(self, size: int | None = -1) -> bytes:  # type: ignore[override]
         chunk = super().read(size)
         self.bytes_read += len(chunk)
+        self.read_calls += 1
         return chunk
+
+
+def test_sync_upload_rejects_known_oversize_before_reading() -> None:
+    stream = TrackingFile(b"SYNTHETIC-OVERSIZE")
+    upload = UploadFile(filename="synthetic.pdf", file=stream, size=len(stream.getvalue()))
+
+    with pytest.raises(AppError) as exc_info:
+        read_upload_bounded(upload, 4)
+
+    assert exc_info.value.code == "FILE_TOO_LARGE"
+    assert stream.read_calls == 0
+
+
+def test_async_upload_rejects_known_oversize_before_reading() -> None:
+    stream = TrackingFile(b"SYNTHETIC-OVERSIZE")
+    upload = UploadFile(filename="synthetic.xlsx", file=stream, size=len(stream.getvalue()))
+
+    with pytest.raises(AppError) as exc_info:
+        asyncio.run(read_upload_bounded_async(upload, 4))
+
+    assert exc_info.value.code == "FILE_TOO_LARGE"
+    assert stream.read_calls == 0
+
+
+def test_upload_within_limit_is_read_completely() -> None:
+    upload = UploadFile(
+        filename="synthetic.pdf",
+        file=io.BytesIO(b"SYNTHETIC"),
+        size=len(b"SYNTHETIC"),
+    )
+
+    assert read_upload_bounded(upload, len(b"SYNTHETIC")) == b"SYNTHETIC"
 
 
 def test_read_upload_limited_stops_reading_past_the_limit() -> None:
     from fastapi import UploadFile
 
-    from app.core.security import _READ_CHUNK, read_upload_limited
+    from app.core.security import _READ_CHUNK
 
     limit = 2 * _READ_CHUNK
-    payload = _CountingFile(b"x" * (20 * _READ_CHUNK))
+    payload = TrackingFile(b"x" * (20 * _READ_CHUNK))
     upload = UploadFile(file=payload, filename="huge.pdf")
     with pytest.raises(AppError) as excinfo:
         read_upload_limited(upload, limit)

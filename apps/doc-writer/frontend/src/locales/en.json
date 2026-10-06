@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "doc-writer",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Generate content from documents and templates with Mistral assistance."
   },
   "nav": {
     "portal": "Portal",

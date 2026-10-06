@@ -20,6 +20,7 @@ import {
   type ClientRule,
 } from "../hooks/useClientConfig";
 import { useStandards, useToggleCatalogRule } from "../hooks/useStandards";
+import { localizedRuleCode } from "../lib/suggestionText";
 import { useFiltersStore } from "../stores/filtersStore";
 import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
@@ -434,14 +435,18 @@ function ClientRules() {
               </td>
               <td className="rule-name-cell">
                 <strong>{localized(rule, "name")}</strong>
-                <div className="label">{rule.code}</div>
+                <div className="label">{localizedRuleCode(rule.code, t)}</div>
               </td>
               <td>
                 <span className={`badge ${rule.execution === "unsupported" ? "default" : "success"}`}>
                   {executionLabel(rule.execution)}
                 </span>
               </td>
-              <td><span className="badge default">{rule.severity}</span></td>
+              <td>
+                <span className="badge default">
+                  {t(`reviewer.suggestion.severity.${rule.severity}`)}
+                </span>
+              </td>
               <td>{localized(rule, "description")}</td>
               <td>{localized(rule, "message")}</td>
             </tr>

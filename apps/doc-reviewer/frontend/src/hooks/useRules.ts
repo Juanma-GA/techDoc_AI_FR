@@ -26,6 +26,7 @@ export type RuleSuggestion = {
 export type RuleSuggestResponse = {
   suggestions: RuleSuggestion[];
   documents_analyzed: number;
+  documents_truncated: number;
 };
 
 export function useRules(filter?: {

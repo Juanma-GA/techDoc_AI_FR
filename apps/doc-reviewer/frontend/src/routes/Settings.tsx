@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -145,6 +145,13 @@ export function Settings() {
                   {" · "}
                   {mistral.data?.chat_model}
                 </p>
+
+                {mistral.data?.api_key_unreadable ? (
+                  <p className="hint" style={{ color: "var(--warning)", display: "flex", gap: 6, alignItems: "flex-start" }}>
+                    <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
+                    {t("settings.mistral.keyUnreadable")}
+                  </p>
+                ) : null}
 
                 <Field label={t("settings.mistral.apiKey")}>
                   <input

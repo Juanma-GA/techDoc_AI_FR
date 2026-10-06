@@ -52,4 +52,17 @@ describe("AppShell", () => {
 
     expect(screen.getByText("OFF").getAttribute("data-status")).toBe("disabled");
   });
+  it("forwards themeToggleLabel to the embedded ThemeToggle", () => {
+    render(
+      <AppShell title="App" navigation={null} themeToggleLabel="Changer de theme">
+        content
+      </AppShell>,
+    );
+    expect(screen.getByRole("button", { name: "Changer de theme" })).toBeTruthy();
+  });
+
+  it("falls back to the ThemeToggle default when no label is passed", () => {
+    render(<AppShell title="App" navigation={null}>content</AppShell>);
+    expect(screen.getByRole("button", { name: /switch to (dark|light) theme/i })).toBeTruthy();
+  });
 });

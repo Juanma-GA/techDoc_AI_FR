@@ -10,7 +10,7 @@ export type RuleKind =
   | "compiled_checklist";
 
 /** Provenance affichee/filtrable dans la liste des anomalies. */
-export type SourceKind = "norme" | "checklist" | "regle" | "transverse";
+export type SourceKind = "ai" | "norme" | "checklist" | "regle" | "transverse";
 
 export type RuleKindStored =
   | "regex_replace"
@@ -37,6 +37,8 @@ export type EvidenceLocation =
 
 export type RuleResult = {
   rule_id: string;
+  rule_title?: string | null;
+  inconclusive_pages?: string[];
   status: "PASS" | "FAIL" | "MANUAL" | "UNSUPPORTED" | "INCONCLUSIVE";
   evidence: {
     page: string;
@@ -89,6 +91,7 @@ export type RejectionItem = {
   id: string;
   file: string;
   rule_code: string;
+  source_kind: SourceKind;
   severity: string;
   message: string;
   feedback: string;
