@@ -9,7 +9,10 @@ type Props = {
 };
 
 export function findInconclusiveResults(results: RuleResult[]): RuleResult[] {
-  return results.filter((result) => result.status === "INCONCLUSIVE");
+  return results.filter(
+    (result) =>
+      result.status === "INCONCLUSIVE" || (result.inconclusive_pages?.length ?? 0) > 0,
+  );
 }
 
 export function IncompleteChecksNotice({ results, isRunning }: Props) {

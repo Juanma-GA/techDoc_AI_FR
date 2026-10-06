@@ -126,6 +126,24 @@ _TEMPERATURE_WITHOUT_FAHRENHEIT_PATTERN = (
     r"(?!\s*\(\s*[+-]?\d+(?:[.,]\d+)?"
     r"(?:\s+to\s+[+-]?\d+(?:[.,]\d+)?)?\s+deg\.\s*F\s*\))"
 )
+_TEMPERATURE_RANGE_UNIT_IN_MIDDLE_PATTERN = (
+    r"(?i)(?P<label>\bTemperature\s*:\s*)"
+    r"(?P<lower>[+-]?\d+(?:[.,]\d+)?)\s*"
+    r"(?:deg\.\s*|\u00b0\s*)?C\s+to\s+"
+    r"(?P<upper>[+-]?\d+(?:[.,]\d+)?)"
+    r"(?![\d.,])"
+    r"(?:\s*(?:deg\.\s*|\u00b0\s*)?C)?"
+)
+_TEMPERATURE_RANGE_MISSING_CELSIUS_PATTERN = (
+    r"(?i)(?P<label>\bTemperature\s*:\s*)"
+    r"(?P<lower>[+-]?\d+(?:[.,]\d+)?)\s+to\s+"
+    r"(?P<upper>[+-]?\d+(?:[.,]\d+)?)"
+    r"(?![\d.,])"
+    r"(?!\s+deg\.\s*C\b)"
+    r"(?!\s+deg\.\s*F\b)"
+    r"(?!\s*\u00b0\s*C\b)"
+    r"(?:\s*C)?"
+)
 _NOTE_INTRODUCTION_TEXT = {
     "REPAIR": (
         "During repair operations, make sure that the environmental conditions "
@@ -155,10 +173,20 @@ _THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
     (r"Tel\s*:\s*\+33\s+\(0\)5\s+24\s+44\s+77\s+40", "Tel : +33 (0)5 24 44 77 40"),
     (r"www\.thalesgroup\.com", "www.thalesgroup.com"),
 )
-_REPAIR_RELATIVE_HUMIDITY_PATTERN = re.escape(_REPAIR_RELATIVE_HUMIDITY).replace(
-    r"\ ", r"\s+"
+_REPAIR_RELATIVE_HUMIDITY_PATTERN = (
+    "(?i:"
+    + re.escape(_REPAIR_RELATIVE_HUMIDITY)
+    .replace(r"\ ", r"\s+")
+    .replace("procedure", r"proc(?:e|\u00e9|\uFFFD)dure")
+    + ")"
 )
-_STORAGE_TEMPERATURE_PATTERN = re.escape(_STORAGE_TEMPERATURE).replace(r"\ ", r"\s+")
+_STORAGE_TEMPERATURE_PATTERN = (
+    "(?i:"
+    + re.escape(_STORAGE_TEMPERATURE)
+    .replace(r"\ ", r"\s+")
+    .replace("–", r"[-\u2010-\u2015\u2212\uFFFD]")
+    + ")"
+)
 _NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
 
 
@@ -437,6 +465,200 @@ CUSTOM_HIGHLIGHTS_REVISION_HEADER = rule(
                 "No. header with the mapped number and date above the table."
             ),
             "message": "The Highlights revision header is missing, incorrect, or placed after the table.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION = rule(
+    code="CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION",
+    name="Description obligatoire pour les suppressions des Highlights",
+    description=(
+        "Toute ligne D des Highlights doit porter en face la mention "
+        "Chapter deleted ou Page deleted."
+    ),
+    message="La suppression des Highlights ne porte pas la mention attendue.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_deleted_description"},
+        )
+    ],
+    failure_message="Description de suppression absente ou incorrecte dans les Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "Every D row in Highlights must have 'Chapter deleted' or "
+                "'Page deleted' in its description."
+            ),
+            "message": "The Highlights deletion row is missing the required description.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION = rule(
+    code="CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION",
+    name="Description obligatoire pour les lignes R des Highlights",
+    description=(
+        "Toute ligne R des Highlights doit avoir une description en face. "
+        "Pour l'Illustrated Parts List, la description peut figurer en face "
+        "de sa rubrique et s'appliquer aux lignes R suivantes."
+    ),
+    message="Une ligne R des Highlights ne porte pas de description.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_revised_description"},
+        )
+    ],
+    failure_message="Description de modification absente dans les Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "Every R row in Highlights must have a description, except that "
+                "Illustrated Parts List may use the description on its section row."
+            ),
+            "message": "A revised Highlights row is missing its description.",
+        }
+    },
+)
+
+CUSTOM_CHAPTER_NUMBER_SEQUENCE = rule(
+    code="CUSTOM_CHAPTER_NUMBER_SEQUENCE",
+    name="Ordre des chapitres numerotes",
+    description=(
+        "Dans chaque serie de pages de chapitre, les titres numerotes "
+        "1., 2., 3., etc. doivent se suivre sans omission ni inversion."
+    ),
+    message="L'ordre de numerotation des chapitres est incoherent.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "chapter_sequence"},
+        )
+    ],
+    failure_message="Ordre des chapitres numerotes incoherent.",
+    translations={
+        "en": {
+            "description": (
+                "Within each chapter page series, numbered headings such as "
+                "1., 2., 3., etc. must follow in order without gaps or reversals."
+            ),
+            "message": "The numbered chapter headings are out of order.",
+        }
+    },
+)
+
+CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES",
+    name="Code sans parentheses dans la LIST OF MATERIALS",
+    description=(
+        "La colonne CODE du tableau LIST OF MATERIALS ne doit contenir "
+        "aucune parenthese. Les parentheses dans les autres colonnes ne sont pas controlees."
+    ),
+    message="Un code de la LIST OF MATERIALS contient des parentheses.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_code_parentheses"},
+        )
+    ],
+    failure_message="La colonne CODE de la LIST OF MATERIALS ne doit pas contenir de parentheses.",
+    translations={
+        "en": {
+            "description": (
+                "The CODE column in the LIST OF MATERIALS table must not contain "
+                "parentheses. Parentheses in other columns are not checked."
+            ),
+            "message": "A LIST OF MATERIALS code contains parentheses.",
+        }
+    },
+)
+
+CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE",
+    name="Codes de la LIST OF MATERIALS en minuscules",
+    description=(
+        "Aucune lettre majuscule n'est autorisee dans la colonne CODE du tableau "
+        "LIST OF MATERIALS."
+    ),
+    message="Les codes de la LIST OF MATERIALS doivent etre en minuscules.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_code_lowercase"},
+        )
+    ],
+    failure_message="La colonne CODE de la LIST OF MATERIALS doit etre en minuscules.",
+    translations={
+        "en": {
+            "description": (
+                "Uppercase letters are not allowed in the CODE column of the "
+                "LIST OF MATERIALS table."
+            ),
+            "message": "LIST OF MATERIALS codes must use lowercase letters.",
+        }
+    },
+)
+
+CUSTOM_NI_PART_NUMBER_ORDER = rule(
+    code="CUSTOM_NI_PART_NUMBER_ORDER",
+    name="Numerical Index trie par Part Number croissant",
+    description=(
+        "Dans le Numerical Index, les Part Numbers de la colonne Part Number "
+        "doivent etre en ordre alphanumerique lexicographique, sans tenir compte "
+        "de la casse, y compris entre les pages consecutives. Les references qui "
+        "commencent par une lettre precedent celles qui commencent par un chiffre."
+    ),
+    message="Les Part Numbers du Numerical Index ne sont pas en ordre croissant.",
+    kind="field_required",
+    severity="warning",
+    target=RuleTarget(
+        page="all",
+        region="full_page",
+        page_type="NUMERICAL_INDEX",
+    ),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "ni_part_number_order"},
+        )
+    ],
+    failure_message="La colonne Part Number du Numerical Index doit etre en ordre croissant.",
+    translations={
+        "en": {
+            "description": (
+                "Alphanumeric values in the Numerical Index Part Number column must "
+                "be in case-insensitive lexicographic order, including across "
+                "consecutive pages. Letter-prefixed values precede digit-prefixed values."
+            ),
+            "message": "The Numerical Index Part Numbers are not in ascending order.",
         }
     },
 )
@@ -795,7 +1017,8 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
     code="CUSTOM_FOOTER_PAGE_NUMBER",
     name="Numero de page present et conforme dans le pied de page",
     description=(
-        "Chaque page doit afficher son numero dans le pied de page. Les pages "
+        "Chaque page doit afficher un seul numero dans le pied de page, sans "
+        "forme combinee telle que Page 25/26. Les pages "
         "LEP, ROR, Highlights et Title Page sont verifiees contre leur prefixe "
         "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.)."
     ),
@@ -811,12 +1034,13 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
             operation_params={"control": "footer_page_number"},
         ),
     ],
-    failure_message="numero de page absent ou incoherent dans le pied de page.",
+    failure_message="numero de page absent, multiple ou incoherent dans le pied de page.",
     only_if=Condition(field="meta_revision_date", state="present"),
     translations={
         "en": {
             "description": (
-                "Every page must show its number in the footer. LEP, ROR, Highlights, "
+                "Every page must show one page number in the footer, not a combined "
+                "label such as Page 25/26. LEP, ROR, Highlights, "
                 "and Title Page pages are checked against their expected prefix and order."
             ),
             "message": "The footer page number is missing or incorrect.",
@@ -1393,6 +1617,36 @@ CUSTOM_COPYRIGHT_POSITION = rule(
     },
 )
 
+CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
+    code="CUSTOM_PDF_BOOKMARK_TITLE_MATCH",
+    name="Titre des signets PDF present sur la page cible",
+    description=(
+        "Le titre de chaque signet PDF doit apparaitre dans le texte de la page "
+        "vers laquelle le signet renvoie."
+    ),
+    message="Le titre du signet PDF ne correspond pas au contenu de sa page cible.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="pdf_bookmarks",
+        )
+    ],
+    failure_message="Le titre d'un signet PDF est absent de sa page cible.",
+    translations={
+        "en": {
+            "description": (
+                "The title of each PDF bookmark must appear in the text of its "
+                "destination page."
+            ),
+            "message": "The PDF bookmark title does not match the content of its destination page.",
+        }
+    },
+)
+
 CUSTOM_NO_DEGREE_C_SYMBOL = rule(
     code="CUSTOM_NO_DEGREE_C_SYMBOL",
     name="Unite de temperature C ecrite au format deg. C",
@@ -1504,6 +1758,41 @@ CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
     },
 )
 
+CUSTOM_TEMPERATURE_RANGE_FORMAT = rule(
+    code="CUSTOM_TEMPERATURE_RANGE_FORMAT",
+    name="Plages de temperature au format X to X deg. C",
+    description=(
+        "Une plage de temperature Celsius doit s'ecrire X to X deg. C : l'unite "
+        "apparait apres la seconde valeur, sans C au milieu."
+    ),
+    message="La plage de temperature doit etre au format X to X deg. C.",
+    kind="regex_flag",
+    severity="error",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=_TEMPERATURE_RANGE_UNIT_IN_MIDDLE_PATTERN,
+        ),
+        Check(
+            field="text",
+            operator="regex",
+            expected=_TEMPERATURE_RANGE_MISSING_CELSIUS_PATTERN,
+        ),
+    ],
+    failure_message="Plage de temperature Celsius hors du format X to X deg. C.",
+    translations={
+        "en": {
+            "description": (
+                "A Celsius temperature range must use X to X deg. C: the unit "
+                "appears after the second value, with no C in the middle."
+            ),
+            "message": "The temperature range must use the X to X deg. C format.",
+        }
+    },
+)
+
 CUSTOM_FORBIDDEN_CONSUMABLES = rule(
     code="CUSTOM_FORBIDDEN_CONSUMABLES",
     name="Consommables a supprimer",
@@ -1556,6 +1845,36 @@ CUSTOM_REPLACE_LEGACY_NAMES = rule(
                 "with THALES."
             ),
             "message": "A legacy reference must be replaced with THALES.",
+        }
+    },
+)
+
+CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR = rule(
+    code="CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR",
+    name="Identification a remplacer par indicator",
+    description=(
+        "Le terme identification doit etre remplace par indicator dans le contenu "
+        "des pages modifiees."
+    ),
+    message="Remplacer identification par indicator.",
+    kind="regex_flag",
+    severity="warning",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=r"(?i)\bidentification\b",
+            replacement="indicator",
+        ),
+    ],
+    failure_message="Le terme identification doit etre remplace par indicator.",
+    translations={
+        "en": {
+            "description": (
+                "Replace the term identification with indicator in modified-page content."
+            ),
+            "message": "Replace identification with indicator.",
         }
     },
 )
@@ -1628,9 +1947,10 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
     code="CUSTOM_REVISION_HIGHLIGHTS_STATUS",
     name="Designation Highlights coherente avec la LEP et le pied de page",
     description=(
-        "La designation R, N ou U des Highlights doit etre coherente avec "
-        "l'etoile et la date de la LEP ainsi qu'avec la date du pied de page. "
-        "Sans la LEP precedente, le controle ne peut pas departager R et N."
+        "La colonne Designation doit utiliser R, N, U ou D. Le controle verifie "
+        "la coherence des statuts avec la LEP et le pied de page. Si le PDF N-1 "
+        "est fourni, N doit etre absent de sa LEP, tandis que R, U et D doivent "
+        "y figurer; une page D ne doit plus figurer dans la LEP ni le document courant."
     ),
     message="La designation Highlights est incoherente avec les pages effectives.",
     kind="field_required",
@@ -1645,17 +1965,51 @@ CUSTOM_REVISION_HIGHLIGHTS_STATUS = rule(
         )
     ],
     failure_message=(
-        "designation Highlights incoherente avec l'etoile ou les dates LEP/pied de page."
+        "designation Highlights invalide ou incoherente avec la LEP, le pied de "
+        "page ou la presence de la page."
     ),
     only_if=Condition(field="meta_revision_date", state="present"),
     translations={
         "en": {
             "description": (
-                "The R, N, or U Highlights designation must agree with the LEP star "
-                "and date and the page footer date. Without the previous LEP, this "
-                "check cannot distinguish R from N."
+                "Highlights Designation must be R, N, U, or D. The designation must "
+                "agree with the LEP and footer; a D page must no longer appear in "
+                "the current LEP or document. When the previous PDF is provided, "
+                "N must be absent from its LEP, while R, U, and D must be present."
             ),
             "message": "The Highlights designation conflicts with the effective-page evidence.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED = rule(
+    code="CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED",
+    name="Designation obligatoire pour chaque ligne de pages des Highlights",
+    description=(
+        "Chaque ligne des Highlights qui contient une plage de pages doit avoir "
+        "une designation R, N, U ou D."
+    ),
+    message="Une ligne de pages des Highlights n'a pas de designation.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "highlights_designation_required"},
+        )
+    ],
+    failure_message="Designation absente pour une ligne de pages des Highlights.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every Highlights row containing a page range must have an "
+                "R, N, U, or D designation."
+            ),
+            "message": "A Highlights page row is missing its designation.",
         }
     },
 )
@@ -1990,6 +2344,7 @@ REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_LEP_STAR,
     CUSTOM_REVISION_UNDECLARED_STAR,
     CUSTOM_REVISION_HIGHLIGHTS_STATUS,
+    CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED,
     CUSTOM_REVISION_LEP_BLANK_STAR,
     CUSTOM_REVISION_LEP_DATE,
     CUSTOM_REVISION_FOOTER_DATE,
@@ -2012,9 +2367,16 @@ RULE_DEFINITIONS = (
     CUSTOM_TP2_IMPORTANT_NOTICE,
     CUSTOM_TITLE_PAGE_COPYRIGHT,
     CUSTOM_COPYRIGHT_POSITION,
+    CUSTOM_PDF_BOOKMARK_TITLE_MATCH,
     CUSTOM_TP1_REVISION_NUMBER,
     CUSTOM_TP1_FIRST_ISSUE_DATE,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
+    CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION,
+    CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION,
+    CUSTOM_CHAPTER_NUMBER_SEQUENCE,
+    CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
+    CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
+    CUSTOM_NI_PART_NUMBER_ORDER,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
     CUSTOM_HIGHLIGHTS_HOLDER,
     CUSTOM_HIGHLIGHTS_ATA_NUMBER,
@@ -2034,6 +2396,7 @@ RULE_DEFINITIONS = (
     CUSTOM_ENUMERATION_PUNCTUATION_SWAP,
     CUSTOM_PARAGRAPH_JUSTIFICATION,
     CUSTOM_TEMPERATURE_FAHRENHEIT,
+    CUSTOM_TEMPERATURE_RANGE_FORMAT,
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_PASCAL_INHG_CONVERSION,
     CUSTOM_METRIC_LENGTH_INCH_CONVERSION,
@@ -2041,6 +2404,7 @@ RULE_DEFINITIONS = (
     CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION,
     CUSTOM_FORBIDDEN_CONSUMABLES,
     CUSTOM_REPLACE_LEGACY_NAMES,
+    CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,
 )

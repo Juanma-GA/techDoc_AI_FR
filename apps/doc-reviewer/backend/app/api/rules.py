@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.checks.client_registry import active_standard_versions
+from app.config import settings
 from app.core import ingest
 from app.core.checklist_compiler import compile_checklist_rule
 from app.core.compiled_rule_store import persist_compiled_rule
@@ -24,7 +25,7 @@ from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.llm_suggester import suggest_rules_from_corpus
 from app.core.pdf_versioning import current_path
 from app.core.rules_engine import validate_rule_pattern
-from app.core.security import read_upload_bounded_async
+from app.core.security import read_upload_limited
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion
 from app.db.session import get_db
 from app.parsers.pdf_parser import parse_pdf
@@ -446,10 +447,10 @@ def download_checklist_template() -> FileResponse:
 
 
 @router.post("/rules/inspect", response_model=SheetInspectOut)
-async def inspect_checklist(file: UploadFile) -> SheetInspectOut:
+def inspect_checklist(file: UploadFile) -> SheetInspectOut:
     """Liste les onglets + grille d'apercu + ligne d'en-tete detectee d'un .xlsx
     (pour piloter le mapping des colonnes cote UI avant l'import)."""
-    data = await read_upload_bounded_async(file, settings.max_upload_size_bytes)
+    data = read_upload_limited(file, settings.max_upload_size_bytes)
     try:
         sheets = list_sheets(data)
     except Exception as exc:  # noqa: BLE001
@@ -559,7 +560,7 @@ def patch_compiled_rule(
 
 
 @router.post("/rules/import", response_model=RuleImportResult)
-async def import_checklist(
+def import_checklist(
     request: Request,
     file: UploadFile,
     sheet: Optional[str] = Form(default=None),
@@ -575,7 +576,7 @@ async def import_checklist(
     if mode not in {"replace", "add"}:
         raise AppError("BAD_MODE", f"Mode d'import inconnu : {mode}.", status_code=400)
 
-    data = await read_upload_bounded_async(file, settings.max_upload_size_bytes)
+    data = read_upload_limited(file, settings.max_upload_size_bytes)
     parsed_mapping: Optional[dict] = None
     if mapping:
         try:
@@ -668,7 +669,7 @@ def validate_all(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/rules/suggest/from-files", response_model=RuleSuggestOut)
-async def suggest_rules_from_files(
+def suggest_rules_from_files(
     files: list[UploadFile] = File(...),
     standard_version_id: Optional[uuid.UUID] = Form(default=None),
     db: Session = Depends(get_db),
@@ -688,9 +689,8 @@ async def suggest_rules_from_files(
 
     samples: list[str] = []
     analyzed = 0
-    truncated = 0
-    for f in files:
-        data = await read_upload_bounded_async(f, settings.max_upload_size_bytes)
+    for f in files[:_SUGGEST_MAX_DOCS]:
+        data = read_upload_limited(f, settings.max_upload_size_bytes)
         try:
             pdf_bytes, name, _engine = ingest.to_pdf_bytes(f.filename or "upload", data)
         except AppError as exc:

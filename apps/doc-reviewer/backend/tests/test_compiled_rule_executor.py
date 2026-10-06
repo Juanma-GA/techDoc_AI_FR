@@ -587,6 +587,61 @@ def test_regex_exists_resolves_document_context_placeholder() -> None:
     assert results[0].evidence.expected_value == r"Revision\s*:\s*{{meta_revision_number}}"
 
 
+def test_regex_exists_matches_context_value_split_by_pdf_layout() -> None:
+    text = "First issue:\nJUL\n30\n/\n73"
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[ParsedPage(page=1, text=text)],
+        full_text=text,
+        is_signed=False,
+    )
+    rule = _rule(
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?i)First\s+issue\s*:\s*{{meta_first_issue_date}}",
+        )
+    )
+
+    results, raws = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(meta_first_issue_date="JUL 30/73"),
+    )
+
+    assert results[0].status == "PASS"
+    assert raws == []
+
+
+def test_regex_exists_matches_context_digits_split_by_pdf_layout() -> None:
+    text = "Revision No.0\n5\nFirst Issue: JUL 30/73"
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[ParsedPage(page=1, text=text)],
+        full_text=text,
+        is_signed=False,
+    )
+    rule = _rule(
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=(
+                r"(?i)Revision\s+No\.?\s*{{meta_revision_number}}"
+                r"\s+(?=[\s\S]*\bFirst\s+Issue\b)"
+            ),
+        )
+    )
+
+    results, raws = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(meta_revision_number="05"),
+    )
+
+    assert results[0].status == "PASS"
+    assert raws == []
+
+
 def test_regex_context_placeholder_is_inconclusive_when_value_is_missing() -> None:
     parsed = ParsedPdf(
         page_count=1,

@@ -115,7 +115,7 @@ def to_pdf_bytes(name: str, data: bytes) -> tuple[bytes, str, str]:
     """Normalise un fichier supporte en octets **PDF**.
 
     - `.pdf`  : valide (magic bytes + taille) et renvoie tel quel.
-    - `.doc/.docx` : convertit en PDF fidele (LibreOffice prioritaire, repli Word).
+    - `.doc/.docx` : convertit en PDF fidele (Word, repli LibreOffice).
 
     Retourne `(pdf_bytes, display_name, engine)`. `engine` trace le moteur de
     normalisation : `"pdf"` (natif, aucune conversion), `"libreoffice"` ou
@@ -179,5 +179,5 @@ def prepare_document(name: str, data: bytes) -> PreparedDocument:
         except (zipfile.BadZipFile, ValueError) as exc:
             raise AppError("DOCX_INVALID", "Fichier .docx illisible.", status_code=400) from exc
         return PreparedDocument("docx", "docx", data, data, safe, "docx-native")
-    working = doc_convert.office_to_docx_bytes(data, ".doc")
-    return PreparedDocument("doc", "docx", data, working, safe, "libreoffice")
+    working, engine = doc_convert.office_to_docx_bytes(data, ".doc")
+    return PreparedDocument("doc", "docx", data, working, safe, engine)

@@ -1,0 +1,4 @@
+# Run artifacts of the manual scripts: they hold the documents under test
+# (client material) and must never be committed.
+outputs/
+state.json

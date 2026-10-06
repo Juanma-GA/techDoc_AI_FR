@@ -9,6 +9,7 @@ type Props = {
   confirmLabel: string;
   cancelLabel: string;
   onConfirm: () => void;
+  confirmDisabled?: boolean;
   destructive?: boolean;
   children?: ReactNode;
 };
@@ -21,6 +22,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   onConfirm,
+  confirmDisabled = false,
   destructive,
   children,
 }: Props) {
@@ -40,6 +42,7 @@ export function ConfirmDialog({
           <button
             type="button"
             className={destructive ? "btn danger" : "btn primary"}
+            disabled={confirmDisabled}
             onClick={() => {
               onConfirm();
               onOpenChange(false);

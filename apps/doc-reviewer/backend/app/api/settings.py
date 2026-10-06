@@ -12,6 +12,7 @@ from app.core.mistral_settings import (
     get_checklist_ai_scan,
     get_checklist_context,
     get_effective,
+    get_endpoint,
     get_feedback_enabled,
     get_llm_enabled,
     get_llm_max_calls,
@@ -154,7 +155,12 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         set_llm_tested(db, False)
         return TestConnectionOut(ok=False, message="Aucune clé API configurée.", models=[])
     try:
-        base_url = validate_mistral_base_url(s["base_url"])
+        s = get_endpoint(db)
+    except AppError as exc:
+        set_llm_tested(db, False)
+        return TestConnectionOut(ok=False, message=exc.message, models=[])
+    base_url = s["base_url"]
+    try:
         with httpx.Client(timeout=10.0, follow_redirects=False) as client:
             r = client.get(
                 f"{base_url}/v1/models",
