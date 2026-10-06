@@ -15,8 +15,8 @@ Robustesse : JSON illisible ou appel Mistral en échec → on GARDE le finding
 from __future__ import annotations
 
 import json
-import logging
 
+import structlog
 from sqlalchemy.orm import Session
 
 from app.checks.raw import RawSuggestion
@@ -24,7 +24,7 @@ from app.core.errors import AppError
 from app.core.llm_budget import LlmBudget
 from app.core.llm_suggester import call_chat
 
-log = logging.getLogger("doc_reviewer.verifier")
+log = structlog.get_logger(__name__)
 
 _SYSTEM = (
     "Tu es un verificateur qualite documentaire aeronautique, severe et sceptique. "
@@ -53,7 +53,7 @@ def _refute_once(db: Session, rule_text: str, excerpt: str) -> bool:
     try:
         out = call_chat(db, _SYSTEM, user, temperature=0.0)
     except AppError as exc:
-        log.warning("refute_call_failed code=%s", exc.code)
+        log.warning("refute_call_failed", code=exc.code)
         return False  # appel indisponible -> on ne refute pas (garde le finding)
     return _parse_verdict(out)
 

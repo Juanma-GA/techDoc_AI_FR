@@ -19,7 +19,11 @@ from app.core.compiled_rule_runtime import (
     evidence,
 )
 
+# Volume par appel ET budget total par regle (hardening B-1) : sans
+# `_SEMANTIC_TOTAL_CHAR_LIMIT`, un document arbitrairement long sort
+# INTEGRALEMENT vers l'API Mistral, sans aucune borne de volume.
 _SEMANTIC_GROUP_CHAR_LIMIT = 10_000
+_SEMANTIC_TOTAL_CHAR_LIMIT = 120_000
 
 
 def execute_semantic(
@@ -29,6 +33,7 @@ def execute_semantic(
     is_docx: bool,
     pdf_pages: list[ParsedPage] | None,
     document: Any | None,
+    warnings: list[str] | None = None,
 ) -> tuple[RuleResult, list[RawSuggestion]]:
     fallback_target = targets[0] if targets else None
     if db is None or not targets:
@@ -41,7 +46,17 @@ def execute_semantic(
             [],
         )
 
-    groups = semantic_groups(targets)
+    groups = semantic_groups(targets, _SEMANTIC_TOTAL_CHAR_LIMIT)
+    covered_chars = sum(len(target.text) for group in groups for target in group)
+    total_chars = sum(len(target.text) for target in targets)
+    if covered_chars < total_chars and warnings is not None:
+        warning = (
+            f"Regle semantique '{rule.id}' limitee a {_SEMANTIC_TOTAL_CHAR_LIMIT} "
+            "caracteres : le reste du document n'a pas ete envoye a Mistral, "
+            "sa couverture est incomplete."
+        )
+        if warning not in warnings:
+            warnings.append(warning)
     if not groups:
         return (
             RuleResult(
@@ -159,16 +174,24 @@ def execute_semantic(
     )
 
 
-def semantic_groups(targets: list[_TextTarget]) -> list[list[_TextTarget]]:
+def semantic_groups(
+    targets: list[_TextTarget],
+    total_budget: int = _SEMANTIC_TOTAL_CHAR_LIMIT,
+) -> list[list[_TextTarget]]:
     groups: list[list[_TextTarget]] = []
     current: list[_TextTarget] = []
     current_len = 0
+    total_len = 0
     for target in targets:
+        if total_len >= total_budget:
+            break
         text = target.text
         if not text.strip():
             continue
         start = 0
         while start < len(text):
+            if total_len >= total_budget:
+                break
             end = min(start + _SEMANTIC_GROUP_CHAR_LIMIT, len(text))
             if end < len(text):
                 boundary_start = start + _SEMANTIC_GROUP_CHAR_LIMIT // 2
@@ -188,6 +211,7 @@ def semantic_groups(targets: list[_TextTarget]) -> list[list[_TextTarget]]:
                 replace(target, text=segment, text_offset=target.text_offset + start)
             )
             current_len += len(segment)
+            total_len += len(segment)
             start = end
     if current:
         groups.append(current)

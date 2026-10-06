@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { useRejectionsSummary } from "../hooks/useSuggestions";
+import { toCsv } from "../lib/csv";
 import { isAiGeneratedSuggestion, localizedRuleCode } from "../lib/suggestionText";
 
 import { BarList, type BarItem } from "./BarList";
@@ -42,8 +43,7 @@ export function RejectionsSummaryCard() {
       i.message,
       i.feedback,
     ]);
-    const esc = (c: string): string => `"${(c ?? "").replace(/"/g, '""')}"`;
-    const csv = [header, ...rows].map((r) => r.map(esc).join(";")).join("\n");
+    const csv = toCsv([header, ...rows]);
     const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

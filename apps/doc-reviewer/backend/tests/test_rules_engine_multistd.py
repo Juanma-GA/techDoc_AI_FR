@@ -265,7 +265,7 @@ def test_mistral_read_timeout_is_retried_once(monkeypatch) -> None:
         monkeypatch.setattr(llm_suggester, "get_llm_enabled", lambda _db: True)
         monkeypatch.setattr(
             llm_suggester,
-            "get_effective",
+            "get_endpoint",
             lambda _db: {
                 "api_key": "test-key",
                 "chat_model": "test-model",

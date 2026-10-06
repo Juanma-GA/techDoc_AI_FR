@@ -287,7 +287,7 @@ def _persist_docx(
     parse pour compter les blocs/pages — aucune conversion.
 
     `.doc` (legacy binaire) : converti **une seule fois, en interne** en
-    `.docx` via LibreOffice (`doc_convert.office_to_docx_bytes`) pour pouvoir
+    `.docx` via Word ou LibreOffice (`doc_convert.office_to_docx_bytes`) pour pouvoir
     beneficier de la revue native au lieu d'etre bascule vers le pipeline PDF.
     L'utilisateur n'a rien a convertir lui-meme : `original_filename` garde
     l'extension `.doc` d'origine, et l'export (`GET .../export`) reconvertit
@@ -315,7 +315,7 @@ def _persist_docx(
         # Conversion interne .doc -> .docx (silencieuse pour l'utilisateur) :
         # le fichier de travail est du docx, mais `original_filename` conserve
         # le suffixe .doc pour un aller-retour transparent a l'export.
-        working_data = doc_convert.office_to_docx_bytes(data, ".doc")
+        working_data, _ = doc_convert.office_to_docx_bytes(data, ".doc")
         engine = "docx-native-from-doc"
     else:
         if data[:2] != b"PK":
@@ -744,11 +744,11 @@ def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db))
         if doc.has_applied_edits:
             available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": ""})
     else:
-        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente", "warning": "Conversion Word -> PDF : le rendu peut varier selon LibreOffice."})
+        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente", "warning": "Conversion Word -> PDF : le rendu peut varier selon le moteur de conversion (Word ou LibreOffice)."})
         if doc.has_applied_edits:
             available.append({"kind": "corrected", "format": "docx", "label": "DOCX corrige", "warning": ""})
-            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": "Conversion Word -> PDF : le rendu peut varier selon LibreOffice."})
-    if doc_convert._find_soffice():
+            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": "Conversion Word -> PDF : le rendu peut varier selon le moteur de conversion (Word ou LibreOffice)."})
+    if doc_convert.can_convert_formats():
         if doc.working_format == "pdf":
             available.append({"kind": "converted", "format": "docx", "label": "DOCX converti", "warning": "Conversion PDF -> DOCX : mise en page, tableaux, polices et positionnement peuvent etre modifies."})
         available.append({"kind": "converted", "format": "doc", "label": "DOC converti", "warning": "Conversion vers DOC legacy : degradation possible de la mise en page, des polices et des elements avances."})

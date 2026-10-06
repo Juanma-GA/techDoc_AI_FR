@@ -11,6 +11,7 @@ from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 from app.core.regex_safety import (
     MAX_USER_REGEX_LENGTH,
+    USER_REGEX_INCOMPLETE_WARNING,
     UserRegexPatternError,
     compile_user_regex,
 )
@@ -59,8 +60,7 @@ def test_custom_regex_timeout_marks_analysis_coverage_reduced(
     suggestions = run_custom_rules([rule], [page], warnings=warnings)
 
     assert suggestions == []
-    assert len(warnings) == 1
-    assert "couverture est réduite" in warnings[0]
+    assert warnings == [USER_REGEX_INCOMPLETE_WARNING]
 
 
 def test_compiled_regex_timeout_returns_inconclusive_without_network(

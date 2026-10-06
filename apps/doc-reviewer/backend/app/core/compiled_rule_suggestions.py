@@ -301,7 +301,7 @@ def client_operation_suggestions_for_rule(
             RawSuggestion(
                 rule_kind=rule_kind,
                 rule_code=rule.id,
-                severity=rule.severity,
+                severity=result.severity or rule.severity,
                 message=result.message or rule.failure_message or rule.topic,
                 original=result.original,
                 proposed=result.proposed or "",

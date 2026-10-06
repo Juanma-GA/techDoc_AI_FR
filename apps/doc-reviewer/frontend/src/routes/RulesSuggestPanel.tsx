@@ -142,6 +142,13 @@ export function RulesSuggestPanel() {
                   })}
                 </span>
               ) : null}
+              {suggest.data && suggest.data.documents_truncated > 0 ? (
+                <span className="card-sub" style={{ color: "var(--warning)" }}>
+                  {t("rules.suggest.docsTruncated", {
+                    count: suggest.data.documents_truncated,
+                  })}
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={close}

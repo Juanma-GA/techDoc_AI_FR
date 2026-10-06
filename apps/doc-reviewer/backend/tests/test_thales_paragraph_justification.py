@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-
 import fitz
 
 from app.checks.client_registry import load_active_client_configuration
@@ -100,6 +99,33 @@ def _three_line_pdf(right_edges: list[float]) -> ParsedPdf:
     )
 
 
+def _layout_pdf(lines: list[tuple[str, float, float]]) -> ParsedPdf:
+    pdf_lines = [
+        PdfLine(
+            text,
+            (left, 150.0 + index * 16.0, right, 161.0 + index * 16.0),
+            block_index=1,
+            line_index=index,
+        )
+        for index, (text, left, right) in enumerate(lines)
+    ]
+    text = "\n".join(line.text for line in pdf_lines)
+    return ParsedPdf(
+        page_count=1,
+        pages=[
+            ParsedPage(
+                page=1,
+                text=text,
+                is_modified=True,
+                lines=pdf_lines,
+                page_height=800.0,
+            )
+        ],
+        full_text=text,
+        is_signed=False,
+    )
+
+
 def _run_rule(parsed: ParsedPdf):
     return execute_pdf_rules(
         parsed,
@@ -169,6 +195,86 @@ def test_three_line_justified_paragraph_ignores_short_final_line() -> None:
     assert suggestions == []
 
 
+def test_one_and_two_line_blocks_are_not_assessed() -> None:
+    for line_count in (1, 2):
+        parsed = _pdf_page([330.0, 410.0, 500.0, 190.0])
+        page = parsed.pages[0]
+        page.lines = page.lines[:line_count]
+        page.spans = page.spans[:line_count]
+        page.text = "\n".join(line.text for line in page.lines)
+        parsed.full_text = page.text
+
+        results, suggestions = _run_rule(parsed)
+
+        assert results[0].status == "INCONCLUSIVE"
+        assert suggestions == []
+
+
+def test_table_of_contents_is_not_treated_as_body_paragraphs() -> None:
+    parsed = _pdf_page([330.0, 410.0, 500.0, 190.0])
+    page = parsed.pages[0]
+    page.text = f"TABLE OF CONTENTS\n{page.text}"
+    parsed.full_text = page.text
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
+def test_one_line_statement_and_list_items_are_not_combined_as_a_paragraph() -> None:
+    parsed = _layout_pdf(
+        [
+            ("This ILLUSTRATED PARTS LIST (IPL) is prepared to ATA Specification 100.", 50.0, 500.0),
+            ("It is divided as follows:", 50.0, 280.0),
+            ("- INTRO: Introduction", 50.0, 240.0),
+            ("- OPL: Optional Parts List", 50.0, 300.0),
+            ("B. Function and Use", 50.0, 300.0),
+        ]
+    )
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
+def test_multicolumn_table_block_is_not_checked_as_a_paragraph() -> None:
+    parsed = _layout_pdf(
+        [
+            ("AR:", 50.0, 70.0),
+            ("As Required", 220.0, 320.0),
+            ("AMDMNT:", 50.0, 110.0),
+            ("Amendment", 220.0, 310.0),
+            ("DET:", 50.0, 75.0),
+            ("Detail", 220.0, 270.0),
+            ("EFF:", 50.0, 75.0),
+            ("Effectivity", 220.0, 310.0),
+        ]
+    )
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
+def test_table_headers_do_not_extend_a_two_line_prose_paragraph() -> None:
+    parsed = _layout_pdf(
+        [
+            ("The Effectivity Code is a letter which shows the interchangeability", 50.0, 500.0),
+            ("of the parts on a figure, as shown below:", 50.0, 350.0),
+            ("FIGURE", 50.0, 120.0),
+            ("ITEM", 250.0, 320.0),
+        ]
+    )
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
 def test_left_aligned_pdf_paragraph_is_detected_from_rendered_geometry(tmp_path) -> None:
     parsed = _render_pdf(tmp_path, alignment=fitz.TEXT_ALIGN_LEFT)
 
@@ -218,6 +324,40 @@ def test_faulty_paragraph_surfaces_as_detection_only() -> None:
     )
 
     assert page.is_modified is True
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].page == page.page
+    assert finding.original == finding.proposed
+    assert finding.bbox[2] > finding.bbox[0]
+
+
+def test_rendered_faulty_paragraph_is_surfaced_as_detection_only(tmp_path) -> None:
+    # Synthetic stand-in for the client manual page (never commit client documents).
+    doc = fitz.open()
+    pdf_page = doc.new_page(width=612, height=792)
+    pdf_page.insert_textbox(
+        fitz.Rect(107.8, 140, 540, 260),
+        "Faulty parts should be replaced by approved spares only. After any component "
+        "has been renewed or repaired, carry out the full procedure in TESTING AND "
+        "FAULT ISOLATION before the unit is returned to service.",
+        fontname="helv",
+        fontsize=10,
+        align=fitz.TEXT_ALIGN_LEFT,
+    )
+    path = tmp_path / "faulty-paragraph.pdf"
+    doc.save(str(path))
+    doc.close()
+
+    parsed = parse_pdf(path)
+    parsed.pages[0].is_modified = True
+    page = parsed.pages[0]
+    results, suggestions = _run_rule(parsed)
+    finding = next(
+        suggestion
+        for suggestion in suggestions
+        if "Faulty parts should be replaced" in suggestion.original
+    )
+
     assert results[0].status == "FAIL"
     assert len(suggestions) == 1
     assert suggestions[0].page == page.page

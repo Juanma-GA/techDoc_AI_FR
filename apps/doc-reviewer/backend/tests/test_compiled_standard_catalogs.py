@@ -12,6 +12,7 @@ from app.checks.thales_rules.page_classifier import (
     HIGHLIGHTS_PAGE_TYPE,
     HIGHLIGHTS_FIRST_PAGE_TYPE,
     INTRODUCTION_PAGE_TYPE,
+    NUMERICAL_INDEX_PAGE_TYPE,
     TP2_PAGE_TYPE,
     REPAIR_PAGE_TYPE,
     STORAGE_PAGE_TYPE,
@@ -19,6 +20,7 @@ from app.checks.thales_rules.page_classifier import (
     TP1_PAGE_TYPE,
     classify_pages,
     identify_note_pages,
+    identify_numerical_index_pages,
     identify_introduction_pages,
     identify_tp1_pages,
 )
@@ -29,10 +31,11 @@ from app.checks.thales_rules.rules import (
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules as _execute_pdf_rules
 from app.core.compiled_rule_operators import extract_year
+from app.core.page_range import filter_pdf_pages
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfBookmark, PdfLine, Span
 
 
 _TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
@@ -59,6 +62,146 @@ def _rule(code: str) -> CompiledRule:
 def _pdf(text: str) -> ParsedPdf:
     page = ParsedPage(page=1, text=text, spans=[])
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def _highlights_structure_pdf(rows: list[tuple[str, str, str]]) -> ParsedPdf:
+    spans = [
+        Span("Chapter/Section and Page No", (54.0, 95.0, 200.0, 105.0), 1, "Arial", 10.0),
+        Span("Designation", (285.0, 95.0, 330.0, 105.0), 1, "Arial", 10.0),
+        Span("Description of Change", (366.0, 95.0, 480.0, 105.0), 1, "Arial", 10.0),
+    ]
+    for index, (pages, status, description) in enumerate(rows):
+        y = 130.0 + index * 20.0
+        if pages:
+            spans.append(
+                Span(pages, (90.7, y, 250.0, y + 10.0), 1, "Arial", 10.0)
+            )
+        if status:
+            spans.append(
+                Span(status, (322.2, y, 328.2, y + 10.0), 1, "Arial", 10.0)
+            )
+        if description:
+            spans.append(
+                Span(description, (366.0, y, 560.0, y + 10.0), 1, "Arial", 10.0)
+            )
+    text = "\n".join(span.text for span in spans)
+    page = ParsedPage(
+        page=1,
+        text=text,
+        spans=spans,
+        page_type=HIGHLIGHTS_FIRST_PAGE_TYPE,
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def _numbered_chapter_pdf(pages: list[tuple[str, list[str]]]) -> ParsedPdf:
+    parsed_pages = []
+    for physical_page, (page_key, headings) in enumerate(pages, start=1):
+        spans = []
+        lines = []
+        for index, heading in enumerate(headings):
+            y = 130.0 + index * 24.0
+            bbox = (86.0, y, 500.0, y + 14.0)
+            lines.append(PdfLine(heading, bbox, block_index=1, line_index=index))
+            spans.append(Span(heading, bbox, physical_page, "Arial", 12.0))
+        spans.extend(
+            [
+                Span("THALES AVS FRANCE SAS", (85.0, 755.0, 220.0, 765.0), physical_page, "Arial", 9.0),
+                Span(f"Page {page_key}", (500.0, 755.0, 560.0, 765.0), physical_page, "Arial", 9.0),
+                Span("JUL 27/26", (500.0, 771.0, 560.0, 781.0), physical_page, "Arial", 9.0),
+            ]
+        )
+        text = "\n".join([*headings, "THALES AVS FRANCE SAS", f"Page {page_key}", "JUL 27/26"])
+        parsed_pages.append(
+            ParsedPage(
+                page=physical_page,
+                text=text,
+                spans=spans,
+                lines=lines,
+                page_height=792.0,
+            )
+        )
+    full_text = "\n".join(page.text for page in parsed_pages)
+    return ParsedPdf(
+        page_count=len(parsed_pages),
+        pages=parsed_pages,
+        full_text=full_text,
+        is_signed=False,
+    )
+
+
+def _list_materials_code_pdf(rows: list[tuple[str, str, str]]) -> ParsedPdf:
+    spans = [
+        Span("LIST OF MATERIALS", (272.0, 100.0, 380.0, 114.0), 1, "Arial", 10.0),
+        Span("DESIGNATION", (113.8, 230.0, 185.8, 244.0), 1, "Arial", 10.0),
+        Span("CODE", (254.0, 208.0, 284.0, 222.0), 1, "Arial", 10.0),
+        Span("(Refer to STANDARD PRACTICES ATA No. 20-02-00)", (210.0, 223.0, 320.0, 251.0), 1, "Arial", 10.0),
+        Span("SUPPLIERS TRADE NAME", (340.7, 223.0, 466.7, 237.0), 1, "Arial", 10.0),
+        Span("AND CODE FSCM", (361.7, 237.0, 445.7, 251.0), 1, "Arial", 10.0),
+        Span("USE", (511.5, 218.0, 535.5, 232.0), 1, "Arial", 10.0),
+        Span("THALES AVS FRANCE SAS", (50.0, 755.0, 210.0, 765.0), 1, "Arial", 9.0),
+        Span("LM Page 1", (500.0, 755.0, 560.0, 765.0), 1, "Arial", 9.0),
+        Span("JUL 30/26", (500.0, 771.0, 560.0, 781.0), 1, "Arial", 9.0),
+    ]
+    for index, (designation, code, supplier) in enumerate(rows):
+        y = 266.0 + index * 22.0
+        spans.extend(
+            [
+                Span(designation, (90.0, y, 192.0, y + 14.0), 1, "Arial", 10.0),
+                Span(code, (210.5, y, 282.5, y + 14.0), 1, "Arial", 10.0),
+                Span(supplier, (328.7, y, 430.7, y + 14.0), 1, "Arial", 10.0),
+            ]
+        )
+    text = "\n".join(span.text for span in spans)
+    page = ParsedPage(page=1, text=text, spans=spans, page_height=792.0)
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def _numerical_index_pdf(
+    pages: list[list[str]],
+    *,
+    leading_pages: int = 0,
+) -> ParsedPdf:
+    parsed_pages = [
+        ParsedPage(page=page_number, text="INTRODUCTION", page_height=792.0)
+        for page_number in range(1, leading_pages + 1)
+    ]
+    for logical_page, part_numbers in enumerate(pages, start=1):
+        physical_page = leading_pages + logical_page
+        spans = [
+            Span("NUMERICAL INDEX", (278.9, 100.0, 368.9, 114.0), physical_page, "Arial", 10.0),
+            Span("PART NUMBER", (89.6, 122.0, 155.6, 136.0), physical_page, "Arial", 10.0),
+            Span("AIRLINE", (311.6, 122.0, 353.6, 136.0), physical_page, "Arial", 10.0),
+            Span("STOCK NO.", (311.6, 133.0, 365.6, 147.0), physical_page, "Arial", 10.0),
+            Span("FIGURE", (454.8, 122.0, 490.8, 136.0), physical_page, "Arial", 10.0),
+            Span("ITEM", (460.8, 133.0, 484.8, 147.0), physical_page, "Arial", 10.0),
+            Span("TTL", (517.1, 122.0, 535.1, 136.0), physical_page, "Arial", 10.0),
+            Span("REQ", (517.1, 133.0, 535.1, 147.0), physical_page, "Arial", 10.0),
+            Span("THALES AVS FRANCE SAS", (85.0, 755.0, 220.0, 765.0), physical_page, "Arial", 9.0),
+            Span(f"NI/NUM 1101 Page {logical_page}", (450.0, 755.0, 567.0, 765.0), physical_page, "Arial", 9.0),
+            Span("JUL 30/26", (500.0, 771.0, 560.0, 781.0), physical_page, "Arial", 9.0),
+        ]
+        for index, part_number in enumerate(part_numbers):
+            y = 160.0 + index * 16.0
+            spans.extend(
+                [
+                    Span(part_number, (89.6, y, 180.0, y + 12.0), physical_page, "Arial", 10.0),
+                    Span("21-33-13", (311.6, y, 365.6, y + 12.0), physical_page, "Arial", 10.0),
+                ]
+            )
+        text = "\n".join(span.text for span in spans)
+        parsed_pages.append(
+            ParsedPage(page=physical_page, text=text, spans=spans, page_height=792.0)
+        )
+    full_text = "\n".join(page.text for page in parsed_pages)
+    parsed = ParsedPdf(
+        page_count=len(parsed_pages),
+        pages=parsed_pages,
+        full_text=full_text,
+        is_signed=False,
+    )
+    identify_numerical_index_pages(parsed)
+    return parsed
 
 
 def _cmm_footer_pdf(footer: str, *, cmm_size: float = 8.0) -> ParsedPdf:
@@ -685,6 +828,37 @@ def test_tp1_revision_number_matches_document_context_value() -> None:
     )
     assert not_tp1 == []
     assert not_tp1_suggestions == []
+
+
+def test_tp1_revision_number_uses_visual_footer_order() -> None:
+    parsed = _tp1_revision_footer_pdf(
+        "First Issue: JUL 27/26\nRevision No.04"
+    )
+    first_issue_span = parsed.pages[0].spans[1]
+    revision_number_span = parsed.pages[0].spans[2]
+    parsed.pages[0].spans[1] = Span(
+        text=first_issue_span.text,
+        bbox=(40.0, 776.0, 300.0, 786.0),
+        page=first_issue_span.page,
+        font=first_issue_span.font,
+        size=first_issue_span.size,
+    )
+    parsed.pages[0].spans[2] = Span(
+        text=revision_number_span.text,
+        bbox=(40.0, 760.0, 300.0, 770.0),
+        page=revision_number_span.page,
+        font=revision_number_span.font,
+        size=revision_number_span.size,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [_rule("CUSTOM_TP1_REVISION_NUMBER")],
+        document=SimpleNamespace(meta_revision_number="04"),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_tp1_first_issue_date_matches_document_context_value() -> None:
@@ -1850,7 +2024,7 @@ def test_tp1_page_type_is_read_from_anywhere_in_the_footer_band() -> None:
 
 def test_repair_testing_storage_page_types_require_standalone_headings() -> None:
     parsed = ParsedPdf(
-        page_count=4,
+        page_count=5,
         pages=[
             ParsedPage(page=1, text="REPAIR\nNOTE\nPressure:"),
             ParsedPage(page=2, text="TESTING\nNOTE\nTemperature:"),
@@ -1880,7 +2054,7 @@ def test_repair_testing_storage_page_types_require_standalone_headings() -> None
 
 def test_note_page_classifier_does_not_misclassify_contents_or_override_highlights() -> None:
     parsed = ParsedPdf(
-        page_count=2,
+        page_count=4,
         pages=[
             ParsedPage(
                 page=1,
@@ -1891,6 +2065,18 @@ def test_note_page_classifier_does_not_misclassify_contents_or_override_highligh
                 text="Highlights Page 2\nRepair\nTesting\nStorage",
                 page_type=HIGHLIGHTS_PAGE_TYPE,
             ),
+            ParsedPage(
+                page=3,
+                text="LIST OF EFFECTIVE PAGES\nSUBJECT\nPAGE\nDATE\nStorage\n901",
+            ),
+            ParsedPage(
+                page=4,
+                text="TABLE OF CONTENTS\nStorage\n901",
+            ),
+            ParsedPage(
+                page=5,
+                text="STORAGE INSTRUCTIONS\n1. STORAGE\nNOTE: During storage operations",
+            ),
         ],
         full_text="",
         is_signed=False,
@@ -1898,7 +2084,13 @@ def test_note_page_classifier_does_not_misclassify_contents_or_override_highligh
 
     page_types = identify_note_pages(parsed)
 
-    assert page_types == {"1": None, "2": HIGHLIGHTS_PAGE_TYPE}
+    assert page_types == {
+        "1": None,
+        "2": HIGHLIGHTS_PAGE_TYPE,
+        "3": None,
+        "4": None,
+        "5": "STORAGE",
+    }
 
 
 def test_introduction_page_classifier_uses_the_standalone_heading() -> None:
@@ -1948,6 +2140,389 @@ def test_shop_verification_changes_with_the_mapping_manufacturer() -> None:
     assert invalid_suggestions[0].page == 1
     assert invalid_suggestions[0].proposed == airbus_text
     assert "Airbus" in invalid_suggestions[0].message
+
+
+def test_deleted_highlights_require_chapter_or_page_deleted_description() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION")
+
+    for description in ("Chapter deleted", "Page deleted"):
+        results, suggestions = execute_pdf_rules(
+            _highlights_structure_pdf(
+                [("Repair", "", ""), ("Pages 601 to 602", "D", description)]
+            ),
+            [rule],
+        )
+        assert results[0].status == "PASS"
+        assert suggestions == []
+
+    results, suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Repair", "", ""), ("Pages 601 to 602", "D", "Removed from the manual")]
+        ),
+        [rule],
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].page == 1
+    assert suggestions[0].bbox[0] >= 300.0
+
+
+def test_revised_highlights_require_description_with_illustrated_parts_list_exception() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION")
+    ordinary_missing, missing_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Repair", "", ""), ("Page 601", "R", "")]
+        ),
+        [rule],
+    )
+    ordinary_present, present_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Repair", "", ""), ("Page 601", "R", "Corrected assembly instruction")]
+        ),
+        [rule],
+    )
+    illustrated_list, illustrated_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [
+                ("Illustrated Parts List", "", "Revised to reflect this revision."),
+                ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
+                ("NI/NUM 1101 Page 1", "R", ""),
+            ]
+        ),
+        [rule],
+    )
+    illustrated_missing, illustrated_missing_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [
+                ("Illustrated Parts List", "", ""),
+                ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
+                ("NI/NUM 1101 Page 1", "R", ""),
+            ]
+        ),
+        [rule],
+    )
+
+    assert ordinary_missing[0].status == "FAIL"
+    assert len(missing_suggestions) == 1
+    assert ordinary_present[0].status == "PASS"
+    assert present_suggestions == []
+    assert illustrated_list[0].status == "PASS"
+    assert illustrated_suggestions == []
+    assert illustrated_missing[0].status == "FAIL"
+    assert len(illustrated_missing_suggestions) == 1
+
+
+def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    valid, valid_suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [
+                ("501", ["1. INFORMATION", "2. MECHANICAL ASSEMBLY"]),
+                ("502", ["3. CHECKING AND ADJUSTMENTS"]),
+            ]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [("701", ["1. INFORMATION"]), ("702", ["3. LEAK TESTS"])]
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].page == 2
+    assert invalid_suggestions[0].proposed == "2. LEAK TESTS"
+
+
+def test_chapter_number_sequence_ignores_numbered_prose() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    results, suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [("501", ["1. Replace the seal immediately."])]
+        ),
+        [rule],
+    )
+
+    assert results[0].status == "INCONCLUSIVE"
+    assert suggestions == []
+
+
+def test_chapter_sequence_uses_full_document_for_a_single_page_analysis() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    full = _numbered_chapter_pdf(
+        [("701", ["1. INFORMATION"]), ("702", ["3. LEAK TESTS"])]
+    )
+    partial = filter_pdf_pages(full, [2])
+
+    results, suggestions = execute_pdf_rules(partial, [rule])
+
+    assert results[0].status == "FAIL"
+    assert suggestions[0].page == 2
+    assert suggestions[0].proposed == "2. LEAK TESTS"
+
+
+def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
+    rule = _rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")
+    pages = [
+        ParsedPage(page=1, text="INTRODUCTION"),
+        ParsedPage(page=2, text="REPAIR PROCEDURE"),
+    ]
+    valid = ParsedPdf(
+        page_count=2,
+        pages=pages,
+        full_text="INTRODUCTION\nREPAIR PROCEDURE",
+        is_signed=False,
+        bookmarks=[
+            PdfBookmark(title="INTRODUCTION", page=1),
+            PdfBookmark(title="REPAIR PROCEDURE", page=2),
+        ],
+    )
+    invalid = ParsedPdf(
+        page_count=2,
+        pages=pages,
+        full_text="INTRODUCTION\nREPAIR PROCEDURE",
+        is_signed=False,
+        bookmarks=[PdfBookmark(title="REPAIR PROCEDURE", page=1)],
+    )
+
+    valid_results, valid_suggestions = execute_pdf_rules(valid, [rule])
+    invalid_results, invalid_suggestions = execute_pdf_rules(invalid, [rule])
+
+    assert valid_results[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid_results[0].status == "FAIL"
+    assert [(item.page, item.original, item.proposed) for item in invalid_suggestions] == [
+        (1, "REPAIR PROCEDURE", "")
+    ]
+
+
+def test_pdf_bookmark_inconclusive_pages_survive_modified_only_filtering() -> None:
+    rule = _rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")
+    parsed = ParsedPdf(
+        page_count=3,
+        pages=[
+            ParsedPage(page=1, text="COMPONENT MAINTENANCE MANUAL"),
+            ParsedPage(page=2, text="REPAIR PROCEDURE"),
+            ParsedPage(page=3, text="", has_text_layer=False),
+        ],
+        full_text="COMPONENT MAINTENANCE MANUAL\nREPAIR PROCEDURE\n",
+        is_signed=False,
+        bookmarks=[
+            PdfBookmark(title="TITLE PAGE", page=1),
+            PdfBookmark(title="WRONG TITLE", page=2),
+            PdfBookmark(title="DISASSEMBLY", page=3),
+        ],
+    )
+
+    scoped = filter_pdf_pages(parsed, [1, 2])
+    results, suggestions = execute_pdf_rules(scoped, [rule])
+
+    assert results[0].status == "FAIL"
+    assert results[0].inconclusive_pages == ["1", "3"]
+    assert [(item.page, item.original) for item in suggestions] == [(2, "WRONG TITLE")]
+
+
+def test_list_of_materials_code_rule_only_checks_the_code_column() -> None:
+    rule = _rule("CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES")
+    parsed = _list_materials_code_pdf(
+        [("Red paint (red)", "CODE-01", "Supplier (FSCM)")]
+    )
+
+    valid, valid_suggestions = execute_pdf_rules(parsed, [rule])
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+
+    parsed = _list_materials_code_pdf(
+        [("Red paint", "(pa-pa-024)", "Supplier (FSCM)")]
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(parsed, [rule])
+
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == "(pa-pa-024)"
+    assert invalid_suggestions[0].proposed == "pa-pa-024"
+
+
+def test_list_of_materials_code_must_not_contain_uppercase_letters() -> None:
+    rule = _rule("CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE")
+    valid, valid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [("RED PAINT", "pa-pa-024", "SUPPLIER ABC")]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [("RED PAINT", "PA-PA-024", "SUPPLIER ABC")]
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("PA-PA-024", "pa-pa-024")
+    ]
+
+
+def test_numerical_index_part_numbers_are_sorted_across_logical_pages() -> None:
+    rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
+    valid, valid_suggestions = execute_pdf_rules(
+        _numerical_index_pdf([["CM7-7268", "JZAG030TL", "100", "200"], ["250", "400"]]),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _numerical_index_pdf([["CM7-7268", "100", "300"], ["250", "400"]]),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].page == 2
+    assert invalid_suggestions[0].original == "250"
+    assert "sous-sequence alphanumerique" in invalid_suggestions[0].message
+
+
+def test_numerical_index_alphanumeric_part_numbers_use_case_insensitive_order() -> None:
+    rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
+    valid, valid_suggestions = execute_pdf_rules(
+        _numerical_index_pdf(
+            [["CM7-7268", "JZAG030TL", "JZAG100TL"], ["100", "100A", "250"]]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _numerical_index_pdf([["CM7-7268", "JZAG030TL"], ["JZAG020TL", "250"]]),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].page == 2
+    assert invalid_suggestions[0].original == "JZAG020TL"
+    assert "sous-sequence alphanumerique" in invalid_suggestions[0].message
+
+
+def test_numerical_index_reports_only_the_misplaced_block_across_pages() -> None:
+    rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
+    parsed = _numerical_index_pdf(
+        [
+            ["CM7-7268", "JZAG030TL", "24595", "24601"],
+            [
+                "13309", "14602", "14910", "14929", "15472", "17554",
+                "18128", "189", "19634", "19922", "20533", "20982",
+                "22889", "234", "23984", "25635",
+            ],
+        ]
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [rule])
+
+    assert results[0].status == "FAIL"
+    assert [(item.page, item.original) for item in suggestions] == [
+        (1, "24595"),
+        (1, "24601"),
+    ]
+
+
+def test_numerical_index_reports_one_misplaced_value_without_cascading() -> None:
+    rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
+    results, suggestions = execute_pdf_rules(
+        _numerical_index_pdf([["100", "200", "300", "400", "33362", "46126"]]),
+        [rule],
+    )
+
+    assert results[0].status == "FAIL"
+    assert [(item.page, item.original) for item in suggestions] == [(1, "33362")]
+
+
+def test_ni_rule_scopes_to_index_pages_and_continues_after_an_unreadable_page() -> None:
+    rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
+    parsed = _numerical_index_pdf(
+        [["100", "300", "350"], ["150"], ["200", "250", "275", "400"]],
+        leading_pages=1,
+    )
+    unreadable_index_page = parsed.pages[2]
+    unreadable_index_page.spans = [
+        span for span in unreadable_index_page.spans if span.text.strip().upper() != "PART NUMBER"
+    ]
+    unreadable_index_page.text = "\n".join(span.text for span in unreadable_index_page.spans)
+    document = SimpleNamespace(
+        meta_revision_date="JUL 30/26",
+        meta_first_issue_date=None,
+        meta_last_issue_date=None,
+        meta_cmm_number="21-33-13",
+    )
+
+    classify_pages(parsed, document)
+    results, suggestions = execute_pdf_rules(parsed, [rule], document=document)
+
+    assert parsed.pages[0].page_type != NUMERICAL_INDEX_PAGE_TYPE
+    assert all(
+        page.page_type == NUMERICAL_INDEX_PAGE_TYPE
+        for page in parsed.pages[1:]
+    )
+    assert results[0].status == "FAIL"
+    assert [(item.page, item.original) for item in suggestions] == [
+        (2, "300"),
+        (2, "350"),
+    ]
+
+
+def test_ni_order_uses_unselected_pages_as_context_for_a_page_range() -> None:
+    rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
+    full = _numerical_index_pdf(
+        [["100", "300", "350"], ["150"], ["200", "250", "275", "400"]],
+        leading_pages=1,
+    )
+    unreadable_index_page = full.pages[2]
+    unreadable_index_page.spans = [
+        span
+        for span in unreadable_index_page.spans
+        if span.text.strip().upper() != "PART NUMBER"
+    ]
+    unreadable_index_page.text = "\n".join(
+        span.text for span in unreadable_index_page.spans
+    )
+    partial = filter_pdf_pages(full, [2])
+
+    results, suggestions = execute_pdf_rules(partial, [rule])
+
+    assert results[0].status == "FAIL"
+    assert [(item.page, item.original) for item in suggestions] == [
+        (2, "300"),
+        (2, "350"),
+    ]
+
+
+def test_shop_verification_accepts_numbered_heading_and_reflowed_text() -> None:
+    rule = _rule("CUSTOM_INTRODUCTION_SHOP_VERIFICATION")
+    observed = (
+        "INTRODUCTION\n1. Shop Verification\nA.\n"
+        "Verification of the procedures in this manual\n(1)\n"
+        "The shop verification will be done at the first repair of the\n"
+        "equipment."
+    )
+
+    results, suggestions = execute_pdf_rules(
+        _note_page_pdf(observed, INTRODUCTION_PAGE_TYPE),
+        [rule],
+        document=SimpleNamespace(meta_manufacturer="Airbus"),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_missing_shop_verification_uses_the_central_blank_area_for_its_bbox() -> None:
@@ -2114,6 +2689,18 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
         ),
         [storage_rule],
     )
+    accented_repair_rh = repair_rh.replace("procedure.", "proc\u00e9dure.")
+    replacement_temperature = storage_temperature.replace("–", "\uFFFD").replace(
+        "Assemblies", "assemblies"
+    )
+    storage_text_variants, _ = execute_pdf_rules(
+        _note_page_pdf(
+            f"STORAGE\n{storage_note_intro}\nPressure: 1 bar\n"
+            f"{accented_repair_rh}\n{replacement_temperature}",
+            STORAGE_PAGE_TYPE,
+        ),
+        [storage_rule],
+    )
 
     assert repair_valid[0].status == "PASS"
     assert repair_outside_note[0].status == "FAIL"
@@ -2126,6 +2713,7 @@ def test_note_page_rules_require_categories_inside_note_and_exact_values() -> No
     assert testing_wrong_rh[0].status == "FAIL"
     assert storage_valid[0].status == "PASS"
     assert storage_wrong_temperature[0].status == "FAIL"
+    assert storage_text_variants[0].status == "PASS"
 
 
 def test_note_suggestions_ignore_list_markers_and_anchor_missing_storage_paragraph() -> None:
@@ -2382,6 +2970,28 @@ def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion()
     )
 
 
+def test_temperature_ranges_use_deg_c_only_after_the_second_value() -> None:
+    rule = _rule("CUSTOM_TEMPERATURE_RANGE_FORMAT")
+    valid, valid_suggestions = execute_pdf_rules(
+        _pdf("Temperature: 15 to 35 deg. C (59 to 95 deg. F)"),
+        [rule],
+    )
+    invalid_cases = (
+        "Temperature: 15 deg. C to 35 deg. C",
+        "Temperature: 15 C to 35 deg. C",
+        "Temperature: 15 to 35 C",
+        "Temperature: 15 to 35",
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    for text in invalid_cases:
+        results, suggestions = execute_pdf_rules(_pdf(text), [rule])
+        assert results[0].status == "FAIL", text
+        assert len(suggestions) == 1, text
+        assert suggestions[0].proposed == "", text
+
+
 def test_bar_pressure_requires_a_parenthesized_psi_conversion() -> None:
     rule = _rule("CUSTOM_BAR_PSI_CONVERSION")
     valid, valid_suggestions = execute_pdf_rules(
@@ -2512,6 +3122,22 @@ def test_legacy_thales_references_are_proposed_as_thales() -> None:
         "thomson",
     ]
     assert {item.proposed for item in invalid_suggestions} == {"THALES"}
+
+
+def test_identification_is_replaced_with_indicator() -> None:
+    rule = _rule("CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR")
+
+    valid, valid_suggestions = execute_pdf_rules(_pdf("Use the indicator."), [rule])
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _pdf("Check the identification number."), [rule]
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        ("identification", "indicator")
+    ]
 
 
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:

@@ -15,6 +15,9 @@ from pathlib import Path
 
 import httpx
 
+# En-tete anti-CSRF exige par le backend sur les requetes de modification.
+CSRF_HEADERS = {"X-Requested-With": "doc-reviewer"}
+
 HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / "state.json"
 OUTPUT_DIR = HERE / "outputs"
@@ -62,7 +65,7 @@ def analyze(state: dict, checklist: bool, timeout: float) -> list[dict]:
     output = OUTPUT_DIR / name
     OUTPUT_DIR.mkdir(exist_ok=True)
     print(f"\nAnalyse document={document_id} checklist={str(checklist).lower()}")
-    with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=timeout, headers=CSRF_HEADERS) as client:
         with client.stream("POST", api_url(state, f"documents/{document_id}/analyze"), params={"checklist": str(checklist).lower()}, headers={"Accept": "text/event-stream"}) as response:
             print(f"HTTP {response.status_code} {response.request.url}")
             if not response.is_success:
@@ -76,7 +79,7 @@ def analyze(state: dict, checklist: bool, timeout: float) -> list[dict]:
 
 def inspect_suggestions(state: dict, timeout: float) -> None:
     document_id = state["document_id"]
-    with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=timeout, headers=CSRF_HEADERS) as client:
         response = client.get(api_url(state, f"documents/{document_id}/suggestions"))
         print(f"\n[suggestions] HTTP {response.status_code}")
         print(response.text[:12000])

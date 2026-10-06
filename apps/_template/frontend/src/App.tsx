@@ -30,6 +30,8 @@ export function App() {
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
       navigation={
         <>
           <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
@@ -61,6 +63,7 @@ export function App() {
           languages={LANGUAGES}
           currentLanguage={currentLanguage}
           onLanguageChange={(language) => void i18n.changeLanguage(language)}
+          ariaLabel={t("nav.languageSwitcher")}
         />
       }
     >

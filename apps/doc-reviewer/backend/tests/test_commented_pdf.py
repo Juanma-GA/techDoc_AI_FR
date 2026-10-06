@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -44,7 +45,12 @@ def test_commented_pdf_after_analyze(client: TestClient, sample_pdf_bytes: bytes
     assert resp.content[:5] == b"%PDF-"
 
 
-def test_pdf_exports_contract(client: TestClient, sample_pdf_bytes: bytes) -> None:
+def test_pdf_exports_contract(
+    client: TestClient, sample_pdf_bytes: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import doc_convert
+
+    monkeypatch.setattr(doc_convert, "can_convert_formats", lambda: False)
     doc_id = _upload(client, sample_pdf_bytes)
     exports = client.get(f"/api/v1/documents/{doc_id}/exports")
     assert exports.status_code == 200
@@ -53,3 +59,16 @@ def test_pdf_exports_contract(client: TestClient, sample_pdf_bytes: bytes) -> No
     assert payload["working_format"] == "pdf"
     assert {item["kind"] for item in payload["available"]} == {"original", "commented"}
     assert all("warning" in item for item in payload["available"])
+
+
+def test_pdf_exports_offer_conversions_when_a_converter_exists(
+    client: TestClient, sample_pdf_bytes: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import doc_convert
+
+    monkeypatch.setattr(doc_convert, "can_convert_formats", lambda: True)
+    doc_id = _upload(client, sample_pdf_bytes)
+    payload = client.get(f"/api/v1/documents/{doc_id}/exports").json()
+    converted = {item["format"] for item in payload["available"] if item["kind"] == "converted"}
+    assert converted == {"docx", "doc"}
+    assert all(item["warning"] for item in payload["available"] if item["kind"] == "converted")

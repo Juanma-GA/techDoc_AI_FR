@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from docx import Document as Docx
 from fastapi.testclient import TestClient
 
@@ -128,7 +129,13 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
     assert "utilize" in "\n".join(p.text for p in restored.paragraphs)
 
 
-def test_docx_upload_selects_working_format_automatically(client: TestClient) -> None:
+def test_docx_upload_selects_working_format_automatically(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import doc_convert
+
+    # Sans moteur de conversion : seuls les exports natifs sont proposes.
+    monkeypatch.setattr(doc_convert, "can_convert_formats", lambda: False)
     data = _docx_bytes("A native Word document")
     up = client.post(
         "/api/v1/documents",

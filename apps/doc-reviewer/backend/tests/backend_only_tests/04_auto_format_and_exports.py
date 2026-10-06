@@ -15,6 +15,9 @@ from pathlib import Path
 
 import httpx
 
+# En-tete anti-CSRF exige par le backend sur les requetes de modification.
+CSRF_HEADERS = {"X-Requested-With": "doc-reviewer"}
+
 HERE = Path(__file__).resolve().parent
 OUTPUT_DIR = HERE / "outputs"
 
@@ -45,7 +48,7 @@ def main() -> None:
         raise SystemExit(f"File not found: {args.document}")
 
     OUTPUT_DIR.mkdir(exist_ok=True)
-    with httpx.Client(timeout=args.timeout) as client, args.document.open("rb") as stream:
+    with httpx.Client(timeout=args.timeout, headers=CSRF_HEADERS) as client, args.document.open("rb") as stream:
         uploaded = request(
             client,
             "POST",

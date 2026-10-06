@@ -9,17 +9,18 @@ analysis pipeline still runs.
 from __future__ import annotations
 
 import json
-import logging
+from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import select
+import structlog
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.errors import AppError
 from app.db.models import AppConfig
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _KEYS = ("api_key", "base_url", "chat_model", "vision_model")
 _PREFIX = "mistral."
@@ -45,9 +46,31 @@ def _get(db: Session, key: str) -> str | None:
         try:
             return _get_secret_manager().decrypt(row.value)
         except Exception:  # noqa: BLE001
+            # H-03 hardening : une cle ENCRYPTION_KEY manquante/rotee, ou une
+            # valeur heritee d'avant le chiffrement obligatoire (texte clair),
+            # rendait ce secret illisible SANS AUCUN signal visible pour
+            # l'utilisateur -- seul ce log. `is_secret_unreadable` expose
+            # maintenant l'etat a l'API pour un avertissement explicite.
             logger.error("Failed to decrypt Mistral setting", setting=key)
             return None
     return row.value
+
+
+def is_secret_unreadable(db: Session, key: str) -> bool:
+    """True when a secret is stored (non-empty) but cannot be decrypted with
+    the currently configured ENCRYPTION_KEY -- see `_get` (H-03 hardening).
+    Lets the API/UI surface a visible warning instead of acting as if no
+    key had ever been saved."""
+    if key not in ENCRYPTED_KEYS:
+        return False
+    row = db.get(AppConfig, _PREFIX + key)
+    if row is None or not row.value:
+        return False
+    try:
+        _get_secret_manager().decrypt(row.value)
+        return False
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _set(db: Session, key: str, value: str) -> None:
@@ -58,6 +81,60 @@ def _set(db: Session, key: str, value: str) -> None:
         db.add(AppConfig(key=_PREFIX + key, value=value))
     else:
         row.value = value
+
+
+def normalize_base_url(url: str) -> str:
+    """Forme canonique d'une base URL (casse du schema/hote, sans `/` final)."""
+    parts = urlsplit((url or "").strip())
+    return urlunsplit(
+        (parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), "", "")
+    )
+
+
+def validate_base_url(url: str) -> str:
+    """Retourne la base URL canonique si elle est autorisee, sinon leve AppError.
+
+    La cle API et le texte des documents ne partent JAMAIS vers une URL hors de
+    `MISTRAL_ALLOWED_BASE_URLS` : sans ce controle, un `POST /settings/mistral`
+    (base_url pointant vers un hote tiers, cle conservee) suivi de
+    `POST /settings/mistral/test` envoyait `Authorization: Bearer <cle>` a cet
+    hote, et `/test` renvoyait le corps de la reponse (SSRF en lecture).
+    """
+    parts = urlsplit((url or "").strip())
+    if (
+        parts.scheme.lower() != "https"
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+        or parts.query
+        or parts.fragment
+    ):
+        raise AppError(
+            "MISTRAL_BASE_URL_NOT_ALLOWED",
+            "URL Mistral invalide : https://hote[/chemin] attendu, sans identifiants "
+            "ni parametres.",
+            status_code=422,
+        )
+    normalized = normalize_base_url(url)
+    allowed = {normalize_base_url(u) for u in settings.mistral_allowed_base_urls}
+    if normalized not in allowed:
+        raise AppError(
+            "MISTRAL_BASE_URL_NOT_ALLOWED",
+            "URL Mistral non autorisee. Points d'acces autorises : "
+            + ", ".join(sorted(allowed))
+            + " (variable MISTRAL_ALLOWED_BASE_URLS, geree par l'IT).",
+            status_code=422,
+        )
+    return normalized
+
+
+def get_endpoint(db: Session) -> dict[str, str]:
+    """Config effective prete a l'appel HTTP : base URL verifiee contre la liste
+    blanche. A utiliser par TOUT code qui envoie la cle API (une valeur deja
+    stockee en base avant ce controle est elle aussi revalidee)."""
+    effective = get_effective(db)
+    effective["base_url"] = validate_base_url(effective["base_url"])
+    return effective
 
 
 def get_effective(db: Session) -> dict[str, str]:
@@ -118,6 +195,18 @@ def set_llm_enabled(db: Session, enabled: bool) -> None:
 
 
 def save(db: Session, payload: dict[str, str]) -> None:
+    if "base_url" in payload:
+        new_base_url = validate_base_url(payload["base_url"])
+        current_base_url = normalize_base_url(get_effective(db)["base_url"])
+        # La cle est liee a son point d'acces : changer d'URL sans ressaisir la
+        # cle reviendrait a envoyer la cle existante a un nouvel hote.
+        if new_base_url != current_base_url and not payload.get("api_key"):
+            raise AppError(
+                "MISTRAL_KEY_REQUIRED",
+                "Ressaisissez la cle API pour changer l'URL Mistral.",
+                status_code=422,
+            )
+        payload = {**payload, "base_url": new_base_url}
     invalidate_test = False
     for k in _KEYS:
         if k in payload:
