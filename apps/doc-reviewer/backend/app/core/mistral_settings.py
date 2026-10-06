@@ -9,11 +9,9 @@ analysis pipeline still runs.
 from __future__ import annotations
 
 import json
-import logging
 from urllib.parse import urlsplit, urlunsplit
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 

@@ -689,6 +689,7 @@ def suggest_rules_from_files(
 
     samples: list[str] = []
     analyzed = 0
+    truncated = 0
     for f in files[:_SUGGEST_MAX_DOCS]:
         data = read_upload_limited(f, settings.max_upload_size_bytes)
         try:

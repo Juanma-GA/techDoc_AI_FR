@@ -35,7 +35,6 @@ from app.core.mistral_settings import (
 )
 from app.core.encryption import EncryptionError
 from app.core.errors import AppError
-from app.core.security import MISTRAL_URL_NOT_ALLOWED_MESSAGE, validate_mistral_base_url
 from app.db.session import get_db
 from app.schemas import (
     ChecklistContextIn,
@@ -101,15 +100,8 @@ def update_mistral_settings(
     # Empty api_key in the request means "keep the current one".
     if not payload.get("api_key"):
         payload.pop("api_key", None)
-    if "base_url" in payload:
-        try:
-            payload["base_url"] = validate_mistral_base_url(payload["base_url"])
-        except ValueError as exc:
-            raise AppError(
-                "MISTRAL_URL_NOT_ALLOWED",
-                MISTRAL_URL_NOT_ALLOWED_MESSAGE,
-                status_code=422,
-            ) from exc
+    # `base_url` validation (allowlist + re-entering the key on a host change)
+    # is handled by `save()` itself — see `mistral_settings.validate_base_url`.
     # `vision_enabled` is stored separately (boolean flag, not in Mistral
     # client config). Pop it before delegating to `save()`.
     vision_enabled = payload.pop("vision_enabled", None)
@@ -181,9 +173,6 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
             message=f"{len(ids)} modèle(s) accessible(s).",
             models=ids[:50],
         )
-    except ValueError:
-        set_llm_tested(db, False)
-        return TestConnectionOut(ok=False, message=MISTRAL_URL_NOT_ALLOWED_MESSAGE, models=[])
     except Exception as exc:  # noqa: BLE001
         # Catch broad — Mistral test must never raise a 500 to the UI; any
         # network/SSL/proxy/parsing problem is reported as `ok=false`.

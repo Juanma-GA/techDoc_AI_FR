@@ -29,7 +29,6 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.mistral_settings import get_endpoint, get_llm_enabled
 from app.core.regex_safety import UserRegexPatternError, compile_user_regex
-from app.core.security import MISTRAL_URL_NOT_ALLOWED_MESSAGE, validate_mistral_base_url
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
 try:
@@ -177,18 +176,6 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
                     f"Échec d'appel Mistral : {type(exc).__name__}",
                     status_code=502,
                 ) from exc
-        except ValueError as exc:
-            # `validate_mistral_base_url` rejection — a policy/config problem,
-            # not a transient network failure. Must not fall into the generic
-            # `except Exception` below, which would mislabel it as
-            # LLM_REPHRASE_FAILED/502 and hide the real cause behind a bare
-            # "ValueError" (see L-10).
-            logger.warning("llm_base_url_rejected")
-            raise AppError(
-                "MISTRAL_URL_NOT_ALLOWED",
-                MISTRAL_URL_NOT_ALLOWED_MESSAGE,
-                status_code=422,
-            ) from exc
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm_network_error", error=type(exc).__name__)
             raise AppError(
