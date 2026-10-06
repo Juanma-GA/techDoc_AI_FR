@@ -13,7 +13,7 @@ from app.core.page_range import (
     select_pdf_page_numbers,
 )
 from app.parsers.docx_parser import Block, ParsedDocx
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfBookmark
 
 
 def _parsed_pdf() -> ParsedPdf:
@@ -47,6 +47,16 @@ def test_pdf_filter_accepts_non_contiguous_physical_pages() -> None:
     assert filtered.page_count == 2
     assert [page.page for page in filtered.pages] == [1, 4]
     assert filtered.full_text == "[PAGE: 1]\nPage 1\n[PAGE: 4]\nPage 4"
+
+
+def test_pdf_filter_preserves_bookmarks_and_full_document_pages() -> None:
+    parsed = _parsed_pdf()
+    parsed.bookmarks = [PdfBookmark(title="SECTION", page=4)]
+
+    filtered = filter_pdf_pages(parsed, [1, 2])
+
+    assert filtered.bookmarks == [PdfBookmark(title="SECTION", page=4)]
+    assert filtered.full_document_pages is parsed.pages
 
 
 def test_modified_page_selection_excludes_only_explicitly_unchanged_pages() -> None:

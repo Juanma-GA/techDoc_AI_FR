@@ -41,6 +41,7 @@ def filter_pdf_pages(parsed: ParsedPdf, page_numbers: list[int]) -> ParsedPdf:
         full_text="\n".join(f"[PAGE: {page.page}]\n{page.text}" for page in pages),
         is_signed=parsed.is_signed,
         full_document_pages=full_document_pages,
+        bookmarks=parsed.bookmarks,
     )
 
 

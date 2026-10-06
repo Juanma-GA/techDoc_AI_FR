@@ -1318,16 +1318,17 @@ def _pdf_bookmark_findings(
 
     targets = tuple(getattr(context, "targets", ()))
     target_pages = {target.raw_page for target in targets}
-    pages_by_number = {page.page: page for page in parsed_pdf.pages}
+    document_pages = parsed_pdf.full_document_pages or parsed_pdf.pages
+    pages_by_number = {page.page: page for page in document_pages}
     findings: list[OperationResult] = []
     checked = 0
     inconclusive_pages: set[int] = set()
     for bookmark in parsed_pdf.bookmarks:
         page = pages_by_number.get(bookmark.page)
         if page is None:
-            if bookmark.page < 1 or not parsed_pdf.pages:
+            if bookmark.page < 1 or not document_pages:
                 continue
-            page = parsed_pdf.pages[0]
+            page = document_pages[0]
             findings.append(
                 OperationResult(
                     status="FAIL",
@@ -1344,19 +1345,19 @@ def _pdf_bookmark_findings(
             )
             checked += 1
             continue
-        if target_pages and page.page not in target_pages:
-            continue
         title = " ".join(bookmark.title.split()).casefold()
         if not title or not page.has_text_layer or not page.text.strip():
             inconclusive_pages.add(page.page)
+            continue
+        if title == "title page":
+            inconclusive_pages.add(page.page)
+            continue
+        if target_pages and page.page not in target_pages:
             continue
 
         checked += 1
         page_text = " ".join(page.text.split()).casefold()
         if title in page_text:
-            continue
-        if title == "title page":
-            inconclusive_pages.add(page.page)
             continue
         findings.append(
             OperationResult(

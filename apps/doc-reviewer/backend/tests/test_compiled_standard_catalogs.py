@@ -2301,7 +2301,7 @@ def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
     ]
 
 
-def test_pdf_bookmark_title_page_and_textless_destinations_are_inconclusive() -> None:
+def test_pdf_bookmark_inconclusive_pages_survive_modified_only_filtering() -> None:
     rule = _rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")
     parsed = ParsedPdf(
         page_count=3,
@@ -2319,7 +2319,8 @@ def test_pdf_bookmark_title_page_and_textless_destinations_are_inconclusive() ->
         ],
     )
 
-    results, suggestions = execute_pdf_rules(parsed, [rule])
+    scoped = filter_pdf_pages(parsed, [1, 2])
+    results, suggestions = execute_pdf_rules(scoped, [rule])
 
     assert results[0].status == "FAIL"
     assert results[0].inconclusive_pages == ["1", "3"]
