@@ -12,6 +12,7 @@ from app.core.mistral_settings import (
     get_checklist_ai_scan,
     get_checklist_context,
     get_effective,
+    get_endpoint,
     get_feedback_enabled,
     get_llm_enabled,
     get_llm_max_calls,
@@ -33,7 +34,6 @@ from app.core.mistral_settings import (
 )
 from app.core.encryption import EncryptionError
 from app.core.errors import AppError
-from app.core.security import validate_mistral_base_url
 from app.db.session import get_db
 from app.schemas import (
     ChecklistContextIn,
@@ -98,15 +98,6 @@ def update_mistral_settings(
     # Empty api_key in the request means "keep the current one".
     if not payload.get("api_key"):
         payload.pop("api_key", None)
-    if "base_url" in payload:
-        try:
-            payload["base_url"] = validate_mistral_base_url(payload["base_url"])
-        except ValueError as exc:
-            raise AppError(
-                "MISTRAL_URL_NOT_ALLOWED",
-                "Seule l’URL HTTPS officielle de Mistral ou une URL entreprise autorisée est acceptée.",
-                status_code=422,
-            ) from exc
     # `vision_enabled` is stored separately (boolean flag, not in Mistral
     # client config). Pop it before delegating to `save()`.
     vision_enabled = payload.pop("vision_enabled", None)
@@ -152,7 +143,12 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         set_llm_tested(db, False)
         return TestConnectionOut(ok=False, message="Aucune clé API configurée.", models=[])
     try:
-        base_url = validate_mistral_base_url(s["base_url"])
+        s = get_endpoint(db)
+    except AppError as exc:
+        set_llm_tested(db, False)
+        return TestConnectionOut(ok=False, message=exc.message, models=[])
+    base_url = s["base_url"]
+    try:
         with httpx.Client(timeout=10.0, follow_redirects=False) as client:
             r = client.get(
                 f"{base_url}/v1/models",

@@ -13,15 +13,16 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 52
+    assert len(payload) == 62
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "c7fdb348273252b5ee8a1fc19fcff33c36be677e29a793f822efda74f4a8c8bf"
+        "654fc31157e37b2d1022793b5b2c3e1286fac7653796aee100f49a659c86d051"
     )
 
     expected_controls = {
         "CUSTOM_REVISION_LEP_STAR": "lep_star",
         "CUSTOM_REVISION_UNDECLARED_STAR": "undeclared_star",
         "CUSTOM_REVISION_HIGHLIGHTS_STATUS": "highlights_status_consistency",
+        "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED": "highlights_designation_required",
         "CUSTOM_REVISION_LEP_BLANK_STAR": "blank_lep_star",
         "CUSTOM_REVISION_LEP_DATE": "lep_date",
         "CUSTOM_REVISION_FOOTER_DATE": "footer_date",
@@ -43,18 +44,43 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         assert check["expected"] is None
 
     expected_operations = {
-        "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": "shop_verification",
-        "CUSTOM_HIGHLIGHTS_HOLDER": "highlights_holder",
-        "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE": "highlights_document_type",
-        "CUSTOM_HIGHLIGHTS_LEGEND_FOOTER": "highlights_legend_footer",
-        "CUSTOM_COPYRIGHT_POSITION": "copyright_position",
-        "CUSTOM_PARAGRAPH_JUSTIFICATION": "paragraph_justification",
+        "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": ("shop_verification", {}),
+        "CUSTOM_HIGHLIGHTS_HOLDER": ("highlights_holder", {}),
+        "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE": ("highlights_document_type", {}),
+        "CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION": (
+            "document_structure",
+            {"control": "highlights_deleted_description"},
+        ),
+        "CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION": (
+            "document_structure",
+            {"control": "highlights_revised_description"},
+        ),
+        "CUSTOM_CHAPTER_NUMBER_SEQUENCE": (
+            "document_structure",
+            {"control": "chapter_sequence"},
+        ),
+        "CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES": (
+            "document_structure",
+            {"control": "list_materials_code_parentheses"},
+        ),
+        "CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE": (
+            "document_structure",
+            {"control": "list_materials_code_lowercase"},
+        ),
+        "CUSTOM_PDF_BOOKMARK_TITLE_MATCH": ("pdf_bookmarks", {}),
+        "CUSTOM_NI_PART_NUMBER_ORDER": (
+            "document_structure",
+            {"control": "ni_part_number_order"},
+        ),
+        "CUSTOM_HIGHLIGHTS_LEGEND_FOOTER": ("highlights_legend_footer", {}),
+        "CUSTOM_COPYRIGHT_POSITION": ("copyright_position", {}),
+        "CUSTOM_PARAGRAPH_JUSTIFICATION": ("paragraph_justification", {}),
     }
-    for code, operation in expected_operations.items():
+    for code, (operation, operation_params) in expected_operations.items():
         check = by_code[code]["checks"][0]
         assert check["operator"] == "client_operation"
         assert check["operation"] == operation
-        assert check["operation_params"] == {}
+        assert check["operation_params"] == operation_params
         assert check["expected"] is None
 
     expected_conversions = {

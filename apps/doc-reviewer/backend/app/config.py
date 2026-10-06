@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# Listes lues depuis l'environnement au format « a,b,c » (cf. .env.example) :
+# `NoDecode` empeche pydantic-settings de les parser comme du JSON (sinon
+# CORS_ORIGINS=http://x,http://y faisait echouer le demarrage).
+CsvList = Annotated[list[str], NoDecode]
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,7 +38,20 @@ class Settings(BaseSettings):
     # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).
     bind_host: str = "127.0.0.1"
 
-    cors_origins: list[str] = [
+    # Noms d'hote (en-tete Host) acceptes EN PLUS des hotes de bouclage
+    # (localhost, 127.0.0.1, [::1]). Vide en local : toute requete dont le Host
+    # n'est pas local est refusee (anti DNS-rebinding, cf. core.request_guard).
+    # Liste separee par des virgules, ports optionnels ("docrev.example:443").
+    allowed_hosts: CsvList = []
+
+    # L'application n'a AUCUNE authentification integree. Exposer l'API au-dela
+    # du poste (bind non local, ou acces via un reverse proxy) n'est autorise
+    # que si l'IT atteste qu'un reverse proxy AUTHENTIFIANT (SSO) est place
+    # devant. Sans cette attestation : refus au demarrage (bind expose) et
+    # refus a l'execution de toute requete relayee par un proxy.
+    behind_auth_proxy: bool = False
+
+    cors_origins: CsvList = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:8003",
@@ -50,12 +69,39 @@ class Settings(BaseSettings):
     mistral_base_url: str = "https://api.mistral.ai"
     mistral_chat_model: str = "mistral-small-latest"
     mistral_vision_model: str = "mistral-medium-3-5"
+    # Points d'acces LLM autorises (https uniquement). La cle API n'est JAMAIS
+    # envoyee a une URL hors de cette liste : une base_url modifiable depuis
+    # l'UI permettait sinon d'exfiltrer la cle et le texte des documents vers
+    # un hote arbitraire. L'IT etend la liste via .env si un endpoint prive
+    # (compatible Mistral) est approuve.
+    mistral_allowed_base_urls: CsvList = ["https://api.mistral.ai"]
 
-    @field_validator("cors_origins", mode="before")
+    # Moteur des conversions .doc/.docx/PDF. "auto" : Microsoft Word, puis
+    # LibreOffice s'il est installe ; "word" ou "libreoffice" : ce moteur seul.
+    office_converter: Literal["auto", "word", "libreoffice"] = "auto"
+    # Identifiant (GUID) de l'etiquette de confidentialite Microsoft Purview
+    # posee sur un .docx produit par conversion quand le document n'en porte
+    # pas deja une. Obligatoire sur un poste ou l'etiquetage est impose (Word
+    # refuse sinon d'enregistrer le .docx). Valeur choisie par l'IT.
+    word_sensitivity_label_id: str = ""
+    # Delai au-dela duquel une conversion Word est consideree bloquee (boite de
+    # dialogue invisible) : l'instance WINWORD de la conversion est arretee.
+    word_convert_timeout_seconds: int = 180
+    # Chemin de soffice.exe (ou de son dossier) quand LibreOffice n'est ni sur
+    # le PATH, ni dans Program Files, ni portable a un emplacement connu.
+    dr_soffice_path: str = ""
+
+    @field_validator(
+        "cors_origins", "allowed_hosts", "mistral_allowed_base_urls", mode="before"
+    )
     @classmethod
     def _parse_cors_origins(cls, v: object) -> object:
         if isinstance(v, str):
-            return [s.strip() for s in v.split(",") if s.strip()]
+            raw = v.strip()
+            # Compatibilite : la forme JSON (["a","b"]) reste acceptee.
+            if raw.startswith("["):
+                return json.loads(raw)
+            return [s.strip() for s in raw.split(",") if s.strip()]
         return v
 
     @property

@@ -78,6 +78,7 @@ def run_all(
     compiled_results: Optional[list[RuleResult]] = None,
     execute_compiled: bool = True,
     client_bundle: ClientBundle[Any] | None = None,
+    previous_revision_pdf: ParsedPdf | None = None,
 ) -> list[RawSuggestion]:
     """Run every check against the parsed PDF, return raw suggestions.
 
@@ -218,6 +219,7 @@ def run_all(
             document=document,
             client_operations=client_bundle.operations,
             client_entities=client_bundle.mapping.entities,
+            previous_revision_pdf=previous_revision_pdf,
         )
         if compiled_results is not None:
             compiled_results.extend(compiled_results_for_log)

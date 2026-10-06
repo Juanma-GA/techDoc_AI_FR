@@ -75,6 +75,7 @@ class _EvalContext:
     # Required by the operators whose verdict spans the whole document
     # (cross-page consistency); None on the docx pipeline.
     parsed_pdf: ParsedPdf | None = None
+    previous_revision_pdf: ParsedPdf | None = None
 
 
 def document_metadata(document: Any | None) -> dict[str, str]:
@@ -203,6 +204,13 @@ def scope_targets(
                 if span.bbox[1] > min_y + height * 0.25
                 and span.bbox[3] < max_y - height * 0.25
             ]
+        if target_spec.page_type == "TP1" and target_spec.region == "footer":
+            spans.sort(
+                key=lambda span: (
+                    (span.bbox[1] + span.bbox[3]) / 2,
+                    span.bbox[0],
+                )
+            )
         if spans:
             text_parts: list[str] = []
             span_ranges: list[_SpanRange] = []

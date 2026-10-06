@@ -37,11 +37,21 @@ export class ApiClientError extends Error {
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
+/**
+ * En-tete anti-CSRF exige par le backend sur toute requete de modification
+ * (cf. backend `core/request_guard.py`). Un en-tete personnalise force un
+ * pre-vol CORS : un site tiers ne peut plus piloter l'API locale.
+ */
+export const CSRF_HEADERS: Readonly<Record<string, string>> = {
+  "X-Requested-With": "doc-reviewer",
+};
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
+      ...CSRF_HEADERS,
       ...(init.body !== undefined && !(init.body instanceof FormData)
         ? { "Content-Type": "application/json" }
         : {}),

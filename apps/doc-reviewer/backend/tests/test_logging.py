@@ -97,9 +97,9 @@ def test_text_and_vision_llm_calls_do_not_log_sensitive_content(monkeypatch, cap
         "vision_model": "test-vision-model",
     }
     monkeypatch.setattr(llm_suggester, "get_llm_enabled", lambda _db: True)
-    monkeypatch.setattr(llm_suggester, "get_effective", lambda _db: synthetic_settings)
+    monkeypatch.setattr(llm_suggester, "get_endpoint", lambda _db: synthetic_settings)
     monkeypatch.setattr(mistral_vision, "get_llm_enabled", lambda _db: True)
-    monkeypatch.setattr(mistral_vision, "get_effective", lambda _db: synthetic_settings)
+    monkeypatch.setattr(mistral_vision, "get_endpoint", lambda _db: synthetic_settings)
     monkeypatch.setattr(httpx, "Client", mock_client)
 
     configure_logging("DEBUG")

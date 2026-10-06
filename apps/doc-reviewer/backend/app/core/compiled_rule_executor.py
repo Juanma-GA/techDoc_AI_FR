@@ -32,6 +32,7 @@ def execute_pdf_rules(
     document: Any | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    previous_revision_pdf: ParsedPdf | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
@@ -52,6 +53,7 @@ def execute_pdf_rules(
         db=db,
         document=document,
         parsed_pdf=parsed,
+        previous_revision_pdf=previous_revision_pdf,
         client_operations=client_operations,
         client_entities=client_entities,
     )
@@ -97,6 +99,7 @@ def _execute(
     db: Session | None = None,
     document: Any | None = None,
     parsed_pdf: ParsedPdf | None = None,
+    previous_revision_pdf: ParsedPdf | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
@@ -112,6 +115,7 @@ def _execute(
         document=document,
         db=db,
         parsed_pdf=parsed_pdf,
+        previous_revision_pdf=previous_revision_pdf,
         client_operations=client_operations,
         client_entities=client_entities,
     )

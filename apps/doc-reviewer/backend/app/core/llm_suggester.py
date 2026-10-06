@@ -26,9 +26,8 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.mistral_settings import get_endpoint, get_llm_enabled
 from app.core.regex_safety import UserRegexPatternError, compile_user_regex
-from app.core.security import validate_mistral_base_url
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
 try:
@@ -124,7 +123,7 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
             "Les suggestions IA sont desactivees dans Parametres.",
             status_code=400,
         )
-    s = get_effective(db)
+    s = get_endpoint(db)
     if not s["api_key"]:
         raise AppError(
             "MISTRAL_NOT_CONFIGURED",
@@ -149,10 +148,9 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
                 endpoint="chat/completions",
                 model=payload["model"],
             )
-            base_url = validate_mistral_base_url(s["base_url"])
             with httpx.Client(timeout=_TIMEOUT, follow_redirects=False) as client:
                 r = client.post(
-                    f"{base_url}/v1/chat/completions",
+                    f"{s['base_url']}/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {s['api_key']}",
                         "Content-Type": "application/json",

@@ -95,6 +95,7 @@ class ClientCatalog(_StrictModel):
 
 class OperationResult(_StrictModel):
     status: Literal["PASS", "FAIL", "INCONCLUSIVE"]
+    severity: Literal["info", "warning", "error"] | None = None
     observed: str | None = None
     expected: str | None = None
     message: str | None = None
