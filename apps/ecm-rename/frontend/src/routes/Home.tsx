@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
-import { Check, FileSearch, FolderPlus, ListPlus, RotateCcw } from "lucide-react";
+import { Check, CircleHelp, FileSearch, FolderOpen, FolderPlus, ListPlus, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,6 +12,7 @@ import {
   type PreviewRequest,
   type AppendTrackerDto,
   type CreateFoldersDto,
+  type FolderMode,
   type TrackerField,
 } from "../lib/api";
 import { PathPickerField } from "./PathPickerField";
@@ -65,6 +66,7 @@ export function Home({
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState("");
   const [preview, setPreview] = useState<PreviewDto | null>(null);
+  const [folderMode, setFolderMode] = useState<FolderMode>("create");
 
   const previewMutation = useMutation({
     mutationFn: ecmRenameApi.preview,
@@ -112,7 +114,7 @@ export function Home({
   );
   const readyForFolders = Boolean(
     preview &&
-      outputPath.trim() &&
+      (folderMode === "rename" || outputPath.trim()) &&
       !layoutDirty &&
       preview.records.length > 0 &&
       preview.records.every((record) => record.reference.trim() && record.subject.trim()),
@@ -140,6 +142,7 @@ export function Home({
     const request: PreviewRequest = {
       source_path: sourcePath.trim(),
       tracker_path: trackerPath.trim(),
+      folder_mode: folderMode,
     };
     if (sheetName) request.sheet_name = sheetName;
     if (preview && headerRow) request.header_row = Number(headerRow);
@@ -209,7 +212,8 @@ export function Home({
       if (folderResult) return;
       folderMutation.mutate({
         source_path: preview.source_path,
-        output_path: outputPath.trim(),
+        output_path: folderMode === "rename" ? preview.source_path : outputPath.trim(),
+        folder_mode: folderMode,
         records: preview.records.map(({ source_path, reference, revision, subject }) => ({
           source_path,
           reference,
@@ -242,11 +246,44 @@ export function Home({
           <CardTitle>{t("home.inputs_title")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="ecm-rename-existing-folders"
+              className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-fg"
+            >
+              <input
+                id="ecm-rename-existing-folders"
+                type="checkbox"
+                className="h-4 w-4 accent-brand-blue"
+                checked={folderMode === "rename"}
+                disabled={
+                  pathPreferences.isLoading ||
+                  previewMutation.isPending ||
+                  operationPending ||
+                  browseMutation.isPending
+                }
+                onChange={(event) => {
+                  setFolderMode(event.currentTarget.checked ? "rename" : "create");
+                  clearPreview();
+                }}
+              />
+              <span>{t("home.rename_existing_folders")}</span>
+            </label>
+            <span
+              role="img"
+              aria-label={t("home.folder_mode_help_label")}
+              title={t("home.folder_mode_help")}
+              className="inline-flex shrink-0 cursor-help text-fg-dim"
+            >
+              <CircleHelp aria-hidden="true" className="h-4 w-4" />
+            </span>
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <PathPickerField
               field="source"
-              label={t("home.source")}
-              placeholder={t("home.source_placeholder")}
+              label={t(folderMode === "rename" ? "home.rename_source" : "home.source")}
+              placeholder={t(folderMode === "rename" ? "home.rename_source_placeholder" : "home.source_placeholder")}
+              sourceBrowseKind={folderMode === "rename" ? "source_directory" : "source_files"}
               value={sourcePath}
               disabled={
                 pathPreferences.isLoading ||
@@ -279,22 +316,24 @@ export function Home({
               onBlur={() => pathPreferences.savePaths()}
               onBrowse={browse}
             />
-            <div className="md:col-span-2">
-              <PathPickerField
-                field="output"
-                label={t("home.output")}
-                placeholder={t("home.output_placeholder")}
-                value={outputPath}
-                disabled={pathPreferences.isLoading || operationPending || browseMutation.isPending}
-                onChange={(value) => {
-                  pathPreferences.setPath("output_path", value);
-                  onClearFolderResult();
-                  folderMutation.reset();
-                }}
-                onBlur={() => pathPreferences.savePaths()}
-                onBrowse={browse}
-              />
-            </div>
+            {folderMode === "create" && (
+              <div className="md:col-span-2">
+                <PathPickerField
+                  field="output"
+                  label={t("home.output")}
+                  placeholder={t("home.output_placeholder")}
+                  value={outputPath}
+                  disabled={pathPreferences.isLoading || operationPending || browseMutation.isPending}
+                  onChange={(value) => {
+                    pathPreferences.setPath("output_path", value);
+                    onClearFolderResult();
+                    folderMutation.reset();
+                  }}
+                  onBlur={() => pathPreferences.savePaths()}
+                  onBrowse={browse}
+                />
+              </div>
+            )}
           </div>
 
           {pathPreferences.loadError && (
@@ -312,7 +351,9 @@ export function Home({
               {errorMessage(browseMutation.error, t("home.browse_failed"))}
             </p>
           )}
-          <p className="text-sm text-fg-dim">{t("home.write_notice")}</p>
+          <p className="text-sm text-fg-dim">
+            {t(folderMode === "rename" ? "home.rename_notice" : "home.write_notice")}
+          </p>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -402,7 +443,8 @@ export function Home({
                   ))}
                 </div>
                 <p className="mt-3 break-all text-sm text-fg-dim">
-                  {t("home.folder")}: <code className="font-mono text-fg">{folderName(record) || t("home.missing_metadata")}</code>
+                  {t(folderMode === "rename" ? "home.rename_folder" : "home.folder")}: {" "}
+                  <code className="font-mono text-fg">{folderName(record) || t("home.missing_metadata")}</code>
                 </p>
                 <details open className="mt-4">
                   <summary className="cursor-pointer text-sm font-medium text-fg">
@@ -438,14 +480,16 @@ export function Home({
                   <Check aria-hidden="true" className="h-4 w-4" />
                 ) : folderMutation.isPending ? (
                   <RotateCcw aria-hidden="true" className="h-4 w-4 animate-spin" />
+                ) : folderMode === "rename" ? (
+                  <FolderOpen aria-hidden="true" className="h-4 w-4" />
                 ) : (
                   <FolderPlus aria-hidden="true" className="h-4 w-4" />
                 )}
                 {folderResult
-                  ? t("home.folders_done")
+                  ? t(folderMode === "rename" ? "home.folders_renamed_done" : "home.folders_done")
                   : folderMutation.isPending
-                    ? t("home.creating_folders")
-                    : t("home.create_folders")}
+                    ? t(folderMode === "rename" ? "home.renaming_folders" : "home.creating_folders")
+                    : t(folderMode === "rename" ? "home.rename_folders" : "home.create_folders")}
               </Button>
               {folderMutation.error && (
                 <p className="max-w-sm text-sm text-danger" role="alert">
@@ -484,7 +528,7 @@ export function Home({
         </section>
       )}
       {(folderResult || trackerResult) && (
-        <ProcessResult folderResult={folderResult} trackerResult={trackerResult} />
+        <ProcessResult folderResult={folderResult} trackerResult={trackerResult} folderMode={folderMode} />
       )}
     </div>
   );

@@ -25,8 +25,10 @@ test("ECM Rename workspace renders", async ({ page }) => {
     });
   });
   let analyzedSourcePath = "";
+  let analyzedFolderMode = "";
   await page.route("**/api/v1/ecm-rename/preview", async (route) => {
     analyzedSourcePath = route.request().postDataJSON().source_path as string;
+    analyzedFolderMode = route.request().postDataJSON().folder_mode as string;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -86,6 +88,30 @@ test("ECM Rename workspace renders", async ({ page }) => {
     }),
   );
   await page.goto("/");
+  const renameExistingFolders = page.getByRole("checkbox", {
+    name: /Renommer des dossiers existants|Rename existing folders/,
+  });
+  await expect(renameExistingFolders).not.toBeChecked();
+  await expect(
+    page.getByRole("img", { name: /Aide sur le mode de traitement des dossiers|Help for folder processing mode/ }),
+  ).toHaveAttribute("title", /Cochez cette option|Check this when/);
+  await renameExistingFolders.check();
+  await expect(
+    page.getByRole("textbox", { name: /Dossier parent des dossiers à renommer|Parent folder of existing folders/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Dossier de sortie|Output folder/ })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /Sélectionner le dossier parent|Select the parent folder/ }),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: /Sélectionner le dossier parent|Select the parent folder/ }).click();
+  await expect(
+    page.getByRole("textbox", { name: /Dossier parent des dossiers à renommer|Parent folder of existing folders/ }),
+  ).toHaveValue("C:\\ECM\\à traiter");
+  await page.getByRole("button", { name: /Sélectionner le tracker Excel|Select the Excel tracker/ }).click();
+  await page.getByRole("button", { name: /Analyser les PDF|Analyze PDFs/ }).click();
+  await expect(page.getByRole("heading", { name: /Prévisualisation et corrections|Preview and corrections/ })).toBeVisible();
+  expect(analyzedFolderMode).toBe("rename");
+  await renameExistingFolders.uncheck();
   await expect(page.getByRole("complementary").getByText("ECM-rename", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Analyser les PDF|Analyze PDFs/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Données|Data/ })).toHaveCount(0);

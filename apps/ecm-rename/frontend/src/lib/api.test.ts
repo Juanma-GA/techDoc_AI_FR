@@ -32,6 +32,7 @@ describe("ecmRenameApi", () => {
     const request = {
       source_path: "C:\\ECM\\ECN.pdf",
       tracker_path: "C:\\ECM\\tracker.xlsx",
+      folder_mode: "create" as const,
     };
 
     await ecmRenameApi.preview(request);

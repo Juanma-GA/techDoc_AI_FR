@@ -5,7 +5,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from app.core.errors import AppError
 from app.services.ecm_rename_pdf import column_values, extract_fields, list_pdf_files, read_pdf_text
@@ -17,6 +17,7 @@ from app.services.ecm_rename_tracker_3 import (
 )
 
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+FolderMode = Literal["create", "rename"]
 
 
 def _app_error(code: str, message: str, status_code: int = 400) -> AppError:
@@ -69,13 +70,50 @@ def _pdf_sources(value: str) -> tuple[Path | None, list[Path], str]:
     return None, files, "\n".join(str(path) for path in files)
 
 
+def _existing_folder_pdf_sources(value: str) -> tuple[Path, list[Path], str]:
+    parent = _user_path(value, "Le dossier parent des dossiers à renommer", must_exist=True)
+    if not parent.is_dir():
+        raise _app_error("INVALID_PDF_SOURCE", "La source doit être un dossier parent.")
+
+    folders = sorted(
+        (path for path in parent.iterdir() if path.is_dir() and not path.is_symlink()),
+        key=lambda path: path.name.casefold(),
+    )
+    if not folders:
+        raise _app_error("NO_FOLDERS", "Aucun sous-dossier trouvé dans le dossier sélectionné.")
+
+    files: list[Path] = []
+    for folder in folders:
+        folder_pdfs = sorted(
+            (
+                path
+                for path in folder.iterdir()
+                if path.is_file() and not path.is_symlink() and path.suffix.casefold() == ".pdf"
+            ),
+            key=lambda path: path.name.casefold(),
+        )
+        if not folder_pdfs:
+            raise _app_error("FOLDER_WITHOUT_PDF", f"Le dossier {folder.name} ne contient aucun PDF.")
+        if len(folder_pdfs) > 1:
+            raise _app_error(
+                "MULTIPLE_PDFS_IN_FOLDER",
+                f"Le dossier {folder.name} contient plusieurs PDF. Chaque dossier doit en contenir un seul.",
+            )
+        files.append(folder_pdfs[0])
+    return parent, files, str(parent)
+
+
 def preview_batch(
     source_path: str,
     tracker_path: str,
     sheet_name: str | None = None,
     header_row: int | None = None,
+    folder_mode: FolderMode = "create",
 ) -> dict[str, Any]:
-    _, files, normalized_source_path = _pdf_sources(source_path)
+    if folder_mode == "rename":
+        _, files, normalized_source_path = _existing_folder_pdf_sources(source_path)
+    else:
+        _, files, normalized_source_path = _pdf_sources(source_path)
     tracker = _tracker_path(tracker_path, must_exist=True)
     with open_tracker(tracker, read_only=True) as workbook:
         sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
@@ -125,12 +163,17 @@ def create_folders_batch(
     source_path: str,
     output_path: str,
     records: list[dict[str, Any]],
+    folder_mode: FolderMode = "create",
 ) -> dict[str, Any]:
-    source, files, _ = _pdf_sources(source_path)
-    output = _user_path(output_path, "Le dossier de sortie", must_exist=False)
+    if folder_mode == "rename":
+        source, files, _ = _existing_folder_pdf_sources(source_path)
+        output = source
+    else:
+        source, files, _ = _pdf_sources(source_path)
+        output = _user_path(output_path, "Le dossier de sortie", must_exist=False)
     if output.exists() and not output.is_dir():
         raise _app_error("INVALID_OUTPUT", "Le chemin de sortie existe mais n'est pas un dossier.")
-    if source is not None and source.is_dir() and output == source:
+    if folder_mode == "create" and source is not None and source.is_dir() and output == source:
         raise _app_error(
             "INVALID_OUTPUT",
             "Choisis un dossier de sortie différent du dossier source des PDF.",
@@ -149,6 +192,66 @@ def create_folders_batch(
         folder_names.append(_safe_folder_name(record["reference"], record["revision"], record["subject"]))
     if len({name.casefold() for name in folder_names}) != len(folder_names):
         raise _app_error("DUPLICATE_FOLDER", "Plusieurs PDF produiraient le même nom de dossier.")
+
+    if folder_mode == "rename":
+        folder_by_pdf_path = {str(path.resolve()): path.parent for path in files}
+        planned_renames = [
+            (
+                folder_by_pdf_path[str(Path(record["source_path"]).resolve())],
+                folder_by_pdf_path[str(Path(record["source_path"]).resolve())].parent / folder_name,
+            )
+            for record, folder_name in zip(records, folder_names, strict=True)
+        ]
+        conflicts = [
+            str(destination)
+            for current, destination in planned_renames
+            if destination.exists() and destination.resolve() != current.resolve()
+        ]
+        if conflicts:
+            raise _app_error(
+                "FOLDER_RENAME_CONFLICT",
+                f"Un dossier porte déjà un nom cible : {', '.join(conflicts)}",
+                409,
+            )
+
+        renamed_folders: list[str] = []
+        existing_folders: list[str] = []
+        completed_renames: list[tuple[Path, Path]] = []
+        try:
+            for current, destination in planned_renames:
+                if current.resolve() == destination.resolve():
+                    existing_folders.append(str(current))
+                    continue
+                os.rename(current, destination)
+                completed_renames.append((current, destination))
+                renamed_folders.append(str(destination))
+        except Exception as exc:
+            rollback_failures: list[str] = []
+            for current, destination in reversed(completed_renames):
+                try:
+                    if destination.exists() and not current.exists():
+                        os.rename(destination, current)
+                except OSError:
+                    rollback_failures.append(str(destination))
+            if rollback_failures:
+                raise _app_error(
+                    "PARTIAL_FOLDER_RENAME",
+                    "Le renommage a été interrompu. Certains dossiers peuvent rester renommés : "
+                    + ", ".join(rollback_failures),
+                    500,
+                ) from exc
+            raise _app_error(
+                "FOLDERS_FAILED",
+                "Le renommage des dossiers a échoué. Vérifie les droits sur le dossier parent.",
+                500,
+            ) from exc
+
+        return {
+            "created_folders": [],
+            "existing_folders": existing_folders,
+            "renamed_folders": renamed_folders,
+        }
+
     destinations = [output / name for name in folder_names]
     conflicts = [path.name for path in destinations if path.exists() and not path.is_dir()]
     if conflicts:
@@ -180,6 +283,7 @@ def create_folders_batch(
         return {
             "created_folders": [str(destination) for _, _, destination in pending_folders],
             "existing_folders": existing_folders,
+            "renamed_folders": [],
         }
     except AppError:
         for destination in created_destinations:

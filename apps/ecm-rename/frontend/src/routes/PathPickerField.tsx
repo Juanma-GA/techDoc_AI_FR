@@ -12,6 +12,7 @@ type PathPickerFieldProps = {
   field: FieldKind;
   label: string;
   placeholder: string;
+  sourceBrowseKind?: Extract<BrowseKind, "source_files" | "source_directory">;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
@@ -23,6 +24,7 @@ export function PathPickerField({
   field,
   label,
   placeholder,
+  sourceBrowseKind = "source_files",
   value,
   disabled,
   onChange,
@@ -32,7 +34,7 @@ export function PathPickerField({
   const { t } = useTranslation();
   const inputId = `ecm-rename-${field}-path`;
   const sourcePaths = field === "source" ? value.split(/\r?\n/).filter(Boolean) : [];
-  const hasMultipleSourcePaths = sourcePaths.length > 1;
+  const hasMultipleSourcePaths = sourceBrowseKind === "source_files" && sourcePaths.length > 1;
   const inputValue = hasMultipleSourcePaths
     ? t("home.selected_pdf_count", { count: sourcePaths.length })
     : value;
@@ -40,9 +42,14 @@ export function PathPickerField({
     field === "source"
       ? [
           {
-            kind: "source_files",
-            label: "home.browse_pdf",
-            icon: <FileText aria-hidden="true" className="h-4 w-4" />,
+            kind: sourceBrowseKind,
+            label: sourceBrowseKind === "source_directory" ? "home.browse_source_folder" : "home.browse_pdf",
+            icon:
+              sourceBrowseKind === "source_directory" ? (
+                <FolderOpen aria-hidden="true" className="h-4 w-4" />
+              ) : (
+                <FileText aria-hidden="true" className="h-4 w-4" />
+              ),
           },
         ]
       : field === "tracker"

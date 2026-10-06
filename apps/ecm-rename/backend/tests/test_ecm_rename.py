@@ -143,6 +143,71 @@ def test_preview_extracts_text_and_tracker_values(client, tmp_path) -> None:
     ]
 
 
+def test_existing_folders_are_renamed_without_moving_their_pdfs(client, tmp_path) -> None:
+    parent = tmp_path / "existing"
+    first_folder = parent / "GKN-ECN-123"
+    second_folder = parent / "GKN-ECN-124-old"
+    first_folder.mkdir(parents=True)
+    second_folder.mkdir()
+    first_pdf = first_folder / "ECN-A.pdf"
+    second_pdf = second_folder / "ECN-B.pdf"
+    _write_pdf(first_pdf, PDF_TEXT)
+    _write_pdf(second_pdf, PDF_TEXT.replace("GKN-ECN-123", "GKN-ECN-124"))
+    original_first_pdf = first_pdf.read_bytes()
+    original_second_pdf = second_pdf.read_bytes()
+    tracker_path = tmp_path / "Tracker.xlsx"
+    _write_tracker(tracker_path)
+
+    preview_response = client.post(
+        "/api/v1/ecm-rename/preview",
+        json={
+            "source_path": str(parent),
+            "tracker_path": str(tracker_path),
+            "folder_mode": "rename",
+        },
+    )
+
+    assert preview_response.status_code == 200
+    preview = preview_response.json()
+    assert preview["source_path"] == str(parent.resolve())
+    assert [record["file_name"] for record in preview["records"]] == ["ECN-A.pdf", "ECN-B.pdf"]
+
+    output_path = tmp_path / "unused-output"
+    rename_response = client.post(
+        "/api/v1/ecm-rename/folders",
+        json={
+            "source_path": str(parent),
+            "output_path": str(output_path),
+            "folder_mode": "rename",
+            "records": [
+                {
+                    "source_path": record["source_path"],
+                    "reference": record["reference"],
+                    "revision": record["revision"],
+                    "subject": record["subject"],
+                }
+                for record in preview["records"]
+            ],
+        },
+    )
+
+    assert rename_response.status_code == 200
+    renamed_folders = [
+        parent / "GKN-ECN-123-A@2-Cooling unit update",
+        parent / "GKN-ECN-124-A@2-Cooling unit update",
+    ]
+    assert rename_response.json() == {
+        "created_folders": [],
+        "existing_folders": [],
+        "renamed_folders": [str(folder) for folder in renamed_folders],
+    }
+    assert (renamed_folders[0] / first_pdf.name).read_bytes() == original_first_pdf
+    assert (renamed_folders[1] / second_pdf.name).read_bytes() == original_second_pdf
+    assert not first_folder.exists()
+    assert not second_folder.exists()
+    assert not output_path.exists()
+
+
 def test_pdf_sources_resolves_only_selected_paths(tmp_path) -> None:
     from app.services.ecm_rename import _pdf_sources
 

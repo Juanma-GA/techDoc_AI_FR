@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ class PreviewRequest(BaseModel):
     tracker_path: str = Field(min_length=1)
     sheet_name: str | None = None
     header_row: int | None = Field(default=None, ge=1)
+    folder_mode: Literal["create", "rename"] = "create"
 
 
 class TrackerColumn(BaseModel):
@@ -57,11 +58,13 @@ class CreateFoldersRequest(BaseModel):
     source_path: str
     output_path: str
     records: list[FolderRecord] = Field(min_length=1)
+    folder_mode: Literal["create", "rename"] = "create"
 
 
 class CreateFoldersResponse(BaseModel):
     created_folders: list[str]
     existing_folders: list[str]
+    renamed_folders: list[str] = Field(default_factory=list)
 
 
 class TrackerRecord(BaseModel):
@@ -133,6 +136,7 @@ def preview(payload: PreviewRequest) -> dict[str, Any]:
         payload.tracker_path,
         payload.sheet_name,
         payload.header_row,
+        payload.folder_mode,
     )
 
 
@@ -142,6 +146,7 @@ def create_folders(payload: CreateFoldersRequest) -> dict[str, Any]:
         source_path=payload.source_path,
         output_path=payload.output_path,
         records=[record.model_dump() for record in payload.records],
+        folder_mode=payload.folder_mode,
     )
 
 

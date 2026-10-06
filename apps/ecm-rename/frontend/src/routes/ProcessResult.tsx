@@ -1,14 +1,20 @@
 import { useTranslation } from "react-i18next";
 
-import type { AppendTrackerDto, CreateFoldersDto } from "../lib/api";
+import type { AppendTrackerDto, CreateFoldersDto, FolderMode } from "../lib/api";
 
 type ProcessResultProps = {
   folderResult: CreateFoldersDto | null;
   trackerResult: AppendTrackerDto | null;
+  folderMode: FolderMode;
 };
 
-export function ProcessResult({ folderResult, trackerResult }: ProcessResultProps) {
+export function ProcessResult({ folderResult, trackerResult, folderMode }: ProcessResultProps) {
   const { t } = useTranslation();
+  const renamedFolders = folderResult?.renamed_folders ?? [];
+  const completedFolders =
+    folderMode === "rename"
+      ? [...renamedFolders, ...(folderResult?.existing_folders ?? [])]
+      : [...(folderResult?.created_folders ?? []), ...(folderResult?.existing_folders ?? [])];
 
   return (
     <section aria-label={t("home.result_title")} className="mt-4 border-t border-md pt-4">
@@ -16,14 +22,21 @@ export function ProcessResult({ folderResult, trackerResult }: ProcessResultProp
       {folderResult && (
         <div className="mt-3">
           <p className="text-sm text-success" role="status">
-            {t("home.folders_success", {
-              count: folderResult.created_folders.length + folderResult.existing_folders.length,
-              existing: folderResult.existing_folders.length,
-            })}
+            {folderMode === "rename"
+              ? t("home.folders_rename_success", {
+                  renamed: renamedFolders.length,
+                  existing: folderResult.existing_folders.length,
+                })
+              : t("home.folders_success", {
+                  count: folderResult.created_folders.length + folderResult.existing_folders.length,
+                  existing: folderResult.existing_folders.length,
+                })}
           </p>
-          <h3 className="label mt-3">{t("home.completed_folders")}</h3>
+          <h3 className="label mt-3">
+            {t(folderMode === "rename" ? "home.renamed_folders" : "home.completed_folders")}
+          </h3>
           <ul className="mt-2 flex flex-col gap-2">
-            {[...folderResult.created_folders, ...folderResult.existing_folders].map((folder) => (
+            {completedFolders.map((folder) => (
               <li key={folder} className="break-all border-l-2 border-brand-blue-light pl-3 font-mono text-sm">
                 {folder}
               </li>

@@ -36,6 +36,7 @@ export type TrackerField =
   | "module_3_open_actions";
 
 export type TrackerColumn = { name: string; index: number; field: TrackerField | null };
+export type FolderMode = "create" | "rename";
 export type PreviewRecord = {
   source_path: string;
   file_name: string;
@@ -47,6 +48,7 @@ export type PreviewRecord = {
 export type PreviewRequest = {
   source_path: string;
   tracker_path: string;
+  folder_mode: FolderMode;
   sheet_name?: string;
   header_row?: number;
 };
@@ -62,11 +64,13 @@ export type PreviewDto = {
 export type CreateFoldersRequest = {
   source_path: string;
   output_path: string;
+  folder_mode: FolderMode;
   records: Pick<PreviewRecord, "source_path" | "reference" | "revision" | "subject">[];
 };
 export type CreateFoldersDto = {
   created_folders: string[];
   existing_folders: string[];
+  renamed_folders?: string[];
 };
 export type AppendTrackerRequest = {
   tracker_path: string;
