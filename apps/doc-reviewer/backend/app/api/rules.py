@@ -55,6 +55,22 @@ logger = structlog.get_logger(__name__)
 
 
 _SUGGEST_MAX_DOCS = 20  # never sample more than this
+_SUGGEST_PER_DOC_BUDGET = 6_000  # chars kept per document before the LLM call (H-04)
+
+
+def _truncate_sample(text: str, limit: int) -> tuple[str, bool]:
+    """Cap `text` to `limit` chars at a whitespace boundary (never mid-word)
+    and mark the cut explicitly in the returned text (H-04 hardening: a real
+    multi-page PDF easily exceeds the total request budget when sent whole;
+    per-document truncation keeps the feature usable, and the explicit
+    `[...]` marker — plus `documents_truncated` in the response — means the
+    cut is visible instead of silent)."""
+    if len(text) <= limit:
+        return text, False
+    cut = text.rfind(" ", 0, limit)
+    if cut <= 0:
+        cut = limit
+    return text[:cut].rstrip() + " [...]", True
 
 
 router = APIRouter(tags=["rules"])
@@ -353,6 +369,7 @@ def suggest_rules(
 
     samples: list[str] = []
     docs_analyzed = 0
+    docs_truncated = 0
     for doc in documents:
         try:
             pdf_path = current_path(doc.storage_dir, doc.current_version)
@@ -374,7 +391,10 @@ def suggest_rules(
                 "Un document du périmètre ne contient pas de texte analysable; aucune suggestion n'a été produite.",
                 status_code=422,
             )
-        samples.append(f"=== {doc.original_filename} ===\n{text}")
+        snippet, was_truncated = _truncate_sample(text, _SUGGEST_PER_DOC_BUDGET)
+        if was_truncated:
+            docs_truncated += 1
+        samples.append(f"=== {doc.original_filename} ===\n{snippet}")
         docs_analyzed += 1
 
     if not samples:
@@ -403,6 +423,7 @@ def suggest_rules(
             for item in items
         ],
         documents_analyzed=docs_analyzed,
+        documents_truncated=docs_truncated,
     )
 
 
@@ -667,6 +688,7 @@ async def suggest_rules_from_files(
 
     samples: list[str] = []
     analyzed = 0
+    truncated = 0
     for f in files:
         data = await read_upload_bounded_async(f, settings.max_upload_size_bytes)
         try:
@@ -694,7 +716,10 @@ async def suggest_rules_from_files(
                 "Un fichier du périmètre ne contient pas de texte analysable; aucune suggestion n'a été produite.",
                 status_code=422,
             )
-        samples.append(f"=== {name} ===\n{text}")
+        snippet, was_truncated = _truncate_sample(text, _SUGGEST_PER_DOC_BUDGET)
+        if was_truncated:
+            truncated += 1
+        samples.append(f"=== {name} ===\n{snippet}")
         analyzed += 1
 
     if not samples:
@@ -722,4 +747,5 @@ async def suggest_rules_from_files(
             for item in items
         ],
         documents_analyzed=analyzed,
+        documents_truncated=truncated,
     )

@@ -24,8 +24,7 @@ suggestions one rule per failure.
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from sqlalchemy.orm import Session
 
 from app.checks.raw import RawSuggestion
@@ -34,7 +33,7 @@ from app.core.mistral_vision import check_figure_compliance, describe_image
 from app.parsers.pdf_parser import extract_images
 
 
-_logger = logging.getLogger(__name__)
+_logger = structlog.get_logger(__name__)
 
 
 # Built-in vision compliance rules — covers S1000D §5.2 conventions on
@@ -85,7 +84,7 @@ def run(
     try:
         images = extract_images(src_path, max_per_doc=max_images + 1)
     except Exception as exc:  # noqa: BLE001
-        _logger.warning("vision_extract_failed: %s", type(exc).__name__)
+        _logger.warning("vision_extract_failed", error=type(exc).__name__)
         _mark_vision_incomplete(warnings)
         return []
     if len(images) > max_images:
@@ -120,13 +119,13 @@ def run(
             result = check_figure_compliance(db, img.bytes, _BUILTIN_VISION_RULES)
         except AppError as exc:
             _logger.warning(
-                "vision_compliance_skipped: page=%s img=%s code=%s",
-                img.page, idx, exc.code,
+                "vision_compliance_skipped",
+                page=img.page, img=idx, code=exc.code,
             )
             _mark_vision_incomplete(warnings)
             continue
         except Exception as exc:  # noqa: BLE001
-            _logger.warning("vision_compliance_error: %s", type(exc).__name__)
+            _logger.warning("vision_compliance_error", error=type(exc).__name__)
             _mark_vision_incomplete(warnings)
             continue
 
@@ -163,7 +162,7 @@ def run(
             try:
                 desc = describe_image(db, img.bytes)
             except Exception as exc:  # noqa: BLE001
-                _logger.warning("vision_description_skipped: %s", type(exc).__name__)
+                _logger.warning("vision_description_skipped", error=type(exc).__name__)
                 _mark_vision_incomplete(warnings)
                 continue
             if desc and _looks_incoherent(desc, img.caption_nearby):

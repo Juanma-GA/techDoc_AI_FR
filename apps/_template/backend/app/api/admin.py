@@ -7,8 +7,7 @@ La cle Mistral (table app_config) est preservee par convention.
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -18,7 +17,7 @@ from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
 
 
-log = logging.getLogger("template.admin")
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -38,8 +37,10 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
 def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
     """Reset complet sauf `app_config` (preserve la cle Mistral).
 
-    TODO POC : etendre pour purger les tables specifiques du POC.
+    TODO POC : etendre pour purger les tables specifiques du POC — garder le
+    log structure `admin_reset_all` (scope + deleted) comme trace d'audit de
+    cette action destructrice (RequestIdMiddleware y attache le request_id).
     """
     deleted: dict[str, int] = {}
-    log.info("admin reset all (template stub)")
+    log.info("admin_reset_all", scope="all", deleted=deleted)
     return AdminResetOut(scope="all", deleted=deleted)

@@ -19,7 +19,6 @@ Override du chemin soffice : variable d'environnement `DR_SOFFICE_PATH`.
 from __future__ import annotations
 
 import glob
-import logging
 import os
 import shutil
 import subprocess
@@ -27,9 +26,11 @@ import tempfile
 import threading
 from pathlib import Path
 
+import structlog
+
 from app.core.errors import AppError
 
-log = logging.getLogger("doc_reviewer.doc_convert")
+log = structlog.get_logger(__name__)
 
 # Emplacements standards d'un LibreOffice installe.
 _SOFFICE_CANDIDATES = [
@@ -59,7 +60,7 @@ def _find_soffice() -> str | None:
             p = p / "soffice.exe"
         if p.exists():
             return str(p)
-        log.warning("DR_SOFFICE_PATH defini mais introuvable")
+        log.warning("dr_soffice_path_not_found")
     # 2) Emplacements standards (PATH + Program Files).
     for cand in _SOFFICE_CANDIDATES:
         if cand.lower().endswith(".exe"):
@@ -110,9 +111,9 @@ def _convert_libreoffice(soffice: str, src: Path, outdir: Path) -> Path | None:
                 capture_output=True,
                 timeout=180,
             )
-        log.info("LibreOffice convert ok")
+        log.info("libreoffice_convert_ok", target_format="pdf")
     except Exception as exc:  # noqa: BLE001
-        log.warning("conversion LibreOffice echouee: %s", type(exc).__name__)
+        log.warning("libreoffice_convert_failed", target_format="pdf", error=type(exc).__name__)
         return None
     out = outdir / (src.stem + ".pdf")
     return out if out.exists() else None
@@ -143,7 +144,7 @@ def _word_export_pdf(src: Path, out: Path) -> tuple[Path | None, str | None]:
         finally:
             doc.Close(False)
     except Exception as exc:  # noqa: BLE001
-        log.warning("export PDF Word echoue: %s", type(exc).__name__)
+        log.warning("word_export_pdf_failed", error=type(exc).__name__)
         return None, type(exc).__name__
     finally:
         if word is not None:
@@ -173,7 +174,7 @@ def convert_to_pdf(src: Path, outdir: Path) -> tuple[Path | None, str | None]:
     produced, _ = _word_export_pdf(src, out)
     if produced is not None and produced.exists():
         return produced, "word"
-    log.warning("convert_to_pdf: ni LibreOffice ni Word disponibles.")
+    log.warning("convert_to_pdf_unavailable")
     return None, None
 
 
@@ -231,10 +232,10 @@ def _convert_libreoffice_format(src: Path, outdir: Path, target_format: str) -> 
                 capture_output=True,
                 timeout=180,
             )
-        log.info("LibreOffice convert ok", target_format=target_format)
+        log.info("libreoffice_convert_ok", target_format=target_format)
     except Exception as exc:  # noqa: BLE001
         log.warning(
-            "conversion LibreOffice echouee",
+            "libreoffice_convert_failed",
             target_format=target_format,
             error=type(exc).__name__,
         )

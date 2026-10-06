@@ -39,31 +39,36 @@ export const DialogOverlay = forwardRef<
 ));
 DialogOverlay.displayName = "DialogOverlay";
 
-export const DialogContent = forwardRef<
-  ElementRef<typeof DialogPrimitive.Content>,
-  ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2",
-        "rounded-lg border bg-card p-6 shadow-card focus:outline-none",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close
-        aria-label="Close"
-        className="absolute right-3 top-3 rounded-sm p-1 text-fg-dim hover:bg-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light"
+export type DialogContentProps = ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+  /** Translated label for the close button; the caller's i18next instance
+   * owns the wording — this component has no language of its own. */
+  closeLabel?: string;
+};
+
+export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Content>, DialogContentProps>(
+  ({ className, children, closeLabel = "Close", ...props }, ref) => (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2",
+          "rounded-lg border bg-card p-6 shadow-card focus:outline-none",
+          className,
+        )}
+        {...props}
       >
-        <X size={16} aria-hidden="true" />
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+        {children}
+        <DialogPrimitive.Close
+          aria-label={closeLabel}
+          className="absolute right-3 top-3 rounded-sm p-1 text-fg-dim hover:bg-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light"
+        >
+          <X size={16} aria-hidden="true" />
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  ),
+);
 DialogContent.displayName = "DialogContent";
 
 export const DialogTitle = forwardRef<

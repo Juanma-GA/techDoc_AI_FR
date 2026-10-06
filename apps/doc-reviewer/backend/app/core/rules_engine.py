@@ -218,6 +218,7 @@ def run_all(
             document=document,
             client_operations=client_bundle.operations,
             client_entities=client_bundle.mapping.entities,
+            warnings=warnings,
         )
         if compiled_results is not None:
             compiled_results.extend(compiled_results_for_log)
@@ -497,28 +498,40 @@ def _dedupe(raws: list[RawSuggestion]) -> list[RawSuggestion]:
 
 
 # Volume de texte par appel Mistral (un lot = plusieurs pages/blocs concatenes
-# jusqu'a cette limite) et budget total scanne par analyse (borne le cout,
-# equivalent grosso modo a l'ancien "30 pages" mais compte en caracteres pour
-# rester correct quelle que soit la taille d'une page/bloc).
+# jusqu'a cette limite) et budget total scanne par analyse (borne le cout ET
+# l'exposition de donnees client vers l'API externe — voir le hardening B-1 :
+# sans ce budget, un document arbitrairement long sort INTEGRALEMENT vers
+# https://api.mistral.ai, sans aucune borne de volume. equivalent grosso modo
+# a l'ancien "30 pages" mais compte en caracteres pour rester correct quelle
+# que soit la taille d'une page/bloc).
 _AI_GROUP_CHAR_LIMIT = 4000
+_AI_TOTAL_CHAR_BUDGET = 120_000
 
 
 def _group_pages_by_text_budget(
     pages: list[ParsedPage],
     per_call_limit: int,
+    total_budget: int,
 ) -> list[list[ParsedPage]]:
-    """Split long pages, then group every text segment within the call limit.
+    """Split long pages, then group every text segment within the call limit,
+    stopping once `total_budget` characters have been queued across all
+    groups.
 
     Le pipeline docx natif presente chaque BLOC (paragraphe, souvent quelques
     dizaines de caracteres) comme une pseudo-page (`docx_pipeline.
     blocks_to_pages`) — un budget compte en NOMBRE de pages (l'ancien
     `_AI_PAGE_LIMIT`) n'y couvrait donc que les tout premiers blocs du
     document (souvent la page de garde), jamais le corps. Segmentation par
-    volume couvre tout le texte sans couper les pages au budget global."""
+    volume couvre le texte proportionnellement sans couper les pages au
+    milieu — l'arret se fait a une frontiere de segment, jamais en plein mot,
+    pour que le lot envoye a Mistral reste toujours un texte coherent."""
     groups: list[list[ParsedPage]] = []
     current: list[ParsedPage] = []
     current_len = 0
+    total_len = 0
     for page in pages:
+        if total_len >= total_budget:
+            break
         text = page.text or ""
         if not text.strip():
             continue
@@ -539,6 +552,8 @@ def _group_pages_by_text_budget(
             start = end
 
         for segment in segments:
+            if total_len >= total_budget:
+                break
             separator_length = 1 if current else 0
             if current and current_len + separator_length + len(segment) > per_call_limit:
                 groups.append(current)
@@ -547,6 +562,7 @@ def _group_pages_by_text_budget(
                 separator_length = 0
             current.append(replace(page, text=segment))
             current_len += separator_length + len(segment)
+            total_len += len(segment)
     if current:
         groups.append(current)
     return groups
@@ -665,8 +681,28 @@ def _run_ai_custom(
     # Regroupement par volume de texte (pas par nombre de pages/blocs) : voir
     # `_group_pages_by_text_budget` — couvre le document proportionnellement
     # a son contenu reel, indispensable pour le pipeline docx natif ou une
-    # "page" est un simple bloc/paragraphe.
-    groups = _group_pages_by_text_budget(parsed.pages, _AI_GROUP_CHAR_LIMIT)
+    # "page" est un simple bloc/paragraphe. Borne a `_AI_TOTAL_CHAR_BUDGET`
+    # par analyse (hardening B-1) : au-dela, le reste du document n'est pas
+    # envoye a Mistral et un avertissement explicite signale la couverture
+    # incomplete (jamais de troncature silencieuse).
+    groups = _group_pages_by_text_budget(parsed.pages, _AI_GROUP_CHAR_LIMIT, _AI_TOTAL_CHAR_BUDGET)
+    covered_chars = sum(len(p.text or "") for group in groups for p in group)
+    total_chars = sum(len(p.text or "") for p in parsed.pages)
+    if covered_chars < total_chars:
+        _logger.warning(
+            "ai_custom_budget_exceeded",
+            covered_chars=covered_chars,
+            total_chars=total_chars,
+            budget=_AI_TOTAL_CHAR_BUDGET,
+        )
+        if warnings is not None:
+            warning = (
+                f"Scan IA/checklist limite a {_AI_TOTAL_CHAR_BUDGET} caracteres "
+                "par analyse : le reste du document n'a pas ete envoye a Mistral, "
+                "sa couverture est incomplete."
+            )
+            if warning not in warnings:
+                warnings.append(warning)
     total_groups = len(groups) or 1
     for group_idx, group in enumerate(groups):
         if progress_cb is not None:

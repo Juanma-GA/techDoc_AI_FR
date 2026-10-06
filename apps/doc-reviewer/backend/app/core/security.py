@@ -21,6 +21,14 @@ _MISTRAL_ENTERPRISE_HOST = re.compile(
     r"api\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.dc\.mistral\.ai"
 )
 
+# Single source of truth for the user-facing wording of a rejected base_url.
+# Every call site that catches `validate_mistral_base_url`'s ValueError must
+# reuse this message (and the matching `MISTRAL_URL_NOT_ALLOWED` error code)
+# instead of inventing its own — see L-10.
+MISTRAL_URL_NOT_ALLOWED_MESSAGE = (
+    "Seule l’URL HTTPS officielle de Mistral ou une URL entreprise autorisée est acceptée."
+)
+
 
 def validate_mistral_base_url(raw: str) -> str:
     """Allow the canonical Mistral API and enterprise HTTPS origins."""

@@ -67,8 +67,25 @@ if "%USE_EMBED%"=="0" (
     set "PYTHON=python"
 )
 
-REM ---- Install deps une seule fois (marker .installed) ---------------------
-if not exist "%INSTALLED_MARK%" (
+REM ---- Install deps si absentes OU si pyproject.toml a change depuis le
+REM      dernier install (hash SHA256 stocke dans le marker). H-02 hardening :
+REM      un simple marker vide ne se reinvalide jamais -- une dependance
+REM      ajoutee a pyproject.toml (ex. regex) ne s'installait plus du tout
+REM      sur un poste ou doc-reviewer avait deja tourne avant le pull.
+set "PYPROJECT=%BACKEND_DIR%\pyproject.toml"
+set "NEED_INSTALL=0"
+if not exist "%INSTALLED_MARK%" set "NEED_INSTALL=1"
+
+REM Comparaison hors bloc parenthese : l'expansion %VAR% dans un bloc if (...)
+REM est figee a l'ouverture du bloc (pas de delayed expansion ici), donc le
+REM calcul et la comparaison du hash doivent rester en lignes simples.
+set "CURRENT_HASH="
+if exist "%INSTALLED_MARK%" for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash -LiteralPath '%PYPROJECT%' -Algorithm SHA256).Hash"`) do set "CURRENT_HASH=%%H"
+set "STORED_HASH="
+if exist "%INSTALLED_MARK%" set /p STORED_HASH=<"%INSTALLED_MARK%"
+if not "%CURRENT_HASH%"=="%STORED_HASH%" set "NEED_INSTALL=1"
+
+if "%NEED_INSTALL%"=="1" (
     echo [setup] Installation des dependances Python ^(1 a 3 min^)...
     "%PYTHON%" -m pip install --upgrade pip >nul
     "%PYTHON%" -m pip install -e .
@@ -77,8 +94,38 @@ if not exist "%INSTALLED_MARK%" (
         pause
         exit /b 1
     )
-    type nul > "%INSTALLED_MARK%"
+    for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command "(Get-FileHash -LiteralPath '%PYPROJECT%' -Algorithm SHA256).Hash"`) do >"%INSTALLED_MARK%" echo %%H
     echo [setup] OK.
+)
+
+REM ---- Auto-provision ENCRYPTION_KEY en posture locale (hardening H-03) ----
+REM Sans cle, POST /settings/mistral refuse TOUTE sauvegarde de cle Mistral
+REM (503) tant qu'un humain n'a pas genere+colle une cle Fernet a la main
+REM dans backend\.env. Inerte des que BIND_HOST s'ecarte du defaut local
+REM 127.0.0.1 : ce cas (deploiement palier 2/3) reste gere par
+REM app.main._validate_security_posture, qui EXIGE une cle fournie par l'IT
+REM et refuse de demarrer sans elle -- une auto-provision serait dangereuse
+REM hors du poste local du developpeur.
+set "ENV_FILE=%BACKEND_DIR%\.env"
+set "BIND_HOST_VALUE="
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /i "BIND_HOST=" "%ENV_FILE%"`) do set "BIND_HOST_VALUE=%%B"
+set "IS_LOCAL_BIND=1"
+if defined BIND_HOST_VALUE if /i not "%BIND_HOST_VALUE%"=="127.0.0.1" set "IS_LOCAL_BIND=0"
+
+set "ENCRYPTION_KEY_VALUE="
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`findstr /b /i "ENCRYPTION_KEY=" "%ENV_FILE%"`) do set "ENCRYPTION_KEY_VALUE=%%B"
+
+if "%IS_LOCAL_BIND%"=="1" if not defined ENCRYPTION_KEY_VALUE (
+    echo [setup] Generation d'une cle de chiffrement locale ^(ENCRYPTION_KEY^)...
+    set "NEW_ENCRYPTION_KEY="
+    for /f "usebackq delims=" %%K in (`"%PYTHON%" -c "from app.core.encryption import generate_key; print(generate_key())"`) do set "NEW_ENCRYPTION_KEY=%%K"
+    if not defined NEW_ENCRYPTION_KEY (
+        echo [erreur] Echec generation de la cle de chiffrement.
+        pause
+        exit /b 1
+    )
+    >>"%ENV_FILE%" echo ENCRYPTION_KEY=%NEW_ENCRYPTION_KEY%
+    echo [setup] OK -- cle ecrite dans backend\.env.
 )
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------

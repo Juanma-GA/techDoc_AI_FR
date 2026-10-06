@@ -116,7 +116,7 @@ def test_ai_scan_segments_cover_all_page_text() -> None:
         ParsedPage(page=2, text="later page", spans=[]),
     ]
 
-    groups = rules_engine._group_pages_by_text_budget(pages, 16)
+    groups = rules_engine._group_pages_by_text_budget(pages, 16, 10_000)
     segments = [page for group in groups for page in group]
     reconstructed = {
         page: "".join(segment.text or "" for segment in segments if segment.page == page)
@@ -125,6 +125,21 @@ def test_ai_scan_segments_cover_all_page_text() -> None:
 
     assert reconstructed == {1: source, 2: "later page"}
     assert all(len("\n".join(page.text or "" for page in group)) <= 16 for group in groups)
+
+
+def test_ai_scan_total_budget_stops_further_groups() -> None:
+    pages = [
+        ParsedPage(page=1, text="A" * 20, spans=[]),
+        ParsedPage(page=2, text="B" * 20, spans=[]),
+        ParsedPage(page=3, text="C" * 20, spans=[]),
+    ]
+
+    groups = rules_engine._group_pages_by_text_budget(pages, 100, 25)
+    covered_pages = {page.page for group in groups for page in group}
+    covered_chars = sum(len(page.text or "") for group in groups for page in group)
+
+    assert covered_chars < sum(len(page.text) for page in pages)
+    assert 3 not in covered_pages
 
 
 def test_ai_scan_sends_all_text_over_previous_page_limit(monkeypatch) -> None:
@@ -181,19 +196,36 @@ def test_malformed_ai_scan_response_is_not_reported_as_clean(monkeypatch) -> Non
     assert exc_info.value.code == "LLM_RESPONSE_INVALID"
 
 
-def test_semantic_segments_cover_text_beyond_previous_total_budget() -> None:
+def test_semantic_segments_cover_text_within_total_budget() -> None:
+    # 5_000 * 30 chars = 150_000, au-dela du budget total par regle
+    # (_SEMANTIC_TOTAL_CHAR_LIMIT = 120_000) : la couverture doit rester
+    # bornee plutot que d'envoyer le document entier a Mistral (hardening B-1).
     source = "synthetic semantic paragraph " * 5_000
+    target = _TextTarget(page="1", text=source, raw_page=1)
+
+    groups = semantic_groups([target])
+    segments = [segment for group in groups for segment in group]
+    covered = "".join(segment.text for segment in segments)
+
+    assert source.startswith(covered)
+    assert len(covered) < len(source)
+    # L'arret se fait a une frontiere de segment (jamais en plein mot), donc le
+    # volume couvert peut depasser le budget d'au plus un segment (10_000 c.).
+    assert len(covered) <= 120_000 + 10_000
+    assert all(len(segment.text) <= 10_000 for segment in segments)
+    assert [segment.text_offset for segment in segments] == sorted(
+        segment.text_offset for segment in segments
+    )
+
+
+def test_semantic_segments_cover_all_text_under_total_budget() -> None:
+    source = "synthetic semantic paragraph " * 400  # ~12_000 chars, sous le budget
     target = _TextTarget(page="1", text=source, raw_page=1)
 
     groups = semantic_groups([target])
     segments = [segment for group in groups for segment in group]
 
     assert "".join(segment.text for segment in segments) == source
-    assert all(len(segment.text) <= 10_000 for segment in segments)
-    assert [segment.text_offset for segment in segments] == sorted(
-        segment.text_offset for segment in segments
-    )
-    assert len(segments) > 12
 
 
 def test_semantic_result_is_inconclusive_when_any_segment_fails(monkeypatch) -> None:

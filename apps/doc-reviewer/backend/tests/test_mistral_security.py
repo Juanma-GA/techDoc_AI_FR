@@ -9,7 +9,7 @@ from app.core import llm_suggester, mistral_vision
 from app.core import mistral_settings
 from app.core.encryption import EncryptionError, SecretManager
 from app.core.errors import AppError
-from app.core.security import validate_mistral_base_url
+from app.core.security import MISTRAL_URL_NOT_ALLOWED_MESSAGE, validate_mistral_base_url
 from app.core.llm_suggester import MAX_RULE_SUGGEST_INPUT_CHARS, suggest_rules_from_corpus
 from app.db.models import AppConfig
 from app.db.session import SessionLocal
@@ -140,8 +140,15 @@ def test_invalid_runtime_url_never_creates_http_client(
     )
     monkeypatch.setattr(module.httpx, "Client", unexpected_client)
 
-    with pytest.raises(AppError):
+    with pytest.raises(AppError) as exc_info:
         call(object())
+
+    # L-10: a rejected base_url must surface the same code/message/status
+    # everywhere, not LLM_REPHRASE_FAILED/VISION_CALL_FAILED/502 behind a
+    # bare "ValueError" that hides the real (policy) cause.
+    assert exc_info.value.code == "MISTRAL_URL_NOT_ALLOWED"
+    assert exc_info.value.message == MISTRAL_URL_NOT_ALLOWED_MESSAGE
+    assert exc_info.value.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -253,6 +260,40 @@ def test_missing_encryption_key_refuses_mistral_key_storage(
     db = SessionLocal()
     try:
         assert db.get(AppConfig, "mistral.api_key") is None
+    finally:
+        db.close()
+
+
+def test_unreadable_stored_key_is_reported_not_silently_hidden(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """H-03 hardening: a key saved under one ENCRYPTION_KEY (or a legacy
+    plaintext value from before encryption was mandatory) that can no
+    longer be decrypted used to disappear silently -- `api_key_set` false,
+    nothing in the API response, only a backend log line. The UI must be
+    able to tell this apart from "no key was ever configured"."""
+    from app.core.encryption import generate_key
+
+    monkeypatch.setattr(mistral_settings.settings, "encryption_key", generate_key())
+    db = SessionLocal()
+    try:
+        db.merge(AppConfig(key="mistral.api_key", value="not-a-valid-fernet-token"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/settings/mistral")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_key_set"] is False
+    assert body["api_key_unreadable"] is True
+
+    db = SessionLocal()
+    try:
+        db.query(AppConfig).filter(AppConfig.key == "mistral.api_key").delete()
+        db.commit()
     finally:
         db.close()
 

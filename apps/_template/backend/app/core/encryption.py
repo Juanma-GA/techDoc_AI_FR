@@ -6,11 +6,10 @@ Secrets are encrypted before storage in DB and decrypted on retrieval.
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from cryptography.fernet import Fernet, InvalidToken
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class EncryptionError(Exception):
@@ -40,7 +39,7 @@ class SecretManager:
 
     def encrypt(self, plaintext: str) -> str:
         if not self._enabled or not self._cipher:
-            logger.warning("Encryption disabled - storing plaintext (INSECURE)")
+            logger.warning("encryption_disabled_plaintext_secret")
             return plaintext
         try:
             return self._cipher.encrypt(plaintext.encode()).decode()

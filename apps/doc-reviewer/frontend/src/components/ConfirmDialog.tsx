@@ -26,7 +26,10 @@ export function ConfirmDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* The "x" close button is equivalent to Cancel here, and every
+          caller already supplies a translated cancelLabel — reuse it
+          instead of leaving the shared Dialog's English default (L-12). */}
+      <DialogContent closeLabel={cancelLabel}>
         <DialogTitle>{title}</DialogTitle>
         {description ? <DialogDescription>{description}</DialogDescription> : null}
         {children}

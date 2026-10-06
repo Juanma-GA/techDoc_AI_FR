@@ -11,9 +11,10 @@ Errors raised:
 - `MISTRAL_NOT_CONFIGURED` (400) — no API key in `app_config`.
 - `LLM_REPHRASE_FAILED` (502) — Mistral 4xx/5xx, network error, JSON parse fail.
 
-**Fallback (HR4/HR7):** When LLM is disabled, `scan_with_prompt` applies
-deterministic regex patterns (fallback_rules.py) to detect common writing
-issues. Results are returned with llm_used=false marker for UI transparency.
+**LLM disabled:** `scan_with_prompt` raises `LLM_DISABLED` instead of running;
+the caller (`rules_engine._run_ai_custom`) catches it and marks that part of
+the analysis as incomplete with a warning (rule #6 graceful degradation — no
+5xx, no silent gap).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AppError
 from app.core.mistral_settings import get_effective, get_llm_enabled
 from app.core.regex_safety import UserRegexPatternError, compile_user_regex
-from app.core.security import validate_mistral_base_url
+from app.core.security import MISTRAL_URL_NOT_ALLOWED_MESSAGE, validate_mistral_base_url
 
 # Inject the OS trust store so corporate SSL proxies don't sink the call.
 try:
@@ -81,7 +82,11 @@ _OUTPUT_INSTRUCTIONS = (
 
 
 _BATCH_LIMIT = 30
-MAX_RULE_SUGGEST_INPUT_CHARS = 12_000
+# Safety-net cap on the full corpus (already per-document truncated by the
+# caller, see `rules.py::_SUGGEST_PER_DOC_BUDGET`, H-04). 20 docs * 6_000
+# chars/doc = 120_000 max in practice; headroom kept for the standard-context
+# prompt overhead.
+MAX_RULE_SUGGEST_INPUT_CHARS = 140_000
 _TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=30.0, pool=10.0)
 _NETWORK_ATTEMPTS = 2
 
@@ -173,6 +178,18 @@ def _call_mistral(db: Session, system: str, user: str, *, temperature: float = 0
                     f"Échec d'appel Mistral : {type(exc).__name__}",
                     status_code=502,
                 ) from exc
+        except ValueError as exc:
+            # `validate_mistral_base_url` rejection — a policy/config problem,
+            # not a transient network failure. Must not fall into the generic
+            # `except Exception` below, which would mislabel it as
+            # LLM_REPHRASE_FAILED/502 and hide the real cause behind a bare
+            # "ValueError" (see L-10).
+            logger.warning("llm_base_url_rejected")
+            raise AppError(
+                "MISTRAL_URL_NOT_ALLOWED",
+                MISTRAL_URL_NOT_ALLOWED_MESSAGE,
+                status_code=422,
+            ) from exc
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm_network_error", error=type(exc).__name__)
             raise AppError(
@@ -453,8 +470,12 @@ def suggest_rules_from_corpus(
 ) -> list[dict]:
     """Ask Mistral to propose new editorial rules from a list of text samples.
 
-    `samples` contains complete `=== <filename> ===\\n<text>` blocks. The
-    complete prompt is rejected before a request if it exceeds the input budget.
+    `samples` contains `=== <filename> ===\\n<text>` blocks, each already
+    truncated per-document by the caller (H-04: real multi-page PDFs easily
+    exceed a single request budget, so each document is capped — visibly,
+    with a `[...]` marker — rather than rejecting the whole request outright).
+    The combined prompt is still rejected if it exceeds `MAX_RULE_SUGGEST_INPUT_CHARS`
+    as a last-resort safety net (e.g. too many documents at once).
     `standard_context` (optional) injects the target norm metadata + its existing catalog so Mistral can tailor the suggestions and
     avoid duplicating built-in rules. Returns a list of dicts shaped like
     `RuleIn` (name, kind, pattern, replacement, severity, message). Invalid
@@ -472,7 +493,7 @@ def suggest_rules_from_corpus(
     if len(user_payload) > MAX_RULE_SUGGEST_INPUT_CHARS:
         raise AppError(
             "RULE_SUGGEST_INPUT_TOO_LARGE",
-            "Le corpus complet dépasse la taille d'une requête IA; réduisez le périmètre. Aucun extrait n'a été tronqué.",
+            "Le corpus dépasse la taille d'une requête IA malgré la troncature par document; réduisez le nombre de documents.",
             status_code=413,
         )
     content = _call_mistral(db, _RULE_SUGGEST_SYSTEM, user_payload)

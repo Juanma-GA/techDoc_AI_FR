@@ -1136,7 +1136,14 @@ def evaluate_regex(
         except TimeoutError:
             return "INCONCLUSIVE", values[0][0], None, expected
         if missing_target is None:
-            target, match = first_match or (values[0][0], pattern.search(values[0][1] or ""))
+            if first_match is not None:
+                target, match = first_match
+            else:
+                target = values[0][0]
+                try:
+                    match = pattern.search(values[0][1] or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                except TimeoutError:
+                    return "INCONCLUSIVE", target, None, expected
             return "PASS", target, match.group(0) if match is not None else None, expected
         return "FAIL", missing_target, None, expected
     if first_match is not None:

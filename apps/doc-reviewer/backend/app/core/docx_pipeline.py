@@ -111,6 +111,7 @@ def run_docx(
             document=document,
             client_operations=client_bundle.operations,
             client_entities=client_bundle.mapping.entities,
+            warnings=warnings,
         )
         if compiled_results is not None:
             compiled_results.extend(results)

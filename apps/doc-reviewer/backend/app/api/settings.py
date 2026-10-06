@@ -19,6 +19,7 @@ from app.core.mistral_settings import (
     get_verify_enabled,
     get_verify_passes,
     get_vision_enabled,
+    is_secret_unreadable,
     save,
     set_ai_custom_prompt,
     set_checklist_ai_scan,
@@ -33,7 +34,7 @@ from app.core.mistral_settings import (
 )
 from app.core.encryption import EncryptionError
 from app.core.errors import AppError
-from app.core.security import validate_mistral_base_url
+from app.core.security import MISTRAL_URL_NOT_ALLOWED_MESSAGE, validate_mistral_base_url
 from app.db.session import get_db
 from app.schemas import (
     ChecklistContextIn,
@@ -68,6 +69,7 @@ def _build_out(db: Session) -> MistralSettingsOut:
     return MistralSettingsOut(
         api_key_set=bool(key),
         api_key_preview=preview,
+        api_key_unreadable=is_secret_unreadable(db, "api_key"),
         base_url=s["base_url"],
         chat_model=s["chat_model"],
         vision_model=s.get("vision_model", "mistral-medium-3-5"),
@@ -104,7 +106,7 @@ def update_mistral_settings(
         except ValueError as exc:
             raise AppError(
                 "MISTRAL_URL_NOT_ALLOWED",
-                "Seule l’URL HTTPS officielle de Mistral ou une URL entreprise autorisée est acceptée.",
+                MISTRAL_URL_NOT_ALLOWED_MESSAGE,
                 status_code=422,
             ) from exc
     # `vision_enabled` is stored separately (boolean flag, not in Mistral
@@ -175,7 +177,7 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         )
     except ValueError:
         set_llm_tested(db, False)
-        return TestConnectionOut(ok=False, message="URL Mistral non autorisée.", models=[])
+        return TestConnectionOut(ok=False, message=MISTRAL_URL_NOT_ALLOWED_MESSAGE, models=[])
     except Exception as exc:  # noqa: BLE001
         # Catch broad — Mistral test must never raise a 500 to the UI; any
         # network/SSL/proxy/parsing problem is reported as `ok=false`.
