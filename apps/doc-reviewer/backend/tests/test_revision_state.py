@@ -854,6 +854,59 @@ def test_star_without_a_revised_status_in_the_highlights_is_reported() -> None:
     assert findings[0].proposed == "JUL 66"
 
 
+def test_star_with_missing_highlights_designation_is_informational() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", ""),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", f"{_REVISION_DATE} *"),
+        ("", "402", _REVISION_DATE),
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "info"
+    assert star.proposed == ""
+    assert "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED" in star.message
+    assert "peut être justifiée" in star.message
+
+
+def test_missing_highlights_designation_on_another_page_does_not_downgrade_star() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Other", "Page 999", ""),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", f"{_REVISION_DATE} *"),
+        ("", "402", _REVISION_DATE),
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "error"
+    assert star.proposed == _REVISION_DATE
+    assert "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED" not in star.message
+
+
 def test_highlights_r_and_n_are_both_valid_when_lep_and_footer_show_revision() -> None:
     for status in ("R", "N"):
         parsed = _consistent_document()

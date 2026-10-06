@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfWord, Span
 
@@ -136,6 +137,7 @@ class InvalidHighlightsDesignation:
 @dataclass(frozen=True)
 class MissingHighlightsDesignation:
     pages_text: str
+    page_keys: tuple[str, ...]
     page: int
     bbox: tuple[float, float, float, float]
 
@@ -293,6 +295,14 @@ class RevisionState:
         best_length = max(length for length, _status in matches)
         statuses = {status for length, status in matches if length == best_length}
         return next(iter(statuses)) if len(statuses) == 1 else None
+
+    def has_missing_highlights_designation(self, entry: LepEntry) -> bool:
+        aliases = _lep_page_key_aliases(entry)
+        return any(
+            page_key in aliases
+            for issue in self.missing_highlights_designations
+            for page_key in issue.page_keys
+        )
 
     def is_declared_modified(self, page_key: str) -> bool:
         entry = self.lep_entry_for_key(page_key)
@@ -767,12 +777,14 @@ def extract_missing_highlights_designations(
         if not page_cells or any(span.text.strip() for span in designation_cells):
             continue
         pages_text = _join_raw_cell(page_cells)
-        if not expand_page_range(pages_text):
+        page_keys = expand_page_range(pages_text)
+        if not page_keys:
             continue
         pages_bbox = _merge_bbox(page_cells)
         missing.append(
             MissingHighlightsDesignation(
                 pages_text=pages_text,
+                page_keys=page_keys,
                 page=page.page,
                 bbox=(
                     designation_x - _COLUMN_TOLERANCE,
@@ -1435,6 +1447,7 @@ class RevisionFinding:
     proposed: str
     page: int
     bbox: tuple[float, float, float, float] | None
+    severity: Literal["info", "warning", "error"] | None = None
 
 
 def _context(subject: str, page_key: str) -> str:
@@ -1503,19 +1516,35 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
             )
             continue
         if not declared and entry.starred:
-            observed = f"« {status} »" if status else "absente des Highlights"
+            missing_designation = state.has_missing_highlights_designation(entry)
+            if missing_designation:
+                message = (
+                    f"{context} porte une « * » dans la LEP, mais sa désignation "
+                    "est absente des Highlights. La règle "
+                    "« CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED » a détecté cette "
+                    "absence : le statut R/N est inconnu et l'étoile peut être "
+                    "justifiée. Vérifier les Highlights avant de la retirer."
+                )
+            else:
+                observed = f"« {status} »" if status else "absente des Highlights"
+                message = (
+                    f"{context} porte une « * » dans la LEP alors qu'elle est "
+                    f"{observed} : la page doit être déclarée R ou N, ou la "
+                    "« * » doit être retirée."
+                )
             findings.append(
                 RevisionFinding(
                     control=UNDECLARED_STAR,
-                    message=(
-                        f"{context} porte une « * » dans la LEP alors qu'elle est "
-                        f"{observed} : la page doit être déclarée R ou N, ou la "
-                        "« * » doit être retirée."
-                    ),
+                    message=message,
                     original=entry.date_text,
-                    proposed=entry.date_text.replace("*", "").rstrip(),
+                    proposed=(
+                        ""
+                        if missing_designation
+                        else entry.date_text.replace("*", "").rstrip()
+                    ),
                     page=entry.page,
                     bbox=entry.bbox,
+                    severity="info" if missing_designation else None,
                 )
             )
             continue

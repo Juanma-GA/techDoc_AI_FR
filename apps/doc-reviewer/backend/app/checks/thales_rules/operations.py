@@ -528,6 +528,7 @@ def _findings(context: Any, parameters: Mapping[str, Any]) -> list[OperationResu
             observed=finding.original or finding.message,
             expected=finding.proposed or None,
             message=finding.message,
+            severity=finding.severity,
             original=finding.original,
             proposed=finding.proposed,
             page=finding.page,
