@@ -15,16 +15,16 @@ beaucoup de bruit) : a affiner sur de vrais documents.
 
 from __future__ import annotations
 
-import logging
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
 import fitz  # PyMuPDF
+import structlog
 
 from app.checks.raw import RawSuggestion
 
-log = logging.getLogger("doc_reviewer.layout_checks")
+log = structlog.get_logger(__name__)
 
 # Seuils (en % de la dimension de page sauf mention).
 _TITLE_SIZE_RATIO = 1.2   # police "titre" >= 1.2x la mediane du corps (exclut les titres du check marge)
@@ -84,7 +84,7 @@ def run(src_path: str | None, warnings: list[str] | None = None) -> list[RawSugg
     try:
         doc = fitz.open(src_path)
     except Exception as exc:  # noqa: BLE001
-        log.warning("layout_open_failed: %s", type(exc).__name__)
+        log.warning("layout_open_failed", error=type(exc).__name__)
         return []
     out: list[RawSuggestion] = []
     footer_centers: list[tuple[int, float, _Line]] = []

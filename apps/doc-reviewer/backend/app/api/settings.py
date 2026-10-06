@@ -20,6 +20,7 @@ from app.core.mistral_settings import (
     get_verify_enabled,
     get_verify_passes,
     get_vision_enabled,
+    is_secret_unreadable,
     save,
     set_ai_custom_prompt,
     set_checklist_ai_scan,
@@ -68,6 +69,7 @@ def _build_out(db: Session) -> MistralSettingsOut:
     return MistralSettingsOut(
         api_key_set=bool(key),
         api_key_preview=preview,
+        api_key_unreadable=is_secret_unreadable(db, "api_key"),
         base_url=s["base_url"],
         chat_model=s["chat_model"],
         vision_model=s.get("vision_model", "mistral-medium-3-5"),
@@ -98,6 +100,8 @@ def update_mistral_settings(
     # Empty api_key in the request means "keep the current one".
     if not payload.get("api_key"):
         payload.pop("api_key", None)
+    # `base_url` validation (allowlist + re-entering the key on a host change)
+    # is handled by `save()` itself — see `mistral_settings.validate_base_url`.
     # `vision_enabled` is stored separately (boolean flag, not in Mistral
     # client config). Pop it before delegating to `save()`.
     vision_enabled = payload.pop("vision_enabled", None)
@@ -169,9 +173,6 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
             message=f"{len(ids)} modèle(s) accessible(s).",
             models=ids[:50],
         )
-    except ValueError:
-        set_llm_tested(db, False)
-        return TestConnectionOut(ok=False, message="URL Mistral non autorisée.", models=[])
     except Exception as exc:  # noqa: BLE001
         # Catch broad — Mistral test must never raise a 500 to the UI; any
         # network/SSL/proxy/parsing problem is reported as `ok=false`.

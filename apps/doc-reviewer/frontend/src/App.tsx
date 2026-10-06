@@ -74,6 +74,8 @@ export function App() {
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
       llmStatus={<LlmBadge />}
       navigation={navItems.map(({ to, labelKey, end }) => (
         <NavLink
@@ -90,6 +92,7 @@ export function App() {
           languages={LANGS}
           currentLanguage={currentLang}
           onLanguageChange={(language) => void i18n.changeLanguage(language)}
+          ariaLabel={t("nav.languageSwitcher")}
         />
       }
     >

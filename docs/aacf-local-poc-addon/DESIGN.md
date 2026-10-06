@@ -113,11 +113,11 @@ Use `GET /api/v1/settings`, `POST /api/v1/settings`, and `POST /api/v1/settings/
 Derive the LLM indicator from backend health and use text plus semantic color:
 
 | API state | Semantic i18n key | Example label (FR / EN) | Token |
-|---|---|---|
-| `ok` | `llm.state.on` | `Actif` / `On` | `success` |
-| `untested` | `llm.state.untested` | `A tester` / `Needs testing` | `warning` |
-| `not_configured` | `llm.state.notConfigured` | `Cle absente` / `No key` | `warning` |
-| `disabled` | `llm.state.off` | `Desactive` / `Off` | `fg-dim` |
+|---|---|---|---|
+| `ok` | `llm.on` | `ON` / `ON` | `success` |
+| `untested` | `llm.untested` | `À TESTER` / `UNTESTED` | `warning` |
+| `not_configured` | `llm.noKey` | `NO KEY` / `NO KEY` | `warning` |
+| `disabled` | `llm.off` | `OFF` / `OFF` | `fg-dim` |
 
 Invalidate/refetch health after saving settings, toggling the capability, or testing the connection. Follow AACF HR20 for known-result mutations: update optimistically and roll back on rejection. Keep pending, disabled, error, and success states visible.
 

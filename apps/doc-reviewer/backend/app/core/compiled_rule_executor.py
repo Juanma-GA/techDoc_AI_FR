@@ -32,6 +32,7 @@ def execute_pdf_rules(
     document: Any | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    warnings: list[str] | None = None,
     previous_revision_pdf: ParsedPdf | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
@@ -56,6 +57,7 @@ def execute_pdf_rules(
         previous_revision_pdf=previous_revision_pdf,
         client_operations=client_operations,
         client_entities=client_entities,
+        warnings=warnings,
     )
 
 
@@ -66,6 +68,7 @@ def execute_docx_rules(
     document: Any | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
@@ -86,6 +89,7 @@ def execute_docx_rules(
         document=document,
         client_operations=client_operations,
         client_entities=client_entities,
+        warnings=warnings,
     )
 
 
@@ -102,6 +106,7 @@ def _execute(
     previous_revision_pdf: ParsedPdf | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     from app.core.compiled_rule_operators import condition_met, evaluate_rule
 
@@ -163,7 +168,7 @@ def _execute(
             from app.core.compiled_rule_semantic import execute_semantic
 
             result, semantic_raws = execute_semantic(
-                rule, scoped or [], db, is_docx, pdf_pages, document
+                rule, scoped or [], db, is_docx, pdf_pages, document, warnings=warnings
             )
             results.append(result)
             raws.extend(semantic_raws)

@@ -56,14 +56,6 @@
   --info: var(--color-semantic-info);
 }
 
-.theme-toggle { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--fg-dim); border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
-.theme-toggle:hover { background: var(--card-hover); color: var(--fg); }
-.theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
-.theme-toggle-sun { display: none; }
-.theme-toggle-moon { display: block; }
-.dark .theme-toggle-sun { display: block; }
-.dark .theme-toggle-moon { display: none; }
-
 .pr *, .pr *::before, .pr *::after { box-sizing: border-box; }
 .pr { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; min-height: 100dvh; }
 .pr a { color: var(--brand-light); text-decoration: none; }

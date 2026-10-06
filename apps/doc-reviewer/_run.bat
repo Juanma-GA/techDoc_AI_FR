@@ -78,7 +78,13 @@ if "%USE_EMBED%"=="0" (
     set "PYTHON=python"
 )
 
-REM ---- Dependencies: skip preinstalled embed, refresh changed local env -----
+REM ---- Install deps verrouillees (hash-pinned) si absentes OU si pyproject.toml
+REM      / requirements.lock.txt ont change depuis le dernier install (empreinte
+REM      SHA256 combinee stockee dans le marker). H-02 hardening : un simple
+REM      marker vide ne se reinvalide jamais -- une dependance ajoutee (ex.
+REM      regex) ne s'installait plus du tout sur un poste ou doc-reviewer avait
+REM      deja tourne avant le pull. --require-hashes --no-deps : aucune
+REM      dependance (directe ou transitive) n'est installee hors du lock file.
 if "%USE_EMBED%"=="1" if exist "%INSTALLED_MARK%" goto deps_ready
 set "DEPS_HASH="
 set "DEPS_HASH_FILE=%TEMP%\docreviewer_deps_hash_%RANDOM%_%RANDOM%.txt"
@@ -116,6 +122,35 @@ if errorlevel 1 (
 >"%INSTALLED_MARK%" echo %DEPS_HASH%
 echo [setup] OK.
 :deps_ready
+
+REM ---- Auto-provision ENCRYPTION_KEY en posture locale (hardening H-03) ----
+REM Sans cle, POST /settings/mistral refuse TOUTE sauvegarde de cle Mistral
+REM (503) tant qu'un humain n'a pas genere+colle une cle Fernet a la main
+REM dans backend\.env. Inerte des que BIND_HOST s'ecarte du defaut local
+REM 127.0.0.1 : ce cas (deploiement palier 2/3) reste gere par
+REM app.main._validate_security_posture, qui EXIGE une cle fournie par l'IT
+REM et refuse de demarrer sans elle -- une auto-provision serait dangereuse
+REM hors du poste local du developpeur.
+set "ENV_FILE=%BACKEND_DIR%\.env"
+set "BIND_HOST_VALUE="
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "BIND_HOST=" "%ENV_FILE%"`) do set "BIND_HOST_VALUE=%%B"
+set "IS_LOCAL_BIND=1"
+if defined BIND_HOST_VALUE if /i not "%BIND_HOST_VALUE%"=="127.0.0.1" set "IS_LOCAL_BIND=0"
+
+set "ENCRYPTION_KEY_VALUE="
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "ENCRYPTION_KEY=" "%ENV_FILE%"`) do set "ENCRYPTION_KEY_VALUE=%%B"
+
+if "%IS_LOCAL_BIND%"=="1" if not defined ENCRYPTION_KEY_VALUE (
+    echo [setup] Generation d'une cle de chiffrement locale ^(ENCRYPTION_KEY^)...
+    set "NEW_ENCRYPTION_KEY="
+    for /f "usebackq delims=" %%K in (`"%PYTHON%" -s -c "from app.core.encryption import generate_key; print(generate_key())"`) do set "NEW_ENCRYPTION_KEY=%%K"
+    if not defined NEW_ENCRYPTION_KEY (
+        echo [erreur] Echec generation de la cle de chiffrement.
+        pause
+        exit /b 1
+    )
+    >>"%ENV_FILE%" echo ENCRYPTION_KEY=%NEW_ENCRYPTION_KEY%
+    echo [setup] OK -- cle ecrite dans backend\.env.
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------
 echo [setup] Verification du schema DB ^(alembic^)...

@@ -12,53 +12,18 @@ from app.core import llm_suggester, mistral_vision
 from app.core import mistral_settings
 from app.core.encryption import EncryptionError, SecretManager
 from app.core.errors import AppError
-from app.core.security import validate_mistral_base_url
 from app.core.llm_suggester import MAX_RULE_SUGGEST_INPUT_CHARS, suggest_rules_from_corpus
 from app.db.models import AppConfig
 from app.db.session import SessionLocal
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://api.mistral.ai",
-        "https://localhost",
-        "https://127.0.0.1",
-        "https://10.0.0.1",
-        "https://169.254.169.254",
-        "https://[::1]",
-        "https://api.mistral.ai.attacker.test",
-        "https://api.2a91ec1812a1.dc.mistral.ai.attacker.test",
-        "https://api.bad-.dc.mistral.ai",
-        "https://api.foo.bar.dc.mistral.ai",
-        "https://user@api.mistral.ai",
-        "https://api.mistral.ai:8443",
-        "https://api.mistral.ai/v1",
-        "https://api.mistral.ai?next=internal",
-    ],
-)
-def test_mistral_base_url_rejects_untrusted_targets(url: str) -> None:
-    with pytest.raises(ValueError):
-        validate_mistral_base_url(url)
-
-
-@pytest.mark.parametrize(
-    ("url", "expected"),
-    [
-        ("https://api.mistral.ai", "https://api.mistral.ai"),
-        ("https://API.MISTRAL.AI:443/", "https://api.mistral.ai"),
-        (
-            "https://api.2a91ec1812a1.dc.mistral.ai",
-            "https://api.2a91ec1812a1.dc.mistral.ai",
-        ),
-        (
-            "https://API.2A91EC1812A1.DC.MISTRAL.AI:443/",
-            "https://api.2a91ec1812a1.dc.mistral.ai",
-        ),
-    ],
-)
-def test_mistral_base_url_normalizes_the_allowed_origin(url: str, expected: str) -> None:
-    assert validate_mistral_base_url(url) == expected
+# NB: the base_url allowlist itself (SSRF/key-exfiltration via private IPs,
+# the loopback metadata endpoint, lookalike domains, etc.) now lives in
+# `mistral_settings.validate_base_url` / `get_endpoint` — a strict exact-match
+# allowlist against `MISTRAL_ALLOWED_BASE_URLS`, which structurally can't
+# suffer the regex-bypass risk the old `security.validate_mistral_base_url`
+# guarded against (no pattern matching at all, just string equality after
+# normalization). See `test_mistral_endpoint_allowlist.py` for that coverage.
 
 
 def test_settings_reject_untrusted_mistral_url(client: TestClient) -> None:
@@ -141,8 +106,15 @@ def test_invalid_runtime_url_never_creates_http_client(
     )
     monkeypatch.setattr(module.httpx, "Client", unexpected_client)
 
-    with pytest.raises(AppError):
+    with pytest.raises(AppError) as exc_info:
         call(object())
+
+    # L-10: a rejected base_url must surface the same code/status everywhere,
+    # not LLM_REPHRASE_FAILED/VISION_CALL_FAILED/502 behind a bare "ValueError"
+    # that hides the real (policy) cause. `get_endpoint` raises AppError
+    # directly (no ValueError indirection), so this must propagate unchanged.
+    assert exc_info.value.code == "MISTRAL_BASE_URL_NOT_ALLOWED"
+    assert exc_info.value.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -248,6 +220,40 @@ def test_missing_encryption_key_refuses_mistral_key_storage(
         db.close()
 
 
+def test_unreadable_stored_key_is_reported_not_silently_hidden(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """H-03 hardening: a key saved under one ENCRYPTION_KEY (or a legacy
+    plaintext value from before encryption was mandatory) that can no
+    longer be decrypted used to disappear silently -- `api_key_set` false,
+    nothing in the API response, only a backend log line. The UI must be
+    able to tell this apart from "no key was ever configured"."""
+    from app.core.encryption import generate_key
+
+    monkeypatch.setattr(mistral_settings.settings, "encryption_key", generate_key())
+    db = SessionLocal()
+    try:
+        db.merge(AppConfig(key="mistral.api_key", value="not-a-valid-fernet-token"))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/v1/settings/mistral")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_key_set"] is False
+    assert body["api_key_unreadable"] is True
+
+    db = SessionLocal()
+    try:
+        db.query(AppConfig).filter(AppConfig.key == "mistral.api_key").delete()
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_secret_manager_without_key_refuses_plaintext_round_trip() -> None:
     manager = SecretManager(None)
 
@@ -257,8 +263,11 @@ def test_secret_manager_without_key_refuses_plaintext_round_trip() -> None:
 
 def test_mistral_setting_without_encryption_key_logs_and_falls_back(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
+    # structlog here is configured with `PrintLoggerFactory` (writes straight
+    # to stdout, bypassing stdlib `logging`) — `caplog` sees nothing, same as
+    # every other structlog assertion in this backend (see test_logging.py).
     monkeypatch.setattr(mistral_settings.settings, "encryption_key", "")
 
     class StoredSetting:
@@ -269,7 +278,9 @@ def test_mistral_setting_without_encryption_key_logs_and_falls_back(
             return StoredSetting()
 
     assert mistral_settings._get(cast(Session, StoredSettings()), "api_key") is None
-    assert "Failed to decrypt Mistral setting api_key" in caplog.text
+    output = capsys.readouterr().out
+    assert "Failed to decrypt Mistral setting" in output
+    assert "api_key" in output
 
 
 def test_rule_suggestions_disabled_are_explicit_and_offline(

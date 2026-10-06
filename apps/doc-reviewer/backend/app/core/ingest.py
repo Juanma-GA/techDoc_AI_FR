@@ -11,7 +11,6 @@ nombre de fichiers bornes (repris de word-reviewer).
 from __future__ import annotations
 
 import io
-import logging
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,8 +19,6 @@ from app.config import settings
 from app.core import doc_convert
 from app.core.errors import AppError
 from app.core.security import safe_filename, validate_pdf_bytes
-
-log = logging.getLogger("doc_reviewer.ingest")
 
 SUPPORTED_EXTS = (".pdf", ".doc", ".docx")
 

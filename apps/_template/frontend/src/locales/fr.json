@@ -5,6 +5,9 @@
     "description": "Squelette de démarrage pour les POCs ATEXIS."
   },
   "nav": {
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
     "home": "Accueil",
     "data": "Données",
     "settings": "Paramètres"
@@ -16,6 +19,11 @@
     "off": "OFF",
     "untested": "À TESTER",
     "noKey": "NO KEY"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "confirm": "Confirmer",
+    "save": "Enregistrer"
   },
   "home": {
     "title": "Bienvenue",
@@ -33,6 +41,23 @@
     "resetTitle": "Réinitialisation",
     "resetHint": "Les paramètres et la configuration LLM sont conservés.",
     "resetButton": "Tout supprimer",
-    "resetDone": "Réinitialisation terminée ({count} éléments supprimés)."
+    "resetDone": "Réinitialisation terminée ({{count}} éléments supprimés)."
+  },
+  "settings": {
+    "ai.title": "Intelligence artificielle",
+    "ai.toggleLabel": "LLM actif",
+    "ai.toggleHint": "Désactiver saute les tâches confiées à l'IA. La clé Mistral est conservée.",
+    "mistral.title": "Configuration Mistral",
+    "mistral.configured": "CONFIGURÉE",
+    "mistral.notConfigured": "NON CONFIGURÉE",
+    "mistral.apiKeyLabel": "Clé API Mistral",
+    "mistral.apiKeyHint": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
+    "mistral.baseUrlLabel": "Base URL",
+    "mistral.chatModelLabel": "Modèle chat",
+    "mistral.embedModelLabel": "Modèle embeddings",
+    "mistral.test": "Tester la connexion",
+    "mistral.saveSuccess": "Paramètres enregistrés.",
+    "mistral.testSuccess": "Connexion OK ({{count}} modèles disponibles).",
+    "mistral.testError": "Échec : {{message}}"
   }
 }
