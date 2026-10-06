@@ -130,6 +130,7 @@ class HighlightsEntry:
 class InvalidHighlightsDesignation:
     designation: str
     pages_text: str
+    page_keys: tuple[str, ...]
     page: int
     bbox: tuple[float, float, float, float]
 
@@ -255,12 +256,13 @@ class RevisionState:
         footers: dict[str, PageFooter] = {}
         ambiguous: set[str] = set()
         for footer in self.footers:
-            if footer.page_key is not None:
-                previous = footers.get(footer.page_key)
+            page_key = self.expected_footer_keys.get(footer.page, footer.page_key)
+            if page_key is not None:
+                previous = footers.get(page_key)
                 if previous is not None and previous is not footer:
-                    ambiguous.add(footer.page_key)
+                    ambiguous.add(page_key)
                 else:
-                    footers[footer.page_key] = footer
+                    footers[page_key] = footer
         for key in ambiguous:
             footers.pop(key, None)
         return footers
@@ -296,13 +298,21 @@ class RevisionState:
         statuses = {status for length, status in matches if length == best_length}
         return next(iter(statuses)) if len(statuses) == 1 else None
 
-    def has_missing_highlights_designation(self, entry: LepEntry) -> bool:
+    def highlights_designation_rule_for(self, entry: LepEntry) -> str | None:
         aliases = _lep_page_key_aliases(entry)
-        return any(
+        if any(
             page_key in aliases
             for issue in self.missing_highlights_designations
             for page_key in issue.page_keys
-        )
+        ):
+            return "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED"
+        if any(
+            page_key in aliases
+            for issue in self.invalid_highlights_designations
+            for page_key in issue.page_keys
+        ):
+            return "CUSTOM_REVISION_HIGHLIGHTS_STATUS"
+        return None
 
     def is_declared_modified(self, page_key: str) -> bool:
         entry = self.lep_entry_for_key(page_key)
@@ -736,7 +746,8 @@ def extract_invalid_highlights_designations(
         if not page_cells or not designation_cells:
             continue
         pages_text = _join_raw_cell(page_cells)
-        if not expand_page_range(pages_text):
+        page_keys = expand_page_range(pages_text)
+        if not page_keys:
             continue
         designation = _join_raw_cell(designation_cells)
         normalized = re.sub(r"\s+", "", designation).upper()
@@ -746,6 +757,7 @@ def extract_invalid_highlights_designations(
             InvalidHighlightsDesignation(
                 designation=designation,
                 pages_text=pages_text,
+                page_keys=page_keys,
                 page=page.page,
                 bbox=_merge_bbox(designation_cells),
             )
@@ -1454,6 +1466,48 @@ def _context(subject: str, page_key: str) -> str:
     return f"« {subject} », page {page_key}" if subject else f"page {page_key}"
 
 
+def _highlights_status_conflict_for_page(
+    state: RevisionState,
+    page_key: str,
+    status: str | None,
+) -> str | None:
+    revision = state.revision_date
+    lep_entry = state.lep_entry_for_key(page_key)
+    footer = state.footer_by_key.get(page_key)
+    if revision is None or lep_entry is None or footer is None or lep_entry.is_blank:
+        return None
+
+    context = _context(lep_entry.subject, page_key)
+    if status == "U":
+        if (
+            lep_entry.starred
+            and revision.same_as(lep_entry.date)
+            and revision.same_as(footer.date)
+        ):
+            return (
+                f"{context} : la LEP porte une étoile et la date "
+                f"{lep_entry.date_text}, et le pied de page porte {footer.date_text}."
+            )
+        return None
+
+    if status not in _MODIFIED_STATUSES:
+        return None
+    previous_issue = state.last_issue_date or revision
+    if (
+        lep_entry.starred
+        or lep_entry.date is None
+        or footer.date is None
+        or revision.same_as(lep_entry.date)
+        or not lep_entry.date.same_as(footer.date)
+        or lep_entry.date.sort_key > previous_issue.sort_key
+    ):
+        return None
+    return (
+        f"{context} : la LEP ne porte pas d'étoile et sa date {lep_entry.date_text} "
+        f"correspond au pied de page {footer.date_text}, antérieur à la révision courante."
+    )
+
+
 def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
     revision = state.revision_date
     assert revision is not None  # guarded by RevisionState.available
@@ -1499,31 +1553,56 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
             continue
 
         declared = status in _MODIFIED_STATUSES or status == "D"
+        status_conflict = _highlights_status_conflict_for_page(
+            state, entry.page_key, status
+        )
 
         if declared and not entry.starred:
+            if status_conflict:
+                message = (
+                    f"{context} est déclarée « {status} » dans les Highlights sans "
+                    f'étoile dans la LEP, mais {status_conflict} Le contrôle '
+                    "« CUSTOM_REVISION_HIGHLIGHTS_STATUS » indique que le statut "
+                    "est peut-être U. Vérifier les Highlights avant d'ajouter « * »."
+                )
+            else:
+                message = (
+                    f"{context} est marquée « {status} » dans les Highlights "
+                    "mais sa date n'est pas suivie de « * » dans la LEP."
+                )
             findings.append(
                 RevisionFinding(
                     control=LEP_STAR,
-                    message=(
-                        f"{context} est marquée « {status} » dans les Highlights "
-                        "mais sa date n'est pas suivie de « * » dans la LEP."
-                    ),
+                    message=message,
                     original=entry.date_text,
-                    proposed=f"{entry.date_text} *",
+                    proposed="" if status_conflict else f"{entry.date_text} *",
                     page=entry.page,
                     bbox=entry.bbox,
+                    severity="info" if status_conflict else None,
                 )
             )
             continue
         if not declared and entry.starred:
-            missing_designation = state.has_missing_highlights_designation(entry)
-            if missing_designation:
+            designation_rule = state.highlights_designation_rule_for(entry)
+            if designation_rule:
+                designation_state = (
+                    "absente"
+                    if designation_rule == "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED"
+                    else "invalide"
+                )
                 message = (
                     f"{context} porte une « * » dans la LEP, mais sa désignation "
-                    "est absente des Highlights. La règle "
-                    "« CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED » a détecté cette "
-                    "absence : le statut R/N est inconnu et l'étoile peut être "
-                    "justifiée. Vérifier les Highlights avant de la retirer."
+                    f"est {designation_state} dans les Highlights. La règle "
+                    f"« {designation_rule} » l'a détectée : le statut R/N est "
+                    "inconnu et l'étoile peut être justifiée. Vérifier les "
+                    "Highlights avant de la retirer."
+                )
+            elif status_conflict:
+                message = (
+                    f"{context} porte une « * » dans la LEP, mais {status_conflict} "
+                    "Le contrôle « CUSTOM_REVISION_HIGHLIGHTS_STATUS » signale une "
+                    "contradiction; vérifier si la désignation doit être R ou N "
+                    "avant de retirer l'étoile."
                 )
             else:
                 observed = f"« {status} »" if status else "absente des Highlights"
@@ -1539,12 +1618,12 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
                     original=entry.date_text,
                     proposed=(
                         ""
-                        if missing_designation
+                        if designation_rule or status_conflict
                         else entry.date_text.replace("*", "").rstrip()
                     ),
                     page=entry.page,
                     bbox=entry.bbox,
-                    severity="info" if missing_designation else None,
+                    severity="info" if designation_rule or status_conflict else None,
                 )
             )
             continue
@@ -1569,14 +1648,28 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
             continue
 
         if revision.same_as(entry.date):
+            designation_rule = state.highlights_designation_rule_for(entry)
+            message = (
+                f"{context} porte la date de révision {revision.text} dans la "
+                "LEP mais n'est déclarée modifiée ni dans les Highlights "
+                "(R ou N) ni par une « * »."
+            )
+            if designation_rule:
+                designation_state = (
+                    "absente"
+                    if designation_rule == "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED"
+                    else "invalide"
+                )
+                message = (
+                    f"{message} La désignation Highlights de cette page est "
+                    f"{designation_state} ({designation_rule}); cela peut expliquer "
+                    "l'absence du statut R/N, mais la date de révision dans la LEP "
+                    "reste un indice indépendant à vérifier."
+                )
             findings.append(
                 RevisionFinding(
                     control=UNDECLARED_PAGE,
-                    message=(
-                        f"{context} porte la date de révision {revision.text} dans la "
-                        "LEP mais n'est déclarée modifiée ni dans les Highlights "
-                        "(R ou N) ni par une « * »."
-                    ),
+                    message=message,
                     original=entry.date_text,
                     proposed="",
                     page=entry.page,
@@ -1606,7 +1699,6 @@ def _lep_findings(state: RevisionState) -> list[RevisionFinding]:
 
 
 def _highlights_status_findings(state: RevisionState) -> list[RevisionFinding]:
-    revision = state.revision_date
     footer_by_key = state.footer_by_key
     findings: list[RevisionFinding] = []
 
@@ -1642,46 +1734,15 @@ def _highlights_status_findings(state: RevisionState) -> list[RevisionFinding]:
                 )
             )
             continue
-        if revision is None:
-            continue
         if entry.status not in _MODIFIED_STATUSES | {"U"}:
             continue
         conflicting_pages: list[str] = []
         for page_key in entry.page_keys:
-            lep_entry = state.lep_entry_for_key(page_key)
-            footer = footer_by_key.get(page_key)
-            if lep_entry is None or footer is None or lep_entry.is_blank:
-                continue
-
-            if entry.status == "U":
-                if not (
-                    lep_entry.starred
-                    and revision.same_as(lep_entry.date)
-                    and revision.same_as(footer.date)
-                ):
-                    continue
-                conflicting_pages.append(
-                    f"{_context(entry.subject, page_key)} : la LEP porte une étoile "
-                    f"et la date {lep_entry.date_text}, et le pied de page porte "
-                    f"{footer.date_text}."
-                )
-                continue
-
-            previous_issue = state.last_issue_date or revision
-            if (
-                lep_entry.starred
-                or lep_entry.date is None
-                or footer.date is None
-                or revision.same_as(lep_entry.date)
-                or not lep_entry.date.same_as(footer.date)
-                or lep_entry.date.sort_key > previous_issue.sort_key
-            ):
-                continue
-            conflicting_pages.append(
-                f"{_context(entry.subject, page_key)} : la LEP ne porte pas "
-                f"d'etoile et sa date {lep_entry.date_text} correspond au pied de "
-                f"page, avec une date antérieure à la révision courante."
+            conflict = _highlights_status_conflict_for_page(
+                state, page_key, entry.status
             )
+            if conflict:
+                conflicting_pages.append(conflict)
 
         if not conflicting_pages:
             continue
@@ -1823,11 +1884,12 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
     assert revision is not None
     findings: list[RevisionFinding] = []
     for footer in state.footers:
-        if page_key_prefix(footer.page_key) == HIGHLIGHTS_KEY_PREFIX:
+        page_key = state.expected_footer_keys.get(footer.page, footer.page_key)
+        if page_key is None:
             continue
-        if footer.page_key is None:
+        if page_key_prefix(page_key) == HIGHLIGHTS_KEY_PREFIX:
             continue
-        entries = state.lep_entries_for_key(footer.page_key)
+        entries = state.lep_entries_for_key(page_key)
 
         if not entries:
             if state.full_document:
@@ -1848,9 +1910,9 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
         if len(entries) > 1:
             continue
         entry = entries[0]
-        declared = state.is_declared_modified(footer.page_key)
+        declared = state.is_declared_modified(page_key)
 
-        if state.is_contested(footer.page_key):
+        if state.is_contested(page_key):
             continue
         expected = revision if declared else entry.date
         if expected is None or expected.same_as(footer.date):
@@ -1876,17 +1938,29 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
             if declared
             else f"la dernière date d'émission connue {expected.text} (LEP)"
         )
+        status = state.highlights_status_for_lep(entry, page_key)
+        status_conflict = _highlights_status_conflict_for_page(
+            state, page_key, status
+        )
+        message = (
+            f"Le pied de page de « {footer.label_text} » porte "
+            f"« {footer.date_text or 'aucune date'} » au lieu de {reason}."
+        )
+        if status_conflict:
+            message = (
+                f"{message} Le contrôle « CUSTOM_REVISION_HIGHLIGHTS_STATUS » "
+                f"signale une contradiction : {status_conflict} Vérifier le statut "
+                "Highlights avant de corriger cette date."
+            )
         findings.append(
             RevisionFinding(
                 control=FOOTER_DATE,
-                message=(
-                    f"Le pied de page de « {footer.label_text} » porte "
-                    f"« {footer.date_text or 'aucune date'} » au lieu de {reason}."
-                ),
+                message=message,
                 original=footer.date_text or footer.label_text,
-                proposed=expected.text,
+                proposed="" if status_conflict else expected.text,
                 page=footer.page,
                 bbox=footer.date_bbox,
+                severity="info" if status_conflict else None,
             )
         )
     return findings
@@ -2010,7 +2084,7 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
 def _missing_page_findings(state: RevisionState) -> list[RevisionFinding]:
     if not state.full_document:
         return []
-    found = {footer.page_key for footer in state.footers}
+    found = set(state.footer_by_key)
     lep = state.lep_by_key
     unlabeled_pages = {
         footer.page for footer in state.footers if footer.observed_page_key is None

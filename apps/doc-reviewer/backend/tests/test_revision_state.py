@@ -907,6 +907,132 @@ def test_missing_highlights_designation_on_another_page_does_not_downgrade_star(
     assert "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED" not in star.message
 
 
+def test_star_with_invalid_highlights_designation_is_informational() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "X"),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "info"
+    assert star.proposed == ""
+    assert "CUSTOM_REVISION_HIGHLIGHTS_STATUS" in star.message
+    assert "invalide" in star.message
+
+
+def test_star_conflicting_with_unchanged_highlights_is_informational() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "U"),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "info"
+    assert star.proposed == ""
+    assert "CUSTOM_REVISION_HIGHLIGHTS_STATUS" in star.message
+
+
+def test_unchanged_revision_evidence_downgrades_linked_star_and_footer_dates() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", "JUL 66"),
+        ("", "402", "JUL 66"),
+    )
+    parsed.pages[2] = _page(3, _footer(3, "Page 401", "JUL 66"))
+    parsed.pages[3] = _page(4, _footer(4, "Page 402", "JUL 66"))
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    linked = [
+        raw
+        for raw in raws
+        if raw.rule_code in {
+            "CUSTOM_REVISION_LEP_STAR",
+            "CUSTOM_REVISION_FOOTER_DATE",
+        }
+    ]
+
+    assert len(linked) == 4
+    assert all(raw.severity == "info" for raw in linked)
+    assert all(raw.proposed == "" for raw in linked)
+    assert all("CUSTOM_REVISION_HIGHLIGHTS_STATUS" in raw.message for raw in linked)
+
+
+def test_undeclared_page_mentions_invalid_designation_without_downgrading() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "X"),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", _REVISION_DATE),
+        ("", "402", f"{_REVISION_DATE} *"),
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    undeclared = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_PAGE"
+        and "page 401" in raw.message
+    )
+
+    assert undeclared.severity == "error"
+    assert "CUSTOM_REVISION_HIGHLIGHTS_STATUS" in undeclared.message
+    assert "invalide" in undeclared.message
+    assert "indice indépendant" in undeclared.message
+
+
+def test_wrong_known_section_footer_number_does_not_report_page_as_absent() -> None:
+    parsed = _consistent_document()
+    lep_page = parsed.pages[1]
+    for span in lep_page.spans:
+        if span.text == "LEP Page 1":
+            span.text = "LEP Page 99"
+    lep_page.text = "\n".join(span.text for span in lep_page.spans)
+
+    findings = _findings(parsed)
+
+    assert any(
+        finding.control == revision.FOOTER_PAGE_NUMBER
+        and finding.page == 2
+        and finding.proposed == "LEP Page 1"
+        for finding in findings
+    )
+    assert not any(
+        finding.control == revision.PAGE_NOT_IN_LEP and finding.page == 2
+        for finding in findings
+    )
+    assert revision.MODIFIED_PAGE_ABSENT not in _codes(parsed)
+
+
 def test_highlights_r_and_n_are_both_valid_when_lep_and_footer_show_revision() -> None:
     for status in ("R", "N"):
         parsed = _consistent_document()

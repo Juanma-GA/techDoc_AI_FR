@@ -7,7 +7,6 @@ import {
   CircleMinus,
   Maximize2,
   Paperclip,
-  X,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -39,18 +38,13 @@ export function DocumentReviewer() {
   const navigate = useNavigate();
   const params = useParams();
   const documentId = params.id;
-  const [previousRevisionFile, setPreviousRevisionFile] = useState<File | null>(null);
-
-  useEffect(() => {
-    setPreviousRevisionFile(null);
-  }, [documentId]);
 
   const document = useDocument(documentId);
   const suggestions = useSuggestions(documentId);
   const ruleResults = useRuleResults(
     document.data?.working_format === "pdf" ? documentId : undefined,
   );
-  const analyze = useAnalyze(documentId, document.data, previousRevisionFile);
+  const analyze = useAnalyze(documentId, document.data);
   const [pendingPageStatus, setPendingPageStatus] = useState<{
     page: number;
     isModified: boolean | null;
@@ -242,50 +236,16 @@ export function DocumentReviewer() {
               className="row"
               style={{ gap: 6, alignItems: "center", minWidth: 0, gridColumn: "1 / -1" }}
             >
-              <label
+              <button
+                type="button"
                 className="btn ghost small"
-                title={t("reviewer.previousRevision.choose")}
+                aria-disabled="true"
+                title={t("reviewer.previousRevision.unavailable")}
+                aria-label={`${t("reviewer.previousRevision.attach")}. ${t("reviewer.previousRevision.unavailable")}`}
               >
                 <Paperclip size={14} aria-hidden="true" />
                 {t("reviewer.previousRevision.attach")}
-                <input
-                  className="sr-only"
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  aria-label={t("reviewer.previousRevision.choose")}
-                  disabled={analyze.status === "running"}
-                  onChange={(event) => {
-                    setPreviousRevisionFile(event.currentTarget.files?.[0] ?? null);
-                    event.currentTarget.value = "";
-                  }}
-                />
-              </label>
-              {previousRevisionFile ? (
-                <>
-                  <span
-                    className="label"
-                    title={previousRevisionFile.name}
-                    style={{
-                      maxWidth: 150,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {previousRevisionFile.name}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn ghost small"
-                    aria-label={t("reviewer.previousRevision.remove")}
-                    title={t("reviewer.previousRevision.remove")}
-                    disabled={analyze.status === "running"}
-                    onClick={() => setPreviousRevisionFile(null)}
-                  >
-                    <X size={14} aria-hidden="true" />
-                  </button>
-                </>
-              ) : null}
+              </button>
             </div>
             <AnalysisPageRange
               pageCount={totalPages}
