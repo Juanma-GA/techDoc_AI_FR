@@ -227,8 +227,8 @@ def test_page_key_normalization_unifies_the_three_sources() -> None:
     ) == ("INTRO 1101 1", "INTRO 1101 2")
     assert revision.expand_page_range(
         "Pages 1101-1 to 1101-2"
-    ) == ("1101-1", "1101-2")
-    assert revision.expand_page_range("Page  1101-1") == ("1101-1",)
+    ) == ("1101 1", "1102 2")
+    assert revision.expand_page_range("Page  1101-1") == ("1101 1",)
 
 
 def test_highlights_page_range_keeps_spans_past_the_header_boundary() -> None:
@@ -323,6 +323,27 @@ def test_compound_highlights_lep_and_footer_names_match() -> None:
         finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
         for finding in state.findings
     )
+
+
+def test_hyphenated_highlights_pages_match_numbered_lep_pages() -> None:
+    highlights_page = _highlights_page(
+        [("Illustrated Parts List", "Pages 1101-1 to 1101-2", "R")]
+    )
+    lep_page = _lep_page(
+        left=[
+            ("", "1101 1", f"{_REVISION_DATE} *"),
+            ("", "1102 2", f"{_REVISION_DATE} *"),
+        ],
+        right=[],
+        page=2,
+    )
+    highlights = revision.extract_highlights(highlights_page)
+    lep, _subject = revision.extract_lep(lep_page)
+    state = revision.RevisionState(highlights=highlights, lep=lep)
+
+    assert highlights[0].page_keys == ("1101 1", "1102 2")
+    assert [state.highlights_status_for_lep(entry) for entry in lep] == ["R", "R"]
+    assert revision._pairing_findings(state) == []
 
 
 def test_footer_reassembles_section_page_and_split_date_spans() -> None:

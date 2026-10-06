@@ -64,6 +64,22 @@ def _pdf(text: str) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
+def test_letter_digit_confusion_rule_flags_substitutions_not_identifiers() -> None:
+    rule = _rule("CUSTOM_LETTER_DIGIT_CONFUSION")
+    suspicious = _pdf(
+        "1llustration, illustrat1ion, s3ction; numeric reference 1l00."
+    )
+    suspicious.pages[0].is_modified = True
+    ordinary = _pdf("TP1, A320 and F9111CMON.")
+    ordinary.pages[0].is_modified = True
+
+    suspicious_results, _ = execute_pdf_rules(suspicious, [rule])
+    ordinary_results, _ = execute_pdf_rules(ordinary, [rule])
+
+    assert suspicious_results[0].status == "FAIL"
+    assert ordinary_results[0].status == "PASS"
+
+
 def _highlights_structure_pdf(rows: list[tuple[str, str, str]]) -> ParsedPdf:
     spans = [
         Span("Chapter/Section and Page No", (54.0, 95.0, 200.0, 105.0), 1, "Arial", 10.0),

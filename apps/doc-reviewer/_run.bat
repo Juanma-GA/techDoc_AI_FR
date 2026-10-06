@@ -140,17 +140,28 @@ if defined BIND_HOST_VALUE if /i not "%BIND_HOST_VALUE%"=="127.0.0.1" set "IS_LO
 set "ENCRYPTION_KEY_VALUE="
 if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "ENCRYPTION_KEY=" "%ENV_FILE%"`) do set "ENCRYPTION_KEY_VALUE=%%B"
 
-if "%IS_LOCAL_BIND%"=="1" if not defined ENCRYPTION_KEY_VALUE (
-    echo [setup] Generation d'une cle de chiffrement locale ^(ENCRYPTION_KEY^)...
-    set "NEW_ENCRYPTION_KEY="
-    for /f "usebackq delims=" %%K in (`"%PYTHON%" -s -c "from app.core.encryption import generate_key; print(generate_key())"`) do set "NEW_ENCRYPTION_KEY=%%K"
-    if not defined NEW_ENCRYPTION_KEY (
-        echo [erreur] Echec generation de la cle de chiffrement.
-        pause
-        exit /b 1
-    )
-    >>"%ENV_FILE%" echo ENCRYPTION_KEY=%NEW_ENCRYPTION_KEY%
-    echo [setup] OK -- cle ecrite dans backend\.env.
+if not "%IS_LOCAL_BIND%"=="1" goto :encryption_key_ready
+if defined ENCRYPTION_KEY_VALUE goto :encryption_key_ready
+
+echo [setup] Generation d'une cle de chiffrement locale ^(ENCRYPTION_KEY^)...
+set "NEW_ENCRYPTION_KEY="
+set "ENCRYPTION_KEY_FILE=%TEMP%\docreviewer_encryption_key_%RANDOM%_%RANDOM%.txt"
+"%PYTHON%" -s -c "from app.core.encryption import generate_key; print(generate_key())" > "%ENCRYPTION_KEY_FILE%"
+if errorlevel 1 goto :encryption_key_failed
+set /p NEW_ENCRYPTION_KEY=<"%ENCRYPTION_KEY_FILE%"
+del "%ENCRYPTION_KEY_FILE%" >nul 2>nul
+if not defined NEW_ENCRYPTION_KEY goto :encryption_key_failed
+>>"%ENV_FILE%" echo ENCRYPTION_KEY=%NEW_ENCRYPTION_KEY%
+echo [setup] OK -- cle ecrite dans backend\.env.
+goto :encryption_key_ready
+
+:encryption_key_failed
+del "%ENCRYPTION_KEY_FILE%" >nul 2>nul
+echo [erreur] Echec generation de la cle de chiffrement.
+pause
+exit /b 1
+
+:encryption_key_ready
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------
 echo [setup] Verification du schema DB ^(alembic^)...

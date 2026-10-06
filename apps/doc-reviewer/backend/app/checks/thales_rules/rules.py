@@ -93,6 +93,12 @@ _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
 )
+_LETTER_DIGIT_CONFUSION_PATTERN = (
+    r"(?i)(?<!\w)(?:"
+    r"(?=(?:[a-z0-9]*[a-z]){3})[a-z]*[0-9][a-z]+[a-z]*"
+    r"|(?=[0-9ilo]*[0-9])[0-9ilo]*[ilo][0-9ilo]*"
+    r")(?!\w)"
+)
 _COPYRIGHT_PATTERN = (
     r"\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
     r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
@@ -1849,6 +1855,36 @@ CUSTOM_REPLACE_LEGACY_NAMES = rule(
     },
 )
 
+CUSTOM_LETTER_DIGIT_CONFUSION = rule(
+    code="CUSTOM_LETTER_DIGIT_CONFUSION",
+    name="Confusion entre lettres et chiffres",
+    description=(
+        "Repere un chiffre utilise dans un mot a la place d'une lettre, "
+        "et les lettres O, I ou l utilisees dans une sequence numerique."
+    ),
+    message="Une confusion entre lettre et chiffre est a verifier.",
+    kind="regex_flag",
+    severity="warning",
+    target=_MODIFIED_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=_LETTER_DIGIT_CONFUSION_PATTERN,
+        ),
+    ],
+    failure_message="confusion possible entre lettres et chiffres.",
+    translations={
+        "en": {
+            "description": (
+                "Flags a digit used in a word in place of a letter, and O, I, or l "
+                "used in a numeric sequence."
+            ),
+            "message": "A possible letter/digit confusion needs review.",
+        }
+    },
+)
+
 CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR = rule(
     code="CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR",
     name="Identification a remplacer par indicator",
@@ -2404,6 +2440,7 @@ RULE_DEFINITIONS = (
     CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION,
     CUSTOM_FORBIDDEN_CONSUMABLES,
     CUSTOM_REPLACE_LEGACY_NAMES,
+    CUSTOM_LETTER_DIGIT_CONFUSION,
     CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,

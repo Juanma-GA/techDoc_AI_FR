@@ -521,6 +521,11 @@ def normalize_page_key(value: str) -> str | None:
         return None
     prefix = match.group("prefix")
     number = match.group("number")
+    numbered_page = re.fullmatch(r"(?P<chapter>\d{4})-(?P<page>[1-9]\d*)", number)
+    if numbered_page is not None:
+        page = int(numbered_page.group("page"))
+        chapter = int(numbered_page.group("chapter")) + page - 1
+        number = f"{chapter} {page}"
     return f"{' '.join(prefix.upper().split())} {number}" if prefix else number
 
 
@@ -2129,6 +2134,7 @@ def _pairing_findings(state: RevisionState) -> list[RevisionFinding]:
     findings: list[RevisionFinding] = []
     for entry in state.highlights:
         missing: list[str] = []
+        entry_numbers = {page_number_of(key) for key in entry.page_keys}
         for key in entry.page_keys:
             number = page_number_of(key)
             if number is None:
@@ -2136,7 +2142,7 @@ def _pairing_findings(state: RevisionState) -> list[RevisionFinding]:
             prefix = page_key_prefix(key)
             neighbour = number + 1 if number % 2 else number - 1
             expected = f"{prefix} {neighbour}" if prefix else str(neighbour)
-            if expected in listed or expected in missing:
+            if expected in listed or neighbour in entry_numbers or expected in missing:
                 continue
             missing.append(expected)
         if not missing:

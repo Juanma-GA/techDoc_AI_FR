@@ -97,6 +97,39 @@ def test_dependency_hash_command_runs_in_cmd(name: str, tmp_path: Path) -> None:
     assert re.search(r"HASH=[0-9a-fA-F]{128}", result.stdout), result.stdout + result.stderr
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="requires cmd.exe")
+def test_encryption_key_command_runs_in_cmd_with_spaced_temp_path(tmp_path: Path) -> None:
+    command = next(
+        line for line in _code_lines("_run.bat") if "generate_key" in line
+    )
+    script = tmp_path / "check_encryption_key.cmd"
+    key_file = tmp_path / "directory with spaces" / "encryption.key"
+    key_file.parent.mkdir()
+    script.write_text(
+        "\r\n".join(
+            (
+                "@echo off",
+                f'set "PYTHON={sys.executable}"',
+                f'set "ENCRYPTION_KEY_FILE={key_file}"',
+                f'cd /d "{APP_DIR / "backend"}"',
+                command,
+                'if errorlevel 1 exit /b 1',
+            )
+        ),
+        encoding="ascii",
+    )
+    result = subprocess.run(
+        ["cmd.exe", "/d", "/c", str(script)],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert re.fullmatch(r"[A-Za-z0-9_-]{43}=\r?\n?", key_file.read_text())
+
+
 def test_start_bat_uses_comspec() -> None:
     code = "\n".join(_code_lines("start.bat"))
     assert '"%ComSpec%" /k' in code
