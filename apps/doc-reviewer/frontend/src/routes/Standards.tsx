@@ -13,6 +13,7 @@ import {
   useToggleCatalogRule,
 } from "../hooks/useStandards";
 import type { Standard } from "../types/domain";
+import { localizedRuleCode } from "../lib/suggestionText";
 
 /**
  * Administration des normes : liste des normes (built-in + custom), versions,
@@ -239,8 +240,14 @@ export function Standards(): JSX.Element {
                       <li key={c.code} className="item-row">
                         <div className="item-main">
                           <p className="row">
-                            <span className="item-name label grow">{c.code}</span>
-                            <span className="badge default">{c.kind} · {c.severity}</span>
+                            <span className="item-name label grow">
+                              {localizedRuleCode(c.code, t)}
+                            </span>
+                            <span className="badge default">
+                              {t(`rules.kind.${c.kind}`, { defaultValue: localizedRuleCode(c.kind, t) })}
+                              {" · "}
+                              {t(`reviewer.suggestion.severity.${c.severity}`)}
+                            </span>
                             <label className="row" style={{ gap: "0.4rem" }}>
                               <input
                                 type="checkbox"

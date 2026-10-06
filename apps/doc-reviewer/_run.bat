@@ -78,27 +78,79 @@ if "%USE_EMBED%"=="0" (
     set "PYTHON=python"
 )
 
-REM ---- Install deps une seule fois (marker .installed) ---------------------
-REM  Package partageable : les dependances sont DEJA installees dans python-embed
-REM  par scripts\package_doc_reviewer.py (marker present) -> aucun acces PyPI.
-REM  Sinon : versions ET empreintes figees (requirements.lock.txt, --require-hashes),
-REM  jamais de resolution flottante ni de mise a jour de pip depuis Internet.
-if not exist "%INSTALLED_MARK%" (
-    echo [setup] Installation des dependances Python verrouillees ^(1 a 3 min^)...
-    "%PYTHON%" -s -m pip install --require-hashes --no-deps -r requirements.lock.txt
-    if errorlevel 1 (
-        echo [erreur] Echec installation des deps.
+REM ---- Install deps verrouillees (hash-pinned) si absentes OU si pyproject.toml
+REM      / requirements.lock.txt ont change depuis le dernier install (empreinte
+REM      SHA256 combinee stockee dans le marker). H-02 hardening : un simple
+REM      marker vide ne se reinvalide jamais -- une dependance ajoutee (ex.
+REM      regex) ne s'installait plus du tout sur un poste ou doc-reviewer avait
+REM      deja tourne avant le pull. --require-hashes --no-deps : aucune
+REM      dependance (directe ou transitive) n'est installee hors du lock file.
+if "%USE_EMBED%"=="1" if exist "%INSTALLED_MARK%" goto deps_ready
+set "DEPS_HASH="
+set "DEPS_HASH_FILE=%TEMP%\docreviewer_deps_hash_%RANDOM%_%RANDOM%.txt"
+"%SYS32%\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "$ErrorActionPreference='Stop'; $p=(Get-FileHash -Algorithm SHA256 -LiteralPath pyproject.toml).Hash; $l=(Get-FileHash -Algorithm SHA256 -LiteralPath requirements.lock.txt).Hash; $p+$l" > "%DEPS_HASH_FILE%"
+if errorlevel 1 (
+    del "%DEPS_HASH_FILE%" >nul 2>nul
+    echo [erreur] Impossible de calculer l'empreinte des dependances.
+    pause
+    exit /b 1
+)
+set /p DEPS_HASH=<"%DEPS_HASH_FILE%"
+del "%DEPS_HASH_FILE%" >nul 2>nul
+if not defined DEPS_HASH (
+    echo [erreur] Impossible de calculer l'empreinte des dependances.
+    pause
+    exit /b 1
+)
+set "INSTALLED_HASH="
+if exist "%INSTALLED_MARK%" set /p INSTALLED_HASH=<"%INSTALLED_MARK%"
+if /i "%INSTALLED_HASH%"=="%DEPS_HASH%" goto deps_ready
+
+echo [setup] Installation des dependances Python verrouillees ^(1 a 3 min^)...
+"%PYTHON%" -s -m pip install --require-hashes --no-deps -r requirements.lock.txt
+if errorlevel 1 (
+    echo [erreur] Echec installation des deps.
+    pause
+    exit /b 1
+)
+"%PYTHON%" -s -m pip install --no-deps -e .
+if errorlevel 1 (
+    echo [erreur] Echec installation des deps.
+    pause
+    exit /b 1
+)
+>"%INSTALLED_MARK%" echo %DEPS_HASH%
+echo [setup] OK.
+:deps_ready
+
+REM ---- Auto-provision ENCRYPTION_KEY en posture locale (hardening H-03) ----
+REM Sans cle, POST /settings/mistral refuse TOUTE sauvegarde de cle Mistral
+REM (503) tant qu'un humain n'a pas genere+colle une cle Fernet a la main
+REM dans backend\.env. Inerte des que BIND_HOST s'ecarte du defaut local
+REM 127.0.0.1 : ce cas (deploiement palier 2/3) reste gere par
+REM app.main._validate_security_posture, qui EXIGE une cle fournie par l'IT
+REM et refuse de demarrer sans elle -- une auto-provision serait dangereuse
+REM hors du poste local du developpeur.
+set "ENV_FILE=%BACKEND_DIR%\.env"
+set "BIND_HOST_VALUE="
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "BIND_HOST=" "%ENV_FILE%"`) do set "BIND_HOST_VALUE=%%B"
+set "IS_LOCAL_BIND=1"
+if defined BIND_HOST_VALUE if /i not "%BIND_HOST_VALUE%"=="127.0.0.1" set "IS_LOCAL_BIND=0"
+
+set "ENCRYPTION_KEY_VALUE="
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "ENCRYPTION_KEY=" "%ENV_FILE%"`) do set "ENCRYPTION_KEY_VALUE=%%B"
+
+if "%IS_LOCAL_BIND%"=="1" if not defined ENCRYPTION_KEY_VALUE (
+    echo [setup] Generation d'une cle de chiffrement locale ^(ENCRYPTION_KEY^)...
+    set "NEW_ENCRYPTION_KEY="
+    for /f "usebackq delims=" %%K in (`"%PYTHON%" -s -c "from app.core.encryption import generate_key; print(generate_key())"`) do set "NEW_ENCRYPTION_KEY=%%K"
+    if not defined NEW_ENCRYPTION_KEY (
+        echo [erreur] Echec generation de la cle de chiffrement.
         pause
         exit /b 1
     )
-    "%PYTHON%" -s -m pip install --no-deps -e .
-    if errorlevel 1 (
-        echo [erreur] Echec installation des deps.
-        pause
-        exit /b 1
-    )
-    type nul > "%INSTALLED_MARK%"
-    echo [setup] OK.
+    >>"%ENV_FILE%" echo ENCRYPTION_KEY=%NEW_ENCRYPTION_KEY%
+    echo [setup] OK -- cle ecrite dans backend\.env.
 )
 
 REM ---- Alembic upgrade head a CHAQUE lancement (idempotent) ----------------

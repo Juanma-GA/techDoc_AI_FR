@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "S1000D Extractor",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Extract and version technical data in the S1000D format."
   },
   "nav": {
     "home": "Home",

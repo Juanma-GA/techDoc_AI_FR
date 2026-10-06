@@ -60,9 +60,9 @@ class Settings(BaseSettings):
 
     default_target_unit_system: Literal["metric", "imperial", "auto"] = "auto"
 
-    # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
-    # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit
-    # via .env — la generer avec app.core.encryption.generate_key() (cf. .env.example).
+    # Cle de chiffrement Fernet (base64, 32 octets) pour stocker la cle Mistral
+    # dans AppConfig. Sans cle valide, l'API refuse toute sauvegarde de secret.
+    # Generer avec app.core.encryption.generate_key() (cf. .env.example).
     encryption_key: str = ""
 
     mistral_api_key: str = ""

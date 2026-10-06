@@ -11,6 +11,38 @@ function translation(
   return value === "__missing_translation__" || value === key ? null : value;
 }
 
+export function localizedRuleCode(ruleCode: string, t: TFunction): string {
+  const translated = translation(t, `rules.codes.${ruleCode}`);
+  if (translated) return translated;
+  return ruleCode
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/(^|\s)([a-z0-9])/g, (_match, prefix: string, character: string) =>
+      `${prefix}${character.toLocaleUpperCase()}`,
+    );
+}
+
+const AI_REWRITTEN_RULE_CODES = new Set([
+  "STE_PASSIVE_VOICE",
+  "STE_FIRST_PERSON",
+  "STE_PROCEDURAL_GERUND",
+  "STE_LONG_SENTENCE",
+]);
+
+export function isAiGeneratedSuggestion(
+  sourceKind: string,
+  ruleCode: string,
+  proposedText?: string,
+): boolean {
+  return (
+    sourceKind === "ai" ||
+    ruleCode === "AI_SCAN" ||
+    ruleCode === "FIGURE_COHERENCE" ||
+    (AI_REWRITTEN_RULE_CODES.has(ruleCode) && Boolean(proposedText))
+  );
+}
+
 function detailText(message: string, t: TFunction): string {
   const sizeMatch = message.match(
     /Taille detectee\s*:\s*(.+?)\.\s*Taille attendue\s*:\s*(.+?)\.?$/,

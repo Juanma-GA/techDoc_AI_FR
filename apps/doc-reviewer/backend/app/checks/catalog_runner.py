@@ -17,23 +17,37 @@ from typing import Any
 
 from app.checks import structural_checks, style_checks
 from app.checks.raw import RawSuggestion
+from app.core.regex_safety import (
+    USER_REGEX_TIMEOUT_SECONDS,
+    UserRegexPatternError,
+    compile_user_regex,
+    mark_user_regex_incomplete,
+)
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 
 TEXT_KINDS = {"regex_flag", "regex_replace", "term_replace", "case_capitalize", "accent_fix"}
 
 
-def run(parsed: ParsedPdf, catalog: list[dict[str, Any]]) -> list[RawSuggestion]:
+def run(
+    parsed: ParsedPdf,
+    catalog: list[dict[str, Any]],
+    warnings: list[str] | None = None,
+) -> list[RawSuggestion]:
     out: list[RawSuggestion] = []
-    out.extend(structural_checks.run(parsed, catalog))
-    out.extend(_run_text(parsed.pages, catalog))
+    out.extend(structural_checks.run(parsed, catalog, warnings=warnings))
+    out.extend(_run_text(parsed.pages, catalog, warnings=warnings))
     for rule in catalog:
         if (rule.get("kind") or "").lower() == "sentence_length":
             out.extend(style_checks.run(parsed.pages, rule))
     return out
 
 
-def _run_text(pages: list[ParsedPage], catalog: list[dict[str, Any]]) -> list[RawSuggestion]:
+def _run_text(
+    pages: list[ParsedPage],
+    catalog: list[dict[str, Any]],
+    warnings: list[str] | None = None,
+) -> list[RawSuggestion]:
     out: list[RawSuggestion] = []
     for rule in catalog:
         kind = (rule.get("kind") or "").lower()
@@ -44,11 +58,19 @@ def _run_text(pages: list[ParsedPage], catalog: list[dict[str, Any]]) -> list[Ra
             continue
         try:
             flags = re.IGNORECASE if kind in {"term_replace", "accent_fix"} else 0
-            compiled = re.compile(pattern, flags)
-        except re.error:
+            compiled = compile_user_regex(pattern, flags)
+        except UserRegexPatternError:
+            mark_user_regex_incomplete(warnings)
             continue
         for page in pages:
-            for m in compiled.finditer(page.text or ""):
+            try:
+                matches = list(
+                    compiled.finditer(page.text or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                )
+            except TimeoutError:
+                mark_user_regex_incomplete(warnings)
+                continue
+            for m in matches:
                 original = m.group(0)
                 proposed = _propose(kind, rule, m)
                 out.append(

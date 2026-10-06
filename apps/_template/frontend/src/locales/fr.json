@@ -1,10 +1,63 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Squelette de démarrage pour les POCs ATEXIS."
+  },
+  "nav": {
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "home": "Accueil",
+    "data": "Données",
+    "settings": "Paramètres"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "État du LLM (voir Paramètres)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "confirm": "Confirmer",
+    "save": "Enregistrer"
   },
   "home": {
     "title": "Bienvenue",
     "subtitle": "Squelette POC — adapte routes/Home.tsx, app/api/, et locales/."
+  },
+  "data": {
+    "title": "Données",
+    "subtitle": "État des données locales de cette application.",
+    "overview": "Vue d'ensemble",
+    "documents": "Documents",
+    "chunks": "Segments",
+    "sessions": "Sessions",
+    "messages": "Messages",
+    "storage": "Stockage",
+    "resetTitle": "Réinitialisation",
+    "resetHint": "Les paramètres et la configuration LLM sont conservés.",
+    "resetButton": "Tout supprimer",
+    "resetDone": "Réinitialisation terminée ({{count}} éléments supprimés)."
+  },
+  "settings": {
+    "ai.title": "Intelligence artificielle",
+    "ai.toggleLabel": "LLM actif",
+    "ai.toggleHint": "Désactiver saute les tâches confiées à l'IA. La clé Mistral est conservée.",
+    "mistral.title": "Configuration Mistral",
+    "mistral.configured": "CONFIGURÉE",
+    "mistral.notConfigured": "NON CONFIGURÉE",
+    "mistral.apiKeyLabel": "Clé API Mistral",
+    "mistral.apiKeyHint": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
+    "mistral.baseUrlLabel": "Base URL",
+    "mistral.chatModelLabel": "Modèle chat",
+    "mistral.embedModelLabel": "Modèle embeddings",
+    "mistral.test": "Tester la connexion",
+    "mistral.saveSuccess": "Paramètres enregistrés.",
+    "mistral.testSuccess": "Connexion OK ({{count}} modèles disponibles).",
+    "mistral.testError": "Échec : {{message}}"
   }
 }

@@ -46,10 +46,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+import structlog
+
 from app.config import settings
 from app.core.errors import AppError
 
-log = logging.getLogger("doc_reviewer.doc_convert")
+log = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # LibreOffice (moteur optionnel)
@@ -84,7 +86,7 @@ def _find_soffice() -> str | None:
             p = p / "soffice.exe"
         if p.exists():
             return str(p)
-        log.warning("DR_SOFFICE_PATH defini mais introuvable: %s", env)
+        log.warning("dr_soffice_path_not_found")
     # 2) Emplacements standards (PATH + Program Files).
     for cand in _SOFFICE_CANDIDATES:
         if cand.lower().endswith(".exe"):
@@ -145,11 +147,14 @@ def _convert_libreoffice_format(src: Path, outdir: Path, target_format: str) -> 
             target_format,
             (result.stdout or b"").decode("utf-8", "replace").strip()[:200],
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         stderr = getattr(exc, "stderr", b"") or b""
+        stderr_text = stderr.decode("utf-8", "replace") if isinstance(stderr, bytes) else str(stderr)
         log.warning(
-            "conversion LibreOffice (%s) echouee: %s | stderr=%s",
-            target_format, exc, stderr.decode("utf-8", "replace")[:300],
+            "libreoffice_convert_failed",
+            target_format=target_format,
+            error=type(exc).__name__,
+            stderr=stderr_text.strip()[:200],
         )
         return None
     out = outdir / (src.stem + f".{target_format}")

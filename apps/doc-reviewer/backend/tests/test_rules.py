@@ -91,6 +91,32 @@ def test_suggest_rejects_when_scope_empty(client: TestClient) -> None:
     assert response.json()["code"] == "NO_DOCS_FOR_SUGGESTIONS"
 
 
+def test_suggest_from_files_rejects_excess_file_count_without_analysis(
+    client: TestClient,
+) -> None:
+    files = [
+        ("files", (f"synthetic-{index}.pdf", b"synthetic", "application/pdf"))
+        for index in range(21)
+    ]
+
+    response = client.post("/api/v1/rules/suggest/from-files", files=files)
+
+    assert response.status_code == 413
+    assert response.json()["code"] == "RULE_SUGGEST_TOO_MANY_DOCUMENTS"
+
+
+def test_suggest_from_files_rejects_unreadable_input_without_partial_results(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/rules/suggest/from-files",
+        files={"files": ("synthetic.txt", b"SYNTHETIC-CONTENT", "text/plain")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "RULE_SUGGEST_INPUT_INCOMPLETE"
+
+
 def test_suggest_returns_filtered_rules(client: TestClient, sample_pdf_bytes: bytes) -> None:
     upload = client.post(
         "/api/v1/documents",
@@ -120,6 +146,48 @@ def test_suggest_returns_filtered_rules(client: TestClient, sample_pdf_bytes: by
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["documents_analyzed"] == 1
+    assert body["documents_truncated"] == 0
     assert len(body["suggestions"]) == 1
     assert body["suggestions"][0]["pattern"] == "must"
     assert body["suggestions"][0]["kind"] == "term_replace"
+
+
+def test_suggest_from_files_truncates_real_sized_documents_instead_of_413(
+    client: TestClient,
+) -> None:
+    """H-04 hardening: a real multi-page PDF easily produces more extracted
+    text than one Mistral request can take. Before this fix, the full text
+    of a single such document was enough to blow `MAX_RULE_SUGGEST_INPUT_CHARS`
+    and the endpoint returned 413 for perfectly normal input, making
+    "Suggerer des regles" unusable. It must now truncate per document and
+    still produce suggestions, surfacing the cut via `documents_truncated`
+    rather than failing outright or hiding it."""
+    import fitz
+
+    paragraph = "Install the bracket and torque the bolt to the specified value. " * 20
+    doc = fitz.open()
+    for _ in range(10):  # 10 pages -> extracted text well above the 6_000 char budget
+        page = doc.new_page()
+        page.insert_textbox(fitz.Rect(36, 36, 560, 800), paragraph, fontsize=8)
+    pdf_bytes = doc.tobytes()
+    doc.close()
+
+    with patch(
+        "app.core.ingest.to_pdf_bytes",
+        return_value=(pdf_bytes, "manual.pdf", "native"),
+    ), patch(
+        "app.api.rules.suggest_rules_from_corpus",
+        return_value=[],
+    ) as mocked:
+        response = client.post(
+            "/api/v1/rules/suggest/from-files",
+            files={"files": ("manual.pdf", b"synthetic", "application/pdf")},
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["documents_analyzed"] == 1
+    assert body["documents_truncated"] == 1
+    sent_samples = mocked.call_args.args[1]
+    assert len(sent_samples[0]) <= 6_100  # per-doc budget + header/marker slack
+    assert sent_samples[0].rstrip().endswith("[...]")

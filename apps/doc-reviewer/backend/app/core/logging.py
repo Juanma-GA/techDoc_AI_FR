@@ -37,6 +37,7 @@ def sanitize_llm_debug(value: Any, *, _key: str = "") -> Any:
         match = re.fullmatch(r"data:([^;]+);base64,(.*)", value, flags=re.IGNORECASE | re.DOTALL)
         if match:
             return {"inline_image": match.group(1), "base64_chars": len(match.group(2))}
+        return {"text_chars": len(value)}
     return value
 
 
@@ -63,7 +64,10 @@ def configure_logging(level: str = "INFO") -> None:
     root.handlers = [handler]
     root.setLevel(log_level)
     for noisy in ("uvicorn", "uvicorn.access", "uvicorn.error"):
-        logging.getLogger(noisy).propagate = True
+        noisy_logger = logging.getLogger(noisy)
+        noisy_logger.propagate = True
+        if noisy == "uvicorn.access":
+            noisy_logger.disabled = True
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:

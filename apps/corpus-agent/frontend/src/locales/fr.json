@@ -20,7 +20,7 @@
   "llm.title": "État de l'IA (voir Paramètres)",
   "llm.on": "ON",
   "llm.off": "OFF",
-  "llm.untested": "A TESTER",
+  "llm.untested": "À TESTER",
   "llm.noKey": "NO KEY",
   "errors.boundary.title": "Quelque chose a mal tourné",
   "errors.boundary.description": "L'interface a rencontré une erreur. Vous pouvez recharger la page pour réessayer.",

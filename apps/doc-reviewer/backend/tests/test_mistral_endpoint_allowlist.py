@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
+from cryptography.fernet import Fernet
 
 from app.config import settings
 from app.core.errors import AppError
@@ -16,6 +17,11 @@ from app.db.session import SessionLocal
 # ---------------------------------------------------------------------------
 # Mistral : pas d'exfiltration de la cle / SSRF via base_url
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _configure_test_encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "encryption_key", Fernet.generate_key().decode("ascii"))
 
 
 @pytest.fixture

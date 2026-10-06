@@ -1,7 +1,8 @@
 {
   "app": {
     "title": "doc-writer",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Génération de contenu à partir de documents et modèles, avec assistance Mistral."
   },
   "nav": {
     "portal": "Portail",

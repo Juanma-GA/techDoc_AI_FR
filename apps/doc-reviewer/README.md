@@ -24,6 +24,14 @@ validation remain environment-dependent.
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+## CI And Repository Content
+
+The dedicated GitHub Actions workflow is an intentional exception to the
+local-first standard's CI scope. Its content-policy job rejects tracked `.pdf`,
+`.doc`, and `.docx` files under `apps/doc-reviewer/`. It checks file paths only
+and does not read document contents. This applies to committed files, not
+documents imported locally while using the app.
+
 ## Port
 
 The target default port is `8003`, followed by the next free port when needed.

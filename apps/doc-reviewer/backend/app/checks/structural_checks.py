@@ -22,6 +22,12 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.checks.raw import RawSuggestion
+from app.core.regex_safety import (
+    USER_REGEX_TIMEOUT_SECONDS,
+    UserRegexPatternError,
+    compile_user_regex,
+    mark_user_regex_incomplete,
+)
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 
@@ -34,7 +40,11 @@ STRUCTURAL_KINDS = {
 }
 
 
-def run(parsed: ParsedPdf, catalog: list[dict[str, Any]]) -> list[RawSuggestion]:
+def run(
+    parsed: ParsedPdf,
+    catalog: list[dict[str, Any]],
+    warnings: list[str] | None = None,
+) -> list[RawSuggestion]:
     """Execute every structural rule from `catalog` against the full doc."""
     out: list[RawSuggestion] = []
     full_text = parsed.full_text or ""
@@ -50,7 +60,7 @@ def run(parsed: ParsedPdf, catalog: list[dict[str, Any]]) -> list[RawSuggestion]
         elif kind == "field_consistency":
             out.extend(_field_consistency(rule, full_text, first_page))
         elif kind == "step_pattern":
-            out.extend(_step_pattern(rule, parsed.pages))
+            out.extend(_step_pattern(rule, parsed.pages, warnings=warnings))
         elif kind == "enum_value":
             out.extend(_enum_value(rule, full_text, first_page))
     return out
@@ -95,7 +105,11 @@ def _section_required(rule: dict[str, Any], text: str, page: int) -> Iterable[Ra
     yield from _field_required(rule, text, page)
 
 
-def _step_pattern(rule: dict[str, Any], pages: list[ParsedPage]) -> Iterable[RawSuggestion]:
+def _step_pattern(
+    rule: dict[str, Any],
+    pages: list[ParsedPage],
+    warnings: list[str] | None = None,
+) -> Iterable[RawSuggestion]:
     """Flag procedure steps that don't match the required pattern.
 
     A step is a line beginning with an **explicit ordinal** (`1.`, `2)`,
@@ -113,8 +127,9 @@ def _step_pattern(rule: dict[str, Any], pages: list[ParsedPage]) -> Iterable[Raw
     if not pattern:
         return
     try:
-        verb_re = re.compile(pattern)
-    except re.error:
+        verb_re = compile_user_regex(pattern)
+    except UserRegexPatternError:
+        mark_user_regex_incomplete(warnings)
         return
     # Numbered list markers only. Captures: "1.", "1)", "(1)", "1]",
     # "Step 1.", "Étape 1.". No bullets / dashes.
@@ -127,8 +142,12 @@ def _step_pattern(rule: dict[str, Any], pages: list[ParsedPage]) -> Iterable[Raw
             step_body = m.group(1).strip()
             if not step_body:
                 continue
-            if verb_re.match(step_body):
-                continue
+            try:
+                if verb_re.match(step_body, timeout=USER_REGEX_TIMEOUT_SECONDS):
+                    continue
+            except TimeoutError:
+                mark_user_regex_incomplete(warnings)
+                break
             if _looks_like_field_label(step_body):
                 # Single short capitalised word → handled by other rules.
                 continue

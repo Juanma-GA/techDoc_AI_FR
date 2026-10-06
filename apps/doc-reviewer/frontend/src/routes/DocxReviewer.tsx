@@ -8,13 +8,14 @@ import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
 import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { IncompleteChecksNotice } from "../components/reviewer/IncompleteChecksNotice";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
   useApplySuggestion,
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocxBlocks, useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
+import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
 import { useViewerStore } from "../stores/viewerStore";
 
 /**
@@ -23,13 +24,16 @@ import { useViewerStore } from "../stores/viewerStore";
  * porteurs d'une anomalie sont surlignés) et le panneau de suggestions à
  * droite (réutilisé du reviewer PDF). L'export rend le `.docx` corrigé.
  */
-export function DocxReviewer({ documentId }: { documentId: string }) {
+export function DocxReviewer({
+  documentId,
+}: { documentId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
   const document = useDocument(documentId);
   const blocks = useDocxBlocks(documentId, true);
   const suggestions = useSuggestions(documentId);
+  const ruleResults = useRuleResults(documentId);
   const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
   const revert = useRevertSuggestion(documentId);
@@ -125,6 +129,10 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
         </div>
 
         <AnalysisTargetBanner />
+        <IncompleteChecksNotice
+          results={ruleResults.data ?? []}
+          isRunning={analyze.status === "running"}
+        />
 
         <main className="reviewer-canvas reviewer-canvas-stack" style={{ overflow: "auto", padding: 16 }}>
           {document.data ? <DocumentMetaPanel document={document.data} /> : null}

@@ -9,10 +9,9 @@ analysis pipeline still runs.
 from __future__ import annotations
 
 import json
-import logging
 from urllib.parse import urlsplit, urlunsplit
 
-from sqlalchemy import select
+import structlog
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -21,7 +20,7 @@ from app.core.errors import AppError
 from app.db.models import AppConfig
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _KEYS = ("api_key", "base_url", "chat_model", "vision_model")
 _PREFIX = "mistral."
@@ -30,22 +29,12 @@ _PREFIX = "mistral."
 # (cf. encryption.py). Seul le secret Mistral est sensible ; base_url et modeles
 # restent en clair.
 ENCRYPTED_KEYS = {"api_key"}
-_PLAINTEXT_WARNING_LOGGED = False
-
-
 def _get_secret_manager():  # type: ignore[no-untyped-def]
     """Create the configured secret manager for persisted Mistral settings."""
-    global _PLAINTEXT_WARNING_LOGGED
-
-    from app.core.encryption import SecretManager
+    from app.core.encryption import EncryptionError, SecretManager
 
     if not settings.encryption_key:
-        if not _PLAINTEXT_WARNING_LOGGED:
-            logger.warning(
-                "Encryption key not configured - local-only Mistral secrets are stored in plaintext"
-            )
-            _PLAINTEXT_WARNING_LOGGED = True
-        return SecretManager(None)
+        raise EncryptionError("ENCRYPTION_KEY_REQUIRED")
     return SecretManager(settings.encryption_key)
 
 
@@ -56,10 +45,32 @@ def _get(db: Session, key: str) -> str | None:
     if key in ENCRYPTED_KEYS:
         try:
             return _get_secret_manager().decrypt(row.value)
-        except Exception as e:  # noqa: BLE001
-            logger.error("Failed to decrypt %s: %s", key, e)
+        except Exception:  # noqa: BLE001
+            # H-03 hardening : une cle ENCRYPTION_KEY manquante/rotee, ou une
+            # valeur heritee d'avant le chiffrement obligatoire (texte clair),
+            # rendait ce secret illisible SANS AUCUN signal visible pour
+            # l'utilisateur -- seul ce log. `is_secret_unreadable` expose
+            # maintenant l'etat a l'API pour un avertissement explicite.
+            logger.error("Failed to decrypt Mistral setting", setting=key)
             return None
     return row.value
+
+
+def is_secret_unreadable(db: Session, key: str) -> bool:
+    """True when a secret is stored (non-empty) but cannot be decrypted with
+    the currently configured ENCRYPTION_KEY -- see `_get` (H-03 hardening).
+    Lets the API/UI surface a visible warning instead of acting as if no
+    key had ever been saved."""
+    if key not in ENCRYPTED_KEYS:
+        return False
+    row = db.get(AppConfig, _PREFIX + key)
+    if row is None or not row.value:
+        return False
+    try:
+        _get_secret_manager().decrypt(row.value)
+        return False
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _set(db: Session, key: str, value: str) -> None:

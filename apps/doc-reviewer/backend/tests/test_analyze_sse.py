@@ -10,16 +10,47 @@ import io
 import hashlib
 import json
 import uuid
+from types import SimpleNamespace
 
 from openpyxl import Workbook
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.checks.client_registry import load_active_client_configuration
+from app.api import analyze as analyze_api
 from app.api import rules as rules_api
+from app.api.analyze import latest_rule_results
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 from app.db.models import AnalysisRun, Document
 from app.db.session import SessionLocal
+
+
+def test_rule_results_include_human_readable_titles_from_synthetic_snapshot() -> None:
+    snapshot = {
+        "rules": [{"id": "CHECKLIST_REVISION_DATE", "topic": "Revision date"}],
+        "results": [
+            {
+                "rule_id": "CHECKLIST_REVISION_DATE",
+                "inconclusive_pages": ["24", "26"],
+                "status": "INCONCLUSIVE",
+                "evidence": {
+                    "page": "1",
+                    "location": {"type": "bbox", "bbox": [0, 0, 0, 0]},
+                    "observed_value": None,
+                    "expected_value": None,
+                },
+            }
+        ],
+    }
+    run = SimpleNamespace(compiled_rules_snapshot_json=json.dumps(snapshot))
+    db = SimpleNamespace(scalar=lambda _statement: run)
+
+    results = latest_rule_results(uuid.uuid4(), db)  # type: ignore[arg-type]
+
+    assert len(results) == 1
+    assert results[0].status == "INCONCLUSIVE"
+    assert results[0].rule_title == "Revision date"
+    assert results[0].inconclusive_pages == ["24", "26"]
 
 
 def _set_document_context(client: TestClient, document_id: str) -> None:
@@ -73,6 +104,7 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
 
     assert b"run_started" in body
     assert b"done" in body
+    assert b"event: page_statuses" in body
 
     sugs = client.get(f"/api/v1/documents/{doc_id}/suggestions")
     assert sugs.status_code == 200
@@ -80,6 +112,218 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     # At least one units suggestion should pop up because the fixture pdf
     # contains both "12 cm" and "5 in".
     assert any(r["rule_kind"] == "units" for r in rows)
+
+
+def test_analyze_accepts_previous_revision_pdf(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+    monkeypatch,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    captured_previous: list = []
+
+    def capture_previous(*_args, **kwargs):
+        captured_previous.append(kwargs["previous_revision_pdf"])
+        return []
+
+    monkeypatch.setattr(analyze_api, "run_all", capture_previous)
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        files={
+            "previous_revision_file": (
+                "manual-rev-00.pdf",
+                sample_pdf_bytes,
+                "application/pdf",
+            )
+        },
+    ) as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes())
+
+    assert b"done" in body
+    assert len(captured_previous) == 1
+    assert captured_previous[0].page_count == 1
+
+
+def test_analyze_rejects_non_pdf_previous_revision(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    response = client.post(
+        f"/api/v1/documents/{document_id}/analyze",
+        files={
+            "previous_revision_file": (
+                "manual-rev-00.docx",
+                sample_pdf_bytes,
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "PREVIOUS_REVISION_BAD_FORMAT"
+
+
+def test_analyze_rejects_invalid_pdf_previous_revision(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    response = client.post(
+        f"/api/v1/documents/{document_id}/analyze",
+        files={
+            "previous_revision_file": (
+                "manual-rev-00.pdf",
+                b"not a PDF",
+                "application/pdf",
+            )
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "PREVIOUS_REVISION_INVALID_PDF"
+
+
+def test_manual_page_rerun_preserves_suggestions_on_other_pages(
+    client: TestClient,
+) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    for page_number in range(1, 3):
+        page = pdf.new_page(width=400, height=300)
+        page.insert_text(
+            (40, 100),
+            f"Replace the fitting after 12 cm on page {page_number}.",
+            fontname="helv",
+            fontsize=12,
+        )
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("two-pages.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    with client.stream("POST", f"/api/v1/documents/{document_id}/analyze") as stream:
+        assert stream.status_code == 200
+        first_body = b"".join(stream.iter_bytes())
+    assert b"done" in first_body
+
+    before = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
+    page_two_ids = {item["id"] for item in before if item["page"] == 2}
+    assert page_two_ids
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        params={
+            "modified_only": "false",
+            "page_number": "1",
+            "page_overrides": json.dumps({"1": True}),
+        },
+    ) as stream:
+        assert stream.status_code == 200
+        rerun_body = b"".join(stream.iter_bytes())
+
+    assert b"event: page_statuses" in rerun_body
+    assert b'"is_modified": true' in rerun_body
+    after = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
+    assert page_two_ids <= {item["id"] for item in after}
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        params={
+            "modified_only": "false",
+            "page_number": "1",
+            "page_overrides": json.dumps({"1": False}),
+        },
+    ) as stream:
+        assert stream.status_code == 200
+        unchanged_body = b"".join(stream.iter_bytes())
+
+    assert b'"is_modified": false' in unchanged_body
+    unchanged = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
+    assert not any(item["page"] == 1 and item["status"] not in {"applied", "rejected"} for item in unchanged)
+    assert page_two_ids <= {item["id"] for item in unchanged}
+
+
+def test_unchanged_page_is_removed_before_rules_run(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    for page_number in range(1, 3):
+        page = pdf.new_page(width=400, height=300)
+        page.insert_text(
+            (40, 100),
+            f"Replace the fitting after 12 cm on page {page_number}.",
+            fontname="helv",
+            fontsize=12,
+        )
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("two-pages.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    analyzed_pages: list[int] = []
+
+    def capture_rule_pages(parsed, *_args, **_kwargs):
+        analyzed_pages.extend(page.page for page in parsed.pages)
+        return []
+
+    monkeypatch.setattr(analyze_api, "run_all", capture_rule_pages)
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        params={
+            "modified_only": "true",
+            "page_overrides": json.dumps({"1": False}),
+        },
+    ) as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes())
+
+    assert b"done" in body
+    assert analyzed_pages == [2]
 
 
 def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) -> None:

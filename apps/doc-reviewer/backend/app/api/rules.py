@@ -1,12 +1,10 @@
 """Rules CRUD — user-defined regex rules used during analyze."""
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -14,6 +12,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.checks.client_registry import active_standard_versions
 from app.config import settings
 from app.core import ingest
@@ -56,9 +55,23 @@ _CHECKLIST_TEMPLATE = Path(__file__).resolve().parent.parent / "static" / "check
 logger = structlog.get_logger(__name__)
 
 
-_SUGGEST_TEXT_BUDGET = 12_000  # total chars sent to Mistral
-_SUGGEST_PER_DOC_BUDGET = 2_000  # per-document char cap
 _SUGGEST_MAX_DOCS = 20  # never sample more than this
+_SUGGEST_PER_DOC_BUDGET = 6_000  # chars kept per document before the LLM call (H-04)
+
+
+def _truncate_sample(text: str, limit: int) -> tuple[str, bool]:
+    """Cap `text` to `limit` chars at a whitespace boundary (never mid-word)
+    and mark the cut explicitly in the returned text (H-04 hardening: a real
+    multi-page PDF easily exceeds the total request budget when sent whole;
+    per-document truncation keeps the feature usable, and the explicit
+    `[...]` marker — plus `documents_truncated` in the response — means the
+    cut is visible instead of silent)."""
+    if len(text) <= limit:
+        return text, False
+    cut = text.rfind(" ", 0, limit)
+    if cut <= 0:
+        cut = limit
+    return text[:cut].rstrip() + " [...]", True
 
 
 router = APIRouter(tags=["rules"])
@@ -348,32 +361,42 @@ def suggest_rules(
             "Aucun document dans le périmètre — uploade d'abord des PDFs.",
             status_code=400,
         )
+    if len(documents) > _SUGGEST_MAX_DOCS:
+        raise AppError(
+            "RULE_SUGGEST_TOO_MANY_DOCUMENTS",
+            f"Sélectionnez au plus {_SUGGEST_MAX_DOCS} documents; aucun document n'a été ignoré.",
+            status_code=413,
+        )
 
     samples: list[str] = []
-    total_chars = 0
     docs_analyzed = 0
-    for doc in documents[:_SUGGEST_MAX_DOCS]:
+    docs_truncated = 0
+    for doc in documents:
         try:
             pdf_path = current_path(doc.storage_dir, doc.current_version)
             parsed = parse_pdf(pdf_path)
         except Exception as exc:
-            # A missing or unparseable snapshot must not sink the whole call.
             logger.warning(
                 "rule_suggest_doc_skipped",
-                document_id=str(doc.id),
                 error=type(exc).__name__,
-                message=str(exc),
             )
-            continue
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un document du périmètre n'a pas pu être analysé intégralement; aucune suggestion n'a été produite.",
+                status_code=422,
+            ) from exc
         text = (parsed.full_text or "").strip()
         if not text:
-            continue
-        snippet = text[:_SUGGEST_PER_DOC_BUDGET]
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un document du périmètre ne contient pas de texte analysable; aucune suggestion n'a été produite.",
+                status_code=422,
+            )
+        snippet, was_truncated = _truncate_sample(text, _SUGGEST_PER_DOC_BUDGET)
+        if was_truncated:
+            docs_truncated += 1
         samples.append(f"=== {doc.original_filename} ===\n{snippet}")
-        total_chars += len(snippet)
         docs_analyzed += 1
-        if total_chars >= _SUGGEST_TEXT_BUDGET:
-            break
 
     if not samples:
         raise AppError(
@@ -401,6 +424,7 @@ def suggest_rules(
             for item in items
         ],
         documents_analyzed=docs_analyzed,
+        documents_truncated=docs_truncated,
     )
 
 
@@ -656,30 +680,48 @@ def suggest_rules_from_files(
     regles proposees a une norme (optionnel)."""
     import fitz  # PyMuPDF
 
+    if len(files) > _SUGGEST_MAX_DOCS:
+        raise AppError(
+            "RULE_SUGGEST_TOO_MANY_DOCUMENTS",
+            f"Sélectionnez au plus {_SUGGEST_MAX_DOCS} fichiers; aucun fichier n'a été ignoré.",
+            status_code=413,
+        )
+
     samples: list[str] = []
-    total = 0
     analyzed = 0
+    truncated = 0
     for f in files[:_SUGGEST_MAX_DOCS]:
         data = read_upload_limited(f, settings.max_upload_size_bytes)
         try:
             pdf_bytes, name, _engine = ingest.to_pdf_bytes(f.filename or "upload", data)
-        except AppError:
-            continue  # format non supporte / conversion indisponible -> on saute
+        except AppError as exc:
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un fichier du périmètre n'a pas pu être converti; aucune suggestion n'a été produite.",
+                status_code=422,
+            ) from exc
         try:
             fdoc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text = "\n".join(p.get_text() for p in fdoc)
             fdoc.close()
-        except Exception:  # noqa: BLE001
-            continue
+        except Exception as exc:  # noqa: BLE001
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un fichier du périmètre n'a pas pu être analysé intégralement; aucune suggestion n'a été produite.",
+                status_code=422,
+            ) from exc
         text = (text or "").strip()
         if not text:
-            continue
-        snippet = text[:_SUGGEST_PER_DOC_BUDGET]
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un fichier du périmètre ne contient pas de texte analysable; aucune suggestion n'a été produite.",
+                status_code=422,
+            )
+        snippet, was_truncated = _truncate_sample(text, _SUGGEST_PER_DOC_BUDGET)
+        if was_truncated:
+            truncated += 1
         samples.append(f"=== {name} ===\n{snippet}")
-        total += len(snippet)
         analyzed += 1
-        if total >= _SUGGEST_TEXT_BUDGET:
-            break
 
     if not samples:
         raise AppError(
@@ -706,4 +748,5 @@ def suggest_rules_from_files(
             for item in items
         ],
         documents_analyzed=analyzed,
+        documents_truncated=truncated,
     )

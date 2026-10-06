@@ -4,6 +4,14 @@
     "version": "0.1.0",
     "description": "Boîte à outils d'automatisations CATIA sur données exportées (pas de CATIA live) : identification de nomenclature, conversion vers Composer, colorisation SMGXML et comparaison de versions."
   },
+  "llm": {
+    "label": "LLM",
+    "title": "État du LLM (voir Paramètres)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  },
   "nav": {
     "identification": "Nomenclature / DE",
     "import": "Source (scan / sélection)",

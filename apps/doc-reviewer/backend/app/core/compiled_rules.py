@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.regex_safety import UserRegexPatternError, compile_user_regex
 from app.core.primitive_catalog import PRIMITIVE_CATALOG, REFERENCE_CATALOG
 
 
@@ -192,9 +193,9 @@ class Check(StrictModel):
             if not isinstance(self.expected, str) or not self.expected:
                 raise ValueError(f"{self.operator} requires a non-empty regex string")
             try:
-                re.compile(self.expected)
-            except re.error as exc:
-                raise ValueError(f"regex invalide: {exc.msg}") from exc
+                compile_user_regex(self.expected)
+            except UserRegexPatternError as exc:
+                raise ValueError(f"regex invalide: {exc.message}") from exc
         if self.operator == "pressure_conversion" and self.expected != "bar_to_psi":
             raise ValueError("pressure_conversion requires expected='bar_to_psi'")
         if self.operator == "unit_conversion" and self.expected not in {
@@ -235,9 +236,9 @@ class Check(StrictModel):
                 raise ValueError("font_size_equals requires a positive expected value")
         if self.missing_anchor is not None:
             try:
-                re.compile(self.missing_anchor)
-            except re.error as exc:
-                raise ValueError(f"missing_anchor invalide: {exc.msg}") from exc
+                compile_user_regex(self.missing_anchor)
+            except UserRegexPatternError as exc:
+                raise ValueError(f"missing_anchor invalide: {exc.message}") from exc
         if self.operator not in {"normalized_equals", "equals_field"} and self.normalization is not None:
             raise ValueError("normalization is only allowed with normalized_equals or equals_field")
         if self.replacement is not None and self.operator not in {"regex", "not_exists", "contains_none"}:
@@ -384,8 +385,10 @@ class CompiledRule(StrictModel):
 
 class RuleResult(StrictModel):
     rule_id: str = Field(min_length=1, max_length=120)
+    rule_title: str | None = None
     status: Literal["PASS", "FAIL", "MANUAL", "UNSUPPORTED", "INCONCLUSIVE"]
     evidence: Evidence | None = None
+    inconclusive_pages: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_evidence(self) -> RuleResult:

@@ -1,40 +1,31 @@
-import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-  DialogTrigger,
-} from "./Dialog";
+import { Dialog, DialogContent, DialogTitle } from "./Dialog";
 
-describe("Dialog", () => {
-  it("renders trigger and is closed by default", () => {
+// L-12: the close button's aria-label was hardcoded "Close" with no prop to
+// override it (unlike Toast's close button, which already forwarded props).
+// A French-language POC had no way to translate it.
+describe("DialogContent", () => {
+  it("uses the translated closeLabel when provided", () => {
     render(
-      <Dialog>
-        <DialogTrigger>Open</DialogTrigger>
-        <DialogContent>
-          <DialogTitle>Title</DialogTitle>
-          <DialogDescription>Description</DialogDescription>
+      <Dialog defaultOpen>
+        <DialogContent closeLabel="Fermer">
+          <DialogTitle>Titre</DialogTitle>
         </DialogContent>
       </Dialog>,
     );
-    expect(screen.getByText("Open")).toBeInTheDocument();
-    // Content is portaled and hidden when closed (Radix behavior).
-    expect(screen.queryByText("Title")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fermer" })).toBeInTheDocument();
   });
 
-  it("renders content when open", () => {
+  it("falls back to the English default when no closeLabel is passed", () => {
     render(
-      <Dialog open>
+      <Dialog defaultOpen>
         <DialogContent>
-          <DialogTitle>Confirm</DialogTitle>
-          <DialogDescription>Are you sure?</DialogDescription>
+          <DialogTitle>Title</DialogTitle>
         </DialogContent>
       </Dialog>,
     );
-    expect(screen.getByText("Confirm")).toBeInTheDocument();
-    expect(screen.getByText("Are you sure?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 });

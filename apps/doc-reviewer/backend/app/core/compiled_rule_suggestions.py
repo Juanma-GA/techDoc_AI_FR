@@ -9,6 +9,7 @@ from typing import Any
 
 from app.checks.raw import RawSuggestion
 from app.core.compiled_rules import Check, CompiledRule
+from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
 from app.parsers.pdf_parser import ParsedPage
 
 from app.core.compiled_rule_runtime import (
@@ -300,7 +301,7 @@ def client_operation_suggestions_for_rule(
             RawSuggestion(
                 rule_kind=rule_kind,
                 rule_code=rule.id,
-                severity=rule.severity,
+                severity=result.severity or rule.severity,
                 message=result.message or rule.failure_message or rule.topic,
                 original=result.original,
                 proposed=result.proposed or "",
@@ -829,10 +830,8 @@ def missing_item_bbox(
     for check in rule.checks:
         if not check.missing_anchor:
             continue
-        try:
-            match = re.search(check.missing_anchor, target.text)
-        except re.error:
-            match = None
+        pattern = compile_user_regex(check.missing_anchor)
+        match = pattern.search(target.text, timeout=USER_REGEX_TIMEOUT_SECONDS)
         if match is None:
             continue
         anchor = observed_bbox(
@@ -1108,15 +1107,13 @@ def regex_suggestions(
     )
     if missing_context:
         return []
-    try:
-        matches = [
-            (target, match)
-            for target in targets
-            for match in re.finditer(resolved_pattern, target.text)
-            if match.group(0)
-        ]
-    except re.error:
-        return []
+    pattern = compile_user_regex(resolved_pattern)
+    matches = [
+        (target, match)
+        for target in targets
+        for match in pattern.finditer(target.text, timeout=USER_REGEX_TIMEOUT_SECONDS)
+        if match.group(0)
+    ]
     suggestions: list[RawSuggestion] = []
     replacement = resolve_replacement_template(check.replacement, ctx.document)
     for target, match in matches:

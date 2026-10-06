@@ -1,10 +1,63 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Starter shell for ATEXIS proof-of-concept apps."
+  },
+  "nav": {
+    "ariaLabel": "Main navigation",
+    "themeToggle": "Switch theme",
+    "languageSwitcher": "Language",
+    "home": "Home",
+    "data": "Data",
+    "settings": "Settings"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "LLM status (see Settings)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "UNTESTED",
+    "noKey": "NO KEY"
+  },
+  "common": {
+    "loading": "Loading…",
+    "confirm": "Confirm",
+    "save": "Save"
   },
   "home": {
     "title": "Welcome",
     "subtitle": "POC skeleton — adapt routes/Home.tsx, app/api/, and locales/."
+  },
+  "data": {
+    "title": "Data",
+    "subtitle": "Local data status for this application.",
+    "overview": "Overview",
+    "documents": "Documents",
+    "chunks": "Chunks",
+    "sessions": "Sessions",
+    "messages": "Messages",
+    "storage": "Storage",
+    "resetTitle": "Reset data",
+    "resetHint": "Settings and LLM configuration are preserved.",
+    "resetButton": "Delete all data",
+    "resetDone": "Reset complete ({{count}} items deleted)."
+  },
+  "settings": {
+    "ai.title": "Artificial intelligence",
+    "ai.toggleLabel": "LLM enabled",
+    "ai.toggleHint": "Disabling skips tasks delegated to AI. The Mistral key is kept.",
+    "mistral.title": "Mistral configuration",
+    "mistral.configured": "CONFIGURED",
+    "mistral.notConfigured": "NOT CONFIGURED",
+    "mistral.apiKeyLabel": "Mistral API key",
+    "mistral.apiKeyHint": "A key is already saved (leave empty to keep it).",
+    "mistral.baseUrlLabel": "Base URL",
+    "mistral.chatModelLabel": "Chat model",
+    "mistral.embedModelLabel": "Embeddings model",
+    "mistral.test": "Test connection",
+    "mistral.saveSuccess": "Settings saved.",
+    "mistral.testSuccess": "Connection OK ({{count}} models available).",
+    "mistral.testError": "Failed: {{message}}"
   }
 }

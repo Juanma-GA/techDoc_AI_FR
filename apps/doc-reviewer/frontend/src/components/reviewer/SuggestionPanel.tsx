@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFiltersStore } from "../../stores/filtersStore";
-import { localizedSuggestionMessage } from "../../lib/suggestionText";
+import { localizedRuleCode, localizedSuggestionMessage } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 import { SuggestionItem } from "./SuggestionItem";
 
@@ -141,7 +141,7 @@ export function SuggestionPanel({
           <option value="">{t("reviewer.panel.filters.allRules")}</option>
           {ruleCodes.map((code) => (
             <option key={code} value={code}>
-              {code}
+              {localizedRuleCode(code, t)}
             </option>
           ))}
         </select>
@@ -171,7 +171,9 @@ export function SuggestionPanel({
                       aria-expanded={isExpanded}
                     >
                       {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <span className="suggestion-loc">{head.rule_code}</span>
+                      <span className="suggestion-loc">
+                        {localizedRuleCode(head.rule_code, t)}
+                      </span>
                       <span className="suggestion-msg" style={{ flex: 1, textAlign: "left" }}>
                         {headMessage}
                       </span>

@@ -193,8 +193,7 @@ class Suggestion(Base):
     )
     rule_kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     rule_code: Mapped[str] = mapped_column(String(80), nullable=False)
-    # Provenance affichee dans la liste des anomalies : "norme" | "checklist" |
-    # "regle" (custom deterministe) | "transverse" (unites/mise en page/vision).
+    # Provenance affichee : norme, checklist, regle, transverse ou sortie IA.
     # Calculee a la materialisation par `rules_engine.classify_source`.
     source_kind: Mapped[str] = mapped_column(
         String(20), default="norme", server_default="norme", index=True

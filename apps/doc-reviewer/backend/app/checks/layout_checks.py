@@ -15,16 +15,16 @@ beaucoup de bruit) : a affiner sur de vrais documents.
 
 from __future__ import annotations
 
-import logging
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
 import fitz  # PyMuPDF
+import structlog
 
 from app.checks.raw import RawSuggestion
 
-log = logging.getLogger("doc_reviewer.layout_checks")
+log = structlog.get_logger(__name__)
 
 # Seuils (en % de la dimension de page sauf mention).
 _TITLE_SIZE_RATIO = 1.2   # police "titre" >= 1.2x la mediane du corps (exclut les titres du check marge)
@@ -78,19 +78,20 @@ def _finding(code: str, severity: str, message: str, page: int,
     )
 
 
-def run(src_path: str | None) -> list[RawSuggestion]:
+def run(src_path: str | None, warnings: list[str] | None = None) -> list[RawSuggestion]:
     if not src_path or not Path(src_path).is_file():
         return []
     try:
         doc = fitz.open(src_path)
     except Exception as exc:  # noqa: BLE001
-        log.warning("layout_open_failed: %s", exc)
+        log.warning("layout_open_failed", error=type(exc).__name__)
         return []
     out: list[RawSuggestion] = []
     footer_centers: list[tuple[int, float, _Line]] = []
     try:
         for i in range(doc.page_count):
             if len(out) >= _MAX_FINDINGS:
+                _mark_layout_incomplete(warnings)
                 break
             page = doc.load_page(i)
             w = page.rect.width or 1.0
@@ -120,6 +121,9 @@ def run(src_path: str | None) -> list[RawSuggestion]:
                     # Seul un decalage vers la DROITE (indentation isolee) est
                     # signale ; un retrait a gauche est souvent une liste/titre.
                     if dev > _MARGIN_TOL:
+                        if len(out) >= _MAX_FINDINGS:
+                            _mark_layout_incomplete(warnings)
+                            break
                         out.append(_finding(
                             "LAYOUT_LEFT_MARGIN", "info",
                             f"Ligne desalignee a gauche ({dev:.0f}% de retrait vs la marge).",
@@ -129,25 +133,37 @@ def run(src_path: str | None) -> list[RawSuggestion]:
             # --- Collecte pied de page ---
             footer_lines = [ln for ln in lines if 100 * ln.y0 / h > _FOOTER_BAND_TOP]
             if not footer_lines:
-                out.append(_finding(
-                    "LAYOUT_FOOTER", "warning",
-                    f"Pied de page absent (page {i + 1}).",
-                    i + 1, None,
-                ))
+                if len(out) >= _MAX_FINDINGS:
+                    _mark_layout_incomplete(warnings)
+                else:
+                    out.append(_finding(
+                        "LAYOUT_FOOTER", "warning",
+                        f"Pied de page absent (page {i + 1}).",
+                        i + 1, None,
+                    ))
             else:
                 fl = footer_lines[0]
                 footer_centers.append((i + 1, 100 * ((fl.x0 + fl.x1) / 2) / w, fl))
 
         # --- Regle 3 : coherence de position des pieds entre pages ---
-        if len(footer_centers) >= 2 and len(out) < _MAX_FINDINGS:
+        if len(footer_centers) >= 2:
             ref = statistics.median([c for _, c, _ in footer_centers])
             for page_no, c, fl in footer_centers:
                 if abs(c - ref) > _FOOTER_ALIGN_TOL:
+                    if len(out) >= _MAX_FINDINGS:
+                        _mark_layout_incomplete(warnings)
+                        break
                     out.append(_finding(
                         "LAYOUT_FOOTER", "info",
                         f"Pied de page mal aligne (page {page_no}, {abs(c - ref):.0f}% d'ecart).",
                         page_no, (fl.x0, fl.y0, fl.x1, fl.y1),
                     ))
-        return out[:_MAX_FINDINGS]
+        return out
     finally:
         doc.close()
+
+
+def _mark_layout_incomplete(warnings: list[str] | None) -> None:
+    warning = "La limite de constats de mise en page a été atteinte; les pages restantes n'ont pas été vérifiées."
+    if warnings is not None and warning not in warnings:
+        warnings.append(warning)
