@@ -62,6 +62,8 @@ PDF_ALIAS_TO_FIELD = {
     if not (field == "response_required" and alias in {"response", "reponse"})
 }
 PDF_ALIAS_TO_FIELD["reply req d"] = "response_required"
+PDF_ALIAS_TO_FIELD["date req d"] = "response_required_date"
+PDF_ALIAS_TO_FIELD["if yes date req d"] = "response_required_date"
 RESPONSE_OPTION_PATTERN = re.compile(
     r"\b(?P<option>yes|no|oui|non)\b\s*"
     r"(?P<mark>\u2612|\u2611|\u2610|\u2613|\u2713|\u2714|\[\s*[xX ]\s*\])",
@@ -186,6 +188,7 @@ def extract_fields(text: str) -> tuple[dict[str, str], dict[str, str]]:
     fields = {field: "" for field in FIELD_ALIASES}
     label_values: dict[str, str] = {}
     lines = text.splitlines()
+    response_required_date = ""
     for line_index, line in enumerate(lines):
         parts = _split_known_label_value(line)
         if not parts:
@@ -211,7 +214,10 @@ def extract_fields(text: str) -> tuple[dict[str, str], dict[str, str]]:
             continue
         normalized_label = normalize_label(label)
         label_values.setdefault(normalized_label, value)
-        if field and not fields[field]:
+        if field == "response_required_date":
+            if not response_required_date:
+                response_required_date = value
+        elif field and not fields[field]:
             fields[field] = value
 
     if not fields["reference"]:
@@ -229,6 +235,8 @@ def extract_fields(text: str) -> tuple[dict[str, str], dict[str, str]]:
 
     if not fields["subject"]:
         fields["subject"] = fields["title"]
+    if fields["response_required"].casefold() == "yes" and not fields["response_date"]:
+        fields["response_date"] = response_required_date
     return fields, label_values
 
 

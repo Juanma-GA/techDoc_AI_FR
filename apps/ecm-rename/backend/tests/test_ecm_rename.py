@@ -325,6 +325,35 @@ def test_subject_starting_with_reponse_is_not_treated_as_response_label(
     assert column_values([{"name": "Reponse", "index": 1}], fields, labels) == [expected_response]
 
 
+@pytest.mark.parametrize(
+    ("yes_mark", "no_mark", "expected_response", "expected_date"),
+    [
+        ("\u2612", "\u2610", "Yes", "2026-10-06"),
+        ("\u2610", "\u2612", "No", ""),
+    ],
+)
+@pytest.mark.parametrize("date_label", ["DATE REQ\u00b4D", "IF YES; DATE REQ\u00b4D"])
+def test_date_req_d_populates_response_date_only_when_response_is_yes(
+    yes_mark: str, no_mark: str, expected_response: str, expected_date: str, date_label: str
+) -> None:
+    from app.services.ecm_rename_pdf import column_values, extract_fields
+
+    pdf_text = "\n".join(
+        [
+            "REPLY REQ\u00b4D",
+            f"YES {yes_mark}",
+            f"NO {no_mark}",
+            date_label,
+            "2026-10-06",
+        ]
+    )
+
+    fields, labels = extract_fields(pdf_text)
+
+    assert fields["response_required"] == expected_response
+    assert column_values([{"name": "Date de Réponse", "index": 1}], fields, labels) == [expected_date]
+
+
 def test_create_folders_copies_pdf_without_updating_tracker(client, tmp_path) -> None:
     pdf_path = tmp_path / "ECM-TEST.pdf"
     tracker_path = tmp_path / "Tracker.xlsx"
