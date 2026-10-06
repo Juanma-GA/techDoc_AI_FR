@@ -1,20 +1,21 @@
-import { ArrowLeft, Download, Play } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
-import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
+import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { IncompleteChecksNotice } from "../components/reviewer/IncompleteChecksNotice";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
-  useApplyGroup,
   useApplySuggestion,
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocxBlocks, useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
-import { API_BASE_URL } from "../lib/api";
+import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
 import { useViewerStore } from "../stores/viewerStore";
 
 /**
@@ -23,16 +24,18 @@ import { useViewerStore } from "../stores/viewerStore";
  * porteurs d'une anomalie sont surlignés) et le panneau de suggestions à
  * droite (réutilisé du reviewer PDF). L'export rend le `.docx` corrigé.
  */
-export function DocxReviewer({ documentId }: { documentId: string }) {
+export function DocxReviewer({
+  documentId,
+}: { documentId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
   const document = useDocument(documentId);
   const blocks = useDocxBlocks(documentId, true);
   const suggestions = useSuggestions(documentId);
-  const analyze = useAnalyze(documentId);
+  const ruleResults = useRuleResults(documentId);
+  const analyze = useAnalyze(documentId, document.data);
   const apply = useApplySuggestion(documentId);
-  const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
 
@@ -84,25 +87,9 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
       { onSuccess: () => apply.mutate(id) },
     );
   };
-  const handleApplyGroup = (id: string): void => {
-    applyGroup.mutate(id);
-  };
   const handleUndo = (id: string): void => {
     revert.mutate(id);
   };
-
-  const handleExport = (): void => {
-    if (!document.data) return;
-    // Rend le .docx corrigé (version courante).
-    window.open(`${API_BASE_URL}/documents/${documentId}/export`, "_blank", "noopener,noreferrer");
-  };
-
-  // Le format natif effectivement revise/exporte est celui du fichier importe
-  // (.doc reste .doc, .docx reste .docx) — le libelle du bouton ne doit jamais
-  // dire ".docx" pour un document importe en .doc (cf. `_persist_docx`).
-  const nativeExt = (document.data?.original_filename ?? "").toLowerCase().endsWith(".doc")
-    ? ".doc"
-    : ".docx";
 
   return (
     <div className="reviewer">
@@ -115,18 +102,14 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
             </button>
             <span className="badge info">{t("reviewer.docxMode")}</span>
           </div>
-          <div className="reviewer-toolbar-group">
-            <button
-              type="button"
-              onClick={() => void analyze.start()}
-              disabled={analyze.status === "running"}
-              className="btn secondary small"
-            >
-              <Play size={14} />
-              {analyze.status === "running"
-                ? t("reviewer.toolbar.analyzing")
-                : t("reviewer.toolbar.analyze")}
-            </button>
+          <div className="reviewer-toolbar-group reviewer-toolbar-actions">
+            <AnalysisPageRange
+              pageCount={document.data?.page_count ?? 0}
+              running={analyze.status === "running"}
+              blocked={!analyze.contextReady}
+              blockReason={t("reviewer.meta.required")}
+              onStart={(range) => void analyze.start(range)}
+            />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
                 <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
@@ -141,17 +124,18 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
                 {analyze.warnings[0]}
               </span>
             ) : null}
-            <button type="button" onClick={handleExport} className="btn primary small">
-              <Download size={14} />
-              {t("reviewer.toolbar.exportDocx", { ext: nativeExt })}
-            </button>
-            {document.data ? <DocumentMetaPanel document={document.data} /> : null}
+            <ExportSelector documentId={documentId} />
           </div>
         </div>
 
         <AnalysisTargetBanner />
+        <IncompleteChecksNotice
+          results={ruleResults.data ?? []}
+          isRunning={analyze.status === "running"}
+        />
 
-        <main className="reviewer-canvas" style={{ overflow: "auto", padding: 16 }}>
+        <main className="reviewer-canvas reviewer-canvas-stack" style={{ overflow: "auto", padding: 16 }}>
+          {document.data ? <DocumentMetaPanel document={document.data} /> : null}
           {blocks.isLoading ? (
             <p className="hint">{t("common.loading")}</p>
           ) : (
@@ -215,7 +199,6 @@ export function DocxReviewer({ documentId }: { documentId: string }) {
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}
-        onApplyGroup={handleApplyGroup}
         onUndo={handleUndo}
       />
     </div>

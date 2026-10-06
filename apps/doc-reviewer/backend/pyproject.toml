@@ -10,10 +10,11 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "pydantic>=2.10",
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.7",
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "httpx>=0.28",
+    "regex==2025.11.3",
     "sse-starlette>=2.2",
     "structlog>=24.1",
     "truststore>=0.10",
@@ -31,6 +32,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "httpx>=0.28",
+    "httpx2>=1.0",
     "ruff>=0.6",
     "mypy>=1.10",
 ]
@@ -42,6 +44,11 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 exclude = ["tests*", "alembic*"]
+
+[tool.setuptools.package-data]
+"app.checks" = ["active_client.json"]
+"app.checks.thales_rules" = ["*.json"]
+"app.checks.sample_client" = ["*.json"]
 
 [tool.ruff]
 line-length = 110

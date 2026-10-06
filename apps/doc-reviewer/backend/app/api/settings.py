@@ -1,7 +1,5 @@
 """GET/POST /api/v1/settings/mistral + POST /settings/mistral/test."""
 
-from __future__ import annotations
-
 import structlog
 import httpx
 from fastapi import APIRouter, Depends
@@ -11,7 +9,10 @@ from pydantic import BaseModel
 
 from app.core.mistral_settings import (
     get_ai_custom_prompt,
+    get_checklist_ai_scan,
+    get_checklist_context,
     get_effective,
+    get_endpoint,
     get_feedback_enabled,
     get_llm_enabled,
     get_llm_max_calls,
@@ -19,8 +20,11 @@ from app.core.mistral_settings import (
     get_verify_enabled,
     get_verify_passes,
     get_vision_enabled,
+    is_secret_unreadable,
     save,
     set_ai_custom_prompt,
+    set_checklist_ai_scan,
+    set_checklist_context,
     set_feedback_enabled,
     set_llm_enabled,
     set_llm_max_calls,
@@ -29,8 +33,16 @@ from app.core.mistral_settings import (
     set_verify_passes,
     set_vision_enabled,
 )
+from app.core.encryption import EncryptionError
+from app.core.errors import AppError
 from app.db.session import get_db
-from app.schemas import MistralSettingsIn, MistralSettingsOut, TestConnectionOut
+from app.schemas import (
+    ChecklistContextIn,
+    ChecklistContextOut,
+    MistralSettingsIn,
+    MistralSettingsOut,
+    TestConnectionOut,
+)
 
 # Inject the OS trust store into Python's ssl module so corporate CAs and
 # transparent SSL proxies work without `pip install certifi --upgrade` games.
@@ -57,12 +69,14 @@ def _build_out(db: Session) -> MistralSettingsOut:
     return MistralSettingsOut(
         api_key_set=bool(key),
         api_key_preview=preview,
+        api_key_unreadable=is_secret_unreadable(db, "api_key"),
         base_url=s["base_url"],
         chat_model=s["chat_model"],
-        vision_model=s.get("vision_model", "pixtral-12b-2409"),
+        vision_model=s.get("vision_model", "mistral-medium-3-5"),
         vision_enabled=get_vision_enabled(db),
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
+        checklist_ai_scan=get_checklist_ai_scan(db),
     )
 
 
@@ -86,15 +100,28 @@ def update_mistral_settings(
     # Empty api_key in the request means "keep the current one".
     if not payload.get("api_key"):
         payload.pop("api_key", None)
+    # `base_url` validation (allowlist + re-entering the key on a host change)
+    # is handled by `save()` itself — see `mistral_settings.validate_base_url`.
     # `vision_enabled` is stored separately (boolean flag, not in Mistral
     # client config). Pop it before delegating to `save()`.
     vision_enabled = payload.pop("vision_enabled", None)
     llm_enabled = payload.pop("llm_enabled", None)
-    save(db, payload)
+    checklist_ai_scan = payload.pop("checklist_ai_scan", None)
+    try:
+        save(db, payload)
+    except EncryptionError as exc:
+        db.rollback()
+        raise AppError(
+            "MISTRAL_KEY_ENCRYPTION_REQUIRED",
+            "Configurez une clé Fernet valide avant d'enregistrer une clé Mistral.",
+            status_code=503,
+        ) from exc
     if vision_enabled is not None:
         set_vision_enabled(db, bool(vision_enabled))
     if llm_enabled is not None:
         set_llm_enabled(db, bool(llm_enabled))
+    if checklist_ai_scan is not None:
+        set_checklist_ai_scan(db, bool(checklist_ai_scan))
     return _build_out(db)
 
 
@@ -120,16 +147,22 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
         set_llm_tested(db, False)
         return TestConnectionOut(ok=False, message="Aucune clé API configurée.", models=[])
     try:
-        with httpx.Client(timeout=10.0) as client:
+        s = get_endpoint(db)
+    except AppError as exc:
+        set_llm_tested(db, False)
+        return TestConnectionOut(ok=False, message=exc.message, models=[])
+    base_url = s["base_url"]
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=False) as client:
             r = client.get(
-                f"{s['base_url'].rstrip('/')}/v1/models",
+                f"{base_url}/v1/models",
                 headers={"Authorization": f"Bearer {s['api_key']}"},
             )
         if r.status_code != 200:
             set_llm_tested(db, False)
             return TestConnectionOut(
                 ok=False,
-                message=f"HTTP {r.status_code} — {r.text[:200]}",
+                message=f"HTTP {r.status_code}",
                 models=[],
             )
         data = r.json() or {}
@@ -143,11 +176,11 @@ def test_mistral_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
     except Exception as exc:  # noqa: BLE001
         # Catch broad — Mistral test must never raise a 500 to the UI; any
         # network/SSL/proxy/parsing problem is reported as `ok=false`.
-        logger.warning("mistral_test_failed", error=type(exc).__name__, message=str(exc))
+        logger.warning("mistral_test_failed", error=type(exc).__name__)
         set_llm_tested(db, False)
         return TestConnectionOut(
             ok=False,
-            message=f"{type(exc).__name__}: {exc}",
+            message=f"Échec du test de connexion ({type(exc).__name__}).",
             models=[],
         )
 
@@ -168,6 +201,22 @@ def get_ai_prompt(db: Session = Depends(get_db)) -> dict:
 def update_ai_prompt(body: AiPromptIn, db: Session = Depends(get_db)) -> dict:
     set_ai_custom_prompt(db, body.prompt)
     return {"prompt": get_ai_custom_prompt(db)}
+
+
+@router.get("/checklist-context", response_model=ChecklistContextOut)
+def get_checklist_context_settings(db: Session = Depends(get_db)) -> ChecklistContextOut:
+    return ChecklistContextOut(**get_checklist_context(db))
+
+
+@router.post("/checklist-context", response_model=ChecklistContextOut)
+def update_checklist_context(
+    body: ChecklistContextIn,
+    db: Session = Depends(get_db),
+) -> ChecklistContextOut:
+    current = get_checklist_context(db)
+    current.update(body.model_dump(exclude_unset=True))
+    set_checklist_context(db, current)
+    return ChecklistContextOut(**get_checklist_context(db))
 
 
 # ---- Fiabilisation LLM ----------------------------------------------------

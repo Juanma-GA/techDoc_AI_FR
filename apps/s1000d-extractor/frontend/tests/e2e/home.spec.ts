@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-test("home page renders", async ({ page }) => {
+test("root redirects to migration", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText(/S1000d Extractor/)).toBeVisible();
+  await expect(page).toHaveURL(/\/migration$/);
+  await expect(page.getByText(/Migration/)).toBeVisible();
 });

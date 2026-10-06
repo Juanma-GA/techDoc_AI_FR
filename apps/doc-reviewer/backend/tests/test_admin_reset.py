@@ -74,6 +74,10 @@ def test_reset_all_deletes_docs_and_storage(
     """`POST /admin/reset` drops every Document AND cleans the
     `data/storage/document_*/` folder on disk."""
     from app.config import settings as _settings
+    from app.core.compiled_rule_store import persist_compiled_rule
+    from app.core.compiled_rules import CompiledRule, RuleTarget
+    from app.db.models import Rule
+    from app.db.session import SessionLocal
 
     storage_root = Path(_settings.storage_dir)
     doc_a = _upload(client, sample_pdf_bytes, name="alpha.pdf")
@@ -88,14 +92,46 @@ def test_reset_all_deletes_docs_and_storage(
     orphan.mkdir(exist_ok=True)
     (orphan / "v0.pdf").write_bytes(b"%PDF-1.4\n")
 
+    db = SessionLocal()
+    try:
+        db.add(
+            Rule(
+                name="Synthetic reset rule",
+                kind="regex_flag",
+                pattern="reset",
+                replacement="",
+                severity="warning",
+                message="Synthetic",
+                enabled=True,
+            )
+        )
+        persist_compiled_rule(
+            db,
+            CompiledRule(
+                id="synthetic-reset-checklist",
+                topic="Synthetic checklist",
+                execution="unsupported",
+                target=RuleTarget(page="all", region="full_page"),
+                compilation_error="Synthetic",
+                source="user_checklist",
+            ),
+        )
+        db.commit()
+    finally:
+        db.close()
+
     reset = client.post("/api/v1/admin/reset")
     assert reset.status_code == 200
     body = reset.json()
     assert body["documents_deleted"] >= 2
+    assert body["rules_deleted"] >= 1
+    assert body["checklist_rules_deleted"] >= 1
     assert body["orphan_folders_cleaned"] >= 1
 
     # DB is empty.
     assert client.get("/api/v1/documents").json() == []
+    assert client.get("/api/v1/rules").json() == []
+    assert client.get("/api/v1/compiled-rules").json() == []
     # Disk is clean for the doc we just uploaded.
     assert not target_a.exists()
     assert not target_b.exists()

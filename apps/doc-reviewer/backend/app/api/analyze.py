@@ -1,22 +1,36 @@
 """POST /api/v1/documents/{id}/analyze — SSE stream emitting suggestions."""
 
-from __future__ import annotations
-
 import asyncio
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from queue import Empty, SimpleQueue
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+import fitz
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
+from app.checks.client_registry import active_standard_versions
+from app.config import settings
 from app.core.errors import AppError
+from app.core.document_context import missing_document_context
+from app.core.compiled_rules import RuleResult
+from app.core.logging import get_logger
+from app.core.page_range import (
+    filter_docx,
+    filter_pdf_pages,
+    resolve_page_range,
+    select_pdf_page_numbers,
+)
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
-from app.core.rules_engine import materialize, run_all
+from app.core.security import read_upload_bounded
+from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
 from app.db.session import SessionLocal, get_db
 from app.parsers.pdf_parser import parse_pdf
@@ -24,15 +38,88 @@ from app.schemas import SuggestionOut
 
 
 router = APIRouter(tags=["analyze"])
+_logger = get_logger(__name__)
+
+
+def _parse_page_overrides(raw: str | None, page_count: int) -> dict[int, bool]:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "Les statuts manuels des pages sont invalides.",
+            status_code=422,
+        ) from exc
+    if not isinstance(payload, dict):
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "Les statuts manuels des pages sont invalides.",
+            status_code=422,
+        )
+    overrides: dict[int, bool] = {}
+    for raw_page, is_modified in payload.items():
+        try:
+            page = int(raw_page)
+        except (TypeError, ValueError) as exc:
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Un numero de page corrige est invalide.",
+                status_code=422,
+            ) from exc
+        if not 1 <= page <= page_count or not isinstance(is_modified, bool):
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Un statut manuel de page est invalide.",
+                status_code=422,
+            )
+        overrides[page] = is_modified
+    return overrides
+
+
+@router.get("/documents/{document_id}/rule-results", response_model=list[RuleResult])
+def latest_rule_results(
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> list[RuleResult]:
+    run = db.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
+        .order_by(AnalysisRun.started_at.desc())
+        .limit(1)
+    )
+    if run is None:
+        return []
+    try:
+        payload = json.loads(run.compiled_rules_snapshot_json or "{}")
+        rule_titles = {
+            str(rule.get("id")): str(rule.get("topic") or "")
+            for rule in payload.get("rules", [])
+            if isinstance(rule, dict) and rule.get("id")
+        }
+        return [
+            RuleResult.model_validate(
+                {
+                    **item,
+                    "rule_title": item.get("rule_title") or rule_titles.get(str(item.get("rule_id"))),
+                }
+            )
+            for item in payload.get("results", [])
+            if isinstance(item, dict)
+        ]
+    except (AttributeError, TypeError, ValueError):
+        return []
 
 
 @router.post("/documents/{document_id}/analyze")
 def analyze_stream(
     document_id: uuid.UUID,
+    request: Request,
     vision: Optional[bool] = Query(
         default=None,
         description=(
-            "Override per-run vision (Pixtral) opt-in/out. None = use the "
+            "Override per-run multimodal vision opt-in/out. None = use the "
             "persisted `vision.enabled` setting from /settings/mistral."
         ),
     ),
@@ -40,17 +127,139 @@ def analyze_stream(
         default=True,
         description="Cible checklist : quand false, exclut les regles importees (llm_nl/manual) du run.",
     ),
+    first_page: int = Query(default=1, ge=1, description="Premiere page physique a analyser."),
+    last_page: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Derniere page physique a analyser. Par defaut : derniere page du document.",
+    ),
+    modified_only: bool = Query(
+        default=False,
+        description="N'analyser que les pages marquees comme modifiees ou indeterminees.",
+    ),
+    page_number: Optional[int] = Query(
+        default=None,
+        ge=1,
+        description="Relancer une seule page apres correction manuelle de son statut.",
+    ),
+    page_overrides: Optional[str] = Query(
+        default=None,
+        description="JSON des statuts de page corriges manuellement, indexe par numero physique.",
+    ),
+    previous_revision_file: UploadFile | None = File(
+        default=None,
+        description="PDF optionnel du CMM de revision N-1 pour les controles comparatifs.",
+    ),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
     doc = db.get(Document, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    previous_revision_bytes: bytes | None = None
+    if previous_revision_file is not None:
+        if doc.working_format != "pdf":
+            raise AppError(
+                "PREVIOUS_REVISION_UNSUPPORTED",
+                "La comparaison avec le CMM N-1 est disponible uniquement pour les PDF.",
+                status_code=422,
+            )
+        filename = previous_revision_file.filename or ""
+        if Path(filename).suffix.lower() != ".pdf":
+            raise AppError(
+                "PREVIOUS_REVISION_BAD_FORMAT",
+                "Le CMM N-1 doit être fourni au format PDF.",
+                status_code=400,
+            )
+        previous_revision_bytes = read_upload_bounded(
+            previous_revision_file,
+            settings.max_upload_size_bytes,
+        )
+        try:
+            with fitz.open(stream=previous_revision_bytes, filetype="pdf") as previous_pdf:
+                previous_page_count = previous_pdf.page_count
+        except Exception as exc:  # noqa: BLE001
+            raise AppError(
+                "PREVIOUS_REVISION_INVALID_PDF",
+                "Le PDF du CMM N-1 est illisible.",
+                status_code=400,
+            ) from exc
+        if previous_page_count < 1:
+            raise AppError(
+                "PREVIOUS_REVISION_INVALID_PDF",
+                "Le PDF du CMM N-1 ne contient aucune page.",
+                status_code=400,
+            )
+    previous_revision_sha256 = (
+        hashlib.sha256(previous_revision_bytes).hexdigest()
+        if previous_revision_bytes is not None
+        else None
+    )
+    client_configuration = request.app.state.client_configuration
+    client_bundle = client_configuration.bundle
+    previous_run = db.scalar(
+        select(AnalysisRun)
+        .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
+        .order_by(AnalysisRun.started_at.desc())
+        .limit(1)
+    )
+    previous_bundle_hash: str | None = None
+    if previous_run is not None:
+        try:
+            previous_snapshot = json.loads(previous_run.context_snapshot_json or "{}")
+            previous_bundle_hash = previous_snapshot.get("client_bundle", {}).get("bundle_hash")
+        except (AttributeError, TypeError, ValueError):
+            previous_bundle_hash = None
+    bundle_changed_since_previous_run = (
+        previous_bundle_hash is not None
+        and previous_bundle_hash != client_configuration.bundle_hash
+    )
+    missing_context = missing_document_context(doc, client_configuration.mapping)
+    if missing_context:
+        raise AppError(
+            "DOCUMENT_CONTEXT_INCOMPLETE",
+            "Renseignez le contexte du document avant de lancer l'analyse.",
+            detail={"fields": missing_context},
+            status_code=409,
+        )
+    parsed_page_overrides = _parse_page_overrides(page_overrides, doc.page_count)
+    if page_number is not None:
+        resolve_page_range(page_number, page_number, doc.page_count)
+        if page_number not in parsed_page_overrides:
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Le statut manuel de la page a corriger est absent.",
+                status_code=422,
+            )
+        resolved_first_page, resolved_last_page = page_number, page_number
+    else:
+        resolved_first_page, resolved_last_page = resolve_page_range(
+            first_page,
+            last_page,
+            doc.page_count,
+        )
+    partial_page_range = (
+        page_number is not None
+        or resolved_first_page != 1
+        or resolved_last_page != doc.page_count
+    )
+    _logger.info(
+        "analysis_requested",
+        source_format=doc.source_format,
+        working_format=doc.working_format,
+        page_count=doc.page_count,
+        first_page=resolved_first_page,
+        last_page=resolved_last_page,
+        modified_only=modified_only,
+        page_number=page_number,
+        checklist_enabled=checklist,
+        vision_override=vision,
+    )
 
     # Run on the current version (post-edit) so the user can re-run the
     # analysis after applying suggestions and pick up new issues that the
     # edit may have introduced (or simply check that fixes hold). Le chemin
     # depend du pipeline : .pdf (defaut) ou .docx (pipeline Word natif).
-    is_docx = doc.source_format == "docx"
+    is_docx = doc.working_format == "docx"
     if is_docx:
         from app.core import docx_versioning
 
@@ -81,12 +290,13 @@ def analyze_stream(
     # applied (undo needs the row) AND the ones rejected (they feed the memory
     # above and must persist their motif). Open / edited / accepted are
     # superseded by the fresh run so we wipe them.
-    db.execute(
-        delete(Suggestion).where(
-            Suggestion.document_id == document_id,
-            Suggestion.status.notin_(("applied", "rejected")),
+    if page_number is None:
+        db.execute(
+            delete(Suggestion).where(
+                Suggestion.document_id == document_id,
+                Suggestion.status.notin_(("applied", "rejected")),
+            )
         )
-    )
     sv_id = doc.standard_version_id
     # v2 multi-norm: parse the JSON list, fall back to the legacy single FK.
     try:
@@ -97,11 +307,73 @@ def analyze_stream(
         sv_ids_list = []
     if not sv_ids_list and sv_id is not None:
         sv_ids_list = [str(sv_id)]
+    if not sv_ids_list:
+        sv_ids_list = [
+            str(version.id)
+            for version in active_standard_versions(
+                db,
+                client_configuration,
+            )
+        ]
+    if sv_id is None and sv_ids_list:
+        try:
+            sv_id = uuid.UUID(str(sv_ids_list[0]))
+        except (ValueError, TypeError):
+            pass
+    context_snapshot = json.dumps(
+        {
+            "client_bundle": {
+                "bundle": client_configuration.selection.bundle,
+                "client_code": client_configuration.manifest.client_code,
+                "bundle_version": client_configuration.manifest.bundle_version,
+                "contract_version": client_configuration.manifest.contract_version,
+                "catalogs": [
+                    catalog.model_dump(mode="json")
+                    for catalog in client_configuration.manifest.catalogs
+                ],
+                "manifest_hash": client_configuration.manifest_hash,
+                "mapping_hash": client_configuration.mapping_hash,
+                "bundle_hash": client_configuration.bundle_hash,
+                "reanalysis": {
+                    "previous_bundle_hash": previous_bundle_hash,
+                    "using_current_bundle": bundle_changed_since_previous_run,
+                },
+            },
+            "analysis_scope": {
+                "first_page": resolved_first_page,
+                "last_page": resolved_last_page,
+                "modified_only": modified_only,
+                "page_number": page_number,
+                "page_overrides": parsed_page_overrides,
+            },
+            "previous_revision": (
+                {"sha256": previous_revision_sha256}
+                if previous_revision_sha256 is not None
+                else None
+            ),
+            "metadata": {
+                "client_metadata": doc.client_metadata or {},
+                "meta_cmm_number": doc.meta_cmm_number,
+                "meta_revision_date": doc.meta_revision_date,
+                "meta_first_issue_date": doc.meta_first_issue_date,
+                "meta_last_issue_date": doc.meta_last_issue_date,
+                "meta_revision_number": doc.meta_revision_number,
+                "meta_manufacturer": doc.meta_manufacturer,
+                "document_language": doc.document_language,
+            }
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     run = AnalysisRun(
         document_id=document_id,
         standard_version_id=sv_id,
         standard_version_ids=json.dumps(sv_ids_list),
         status="running",
+        context_snapshot_json=context_snapshot,
+        compiled_rules_snapshot_json="[]",
+        snapshot_sha256=hashlib.sha256(context_snapshot.encode("utf-8")).hexdigest(),
     )
     db.add(run)
     # Mark the document as analyzing immediately so the UI list reflects
@@ -113,6 +385,7 @@ def analyze_stream(
     document_id_value = document_id
     run_id_value = run.id
     src_path = str(src)
+    previous_revision_bytes_value = previous_revision_bytes
     target_unit = doc.target_unit_system
     # Portail qualite : etat de revuabilite (homogene tous formats), signale en
     # tete de flux pour qu'un document non exploitable (scan sans couche texte)
@@ -130,12 +403,29 @@ def analyze_stream(
     meta_revision_date_value = doc.meta_revision_date
     meta_cmm_number_value = doc.meta_cmm_number
     meta_first_issue_date_value = doc.meta_first_issue_date
+    meta_last_issue_date_value = doc.meta_last_issue_date
     meta_revision_number_value = doc.meta_revision_number
+    meta_pnr_number_value = doc.meta_pnr_number
+    meta_manufacturer_value = doc.meta_manufacturer
+    document_language_value = doc.document_language
+    client_metadata_value = dict(doc.client_metadata or {})
+    first_page_value = resolved_first_page
+    last_page_value = resolved_last_page
+    partial_page_range_value = partial_page_range
+    doc_page_count_value = doc.page_count
+    modified_only_value = modified_only
+    page_number_value = page_number
+    page_overrides_value = parsed_page_overrides
 
     async def event_gen():
         yield {
             "event": "run_started",
-            "data": json.dumps({"run_id": str(run_id_value), "document_id": str(document_id_value)}),
+            "data": json.dumps({
+                "run_id": str(run_id_value),
+                "document_id": str(document_id_value),
+                "first_page": first_page_value,
+                "last_page": last_page_value,
+            }),
         }
         yield {
             "event": "quality",
@@ -152,8 +442,33 @@ def analyze_stream(
                 from app.parsers.docx_parser import parse_docx
 
                 parsed = await asyncio.to_thread(parse_docx, src_path)
+                parsed = filter_docx(parsed, first_page_value, last_page_value)
             else:
                 parsed = await asyncio.to_thread(parse_pdf, src_path)
+            previous_parsed = (
+                await asyncio.to_thread(parse_pdf, previous_revision_bytes_value)
+                if previous_revision_bytes_value is not None
+                else None
+            )
+            # `page.page_type` (le cas echeant) n'est peuple qu'une fois les
+            # standards selectionnes connus : voir le classifieur invoque par
+            # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
+            page_types: dict[str, str | None] = {}
+            if is_docx_value:
+                parsed_page_count = parsed.block_count
+                parsed_text_chars = sum(len(block.text or "") for block in parsed.blocks)
+                span_count = 0
+            else:
+                parsed_page_count = len(parsed.pages)
+                parsed_text_chars = sum(len(page.text or "") for page in parsed.pages)
+                span_count = sum(len(page.spans) for page in parsed.pages)
+            _logger.info(
+                "analysis_document_parsed",
+                format="docx" if is_docx_value else "pdf",
+                page_count=parsed_page_count,
+                text_chars=parsed_text_chars,
+                span_count=span_count,
+            )
             yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
 
             # Build a lightweight Document-like with target_unit_system (we
@@ -163,7 +478,12 @@ def analyze_stream(
                 meta_revision_date = meta_revision_date_value
                 meta_cmm_number = meta_cmm_number_value
                 meta_first_issue_date = meta_first_issue_date_value
+                meta_last_issue_date = meta_last_issue_date_value
                 meta_revision_number = meta_revision_number_value
+                meta_pnr_number = meta_pnr_number_value
+                meta_manufacturer = meta_manufacturer_value
+                document_language = document_language_value
+                client_metadata = client_metadata_value
 
             scoped_session: Session = SessionLocal()
             try:
@@ -176,6 +496,82 @@ def analyze_stream(
                     sv = scoped_session.get(StandardVersion, vid)
                     if sv is not None:
                         versions.append(sv)
+
+                selected_page_numbers: list[int] = []
+                page_status_payload: list[dict[str, object]] = []
+                full_page_count = parsed.page_count if not is_docx_value else doc_page_count_value
+                if not is_docx_value:
+                    page_classifier = client_bundle.page_classifier
+                    if page_classifier is not None:
+                        for version in versions:
+                            if version.standard.code in client_bundle.standard_specs:
+                                page_classifier(parsed, _DocStub())
+                    for page in parsed.pages:
+                        if page.page in page_overrides_value:
+                            page.is_modified = page_overrides_value[page.page]
+                    page_status_payload = [
+                        {
+                            "page": page.page,
+                            "is_modified": page.is_modified,
+                            "source": "manual" if page.page in page_overrides_value else "detected",
+                        }
+                        for page in parsed.pages
+                    ]
+                    yield {
+                        "event": "page_statuses",
+                        "data": json.dumps({"pages": page_status_payload}),
+                    }
+                    selected_page_numbers = select_pdf_page_numbers(
+                        parsed,
+                        first_page=first_page_value,
+                        last_page=None if modified_only_value or page_number_value is not None else last_page_value,
+                        modified_only=modified_only_value,
+                        page_number=page_number_value,
+                    )
+                    cached_revision_state = getattr(parsed, "_thales_revision_state", None)
+                    parsed = filter_pdf_pages(parsed, selected_page_numbers)
+                    if cached_revision_state is not None:
+                        setattr(parsed, "_thales_revision_state", cached_revision_state)
+                else:
+                    selected_page_numbers = sorted({block.page for block in parsed.blocks})
+                partial_analysis_value = (
+                    partial_page_range_value
+                    if is_docx_value
+                    else selected_page_numbers != list(range(1, full_page_count + 1))
+                )
+
+                if page_number_value is not None:
+                    scoped_session.execute(
+                        delete(Suggestion).where(
+                            Suggestion.document_id == document_id_value,
+                            Suggestion.page == page_number_value,
+                            Suggestion.status.notin_(("applied", "rejected")),
+                        )
+                    )
+                    scoped_session.commit()
+
+                run_row = scoped_session.get(AnalysisRun, run_id_value)
+                if run_row is not None:
+                    try:
+                        context_payload = json.loads(run_row.context_snapshot_json or "{}")
+                    except (TypeError, ValueError):
+                        context_payload = {}
+                    context_payload["analysis_scope"] = {
+                        "first_page": first_page_value,
+                        "last_page": last_page_value,
+                        "modified_only": modified_only_value,
+                        "page_number": page_number_value,
+                        "selected_pages": selected_page_numbers,
+                        "page_overrides": page_overrides_value,
+                    }
+                    context_payload["page_statuses"] = page_status_payload
+                    run_row.context_snapshot_json = json.dumps(
+                        context_payload,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    scoped_session.commit()
 
                 # Le scan checklist/IA (une passe Mistral par page) domine
                 # generalement le temps d'une analyse : sans remontee de
@@ -194,6 +590,19 @@ def analyze_stream(
                 # modele invalide sur un endpoint prive…) : remontes ici au
                 # lieu de se traduire silencieusement par "0 anomalie" (HR7).
                 run_warnings: list[str] = []
+                compiled_results = []
+                if bundle_changed_since_previous_run:
+                    run_warnings.append(
+                        "Le run precedent utilisait un autre bundle; cette analyse "
+                        f"utilise le bundle actif {client_configuration.manifest.client_code} "
+                        f"v{client_configuration.manifest.bundle_version}."
+                    )
+                if modified_only_value and not selected_page_numbers and page_number_value is None:
+                    run_warnings.append("Aucune page modifiee detectee; aucune regle n'a ete executee.")
+                if partial_analysis_value and vision_override_value:
+                    run_warnings.append(
+                        "Analyse vision ignoree pour une plage partielle de pages"
+                    )
 
                 if is_docx_value:
                     from app.core import docx_pipeline
@@ -205,6 +614,8 @@ def analyze_stream(
                                 checklist_enabled=checklist_enabled_value,
                                 progress_cb=_on_progress,
                                 warnings=run_warnings,
+                                compiled_results=compiled_results,
+                                client_bundle=client_bundle,
                             )
                         )
                     )
@@ -220,27 +631,56 @@ def analyze_stream(
                         raws, parsed, document_id_value, run_id_value
                     )
                 else:
-                    task = asyncio.create_task(
-                        asyncio.to_thread(
-                            lambda: run_all(
-                                parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
-                                src_path=src_path,
-                                vision_enabled_override=vision_override_value,
-                                checklist_enabled=checklist_enabled_value,
-                                progress_cb=_on_progress,
-                                warnings=run_warnings,
+                    if parsed.pages:
+                        task = asyncio.create_task(
+                            asyncio.to_thread(
+                                lambda: run_all(
+                                    parsed, _DocStub(), scoped_session, versions,  # type: ignore[arg-type]
+                                    src_path=src_path if not partial_analysis_value else None,
+                                    vision_enabled_override=(
+                                        vision_override_value
+                                        if not partial_analysis_value
+                                        else False
+                                    ),
+                                    checklist_enabled=checklist_enabled_value,
+                                    progress_cb=_on_progress,
+                                    warnings=run_warnings,
+                                    compiled_results=compiled_results,
+                                    client_bundle=client_bundle,
+                                    previous_revision_pdf=previous_parsed,
+                                )
                             )
                         )
-                    )
-                    while not task.done():
-                        try:
-                            pct = progress_q.get_nowait()
-                            yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
-                        except Empty:
-                            await asyncio.sleep(0.2)
-                    raws = await task
+                        while not task.done():
+                            try:
+                                pct = progress_q.get_nowait()
+                                yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
+                            except Empty:
+                                await asyncio.sleep(0.2)
+                        raws = await task
+                    else:
+                        raws = []
                     yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
+                    rows = [row for row in rows if row.page in set(selected_page_numbers)]
+                    # A ce stade, le classifieur du ClientBundle invoque par
+                    # `run_all` a pu peupler `page.page_type`; on le capture ici.
+                    page_types = {str(page.page): page.page_type for page in parsed.pages}
+
+                run_row = scoped_session.get(AnalysisRun, run_id_value)
+                if run_row is not None:
+                    try:
+                        context_payload = json.loads(run_row.context_snapshot_json or "{}")
+                    except (TypeError, ValueError):
+                        context_payload = {}
+                    context_payload["page_types"] = page_types
+                    run_row.context_snapshot_json = json.dumps(
+                        context_payload,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    scoped_session.commit()
 
                 if run_warnings:
                     yield {"event": "warning", "data": json.dumps({"messages": run_warnings})}
@@ -262,8 +702,26 @@ def analyze_stream(
 
                 run_row = scoped_session.get(AnalysisRun, run_id_value)
                 if run_row is not None:
+                    compiled_rules = load_compiled_rules(
+                        scoped_session,
+                        versions,
+                        checklist_enabled=checklist_enabled_value,
+                    )
+                    compiled_snapshot = json.dumps(
+                        {
+                            "rules": [rule.model_dump(mode="json") for rule in compiled_rules],
+                            "results": [result.model_dump(mode="json") for result in compiled_results],
+                        },
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
                     run_row.status = "done"
                     run_row.finished_at = datetime.now(timezone.utc)
+                    run_row.compiled_rules_snapshot_json = compiled_snapshot
+                    run_row.snapshot_sha256 = hashlib.sha256(
+                        f"{run_row.context_snapshot_json}\n{compiled_snapshot}".encode("utf-8")
+                    ).hexdigest()
                     run_row.summary = json.dumps(
                         {"total": total, "suppressed_rejected": suppressed_rejected}
                     )
@@ -274,6 +732,13 @@ def analyze_stream(
                     doc_row.status = "analyzed"
                     scoped_session.commit()
 
+                _logger.info(
+                    "analysis_finished",
+                    total_suggestions=total,
+                    suppressed_rejected=suppressed_rejected,
+                    warning_count=len(run_warnings),
+                    compiled_result_count=len(compiled_results),
+                )
                 yield {
                     "event": "done",
                     "data": json.dumps({
@@ -285,13 +750,21 @@ def analyze_stream(
             finally:
                 scoped_session.close()
         except AppError as exc:
+            _logger.warning(
+                "analysis_failed",
+                error=exc.code,
+            )
             _mark_failed(document_id_value)
             yield {"event": "error", "data": json.dumps({"code": exc.code, "message": exc.message})}
         except Exception as exc:  # noqa: BLE001
+            _logger.error(
+                "analysis_failed",
+                error=type(exc).__name__,
+            )
             _mark_failed(document_id_value)
             yield {
                 "event": "error",
-                "data": json.dumps({"code": "INTERNAL_ERROR", "message": str(exc)}),
+                "data": json.dumps({"code": "INTERNAL_ERROR", "message": "Erreur interne pendant l'analyse."}),
             }
 
     return EventSourceResponse(event_gen())

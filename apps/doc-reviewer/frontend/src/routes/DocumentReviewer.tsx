@@ -1,21 +1,35 @@
-import { ArrowLeft, Download, Play } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  CircleCheck,
+  CircleHelp,
+  CircleMinus,
+  Maximize2,
+  Paperclip,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { PdfViewer } from "../components/reviewer/PdfViewer";
-import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { IncompleteChecksNotice } from "../components/reviewer/IncompleteChecksNotice";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
+import { AnalysisPageRange } from "../components/reviewer/AnalysisPageRange";
+import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { SuggestionPanel } from "../components/reviewer/SuggestionPanel";
+import { ExportSelector } from "../components/reviewer/ExportSelector";
 import { DocxReviewer } from "./DocxReviewer";
 import { useAnalyze } from "../hooks/useAnalyze";
 import {
-  useApplyGroup,
   useApplySuggestion,
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useSuggestions } from "../hooks/useSuggestions";
+import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
 import { API_BASE_URL } from "../lib/api";
 import { useViewerStore } from "../stores/viewerStore";
 
@@ -27,9 +41,16 @@ export function DocumentReviewer() {
 
   const document = useDocument(documentId);
   const suggestions = useSuggestions(documentId);
-  const analyze = useAnalyze(documentId);
+  const ruleResults = useRuleResults(
+    document.data?.working_format === "pdf" ? documentId : undefined,
+  );
+  const analyze = useAnalyze(documentId, document.data);
+  const [pendingPageStatus, setPendingPageStatus] = useState<{
+    page: number;
+    isModified: boolean | null;
+    requiresChoice: boolean;
+  } | null>(null);
   const apply = useApplySuggestion(documentId);
-  const applyGroup = useApplyGroup(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
 
@@ -37,8 +58,11 @@ export function DocumentReviewer() {
   const setPdfVersion = useViewerStore((s) => s.setPdfVersion);
   const currentPage = useViewerStore((s) => s.currentPage);
   const setCurrentPage = useViewerStore((s) => s.setCurrentPage);
+  const currentPageStatus = analyze.pageStatuses.find((page) => page.page === currentPage);
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
+  const zoom = useViewerStore((s) => s.zoom);
+  const setZoom = useViewerStore((s) => s.setZoom);
 
   // Nombre de pages = metadonnee du document (plus de chargement react-pdf).
   const totalPages = document.data?.page_count ?? 0;
@@ -60,7 +84,7 @@ export function DocumentReviewer() {
   // Pipeline Word natif : reviewer dédié (blocs + sortie .docx), le viewer PDF
   // ne s'applique pas. On attend le chargement du document pour connaître le
   // format avant de choisir le reviewer.
-  if (document.data?.source_format === "docx") {
+  if (document.data?.working_format === "docx") {
     return <DocxReviewer documentId={documentId} />;
   }
 
@@ -96,29 +120,10 @@ export function DocumentReviewer() {
     );
   };
 
-  // Apply the same anomaly across every page where it recurs. The
-  // backend resolves the group and patches each page in one pass.
-  const handleApplyGroup = (id: string): void => {
-    applyGroup.mutate(id);
-  };
-
   // Annule une suggestion deja appliquee (revert backend -> version PDF
   // precedente ; cascade les patchs appliques par-dessus).
   const handleUndo = (id: string): void => {
     revert.mutate(id);
-  };
-
-  const handleExport = (): void => {
-    if (!document.data) return;
-    const url = `${API_BASE_URL}/documents/${documentId}/export`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  // Livrable relecteur (CR) : le PDF fidele + anomalies retenues estampillees.
-  const handleExportCommented = (): void => {
-    if (!document.data) return;
-    const url = `${API_BASE_URL}/documents/${documentId}/commented.pdf`;
-    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   // Barre minimale (demande utilisateur) : Retour | navigation pages | Export.
@@ -138,6 +143,39 @@ export function DocumentReviewer() {
             </button>
           </div>
 
+          <div className="reviewer-toolbar-group reviewer-zoom-controls" aria-label={t("reviewer.toolbar.fit")}>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setZoom(zoom - 0.25)}
+              disabled={zoom <= 0.5}
+              aria-label={t("reviewer.toolbar.zoomOut")}
+              title={t("reviewer.toolbar.zoomOut")}
+            >
+              <ZoomOut size={14} aria-hidden="true" />
+            </button>
+            <span className="label reviewer-zoom-value">{Math.round(zoom * 100)}%</span>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setZoom(zoom + 0.25)}
+              disabled={zoom >= 3}
+              aria-label={t("reviewer.toolbar.zoomIn")}
+              title={t("reviewer.toolbar.zoomIn")}
+            >
+              <ZoomIn size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="btn ghost small"
+              onClick={() => setZoom(1)}
+              aria-label={t("reviewer.toolbar.fit")}
+              title={t("reviewer.toolbar.fit")}
+            >
+              <Maximize2 size={14} aria-hidden="true" />
+            </button>
+          </div>
+
           <div className="reviewer-toolbar-group">
             <button
               type="button"
@@ -146,7 +184,7 @@ export function DocumentReviewer() {
               className="btn ghost small"
               aria-label={t("viewer.prev")}
             >
-              ◀
+              <ChevronLeft size={14} aria-hidden="true" />
             </button>
             <span className="label">
               {currentPage}/{totalPages || "?"}
@@ -158,22 +196,64 @@ export function DocumentReviewer() {
               className="btn ghost small"
               aria-label={t("viewer.next")}
             >
-              ▶
+              <ChevronRight size={14} aria-hidden="true" />
             </button>
+            {currentPageStatus ? (
+              <button
+                type="button"
+                className="btn ghost small"
+                disabled={analyze.status === "running"}
+                onClick={() => {
+                  const requiresChoice = currentPageStatus.is_modified === null;
+                  setPendingPageStatus({
+                    page: currentPage,
+                    isModified: requiresChoice ? null : !currentPageStatus.is_modified,
+                    requiresChoice,
+                  });
+                }}
+              >
+                {currentPageStatus.is_modified === true ? (
+                  <CircleCheck size={14} aria-hidden="true" />
+                ) : currentPageStatus.is_modified === false ? (
+                  <CircleMinus size={14} aria-hidden="true" />
+                ) : (
+                  <CircleHelp size={14} aria-hidden="true" />
+                )}
+                {currentPageStatus.is_modified === true
+                  ? t("reviewer.pageStatus.modified")
+                  : currentPageStatus.is_modified === false
+                    ? t("reviewer.pageStatus.unchanged")
+                    : t("reviewer.pageStatus.unknown")}
+                {currentPageStatus.source === "manual" ? (
+                  <span className="hint">({t("reviewer.pageStatus.manual")})</span>
+                ) : null}
+              </button>
+            ) : null}
           </div>
 
-          <div className="reviewer-toolbar-group">
-            <button
-              type="button"
-              onClick={() => void analyze.start()}
-              disabled={analyze.status === "running"}
-              className="btn secondary small"
+          <div className="reviewer-toolbar-group reviewer-toolbar-actions">
+            <div
+              className="row"
+              style={{ gap: 6, alignItems: "center", minWidth: 0, gridColumn: "1 / -1" }}
             >
-              <Play size={14} />
-              {analyze.status === "running"
-                ? t("reviewer.toolbar.analyzing")
-                : t("reviewer.toolbar.analyze")}
-            </button>
+              <button
+                type="button"
+                className="btn ghost small"
+                aria-disabled="true"
+                title={t("reviewer.previousRevision.unavailable")}
+                aria-label={`${t("reviewer.previousRevision.attach")}. ${t("reviewer.previousRevision.unavailable")}`}
+              >
+                <Paperclip size={14} aria-hidden="true" />
+                {t("reviewer.previousRevision.attach")}
+              </button>
+            </div>
+            <AnalysisPageRange
+              pageCount={totalPages}
+              running={analyze.status === "running"}
+              blocked={!analyze.contextReady}
+              blockReason={t("reviewer.meta.required")}
+              onStart={(range) => void analyze.start(range)}
+            />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
                 <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
@@ -188,29 +268,22 @@ export function DocumentReviewer() {
                 {analyze.warnings[0]}
               </span>
             ) : null}
-            <button
-              type="button"
-              onClick={handleExportCommented}
-              className="btn primary small"
-              data-testid="export-commented"
-            >
-              <Download size={14} />
-              {t("reviewer.toolbar.exportCommented")}
-            </button>
-            <button type="button" onClick={handleExport} className="btn secondary small">
-              <Download size={14} />
-              {t("reviewer.toolbar.export")}
-            </button>
-            {document.data ? <DocumentMetaPanel document={document.data} /> : null}
+            <ExportSelector documentId={documentId} />
           </div>
         </div>
 
         <AnalysisTargetBanner />
+        <IncompleteChecksNotice
+          results={ruleResults.data ?? []}
+          isRunning={analyze.status === "running"}
+        />
 
-        <main className="reviewer-canvas">
+        <main className="reviewer-canvas reviewer-canvas-stack">
+          {document.data ? <DocumentMetaPanel document={document.data} /> : null}
           <PdfViewer
             pageImageUrl={pageImageUrl}
             pageNumber={currentPage}
+            zoom={zoom}
             suggestions={suggestions.data ?? []}
             selectedSuggestionId={selectedId}
             onSuggestionClick={setSelected}
@@ -231,9 +304,67 @@ export function DocumentReviewer() {
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}
-        onApplyGroup={handleApplyGroup}
         onUndo={handleUndo}
       />
+      <ConfirmDialog
+        open={pendingPageStatus !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingPageStatus(null);
+        }}
+        title={
+          pendingPageStatus?.requiresChoice
+            ? t("reviewer.pageStatus.chooseTitle", { page: pendingPageStatus.page })
+            : t("reviewer.pageStatus.confirmTitle")
+        }
+        description={
+          pendingPageStatus
+            ? pendingPageStatus.isModified === null
+              ? t("reviewer.pageStatus.chooseDescription")
+              : pendingPageStatus.isModified
+                ? t("reviewer.pageStatus.confirmModified", { page: pendingPageStatus.page })
+                : t("reviewer.pageStatus.confirmUnchanged", { page: pendingPageStatus.page })
+            : undefined
+        }
+        confirmLabel={t("common.confirm")}
+        cancelLabel={t("common.cancel")}
+        confirmDisabled={pendingPageStatus?.isModified === null}
+        onConfirm={() => {
+          if (pendingPageStatus?.isModified !== null && pendingPageStatus) {
+            analyze.correctPageStatus(pendingPageStatus.page, pendingPageStatus.isModified);
+          }
+        }}
+      >
+        {pendingPageStatus?.requiresChoice ? (
+          <div className="row" role="group" aria-label={t("reviewer.pageStatus.chooseLabel")}>
+            <button
+              type="button"
+              className={pendingPageStatus.isModified === true ? "btn primary small" : "btn secondary small"}
+              aria-pressed={pendingPageStatus.isModified === true}
+              onClick={() =>
+                setPendingPageStatus((current) =>
+                  current ? { ...current, isModified: true } : null,
+                )
+              }
+            >
+              <CircleCheck size={14} aria-hidden="true" />
+              {t("reviewer.pageStatus.modified")}
+            </button>
+            <button
+              type="button"
+              className={pendingPageStatus.isModified === false ? "btn primary small" : "btn secondary small"}
+              aria-pressed={pendingPageStatus.isModified === false}
+              onClick={() =>
+                setPendingPageStatus((current) =>
+                  current ? { ...current, isModified: false } : null,
+                )
+              }
+            >
+              <CircleMinus size={14} aria-hidden="true" />
+              {t("reviewer.pageStatus.unchanged")}
+            </button>
+          </div>
+        ) : null}
+      </ConfirmDialog>
     </div>
   );
 }

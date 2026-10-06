@@ -28,11 +28,44 @@ class Span:
 
 
 @dataclass
+class PdfLine:
+    text: str
+    bbox: tuple[float, float, float, float]
+    block_index: int
+    line_index: int
+    direction: tuple[float, float] = (1.0, 0.0)
+
+
+@dataclass(frozen=True)
+class PdfWord:
+    text: str
+    bbox: tuple[float, float, float, float]
+    block_index: int
+    line_index: int
+    word_index: int
+
+
+@dataclass(frozen=True)
+class PdfBookmark:
+    title: str
+    page: int
+
+
+@dataclass
 class ParsedPage:
     page: int  # 1-indexed
     text: str
     spans: list[Span] = field(default_factory=list)
     has_text_layer: bool = True
+    page_type: str | None = None
+    # Filled by a standard's page classifier when the document declares which
+    # pages the revision touched. None = undecided (no such declaration, or
+    # the page could not be matched), which every consumer must treat as
+    # "do not filter this page out".
+    is_modified: bool | None = None
+    lines: list[PdfLine] = field(default_factory=list)
+    page_height: float = 0.0
+    words: list[PdfWord] = field(default_factory=list)
 
 
 @dataclass
@@ -41,12 +74,18 @@ class ParsedPdf:
     pages: list[ParsedPage]
     full_text: str
     is_signed: bool
+    full_document_pages: list[ParsedPage] | None = None
+    bookmarks: list[PdfBookmark] = field(default_factory=list)
 
 
-def parse_pdf(path: str | Path) -> ParsedPdf:
-    doc = fitz.open(str(path))
+def parse_pdf(path: str | Path | bytes) -> ParsedPdf:
+    doc = fitz.open(stream=path, filetype="pdf") if isinstance(path, bytes) else fitz.open(str(path))
     try:
         is_signed = _has_digital_signature(doc)
+        bookmarks = [
+            PdfBookmark(title=str(title or ""), page=int(page_number))
+            for _level, title, page_number in doc.get_toc(simple=True)
+        ]
         pages: list[ParsedPage] = []
         all_text: list[str] = []
 
@@ -54,9 +93,23 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
             text = page.get_text("text") or ""
             data = page.get_text("dict")
             spans: list[Span] = []
-            for block in data.get("blocks", []):
-                for line in block.get("lines", []):
-                    for span in line.get("spans", []):
+            lines: list[PdfLine] = []
+            for block_index, block in enumerate(data.get("blocks", [])):
+                for line_index, line in enumerate(block.get("lines", [])):
+                    line_spans = line.get("spans", [])
+                    line_text = "".join(span.get("text", "") or "" for span in line_spans)
+                    if line_text.strip():
+                        raw_direction = line.get("dir", (1.0, 0.0))
+                        lines.append(
+                            PdfLine(
+                                text=line_text,
+                                bbox=tuple(float(value) for value in line.get("bbox", (0, 0, 0, 0))),
+                                block_index=block_index,
+                                line_index=line_index,
+                                direction=(float(raw_direction[0]), float(raw_direction[1])),
+                            )
+                        )
+                    for span in line_spans:
                         s_text = span.get("text", "") or ""
                         if not s_text.strip():
                             continue
@@ -69,12 +122,29 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
                                 size=float(span.get("size", 0.0)),
                             )
                         )
+            words: list[PdfWord] = []
+            for word in page.get_text("words"):
+                x0, y0, x1, y1, word_text, block_index, line_index, word_index = word
+                if not str(word_text).strip():
+                    continue
+                words.append(
+                    PdfWord(
+                        text=str(word_text),
+                        bbox=(float(x0), float(y0), float(x1), float(y1)),
+                        block_index=int(block_index),
+                        line_index=int(line_index),
+                        word_index=int(word_index),
+                    )
+                )
             pages.append(
                 ParsedPage(
                     page=idx,
                     text=text,
                     spans=spans,
                     has_text_layer=bool(text.strip()),
+                    lines=lines,
+                    page_height=float(page.rect.height),
+                    words=words,
                 )
             )
             all_text.append(f"[PAGE: {idx}]\n{text}")
@@ -84,6 +154,7 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
             pages=pages,
             full_text="\n".join(all_text),
             is_signed=is_signed,
+            bookmarks=bookmarks,
         )
     finally:
         doc.close()
@@ -207,9 +278,12 @@ def locate_with_search_for(
     page: fitz.Page,
     original: str,
     span_index: int,
+    reference_bbox: tuple[float, float, float, float] | None = None,
 ) -> tuple[float, float, float, float] | None:
     """Return the bbox of `original`'s `span_index`-th occurrence on `page`,
-    using PyMuPDF's native `page.search_for`. None when not found.
+    using PyMuPDF's native `page.search_for`. When a precomputed bbox is
+    available, prefer the hit that overlaps it so repeated text in another
+    page region cannot steal the overlay. None when not found.
 
     Used by `rules_engine.materialize` to compute precise bboxes for
     suggestion overlays. Pairing the overlay's bbox with the editor's
@@ -224,6 +298,20 @@ def locate_with_search_for(
         return None
     if not hits:
         return None
+    if reference_bbox is not None and len(hits) > 1:
+        reference = fitz.Rect(*reference_bbox)
+
+        def overlap_ratio(hit: fitz.Rect) -> float:
+            intersection = hit & reference
+            if intersection.is_empty:
+                return 0.0
+            smaller_area = min(hit.get_area(), reference.get_area())
+            return float(intersection.get_area() / smaller_area) if smaller_area > 0 else 0.0
+
+        ranked = sorted(hits, key=overlap_ratio, reverse=True)
+        if overlap_ratio(ranked[0]) > 0:
+            rect = ranked[0]
+            return (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))
     idx = max(0, min(span_index, len(hits) - 1))
     rect = hits[idx]
     return (float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1))

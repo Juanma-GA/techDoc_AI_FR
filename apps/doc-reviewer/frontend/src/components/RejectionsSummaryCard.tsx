@@ -1,6 +1,8 @@
 import { useTranslation } from "react-i18next";
 
 import { useRejectionsSummary } from "../hooks/useSuggestions";
+import { toCsv } from "../lib/csv";
+import { isAiGeneratedSuggestion, localizedRuleCode } from "../lib/suggestionText";
 
 import { BarList, type BarItem } from "./BarList";
 
@@ -27,17 +29,22 @@ export function RejectionsSummaryCard() {
   const data = q.data;
 
   const byRule: BarItem[] = (data?.by_rule ?? []).map((r) => ({
-    label: r.rule_code || t("data.rejects.noRule"),
+    label: r.rule_code ? localizedRuleCode(r.rule_code, t) : t("data.rejects.noRule"),
     value: r.count,
   }));
 
   const exportCsv = (): void => {
     if (!data) return;
     const header = ["fichier", "regle", "severite", "message", "motif"];
-    const rows = data.items.map((i) => [i.file, i.rule_code, i.severity, i.message, i.feedback]);
-    const esc = (c: string): string => `"${(c ?? "").replace(/"/g, '""')}"`;
-    const csv = [header, ...rows].map((r) => r.map(esc).join(";")).join("\n");
-    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
+    const rows = data.items.map((i) => [
+      i.file,
+      localizedRuleCode(i.rule_code, t),
+      t(`reviewer.suggestion.severity.${i.severity}`),
+      i.message,
+      i.feedback,
+    ]);
+    const csv = toCsv([header, ...rows]);
+    const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -91,7 +98,7 @@ export function RejectionsSummaryCard() {
           )}
 
           {/* Répartition par règle (indice de faux positifs par règle). */}
-          <h3 className="card-title" style={{ fontSize: "0.95rem" }}>
+          <h3 className="card-title">
             {t("data.rejects.byRule")}
           </h3>
           <div style={{ marginBottom: 12 }}>
@@ -99,7 +106,7 @@ export function RejectionsSummaryCard() {
           </div>
 
           {/* Tableau exploitable des rejets. */}
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-scroll">
             <table className="rules-table">
               <thead>
                 <tr>
@@ -115,10 +122,19 @@ export function RejectionsSummaryCard() {
                   <tr key={i.id}>
                     <td title={i.file}>{truncate(i.file, 34)}</td>
                     <td>
-                      <span className="badge default">{i.rule_code}</span>
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                        <span className="badge default">
+                          {localizedRuleCode(i.rule_code, t)}
+                        </span>
+                        {isAiGeneratedSuggestion(i.source_kind, i.rule_code) ? (
+                          <span className="badge info">{t("reviewer.source.ai")}</span>
+                        ) : null}
+                      </div>
                     </td>
                     <td>
-                      <span className={`badge ${SEV_CLASS[i.severity] ?? "info"}`}>{i.severity}</span>
+                      <span className={`badge ${SEV_CLASS[i.severity] ?? "info"}`}>
+                        {t(`reviewer.suggestion.severity.${i.severity}`)}
+                      </span>
                     </td>
                     <td title={i.message}>{truncate(i.message)}</td>
                     <td>{i.feedback?.trim() ? i.feedback : <span className="label">—</span>}</td>

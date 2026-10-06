@@ -44,6 +44,8 @@ def run(
     hint: str = "mixed",
     db: Session | None = None,
     brex_xml: str | None = None,
+    dm_metadata: dict | None = None,
+    header_template: dict | None = None,
     progress_cb: ProgressCb = _noop,
 ) -> PipelineResult:
     progress_cb("parse", 10)
@@ -62,10 +64,16 @@ def run(
     resolver.resolve(root)
 
     progress_cb("serialize", 85)
-    xml = serialize(root, issue=issue, dm_type=dm_type)
+    xml = serialize(
+        root,
+        issue=issue,
+        dm_type=dm_type,
+        dm_metadata=dm_metadata,
+        header_template=header_template,
+    )
 
     progress_cb("validate", 95)
-    violations = _validate(xml, issue=issue, brex_xml=brex_xml)
+    violations = _validate(xml, issue=issue, dm_type=dm_type, brex_xml=brex_xml)
 
     progress_cb("done", 100)
     return PipelineResult(
@@ -73,9 +81,9 @@ def run(
     )
 
 
-def _validate(xml: str, *, issue: str, brex_xml: str | None) -> list[dict]:
+def _validate(xml: str, *, issue: str, dm_type: str, brex_xml: str | None) -> list[dict]:
     """Validation XSD + BREX. Import tardif pour ne pas coupler le coeur a lxml
     si la validation est desactivee/indisponible."""
     from app.core.validator import validate_document
 
-    return validate_document(xml, issue=issue, brex_xml=brex_xml)
+    return validate_document(xml, issue=issue, dm_type=dm_type, brex_xml=brex_xml)

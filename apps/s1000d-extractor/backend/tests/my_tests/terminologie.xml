@@ -1,0 +1,98 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE dmodule [
+<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">
+%ISOEntities;
+]>
+<!-- Squelette structurel best-effort genere par s1000d extractor. NON valide comme Data Module : DMC / SNS / applicabilite / securite / ICN a completer manuellement (voir les commentaires TODO). -->
+<dmodule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://www.purl.org/dc/elements/1.1/" xsi:noNamespaceSchemaLocation="http://www.s1000d.org/S1000D_4-2/xml_schema_flat/descript.xsd">
+  <identAndStatusSection>
+    <dmAddress>
+      <dmIdent>
+        <dmCode assyCode="00" disassyCode="00" disassyCodeVariant="A" infoCode="040" infoCodeVariant="A" itemLocationCode="D" modelIdentCode="TODO" subSubSystemCode="0" subSystemCode="0" systemCode="00" systemDiffCode="A"/>
+        <language countryIsoCode="FR" languageIsoCode="fr"/>
+        <issueInfo inWork="00" issueNumber="001"/>
+      </dmIdent>
+      <dmAddressItems>
+        <issueDate day="16" month="09" year="2026"/>
+        <dmTitle>
+          <techName>Moteurs electriques</techName>
+          <infoName>Terminologie</infoName>
+        </dmTitle>
+      </dmAddressItems>
+    </dmAddress>
+    <dmStatus issueType="new">
+      <security securityClassification="02"/>
+      <dataRestrictions>
+        <restrictionInstructions>
+          <dataDistribution>To be made available to all users.</dataDistribution>
+          <exportControl>
+            <exportRegistrationStmt>
+              <simplePara>Export and storage of this module is to be at the discretion of the organization.</simplePara>
+            </exportRegistrationStmt>
+          </exportControl>
+          <dataHandling>There are no specific handling instructions for this module.</dataHandling>
+          <dataDestruction>Users may destroy this module in accordance with their own local procedures.</dataDestruction>
+          <dataDisclosure>There are no dissemination limitations that apply to this module.</dataDisclosure>
+        </restrictionInstructions>
+        <restrictionInfo>
+          <copyright>
+            <copyrightPara>© Example Organization</copyrightPara>
+            <copyrightPara>The information in this module is the property of Example Organization. The information may not be copied, or communicated to a third party, or used for any purpose other than that for which it is intended, without the prior written consent of Example Organization.</copyrightPara>
+          </copyright>
+          <dataConds>There are no known conditions that would change the data restrictions for, or security classification of, this module.</dataConds>
+        </restrictionInfo>
+      </dataRestrictions>
+      <responsiblePartnerCompany enterpriseCode="EX">
+        <enterpriseName>EXAMPLE ORGANIZATION</enterpriseName>
+      </responsiblePartnerCompany>
+      <originator enterpriseCode="EX">
+        <enterpriseName>EXAMPLE ORGANIZATION</enterpriseName>
+      </originator>
+      <applic>
+        <displayText>
+          <simplePara>All</simplePara>
+        </displayText>
+      </applic>
+      <brexDmRef>
+        <dmRef>
+          <dmRefIdent>
+            <dmCode assyCode="0301" disassyCode="00" disassyCodeVariant="A" infoCode="022" infoCodeVariant="A" itemLocationCode="D" modelIdentCode="S1000D" subSubSystemCode="0" subSystemCode="1" systemCode="04" systemDiffCode="E"/>
+          </dmRefIdent>
+        </dmRef>
+      </brexDmRef>
+      <qualityAssurance>
+        <unverified/>
+      </qualityAssurance>
+    </dmStatus>
+  </identAndStatusSection>
+  <content>
+    <description>
+      <levelledPara>
+        <title>TERMINOLOGIE</title>
+        <para>Équilibrage : méthode par laquelle la répartition de la masse d’un rotor est vérifiée et, si nécessaire, corrigée, de façon 
+à garantir que le balourd résiduel ou la vibration des tourillons et/ou que les forces sur les paliers sont dans des limites 
+spécifiées pour une fréquence correspondant à la vitesse nominale.</para>
+        <para>[ISO 1925:2001, définition 4.1]</para>
+        <para>Degré de qualité d’équilibrage : C’est une « valeur » permettant de produire un degré de vibrations acceptable sur une 
+machine universelle en marche à l’intérieur de son propre environnement. La valeur numérique de « G » équivaut à la vélocité 
+de vibration mesurée en mm/s (2,5 mm/s = 0,1 pouce/s) d’un rotor en appui libre.</para>
+        <para>Pièce mise à la terre : pièce métallique connectée au système de mise à la terre.</para>
+        <para>Pièce sous tension : Conducteur ou partie conductrice alimenté en mode de fonctionnement normal, y compris un 
+conducteur neutre.</para>
+        <para>Personnel autorisé : employé ayant l’approbation officielle de la compagnie.</para>
+        <para>Personnel qualifié : employé qui remplit les conditions suivantes simultanément :</para>
+        <randomList>
+          <listItem>
+            <para>reçoit une formation sous la direction et la responsabilité d’un professionnel qualifié et autorisé ;</para>
+          </listItem>
+          <listItem>
+            <para>travaille sous la responsabilité d’un professionnel qualifié et approuvé.</para>
+          </listItem>
+        </randomList>
+        <note>
+          <notePara>Remarque : La qualification est uniquement valable pour la société qui a formé l’employé dans les conditions fixées par le professionnel autorisé et qualifié responsable de la formation.</notePara>
+        </note>
+      </levelledPara>
+    </description>
+  </content>
+</dmodule>

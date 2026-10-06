@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from lxml import etree
+import json
+
+from app.core import xml_safe
+from app.core.ir import IRNode, to_dict
+from app.db.session import SessionLocal
 
 
 def _upload(client, data: bytes) -> str:
@@ -52,16 +56,64 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     proc_found = False
     for d in st["dms"]:
         xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{d['dm_id']}/xml").text
-        etree.fromstring(xml.encode("utf-8"))
+        xml_safe.fromstring(xml, allow_internal_dtd=True)
         if d["dm_type"] == "procedural":
             assert "<procedure>" in xml
             proc_found = True
+        else:
+            assert "<levelledPara" in xml
     assert proc_found, types
 
     # ZIP de tous les DMs
     z = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
     assert z.status_code == 200
     assert z.headers["content-type"] == "application/zip"
+
+
+def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
+    from app.db.models import Document
+
+    with SessionLocal() as db:
+        doc = Document(
+            filename="manual.pdf",
+            source_format="pdf",
+            storage_path="unused.pdf",
+            dms_json=json.dumps([
+                {
+                    "dm_id": "dm1",
+                    "title": "First",
+                    "dm_type": "descriptive",
+                    "tree": to_dict(IRNode(
+                        id="r1",
+                        kind="section",
+                        children=[IRNode(id="f1", kind="figure", text="Figure 1 First")],
+                    )),
+                },
+                {
+                    "dm_id": "dm2",
+                    "title": "Second",
+                    "dm_type": "descriptive",
+                    "tree": to_dict(IRNode(
+                        id="r2",
+                        kind="section",
+                        children=[
+                            IRNode(id="f2", kind="figure", text="Figure 2 Second"),
+                            IRNode(id="t2", kind="table", table_rows=[["A"]]),
+                        ],
+                    )),
+                },
+            ]),
+        )
+        db.add(doc)
+        db.commit()
+        doc_id = doc.id
+
+    first = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm1/xml")
+    second = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm2/xml")
+
+    assert 'id="fig-0001"' in first.text
+    assert 'id="fig-0002"' in second.text
+    assert 'id="tbl-0001"' in second.text
 
 
 def _split_state(client, doc_id):
@@ -90,6 +142,51 @@ def test_split_rename_and_exclude(client, pdf_bytes) -> None:
         json={"op": "exclude", "id": first},
     ).json()
     assert len(st["dms"]) == 1
+
+
+def test_rename_reassociates_available_dmrl_dmc(client, pdf_bytes, tmp_path) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    dmrl = tmp_path / "dmrl.json"
+    dmrl.write_text(json.dumps([
+        {"DMC": "DMC-TEST-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-TEST-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]), encoding="utf-8")
+    with dmrl.open("rb") as stream:
+        response = client.post(
+            f"/api/v1/documents/{doc_id}/resources/dmrl",
+            files={"file": ("dmrl.json", stream, "application/json")},
+        )
+    assert response.status_code == 200, response.text
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    first = state["dms"][0]["dm_id"]
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/update",
+        json={"op": "rename", "id": first, "title": "Removal Procedure"},
+    ).json()
+    assert [dm["dmc"] for dm in state["dms"]].count("DMC-TEST-A-00-00-00-00A-520A-D") == 1
+
+
+def test_split_does_not_duplicate_dmrl_dmc(client, pdf_bytes, tmp_path) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    dmrl = tmp_path / "dmrl.json"
+    dmrl.write_text(json.dumps([
+        {"DMC": "DMC-TEST-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-TEST-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]), encoding="utf-8")
+    with dmrl.open("rb") as stream:
+        response = client.post(
+            f"/api/v1/documents/{doc_id}/resources/dmrl",
+            files={"file": ("dmrl.json", stream, "application/json")},
+        )
+    assert response.status_code == 200, response.text
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    target = state["dms"][0]["dm_id"]
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/update",
+        json={"op": "split", "id": target},
+    ).json()
+    dmcs = [dm["dmc"] for dm in state["dms"] if dm["dmc"]]
+    assert len(dmcs) == len(set(dmcs))
 
 
 def test_split_preserved_on_advance(client, pdf_bytes) -> None:
@@ -172,8 +269,12 @@ def test_split_undo_restores(client, pdf_bytes) -> None:
     assert len(st["dms"]) == n0, "undo n'a pas restaure le DM exclu"
 
 
-def test_hide_zones_removes_headers_and_undo(client, pdf_bytes_headers) -> None:
-    """« Masquer entetes/pieds » retire le bruit, undo le restaure."""
+def test_hide_zones_is_idempotent_after_automatic_noise_filter(client, pdf_bytes_headers) -> None:
+    """Le bruit de mise en page est retire avant l'etape split.
+
+    L'action historique « Masquer entetes/pieds » reste sans effet destructif
+    et son undo conserve le meme contenu deja nettoye.
+    """
     doc_id = _upload(client, pdf_bytes_headers)
     st = _split_state(client, doc_id)
     before = sum(d["node_count"] for d in st["dms"])
@@ -183,7 +284,7 @@ def test_hide_zones_removes_headers_and_undo(client, pdf_bytes_headers) -> None:
         json={"op": "hide_zones", "zones": ["header", "footer"]},
     ).json()
     after = sum(d["node_count"] for d in st["dms"])
-    assert after < before, "aucun noeud entete/pied retire"
+    assert after == before, "le masquage manuel ne doit pas retirer du contenu deja nettoye"
 
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/update", json={"op": "undo"}
@@ -235,3 +336,93 @@ def test_wizard_type_override(client, pdf_bytes) -> None:
     client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []})
     xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm0}/xml").text
     assert "<procedure>" in xml
+
+
+def test_manual_dm_type_is_applied_before_resolution() -> None:
+    from app.core import ir as ir_mod
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[IRNode(id="p1", kind="paragraph", text="Check the pump.")],
+    )
+    doc = Document(dms_json=json.dumps([{
+        "dm_id": "dm1",
+        "title": "Pump",
+        "dm_type": "descriptive",
+        "tree": to_dict(root),
+    }]))
+
+    wizard_core._apply_types(doc, {"dm1": "procedural"})
+    wizard_core._resolve_all(doc)
+
+    tree = ir_mod.from_dict(json.loads(doc.dms_json)[0]["tree"])
+    paragraph = ir_mod.find_node(tree, "p1")
+    assert paragraph is not None
+    assert paragraph.context == "procedural"
+    assert paragraph.candidates[0].element == "proceduralStep"
+
+
+def test_wizard_splits_inline_numbered_actions_after_procedural_type_selection() -> None:
+    from app.core import ir as ir_mod
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    root = IRNode(id="root", kind="section", children=[IRNode(
+        id="section",
+        kind="section",
+        level=4,
+        text="Procédures de mise en position verticale des moteurs W22",
+        children=[IRNode(
+            id="paragraph",
+            kind="paragraph",
+            text=(
+                "Pour mettre les moteurs W22 en position verticale, procédez "
+                "comme suit : 1. Serrer les anneaux de levage ; "
+                "2. Retirer le moteur de l’emballage."
+            ),
+        )],
+    )])
+    doc = Document(dms_json=json.dumps([{
+        "dm_id": "dm1",
+        "title": "Procédures W22",
+        "dm_type": "descriptive",
+        "tree": to_dict(root),
+    }]))
+
+    wizard_core._apply_types(doc, {"dm1": "procedural"})
+    wizard_core._resolve_all(doc)
+
+    generated = ir_mod.from_dict(json.loads(doc.dms_json)[0]["tree"])
+    split_paragraph = ir_mod.find_node(generated, "paragraph")
+    assert split_paragraph is not None
+    assert split_paragraph.kind == "section"
+    assert split_paragraph.children[0].text.endswith("comme suit :")
+    actions = split_paragraph.children[1]
+    assert actions.kind == "item-sequence"
+    assert [item.text for item in actions.children] == [
+        "Serrer les anneaux de levage",
+        "Retirer le moteur de l’emballage.",
+    ]
+
+    from app.core.s1000d_schema import validate_xsd
+    from app.core.s1000d_serializer import serialize
+
+    xml = serialize(generated, issue="4.2", dm_type="procedural", title="Procédures W22")
+    violations = validate_xsd(
+        xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
+    )
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+    xml_root = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    main = xml_root.find("./content/procedure/mainProcedure")
+    assert main is not None
+    procedure_step = main.find("./proceduralStep")
+    assert procedure_step is not None
+    assert procedure_step.findtext("./title") == "Procédures de mise en position verticale des moteurs W22"
+    assert "procédez comme suit" in "".join(procedure_step.find("./para").itertext())
+    generated_steps = procedure_step.findall("./proceduralStep")
+    assert len(generated_steps) == 2
+    assert "Serrer les anneaux" in "".join(generated_steps[0].itertext())
+    assert "Retirer le moteur" in "".join(generated_steps[1].itertext())

@@ -22,6 +22,7 @@ def test_upload_pdf_persists_v0(client: TestClient, sample_pdf_bytes: bytes) -> 
     assert body["target_unit_system"] == "imperial"
     assert body["status"] == "uploaded"
     assert body["current_version"] == 0
+    assert body["client_metadata"]["meta_manufacturer"] == body["meta_manufacturer"]
 
 
 def test_upload_rejects_non_pdf(client: TestClient) -> None:
@@ -52,6 +53,115 @@ def test_list_and_get(client: TestClient, sample_pdf_bytes: bytes) -> None:
     get_resp = client.get(f"/api/v1/documents/{doc['id']}")
     assert get_resp.status_code == 200
     assert get_resp.json()["id"] == doc["id"]
+
+
+def test_patch_document_context_validates_language(client: TestClient, sample_pdf_bytes: bytes) -> None:
+    doc = _upload(client, sample_pdf_bytes)
+    response = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={
+            "meta_cmm_number": "24-09-06",
+            "meta_revision_date": "MAR 18/26",
+            "meta_revision_number": "04",
+            "meta_manufacturer": "Boeing",
+            "document_language": "en",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document_language"] == "en"
+    assert body["meta_manufacturer"] == "Boeing"
+    assert body["client_metadata"]["meta_cmm_number"] == "24-09-06"
+    assert body["client_metadata"]["document_language"] == "en"
+
+    invalid = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"document_language": "de"},
+    )
+    assert invalid.status_code == 422
+
+    invalid_manufacturer = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"meta_manufacturer": "Embraer"},
+    )
+    assert invalid_manufacturer.status_code == 422
+
+
+def test_client_metadata_patch_merges_and_updates_legacy_fields(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    doc = _upload(client, sample_pdf_bytes)
+    first = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={
+            "client_metadata": {
+                "meta_cmm_number": "79-30-02",
+                "document_language": "fr",
+            }
+        },
+    )
+
+    assert first.status_code == 200, first.text
+    first_body = first.json()
+    assert first_body["meta_cmm_number"] == "79-30-02"
+    assert first_body["document_language"] == "fr"
+
+    second = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_revision_date": "MAR 18/26"}},
+    )
+
+    assert second.status_code == 200, second.text
+    second_body = second.json()
+    assert second_body["client_metadata"]["meta_cmm_number"] == "79-30-02"
+    assert second_body["client_metadata"]["document_language"] == "fr"
+    assert second_body["client_metadata"]["meta_revision_date"] == "MAR 18/26"
+    assert second_body["meta_revision_date"] == "MAR 18/26"
+
+
+def test_client_metadata_patch_validates_manifest_fields(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    doc = _upload(client, sample_pdf_bytes)
+    response = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"unknown_field": "value"}},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "CLIENT_METADATA_INVALID"
+
+    invalid_value = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_manufacturer": "Embraer"}},
+    )
+    assert invalid_value.status_code == 422
+    assert invalid_value.json()["code"] == "CLIENT_METADATA_INVALID"
+
+
+def test_client_metadata_supports_multiple_pnr_values(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    doc = _upload(client, sample_pdf_bytes)
+    pnr_values = ["1-879-SB", "2-410-MX"]
+
+    patched = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_pnr_number": pnr_values}},
+    )
+
+    assert patched.status_code == 200, patched.text
+    body = patched.json()
+    assert body["client_metadata"]["meta_pnr_number"] == pnr_values
+    assert body["meta_pnr_number"] == ", ".join(pnr_values)
+
+    next_upload = _upload(client, sample_pdf_bytes)
+    assert next_upload["client_metadata"]["meta_pnr_number"] == pnr_values
+    assert next_upload["meta_pnr_number"] == ", ".join(pnr_values)
 
 
 def test_get_pdf_returns_v0_bytes(client: TestClient, sample_pdf_bytes: bytes) -> None:

@@ -7,17 +7,17 @@ avec fallback sur `app.config.settings` (qui lit le `.env`).
 from __future__ import annotations
 
 import json
-import logging
 from collections.abc import AsyncIterator
 from typing import Any, Optional
 
 import httpx
+import structlog
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db.models import AppConfig
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 try:
@@ -61,7 +61,7 @@ def _get_secret_manager():  # type: ignore[no-untyped-def]
     from app.core.encryption import SecretManager
 
     if not settings.encryption_key:
-        logger.warning("Encryption key not configured - secrets stored in plaintext (INSECURE)")
+        logger.warning("mistral_encryption_key_missing", risk="secrets stored in plaintext")
         return SecretManager(None)
     return SecretManager(settings.encryption_key)
 
@@ -74,7 +74,7 @@ def _read_config(db: Session, key: str, default: str = "") -> str:
         try:
             return _get_secret_manager().decrypt(row.value)
         except Exception as e:  # noqa: BLE001
-            logger.error("Failed to decrypt %s: %s", key, e)
+            logger.error("mistral_config_decrypt_failed", key=key, error=type(e).__name__)
             return default
     return row.value
 
@@ -84,7 +84,7 @@ def _write_config(db: Session, key: str, value: str) -> None:
         try:
             value = _get_secret_manager().encrypt(value)
         except Exception as e:  # noqa: BLE001
-            logger.error("Failed to encrypt %s: %s", key, e)
+            logger.error("mistral_config_encrypt_failed", key=key, error=type(e).__name__)
             raise MistralError(f"Encryption failed: {e}") from e
     row = db.get(AppConfig, key)
     if row is None:

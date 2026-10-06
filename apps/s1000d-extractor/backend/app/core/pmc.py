@@ -22,7 +22,7 @@ if TYPE_CHECKING:  # pragma: no cover - import de typage seulement
 _DMC_RE = re.compile(
     r"^(?:DMC-)?"
     r"(?P<mic>[A-Z0-9]+)-"
-    r"(?P<sdc>[A-Z0-9])-"
+    r"(?P<sdc>[A-Z0-9]{1,2})-"
     r"(?P<sc>[A-Z0-9]{2,3})-"
     r"(?P<ssc>[A-Z0-9])(?P<sssc>[A-Z0-9])-"
     r"(?P<ac>[A-Z0-9]{2,4})-"
@@ -77,28 +77,54 @@ def _emit_dm_ref(parent: etree._Element, entry: DmrlEntry) -> None:
 
 
 def _emit_entry(parent: etree._Element, node: dict) -> None:
-    entry: DmrlEntry | None = node["entry"]
+    entries: list[DmrlEntry] = node["entries"]
     el = etree.SubElement(parent, "pmEntry")
-    label = entry.title if entry else node["key"]
+    label = entries[0].title if entries else node["key"]
     etree.SubElement(el, "pmEntryTitle").text = label
-    if entry is not None:
+    for entry in entries:
         _emit_dm_ref(el, entry)
     for child in node["children"]:
         _emit_entry(el, child)
 
 
 def _build_tree(entries: list[DmrlEntry]) -> list[dict]:
-    """Arbre {key, entry, children} construit depuis les chemins `Arbo`.
+    """Construit l'arbre depuis des niveaux numeriques ou des chemins `Arbo`."""
+    levels: list[int | None] = []
+    numeric_levels = True
+    for entry in entries:
+        value = str(entry.arbo or "").strip()
+        if not value:
+            levels.append(None)
+        elif re.fullmatch(r"\d+", value):
+            levels.append(int(value))
+        else:
+            numeric_levels = False
+            break
 
-    Les entrees sans `Arbo` (ou dont le parent est absent) sont rattachees a la
-    racine, dans leur ordre d'apparition : aucune ligne de DMRL n'est perdue.
-    """
+    if numeric_levels and any(level is not None for level in levels):
+        roots: list[dict] = []
+        stack: list[tuple[int, dict]] = []
+        for entry, level in zip(entries, levels):
+            node = {"key": entry.title or entry.dmc, "entries": [entry], "children": []}
+            if level is None:
+                roots.append(node)
+                stack.clear()
+                continue
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            if level == 1 or not stack:
+                roots.append(node)
+            else:
+                stack[-1][1]["children"].append(node)
+            stack.append((level, node))
+        return roots
+
     roots: list[dict] = []
     index: dict[str, dict] = {}
     for entry in entries:
         parts = _arbo_parts(entry.arbo)
         if not parts:
-            roots.append({"key": entry.title, "entry": entry, "children": []})
+            roots.append({"key": entry.title, "entries": [entry], "children": []})
             continue
         path = ""
         parent_children = roots
@@ -106,11 +132,11 @@ def _build_tree(entries: list[DmrlEntry]) -> list[dict]:
             path = f"{path}.{part}" if path else part
             node = index.get(path)
             if node is None:
-                node = {"key": path, "entry": None, "children": []}
+                node = {"key": path, "entries": [], "children": []}
                 index[path] = node
                 parent_children.append(node)
             if i == len(parts) - 1:
-                node["entry"] = entry
+                node["entries"].append(entry)
             parent_children = node["children"]
     return roots
 

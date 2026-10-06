@@ -1,5 +1,11 @@
 import { bboxToPercentRect, hasValidBbox } from "../../lib/bbox";
+import {
+  isAiGeneratedSuggestion,
+  localizedRuleCode,
+  localizedSuggestionMessage,
+} from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   suggestions: Suggestion[];
@@ -18,6 +24,7 @@ export function HighlightLayer({
   selectedSuggestionId,
   onSuggestionClick,
 }: Props) {
+  const { t } = useTranslation();
   const sorted = [...suggestions].sort((a, b) => {
     if (a.span_index !== b.span_index) return a.span_index - b.span_index;
     return a.id.localeCompare(b.id);
@@ -45,14 +52,21 @@ export function HighlightLayer({
         groupCursor.set(k, cur);
         const counter = total > 1 ? ` (${cur}/${total})` : "";
         const detectionOnly = !s.proposed_text || s.proposed_text === s.original_text;
-        const label = `${s.rule_code}${counter} · ${s.message || ""}`;
+        const message = localizedSuggestionMessage(s, t);
+        const ruleCodeLabel = localizedRuleCode(s.rule_code, t);
+        const sourceKind = isAiGeneratedSuggestion(s.source_kind, s.rule_code, s.proposed_text)
+          ? "ai"
+          : s.source_kind;
+        const sourceLabel = t(`reviewer.source.${sourceKind}`);
+        const severityLabel = t(`reviewer.suggestion.severity.${s.severity}`);
+        const label = `${ruleCodeLabel}${counter} · ${sourceLabel} · ${message || ""}`;
         const proposedLine = detectionOnly
-          ? "Détection · pas de correction automatique"
-          : `Proposé : ${s.proposed_text}`;
+          ? t("rules.suggestionDetails.detectionOnly")
+          : `${t("rules.suggestionDetails.proposed")} : ${s.proposed_text}`;
         const tooltip =
-          `${s.rule_code}${counter} · ${s.severity}\n` +
-          `${s.message || ""}\n` +
-          `Original : ${s.original_text}\n` +
+          `${ruleCodeLabel}${counter} · ${sourceLabel} · ${severityLabel}\n` +
+          `${message || ""}\n` +
+          `${t("rules.suggestionDetails.original")} : ${s.original_text}\n` +
           `${proposedLine}`;
         return (
           <button

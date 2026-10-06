@@ -7,11 +7,15 @@ import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../component
 import {
   brexApi,
   documentsApi,
+  migrationInputsApi,
+  pdfCutApi,
   resourcesApi,
   startWizardStream,
   wizardApi,
   type ContextHint,
   type DmrlRow,
+  type MigrationInputKind,
+  type PdfCutDetection,
   type ResourceKind,
   type S1000dIssue,
   type TreeNode,
@@ -155,7 +159,7 @@ export function Migration() {
 
   // Formulaire de chargement.
   const [file, setFile] = useState<File | null>(null);
-  const [issue, setIssue] = useState<S1000dIssue>("5.0");
+  const [issue, setIssue] = useState<S1000dIssue>("4.2");
   const [hint, setHint] = useState<ContextHint>("mixed");
   const [brexId, setBrexId] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -168,6 +172,13 @@ export function Migration() {
   const [starting, setStarting] = useState<{ pct: number; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [wizError, setWizError] = useState<string | null>(null);
+  const [pdfCut, setPdfCut] = useState<{
+    docId: string;
+    detection: PdfCutDetection;
+    startPage: number | null;
+    endPage: number | null;
+  } | null>(null);
+  const [pdfCutBusy, setPdfCutBusy] = useState(false);
 
   // Éditions locales de l'étape courante (réinitialisées à chaque nouvel état).
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -178,6 +189,58 @@ export function Migration() {
   const [splitLevel, setSplitLevel] = useState("section");
   const [splitMsg, setSplitMsg] = useState<string | null>(null);
   const wizRef = useRef<HTMLDivElement>(null);
+  const inputRefs = useRef<Partial<Record<MigrationInputKind, HTMLInputElement | null>>>({});
+  const mappingTouched = useRef(false);
+
+  const restoreFileInput = (kind: MigrationInputKind, fileToRestore: File) => {
+    const input = inputRefs.current[kind];
+    if (!input || typeof DataTransfer === "undefined") return;
+    const transfer = new DataTransfer();
+    transfer.items.add(fileToRestore);
+    input.files = transfer.files;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSavedInputs = async () => {
+      try {
+        const mapping = await migrationInputsApi.read();
+        if (cancelled || mappingTouched.current) return;
+        setIssue(mapping.issue);
+        setHint(mapping.context_hint);
+        setBrexId(mapping.brex_id ?? "");
+        const entries = Object.entries(mapping.files) as [
+          MigrationInputKind,
+          { filename: string },
+        ][];
+        const loaded = await Promise.all(
+          entries.map(async ([kind, metadata]) => {
+            try {
+              return [kind, await migrationInputsApi.file(kind, metadata.filename)] as const;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        if (cancelled || mappingTouched.current) return;
+        const restoredResources: Partial<Record<ResourceKind, File>> = {};
+        for (const item of loaded) {
+          if (!item) continue;
+          const [kind, restoredFile] = item;
+          restoreFileInput(kind, restoredFile);
+          if (kind === "document") setFile(restoredFile);
+          else restoredResources[kind] = restoredFile;
+        }
+        setResourceFiles(restoredResources);
+      } catch {
+        // No mapping exists on a fresh installation.
+      }
+    };
+    void loadSavedInputs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSelected(new Set());
@@ -187,11 +250,55 @@ export function Migration() {
     setOverrides({});
     setSplitMsg(null);
     if (wiz?.split_level) setSplitLevel(wiz.split_level);
-    if (wiz && wizRef.current)
-      wizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [wiz]);
 
+  useEffect(() => {
+    if (wiz?.step && wizRef.current) {
+      wizRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [wiz?.step]);
+
+  useEffect(() => {
+    const onDocumentsReset = () => {
+      setDocId(null);
+      setWiz(null);
+      setStarting(null);
+      setPdfCut(null);
+      setWizError(null);
+    };
+    window.addEventListener("s1000d-documents-reset", onDocumentsReset);
+    return () => window.removeEventListener("s1000d-documents-reset", onDocumentsReset);
+  }, []);
+
   const refreshDocs = () => void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
+
+  const startAnalysis = async (id: string) => {
+    setStarting({ pct: 5, label: t("migration.start.starting") });
+    await startWizardStream(id, onStreamEvent);
+    refreshDocs();
+  };
+
+  const startDocument = async (id: string, sourceFormat: string) => {
+    setStarting({ pct: 5, label: t("migration.start.starting") });
+    if (sourceFormat === "pdf") {
+      const detection = await pdfCutApi.detect(id);
+      if (
+        detection.validation_required &&
+        (detection.selected_page == null || detection.selected_end_page == null)
+      ) {
+        setPdfCut({
+          docId: id,
+          detection,
+          startPage: detection.selected_page ?? detection.default_start_page,
+          endPage: detection.selected_end_page ?? detection.total_pages,
+        });
+        setStarting(null);
+        refreshDocs();
+        return;
+      }
+    }
+    await startAnalysis(id);
+  };
 
   const stepLabel = (step: unknown) =>
     t(`migration.start.${String(step)}`, { defaultValue: t("migration.start.fallback") });
@@ -201,6 +308,7 @@ export function Migration() {
       setStarting({ pct: (data.pct as number) || 0, label: stepLabel(data.step) });
     } else if (ev === "done") {
       setStarting(null);
+      setPdfCut(null);
       setWiz(data as unknown as WizardState);
     } else if (ev === "error") {
       setStarting(null);
@@ -216,6 +324,7 @@ export function Migration() {
     setLoadError(null);
     setWiz(null);
     setWizError(null);
+    setPdfCut(null);
     try {
       const doc = await documentsApi.upload(file, issue, hint, brexId || undefined);
       setDocId(doc.id);
@@ -223,9 +332,7 @@ export function Migration() {
       for (const [kind, resource] of Object.entries(resourceFiles)) {
         if (resource) await resourcesApi.upload(doc.id, kind as ResourceKind, resource);
       }
-      setStarting({ pct: 5, label: t("migration.start.starting") });
-      await startWizardStream(doc.id, onStreamEvent);
-      refreshDocs();
+      await startDocument(doc.id, doc.source_format);
     } catch (e) {
       setStarting(null);
       setLoadError(e instanceof Error ? e.message : String(e));
@@ -240,14 +347,36 @@ export function Migration() {
       const st = await wizardApi.get(id);
       setWiz(st);
     } catch {
-      // Pas encore démarré : lance le stream de démarrage.
-      setStarting({ pct: 5, label: t("migration.start.starting") });
       try {
-        await startWizardStream(id, onStreamEvent);
+        const doc = await documentsApi.get(id);
+        await startDocument(id, doc.source_format);
       } catch (e) {
         setStarting(null);
         setWizError(e instanceof Error ? e.message : String(e));
       }
+    }
+  };
+
+  const confirmPdfCut = async () => {
+    if (!pdfCut || pdfCut.startPage == null || pdfCut.endPage == null) return;
+    const pending = pdfCut;
+    const startPage = pending.startPage;
+    const endPage = pending.endPage;
+    if (startPage == null || endPage == null) return;
+    if (startPage > endPage) {
+      setLoadError(t("migration.upload.pdfCut.invalidRange"));
+      return;
+    }
+    setPdfCutBusy(true);
+    setLoadError(null);
+    try {
+      await pdfCutApi.confirm(pending.docId, startPage, endPage);
+      setPdfCut(null);
+      await startAnalysis(pending.docId);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfCutBusy(false);
     }
   };
 
@@ -327,21 +456,40 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".pdf,.docx"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                ref={(element) => {
+                  inputRefs.current.document = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setFile(e.target.files?.[0] ?? null);
+                }}
               />
             </label>
           </div>
           <div className="row">
             <label className="grow">
               <div className="label">{t("migration.upload.issue")}</div>
-              <select value={issue} onChange={(e) => setIssue(e.target.value as S1000dIssue)}>
-                <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
+              <select
+                value={issue}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setIssue(e.target.value as S1000dIssue);
+                }}
+              >
                 <option value="4.2">{t("migration.upload.issueValue", { issue: "4.2" })}</option>
+                <option value="4.1">{t("migration.upload.issueValue", { issue: "4.1" })}</option>
+                <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
               </select>
             </label>
             <label className="grow">
               <div className="label">{t("migration.upload.hint")}</div>
-              <select value={hint} onChange={(e) => setHint(e.target.value as ContextHint)}>
+              <select
+                value={hint}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setHint(e.target.value as ContextHint);
+                }}
+              >
                 <option value="mixed">{t("migration.upload.hintMixed")}</option>
                 <option value="descriptive">{t("dmType.descriptive")}</option>
                 <option value="procedural">{t("dmType.procedural")}</option>
@@ -349,7 +497,13 @@ export function Migration() {
             </label>
             <label className="grow">
               <div className="label">{t("migration.upload.brex")}</div>
-              <select value={brexId} onChange={(e) => setBrexId(e.target.value)}>
+              <select
+                value={brexId}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setBrexId(e.target.value);
+                }}
+              >
                 <option value="">{t("migration.upload.brexNone")}</option>
                 {brex.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -366,9 +520,13 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".xlsx,.xlsm,.csv,.json"
-                onChange={(e) =>
-                  setResourceFiles((p) => ({ ...p, dmrl: e.target.files?.[0] }))
-                }
+                ref={(element) => {
+                  inputRefs.current.dmrl = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, dmrl: e.target.files?.[0] }));
+                }}
               />
             </label>
             <label className="grow">
@@ -377,7 +535,13 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".xml"
-                onChange={(e) => setResourceFiles((p) => ({ ...p, cir: e.target.files?.[0] }))}
+                ref={(element) => {
+                  inputRefs.current.cir = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, cir: e.target.files?.[0] }));
+                }}
               />
             </label>
             <label className="grow">
@@ -386,9 +550,28 @@ export function Migration() {
                 className="input"
                 type="file"
                 accept=".json"
-                onChange={(e) =>
-                  setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }))
-                }
+                ref={(element) => {
+                  inputRefs.current.brex_rules = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }));
+                }}
+              />
+            </label>
+            <label className="grow">
+              <div className="label">{t("migration.upload.dmHeader")}</div>
+              <input
+                className="input"
+                type="file"
+                accept=".json,.xml"
+                ref={(element) => {
+                  inputRefs.current.dm_header = element;
+                }}
+                onChange={(e) => {
+                  mappingTouched.current = true;
+                  setResourceFiles((p) => ({ ...p, dm_header: e.target.files?.[0] }));
+                }}
               />
             </label>
           </div>
@@ -396,15 +579,103 @@ export function Migration() {
             <button
               type="button"
               className="btn primary"
-              disabled={busy || starting !== null}
+              disabled={busy || starting !== null || pdfCut !== null || pdfCutBusy}
               onClick={() => void doStart()}
             >
               {t("migration.upload.start")}
             </button>
+            {starting ? (
+              <div style={{ minWidth: 240, flex: "1 1 280px" }}>
+                <div
+                  className="label"
+                  style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
+                >
+                  <span>{starting.label}</span>
+                  <span>{starting.pct}%</span>
+                </div>
+                <div
+                  className="progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={starting.pct}
+                >
+                  <span style={{ width: `${starting.pct}%` }} />
+                </div>
+              </div>
+            ) : null}
             {loadError ? <span className="error grow">{loadError}</span> : null}
           </div>
         </div>
       </div>
+
+      {pdfCut ? (
+        <div className="card">
+          <h2 className="card-title">{t("migration.upload.pdfCut.title")}</h2>
+          <p className="label">{t("migration.upload.pdfCut.help")}</p>
+          <div className="row" style={{ alignItems: "end" }}>
+            <label>
+              <div className="label">{t("migration.upload.pdfCut.startPage")}</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={pdfCut.detection.total_pages}
+                value={pdfCut.startPage ?? ""}
+                disabled={pdfCutBusy}
+                onChange={(e) =>
+                  setPdfCut((current) =>
+                    current ? { ...current, startPage: Number(e.target.value) || null } : current,
+                  )
+                }
+              />
+            </label>
+            <label>
+              <div className="label">{t("migration.upload.pdfCut.endPage")}</div>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={pdfCut.detection.total_pages}
+                value={pdfCut.endPage ?? ""}
+                disabled={pdfCutBusy}
+                onChange={(e) =>
+                  setPdfCut((current) =>
+                    current ? { ...current, endPage: Number(e.target.value) || null } : current,
+                  )
+                }
+              />
+            </label>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={
+                pdfCutBusy ||
+                pdfCut.startPage == null ||
+                pdfCut.endPage == null ||
+                pdfCut.startPage > pdfCut.endPage
+              }
+              onClick={() => void confirmPdfCut()}
+            >
+              {t("migration.upload.pdfCut.validate")}
+            </button>
+          </div>
+          {pdfCut.startPage != null ? (
+            <img
+              src={pdfCutApi.previewUrl(pdfCut.docId, pdfCut.startPage)}
+              alt={t("migration.upload.pdfCut.previewAlt", { page: pdfCut.startPage })}
+              style={{
+                display: "block",
+                maxWidth: "100%",
+                maxHeight: 560,
+                marginTop: 16,
+                objectFit: "contain",
+                border: "1px solid var(--border)",
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="card">
         <h2 className="card-title">{t("migration.docs.title")}</h2>
@@ -450,18 +721,6 @@ export function Migration() {
 
       {/* Assistant */}
       <div ref={wizRef}>
-        {starting ? (
-          <div className="card">
-            <h2 className="card-title">{t("migration.start.title")}</h2>
-            <div className="label" style={{ marginBottom: 6 }}>
-              {starting.label}
-            </div>
-            <div className="progress">
-              <span style={{ width: `${starting.pct}%` }} />
-            </div>
-          </div>
-        ) : null}
-
         {wizError ? <div className="card"><div className="error">{wizError}</div></div> : null}
 
         {wiz?.resources?.errors?.length ? (
@@ -471,6 +730,13 @@ export function Migration() {
                 {t("migration.resource.notApplied", { detail: e })}
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {wiz?.resources?.has_dm_header ? (
+          <div className="card">
+            <span className="badge ok">{t("migration.resource.headerLoaded")}</span>{" "}
+            <span className="label">{t("migration.resource.headerLoadedHelp")}</span>
           </div>
         ) : null}
 
@@ -487,13 +753,23 @@ export function Migration() {
                   </span>
                 ))}
                 {wiz.resources?.dmrl_count && docId ? (
-                  <a
-                    className="btn secondary small"
-                    style={{ marginLeft: "auto" }}
-                    href={resourcesApi.pmcUrl(docId)}
-                  >
-                    {t("migration.generate.pmc")}
-                  </a>
+                  <>
+                    <a
+                      className="btn secondary small"
+                      style={{ marginLeft: "auto" }}
+                      href={resourcesApi.pmcUrl(docId)}
+                    >
+                      {t("migration.generate.pmc")}
+                    </a>
+                    {wiz.step === "generate" ? (
+                      <a
+                        className="btn primary small"
+                        href={wizardApi.zipUrl(docId)}
+                      >
+                        {t("migration.generate.zip")}
+                      </a>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             </div>
@@ -557,6 +833,14 @@ export function Migration() {
                       <MatchBadge row={row} />
                       <span className="label" title={row.dmc}>
                         {row.dmc || t("common.none")}
+                      </span>
+                      <span
+                        className="label"
+                        title={row.icn || undefined}
+                        style={{ maxWidth: 280, whiteSpace: "pre-line", overflowWrap: "anywhere" }}
+                      >
+                        <strong>{t("migration.dmrl.icn")}:</strong>{" "}
+                        {row.icn || t("common.none")}
                       </span>
                       <button
                         type="button"
@@ -891,6 +1175,16 @@ export function Migration() {
 
             {wiz.step === "generate" ? (
               <div className="card">
+                <div className="row" style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    disabled={busy}
+                    onClick={() => void wizAction("back")}
+                  >
+                    {t("common.back")}
+                  </button>
+                </div>
                 <h2 className="card-title">
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>

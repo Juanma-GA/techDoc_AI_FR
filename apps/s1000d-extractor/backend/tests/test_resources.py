@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from lxml import etree
 
@@ -18,6 +19,14 @@ _CIR = (
     '<warning id="WARN-001"><para>Couper l alimentation.</para></warning>'
     "</commonRepository>"
 )
+
+_DMRL_WITH_ICN = [{
+    "Arbo": "1",
+    "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+    "Titre": "Description",
+    "Type": "Descriptif",
+    "ICN": "ICN-WEG-AA0004-00001-A-02.png",
+}]
 
 
 def _upload_doc(client, data: bytes) -> str:
@@ -54,6 +63,94 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Le type declare dans la DMRL fait foi.
     assert [d["dm_type"] for d in state["dms"]] == ["descriptive", "procedural"]
     assert state["resources"]["dmrl_count"] == 2
+
+
+def test_document_defaults_to_issue_4_2(client, pdf_bytes) -> None:
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("manual.pdf", pdf_bytes)},
+        data={"context_hint": "mixed"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["s1000d_issue"] == "4.2"
+
+
+def test_migration_input_mapping_persists_last_files(client, pdf_bytes) -> None:
+    doc_id = _upload_doc(client, pdf_bytes)
+    dmrl_payload = json.dumps(_DMRL).encode()
+    header_payload = b'{"security":{"securityClassification":"04"}}'
+    assert _upload_resource(client, doc_id, "dmrl", "client-dmrl.json", dmrl_payload).status_code == 200
+    assert _upload_resource(client, doc_id, "dm_header", "client-header.json", header_payload).status_code == 200
+
+    mapping = client.get("/api/v1/migration-inputs")
+    assert mapping.status_code == 200, mapping.text
+    body = mapping.json()
+    assert body["issue"] == "5.0"
+    assert body["context_hint"] == "mixed"
+    assert body["files"]["document"]["filename"] == "manual.pdf"
+    assert body["files"]["dmrl"]["filename"] == "client-dmrl.json"
+    assert body["files"]["dm_header"]["filename"] == "client-header.json"
+
+    assert client.get("/api/v1/migration-inputs/document").content == pdf_bytes
+    assert client.get("/api/v1/migration-inputs/dmrl").content == dmrl_payload
+    assert client.get("/api/v1/migration-inputs/dm_header").content == header_payload
+
+
+def test_dmrl_icn_renames_image_and_xml_omits_extension(client, pdf_bytes_image) -> None:
+    doc_id = _upload_doc(client, pdf_bytes_image)
+    _upload_resource(client, doc_id, "dmrl", "DMRL.json", json.dumps(_DMRL_WITH_ICN).encode())
+
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/start",
+        json={"start_page": 1},
+    ).json()
+    assert state["dmrl"][0]["icn"] == "ICN-WEG-AA0004-00001-A-02.png"
+
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    names = client.get(f"/api/v1/documents/{doc_id}/wizard/images").json()
+    assert names == ["ICN-WEG-AA0004-00001-A-02.png"]
+    image = client.get(f"/api/v1/documents/{doc_id}/wizard/images/{names[0]}")
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+
+    for payload in ({"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    xml = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
+    ).text
+    assert "<!DOCTYPE dmodule [" in xml
+    assert (
+        '<!ENTITY ICN-WEG-AA0004-00001-A-02 SYSTEM '
+        '"ICN-WEG-AA0004-00001-A-02.png" NDATA png>' in xml
+    )
+    assert 'infoEntityIdent="ICN-WEG-AA0004-00001-A-02"' in xml
+    assert 'infoEntityIdent="ICN-WEG-AA0004-00001-A-02.png"' not in xml
+
+
+def test_existing_dm_without_doctype_is_upgraded_on_download(client, pdf_bytes_image) -> None:
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload_doc(client, pdf_bytes_image)
+    client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"start_page": 1})
+    for payload in ({}, {"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    dm_id = state["dms"][0]["dm_id"]
+
+    db = SessionLocal()
+    try:
+        document = db.get(Document, doc_id)
+        dms = json.loads(document.dms_json)
+        dms[0]["xml"] = dms[0]["xml"].split("<!DOCTYPE dmodule [", 1)[0] + dms[0]["xml"].split("]>\n", 1)[1]
+        document.dms_json = json.dumps(dms, ensure_ascii=False)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm_id}/xml")
+    assert response.status_code == 200
+    assert "<!DOCTYPE dmodule [" in response.text
 
 
 def test_dmrl_step_reports_unmatched_entry(client, pdf_bytes) -> None:
@@ -110,8 +207,10 @@ def test_pmc_endpoint(client, pdf_bytes) -> None:
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/xml")
     root = etree.fromstring(r.content)
-    assert [e.findtext("pmEntryTitle") for e in root.findall("./content/pmEntry")] == [
-        "Description", "Removal Procedure"
+    top = root.findall("./content/pmEntry")
+    assert [entry.findtext("pmEntryTitle") for entry in top] == ["Description"]
+    assert [entry.findtext("pmEntryTitle") for entry in top[0].findall("./pmEntry")] == [
+        "Removal Procedure"
     ]
 
 
@@ -135,8 +234,64 @@ def test_cir_and_brex_rules_upload(client, pdf_bytes) -> None:
     assert _upload_resource(client, doc_id, "brex_rules", "rules.json", rules).status_code == 200
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
     assert state["resources"] == {
-        "dmrl_count": 0, "has_cir": True, "has_brex_rules": True, "errors": []
+        "dmrl_count": 0, "has_cir": True, "has_brex_rules": True,
+        "has_dm_header": False, "errors": []
     }
+
+
+def test_client_dm_header_template_is_applied(client, pdf_bytes) -> None:
+    doc_id = _upload_doc(client, pdf_bytes)
+    template = {
+        "security": {"securityClassification": "04"},
+        "responsiblePartnerCompany": {
+            "enterpriseCode": "TST",
+            "enterpriseName": "TEST COMPANY",
+        },
+        "originator": {
+            "enterpriseCode": "TST",
+            "enterpriseName": "TEST COMPANY",
+        },
+    }
+    response = _upload_resource(
+        client, doc_id, "dm_header", "header.json", json.dumps(template).encode()
+    )
+    assert response.status_code == 200, response.text
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/start", json={"start_page": 1}
+    ).json()
+    assert state["resources"]["has_dm_header"] is True
+    for payload in ({}, {"types": {}}, {"overrides": []}, {}):
+        state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
+    xml = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/dm/{state['dms'][0]['dm_id']}/xml"
+    ).text
+    assert 'securityClassification="04"' in xml
+    assert "TEST COMPANY" in xml
+
+
+def test_imported_resource_paths_are_persisted(client, pdf_bytes) -> None:
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    doc_id = _upload_doc(client, pdf_bytes)
+    assert _upload_resource(
+        client, doc_id, "dmrl", "client-dmrl.json", json.dumps(_DMRL).encode()
+    ).status_code == 200
+    assert _upload_resource(
+        client, doc_id, "dm_header", "client-header.json", b"{}"
+    ).status_code == 200
+
+    db = SessionLocal()
+    try:
+        document = db.get(Document, doc_id)
+        assert document is not None
+        assert Path(document.storage_path).exists()
+        assert Path(document.dmrl_path).name == f"document_{doc_id}_dmrl.json"
+        assert Path(document.dmrl_path).exists()
+        assert Path(document.dm_header_path).name == f"document_{doc_id}_dm_header.json"
+        assert Path(document.dm_header_path).exists()
+    finally:
+        db.close()
 
 
 def test_unreadable_resource_is_reported_not_swallowed(client, pdf_bytes, tmp_path) -> None:

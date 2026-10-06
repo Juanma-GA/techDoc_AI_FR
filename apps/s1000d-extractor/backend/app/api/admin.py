@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.db.models import BrexProfile, Document
+from app.core.errors import AppError
+from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
 
@@ -87,7 +88,15 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
 
     docs = db.scalars(select(Document)).all()
     for d in docs:
-        for p in (d.storage_path, d.xml_path):
+        for p in (
+            d.storage_path,
+            d.pdf_cut_path,
+            d.xml_path,
+            d.dmrl_path,
+            d.dm_header_path,
+            d.cir_path,
+            d.brex_rules_path,
+        ):
             if p:
                 try:
                     Path(p).unlink(missing_ok=True)
@@ -98,6 +107,8 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
         except OSError:
             pass
     count = len(docs)
+    db.query(DmDocumentLink).delete()
+    db.query(DmVersion).delete()
     db.query(Document).delete()
     db.commit()
     log.info("admin reset scope=%s documents=%d", scope, count)

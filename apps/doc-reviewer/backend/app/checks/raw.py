@@ -27,3 +27,4 @@ class RawSuggestion:
     # et n'ont pas de texte a localiser via search_for. None = laisser
     # `materialize` calculer la bbox depuis `original`.
     bbox: tuple[float, float, float, float] | None = None
+    ai_generated: bool = False

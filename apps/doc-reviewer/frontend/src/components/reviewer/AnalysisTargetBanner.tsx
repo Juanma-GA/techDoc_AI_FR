@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { useClientConfig } from "../../hooks/useClientConfig";
 import { useFiltersStore } from "../../stores/filtersStore";
 
 /**
@@ -11,12 +12,18 @@ import { useFiltersStore } from "../../stores/filtersStore";
  */
 export function AnalysisTargetBanner() {
   const { t } = useTranslation();
-  const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
-  const checklistActive = useFiltersStore((s) => s.checklistActive);
+  const clientConfig = useClientConfig();
+  const legacyChecklistActive = useFiltersStore((s) => s.checklistActive);
+  const checklistActive =
+    import.meta.env.VITE_LEGACY_RULES_UI === "true" && legacyChecklistActive;
   const targetUnits = useFiltersStore((s) => s.targetUnits);
 
+  const hasActiveClientCatalog = (clientConfig.data?.catalogs.length ?? 0) > 0;
   const hasNoAnalysisTarget =
-    activeStandardVersionIds.length === 0 && !checklistActive && targetUnits.length === 0;
+    !clientConfig.isLoading &&
+    !hasActiveClientCatalog &&
+    !checklistActive &&
+    targetUnits.length === 0;
 
   if (!hasNoAnalysisTarget) return null;
   return <p className="banner warn">{t("documents.noAnalysisTarget")}</p>;

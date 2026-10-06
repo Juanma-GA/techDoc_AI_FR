@@ -109,7 +109,7 @@ for runbat in apps/*/_run.bat; do
   [[ -f "$runbat" ]] || continue
   if ! grep -q 'set "PORT=' "$runbat"; then
     missing+="$runbat — manque la variable 'set \"PORT=80XX\"'\n"
-  elif ! grep -q 'findstr "LISTENING"' "$runbat"; then
+  elif ! grep -Eq 'findstr(\.exe)?["]?[[:space:]]+"LISTENING"' "$runbat"; then
     missing+="$runbat — manque le check de port (netstat ... findstr \"LISTENING\")\n"
   elif ! grep -q ':find_port' "$runbat"; then
     missing+="$runbat — manque la bascule auto sur port libre (boucle :find_port)\n"

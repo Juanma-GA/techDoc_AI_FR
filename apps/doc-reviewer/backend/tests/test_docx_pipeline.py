@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from docx import Document as Docx
 from fastapi.testclient import TestClient
 
@@ -25,13 +26,28 @@ def _ste100_version_id(client: TestClient) -> str:
     raise AssertionError("ASD-STE100 seed introuvable")
 
 
+
+def _set_document_context(client: TestClient, document_id: str) -> None:
+    response = client.patch(
+        f"/api/v1/documents/{document_id}",
+        json={
+            "meta_revision_date": "JUL 27/26",
+            "meta_cmm_number": "79-30-02",
+            "meta_first_issue_date": "JUL 1966",
+            "meta_revision_number": "Rev. 01",
+            "document_language": "en",
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
 def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool before the check.")
 
-    # 1. Upload en mode Word natif.
+    # 1. Upload : le format d'entree selectionne automatiquement le mode natif.
     up = client.post(
-        f"/api/v1/documents?word_mode=docx&standard_version_ids={sv_id}",
+        f"/api/v1/documents?standard_version_ids={sv_id}",
         files={
             "file": (
                 "manual.docx",
@@ -45,6 +61,7 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     assert doc["source_format"] == "docx"
     assert doc["convert_engine"] == "docx-native"
     doc_id = doc["id"]
+    _set_document_context(client, doc_id)
 
     # Vue blocs disponible + zones semantiques (Phase 2).
     blocks = client.get(f"/api/v1/documents/{doc_id}/blocks").json()["blocks"]
@@ -89,10 +106,11 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool.")
     up = client.post(
-        f"/api/v1/documents?word_mode=docx&standard_version_ids={sv_id}",
+        f"/api/v1/documents?standard_version_ids={sv_id}",
         files={"file": ("m.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
     )
     doc_id = up.json()["id"]
+    _set_document_context(client, doc_id)
     with client.stream("POST", f"/api/v1/documents/{doc_id}/analyze") as s:
         b"".join(s.iter_bytes())
     sug = [x for x in client.get(f"/api/v1/documents/{doc_id}/suggestions").json()
@@ -111,10 +129,22 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
     assert "utilize" in "\n".join(p.text for p in restored.paragraphs)
 
 
-def test_docx_mode_rejects_non_docx(client: TestClient) -> None:
+def test_docx_upload_selects_working_format_automatically(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import doc_convert
+
+    # Sans moteur de conversion : seuls les exports natifs sont proposes.
+    monkeypatch.setattr(doc_convert, "can_convert_formats", lambda: False)
+    data = _docx_bytes("A native Word document")
     up = client.post(
-        "/api/v1/documents?word_mode=docx",
-        files={"file": ("notes.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        "/api/v1/documents",
+        files={"file": ("automatic.docx", data, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
     )
-    assert up.status_code == 400
-    assert up.json()["code"] == "DOCX_MODE_REQUIRES_DOCX"
+    assert up.status_code == 201, up.text
+    document = up.json()
+    assert document["source_format"] == "docx"
+    assert document["working_format"] == "docx"
+    exports = client.get(f"/api/v1/documents/{document['id']}/exports")
+    assert exports.status_code == 200
+    assert {item["format"] for item in exports.json()["available"]} == {"docx", "pdf"}

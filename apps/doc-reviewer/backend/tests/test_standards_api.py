@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from app.checks.client_registry import load_active_client_configuration
+from app.checks.standards import serialize_builtin_version
+
 
 def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     resp = client.get("/api/v1/standards")
@@ -12,7 +15,7 @@ def test_list_standards_returns_builtin_pdf_norms(client: TestClient) -> None:
     codes = {s["code"] for s in body}
     # Les normes purement XML/données (S1000D, ATA2200, S2000M) ont été
     # retirées du catalogue — seules restent les normes texte/rendu.
-    assert codes == {"ASD-STE100", "MAT10000", "ATA100"}
+    assert codes == {"ASD-STE100", "MAT10000", "ATA100", "THALES-CUSTOM"}
     for std in body:
         assert std["builtin"] is True
         assert len(std["versions"]) >= 1
@@ -68,6 +71,117 @@ def test_version_detail_returns_catalog(client: TestClient) -> None:
     assert "MAT_STEP_VERB" in catalog_codes
 
 
+def test_thales_catalog_exposes_english_description_and_message(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    thales = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = thales["versions"][0]
+
+    response = client.get(
+        f"/api/v1/standards/{thales['id']}/versions/{version['id']}"
+    )
+
+    assert response.status_code == 200
+    rule = next(
+        item
+        for item in response.json()["catalog"]
+        if item["code"] == "CUSTOM_NO_DEGREE_F_SYMBOL"
+    )
+    assert rule["description_en"] == "The °F symbol must be written as deg. F."
+    assert rule["message_en"] == "The °F symbol is forbidden: use deg. F."
+
+
+def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version_id = custom["versions"][0]["id"]
+
+    response = client.get(
+        f"/api/v1/standards/{custom['id']}/versions/{version_id}"
+    )
+
+    assert response.status_code == 200
+    severities = {
+        item["code"]: item["severity"] for item in response.json()["catalog"]
+    }
+    assert severities == {
+        "CUSTOM_CMM_NUMBER": "error",
+        "CUSTOM_CMM_NUMBER_FONT_SIZE": "error",
+        "CUSTOM_THALES_LOGO_FONT_SIZE": "warning",
+        "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "warning",
+        "CUSTOM_TP2_IMPORTANT_NOTICE": "error",
+        "CUSTOM_TITLE_PAGE_COPYRIGHT": "warning",
+        "CUSTOM_COPYRIGHT_POSITION": "warning",
+        "CUSTOM_FOOTER_PAGE_NUMBER": "error",
+        "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": "error",
+        "CUSTOM_HIGHLIGHTS_HOLDER": "error",
+        "CUSTOM_HEADER_DOCUMENT_TYPE": "error",
+        "CUSTOM_TP1_HEADER_DOCUMENT_TYPE": "error",
+        "CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE": "error",
+        "CUSTOM_HIGHLIGHTS_LEGEND_FOOTER": "warning",
+        "CUSTOM_TP1_REVISION_NUMBER": "error",
+        "CUSTOM_TP1_FIRST_ISSUE_DATE": "warning",
+        "CUSTOM_HIGHLIGHTS_REVISION_HEADER": "warning",
+        "CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION": "error",
+        "CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION": "error",
+        "CUSTOM_CHAPTER_NUMBER_SEQUENCE": "warning",
+        "CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES": "error",
+        "CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE": "error",
+        "CUSTOM_NI_PART_NUMBER_ORDER": "warning",
+        "CUSTOM_HIGHLIGHTS_ATA_NUMBER": "error",
+        "CUSTOM_HIGHLIGHTS_PNR_HEADER": "error",
+        "CUSTOM_PNR_PAGE_VALUE": "error",
+        "CUSTOM_TP1_PNR_PAGE_VALUE": "error",
+        "CUSTOM_REPAIR_NOTE": "error",
+        "CUSTOM_TESTING_NOTE": "error",
+        "CUSTOM_STORAGE_NOTE": "error",
+        "CUSTOM_TP1_THALES_ADDRESS": "warning",
+        "CUSTOM_DECIMAL_COMMA": "warning",
+        "CUSTOM_SENTENCE_PUNCTUATION": "error",
+        "CUSTOM_ENUMERATION_PUNCTUATION_SWAP": "info",
+        "CUSTOM_PARAGRAPH_JUSTIFICATION": "warning",
+        "CUSTOM_TEMPERATURE_FAHRENHEIT": "error",
+        "CUSTOM_TEMPERATURE_RANGE_FORMAT": "error",
+        "CUSTOM_BAR_PSI_CONVERSION": "error",
+        "CUSTOM_PASCAL_INHG_CONVERSION": "error",
+        "CUSTOM_METRIC_LENGTH_INCH_CONVERSION": "error",
+        "CUSTOM_METRIC_MASS_LBF_CONVERSION": "error",
+        "CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION": "error",
+        "CUSTOM_FORBIDDEN_CONSUMABLES": "error",
+        "CUSTOM_REPLACE_LEGACY_NAMES": "warning",
+        "CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR": "warning",
+        "CUSTOM_PDF_BOOKMARK_TITLE_MATCH": "warning",
+        "CUSTOM_NO_DEGREE_C_SYMBOL": "info",
+        "CUSTOM_NO_DEGREE_F_SYMBOL": "info",
+        "CUSTOM_REVISION_LEP_STAR": "error",
+        "CUSTOM_REVISION_UNDECLARED_STAR": "error",
+        "CUSTOM_REVISION_LEP_BLANK_STAR": "error",
+        "CUSTOM_REVISION_LEP_DATE": "error",
+        "CUSTOM_REVISION_FOOTER_DATE": "error",
+        "CUSTOM_REVISION_UNDECLARED_PAGE": "error",
+        "CUSTOM_REVISION_PAGE_NOT_IN_LEP": "warning",
+        "CUSTOM_REVISION_MODIFIED_PAGE_ABSENT": "warning",
+        "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "warning",
+        "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "warning",
+        "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED": "error",
+        "CUSTOM_ROR_INSERTION_DATE": "error",
+        "CUSTOM_ROR_REVISION_DATE": "error",
+        "CUSTOM_REVISION_HIGHLIGHTS_STATUS": "warning",
+    }
+
+
+def test_compiled_rules_include_tp1_address_when_custom_standard_is_selected(
+    client: TestClient,
+) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version_id = custom["versions"][0]["id"]
+
+    response = client.get(f"/api/v1/compiled-rules?standard_version_id={version_id}")
+
+    assert response.status_code == 200
+    assert "CUSTOM_TP1_THALES_ADDRESS" in {item["id"] for item in response.json()}
+
+
 def test_create_duplicate_code_returns_409(client: TestClient) -> None:
     client.post("/api/v1/standards", json={"code": "UNIQ-A", "label": "A"})
     second = client.post(
@@ -75,3 +189,63 @@ def test_create_duplicate_code_returns_409(client: TestClient) -> None:
     )
     assert second.status_code == 409
     assert second.json()["code"] == "STANDARD_CODE_TAKEN"
+
+
+def test_toggle_thales_catalog_rule_individually(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = custom["versions"][0]
+    detail_url = f"/api/v1/standards/{custom['id']}/versions/{version['id']}"
+    code = "CUSTOM_CMM_NUMBER"
+
+    disabled = client.post(
+        f"{detail_url}/rules/toggle",
+        json={"code": code, "enabled": False},
+    )
+    assert disabled.status_code == 200
+    assert code in disabled.json()["disabled_rule_codes"]
+
+    compiled = client.get(
+        f"/api/v1/compiled-rules?standard_version_id={version['id']}"
+    )
+    assert compiled.status_code == 200
+    compiled_rule = next(item for item in compiled.json() if item["id"] == code)
+    assert compiled_rule["active"] is False
+    assert compiled_rule["standard_id"] == custom["id"]
+    assert compiled_rule["standard_version_id"] == version["id"]
+
+    enabled = client.post(
+        f"{detail_url}/rules/toggle",
+        json={"code": code, "enabled": True},
+    )
+    assert enabled.status_code == 200
+    assert code not in enabled.json()["disabled_rule_codes"]
+
+
+def test_reset_thales_catalog_rule_reads_active_bundle(client: TestClient) -> None:
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version = custom["versions"][0]
+    code = "CUSTOM_CMM_NUMBER"
+    rule_url = (
+        f"/api/v1/standards/{custom['id']}/versions/{version['id']}"
+        f"/rules/{code}"
+    )
+
+    patched = client.patch(rule_url, json={"message": "Temporary message"})
+    assert patched.status_code == 200, patched.text
+    assert next(item for item in patched.json()["catalog"] if item["code"] == code)["message"] == (
+        "Temporary message"
+    )
+
+    reset = client.post(f"{rule_url}/reset")
+    assert reset.status_code == 200, reset.text
+    reset_rule = next(item for item in reset.json()["catalog"] if item["code"] == code)
+    configuration = load_active_client_configuration()
+    spec = configuration.bundle.standard_specs["THALES-CUSTOM"]
+    expected = next(
+        item
+        for item in serialize_builtin_version(spec, "v1")
+        if item["code"] == code
+    )
+    assert reset_rule["message"] == expected["message"]

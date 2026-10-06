@@ -20,7 +20,7 @@
   "llm.title": "AI status (see Settings)",
   "llm.on": "ON",
   "llm.off": "OFF",
-  "llm.untested": "TO TEST",
+  "llm.untested": "UNTESTED",
   "llm.noKey": "NO KEY",
   "errors.boundary.title": "Something went wrong",
   "errors.boundary.description": "The interface ran into an error. You can reload the page to try again.",

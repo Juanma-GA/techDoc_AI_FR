@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -97,10 +98,12 @@ class Document(Base):
         String(30), default="uploaded", server_default="uploaded", index=True
     )
     current_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    # Format de revue : "pdf" (pipeline PDF : conversion + edition PDF, defaut) ou
-    # "docx" (pipeline Word natif : parse python-docx, edition run-level, sortie
-    # .docx corrigee). Choisi a l'upload (dual-mode). cf. core/docx_pipeline.py.
+    # Format source fourni par l'utilisateur; le routage se fait via
+    # `working_format` et non via ce champ.
     source_format: Mapped[str] = mapped_column(String(10), default="pdf", server_default="pdf")
+    working_format: Mapped[str] = mapped_column(String(10), default="pdf", server_default="pdf")
+    original_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    original_storage_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     # Portail qualite (homogeneite tous formats) : moteur de normalisation
     # ("pdf" natif, "libreoffice", "word"), % de pages porteuses de texte, et
     # etat de revuabilite ("analyzable" | "degraded" | "unusable"). Renseignes
@@ -110,6 +113,13 @@ class Document(Base):
     quality: Mapped[str] = mapped_column(
         String(20), default="analyzable", server_default="analyzable", index=True
     )
+    client_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "client_metadata_json",
+        JSON,
+        default=dict,
+        server_default="{}",
+        nullable=False,
+    )
     # Mapping manuel par document (saisi par le relecteur) : les consignes de
     # checklist peuvent y faire reference (ex. « verifier que la date de
     # revision de la page de garde correspond a la date de revision saisie
@@ -117,8 +127,20 @@ class Document(Base):
     meta_revision_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_cmm_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     meta_first_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    # Date de la revision precedente : borne haute des dates portees par les
+    # pages que la revision courante ne touche pas.
+    meta_last_issue_date: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
     meta_revision_number: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    meta_pnr_number: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    meta_manufacturer: Mapped[str] = mapped_column(
+        String(20), default="Airbus", server_default="Airbus", nullable=False
+    )
+    document_language: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+    @property
+    def has_applied_edits(self) -> bool:
+        return self.current_version > 0
 
     suggestions: Mapped[list["Suggestion"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
@@ -148,6 +170,9 @@ class AnalysisRun(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="running", server_default="running")
     summary: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    context_snapshot_json: Mapped[str] = mapped_column(Text, default="{}", server_default="{}")
+    compiled_rules_snapshot_json: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")
+    snapshot_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     document: Mapped[Document] = relationship(back_populates="runs")
     suggestions: Mapped[list["Suggestion"]] = relationship(back_populates="run")
@@ -168,8 +193,7 @@ class Suggestion(Base):
     )
     rule_kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     rule_code: Mapped[str] = mapped_column(String(80), nullable=False)
-    # Provenance affichee dans la liste des anomalies : "norme" | "checklist" |
-    # "regle" (custom deterministe) | "transverse" (unites/mise en page/vision).
+    # Provenance affichee : norme, checklist, regle, transverse ou sortie IA.
     # Calculee a la materialisation par `rules_engine.classify_source`.
     source_kind: Mapped[str] = mapped_column(
         String(20), default="norme", server_default="norme", index=True
@@ -219,6 +243,23 @@ class Rule(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class CompiledRuleVersion(Base):
+    __tablename__ = "compiled_rule_versions"
+    __table_args__ = (UniqueConstraint("code", "version", name="uq_compiled_rule_code_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid4)
+    code: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    source: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    source_ref: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    compiled_json: Mapped[str] = mapped_column(Text, nullable=False)
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    validation_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
 
 
 class EditHistory(Base):

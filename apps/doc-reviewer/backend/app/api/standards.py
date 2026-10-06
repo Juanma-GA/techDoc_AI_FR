@@ -6,13 +6,11 @@ versions) are fully editable; they can be cloned from a built-in via
 the `POST /standards/{id}/versions` endpoint with a copied `catalog`.
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -212,8 +210,8 @@ def get_version_detail(
 
 
 _PATCHABLE_FIELDS = {
-    "title", "description", "severity", "kind",
-    "pattern", "replacement", "message",
+    "title", "description", "description_en", "severity", "kind",
+    "pattern", "replacement", "message", "message_en",
     "example_invalid", "example_valid",
 }
 
@@ -280,12 +278,13 @@ def reset_catalog_rule(
     standard_id: uuid.UUID,
     version_id: uuid.UUID,
     code: str,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
     """Restore a built-in catalog rule from the Python source of truth
     (`app.checks.standards.*`). No-op for custom versions or codes not
     present in the factory catalog."""
-    from app.checks.standards import BUILTIN_STANDARDS
+    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 
     version = db.get(StandardVersion, version_id)
     if version is None or version.standard_id != standard_id:
@@ -300,16 +299,24 @@ def reset_catalog_rule(
         )
 
     factory_rule = None
-    for spec in BUILTIN_STANDARDS:
+    factory_specs = [
+        *BUILTIN_STANDARDS,
+        *request.app.state.client_configuration.bundle.standard_specs.values(),
+    ]
+    for spec in factory_specs:
         if spec["code"] != std.code:
             continue
-        for label, rules in spec["versions"].items():
+        for label in spec["versions"]:
             if label != version.label:
                 continue
-            for r in rules:
-                if r.code == code:
-                    factory_rule = r.as_dict()
-                    break
+            factory_rule = next(
+                (
+                    item
+                    for item in serialize_builtin_version(spec, label)
+                    if item.get("code") == code
+                ),
+                None,
+            )
     if factory_rule is None:
         raise AppError(
             "CATALOG_CODE_UNKNOWN",

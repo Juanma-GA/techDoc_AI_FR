@@ -5,12 +5,14 @@ import { api } from "../lib/api";
 export type MistralSettings = {
   api_key_set: boolean;
   api_key_preview: string;
+  api_key_unreadable: boolean;
   base_url: string;
   chat_model: string;
   vision_model: string;
   vision_enabled: boolean;
   llm_enabled: boolean;
   llm_tested: boolean;
+  checklist_ai_scan: boolean;
 };
 
 export type MistralSettingsInput = {
@@ -20,6 +22,7 @@ export type MistralSettingsInput = {
   vision_model?: string;
   vision_enabled?: boolean;
   llm_enabled?: boolean;
+  checklist_ai_scan?: boolean;
 };
 
 export type TestConnectionResult = {

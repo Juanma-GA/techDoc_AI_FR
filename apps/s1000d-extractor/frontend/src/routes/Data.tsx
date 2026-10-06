@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useRef, useState } from "react";
 
 import { adminApi, type AdminStatsDto } from "../lib/api";
@@ -11,9 +12,11 @@ function formatSize(n: number): string {
 
 function ConfirmButton({
   label,
+  confirmLabel,
   onConfirm,
 }: {
   label: string;
+  confirmLabel: string;
   onConfirm: () => void;
 }) {
   const [armed, setArmed] = useState(false);
@@ -33,12 +36,13 @@ function ConfirmButton({
         onConfirm();
       }}
     >
-      {armed ? "Cliquer encore pour confirmer" : label}
+      {armed ? confirmLabel : label}
     </button>
   );
 }
 
 export function Data() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(
     null,
@@ -57,59 +61,66 @@ export function Data() {
       const items =
         Object.entries(r.deleted ?? {})
           .map(([k, v]) => `${k}: ${v}`)
-          .join(", ") || "(rien à supprimer)";
-      setFeedback({ kind: "ok", text: `Reset OK (${items}).` });
+          .join(", ") || t("data.nothingToDelete");
+      setFeedback({ kind: "ok", text: t("data.resetSuccess", { items }) });
       void qc.invalidateQueries({ queryKey: ["admin", "stats"] });
+      void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
+      window.dispatchEvent(new Event("s1000d-documents-reset"));
     } catch (e) {
-      setFeedback({ kind: "error", text: e instanceof Error ? e.message : String(e) });
+      const message = e instanceof Error ? e.message : String(e);
+      setFeedback({ kind: "error", text: t("data.resetError", { message }) });
     }
   };
 
   return (
     <>
       <div className="page-header">
-        <h1>Données</h1>
-        <p>Vue d'ensemble et opérations de reset.</p>
+        <h1>{t("data.title")}</h1>
+        <p>{t("data.subtitle")}</p>
       </div>
 
       <div className="card">
-        <h2 className="card-title">Vue d'ensemble</h2>
+        <h2 className="card-title">{t("data.overview")}</h2>
         {stats ? (
           <div className="kpi-grid">
             <div className="kpi">
-              <div className="label">Documents</div>
+              <div className="label">{t("data.documents")}</div>
               <div className="kpi-value info">{stats.documents}</div>
             </div>
             <div className="kpi">
-              <div className="label">Extraits</div>
+              <div className="label">{t("data.extracted")}</div>
               <div className="kpi-value info">{stats.extracted}</div>
             </div>
             <div className="kpi">
-              <div className="label">Profils BREX</div>
+              <div className="label">{t("data.brexProfiles")}</div>
               <div className="kpi-value info">{stats.brex_profiles}</div>
             </div>
             <div className="kpi">
-              <div className="label">Taille totale</div>
+              <div className="label">{t("data.totalSize")}</div>
               <div className="kpi-value">{formatSize(stats.total_size_bytes)}</div>
             </div>
           </div>
         ) : (
-          <div className="empty-state">Stats indisponibles.</div>
+          <div className="empty-state">{t("data.statsUnavailable")}</div>
         )}
       </div>
 
       <div className="card">
-        <h2 className="card-title">Réinitialiser</h2>
+        <h2 className="card-title">{t("data.reset")}</h2>
         <div className="banner warn">
-          Opération <strong>irréversible</strong>. La configuration Mistral
-          (<code>app_config</code>) et les profils BREX sont préservés.
+          {t("data.warningPrefix")} <strong>{t("data.irreversible")}</strong>. {t("data.warningSuffix", { config: "app_config" })}
         </div>
         <div className="row">
           <ConfirmButton
-            label="Supprimer les documents"
+            label={t("data.deleteDocuments")}
+            confirmLabel={t("data.confirm")}
             onConfirm={() => void reset("documents")}
           />
-          <ConfirmButton label="Tout supprimer" onConfirm={() => void reset("all")} />
+          <ConfirmButton
+            label={t("data.deleteAll")}
+            confirmLabel={t("data.confirm")}
+            onConfirm={() => void reset("all")}
+          />
         </div>
         {feedback ? (
           <div className={feedback.kind === "ok" ? "success" : "error"}>

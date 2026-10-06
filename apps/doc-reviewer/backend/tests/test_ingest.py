@@ -40,6 +40,20 @@ def test_expand_uploads_zip_keeps_supported_ignores_rest(sample_pdf_bytes: bytes
     assert any("readme.txt" in i for i in ignored)
 
 
+def test_expand_uploads_enforces_caller_uncompressed_limit(sample_pdf_bytes: bytes) -> None:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr("synthetic.pdf", sample_pdf_bytes)
+
+    with pytest.raises(AppError) as exc_info:
+        ingest.expand_uploads(
+            [("synthetic.zip", buf.getvalue())],
+            max_total_uncompressed=10,
+        )
+
+    assert exc_info.value.code == "ZIP_TOO_LARGE"
+
+
 def test_expand_uploads_empty_raises() -> None:
     with pytest.raises(AppError) as exc:
         ingest.expand_uploads([("readme.txt", b"nope")])

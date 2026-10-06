@@ -6,8 +6,9 @@ Bug 2 : duplication des illustrations.
 
 from __future__ import annotations
 
-from lxml import etree
+import json
 
+from app.core import xml_safe
 from app.core.ir import IRNode
 from app.core.s1000d_serializer import serialize
 from app.core.validator import validate_document
@@ -45,7 +46,7 @@ def test_serialize_strips_control_characters() -> None:
         IRNode(id="n2", kind="figure", text="Figure 1\x0b legende"),
     ])
     xml = serialize(root, issue="5.0", dm_type="descriptive", title="Titre\x0c")
-    etree.fromstring(xml.encode("utf-8"))
+    xml_safe.fromstring(xml, allow_internal_dtd=True)
     assert "\x0c" not in xml and "\x00" not in xml
 
 
@@ -65,7 +66,7 @@ def test_serialize_rejects_invalid_element_name() -> None:
                                       "rationale": ""})()]
     xml = serialize(IRNode(id="r", kind="section", level=0, children=[node]),
                     issue="5.0", dm_type="descriptive")
-    etree.fromstring(xml.encode("utf-8"))
+    xml_safe.fromstring(xml, allow_internal_dtd=True)
 
 
 def test_validate_document_never_raises_on_bad_brex() -> None:
@@ -79,6 +80,33 @@ def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> N
     state = _run_wizard(client, _upload(client, pdf_bytes))
     assert state["step"] == "generate"
     assert all(d["has_xml"] for d in state["dms"])
+
+
+def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
+    for params in ({}, {"types": {}}, {"overrides": []}, {}):
+        response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=params)
+        assert response.status_code == 200, response.text
+
+    dm_id = response.json()["dms"][0]["dm_id"]
+    from app.db.models import Document
+    from app.db.session import SessionLocal
+
+    db = SessionLocal()
+    try:
+        document = db.get(Document, doc_id)
+        dms = json.loads(document.dms_json)
+        dms[0]["xml"] = "<dmodule><content>obsolete</content></dmodule>"
+        document.dms_json = json.dumps(dms, ensure_ascii=False)
+        db.commit()
+    finally:
+        db.close()
+
+    rebuilt = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm_id}/xml")
+    assert rebuilt.status_code == 200
+    assert "obsolete" not in rebuilt.text
+    assert "<!DOCTYPE dmodule [" in rebuilt.text
 
 
 # --- Bug 2 : plus de duplication d'illustrations ----------------------------
@@ -99,3 +127,144 @@ def test_restarting_wizard_does_not_pile_up_images(client, pdf_bytes_image) -> N
     again = client.get(f"/api/v1/documents/{doc_id}/wizard/images").json()
     assert again == first
     assert len(list(images_dir(doc_id).glob("*.jpg"))) == len(first)
+
+
+def test_multiple_figure_captions_on_one_line_create_separate_figures() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([RawBlock(
+        text="Figure 4.1 Serrage correct Figure 4.2 Serrage incorrect Figure 4.3 Detail",
+        page=1,
+    )])
+
+    assert [node.text for node in root.walk() if node.kind == "figure"] == [
+        "Figure 4.1 Serrage correct",
+        "Figure 4.2 Serrage incorrect",
+        "Figure 4.3 Detail",
+    ]
+
+
+def test_numbered_note_items_continue_across_figure_captions_and_pages() -> None:
+    from app.core.ir import InlineRun, RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([
+        RawBlock(
+            text="Remarque :\n1) Ne superposez pas.\n2) Alignez les caisses.",
+            page=1,
+        ),
+        RawBlock(text="Figure 5.1 Empilage correct\nFigure 5.2 Empilage incorrect", page=1),
+        RawBlock(
+            text="3) \x07Soutenez les pieds.",
+            page=2,
+            inline_runs=[
+                InlineRun("3) "),
+                InlineRun("\x07"),
+                InlineRun("Soutenez les pieds.", italic=True),
+            ],
+        ),
+        RawBlock(text="Figure 5.3 Appui correct\nFigure 5.4 Appui incorrect", page=2),
+        RawBlock(text="4) Ajoutez des lattes.", page=2),
+        RawBlock(text="Figure 5.5 Lattes supplémentaires", page=2),
+        RawBlock(text="5.3 Paliers", page=2, heading_level=1),
+    ])
+
+    note = next(node for node in root.walk() if node.kind == "admonition")
+    sequence = note.children[0]
+
+    assert note.text == "Remarque :"
+    assert sequence.kind == "item-sequence" and sequence.form == "ordered"
+    assert [item.text for item in sequence.children] == [
+        "Ne superposez pas.",
+        "Alignez les caisses.",
+        "Soutenez les pieds.",
+        "Ajoutez des lattes.",
+    ]
+    assert sequence.children[2].inline_runs == [
+        InlineRun("Soutenez les pieds.", italic=True),
+    ]
+
+
+def test_numbered_note_items_can_follow_a_separate_note_label() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([
+        RawBlock(text="Remarque :", page=1),
+        RawBlock(text="Figure 1 Empilage correct", page=1),
+        RawBlock(text="1) Alignez les caisses.", page=1),
+        RawBlock(text="2) Soutenez les pieds.", page=1),
+        RawBlock(text="Fin de la note.", page=1),
+    ])
+
+    note = next(node for node in root.walk() if node.kind == "admonition")
+    assert [item.text for item in note.children[0].children] == [
+        "Alignez les caisses.",
+        "Soutenez les pieds.",
+    ]
+
+
+def test_inline_numbered_and_lettered_lists_split_into_nested_items() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([RawBlock(
+        text=(
+            "Vérifiez les éléments :\n"
+            "1. Résistance d’isolation, voir l’article 5.4.\n"
+            "2. Paliers :\n"
+            "a. Paliers à roulement avec détail\ncontinué sur la ligne suivante.\n"
+            "b. Palier lisse.\n"
+            "3. Conditions de fonctionnement.\n"
+            "4. Boîte à bornes :\n"
+            "a. L’intérieur est propre.\n"
+            "b. Les contacts sont raccordés.\n"
+            "c. Les entrées sont hermétiques.\n"
+            "5. Refroidissement."
+        ),
+        page=1,
+    )])
+
+    sequences = [node for node in root.walk() if node.kind == "item-sequence"]
+    numbered = next(sequence for sequence in sequences if sequence.form == "ordered")
+
+    assert len(numbered.children) == 5
+    assert "5.4" in numbered.children[0].text
+    first_sublist = numbered.children[1].children[0]
+    second_sublist = numbered.children[3].children[0]
+    assert first_sublist.form == second_sublist.form == "lettered"
+    assert [item.text for item in first_sublist.children] == [
+        "a. Paliers à roulement avec détail\ncontinué sur la ligne suivante.",
+        "b. Palier lisse.",
+    ]
+    assert [item.text for item in second_sublist.children] == [
+        "a. L’intérieur est propre.",
+        "b. Les contacts sont raccordés.",
+        "c. Les entrées sont hermétiques.",
+    ]
+
+
+def test_lettered_list_blocks_nest_under_number_and_resume_numbering() -> None:
+    from app.core.ir import RawBlock
+    from app.core.structure_infer import build_ir
+
+    root = build_ir([
+        RawBlock(text="1. Résistance d’isolation.", page=1),
+        RawBlock(text="2. Paliers :", page=1),
+        RawBlock(text="a. Paliers à roulement.", page=1),
+        RawBlock(text="b. Palier lisse.", page=1),
+        RawBlock(text="3. Refroidissement.", page=1),
+    ])
+    numbered = next(node for node in root.walk() if node.kind == "item-sequence")
+
+    assert numbered.form == "ordered"
+    assert [item.text for item in numbered.children] == [
+        "Résistance d’isolation.",
+        "Paliers :",
+        "Refroidissement.",
+    ]
+    assert [item.text for item in numbered.children[1].children[0].children] == [
+        "a. Paliers à roulement.",
+        "b. Palier lisse.",
+    ]

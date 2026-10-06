@@ -1,24 +1,45 @@
-import { ErrorBoundary } from "@internal/ui";
+import {
+  AppShell,
+  ErrorBoundary,
+  LanguageSwitcher,
+  sidebarNavItemClass,
+} from "@internal/ui";
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import i18n from "./i18n";
-import { Dashboard } from "./routes/Dashboard";
-import { Data } from "./routes/Data";
-import { DocumentReviewer } from "./routes/DocumentReviewer";
-import { DocumentsList } from "./routes/DocumentsList";
-import { Settings } from "./routes/Settings";
 
-// Coquille pixel-coherente avec le preview.html : 5 onglets (Tableau de bord /
-// Documents / Architecture / Donnees / Parametres). Normes + Regles vivent
-// DANS Parametres (cartes), le reviewer est embarque dans le detail Documents
-// (la sidebar reste visible) — parite 1:1 avec preview.html.
+const Dashboard = lazy(async () => ({
+  default: (await import("./routes/Dashboard")).Dashboard,
+}));
+const DocumentReviewer = lazy(async () => ({
+  default: (await import("./routes/DocumentReviewer")).DocumentReviewer,
+}));
+const DocumentsList = lazy(async () => ({
+  default: (await import("./routes/DocumentsList")).DocumentsList,
+}));
+const Settings = lazy(async () => ({
+  default: (await import("./routes/Settings")).Settings,
+}));
+const Rules = lazy(async () => ({
+  default: (await import("./routes/Rules")).Rules,
+}));
+
+function RouteFallback() {
+  return (
+    <div className="empty-state" aria-busy="true">
+      <span className="spinner" />
+    </div>
+  );
+}
+
+// Navigation principale et reviewer plein ecran pour le document courant.
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
-  { to: "/data", labelKey: "nav.data" },
+  { to: "/rules", labelKey: "nav.rules" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
 
@@ -37,64 +58,54 @@ export function App() {
     return (
       <div className="pr">
         <ErrorBoundary>
-          <Routes>
-            <Route path="/documents/:id" element={<DocumentReviewer />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/documents/:id" element={<DocumentReviewer />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </div>
     );
   }
 
   return (
-    <div className="pr">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <span className="brand">{t("app.title")}</span>
-            <span className="label">{t("app.version")}</span>
-            <ThemeToggleButton />
-          </div>
-
-          <LlmBadge />
-
-          <nav>
-            {navItems.map(({ to, labelKey, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
-              >
-                {t(labelKey)}
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {LANGS.map((lng) => (
-              <button
-                key={lng}
-                type="button"
-                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
-                onClick={() => void i18n.changeLanguage(lng)}
-              >
-                {lng.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main>
-          <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/documents" element={<DocumentsList />} />
-              <Route path="/data" element={<Data />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </ErrorBoundary>
-        </main>
-      </div>
-    </div>
+    <AppShell
+      className="pr"
+      title={t("app.title")}
+      brandTitle={t("app.description")}
+      version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      llmStatus={<LlmBadge />}
+      navigation={navItems.map(({ to, labelKey, end }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={end}
+          className={({ isActive }) => sidebarNavItemClass(isActive)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={LANGS}
+          currentLanguage={currentLang}
+          onLanguageChange={(language) => void i18n.changeLanguage(language)}
+          ariaLabel={t("nav.languageSwitcher")}
+        />
+      }
+    >
+      <ErrorBoundary>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/documents" element={<DocumentsList />} />
+            <Route path="/rules" element={<Rules />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    </AppShell>
   );
 }

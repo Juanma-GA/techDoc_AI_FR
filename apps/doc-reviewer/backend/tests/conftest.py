@@ -14,14 +14,16 @@ _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp_db.close()
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{_tmp_db.name}")
 os.environ.setdefault("STORAGE_DIR", tempfile.mkdtemp(prefix="doc-reviewer-tests-"))
-os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
 
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import delete  # noqa: E402
 
 from app.db.session import Base, engine  # noqa: E402
+from app.db.models import AppConfig  # noqa: E402
+from app.db.session import SessionLocal  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
@@ -36,15 +38,20 @@ def _seed_builtin_standards() -> None:
     rather than `alembic upgrade`)."""
     import json
 
-    from app.checks.standards import BUILTIN_STANDARDS
+    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
+    from app.checks.client_registry import load_active_client_configuration
+    from app.db.seed import sync_user_standard
     from app.db.models import Standard, StandardVersion
     from app.db.session import SessionLocal
 
     session = SessionLocal()
     try:
-        if session.query(Standard).first() is not None:
-            return
+        existing_codes = {
+            code for (code,) in session.query(Standard.code).all()
+        }
         for spec in BUILTIN_STANDARDS:
+            if spec["code"] in existing_codes:
+                continue
             std = Standard(
                 code=spec["code"],
                 label=spec["label"],
@@ -53,23 +60,54 @@ def _seed_builtin_standards() -> None:
             )
             session.add(std)
             session.flush()
-            for label, rules in spec["versions"].items():
+            for label in spec["versions"]:
                 session.add(
                     StandardVersion(
                         standard_id=std.id,
                         label=label,
                         builtin=True,
-                        catalog_json=json.dumps([r.as_dict() for r in rules]),
+                        catalog_json=json.dumps(serialize_builtin_version(spec, label)),
                     )
                 )
-        session.commit()
+            sync_user_standard(
+                session,
+                load_active_client_configuration().bundle.standard_specs,
+            )
     finally:
         session.close()
 
 
+LOCAL_BASE_URL = "http://127.0.0.1:8003"
+
+
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app())
+    """Client se comportant comme le front servi en local : Host de bouclage et
+    en-tete anti-CSRF envoye sur chaque requete (cf. core.request_guard)."""
+    from app.core.request_guard import CSRF_HEADER, CSRF_HEADER_VALUE
+
+    return TestClient(
+        create_app(),
+        base_url=LOCAL_BASE_URL,
+        headers={CSRF_HEADER: CSRF_HEADER_VALUE},
+    )
+
+
+@pytest.fixture
+def bare_client() -> TestClient:
+    """Client SANS l'en-tete anti-CSRF (simule une requete forgee par un site tiers)."""
+    return TestClient(create_app(), base_url=LOCAL_BASE_URL)
+
+
+@pytest.fixture(autouse=True)
+def _reset_document_context_defaults() -> None:
+    """Do not leak the persisted next-upload mapping between tests."""
+    session = SessionLocal()
+    try:
+        session.execute(delete(AppConfig).where(AppConfig.key == "document.context_defaults"))
+        session.commit()
+    finally:
+        session.close()
 
 
 def _make_simple_pdf(text: str = "Torque value 12 cm and 5 in") -> bytes:

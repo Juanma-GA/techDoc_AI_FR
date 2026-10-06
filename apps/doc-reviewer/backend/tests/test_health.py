@@ -41,13 +41,15 @@ def test_llm_state_not_configured_without_key(client: TestClient) -> None:
     assert _llm_state(client) == "not_configured"
 
 
-def test_llm_state_untested_then_configured(client: TestClient) -> None:
+def test_llm_state_untested_then_configured(client: TestClient, monkeypatch) -> None:
     """Key present + enabled but no successful test -> untested; once the
     tested flag flips true -> ok (green). Saving the key invalidates
     the test (back to untested)."""
     from app.core import mistral_settings
+    from app.core.encryption import generate_key
     from app.db.session import SessionLocal
 
+    monkeypatch.setattr(mistral_settings.settings, "encryption_key", generate_key())
     db = SessionLocal()
     try:
         mistral_settings.set_llm_enabled(db, True)
@@ -75,11 +77,13 @@ def test_llm_state_untested_then_configured(client: TestClient) -> None:
     assert _llm_state(client) == "untested"
 
 
-def test_llm_state_disabled_overrides(client: TestClient) -> None:
+def test_llm_state_disabled_overrides(client: TestClient, monkeypatch) -> None:
     """Switch OFF wins over a configured + tested key."""
     from app.core import mistral_settings
+    from app.core.encryption import generate_key
     from app.db.session import SessionLocal
 
+    monkeypatch.setattr(mistral_settings.settings, "encryption_key", generate_key())
     db = SessionLocal()
     try:
         mistral_settings.save(db, {"api_key": "sk-test-key"})

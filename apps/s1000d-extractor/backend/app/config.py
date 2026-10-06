@@ -37,6 +37,7 @@ class Settings(BaseSettings):
         "http://localhost:8004",
     ]
     max_upload_size_mb: int = 50
+    pdf_cut_requires_validation: bool = True
 
     # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
     # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit

@@ -1,12 +1,11 @@
 """Schemas S1000D par Issue : validation XSD + vocabulaire d'elements.
 
-Les jeux de schemas officiels (volumineux) ne sont pas redistribues dans le
-repo. On les charge depuis `app/s1000d_schemas/issue-<x>/` si presents (drop
-manuel ou `scripts/fetch_s1000d_schemas.py`). Absents -> la validation XSD est
+Les jeux de schemas officiels (volumineux) sont charges depuis
+`app/s1000d_schemas/issue-<x>/` lorsqu'ils sont presents. Absents -> la validation XSD est
 signalee "non installee" (degradation gracieuse), mais le vocabulaire intern
 (table ci-dessous) reste disponible pour la resolution.
 
-Issues supportees : 4.2 et 5.0. Les noms d'elements du squelette sont stables
+Issues supportees : 4.1, 4.2 et 5.0. Les noms d'elements du squelette sont stables
 entre les deux (heritage du redesign Issue 4.0).
 """
 
@@ -18,7 +17,7 @@ from lxml import etree
 
 from app.core import xml_safe
 
-SUPPORTED_ISSUES = ("4.2", "5.0")
+SUPPORTED_ISSUES = ("4.1", "4.2", "5.0")
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
 
 # Vocabulaire d'elements legaux par contexte (sous-ensemble structurel v1).
@@ -27,11 +26,13 @@ _VOCAB: dict[str, set[str]] = {
     "descriptive": {
         "levelledPara", "title", "para", "randomList", "sequentialList",
         "listItem", "warning", "caution", "note", "warningAndCautionPara",
-        "notePara", "figure", "graphic", "table", "tgroup", "tbody", "row", "entry",
+        "notePara", "attentionSequentialList", "attentionSequentialListItem",
+        "attentionListItemPara", "figure", "graphic", "table", "tgroup", "tbody", "row", "entry",
     },
     "procedural": {
         "proceduralStep", "para", "warning", "caution", "note",
-        "warningAndCautionPara", "notePara", "figure", "graphic",
+        "warningAndCautionPara", "notePara", "attentionSequentialList",
+        "attentionSequentialListItem", "attentionListItemPara", "figure", "graphic",
         "table", "tgroup", "tbody", "row", "entry", "title",
     },
 }
@@ -50,19 +51,27 @@ def is_installed(issue: str) -> bool:
     return d.is_dir() and any(d.glob("*.xsd"))
 
 
-def _find_dm_xsd(issue: str) -> Path | None:
+def _find_dm_xsd(issue: str, dm_type: str | None = None) -> Path | None:
     d = _issue_dir(issue)
     if not d.is_dir():
         return None
-    # Heuristique : on prend le schema 'descript' ou le premier *.xsd.
-    for pat in ("descript*.xsd", "proced*.xsd", "*.xsd"):
+    preferred = "proced*.xsd" if dm_type == "procedural" else "descript*.xsd"
+    # Le type du DM choisit le schema correspondant ; le premier schema reste
+    # un repli pour les anciennes installations mono-XSD.
+    for pat in (preferred, "descript*.xsd", "proced*.xsd", "*.xsd"):
         hits = sorted(d.glob(pat))
         if hits:
             return hits[0]
     return None
 
 
-def validate_xsd(xml: str, issue: str) -> list[dict]:
+def validate_xsd(
+    xml: str,
+    issue: str,
+    *,
+    dm_type: str | None = None,
+    allow_internal_dtd: bool = False,
+) -> list[dict]:
     """Valide le XML contre le XSD officiel de l'Issue si installe.
 
     Renvoie une liste de violations `{severity, rule, message, path}`. Une
@@ -77,12 +86,16 @@ def validate_xsd(xml: str, issue: str) -> list[dict]:
             f"(app/s1000d_schemas/issue-{issue}/). Validation XSD ignoree.",
             "/",
         )]
-    xsd_path = _find_dm_xsd(issue)
+    xsd_path = _find_dm_xsd(issue, dm_type)
     if xsd_path is None:
         return [_v("info", "XSD", f"Aucun .xsd trouve pour l'Issue {issue}.", "/")]
     try:
+        doc = xml_safe.fromstring(xml, allow_internal_dtd=allow_internal_dtd)
+        selected_type = dm_type
+        if selected_type is None:
+            selected_type = "procedural" if doc.find("./content/procedure") is not None else "descriptive"
+        xsd_path = _find_dm_xsd(issue, selected_type) or xsd_path
         schema = etree.XMLSchema(xml_safe.parse(str(xsd_path)))
-        doc = xml_safe.fromstring(xml)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "XSD", f"XML mal forme : {exc}", "/")]
     except Exception as exc:

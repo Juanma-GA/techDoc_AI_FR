@@ -10,7 +10,8 @@ from the DB so the user can clone/override built-in catalogs.
 from __future__ import annotations
 
 from app.checks.standards import ata100, mat10000, ste100
-from app.checks.standards._base import StandardRule
+from app.checks.standards._catalog import serialize_compiled_rule
+from app.core.compiled_rules import CompiledRule
 
 
 # Le Doc Reviewer analyse le **rendu PDF** publié, jamais la source. Les
@@ -35,6 +36,7 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
             "indépendante."
         ),
         "versions": ste100.CATALOG,
+        "metadata": ste100.RULE_METADATA,
     },
     {
         "code": "MAT10000",
@@ -45,6 +47,7 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
             "consignes de sécurité."
         ),
         "versions": mat10000.CATALOG,
+        "metadata": mat10000.RULE_METADATA,
     },
     {
         "code": "ATA100",
@@ -55,8 +58,29 @@ BUILTIN_STANDARDS: list[dict[str, object]] = [
             "par iSpec 2200 mais toujours référencé."
         ),
         "versions": ata100.CATALOG,
+        "metadata": ata100.RULE_METADATA,
     },
 ]
 
 
-__all__ = ["BUILTIN_STANDARDS", "StandardRule"]
+def serialize_builtin_version(spec: dict[str, object], label: str) -> list[dict[str, object]]:
+    """Serialize a built-in CompiledRule catalog for DB/API compatibility."""
+    versions = spec["versions"]
+    metadata = spec.get("metadata") or {}
+    rules = versions[label]  # type: ignore[index]
+    return [
+        serialize_compiled_rule(rule, metadata.get(rule.id))  # type: ignore[union-attr]
+        for rule in rules  # type: ignore[union-attr]
+    ]
+
+
+def builtin_rule_metadata(code: str) -> dict[str, object]:
+    """Return presentation metadata for a built-in compiled rule."""
+    for spec in BUILTIN_STANDARDS:
+        metadata = spec.get("metadata") or {}
+        if code in metadata:
+            return dict(metadata[code])  # type: ignore[index]
+    return {}
+
+
+__all__ = ["BUILTIN_STANDARDS", "CompiledRule", "builtin_rule_metadata", "serialize_builtin_version"]

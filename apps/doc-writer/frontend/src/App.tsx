@@ -1,10 +1,15 @@
-import { ErrorBoundary, PortalLink } from "@internal/ui";
+import {
+  AppShell,
+  ErrorBoundary,
+  LanguageSwitcher,
+  PortalLink,
+  sidebarNavItemClass,
+} from "@internal/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { authApi, type AuthSessionDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Documents } from "./routes/Documents";
@@ -63,69 +68,51 @@ export function App() {
   }
 
   return (
-    <div className="dw">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <PortalLink className="sidebar-home" label={t("nav.portal")} />
-            <span className="brand">doc-writer</span>
-            <span className="label">v{t("app.version")}</span>
-            <ThemeToggleButton />
+    <AppShell
+      className="dw"
+      headerStart={<PortalLink className="sidebar-home" label={t("nav.portal")} />}
+      title={t("app.title")}
+      brandTitle={t("app.title")}
+      version={t("app.version")}
+      sidebarTop={
+        session?.enabled && session.authenticated ? (
+          <div className="current-user-badge">
+            {session.display_name || session.email}
+            {" · "}
+            <button type="button" className="btn ghost small" onClick={() => void logout()}>
+              {t("auth.logout")}
+            </button>
           </div>
-
-          {session?.enabled && session.authenticated ? (
-            <div className="current-user-badge">
-              {session.display_name || session.email}
-              {" · "}
-              <button type="button" className="btn ghost small" onClick={() => void logout()}>
-                {t("auth.logout")}
-              </button>
-            </div>
-          ) : null}
-
-          <LlmBadge />
-
-          <nav>
-            {navItems.map(({ to, labelKey }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === "/"}
-                className={({ isActive }) =>
-                  isActive ? "nav-item active" : "nav-item"
-                }
-              >
-                {t(labelKey)}
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {LANGS.map((lng) => (
-              <button
-                key={lng}
-                type="button"
-                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
-                onClick={() => void i18n.changeLanguage(lng)}
-              >
-                {lng.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main>
-          <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Generate />} />
-              <Route path="/documents" element={<Documents />} />
-              <Route path="/sessions" element={<Sessions />} />
-              <Route path="/data" element={<Data />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </ErrorBoundary>
-        </main>
-      </div>
-    </div>
+        ) : null
+      }
+      llmStatus={<LlmBadge />}
+      navigation={navItems.map(({ to, labelKey }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === "/"}
+          className={({ isActive }) => sidebarNavItemClass(isActive)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={LANGS}
+          currentLanguage={currentLang}
+          onLanguageChange={(language) => void i18n.changeLanguage(language)}
+        />
+      }
+    >
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/" element={<Generate />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/sessions" element={<Sessions />} />
+          <Route path="/data" element={<Data />} />
+          <Route path="/settings" element={<Settings />} />
+        </Routes>
+      </ErrorBoundary>
+    </AppShell>
   );
 }

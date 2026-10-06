@@ -67,3 +67,15 @@ def test_page_refs_and_dotted_contents_are_review_flags() -> None:
     assert blocks[3].zone == "toc"
     assert blocks[4].zone == "toc"
     assert blocks[5].zone == "toc"
+
+
+def test_table_of_contents_is_detected_after_the_first_two_pages() -> None:
+    blocks = [
+        _block("INHALT", 3, y0=40, y1=60),
+        _block("1 INTRODUCTION........................................ 5", 3, y0=80, y1=100),
+        _block("2 INSTALLATION......................................... 8", 3, y0=110, y1=130),
+    ]
+
+    classify_zones(blocks)
+
+    assert all(block.zone == "toc" for block in blocks)

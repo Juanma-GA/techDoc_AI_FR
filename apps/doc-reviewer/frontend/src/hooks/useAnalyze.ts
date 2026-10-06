@@ -1,8 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { API_BASE_URL } from "../lib/api";
+import { API_BASE_URL, CSRF_HEADERS } from "../lib/api";
+import { useClientConfig } from "./useClientConfig";
 import { useFiltersStore } from "../stores/filtersStore";
+import { missingDocumentContext } from "../types/domain";
+import type { Document } from "../types/domain";
 
 type AnalyzeStatus = "idle" | "running" | "done" | "error";
 
@@ -14,9 +17,38 @@ export type AnalyzeQuality = {
   engine: string;
 };
 
-export function useAnalyze(documentId: string | undefined) {
+export type AnalyzeOptions = {
+  vision?: boolean;
+  firstPage?: number;
+  lastPage?: number;
+  modifiedOnly?: boolean;
+  pageNumber?: number;
+  pageOverrides?: Record<number, boolean>;
+};
+
+export type PageRevisionStatus = {
+  page: number;
+  is_modified: boolean | null;
+  source: "detected" | "manual";
+};
+
+export function useAnalyze(
+  documentId: string | undefined,
+  document?: Document,
+  previousRevisionFile?: File | null,
+) {
   const qc = useQueryClient();
-  const checklistActive = useFiltersStore((s) => s.checklistActive);
+  const clientConfig = useClientConfig();
+  const legacyChecklistActive = useFiltersStore((s) => s.checklistActive);
+  const checklistActive =
+    import.meta.env.VITE_LEGACY_RULES_UI === "true" && legacyChecklistActive;
+  const requiredFields = clientConfig.data
+    ? Object.entries(clientConfig.data.mapping.fields)
+        .filter(([, field]) => field.required)
+        .map(([name]) => name)
+    : undefined;
+  const missingContextFields = missingDocumentContext(document, requiredFields);
+  const contextReady = Boolean(document) && missingContextFields.length === 0;
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -25,9 +57,21 @@ export function useAnalyze(documentId: string | undefined) {
   // erreur Mistral) : l'analyse se termine quand meme (statut "done"), mais
   // le resultat peut etre incomplet — ne doit jamais passer inaperçu.
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [pageStatuses, setPageStatuses] = useState<PageRevisionStatus[]>([]);
+  const [pageOverrides, setPageOverrides] = useState<Record<number, boolean>>({});
 
-  const start = useCallback(async (vision?: boolean) => {
+  useEffect(() => {
+    setPageStatuses([]);
+    setPageOverrides({});
+  }, [documentId]);
+
+  const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
+    if (!contextReady) {
+      setStatus("error");
+      setError("DOCUMENT_CONTEXT_INCOMPLETE");
+      return;
+    }
     setStatus("running");
     setProgress(0);
     setError(null);
@@ -38,14 +82,38 @@ export function useAnalyze(documentId: string | undefined) {
       // Cible « checklist » (toggle Documents) transmise a chaque run ; `vision`
       // override le reglage persiste le temps d'un run.
       const params = new URLSearchParams({ checklist: String(checklistActive) });
-      if (vision !== undefined) params.set("vision", String(vision));
+      if (options.vision !== undefined) params.set("vision", String(options.vision));
+      if (options.firstPage !== undefined) params.set("first_page", String(options.firstPage));
+      if (options.lastPage !== undefined) params.set("last_page", String(options.lastPage));
+      if (options.modifiedOnly !== undefined) {
+        params.set("modified_only", String(options.modifiedOnly));
+      }
+      if (options.pageNumber !== undefined) {
+        params.set("page_number", String(options.pageNumber));
+      }
+      const overrides = options.pageOverrides ?? pageOverrides;
+      if (Object.keys(overrides).length > 0) {
+        params.set("page_overrides", JSON.stringify(overrides));
+      }
       const url = `${API_BASE_URL}/documents/${documentId}/analyze?${params.toString()}`;
+      const body = new FormData();
+      if (previousRevisionFile) {
+        body.append("previous_revision_file", previousRevisionFile);
+      }
       const response = await fetch(url, {
         method: "POST",
-        headers: { Accept: "text/event-stream" },
+        headers: { Accept: "text/event-stream", ...CSRF_HEADERS },
+        body: previousRevisionFile ? body : undefined,
       });
       if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status}`);
+        let message = `HTTP ${response.status}`;
+        try {
+          const payload = (await response.json()) as { message?: string; code?: string };
+          message = payload.message ?? payload.code ?? message;
+        } catch {
+          /* keep the HTTP fallback */
+        }
+        throw new Error(message);
       }
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -88,6 +156,13 @@ export function useAnalyze(documentId: string | undefined) {
                 } catch {
                   /* ignore */
                 }
+              } else if (currentEvent === "page_statuses") {
+                try {
+                  const parsed = JSON.parse(data) as { pages?: PageRevisionStatus[] };
+                  if (Array.isArray(parsed.pages)) setPageStatuses(parsed.pages);
+                } catch {
+                  /* ignore */
+                }
               } else if (currentEvent === "done") {
                 setStatus("done");
                 setProgress(100);
@@ -113,13 +188,42 @@ export function useAnalyze(documentId: string | undefined) {
         }
       }
       qc.invalidateQueries({ queryKey: ["suggestions", documentId] });
+      qc.invalidateQueries({ queryKey: ["rule-results", documentId] });
       qc.invalidateQueries({ queryKey: ["document", documentId] });
       if (status !== "error") setStatus("done");
     } catch (exc) {
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [documentId, qc, status, checklistActive]);
+  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive]);
 
-  return { status, progress, error, quality, warnings, start };
+  const correctPageStatus = useCallback((pageNumber: number, isModified: boolean) => {
+    const nextOverrides = { ...pageOverrides, [pageNumber]: isModified };
+    setPageOverrides(nextOverrides);
+    setPageStatuses((current) =>
+      current.map((page) =>
+        page.page === pageNumber
+          ? { ...page, is_modified: isModified, source: "manual" }
+          : page,
+      ),
+    );
+    void start({
+      modifiedOnly: false,
+      pageNumber,
+      pageOverrides: nextOverrides,
+    });
+  }, [pageOverrides, start]);
+
+  return {
+    status,
+    progress,
+    error,
+    quality,
+    warnings,
+    pageStatuses,
+    start,
+    correctPageStatus,
+    contextReady,
+    missingContextFields,
+  };
 }

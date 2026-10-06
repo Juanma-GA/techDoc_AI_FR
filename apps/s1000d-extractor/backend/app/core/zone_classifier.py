@@ -63,11 +63,18 @@ def classify_zones(blocks: list[RawBlock]) -> None:
 
     repeat_min = max(2, round(0.5 * n_pages))
 
-    # Les pages de garde et tables des matieres sont des zones explicites,
-    # detectees uniquement dans les deux premieres pages pour eviter les faux positifs.
+    # Une page portant un titre de sommaire ou plusieurs lignes pointillees est
+    # une page de table des matieres, quel que soit son numero ou la langue du
+    # titre. Le signal structurel evite de dependre d'un vocabulaire fixe.
     toc_pages = {
-        b.page for b in geo
-        if b.page is not None and b.page <= 2 and _TOC_RE.search(b.text)
+        page for page in {b.page for b in geo if b.page is not None}
+        if any(
+            b.page == page and _TOC_RE.search(b.text)
+            for b in geo
+        ) or sum(
+            b.page == page and bool(_TOC_ENTRY_RE.match(b.text))
+            for b in geo
+        ) >= 2
     }
 
     for b in geo:
@@ -81,7 +88,7 @@ def classify_zones(blocks: list[RawBlock]) -> None:
         if b.page == 1 and _COVER_RE.search(text) and len(top_pages.get(key, ())) < repeat_min:
             b.zone = "cover"
             continue
-        if b.page in toc_pages and (_TOC_RE.search(text) or _TOC_ENTRY_RE.match(text)):
+        if b.page in toc_pages:
             b.zone = "toc"
             continue
         if is_page_num:

@@ -25,16 +25,18 @@ def test_upload_with_standard_version_id_persists_it(
     assert doc["standard_version_id"] == sv
 
 
-def test_upload_without_standard_version_id_is_nullable(
+def test_upload_without_standard_version_id_uses_active_bundle_versions(
     client: TestClient,
     sample_pdf_bytes: bytes,
 ) -> None:
+    active_version = _get_version_id(client, "THALES-CUSTOM")
     resp = client.post(
         "/api/v1/documents?target=auto",
         files={"file": ("b.pdf", sample_pdf_bytes, "application/pdf")},
     )
     assert resp.status_code == 201
-    assert resp.json()["standard_version_id"] is None
+    assert resp.json()["standard_version_id"] == active_version
+    assert resp.json()["standard_version_ids"] == [active_version]
 
 
 def test_upload_with_unknown_standard_version_id_400(

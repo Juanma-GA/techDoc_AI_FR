@@ -1,4 +1,5 @@
 // Atoms
+export { AppShell, sidebarNavItemClass, type AppShellProps } from "./components/AppShell";
 export { Badge, badgeVariants, type BadgeProps } from "./components/Badge";
 export { Button, buttonVariants, type ButtonProps } from "./components/Button";
 export { Card, CardContent, CardHeader, CardTitle } from "./components/Card";
@@ -23,7 +24,9 @@ export { ChartCard, type ChartCardProps } from "./components/ChartCard";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { FileDropzone, type FileDropzoneProps } from "./components/FileDropzone";
 export { KpiCard, type KpiCardProps, type KpiDelta } from "./components/KpiCard";
+export { LanguageSwitcher, type LanguageSwitcherProps } from "./components/LanguageSwitcher";
 export { LoadingOverlay, type LoadingOverlayProps } from "./components/LoadingOverlay";
+export { LlmStatus, type LlmStatusLabels, type LlmStatusProps } from "./components/LlmStatus";
 export { MarkdownView, type MarkdownViewProps } from "./components/MarkdownView";
 export { PortalLink, portalHref, type PortalLinkProps } from "./components/PortalLink";
 export {

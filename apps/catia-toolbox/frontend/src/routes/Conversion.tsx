@@ -404,7 +404,7 @@ export function Conversion() {
 
           {/* ---- Execution locale (non destructive) ---- */}
           <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
-            <h3 className="card-title" style={{ fontSize: "0.95rem" }}>{t("conversion.execTitle")}</h3>
+            <h3 className="card-title">{t("conversion.execTitle")}</h3>
             <p className="hint">{t("conversion.execHint")}</p>
             <div className="row" style={{ marginTop: "0.5rem" }}>
               <button

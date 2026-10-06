@@ -18,17 +18,18 @@ merge / split / masquage entetes-pieds / undo / apercu) vit dans `wizard_split`.
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 
+import structlog
 from sqlalchemy.orm import Session
 
-from app.core import context_classifier, ingest, resolver, splitter, structure_infer
+from app.core import context_classifier, form_segmenter, ingest, resolver, splitter, structure_infer
+from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.errors import AppError
-from app.core.s1000d_serializer import serialize
+from app.core.s1000d_serializer import build_reference_index, content_node_count, serialize
 from app.core.validator import validate_document
 from app.db.models import BrexProfile, Document
 
@@ -38,7 +39,7 @@ STEPS = ("split", "type", "structure", "generate")
 STEPS_WITH_DMRL = ("dmrl", *STEPS)
 _DEFAULT_LEVEL = "section"
 
-log = logging.getLogger("s1000d_extractor.wizard")
+log = structlog.get_logger("s1000d_extractor.wizard")
 
 
 def steps_for(doc: Document) -> tuple[str, ...]:
@@ -69,13 +70,46 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
     from app.core import illustrations
     out_dir = images_dir(doc.id)
     try:
-        for old in out_dir.glob("*.jpg"):
-            old.unlink(missing_ok=True)
+        if out_dir.exists():
+            for old in out_dir.iterdir():
+                if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                    old.unlink(missing_ok=True)
         illustrations.attach_illustrations(
-            root, pdf_path=doc.storage_path, out_dir=out_dir, doc_id=doc.id
+            root,
+            pdf_path=doc.pdf_cut_path or doc.storage_path,
+            out_dir=out_dir,
+            doc_id=doc.id,
+            dm_level=splitter.level_of(_DEFAULT_LEVEL),
         )
     except Exception:  # jamais bloquant : le squelette reste generable sans images
         pass
+
+
+def _apply_dmrl_icns(
+    units: list[splitter.DmUnit],
+    entries: list[dmrl_mod.DmrlEntry],
+    out_dir: Path,
+) -> None:
+    from app.core import illustrations
+
+    for unit in units:
+        if unit.dmrl_index is None or unit.dmrl_index >= len(entries):
+            continue
+        icn_names = dmrl_mod.extract_icn_filenames(entries[unit.dmrl_index].icn)
+        if not icn_names:
+            continue
+        figures = [
+            node for node in unit.root.walk()
+            if node.kind == "figure" and not node.is_pictogram
+        ]
+        for figure, icn_name in zip(figures, icn_names, strict=False):
+            current_name = figure.icn or (figure.icns[0] if figure.icns else None)
+            if not current_name:
+                continue
+            renamed = illustrations.rename_illustration(out_dir, current_name, icn_name)
+            if renamed:
+                figure.icn = renamed
+                figure.icns = [renamed]
 
 
 # --- transitions -------------------------------------------------------------
@@ -84,15 +118,51 @@ def _noop_progress(step: str, pct: int) -> None:
     pass
 
 
-def start(db: Session, doc: Document, progress_cb=_noop_progress) -> dict:
+def start(
+    db: Session,
+    doc: Document,
+    progress_cb=_noop_progress,
+    *,
+    cut_pdf: bool = True,
+    start_page: int | None = None,
+    end_page: int | None = None,
+) -> dict:
     """Parse le document, construit l'IR, propose un decoupage par defaut.
 
     `progress_cb(step, pct)` permet de streamer la progression (parse / ocr /
     infer / split / classify) vers une barre cote UI.
     """
+    from app.core.pdf_cut import prepare_source
+
+    previous_dm_count = len(ws.load_dms(doc))
+    doc.dms_json = "[]"
+    doc.dms_history_json = None
+    log.info(
+        "wizard_rebuild_started",
+        document_id=doc.id,
+        filename=doc.filename,
+        source_format=doc.source_format,
+        previous_dm_count=previous_dm_count,
+        cut_pdf=cut_pdf,
+        start_page=start_page,
+        end_page=end_page,
+    )
+    source_path = prepare_source(
+        doc,
+        db,
+        cut_pdf=cut_pdf,
+        start_page=start_page,
+        end_page=end_page,
+    )
     progress_cb("parse", 10)
     blocks = ingest.extract_blocks(
-        doc.storage_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
+        source_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
+    )
+    log.info(
+        "wizard_source_parsed",
+        document_id=doc.id,
+        filename=doc.filename,
+        block_count=len(blocks),
     )
     progress_cb("infer", 40)
     root = structure_infer.build_ir(blocks)
@@ -102,8 +172,23 @@ def start(db: Session, doc: Document, progress_cb=_noop_progress) -> dict:
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
     _resplit(db, doc, _DEFAULT_LEVEL, progress_cb=progress_cb)
+    rebuilt_dms = ws.load_dms(doc)
+    log.info(
+        "wizard_split_completed",
+        document_id=doc.id,
+        filename=doc.filename,
+        new_dm_count=len(rebuilt_dms),
+        dm_ids=[dm["dm_id"] for dm in rebuilt_dms[:5]],
+    )
     doc.wizard_step = steps_for(doc)[0]
     doc.status = "wizard"
+    log.info(
+        "wizard_started",
+        document_id=doc.id,
+        filename=doc.filename,
+        dm_count=len(ws.load_dms(doc)),
+        step=doc.wizard_step,
+    )
     progress_cb("done", 100)
     db.commit()
     return state(doc)
@@ -119,22 +204,29 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     root = ir_mod.from_dict(json.loads(doc.ir_json))
     entries = wres.dmrl_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
+    if entries:
+        _apply_dmrl_icns(units, entries, images_dir(doc.id))
+        doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     progress_cb("classify", 80)
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
-    dmrl_types = {e.title: e.dm_type for e in entries if e.dm_type}
-    ws.save_dms(doc, [
+    dmrl_types = {e.dmc: e.dm_type for e in entries if e.dmc and e.dm_type}
+    dms = [
         {
             "dm_id": u.dm_id,
+            "dmc": u.dmc,
             "title": u.title,
             # Le type declare dans la DMRL fait foi quand il existe.
-            "dm_type": dmrl_types.get(u.title) or types[u.dm_id],
+            "dm_type": dmrl_types.get(u.dmc) or types[u.dm_id],
             "is_orphan": u.is_orphan,
             "tree": ir_mod.to_dict(u.root),
             "xml": None,
             "violations": None,
         }
         for u in units
-    ])
+    ]
+    if entries:
+        ws.sync_dmcs(dms, doc)
+    ws.save_dms(doc, dms)
     doc.split_level = split_level
 
 
@@ -206,6 +298,10 @@ def _apply_types(doc: Document, types: dict) -> None:
     for dm in dms:
         if dm["dm_id"] in types and types[dm["dm_id"]] in context_classifier.DM_TYPES:
             dm["dm_type"] = types[dm["dm_id"]]
+        root = ir_mod.from_dict(dm["tree"])
+        context_classifier.apply_dm_type(root, dm["dm_type"])
+        form_segmenter.segment(root)
+        dm["tree"] = ir_mod.to_dict(root)
     ws.save_dms(doc, dms)
 
 
@@ -246,11 +342,43 @@ def _generate_all(db: Session, doc: Document) -> None:
     dms = ws.load_dms(doc)
     brex_xml = _brex_xml(db, doc.brex_id)
     res = wres.load_resources(doc)
+    dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
+    log.info(
+        "wizard_generation_started",
+        document_id=doc.id,
+        dm_count=len(dms),
+    )
+    figure_offset = 0
+    table_offset = 0
+    section_offset = 0
+    reference_index = build_reference_index([
+        (
+            dm["dm_id"],
+            ir_mod.from_dict(dm["tree"]),
+            dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+        )
+        for dm in dms
+    ])
     for dm in dms:
         try:
             enriched, extra = wres.apply_resources(dm, res)
             root = ir_mod.from_dict(enriched["tree"])
-            xml = serialize(root, issue=doc.s1000d_issue, dm_type=dm["dm_type"], title=dm["title"])
+            xml = serialize(
+                root,
+                issue=doc.s1000d_issue,
+                dm_type=dm["dm_type"],
+                title=dm["title"],
+                figure_offset=figure_offset,
+                table_offset=table_offset,
+                section_offset=section_offset,
+                dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+                header_template=res.header_template,
+                reference_index=reference_index,
+                reference_dm_id=dm["dm_id"],
+            )
+            figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
+            table_offset += sum(1 for node in root.walk() if node.kind == "table")
+            section_offset += content_node_count(root, "section")
             # `content_html`/`content_xml` ne sont pas persistes : ce sont des
             # rendus derives du tree, ils doubleraient inutilement le JSON.
             dm.update({
@@ -259,11 +387,19 @@ def _generate_all(db: Session, doc: Document) -> None:
             })
             dm["xml"] = xml
             dm["violations"] = validate_document(
-                xml, issue=doc.s1000d_issue, brex_xml=brex_xml,
+                xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"], brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
             ) + extra
+            log.info(
+                "dm_generated",
+                document_id=doc.id,
+                dm_id=dm["dm_id"],
+                icn_count=sum(1 for node in root.walk() if node.kind == "figure" and node.icn),
+                has_doctype="<!DOCTYPE dmodule [" in xml,
+                xml_length=len(xml),
+            )
         except Exception as exc:
-            log.exception("generation du DM %s echouee", dm.get("dm_id"))
+            log.exception("dm_generation_failed", document_id=doc.id, dm_id=dm.get("dm_id"))
             dm["xml"] = None
             dm["violations"] = [{
                 "severity": "error", "rule": "GENERATE",
@@ -282,6 +418,7 @@ def state(doc: Document) -> dict:
     for dm in dms:
         entry = {
             "dm_id": dm["dm_id"],
+            "dmc": dm.get("dmc", ""),
             "title": dm["title"],
             "dm_type": dm["dm_type"],
             "is_orphan": bool(dm.get("is_orphan")),
@@ -313,19 +450,57 @@ def state(doc: Document) -> dict:
 def _resources_state(doc: Document) -> dict:
     """Etat REEL des ressources : une ressource attachee mais illisible ne doit
     pas s'afficher comme active."""
-    res = wres.load_resources(doc) if (doc.cir_path or doc.brex_rules_path) else None
+    res = wres.load_resources(doc) if (doc.cir_path or doc.brex_rules_path or doc.dm_header_json) else None
     return {
         "dmrl_count": len(wres.dmrl_entries(doc)),
         "has_cir": bool(res and res.cir),
         "has_brex_rules": bool(res and res.brex_rules),
+        "has_dm_header": bool(res and res.header_template),
         "errors": list(res.errors) if res else [],
     }
 
 
 def dm_xml(doc: Document, dm_id: str) -> str:
-    for dm in ws.load_dms(doc):
+    dms = ws.load_dms(doc)
+    figure_offset = 0
+    table_offset = 0
+    section_offset = 0
+    res = wres.load_resources(doc)
+    dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
+    reference_index = build_reference_index([
+        (
+            dm["dm_id"],
+            ir_mod.from_dict(dm["tree"]),
+            dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+        )
+        for dm in dms
+        if dm.get("tree")
+    ])
+    for dm in dms:
         if dm["dm_id"] == dm_id:
-            if not dm.get("xml"):
+            if not dm.get("tree"):
                 raise AppError("NO_XML", "XML non genere : termine l'etape Generation.", 409)
-            return dm["xml"]
+            # Le tree est la source de verite : un XML persiste peut provenir
+            # d'une generation precedente ou d'un serializer ancien.
+            xml = serialize(
+                ir_mod.from_dict(dm["tree"]),
+                issue=doc.s1000d_issue,
+                dm_type=dm["dm_type"],
+                title=dm["title"],
+                figure_offset=figure_offset,
+                table_offset=table_offset,
+                section_offset=section_offset,
+                dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+                header_template=res.header_template,
+                reference_index=reference_index,
+                reference_dm_id=dm["dm_id"],
+            )
+            dm["xml"] = xml
+            ws.save_dms(doc, dms)
+            return xml
+        root = ir_mod.from_dict(dm["tree"]) if dm.get("tree") else None
+        if root is not None:
+            figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
+            table_offset += sum(1 for node in root.walk() if node.kind == "table")
+            section_offset += content_node_count(root, "section")
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)

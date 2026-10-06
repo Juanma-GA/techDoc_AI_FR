@@ -23,6 +23,12 @@ import re
 from typing import Iterable
 
 from app.checks.raw import RawSuggestion
+from app.core.regex_safety import (
+    USER_REGEX_TIMEOUT_SECONDS,
+    UserRegexPatternError,
+    compile_user_regex,
+    mark_user_regex_incomplete,
+)
 from app.db.models import Rule
 from app.parsers.pdf_parser import ParsedPage
 
@@ -131,17 +137,29 @@ _DETERMINISTIC_KINDS = {
 }
 
 
-def run(rules: Iterable[Rule], pages: list[ParsedPage]) -> list[RawSuggestion]:
+def run(
+    rules: Iterable[Rule],
+    pages: list[ParsedPage],
+    warnings: list[str] | None = None,
+) -> list[RawSuggestion]:
     suggestions: list[RawSuggestion] = []
     enabled = [r for r in rules if r.enabled and r.kind in _DETERMINISTIC_KINDS]
     for rule in enabled:
         try:
             flags = re.IGNORECASE if rule.kind in {"term_replace", "accent_fix"} else 0
-            pattern = re.compile(rule.pattern, flags)
-        except re.error:
+            pattern = compile_user_regex(rule.pattern, flags)
+        except UserRegexPatternError:
+            mark_user_regex_incomplete(warnings)
             continue
         for page in pages:
-            for m in pattern.finditer(page.text):
+            try:
+                matches = list(
+                    pattern.finditer(page.text or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                )
+            except TimeoutError:
+                mark_user_regex_incomplete(warnings)
+                continue
+            for m in matches:
                 proposed = _propose(rule, m)
                 suggestions.append(
                     RawSuggestion(

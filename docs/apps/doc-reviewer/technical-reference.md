@@ -84,14 +84,14 @@ The built-in **deterministic catalog** (ASD-STE100, MAT10000, ATA 100) and **uni
 
 ## Démarrage rapide
 
-### Backend (port 8008)
+### Backend (port 8003)
 
 ```bash
 cd apps/doc-reviewer/backend
 python -m venv .venv && source .venv/bin/activate   # ou .venv\Scripts\activate sous Windows
 pip install -e .[dev]
 alembic upgrade head
-uvicorn app.main:app --reload --port 8008
+uvicorn app.main:app --reload --port 8003
 ```
 
 ### Frontend (port 5173)
@@ -101,7 +101,7 @@ pnpm install                                   # depuis la racine du monorepo
 pnpm --filter @apps/doc-reviewer-frontend dev
 ```
 
-Le proxy Vite redirige `/api` → `http://localhost:8008`.
+Le proxy Vite redirige `/api` → `http://localhost:8003`.
 
 ### Tests
 
@@ -121,22 +121,22 @@ pnpm --filter @apps/doc-reviewer-frontend test:e2e   # Playwright
 ```bash
 # Upload
 curl -F "file=@./backend/tests/fixtures/sample.pdf" \
-     "http://localhost:8008/api/v1/documents?target=imperial"
+    "http://localhost:8003/api/v1/documents?target=imperial"
 # → {"id":"<DOC_ID>", "current_version":0, ...}
 
 # Analyse (SSE)
-curl -N -X POST "http://localhost:8008/api/v1/documents/<DOC_ID>/analyze"
+curl -N -X POST "http://localhost:8003/api/v1/documents/<DOC_ID>/analyze"
 
 # Liste suggestions
-curl "http://localhost:8008/api/v1/documents/<DOC_ID>/suggestions"
+curl "http://localhost:8003/api/v1/documents/<DOC_ID>/suggestions"
 
 # Apply
 curl -X PATCH -d '{"status":"accepted"}' -H "Content-Type: application/json" \
-     "http://localhost:8008/api/v1/suggestions/<SUG_ID>"
-curl -X POST "http://localhost:8008/api/v1/suggestions/<SUG_ID>/apply"
+    "http://localhost:8003/api/v1/suggestions/<SUG_ID>"
+curl -X POST "http://localhost:8003/api/v1/suggestions/<SUG_ID>/apply"
 
 # Export PDF modifié
-curl -o final.pdf "http://localhost:8008/api/v1/documents/<DOC_ID>/export"
+curl -o final.pdf "http://localhost:8003/api/v1/documents/<DOC_ID>/export"
 ```
 
 ---

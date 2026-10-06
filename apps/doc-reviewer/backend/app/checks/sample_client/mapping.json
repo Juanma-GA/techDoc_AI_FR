@@ -1,0 +1,36 @@
+{
+  "fields": {
+    "asset_reference": {
+      "type": "string",
+      "required": true,
+      "max_length": 80,
+      "labels": {
+        "fr": "Reference equipement",
+        "en": "Asset reference"
+      }
+    },
+    "document_type": {
+      "type": "enum",
+      "required": false,
+      "default": "maintenance",
+      "allowed_values": ["maintenance", "inspection"],
+      "labels": {
+        "fr": "Type de document",
+        "en": "Document type"
+      }
+    },
+    "part_numbers": {
+      "type": "string_list",
+      "required": false,
+      "max_items": 20,
+      "labels": {
+        "fr": "Numeros de piece",
+        "en": "Part numbers"
+      }
+    }
+  },
+  "entities": {
+    "serial_number": "(?i)\\bSERIAL\\s+NO:\\s*([A-Z0-9-]+)\\b"
+  },
+  "tokens": {}
+}

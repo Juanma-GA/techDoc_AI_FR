@@ -31,6 +31,7 @@ def validate_document(
     xml: str,
     *,
     issue: str,
+    dm_type: str | None = None,
     brex_xml: str | None = None,
     brex_rules: dict | None = None,
     dm: dict | None = None,
@@ -39,13 +40,20 @@ def validate_document(
 
     # 1. Well-formedness (toujours).
     try:
-        xml_safe.fromstring(xml)
+        xml_safe.fromstring(xml, allow_internal_dtd=True)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "WELLFORMED", f"XML mal forme : {exc}")]
 
     # 2. XSD officiel (si installe pour l'Issue).
     try:
-        violations.extend(s1000d_schema.validate_xsd(xml, issue))
+        violations.extend(
+            s1000d_schema.validate_xsd(
+                xml,
+                issue,
+                dm_type=dm_type,
+                allow_internal_dtd=True,
+            )
+        )
     except Exception as exc:
         log.warning("XSD validation failed: %s", exc)
         # `warning`, pas `info` : "non validee" ne doit pas se lire comme "validee
@@ -56,7 +64,7 @@ def validate_document(
     if brex_xml:
         try:
             rules = brex_mod.parse_brex(brex_xml)
-            violations.extend(brex_mod.validate_brex(xml, rules))
+            violations.extend(brex_mod.validate_brex(xml, rules, allow_internal_dtd=True))
         except Exception as exc:
             log.warning("BREX validation failed: %s", exc)
             violations.append(_v("warning", "BREX", f"Validation BREX NON EXECUTEE : {exc}"))

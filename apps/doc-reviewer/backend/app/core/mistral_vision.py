@@ -1,4 +1,4 @@
-"""Mistral vision (Pixtral) helpers — ported from `apps/corpus`.
+"""Mistral multimodal vision helpers — ported from `apps/corpus`.
 
 Two entry points :
 
@@ -9,7 +9,7 @@ Two entry points :
   question in a single multimodal call.
 
 Errors are raised as `AppError` so the analyse pipeline can degrade
-gracefully (Mistral down → suggestion skipped, not run-wide failure).
+gracefully (Mistral down -> suggestion skipped, not run-wide failure).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import structlog
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.core.mistral_settings import get_effective, get_llm_enabled
+from app.core.mistral_settings import get_endpoint, get_llm_enabled
 
 # Inject the OS trust store — same trick used by the chat client so
 # corporate SSL proxies don't sink the multimodal call.
@@ -40,7 +40,7 @@ logger = structlog.get_logger(__name__)
 
 
 _TIMEOUT_S = 45.0
-_MAX_BYTES = 4 * 1024 * 1024  # 4 MB per image, conservative for Pixtral
+_MAX_BYTES = 4 * 1024 * 1024  # 4 MB per image
 
 
 def _extract_first_json_object(text: str) -> str | None:
@@ -62,21 +62,21 @@ def _extract_first_json_object(text: str) -> str | None:
     return None
 
 
-def _call_pixtral(db: Session, messages: list[dict], *, response_format: dict | None = None) -> str:
+def _call_mistral_vision(db: Session, messages: list[dict], *, response_format: dict | None = None) -> str:
     if not get_llm_enabled(db):
         raise AppError(
             "LLM_DISABLED",
             "Les analyses IA sont desactivees dans Parametres.",
             status_code=400,
         )
-    s = get_effective(db)
+    s = get_endpoint(db)
     if not s["api_key"]:
         raise AppError(
             "MISTRAL_NOT_CONFIGURED",
             "Configurez la clé API Mistral dans Paramètres pour activer la vision.",
             status_code=400,
         )
-    model = s.get("vision_model") or "pixtral-12b-2409"
+    model = s.get("vision_model") or "mistral-medium-3-5"
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -85,17 +85,30 @@ def _call_pixtral(db: Session, messages: list[dict], *, response_format: dict | 
     if response_format is not None:
         payload["response_format"] = response_format
     try:
-        with httpx.Client(timeout=_TIMEOUT_S) as client:
+        logger.debug(
+            "llm_request",
+            provider="mistral",
+            endpoint="chat/completions",
+            model=payload["model"],
+        )
+        with httpx.Client(timeout=_TIMEOUT_S, follow_redirects=False) as client:
             r = client.post(
-                f"{s['base_url'].rstrip('/')}/v1/chat/completions",
+                f"{s['base_url']}/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {s['api_key']}",
                     "Content-Type": "application/json",
                 },
                 content=json.dumps(payload),
             )
+        logger.debug(
+            "llm_response",
+            provider="mistral",
+            endpoint="chat/completions",
+            model=payload["model"],
+            status_code=r.status_code,
+        )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("vision_network_error", error=type(exc).__name__, message=str(exc))
+        logger.warning("vision_network_error", error=type(exc).__name__)
         raise AppError(
             "VISION_CALL_FAILED",
             f"Échec d'appel Mistral (vision) : {type(exc).__name__}",
@@ -151,7 +164,7 @@ def describe_image(
             ],
         }
     ]
-    return _call_pixtral(db, messages).strip()
+    return _call_mistral_vision(db, messages).strip()
 
 
 def check_figure_compliance(
@@ -161,7 +174,7 @@ def check_figure_compliance(
     *,
     mime_type: str = "image/png",
 ) -> dict[str, Any]:
-    """Ask Pixtral N yes/no compliance questions about an image in a
+    """Ask the Mistral multimodal model N yes/no compliance questions about an image in a
     single multimodal call. Returns the parsed JSON
     `{"results": [{"id", "compliant": bool, "evidence": str}, …]}`.
 
@@ -204,12 +217,20 @@ def check_figure_compliance(
             ],
         }
     ]
-    content = _call_pixtral(db, messages, response_format={"type": "json_object"})
+    content = _call_mistral_vision(db, messages, response_format={"type": "json_object"})
     json_text = _extract_first_json_object(content) or content
     try:
         parsed = json.loads(json_text)
     except (ValueError, TypeError):
-        return {"results": [], "error": "invalid_json", "raw": content[:300]}
+        raise AppError(
+            "VISION_RESPONSE_INVALID",
+            "La réponse vision est inexploitable; cette partie de l'analyse est incomplète.",
+            status_code=502,
+        )
     if not isinstance(parsed, dict) or not isinstance(parsed.get("results"), list):
-        return {"results": [], "error": "invalid_shape", "raw": content[:300]}
+        raise AppError(
+            "VISION_RESPONSE_INVALID",
+            "La réponse vision est inexploitable; cette partie de l'analyse est incomplète.",
+            status_code=502,
+        )
     return parsed

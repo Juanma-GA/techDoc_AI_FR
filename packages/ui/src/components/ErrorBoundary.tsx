@@ -1,5 +1,6 @@
 import { AlertCircle } from "lucide-react";
-import { Component, ErrorInfo, PropsWithChildren, ReactNode } from "react";
+import { Component } from "react";
+import type { ErrorInfo, PropsWithChildren, ReactNode } from "react";
 
 import { cn } from "../lib/utils";
 
@@ -41,13 +42,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Log error for debugging (structlog on backend + console here)
     console.error("ErrorBoundary caught:", error, errorInfo);
     this.props.onError?.(error, errorInfo);
   }
 
-  render(): ReactNode {
+  override render(): ReactNode {
     if (this.state.hasError) {
       return (
         <div

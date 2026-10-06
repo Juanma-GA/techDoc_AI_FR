@@ -7,33 +7,13 @@ export function BarList({ items }: { items: BarItem[] }) {
   if (!items.length) return <div className="empty-state">—</div>;
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
-    <div>
+    <div className="bar-list">
       {items.map((it) => (
-        <div
-          key={it.label}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 6,
-            fontSize: "0.85rem",
-          }}
-        >
-          <span
-            style={{ width: 120, flexShrink: 0, color: "var(--fg-dim)", textAlign: "right" }}
-          >
+        <div key={it.label} className="bar-list-row">
+          <span className="bar-list-label" title={it.label}>
             {it.label}
           </span>
-          <span
-            style={{
-              display: "block",
-              flex: 1,
-              background: "var(--bg-3)",
-              borderRadius: 4,
-              height: 18,
-              overflow: "hidden",
-            }}
-          >
+          <span className="bar-list-track">
             <span
               style={{
                 display: "block",
@@ -45,11 +25,7 @@ export function BarList({ items }: { items: BarItem[] }) {
               }}
             />
           </span>
-          <span
-            style={{ width: 36, textAlign: "right", fontFamily: '"JetBrains Mono", monospace' }}
-          >
-            {it.value}
-          </span>
+          <span className="bar-list-value">{it.value}</span>
         </div>
       ))}
     </div>

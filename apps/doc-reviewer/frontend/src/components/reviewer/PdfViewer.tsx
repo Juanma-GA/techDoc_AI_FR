@@ -7,6 +7,7 @@ type Props = {
   /** URL de l'image PNG de la page courante (rendu serveur). */
   pageImageUrl: string;
   pageNumber: number;
+  zoom: number;
   suggestions: Suggestion[];
   selectedSuggestionId: string | null;
   onSuggestionClick: (id: string) => void;
@@ -18,15 +19,15 @@ type Box = { left: number; top: number; width: number; height: number };
  * Apercu PDF = image PNG rendue cote serveur (`/pages/{n}.png`), affichee a
  * 100% (fit largeur), comme l'ancien preview.html.
  *
- * Alignement des surlignages : on NE suppose RIEN sur le conteneur. On MESURE
- * la position et la taille reelles de l'image (`offsetLeft/Top`, `clientW/H`)
- * et on pose le calque d'overlays exactement sur cette boite. Les overlays
- * (en % via HighlightLayer) tombent alors pile sur le texte, quelle que soit
- * la facon dont l'image est centree / redimensionnee.
+ * Alignement des surlignages : on mesure la position et la taille reelles de
+ * l'image dans le wrapper, puis on pose le calque exactement sur cette boite.
+ * Les overlays (en % via HighlightLayer) restent ainsi alignes quand le
+ * viewer est centre ou redimensionne.
  */
 export function PdfViewer({
   pageImageUrl,
   pageNumber,
+  zoom,
   suggestions,
   selectedSuggestionId,
   onSuggestionClick,
@@ -38,22 +39,30 @@ export function PdfViewer({
 
   const measure = useCallback(() => {
     const img = imgRef.current;
-    if (!img || !img.clientWidth || !img.clientHeight) return;
+    const wrapper = wrapRef.current;
+    if (!img || !wrapper) return;
+
+    const imageRect = img.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
+    if (!imageRect.width || !imageRect.height || !wrapper.offsetWidth || !wrapper.offsetHeight) return;
+
+    const scaleX = wrapperRect.width / wrapper.offsetWidth || 1;
+    const scaleY = wrapperRect.height / wrapper.offsetHeight || 1;
     setBox({
-      left: img.offsetLeft,
-      top: img.offsetTop,
-      width: img.clientWidth,
-      height: img.clientHeight,
+      left: (imageRect.left - wrapperRect.left) / scaleX,
+      top: (imageRect.top - wrapperRect.top) / scaleY,
+      width: imageRect.width / scaleX,
+      height: imageRect.height / scaleY,
     });
   }, []);
 
-  // Re-mesure sur changement de taille de l'image (resize fenetre, panneau...).
   useEffect(() => {
     const img = imgRef.current;
     if (!img || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(img);
-    return () => ro.disconnect();
+    const observer = new ResizeObserver(measure);
+    observer.observe(img);
+    if (wrapRef.current) observer.observe(wrapRef.current);
+    return () => observer.disconnect();
   }, [measure]);
 
   // Reset au changement de page / version.
@@ -76,14 +85,16 @@ export function PdfViewer({
   }, [selectedSuggestionId, box]);
 
   return (
-    <div style={{ width: "100%", textAlign: "center" }}>
+    <div className="viewer-surface">
       {error ? (
         <div className="empty-state">Apercu de page indisponible.</div>
       ) : (
         <div
           ref={wrapRef}
           className="viewer-wrap"
-          style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}
+          style={{
+            width: `${zoom * 100}%`,
+          }}
         >
           <img
             ref={imgRef}

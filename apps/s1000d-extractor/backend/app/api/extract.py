@@ -18,12 +18,14 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
 from app.core import ir as ir_mod
+from app.core import migration_inputs
 from app.core import pipeline
+from app.core import wizard_resources as wres
 from app.core.errors import AppError
 from app.core.s1000d_schema import SUPPORTED_ISSUES
 from app.core.s1000d_serializer import serialize
 from app.core.validator import validate_document
-from app.db.models import BrexProfile, Document, DmDocumentLink, DmVersion
+from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import SessionLocal, get_db
 from app.parsers import detect_format
 from app.parsers.pdf_parser import pdf_page_count
@@ -79,7 +81,10 @@ def delete_document(
 
     from app.core.wizard import images_dir
 
-    for path in (doc.storage_path, doc.xml_path, doc.cir_path, doc.brex_rules_path):
+    for path in (
+        doc.storage_path, doc.pdf_cut_path, doc.xml_path, doc.dmrl_path,
+        doc.dm_header_path, doc.cir_path, doc.brex_rules_path,
+    ):
         if path:
             Path(path).unlink(missing_ok=True)
     shutil.rmtree(images_dir(doc.id), ignore_errors=True)
@@ -93,7 +98,7 @@ def delete_document(
 @router.post("", response_model=DocumentOut, status_code=201)
 async def upload_document(
     file: UploadFile = File(...),
-    s1000d_issue: str = Form("5.0"),
+    s1000d_issue: str = Form("4.2"),
     context_hint: str = Form("mixed"),
     brex_id: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -124,6 +129,7 @@ async def upload_document(
             doc.page_count = pdf_page_count(path)
         except Exception:
             doc.page_count = None
+    migration_inputs.save_document(db, doc, filename=file.filename or doc.filename)
     db.commit()
     return _to_out(doc)
 
@@ -190,6 +196,19 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
+    if "<!DOCTYPE dmodule [" not in xml and doc.ir_json:
+        root = ir_mod.from_dict(json.loads(doc.ir_json))
+        resources = wres.load_resources(doc)
+        entries = wres.dmrl_entries(doc)
+        metadata = entries[0].to_dict() if entries else None
+        xml = serialize(
+            root,
+            issue=doc.s1000d_issue,
+            dm_type=doc.dm_type or "descriptive",
+            dm_metadata=metadata,
+            header_template=resources.header_template,
+        )
+        Path(doc.xml_path).write_text(xml, encoding="utf-8")
     return Response(
         content=xml, media_type="application/xml",
         headers={"Content-Disposition": f'attachment; filename="{doc.id}.xml"'},
@@ -213,9 +232,23 @@ def override_node(
     node.candidates = [chosen] + [c for c in node.candidates if c.element != body.element]
     node.confidence = 1.0
 
-    xml = serialize(root, issue=doc.s1000d_issue, dm_type=doc.dm_type or "descriptive")
+    resources = wres.load_resources(doc)
+    entries = wres.dmrl_entries(doc)
+    metadata = entries[0].to_dict() if entries else None
+    xml = serialize(
+        root,
+        issue=doc.s1000d_issue,
+        dm_type=doc.dm_type or "descriptive",
+        dm_metadata=metadata,
+        header_template=resources.header_template,
+    )
     brex_xml = _brex_xml(db, doc.brex_id)
-    violations = validate_document(xml, issue=doc.s1000d_issue, brex_xml=brex_xml)
+    violations = validate_document(
+        xml,
+        issue=doc.s1000d_issue,
+        dm_type=doc.dm_type or "descriptive",
+        brex_xml=brex_xml,
+    )
     Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)
@@ -257,7 +290,10 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         try:
             result = pipeline.run(
                 doc.storage_path, fmt=doc.source_format, issue=doc.s1000d_issue,
-                hint=doc.context_hint, db=db, brex_xml=brex_xml, progress_cb=cb,
+                hint=doc.context_hint, db=db, brex_xml=brex_xml,
+                dm_metadata=(wres.dmrl_entries(doc)[0].to_dict() if wres.dmrl_entries(doc) else None),
+                header_template=wres.load_resources(doc).header_template,
+                progress_cb=cb,
             )
         except Exception:
             doc.status = "extract_failed"

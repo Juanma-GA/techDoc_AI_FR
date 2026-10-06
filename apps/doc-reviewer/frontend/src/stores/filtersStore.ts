@@ -1,7 +1,10 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
-import type { RuleKind, Severity, SourceKind } from "../types/domain";
+import type { RuleKind, Severity } from "../types/domain";
+
+if (typeof localStorage !== "undefined") {
+  localStorage.removeItem("doc-reviewer-filters");
+}
 
 type FiltersState = {
   severities: Severity[];
@@ -19,9 +22,7 @@ type FiltersState = {
   // Normes cibles actives (multi-select Parametres, parite preview) : liste de
   // version IDs fusionnees a chaque analyse et appliquees a chaque upload.
   activeStandardVersionIds: string[];
-  // Filtre de la liste des anomalies (panneau reviewer) : source (checklist /
-  // norme / regle / transverse) et regle precise. `null` = pas de filtre.
-  sourceKindFilter: SourceKind | null;
+  // Filtre du code de regle dans le panneau reviewer. `null` = pas de filtre.
   ruleCodeFilter: string | null;
   toggleSeverity: (s: Severity) => void;
   toggleKind: (k: RuleKind) => void;
@@ -31,14 +32,12 @@ type FiltersState = {
   setChecklistActive: (v: boolean) => void;
   setLastStandard: (standardId: string | null, versionId: string | null) => void;
   toggleActiveStandardVersion: (versionId: string) => void;
+  reconcileActiveStandardVersions: (validVersionIds: string[]) => void;
   clearActiveStandards: () => void;
-  setSourceKindFilter: (v: SourceKind | null) => void;
   setRuleCodeFilter: (v: string | null) => void;
 };
 
-export const useFiltersStore = create<FiltersState>()(
-  persist(
-    (set, get) => ({
+export const useFiltersStore = create<FiltersState>()((set, get) => ({
       severities: ["info", "warning", "error"],
       kinds: ["standard", "custom", "units", "layout"],
       hideAccepted: false,
@@ -51,7 +50,6 @@ export const useFiltersStore = create<FiltersState>()(
       lastStandardId: null,
       lastStandardVersionId: null,
       activeStandardVersionIds: [],
-      sourceKindFilter: null,
       ruleCodeFilter: null,
       toggleSeverity: (s) =>
         set({
@@ -82,12 +80,18 @@ export const useFiltersStore = create<FiltersState>()(
             ? get().activeStandardVersionIds.filter((x) => x !== versionId)
             : [...get().activeStandardVersionIds, versionId],
         }),
+      reconcileActiveStandardVersions: (validVersionIds) =>
+        set((state) => {
+          const validIds = new Set(validVersionIds);
+          const activeIds = state.activeStandardVersionIds.filter((id) => validIds.has(id));
+          const unchanged =
+            activeIds.length === state.activeStandardVersionIds.length &&
+            activeIds.every((id, index) => id === state.activeStandardVersionIds[index]);
+          return unchanged ? {} : { activeStandardVersionIds: activeIds };
+        }),
       clearActiveStandards: () => set({ activeStandardVersionIds: [] }),
-      setSourceKindFilter: (v) => set({ sourceKindFilter: v }),
       setRuleCodeFilter: (v) => set({ ruleCodeFilter: v }),
     }),
-    { name: "doc-reviewer-filters" },
-  ),
 );
 
 /** Cible d'unite envoyee au backend a partir de la selection multiple :
@@ -97,5 +101,6 @@ export function effectiveTarget(
   units: ("metric" | "imperial")[],
 ): "metric" | "imperial" | "auto" | "none" {
   if (units.length === 0) return "none";
-  return units.length === 1 ? units[0] : "auto";
+  const selectedUnit = units[0];
+  return units.length === 1 && selectedUnit ? selectedUnit : "auto";
 }

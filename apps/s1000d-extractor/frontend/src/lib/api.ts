@@ -94,7 +94,7 @@ export const settingsApi = {
 
 // ----- Domain types ---------------------------------------------------------
 
-export type S1000dIssue = "4.2" | "5.0";
+export type S1000dIssue = "4.1" | "4.2" | "5.0";
 export type ContextHint = "mixed" | "descriptive" | "procedural";
 
 export type BrexProfile = {
@@ -128,6 +128,22 @@ export type DocumentOut = {
   filename: string;
   source_format: string;
   status: string;
+};
+
+export type PdfCutCandidate = {
+  page: number;
+  score: number;
+  reasons: string[];
+  preview: string;
+};
+
+export type PdfCutDetection = {
+  validation_required: boolean;
+  selected_page: number | null;
+  selected_end_page: number | null;
+  default_start_page: number;
+  total_pages: number;
+  candidates: PdfCutCandidate[];
 };
 
 export type DmVersion = {
@@ -184,6 +200,7 @@ export type WizardResources = {
   dmrl_count: number;
   has_cir: boolean;
   has_brex_rules: boolean;
+  has_dm_header: boolean;
   errors?: string[];
 };
 
@@ -195,6 +212,7 @@ export type DmrlRow = {
   dmc: string;
   title: string;
   dm_type: string;
+  icn: string;
   matched: boolean;
   match_rank: DmrlMatchRank;
   page: number | null;
@@ -219,6 +237,7 @@ export const brexApi = {
 
 export const documentsApi = {
   list: () => api<DocumentOut[]>("/documents"),
+  get: (docId: string) => api<DocumentOut>(`/documents/${docId}`),
   delete: (docId: string, confirmToken: string) =>
     api<{ id: string; status: string }>(
       `/documents/${docId}?confirm_token=${encodeURIComponent(confirmToken)}`,
@@ -244,10 +263,42 @@ export const documentsApi = {
   },
 };
 
-export type ResourceKind = "dmrl" | "cir" | "brex_rules";
-export type ResourceUploadDto = { kind: ResourceKind; count: number };
+export const pdfCutApi = {
+  detect: (docId: string) =>
+    api<PdfCutDetection>(`/documents/${docId}/pdf-cut/detect`, { method: "POST" }),
+  confirm: (docId: string, startPage: number, endPage: number) =>
+    api<{ page: number; start_page: number; end_page: number; page_count: number; status: string }>(
+      `/documents/${docId}/pdf-cut/confirm`,
+      { method: "POST", body: JSON.stringify({ start_page: startPage, end_page: endPage }) },
+    ),
+  previewUrl: (docId: string, page: number) =>
+    `${API_BASE}/documents/${docId}/pdf-cut/preview/${page}`,
+};
 
-// Ressources client optionnelles : DMRL (decoupage + PMC), CIR, regles BREX JSON.
+export type ResourceKind = "dmrl" | "cir" | "brex_rules" | "dm_header";
+export type ResourceUploadDto = { kind: ResourceKind; count: number };
+export type MigrationInputKind = "document" | ResourceKind;
+export type MigrationInputMapping = {
+  issue: S1000dIssue;
+  context_hint: ContextHint;
+  brex_id: string | null;
+  files: Partial<Record<MigrationInputKind, { filename: string }>>;
+};
+
+export const migrationInputsApi = {
+  read: () => api<MigrationInputMapping>("/migration-inputs"),
+  file: async (kind: MigrationInputKind, filename: string): Promise<File> => {
+    const res = await fetch(`${API_BASE}/migration-inputs/${kind}`);
+    if (!res.ok) {
+      const e = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(e?.message || res.statusText);
+    }
+    const blob = await res.blob();
+    return new File([blob], filename, { type: blob.type });
+  },
+};
+
+// Ressources client optionnelles : DMRL, CIR, regles BREX et template d'en-tete.
 export const resourcesApi = {
   upload: async (docId: string, kind: ResourceKind, file: File): Promise<ResourceUploadDto> => {
     const fd = new FormData();

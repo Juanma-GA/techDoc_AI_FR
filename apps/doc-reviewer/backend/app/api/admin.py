@@ -8,18 +8,15 @@ Two endpoints, both destructive and irreversible :
   preserved. EditHistory rows are kept too (they reference applied
   versions that already shipped on disk).
 - `POST /admin/reset` is the full reset : every Document is dropped
-  (cascading to suggestions, runs, history), every snapshot file in
-  `storage/document_*/` is removed, and any orphan storage folder
-  whose `document_*` UUID is no longer in the DB is cleaned up as
-  well. Custom Rules, Standards, Mistral config and the AI prompt
-  are preserved — those are configuration, not data.
+    (cascading to suggestions, runs, history), user rules and compiled
+    checklists are deleted, every snapshot file in `storage/document_*/`
+    is removed, and orphan storage folders are cleaned up. Built-in
+    Standards, Mistral config and the AI prompt are preserved.
 
 Both endpoints are local-first (palier 1 auth — bind 127.0.0.1) and
 deliberately have no authentication gate. Don't expose them on a
 public bind.
 """
-
-from __future__ import annotations
 
 import os
 import shutil
@@ -32,7 +29,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import Document, EditHistory, Suggestion
+from app.db.models import CompiledRuleVersion, Document, EditHistory, Rule, Suggestion
 from app.db.session import get_db
 
 
@@ -77,9 +74,7 @@ def _remove_storage_dir(storage_dir: str) -> bool:
     except OSError as exc:
         _logger.warning(
             "admin_storage_cleanup_failed",
-            path=str(target),
             error=type(exc).__name__,
-            message=str(exc),
         )
         return False
 
@@ -103,12 +98,22 @@ def wipe_all_suggestions(db: Session = Depends(get_db)) -> dict:
 @router.post("/reset")
 def reset_all(db: Session = Depends(get_db)) -> dict:
     """Nuclear reset : drop every Document (cascades suggestions, runs,
-    history) AND remove their storage folders from disk. Orphan
+    history), user rules and compiled checklists, then remove their
+    storage folders from disk. Orphan
     storage folders (no matching Document row) are also cleaned up.
     Returns a count summary so the UI can confirm the wipe scope."""
     docs = list(db.scalars(select(Document)))
     known_storage_dirs = {d.storage_dir for d in docs}
     deleted_docs = len(docs)
+    deleted_rules = db.execute(delete(Rule)).rowcount or 0
+    deleted_checklist_rules = (
+        db.execute(
+            delete(CompiledRuleVersion).where(
+                CompiledRuleVersion.source == "user_checklist"
+            )
+        ).rowcount
+        or 0
+    )
 
     # 1. Delete docs in bulk — cascade=all,delete-orphan will wipe
     #    suggestions / analysis_runs / edit_history transparently.
@@ -139,9 +144,7 @@ def reset_all(db: Session = Depends(get_db)) -> dict:
             except OSError as exc:
                 _logger.warning(
                     "admin_orphan_cleanup_failed",
-                    path=str(child),
                     error=type(exc).__name__,
-                    message=str(exc),
                 )
 
     _logger.info(
@@ -152,6 +155,8 @@ def reset_all(db: Session = Depends(get_db)) -> dict:
     )
     return {
         "documents_deleted": deleted_docs,
+        "rules_deleted": deleted_rules,
+        "checklist_rules_deleted": deleted_checklist_rules,
         "storage_folders_cleaned": cleaned,
         "orphan_folders_cleaned": orphans,
     }

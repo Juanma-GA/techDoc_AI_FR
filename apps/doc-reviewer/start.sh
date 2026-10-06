@@ -7,14 +7,16 @@
 
 set -euo pipefail
 
-# Port unique (à ajuster par POC : 8008, 8002, ...)
-PORT="${PORT:-8008}"
+# Port unique (configurable via PORT), puis premier port libre suivant.
+PORT="${PORT:-8003}"
+REQUESTED_PORT="$PORT"
+PORT_MAX=$((PORT + 20))
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="${APP_DIR}/backend"
 
 echo "============================================================"
-echo " TEMPLATE - Lancement local"
+echo " Doc Reviewer - Lancement local"
 echo "============================================================"
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -32,21 +34,70 @@ fi
 # shellcheck source=/dev/null
 source .venv/bin/activate
 
+# Reinstalle si le marker est absent OU si pyproject.toml a change depuis le
+# dernier install (hash stocke dans le marker). H-02 hardening : un marker
+# vide ne se reinvalide jamais -- une dependance ajoutee a pyproject.toml
+# (ex. regex) ne s'installait plus du tout sur un poste ou doc-reviewer
+# avait deja tourne avant le pull.
+pyproject_hash() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum pyproject.toml | awk '{print $1}'
+    else
+        shasum -a 256 pyproject.toml | awk '{print $1}'
+    fi
+}
+need_install=0
 if [[ ! -f .venv/.installed ]]; then
+    need_install=1
+elif [[ "$(pyproject_hash)" != "$(cat .venv/.installed)" ]]; then
+    need_install=1
+fi
+if [[ "$need_install" == "1" ]]; then
     echo "[setup] Installation des deps Python..."
     pip install --upgrade pip >/dev/null
     pip install -e .
-    touch .venv/.installed
+    pyproject_hash > .venv/.installed
+fi
+
+# Auto-provision ENCRYPTION_KEY en posture locale (hardening H-03) : sans
+# elle, POST /settings/mistral refuse TOUTE sauvegarde de cle Mistral (503)
+# tant qu'un humain n'a pas genere+colle une cle Fernet a la main dans
+# backend/.env. Inerte des que BIND_HOST s'ecarte du defaut local
+# 127.0.0.1 : ce cas (deploiement palier 2/3) reste gere par
+# app.main._validate_security_posture, qui EXIGE une cle fournie par l'IT
+# et refuse de demarrer sans elle -- une auto-provision serait dangereuse
+# hors du poste local du developpeur.
+ENV_FILE=".env"
+bind_host_value=""
+[[ -f "$ENV_FILE" ]] && bind_host_value="$(grep -m1 '^BIND_HOST=' "$ENV_FILE" | cut -d= -f2-)"
+encryption_key_value=""
+[[ -f "$ENV_FILE" ]] && encryption_key_value="$(grep -m1 '^ENCRYPTION_KEY=' "$ENV_FILE" | cut -d= -f2-)"
+if [[ ( -z "$bind_host_value" || "$bind_host_value" == "127.0.0.1" ) && -z "$encryption_key_value" ]]; then
+    echo "[setup] Generation d'une cle de chiffrement locale (ENCRYPTION_KEY)..."
+    new_key="$(python -c "from app.core.encryption import generate_key; print(generate_key())")"
+    if [[ -z "$new_key" ]]; then
+        echo "[erreur] Echec generation de la cle de chiffrement."
+        exit 1
+    fi
+    echo "ENCRYPTION_KEY=${new_key}" >> "$ENV_FILE"
+    echo "[setup] OK -- cle ecrite dans backend/.env."
 fi
 
 echo "[setup] Migrations Alembic..."
 alembic upgrade head
 
-# Vérifier que le port est libre
-if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
-    echo "[erreur] Le port $PORT est deja utilise :"
-    lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n
-    exit 1
+# Chercher le premier port libre dans la plage autorisee.
+if command -v lsof >/dev/null 2>&1; then
+    while lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; do
+        if (( PORT >= PORT_MAX )); then
+            echo "[erreur] Aucun port libre entre $REQUESTED_PORT et $PORT_MAX."
+            exit 1
+        fi
+        PORT=$((PORT + 1))
+    done
+fi
+if [[ "$PORT" != "$REQUESTED_PORT" ]]; then
+    echo "[info] Le port $REQUESTED_PORT est occupe - bascule automatique sur $PORT."
 fi
 
 # Front React : rebuild auto si dist absent OU sources front plus recentes que

@@ -1,16 +1,19 @@
-"""Vision checks — Pixtral-powered analysis of embedded illustrations.
+"""Vision checks — Mistral multimodal analysis of embedded illustrations.
 
 Emits `RawSuggestion` entries with `rule_kind="vision"` so the rest of
-the pipeline (materialize, persistence, overlay) handles them
+        images = extract_images(src_path, max_per_doc=max_images + 1)
 identically to text-bearing rules.
 
 Two checks run per image (cap at 20 images per document) :
 
+    if len(images) > max_images:
+        _mark_vision_limited(warnings)
+        images = images[:max_images]
 - **FIGURE_NO_CAPTION** (structural, no Mistral call) : the PDF doesn't
-  contain a « Figure N — … » line below the image. Detection-only —
+    contain a « Figure N — … » line below the image. Detection-only —
   the operator has to add the caption in the source document.
 - **FIGURE_COHERENCE** (Mistral, requires `vision.enabled` + API key) :
-  the image description provided by Pixtral is compared against the
+    the image description provided by the multimodal model is compared against the
   caption / surrounding text. A low coherence score raises a warning.
 
 A future iteration can plug in the `regles_conformite_visuelle` rule
@@ -21,8 +24,7 @@ suggestions one rule per failure.
 
 from __future__ import annotations
 
-import logging
-
+import structlog
 from sqlalchemy.orm import Session
 
 from app.checks.raw import RawSuggestion
@@ -31,11 +33,11 @@ from app.core.mistral_vision import check_figure_compliance, describe_image
 from app.parsers.pdf_parser import extract_images
 
 
-_logger = logging.getLogger(__name__)
+_logger = structlog.get_logger(__name__)
 
 
 # Built-in vision compliance rules — covers S1000D §5.2 conventions on
-# figures. Each rule is asked of Pixtral as a yes/no question. The
+# figures. Each rule is asked of the multimodal model as a yes/no question. The
 # `id` ends up in the suggestion's `rule_code` so the reviewer can
 # filter / toggle the rule like any other catalog entry.
 _BUILTIN_VISION_RULES = [
@@ -72,6 +74,7 @@ def run(
     *,
     max_images: int = 20,
     enable_mistral: bool = True,
+    warnings: list[str] | None = None,
 ) -> list[RawSuggestion]:
     """Extract every embedded image and emit vision-related suggestions.
 
@@ -79,10 +82,14 @@ def run(
     (FIGURE_NO_CAPTION) — useful when the user just wants the caption
     audit without paying for vision calls."""
     try:
-        images = extract_images(src_path, max_per_doc=max_images)
+        images = extract_images(src_path, max_per_doc=max_images + 1)
     except Exception as exc:  # noqa: BLE001
-        _logger.warning("vision_extract_failed: %s", exc)
+        _logger.warning("vision_extract_failed", error=type(exc).__name__)
+        _mark_vision_incomplete(warnings)
         return []
+    if len(images) > max_images:
+        _mark_vision_limited(warnings)
+        images = images[:max_images]
 
     out: list[RawSuggestion] = []
     for idx, img in enumerate(images, start=1):
@@ -107,17 +114,19 @@ def run(
         if not enable_mistral:
             continue
 
-        # Semantic compliance — yes/no questions to Pixtral on the image.
+        # Semantic compliance — yes/no questions to the multimodal model on the image.
         try:
             result = check_figure_compliance(db, img.bytes, _BUILTIN_VISION_RULES)
         except AppError as exc:
             _logger.warning(
-                "vision_compliance_skipped: page=%s img=%s code=%s",
-                img.page, idx, exc.code,
+                "vision_compliance_skipped",
+                page=img.page, img=idx, code=exc.code,
             )
+            _mark_vision_incomplete(warnings)
             continue
         except Exception as exc:  # noqa: BLE001
-            _logger.warning("vision_compliance_error: %s", exc)
+            _logger.warning("vision_compliance_error", error=type(exc).__name__)
+            _mark_vision_incomplete(warnings)
             continue
 
         for entry in result.get("results", []):
@@ -137,12 +146,13 @@ def run(
                         severity=str(rule.get("severity") or "warning"),
                         message=(
                             f"Figure {idx} — non-conforme : {rule.get('question', '')}\n"
-                            f"Constat Pixtral : {evidence or '(aucune justification)'}"
+                            f"Constat vision : {evidence or '(aucune justification)'}"
                         ),
                         original="",
                         proposed="",  # detection-only
                         page=img.page,
                         span=(0, 0),
+                        ai_generated=True,
                     )
                 )
 
@@ -151,8 +161,10 @@ def run(
         if img.caption_nearby:
             try:
                 desc = describe_image(db, img.bytes)
-            except (AppError, Exception):  # noqa: BLE001
-                desc = ""
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("vision_description_skipped", error=type(exc).__name__)
+                _mark_vision_incomplete(warnings)
+                continue
             if desc and _looks_incoherent(desc, img.caption_nearby):
                 out.append(
                     RawSuggestion(
@@ -163,16 +175,29 @@ def run(
                             f"Figure {idx} — la légende et le contenu visuel "
                             "semblent discordants.\n"
                             f"Légende : {img.caption_nearby}\n"
-                            f"Image (Pixtral) : {desc}"
+                            f"Image : {desc}"
                         ),
                         original="",
                         proposed="",
                         page=img.page,
                         span=(0, 0),
+                        ai_generated=True,
                     )
                 )
 
     return out
+
+
+def _mark_vision_incomplete(warnings: list[str] | None) -> None:
+    warning = "La vérification sémantique des figures est indisponible; la couverture est réduite."
+    if warnings is not None and warning not in warnings:
+        warnings.append(warning)
+
+
+def _mark_vision_limited(warnings: list[str] | None) -> None:
+    warning = "La limite d'illustrations a été atteinte; les images restantes n'ont pas été analysées."
+    if warnings is not None and warning not in warnings:
+        warnings.append(warning)
 
 
 def _looks_incoherent(description: str, caption: str) -> bool:

@@ -17,6 +17,7 @@ attendus par le client (`split_by_dmrl`) au lieu du niveau de titre.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 
 from app.core import dmrl
@@ -24,6 +25,7 @@ from app.core.dmrl import DmrlEntry
 from app.core.ir import IRNode
 
 _LEVEL = {"chapter": 1, "section": 2, "subsection": 3}
+_LAYOUT_NOISE_ZONES = frozenset({"header", "footer", "cover", "toc"})
 
 
 def level_of(split_level: str) -> int:
@@ -37,6 +39,8 @@ class DmUnit:
     root: IRNode                       # racine synthetique : children = contenu du DM
     page: int | None = None
     node_count: int = 0
+    dmc: str = ""
+    dmrl_index: int | None = None
     # Contenu du document non couvert par la DMRL : le libelle est rendu cote UI
     # (pas de chaine d'affichage en dur dans le moteur).
     is_orphan: bool = False
@@ -54,6 +58,15 @@ def _collect(node: IRNode, depth: int, out: list[IRNode]) -> None:
             _collect(child, depth, out)
 
 
+def _without_layout_noise(node: IRNode) -> IRNode:
+    node.children = [
+        _without_layout_noise(child)
+        for child in node.children
+        if child.zone not in _LAYOUT_NOISE_ZONES
+    ]
+    return node
+
+
 def split_into_dms(root: IRNode, split_level: str) -> list[DmUnit]:
     depth = level_of(split_level)
     sections: list[IRNode] = []
@@ -61,19 +74,25 @@ def split_into_dms(root: IRNode, split_level: str) -> list[DmUnit]:
 
     # Aucune section au niveau voulu -> tout le document devient un seul DM.
     if not sections:
-        title = next((c.text for c in root.children if c.kind == "section" and c.text), "Document")
-        syn = IRNode(id="dm1-root", kind="section", level=0, children=list(root.children))
+        children = [
+            _without_layout_noise(deepcopy(child))
+            for child in root.children
+            if child.zone not in _LAYOUT_NOISE_ZONES
+        ]
+        title = next((c.text for c in children if c.kind == "section" and c.text), "Document")
+        syn = IRNode(id="dm1-root", kind="section", level=0, children=children)
         return [DmUnit(dm_id="dm1", title=title, root=syn, node_count=len(syn.walk()))]
 
     dms: list[DmUnit] = []
     for i, sec in enumerate(sections, start=1):
         dm_id = f"dm{i}"
-        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=list(sec.children))
+        clean_section = _without_layout_noise(deepcopy(sec))
+        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[clean_section])
         dms.append(DmUnit(
             dm_id=dm_id,
-            title=sec.text or f"Data Module {i}",
+            title=clean_section.text or f"Data Module {i}",
             root=syn,
-            page=sec.page,
+            page=clean_section.page,
             node_count=len(syn.walk()),
         ))
     return dms
@@ -103,6 +122,7 @@ def _flat_nodes(root: IRNode) -> list[IRNode]:
                     id=child.id, kind="section", text=child.text, level=child.level,
                     form=child.form, page=child.page, zone=child.zone,
                     context=child.context, confidence=child.confidence,
+                    inline_runs=list(child.inline_runs),
                 ))
                 walk(child)
             else:
@@ -112,18 +132,47 @@ def _flat_nodes(root: IRNode) -> list[IRNode]:
     return out
 
 
+def _dmrl_nodes(root: IRNode) -> list[IRNode]:
+    """Aplatit l'IR en excluant les entetes et pieds recurrents.
+
+    Ces zones sont du bruit de mise en page : elles ne doivent ni preceder le
+    premier ancrage DMRL ni etre rattachees au contenu d'un Data Module.
+    """
+    return [node for node in _flat_nodes(root) if node.zone not in _LAYOUT_NOISE_ZONES]
+
+
+def _find_section_title(
+    nodes: list[IRNode], needle: str, from_idx: int
+) -> tuple[int | None, str]:
+    section_positions = [
+        position for position, node in enumerate(nodes) if node.kind == "section"
+    ]
+    if not section_positions:
+        return None, ""
+
+    section_texts = [dmrl.normalize(nodes[position].text) for position in section_positions]
+    section_cursor = sum(position < from_idx for position in section_positions)
+    section_idx, rank = dmrl.find_title(section_texts, needle, section_cursor)
+    if section_idx is None:
+        return None, ""
+    return section_positions[section_idx], rank
+
+
 def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | None, str]]:
     """Pour chaque entree DMRL : index du noeud-titre apparie + rang d'appariement.
 
     Sert AVANT le decoupage : l'utilisateur valide la DMRL en voyant ce qui a
     ete retrouve dans son document, et A QUEL POINT c'est sur.
     """
-    nodes = _flat_nodes(root)
+    nodes = _dmrl_nodes(root)
     norm_nodes = [dmrl.normalize(n.text) for n in nodes]
     out: list[tuple[int | None, str]] = []
     cursor = 0
     for entry in dmrl_data:
-        idx, rank = dmrl.find_title(norm_nodes, dmrl.normalize(entry.title), cursor)
+        needle = dmrl.normalize(entry.title)
+        idx, rank = _find_section_title(nodes, needle, cursor)
+        if idx is None:
+            idx, rank = dmrl.find_title(norm_nodes, needle, cursor)
         out.append((idx, rank))
         if idx is not None:
             cursor = idx + 1
@@ -132,7 +181,7 @@ def match_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[tuple[int | Non
 
 def match_report(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[dict]:
     """Rapport d'appariement DMRL <-> document : une ligne par entree."""
-    nodes = _flat_nodes(root)
+    nodes = _dmrl_nodes(root)
     matches = match_dmrl(root, dmrl_data)
     return [
         {
@@ -157,16 +206,16 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
     preface, avertissements) devient un DM marque `is_orphan`, et les entrees
     non retrouvees produisent un DM VIDE — l'humain voit ce qui reste a traiter.
     """
-    nodes = _flat_nodes(root)
+    nodes = _dmrl_nodes(root)
     matches = match_dmrl(root, dmrl_data)
 
-    anchors: list[tuple[int, DmrlEntry]] = []
-    missing: list[DmrlEntry] = []
-    for entry, (idx, _rank) in zip(dmrl_data, matches, strict=True):
+    anchors: list[tuple[int, int, DmrlEntry]] = []
+    missing: list[tuple[int, DmrlEntry]] = []
+    for dmrl_index, (entry, (idx, _rank)) in enumerate(zip(dmrl_data, matches, strict=True)):
         if idx is None:
-            missing.append(entry)
+            missing.append((dmrl_index, entry))
         else:
-            anchors.append((idx, entry))
+            anchors.append((idx, dmrl_index, entry))
     anchors.sort(key=lambda t: t[0])
 
     dms: list[DmUnit] = []
@@ -177,19 +226,21 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
             node_count=len(syn.walk()), is_orphan=True,
         ))
 
-    for i, (idx, entry) in enumerate(anchors):
+    for i, (idx, dmrl_index, entry) in enumerate(anchors):
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(nodes)
         dm_id = f"dm{len(dms) + 1}"
-        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0,
-                     children=list(nodes[idx + 1:end]))
+        section = nodes[idx]
+        section.children = list(nodes[idx + 1:end])
+        syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[section])
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title or f"Data Module {i + 1}",
-            root=syn, page=nodes[idx].page, node_count=len(syn.walk()),
+            root=syn, page=nodes[idx].page, node_count=len(syn.walk()), dmc=entry.dmc,
+            dmrl_index=dmrl_index,
         ))
-    for entry in missing:
+    for dmrl_index, entry in missing:
         dm_id = f"dm{len(dms) + 1}"
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title, root=IRNode(id=f"{dm_id}-root", kind="section", level=0),
-            node_count=1,
+            node_count=1, dmc=entry.dmc, dmrl_index=dmrl_index,
         ))
     return dms
