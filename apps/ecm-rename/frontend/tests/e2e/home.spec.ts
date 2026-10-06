@@ -97,8 +97,12 @@ test("ECM Rename workspace renders", async ({ page }) => {
   await expect(page.getByText("C:\\ECM\\sortie\\ECN-42-A-Cooling unit", { exact: true })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /Ajouter les lignes au tracker|Add rows to tracker/ }).click();
-  await page.getByRole("button", { name: /Confirmer l'ajout au tracker|Confirm tracker update/ }).click();
+  await expect(page.getByRole("button", { name: /Ajouté|Added/ })).toBeDisabled();
   await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: /Référence|Reference/ }).first().fill("ECN-43");
+  await expect(page.getByRole("button", { name: /Ajouter les lignes au tracker|Add rows to tracker/ })).toBeEnabled();
+  await page.getByRole("button", { name: /Ajouter les lignes au tracker|Add rows to tracker/ }).click();
+  await expect(page.getByRole("button", { name: /Ajouté|Added/ })).toBeDisabled();
 
   await page.getByRole("button", { name: "EN" }).click();
   await page.getByRole("link", { name: "Settings" }).click();

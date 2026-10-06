@@ -61,6 +61,7 @@ export function App() {
                   setLastTrackerResult(null);
                 }}
                 onClearFolderResult={() => setLastFolderResult(null)}
+                onClearTrackerResult={() => setLastTrackerResult(null)}
               />
             }
           />

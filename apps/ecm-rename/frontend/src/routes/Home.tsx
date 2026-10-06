@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
 import { Check, FileSearch, FolderPlus, ListPlus, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { usePathPreferences } from "../hooks/usePathPreferences";
@@ -43,6 +43,7 @@ type HomeProps = {
   onTrackerUpdated: (result: AppendTrackerDto) => void;
   onClearResults: () => void;
   onClearFolderResult: () => void;
+  onClearTrackerResult: () => void;
 };
 
 export function Home({
@@ -52,6 +53,7 @@ export function Home({
   onTrackerUpdated,
   onClearResults,
   onClearFolderResult,
+  onClearTrackerResult,
 }: HomeProps) {
   const { t, i18n } = useTranslation();
   const pathPreferences = usePathPreferences();
@@ -63,7 +65,6 @@ export function Home({
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState("");
   const [preview, setPreview] = useState<PreviewDto | null>(null);
-  const [confirmationArmed, setConfirmationArmed] = useState<Operation | null>(null);
 
   const previewMutation = useMutation({
     mutationFn: ecmRenameApi.preview,
@@ -73,7 +74,6 @@ export function Home({
       setHeaderRow(String(result.header_row));
       folderMutation.reset();
       trackerMutation.reset();
-      setConfirmationArmed(null);
     },
   });
 
@@ -104,15 +104,8 @@ export function Home({
       pathPreferences.savePaths({ output_path: path });
       onClearFolderResult();
       folderMutation.reset();
-      setConfirmationArmed(null);
     },
   });
-
-  useEffect(() => {
-    if (!confirmationArmed) return;
-    const timeout = window.setTimeout(() => setConfirmationArmed(null), 3000);
-    return () => window.clearTimeout(timeout);
-  }, [confirmationArmed]);
 
   const layoutDirty = Boolean(
     preview && (preview.sheet_name !== sheetName || preview.header_row !== Number(headerRow)),
@@ -140,7 +133,6 @@ export function Home({
     previewMutation.reset();
     folderMutation.reset();
     trackerMutation.reset();
-    setConfirmationArmed(null);
   }
 
   function analyze() {
@@ -167,8 +159,8 @@ export function Home({
 
   function updateFolderField(recordIndex: number, field: FolderField, value: string) {
     onClearFolderResult();
+    onClearTrackerResult();
     folderMutation.reset();
-    setConfirmationArmed(null);
     setPreview((current) => {
       if (!current) return current;
       return {
@@ -187,11 +179,11 @@ export function Home({
 
   function updateTrackerValue(recordIndex: number, columnIndex: number, value: string) {
     const selectedField = preview?.columns[columnIndex]?.field;
+    onClearTrackerResult();
     if (selectedField === "reference" || selectedField === "revision" || selectedField === "subject") {
       onClearFolderResult();
       folderMutation.reset();
     }
-    setConfirmationArmed(null);
     setPreview((current) => {
       if (!current) return current;
       return {
@@ -210,12 +202,11 @@ export function Home({
     });
   }
 
-  function confirmOperation(operation: Operation) {
+  function runOperation(operation: Operation) {
     const ready = operation === "folders" ? readyForFolders : readyForTracker;
     if (!preview || !ready) return;
     if (operation === "folders") {
       if (folderResult) return;
-      setConfirmationArmed(null);
       folderMutation.mutate({
         source_path: preview.source_path,
         output_path: outputPath.trim(),
@@ -229,11 +220,6 @@ export function Home({
       return;
     }
 
-    if (confirmationArmed !== "tracker") {
-      setConfirmationArmed("tracker");
-      return;
-    }
-    setConfirmationArmed(null);
     trackerMutation.mutate({
       tracker_path: preview.tracker_path,
       sheet_name: preview.sheet_name,
@@ -304,7 +290,6 @@ export function Home({
                   pathPreferences.setPath("output_path", value);
                   onClearFolderResult();
                   folderMutation.reset();
-                  setConfirmationArmed(null);
                 }}
                 onBlur={() => pathPreferences.savePaths()}
                 onBrowse={browse}
@@ -368,7 +353,6 @@ export function Home({
                   options={preview.sheet_names.map((name) => ({ value: name, label: name }))}
                   onChange={(event) => {
                     setSheetName(event.currentTarget.value);
-                    setConfirmationArmed(null);
                   }}
                 />
               </label>
@@ -380,7 +364,6 @@ export function Home({
                   value={headerRow}
                   onChange={(event) => {
                     setHeaderRow(event.currentTarget.value);
-                    setConfirmationArmed(null);
                   }}
                 />
               </label>
@@ -449,7 +432,7 @@ export function Home({
                 variant={folderResult ? "secondary" : "primary"}
                 className="max-w-full whitespace-normal text-left"
                 disabled={!readyForFolders || operationPending || browseMutation.isPending || Boolean(folderResult)}
-                onClick={() => confirmOperation("folders")}
+                onClick={() => runOperation("folders")}
               >
                 {folderResult ? (
                   <Check aria-hidden="true" className="h-4 w-4" />
@@ -475,18 +458,20 @@ export function Home({
                 type="button"
                 variant="secondary"
                 className="max-w-full whitespace-normal text-left"
-                disabled={!readyForTracker || operationPending || browseMutation.isPending}
-                onClick={() => confirmOperation("tracker")}
+                disabled={!readyForTracker || operationPending || browseMutation.isPending || Boolean(trackerResult)}
+                onClick={() => runOperation("tracker")}
               >
                 {trackerMutation.isPending ? (
                   <RotateCcw aria-hidden="true" className="h-4 w-4 animate-spin" />
+                ) : trackerResult ? (
+                  <Check aria-hidden="true" className="h-4 w-4" />
                 ) : (
                   <ListPlus aria-hidden="true" className="h-4 w-4" />
                 )}
                 {trackerMutation.isPending
                   ? t("home.appending_tracker")
-                  : confirmationArmed === "tracker"
-                    ? t("home.confirm_tracker")
+                  : trackerResult
+                    ? t("home.tracker_done")
                     : t("home.append_tracker")}
               </Button>
               {trackerMutation.error && (
