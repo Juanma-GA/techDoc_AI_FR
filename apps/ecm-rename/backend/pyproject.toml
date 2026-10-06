@@ -21,6 +21,7 @@ dependencies = [
     "structlog>=24.1",
     "truststore>=0.10",
     "python-multipart>=0.0.9",
+    "xlwings>=0.37",
 ]
 
 [project.optional-dependencies]

@@ -61,6 +61,7 @@ class CreateFoldersRequest(BaseModel):
 
 class CreateFoldersResponse(BaseModel):
     created_folders: list[str]
+    existing_folders: list[str]
 
 
 class TrackerRecord(BaseModel):

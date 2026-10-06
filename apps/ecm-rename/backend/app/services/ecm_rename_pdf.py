@@ -11,6 +11,8 @@ from app.core.errors import AppError
 
 
 FIELD_ALIASES = {
+    "send_date": {"date d envoi"},
+    "reception_week": {"semaine de reception", "reception week"},
     "reference": {
         "reference",
         "ref",
@@ -22,10 +24,13 @@ FIELD_ALIASES = {
         "cm no",
     },
     "revision": {"revision", "revision number", "revision @", "rev", "rev number"},
-    "subject": {"subject", "sujet", "objet", "ecn subject"},
+    "module": {"module"},
+    "subject": {"subject", "sujet", "objet", "ecn subject", "description"},
     "title": {"title", "titre", "ecn title"},
     "author": {"author", "auteur", "originator", "prepared by", "created by"},
     "response_required": {
+        "response",
+        "reponse",
         "response required",
         "response requested",
         "requires response",
@@ -34,7 +39,10 @@ FIELD_ALIASES = {
         "reponse demandee",
         "reponse attendue",
     },
+    "response_date": {"date de reponse", "response date"},
+    "open_action_count": {"nombre d action ouverte", "opened action counter"},
     "module_3_open_actions": {
+        "actions",
         "module 3",
         "module 3 action ouvertes",
         "module 3 actions",
@@ -44,8 +52,22 @@ FIELD_ALIASES = {
         "actions ouvertes",
         "actions ouvertes module 3",
     },
+    "distribution": {"diffusion", "distribution"},
+    "status": {"statut", "status"},
 }
 ALIAS_TO_FIELD = {alias: field for field, aliases in FIELD_ALIASES.items() for alias in aliases}
+PDF_ALIAS_TO_FIELD = {
+    alias: field
+    for alias, field in ALIAS_TO_FIELD.items()
+    if not (field == "response_required" and alias in {"response", "reponse"})
+}
+PDF_ALIAS_TO_FIELD["reply req d"] = "response_required"
+RESPONSE_OPTION_PATTERN = re.compile(
+    r"\b(?P<option>yes|no|oui|non)\b\s*"
+    r"(?P<mark>\u2612|\u2611|\u2610|\u2613|\u2713|\u2714|\[\s*[xX ]\s*\])",
+    re.I,
+)
+CHECKED_RESPONSE_MARKS = {"\u2612", "\u2611", "\u2613", "\u2713", "\u2714", "[x]"}
 REFERENCE_PATTERN = re.compile(
     r"\bGKN-[A-Z0-9]+(?:[-_/][A-Z0-9]+)*(?:@[A-Z0-9][A-Z0-9._-]*)?\b",
     re.I,
@@ -59,8 +81,32 @@ def normalize_label(value: str) -> str:
     return re.sub(r"[^a-z0-9@]+", " ", ascii_value).strip()
 
 
+def _label_candidates(label: str) -> list[str]:
+    candidates = [normalize_label(label)]
+    candidates.extend(normalize_label(part) for part in re.split(r"[\r\n]+", label))
+    return list(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
 def field_for_label(label: str) -> str | None:
-    return ALIAS_TO_FIELD.get(normalize_label(label))
+    return next(
+        (
+            ALIAS_TO_FIELD[candidate]
+            for candidate in _label_candidates(label)
+            if candidate in ALIAS_TO_FIELD
+        ),
+        None,
+    )
+
+
+def _pdf_field_for_label(label: str) -> str | None:
+    return next(
+        (
+            PDF_ALIAS_TO_FIELD[candidate]
+            for candidate in _label_candidates(label)
+            if candidate in PDF_ALIAS_TO_FIELD
+        ),
+        None,
+    )
 
 
 def _split_known_label_value(line: str) -> tuple[str, str] | None:
@@ -71,9 +117,27 @@ def _split_known_label_value(line: str) -> tuple[str, str] | None:
     words = line.split()
     for label_end in range(len(words), 0, -1):
         label = " ".join(words[:label_end]).rstrip(":")
-        if field_for_label(label):
+        if _pdf_field_for_label(label):
             return label, " ".join(words[label_end:]).strip()
     return None
+
+
+def _response_checkbox_value(value: str, lines: list[str], line_index: int) -> tuple[bool, str]:
+    option_states: dict[str, bool] = {}
+    candidates = [value, *lines[line_index + 1 : line_index + 5]]
+    for candidate in candidates:
+        for match in RESPONSE_OPTION_PATTERN.finditer(candidate):
+            option = match.group("option").casefold()
+            option = "yes" if option in {"yes", "oui"} else "no"
+            mark = match.group("mark").casefold().replace(" ", "")
+            option_states[option] = mark in CHECKED_RESPONSE_MARKS
+        if {"yes", "no"}.issubset(option_states):
+            break
+
+    checked_options = [option for option, checked in option_states.items() if checked]
+    if checked_options:
+        return True, "Yes" if checked_options[0] == "yes" else "No"
+    return bool(option_states), ""
 
 
 def list_pdf_files(source: Path) -> list[Path]:
@@ -127,13 +191,19 @@ def extract_fields(text: str) -> tuple[dict[str, str], dict[str, str]]:
         if not parts:
             continue
         label, value = parts
-        if not value:
+        field = _pdf_field_for_label(label)
+        checkbox_found = False
+        if field == "response_required":
+            checkbox_found, checkbox_value = _response_checkbox_value(value, lines, line_index)
+            if checkbox_found:
+                value = checkbox_value
+        if not value and not checkbox_found:
             for candidate in lines[line_index + 1 :]:
                 candidate = candidate.strip()
                 if not candidate:
                     continue
                 next_parts = _split_known_label_value(candidate)
-                if next_parts and field_for_label(next_parts[0]):
+                if next_parts and _pdf_field_for_label(next_parts[0]):
                     continue
                 value = candidate
                 break
@@ -141,7 +211,6 @@ def extract_fields(text: str) -> tuple[dict[str, str], dict[str, str]]:
             continue
         normalized_label = normalize_label(label)
         label_values.setdefault(normalized_label, value)
-        field = ALIAS_TO_FIELD.get(normalized_label)
         if field and not fields[field]:
             fields[field] = value
 
@@ -171,6 +240,12 @@ def column_values(
     values: list[str] = []
     for column in columns:
         field = field_for_label(column["name"])
-        value = fields.get(field, "") if field else labels.get(normalize_label(column["name"]), "")
+        if field:
+            value = fields.get(field, "")
+        else:
+            value = next(
+                (labels[candidate] for candidate in _label_candidates(column["name"]) if candidate in labels),
+                "",
+            )
         values.append(value)
     return values

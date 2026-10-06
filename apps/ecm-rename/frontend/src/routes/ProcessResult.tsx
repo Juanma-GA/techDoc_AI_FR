@@ -16,11 +16,14 @@ export function ProcessResult({ folderResult, trackerResult }: ProcessResultProp
       {folderResult && (
         <div className="mt-3">
           <p className="text-sm text-success" role="status">
-            {t("home.folders_success", { count: folderResult.created_folders.length })}
+            {t("home.folders_success", {
+              count: folderResult.created_folders.length + folderResult.existing_folders.length,
+              existing: folderResult.existing_folders.length,
+            })}
           </p>
-          <h3 className="label mt-3">{t("home.created_folders")}</h3>
+          <h3 className="label mt-3">{t("home.completed_folders")}</h3>
           <ul className="mt-2 flex flex-col gap-2">
-            {folderResult.created_folders.map((folder) => (
+            {[...folderResult.created_folders, ...folderResult.existing_folders].map((folder) => (
               <li key={folder} className="break-all border-l-2 border-brand-blue-light pl-3 font-mono text-sm">
                 {folder}
               </li>

@@ -49,6 +49,7 @@ test("ECM Rename workspace renders", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify({
         created_folders: ["C:\\ECM\\sortie\\ECN-42-A-Cooling unit"],
+        existing_folders: [],
       }),
     }),
   );
@@ -90,8 +91,8 @@ test("ECM Rename workspace renders", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: /Référence|Reference/ }).first()).toHaveValue("ECN-42");
   await expect(page.getByRole("textbox", { name: /Révision|Revision/ }).first()).toHaveValue("A");
   await expect(page.getByRole("textbox", { name: /Sujet|Subject/ }).first()).toHaveValue("Cooling unit");
-  await page.getByRole("button", { name: /Créer les dossiers avec les PDF|Create folders with PDFs/ }).click();
-  await page.getByRole("button", { name: /Confirmer la création des dossiers|Confirm folder creation/ }).click();
+  await page.getByRole("button", { name: /Créer les dossiers|Create folders/ }).click();
+  await expect(page.getByRole("button", { name: /Terminé|Done/ })).toBeDisabled();
   await expect(page.getByRole("heading", { name: /Résultat de l'opération|Operation result/ })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\sortie\\ECN-42-A-Cooling unit", { exact: true })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toHaveCount(0);

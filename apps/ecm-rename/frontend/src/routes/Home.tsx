@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
-import { FileSearch, FolderPlus, ListPlus, RotateCcw } from "lucide-react";
+import { Check, FileSearch, FolderPlus, ListPlus, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -166,6 +166,8 @@ export function Home({
   }
 
   function updateFolderField(recordIndex: number, field: FolderField, value: string) {
+    onClearFolderResult();
+    folderMutation.reset();
     setConfirmationArmed(null);
     setPreview((current) => {
       if (!current) return current;
@@ -184,6 +186,11 @@ export function Home({
   }
 
   function updateTrackerValue(recordIndex: number, columnIndex: number, value: string) {
+    const selectedField = preview?.columns[columnIndex]?.field;
+    if (selectedField === "reference" || selectedField === "revision" || selectedField === "subject") {
+      onClearFolderResult();
+      folderMutation.reset();
+    }
     setConfirmationArmed(null);
     setPreview((current) => {
       if (!current) return current;
@@ -206,12 +213,9 @@ export function Home({
   function confirmOperation(operation: Operation) {
     const ready = operation === "folders" ? readyForFolders : readyForTracker;
     if (!preview || !ready) return;
-    if (confirmationArmed !== operation) {
-      setConfirmationArmed(operation);
-      return;
-    }
-    setConfirmationArmed(null);
     if (operation === "folders") {
+      if (folderResult) return;
+      setConfirmationArmed(null);
       folderMutation.mutate({
         source_path: preview.source_path,
         output_path: outputPath.trim(),
@@ -222,14 +226,20 @@ export function Home({
           subject,
         })),
       });
-    } else {
-      trackerMutation.mutate({
-        tracker_path: preview.tracker_path,
-        sheet_name: preview.sheet_name,
-        header_row: preview.header_row,
-        records: preview.records.map(({ tracker_values }) => ({ tracker_values })),
-      });
+      return;
     }
+
+    if (confirmationArmed !== "tracker") {
+      setConfirmationArmed("tracker");
+      return;
+    }
+    setConfirmationArmed(null);
+    trackerMutation.mutate({
+      tracker_path: preview.tracker_path,
+      sheet_name: preview.sheet_name,
+      header_row: preview.header_row,
+      records: preview.records.map(({ tracker_values }) => ({ tracker_values })),
+    });
   }
 
   return (
@@ -436,20 +446,22 @@ export function Home({
             <div className="flex flex-col gap-2">
               <Button
                 type="button"
-                variant="primary"
+                variant={folderResult ? "secondary" : "primary"}
                 className="max-w-full whitespace-normal text-left"
-                disabled={!readyForFolders || operationPending || browseMutation.isPending}
+                disabled={!readyForFolders || operationPending || browseMutation.isPending || Boolean(folderResult)}
                 onClick={() => confirmOperation("folders")}
               >
-                {folderMutation.isPending ? (
+                {folderResult ? (
+                  <Check aria-hidden="true" className="h-4 w-4" />
+                ) : folderMutation.isPending ? (
                   <RotateCcw aria-hidden="true" className="h-4 w-4 animate-spin" />
                 ) : (
                   <FolderPlus aria-hidden="true" className="h-4 w-4" />
                 )}
-                {folderMutation.isPending
-                  ? t("home.creating_folders")
-                  : confirmationArmed === "folders"
-                    ? t("home.confirm_folders")
+                {folderResult
+                  ? t("home.folders_done")
+                  : folderMutation.isPending
+                    ? t("home.creating_folders")
                     : t("home.create_folders")}
               </Button>
               {folderMutation.error && (

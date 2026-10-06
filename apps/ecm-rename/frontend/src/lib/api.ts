@@ -66,6 +66,7 @@ export type CreateFoldersRequest = {
 };
 export type CreateFoldersDto = {
   created_folders: string[];
+  existing_folders: string[];
 };
 export type AppendTrackerRequest = {
   tracker_path: string;
