@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
-import { FileSearch, FolderPlus, RotateCcw } from "lucide-react";
+import { FileSearch, FolderPlus, ListPlus, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,13 +10,15 @@ import {
   type BrowseKind,
   type PreviewDto,
   type PreviewRequest,
-  type ProcessDto,
+  type AppendTrackerDto,
+  type CreateFoldersDto,
   type TrackerField,
 } from "../lib/api";
 import { PathPickerField } from "./PathPickerField";
 import { ProcessResult } from "./ProcessResult";
 
 type FolderField = Extract<TrackerField, "reference" | "revision" | "subject">;
+type Operation = "folders" | "tracker";
 
 function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
@@ -35,12 +37,22 @@ function folderName(record: PreviewDto["records"][number]): string {
 }
 
 type HomeProps = {
-  result: ProcessDto | null;
-  onProcessed: (result: ProcessDto) => void;
-  onClearResult: () => void;
+  folderResult: CreateFoldersDto | null;
+  trackerResult: AppendTrackerDto | null;
+  onFoldersCreated: (result: CreateFoldersDto) => void;
+  onTrackerUpdated: (result: AppendTrackerDto) => void;
+  onClearResults: () => void;
+  onClearFolderResult: () => void;
 };
 
-export function Home({ result, onProcessed, onClearResult }: HomeProps) {
+export function Home({
+  folderResult,
+  trackerResult,
+  onFoldersCreated,
+  onTrackerUpdated,
+  onClearResults,
+  onClearFolderResult,
+}: HomeProps) {
   const { t, i18n } = useTranslation();
   const pathPreferences = usePathPreferences();
   const {
@@ -51,7 +63,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState("");
   const [preview, setPreview] = useState<PreviewDto | null>(null);
-  const [confirmationArmed, setConfirmationArmed] = useState(false);
+  const [confirmationArmed, setConfirmationArmed] = useState<Operation | null>(null);
 
   const previewMutation = useMutation({
     mutationFn: ecmRenameApi.preview,
@@ -59,14 +71,20 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
       setPreview(result);
       setSheetName(result.sheet_name);
       setHeaderRow(String(result.header_row));
-      processMutation.reset();
-      setConfirmationArmed(false);
+      folderMutation.reset();
+      trackerMutation.reset();
+      setConfirmationArmed(null);
     },
   });
 
-  const processMutation = useMutation({
-    mutationFn: ecmRenameApi.process,
-    onSuccess: onProcessed,
+  const folderMutation = useMutation({
+    mutationFn: ecmRenameApi.createFolders,
+    onSuccess: onFoldersCreated,
+  });
+
+  const trackerMutation = useMutation({
+    mutationFn: ecmRenameApi.appendTracker,
+    onSuccess: onTrackerUpdated,
   });
 
   const browseMutation = useMutation({
@@ -84,46 +102,54 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
         return;
       }
       pathPreferences.savePaths({ output_path: path });
-      processMutation.reset();
-      setConfirmationArmed(false);
+      onClearFolderResult();
+      folderMutation.reset();
+      setConfirmationArmed(null);
     },
   });
 
   useEffect(() => {
     if (!confirmationArmed) return;
-    const timeout = window.setTimeout(() => setConfirmationArmed(false), 3000);
+    const timeout = window.setTimeout(() => setConfirmationArmed(null), 3000);
     return () => window.clearTimeout(timeout);
   }, [confirmationArmed]);
 
   const layoutDirty = Boolean(
     preview && (preview.sheet_name !== sheetName || preview.header_row !== Number(headerRow)),
   );
-  const readyToProcess = Boolean(
+  const readyForFolders = Boolean(
     preview &&
       outputPath.trim() &&
       !layoutDirty &&
       preview.records.length > 0 &&
       preview.records.every((record) => record.reference.trim() && record.subject.trim()),
   );
+  const readyForTracker = Boolean(
+    preview &&
+      !layoutDirty &&
+      preview.records.length > 0 &&
+      preview.records.every((record) => record.tracker_values.length === preview.columns.length),
+  );
+  const operationPending = folderMutation.isPending || trackerMutation.isPending;
 
   function clearPreview() {
-    onClearResult();
+    onClearResults();
     setPreview(null);
     setSheetName("");
     setHeaderRow("");
     previewMutation.reset();
-    processMutation.reset();
-    setConfirmationArmed(false);
+    folderMutation.reset();
+    trackerMutation.reset();
+    setConfirmationArmed(null);
   }
 
   function analyze() {
-    onClearResult();
+    onClearResults();
     const request: PreviewRequest = {
       source_path: sourcePath.trim(),
       tracker_path: trackerPath.trim(),
     };
     if (sheetName) request.sheet_name = sheetName;
-    onClearResult();
     if (preview && headerRow) request.header_row = Number(headerRow);
     previewMutation.mutate(request);
   }
@@ -140,7 +166,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
   }
 
   function updateFolderField(recordIndex: number, field: FolderField, value: string) {
-    setConfirmationArmed(false);
+    setConfirmationArmed(null);
     setPreview((current) => {
       if (!current) return current;
       return {
@@ -158,7 +184,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
   }
 
   function updateTrackerValue(recordIndex: number, columnIndex: number, value: string) {
-    setConfirmationArmed(false);
+    setConfirmationArmed(null);
     setPreview((current) => {
       if (!current) return current;
       return {
@@ -177,27 +203,33 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
     });
   }
 
-  function confirmProcess() {
-    if (!preview || !readyToProcess) return;
-    if (!confirmationArmed) {
-      setConfirmationArmed(true);
+  function confirmOperation(operation: Operation) {
+    const ready = operation === "folders" ? readyForFolders : readyForTracker;
+    if (!preview || !ready) return;
+    if (confirmationArmed !== operation) {
+      setConfirmationArmed(operation);
       return;
     }
-    setConfirmationArmed(false);
-    processMutation.mutate({
-      source_path: preview.source_path,
-      tracker_path: preview.tracker_path,
-      output_path: outputPath.trim(),
-      sheet_name: preview.sheet_name,
-      header_row: preview.header_row,
-      records: preview.records.map(({ source_path, reference, revision, subject, tracker_values }) => ({
-        source_path,
-        reference,
-        revision,
-        subject,
-        tracker_values,
-      })),
-    });
+    setConfirmationArmed(null);
+    if (operation === "folders") {
+      folderMutation.mutate({
+        source_path: preview.source_path,
+        output_path: outputPath.trim(),
+        records: preview.records.map(({ source_path, reference, revision, subject }) => ({
+          source_path,
+          reference,
+          revision,
+          subject,
+        })),
+      });
+    } else {
+      trackerMutation.mutate({
+        tracker_path: preview.tracker_path,
+        sheet_name: preview.sheet_name,
+        header_row: preview.header_row,
+        records: preview.records.map(({ tracker_values }) => ({ tracker_values })),
+      });
+    }
   }
 
   return (
@@ -223,7 +255,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
               disabled={
                 pathPreferences.isLoading ||
                 previewMutation.isPending ||
-                processMutation.isPending ||
+                operationPending ||
                 browseMutation.isPending
               }
               onChange={(value) => {
@@ -241,7 +273,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
               disabled={
                 pathPreferences.isLoading ||
                 previewMutation.isPending ||
-                processMutation.isPending ||
+                operationPending ||
                 browseMutation.isPending
               }
               onChange={(value) => {
@@ -257,12 +289,12 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
                 label={t("home.output")}
                 placeholder={t("home.output_placeholder")}
                 value={outputPath}
-                disabled={pathPreferences.isLoading || processMutation.isPending || browseMutation.isPending}
+                disabled={pathPreferences.isLoading || operationPending || browseMutation.isPending}
                 onChange={(value) => {
                   pathPreferences.setPath("output_path", value);
-                  onClearResult();
-                  processMutation.reset();
-                  setConfirmationArmed(false);
+                  onClearFolderResult();
+                  folderMutation.reset();
+                  setConfirmationArmed(null);
                 }}
                 onBlur={() => pathPreferences.savePaths()}
                 onBrowse={browse}
@@ -293,6 +325,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
               variant="primary"
               disabled={
                 !sourcePath.trim() || !trackerPath.trim() || previewMutation.isPending || browseMutation.isPending
+                || operationPending
               }
               onClick={analyze}
             >
@@ -325,7 +358,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
                   options={preview.sheet_names.map((name) => ({ value: name, label: name }))}
                   onChange={(event) => {
                     setSheetName(event.currentTarget.value);
-                    setConfirmationArmed(false);
+                    setConfirmationArmed(null);
                   }}
                 />
               </label>
@@ -337,7 +370,7 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
                   value={headerRow}
                   onChange={(event) => {
                     setHeaderRow(event.currentTarget.value);
-                    setConfirmationArmed(false);
+                    setConfirmationArmed(null);
                   }}
                 />
               </label>
@@ -399,30 +432,63 @@ export function Home({ result, onProcessed, onClearResult }: HomeProps) {
           })}
 
           {preview.records.length === 0 && <p className="text-sm text-fg-dim">{t("home.empty_preview")}</p>}
-          <div className="flex flex-wrap items-center gap-3 border-t border-md pt-4">
-            <Button
-              type="button"
-              variant="primary"
-              className="max-w-full whitespace-normal text-left"
-              disabled={!readyToProcess || processMutation.isPending || browseMutation.isPending}
-              onClick={confirmProcess}
-            >
-              <FolderPlus aria-hidden="true" className="h-4 w-4" />
-              {processMutation.isPending
-                ? t("home.processing")
-                : confirmationArmed
-                  ? t("home.confirm")
-                  : t("home.process")}
-            </Button>
-            {processMutation.error && (
-              <p className="text-sm text-danger" role="alert">
-                {errorMessage(processMutation.error, t("home.unknown_error"))}
-              </p>
-            )}
+          <div className="flex flex-wrap items-start gap-3 border-t border-md pt-4">
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                className="max-w-full whitespace-normal text-left"
+                disabled={!readyForFolders || operationPending || browseMutation.isPending}
+                onClick={() => confirmOperation("folders")}
+              >
+                {folderMutation.isPending ? (
+                  <RotateCcw aria-hidden="true" className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FolderPlus aria-hidden="true" className="h-4 w-4" />
+                )}
+                {folderMutation.isPending
+                  ? t("home.creating_folders")
+                  : confirmationArmed === "folders"
+                    ? t("home.confirm_folders")
+                    : t("home.create_folders")}
+              </Button>
+              {folderMutation.error && (
+                <p className="max-w-sm text-sm text-danger" role="alert">
+                  {errorMessage(folderMutation.error, t("home.unknown_error"))}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="max-w-full whitespace-normal text-left"
+                disabled={!readyForTracker || operationPending || browseMutation.isPending}
+                onClick={() => confirmOperation("tracker")}
+              >
+                {trackerMutation.isPending ? (
+                  <RotateCcw aria-hidden="true" className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ListPlus aria-hidden="true" className="h-4 w-4" />
+                )}
+                {trackerMutation.isPending
+                  ? t("home.appending_tracker")
+                  : confirmationArmed === "tracker"
+                    ? t("home.confirm_tracker")
+                    : t("home.append_tracker")}
+              </Button>
+              {trackerMutation.error && (
+                <p className="max-w-sm text-sm text-danger" role="alert">
+                  {errorMessage(trackerMutation.error, t("home.unknown_error"))}
+                </p>
+              )}
+            </div>
           </div>
         </section>
       )}
-      {result && <ProcessResult result={result} />}
+      {(folderResult || trackerResult) && (
+        <ProcessResult folderResult={folderResult} trackerResult={trackerResult} />
+      )}
     </div>
   );
 }

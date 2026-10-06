@@ -137,7 +137,50 @@ def test_preview_extracts_primary_fields_before_reply_section(client, tmp_path) 
     assert record["subject"] == "Example subject"
 
 
-def test_process_creates_folder_and_appends_tracker_row_without_changing_metadata(client, tmp_path) -> None:
+def test_create_folders_copies_pdf_without_updating_tracker(client, tmp_path) -> None:
+    pdf_path = tmp_path / "ECM-TEST.pdf"
+    tracker_path = tmp_path / "Tracker.xlsx"
+    output_path = tmp_path / "output"
+    _write_pdf(pdf_path, PDF_TEXT)
+    _write_tracker(tracker_path)
+    tracker_before = tracker_path.read_bytes()
+    original_pdf = pdf_path.read_bytes()
+
+    preview = client.post(
+        "/api/v1/ecm-rename/preview",
+        json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
+    ).json()
+    record = preview["records"][0]
+    record["revision"] = "A@3"
+    record["subject"] = "Cooling unit revised"
+
+    response = client.post(
+        "/api/v1/ecm-rename/folders",
+        json={
+            "source_path": preview["source_path"],
+            "output_path": str(output_path),
+            "records": [
+                {
+                    "source_path": record["source_path"],
+                    "reference": record["reference"],
+                    "revision": record["revision"],
+                    "subject": record["subject"],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    expected_folder = output_path / "GKN-ECN-123-A@3-Cooling unit revised"
+    assert expected_folder.is_dir()
+    assert (expected_folder / pdf_path.name).read_bytes() == original_pdf
+    assert pdf_path.read_bytes() == original_pdf
+    assert result == {"created_folders": [str(expected_folder)]}
+    assert tracker_path.read_bytes() == tracker_before
+
+
+def test_append_tracker_row_without_creating_folders_or_changing_metadata(client, tmp_path) -> None:
     pdf_path = tmp_path / "ECM-TEST.pdf"
     tracker_path = tmp_path / "Tracker.xlsx"
     output_path = tmp_path / "output"
@@ -178,40 +221,22 @@ def test_process_creates_folder_and_appends_tracker_row_without_changing_metadat
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     ).json()
     record = preview["records"][0]
-    record["revision"] = "A@3"
-    record["subject"] = "Cooling unit revised"
-    record["tracker_values"][1] = record["revision"]
-    record["tracker_values"][2] = record["subject"]
 
     response = client.post(
-        "/api/v1/ecm-rename/process",
+        "/api/v1/ecm-rename/tracker",
         json={
-            "source_path": preview["source_path"],
             "tracker_path": preview["tracker_path"],
-            "output_path": str(output_path),
             "sheet_name": preview["sheet_name"],
             "header_row": preview["header_row"],
-            "records": [
-                {
-                    "source_path": record["source_path"],
-                    "reference": record["reference"],
-                    "revision": record["revision"],
-                    "subject": record["subject"],
-                    "tracker_values": record["tracker_values"],
-                }
-            ],
+            "records": [{"tracker_values": record["tracker_values"]}],
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     result = response.json()
-    expected_folder = output_path / "GKN-ECN-123-A@3-Cooling unit revised"
-    assert expected_folder.is_dir()
-    assert (expected_folder / pdf_path.name).read_bytes() == original_pdf
-    assert pdf_path.read_bytes() == original_pdf
     assert result["rows_written"] == 1
     assert result["tracker_path"] == str(tracker_path)
-    assert result["created_folders"] == [str(expected_folder)]
+    assert not output_path.exists()
     with ZipFile(tracker_path) as archive:
         assert {
             name: archive.read(name)

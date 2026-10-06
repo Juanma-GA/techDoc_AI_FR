@@ -59,19 +59,21 @@ export type PreviewDto = {
   columns: TrackerColumn[];
   records: PreviewRecord[];
 };
-export type ProcessRequest = {
+export type CreateFoldersRequest = {
   source_path: string;
-  tracker_path: string;
   output_path: string;
+  records: Pick<PreviewRecord, "source_path" | "reference" | "revision" | "subject">[];
+};
+export type CreateFoldersDto = {
+  created_folders: string[];
+};
+export type AppendTrackerRequest = {
+  tracker_path: string;
   sheet_name: string;
   header_row: number;
-  records: Pick<
-    PreviewRecord,
-    "source_path" | "reference" | "revision" | "subject" | "tracker_values"
-  >[];
+  records: Pick<PreviewRecord, "tracker_values">[];
 };
-export type ProcessDto = {
-  created_folders: string[];
+export type AppendTrackerDto = {
   tracker_path: string;
   rows_written: number;
 };
@@ -97,6 +99,8 @@ export const ecmRenameApi = {
     api<BrowseResponse>("/ecm-rename/browse", { method: "POST", body: JSON.stringify(body) }),
   preview: (body: PreviewRequest) =>
     api<PreviewDto>("/ecm-rename/preview", { method: "POST", body: JSON.stringify(body) }),
-  process: (body: ProcessRequest) =>
-    api<ProcessDto>("/ecm-rename/process", { method: "POST", body: JSON.stringify(body) }),
+  createFolders: (body: CreateFoldersRequest) =>
+    api<CreateFoldersDto>("/ecm-rename/folders", { method: "POST", body: JSON.stringify(body) }),
+  appendTracker: (body: AppendTrackerRequest) =>
+    api<AppendTrackerDto>("/ecm-rename/tracker", { method: "POST", body: JSON.stringify(body) }),
 };

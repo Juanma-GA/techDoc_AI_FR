@@ -102,16 +102,12 @@ def _safe_folder_name(reference: str, revision: str, subject: str) -> str:
     return safe_name
 
 
-def process_batch(
+def create_folders_batch(
     source_path: str,
-    tracker_path: str,
     output_path: str,
-    sheet_name: str,
-    header_row: int,
     records: list[dict[str, Any]],
 ) -> dict[str, Any]:
     source = _user_path(source_path, "La source PDF", must_exist=True)
-    tracker = _tracker_path(tracker_path, must_exist=True)
     output = _user_path(output_path, "Le dossier de sortie", must_exist=False)
     if output.exists() and not output.is_dir():
         raise _app_error("INVALID_OUTPUT", "Le chemin de sortie existe mais n'est pas un dossier.")
@@ -127,13 +123,11 @@ def process_batch(
     if len(record_paths) != len(set(record_paths)) or set(record_paths) != set(file_by_path):
         raise _app_error(
             "STALE_PREVIEW",
-            "La liste des PDF a changé. Relance l'analyse avant l'ajout au tracker.",
+            "La liste des PDF a changé. Relance l'analyse avant la création des dossiers.",
         )
 
     folder_names: list[str] = []
     for record in records:
-        if len(record["tracker_values"]) == 0:
-            raise _app_error("INVALID_TRACKER_VALUES", "Les valeurs de tracker sont incomplètes.")
         folder_names.append(_safe_folder_name(record["reference"], record["revision"], record["subject"]))
     if len({name.casefold() for name in folder_names}) != len(folder_names):
         raise _app_error("DUPLICATE_FOLDER", "Plusieurs PDF produiraient le même nom de dossier.")
@@ -142,15 +136,9 @@ def process_batch(
     if conflicts:
         raise _app_error("OUTPUT_EXISTS", f"Un dossier de sortie existe déjà : {', '.join(conflicts)}", 409)
 
-    stat_before = tracker.stat()
-    workbook = load_tracker(tracker, read_only=False)
     stage_root: Path | None = None
     created_destinations: list[Path] = []
     try:
-        sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
-        if any(len(record["tracker_values"]) != len(columns) for record in records):
-            raise _app_error("STALE_PREVIEW", "Les colonnes du tracker ont changé. Relance l'analyse.")
-
         output.mkdir(parents=True, exist_ok=True)
         stage_root = Path(tempfile.mkdtemp(prefix=".ecm-rename-", dir=output))
         for record, folder_name in zip(records, folder_names, strict=True):
@@ -158,6 +146,42 @@ def process_batch(
             staged_folder = stage_root / folder_name
             staged_folder.mkdir()
             shutil.copy2(source_file, staged_folder / source_file.name)
+
+        for folder_name, destination in zip(folder_names, destinations, strict=True):
+            os.replace(stage_root / folder_name, destination)
+            created_destinations.append(destination)
+
+        return {"created_folders": [str(path) for path in destinations]}
+    except AppError:
+        for destination in created_destinations:
+            shutil.rmtree(destination, ignore_errors=True)
+        raise
+    except Exception as exc:
+        for destination in created_destinations:
+            shutil.rmtree(destination, ignore_errors=True)
+        raise _app_error(
+            "FOLDERS_FAILED",
+            "La création des dossiers a échoué. Vérifie les droits sur les dossiers source et sortie.",
+            500,
+        ) from exc
+    finally:
+        if stage_root is not None:
+            shutil.rmtree(stage_root, ignore_errors=True)
+
+
+def append_tracker_batch(
+    tracker_path: str,
+    sheet_name: str,
+    header_row: int,
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    tracker = _tracker_path(tracker_path, must_exist=True)
+    stat_before = tracker.stat()
+    workbook = load_tracker(tracker, read_only=False)
+    try:
+        sheet, selected_header_row, columns = find_tracker_layout(workbook, sheet_name, header_row)
+        if any(len(record["tracker_values"]) != len(columns) for record in records):
+            raise _app_error("STALE_PREVIEW", "Les colonnes du tracker ont changé. Relance l'analyse.")
 
         appended_rows = append_tracker_rows(sheet, selected_header_row, columns, records)
 
@@ -169,30 +193,15 @@ def process_batch(
                 409,
             )
 
-        for folder_name, destination in zip(folder_names, destinations, strict=True):
-            os.replace(stage_root / folder_name, destination)
-            created_destinations.append(destination)
-
         save_tracker(tracker, sheet, columns, appended_rows)
-
-        return {
-            "created_folders": [str(path) for path in destinations],
-            "tracker_path": str(tracker),
-            "rows_written": len(records),
-        }
+        return {"tracker_path": str(tracker), "rows_written": len(records)}
     except AppError:
-        for destination in created_destinations:
-            shutil.rmtree(destination, ignore_errors=True)
         raise
     except Exception as exc:
-        for destination in created_destinations:
-            shutil.rmtree(destination, ignore_errors=True)
         raise _app_error(
-            "PROCESS_FAILED",
-            "La création a échoué. Vérifie les droits sur les dossiers et que le tracker Excel est fermé.",
+            "TRACKER_FAILED",
+            "L'ajout au tracker a échoué. Vérifie que le fichier Excel est fermé et accessible.",
             500,
         ) from exc
     finally:
         workbook.close()
-        if stage_root is not None:
-            shutil.rmtree(stage_root, ignore_errors=True)

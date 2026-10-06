@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import PathPreference
 from app.db.session import get_db
-from app.services.ecm_rename import preview_batch, process_batch
+from app.services.ecm_rename import append_tracker_batch, create_folders_batch, preview_batch
 from app.services.path_picker import BrowseKind, BrowseLanguage, choose_path
 
 router = APIRouter(prefix="/ecm-rename", tags=["ecm-rename"])
@@ -46,25 +46,35 @@ class PreviewResponse(BaseModel):
     records: list[PreviewRecord]
 
 
-class ProcessRecord(BaseModel):
+class FolderRecord(BaseModel):
     source_path: str
     reference: str
     revision: str = ""
     subject: str
+
+
+class CreateFoldersRequest(BaseModel):
+    source_path: str
+    output_path: str
+    records: list[FolderRecord] = Field(min_length=1)
+
+
+class CreateFoldersResponse(BaseModel):
+    created_folders: list[str]
+
+
+class TrackerRecord(BaseModel):
     tracker_values: list[str]
 
 
-class ProcessRequest(BaseModel):
-    source_path: str
+class AppendTrackerRequest(BaseModel):
     tracker_path: str
-    output_path: str
     sheet_name: str
     header_row: int = Field(ge=1)
-    records: list[ProcessRecord] = Field(min_length=1)
+    records: list[TrackerRecord] = Field(min_length=1)
 
 
-class ProcessResponse(BaseModel):
-    created_folders: list[str]
+class AppendTrackerResponse(BaseModel):
     tracker_path: str
     rows_written: int
 
@@ -125,12 +135,19 @@ def preview(payload: PreviewRequest) -> dict[str, Any]:
     )
 
 
-@router.post("/process", response_model=ProcessResponse)
-def process(payload: ProcessRequest) -> dict[str, Any]:
-    return process_batch(
+@router.post("/folders", response_model=CreateFoldersResponse)
+def create_folders(payload: CreateFoldersRequest) -> dict[str, Any]:
+    return create_folders_batch(
         source_path=payload.source_path,
-        tracker_path=payload.tracker_path,
         output_path=payload.output_path,
+        records=[record.model_dump() for record in payload.records],
+    )
+
+
+@router.post("/tracker", response_model=AppendTrackerResponse)
+def append_tracker(payload: AppendTrackerRequest) -> dict[str, Any]:
+    return append_tracker_batch(
+        tracker_path=payload.tracker_path,
         sheet_name=payload.sheet_name,
         header_row=payload.header_row,
         records=[record.model_dump() for record in payload.records],

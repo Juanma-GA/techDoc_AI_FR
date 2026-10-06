@@ -43,12 +43,20 @@ test("ECM Rename workspace renders", async ({ page }) => {
       }),
     }),
   );
-  await page.route("**/api/v1/ecm-rename/process", (route) =>
+  await page.route("**/api/v1/ecm-rename/folders", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
         created_folders: ["C:\\ECM\\sortie\\ECN-42-A-Cooling unit"],
+      }),
+    }),
+  );
+  await page.route("**/api/v1/ecm-rename/tracker", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
         tracker_path: "C:\\ECM\\tracker.xlsx",
         rows_written: 1,
       }),
@@ -82,11 +90,14 @@ test("ECM Rename workspace renders", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: /Référence|Reference/ }).first()).toHaveValue("ECN-42");
   await expect(page.getByRole("textbox", { name: /Révision|Revision/ }).first()).toHaveValue("A");
   await expect(page.getByRole("textbox", { name: /Sujet|Subject/ }).first()).toHaveValue("Cooling unit");
-  await page.getByRole("button", { name: /Créer les dossiers et mettre à jour le tracker|Create folders and update tracker/ }).click();
-  await page.getByRole("button", { name: /Cliquer encore pour confirmer|Click again to confirm/ }).click();
+  await page.getByRole("button", { name: /Créer les dossiers avec les PDF|Create folders with PDFs/ }).click();
+  await page.getByRole("button", { name: /Confirmer la création des dossiers|Confirm folder creation/ }).click();
   await expect(page.getByRole("heading", { name: /Résultat de l'opération|Operation result/ })).toBeVisible();
-  await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toBeVisible();
   await expect(page.getByText("C:\\ECM\\sortie\\ECN-42-A-Cooling unit", { exact: true })).toBeVisible();
+  await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: /Ajouter les lignes au tracker|Add rows to tracker/ }).click();
+  await page.getByRole("button", { name: /Confirmer l'ajout au tracker|Confirm tracker update/ }).click();
+  await expect(page.getByText("C:\\ECM\\tracker.xlsx", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "EN" }).click();
   await page.getByRole("link", { name: "Settings" }).click();
