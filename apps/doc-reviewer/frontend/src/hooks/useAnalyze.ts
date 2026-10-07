@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
-import { API_BASE_URL, CSRF_HEADERS } from "../lib/api";
+import { API_BASE_URL, api, CSRF_HEADERS } from "../lib/api";
 import { useClientConfig } from "./useClientConfig";
 import { useFiltersStore } from "../stores/filtersStore";
 import { missingDocumentContext } from "../types/domain";
@@ -207,12 +207,22 @@ export function useAnalyze(
           : page,
       ),
     );
-    void start({
-      modifiedOnly: false,
-      pageNumber,
-      pageOverrides: nextOverrides,
-    });
-  }, [pageOverrides, start]);
+    if (isModified) {
+      void start({
+        modifiedOnly: false,
+        pageNumber,
+        pageOverrides: nextOverrides,
+      });
+    } else if (documentId) {
+      void api
+        .delete<void>(`/documents/${documentId}/pages/${pageNumber}/suggestions`)
+        .then(() => qc.invalidateQueries({ queryKey: ["suggestions", documentId] }))
+        .catch((exc: unknown) => {
+          setStatus("error");
+          setError(exc instanceof Error ? exc.message : "error");
+        });
+    }
+  }, [documentId, pageOverrides, qc, start]);
 
   return {
     status,

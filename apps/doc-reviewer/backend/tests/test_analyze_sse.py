@@ -259,22 +259,28 @@ def test_manual_page_rerun_preserves_suggestions_on_other_pages(
     after = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
     assert page_two_ids <= {item["id"] for item in after}
 
-    with client.stream(
-        "POST",
-        f"/api/v1/documents/{document_id}/analyze",
-        params={
-            "modified_only": "false",
-            "page_number": "1",
-            "page_overrides": json.dumps({"1": False}),
-        },
-    ) as stream:
-        assert stream.status_code == 200
-        unchanged_body = b"".join(stream.iter_bytes())
+    with SessionLocal() as session:
+        run_ids_before_delete = session.scalars(
+            select(AnalysisRun.id).where(
+                AnalysisRun.document_id == uuid.UUID(document_id)
+            )
+        ).all()
 
-    assert b'"is_modified": false' in unchanged_body
+    cleared = client.delete(
+        f"/api/v1/documents/{document_id}/pages/1/suggestions"
+    )
+    assert cleared.status_code == 204, cleared.text
+
     unchanged = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
     assert not any(item["page"] == 1 and item["status"] not in {"applied", "rejected"} for item in unchanged)
     assert page_two_ids <= {item["id"] for item in unchanged}
+    with SessionLocal() as session:
+        run_ids_after_delete = session.scalars(
+            select(AnalysisRun.id).where(
+                AnalysisRun.document_id == uuid.UUID(document_id)
+            )
+        ).all()
+    assert run_ids_after_delete == run_ids_before_delete
 
 
 def test_unchanged_page_is_removed_before_rules_run(

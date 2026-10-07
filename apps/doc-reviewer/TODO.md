@@ -38,3 +38,8 @@ JUL 27/26
 JUL 66
 01
 1-879-SB
+
+
+
+- Ajouter Uun onglet avec la liste des rejets (si pas de rejets mettre au mileu "Aucun rejet"). Il faut que ce soit organisé par documents et qu'on puisse plier ou déplier les rejets des documents. Et faire en sorte que sur le dashboard la box "Corrections rejetées" devienne un cliquable et ça redirige vers l'onglet des rejets
+Mais ducoup il faut vérifier si dans la DB y'a les rejets stockés ou non et si oui il faut que ce soit pas une table en plus evidemment 

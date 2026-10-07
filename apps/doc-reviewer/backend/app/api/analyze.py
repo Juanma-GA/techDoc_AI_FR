@@ -12,7 +12,7 @@ from typing import Optional
 
 import fitz
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -110,6 +110,29 @@ def latest_rule_results(
         ]
     except (AttributeError, TypeError, ValueError):
         return []
+
+
+@router.delete(
+    "/documents/{document_id}/pages/{page_number}/suggestions",
+    status_code=204,
+)
+def clear_pending_page_suggestions(
+    document_id: uuid.UUID,
+    page_number: int,
+    db: Session = Depends(get_db),
+) -> None:
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    resolve_page_range(page_number, page_number, doc.page_count)
+    db.execute(
+        delete(Suggestion).where(
+            Suggestion.document_id == document_id,
+            Suggestion.page == page_number,
+            Suggestion.status.notin_(("applied", "rejected")),
+        )
+    )
+    db.commit()
 
 
 @router.post("/documents/{document_id}/analyze")
