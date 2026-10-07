@@ -15,7 +15,6 @@ dependencies = [
     "alembic>=1.13",
     "httpx>=0.28",
     "cryptography>=44.0",
-    "sse-starlette>=2.2",
     "structlog>=24.1",
     "truststore>=0.10",
     "python-multipart>=0.0.9",

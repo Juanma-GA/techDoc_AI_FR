@@ -29,6 +29,7 @@ const MAPPING_FIELDS: { field: keyof NomenclatureMapping; labelKey: string; requ
   { field: "old_rev", labelKey: "identification.fieldOldRev", required: false },
   { field: "new_rev", labelKey: "identification.fieldNewRev", required: false },
   { field: "color_ref", labelKey: "identification.fieldColorRef", required: false },
+  { field: "optimized", labelKey: "identification.fieldOptimized", required: false },
 ];
 
 // Colonnes qui suffisent a identifier une piece (au moins une requise).
@@ -758,7 +759,7 @@ export function Identification() {
   const [resultColumns, setResultColumns] = useState<string[]>([]);
   // Filtres d'affichage : "Pieces remplacees" par defaut (champ de filtre choisi
   // via une liste deroulante), + avec couleur / toutes.
-  type ItemFilter = "all" | "replaced" | "monoBody" | "color";
+  type ItemFilter = "all" | "replaced" | "monoBody" | "color" | "optimized";
   const [filter, setFilter] = useState<ItemFilter>("replaced");
 
   const runsQuery = useQuery<NomenclatureRunDto[]>({
@@ -850,6 +851,7 @@ export function Identification() {
     queryFn: () =>
       identificationApi.items(resultRunId!, {
         replaced: filter === "replaced" ? true : undefined,
+        optimized: filter === "optimized" ? true : undefined,
         monoBody: filter === "monoBody" ? true : undefined,
         hasColor: filter === "color" ? true : undefined,
       }),
@@ -1253,6 +1255,9 @@ export function Identification() {
                     {resultColumns.includes("color") ? (
                       <option value="color">{t("identification.withColor")}</option>
                     ) : null}
+                    {resultColumns.includes("optimized") ? (
+                      <option value="optimized">{t("identification.optimizedOnly")}</option>
+                    ) : null}
                   </select>
                 </div>
                 <a
@@ -1262,6 +1267,8 @@ export function Identification() {
                       ? { replaced: true }
                       : filter === "monoBody"
                         ? { monoBody: true }
+                        : filter === "optimized"
+                          ? { optimized: true }
                         : undefined,
                   )}
                 >

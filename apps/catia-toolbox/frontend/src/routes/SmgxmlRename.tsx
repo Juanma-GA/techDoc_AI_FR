@@ -96,9 +96,9 @@ function BatchRenameCard() {
         </div>
 
         <div className="field">
-          <label htmlFor="batch-nomen" className="field-label">{t("smgxmlRecolor.nomenLabel")}</label>
+          <label htmlFor="batch-nomen" className="field-label">{t("smgxmlRename.nomenLabel")}</label>
           <select id="batch-nomen" className="input" value={nomenId} onChange={(e) => setNomenId(e.target.value)}>
-            <option value="">{t("smgxmlRecolor.nomenEmpty")}</option>
+            <option value="">{t("smgxmlRename.nomenEmpty")}</option>
             {runs.map((r) => (
               <option key={r.id} value={r.id}>{fileName(r.source_ref)}</option>
             ))}

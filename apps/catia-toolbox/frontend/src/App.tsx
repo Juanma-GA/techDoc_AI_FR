@@ -8,19 +8,14 @@ import { LlmBadge } from "./components/LlmBadge";
 import i18n from "./i18n";
 import { healthApi, importsApi, identificationApi } from "./lib/api";
 import { Checks } from "./routes/Checks";
-import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
 import { Data } from "./routes/Data";
 import { Diff } from "./routes/Diff";
-import { Export } from "./routes/Export";
 import { Identification } from "./routes/Identification";
 import { Qc } from "./routes/Qc";
 import { Replacement } from "./routes/Replacement";
 import { Settings } from "./routes/Settings";
-import { SmgxmlRecolor } from "./routes/SmgxmlRecolor";
 import { SmgxmlRename } from "./routes/SmgxmlRename";
-import { Suggestions } from "./routes/Suggestions";
-import { Tree } from "./routes/Tree";
 import { useWorkspace } from "./stores/workspace";
 
 type NavLeaf = { to: string; labelKey: string; end?: boolean };
@@ -45,10 +40,8 @@ const NAV: NavEntry[] = [
   {
     groupKey: "nav.groups.traitement",
     items: [
-      { to: "/smgxml-recolor", labelKey: "nav.smgxmlRecolor" },
-      { to: "/tree", labelKey: "nav.tree" },
-      { to: "/suggestions", labelKey: "nav.suggestions" },
-      { to: "/export", labelKey: "nav.export" },
+      { to: "/tree", labelKey: "nav.optimizationTree" },
+      { to: "/colorization", labelKey: "nav.colorization" },
     ],
   },
   {
@@ -76,11 +69,8 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
   "/identification": { titleKey: "page.identification.title", subKey: "page.identification.sub" },
   "/diff": { titleKey: "page.diff.title", subKey: "page.diff.sub" },
   "/conversion": { titleKey: "page.conversion.title", subKey: "page.conversion.sub" },
-  "/smgxml-recolor": { titleKey: "page.smgxmlRecolor.title", subKey: "page.smgxmlRecolor.sub" },
   "/colorization": { titleKey: "page.colorization.title", subKey: "page.colorization.sub" },
-  "/tree": { titleKey: "page.tree.title", subKey: "page.tree.sub" },
-  "/suggestions": { titleKey: "page.suggestions.title", subKey: "page.suggestions.sub" },
-  "/export": { titleKey: "page.export.title", subKey: "page.export.sub" },
+  "/tree": { titleKey: "page.optimizationTree.title", subKey: "page.optimizationTree.sub" },
   "/smgxml-rename": { titleKey: "page.smgxmlRename.title", subKey: "page.smgxmlRename.sub" },
   "/replacement": { titleKey: "page.replacement.title", subKey: "page.replacement.sub" },
   "/qc": { titleKey: "page.qc.title", subKey: "page.qc.sub" },
@@ -93,10 +83,8 @@ const navItemClass = ({ isActive }: { isActive: boolean }) =>
 
 function WorkspaceBootstrap() {
   const importId = useWorkspace((state) => state.importId);
-  const runId = useWorkspace((state) => state.runId);
   const nomenclatureRunId = useWorkspace((state) => state.nomenclatureRunId);
   const setImport = useWorkspace((state) => state.setImport);
-  const setRun = useWorkspace((state) => state.setRun);
   const setNomenclatureRun = useWorkspace((state) => state.setNomenclatureRun);
   const validated = useRef(false);
 
@@ -111,12 +99,6 @@ function WorkspaceBootstrap() {
     queryFn: identificationApi.list,
     enabled: healthQuery.isSuccess,
   });
-  const runsQuery = useQuery({
-    queryKey: ["workspace", "runs", importId],
-    queryFn: () => importsApi.runs(importId as string),
-    enabled: healthQuery.isSuccess && !!importId,
-  });
-
   useEffect(() => {
     if (
       validated.current ||
@@ -124,12 +106,9 @@ function WorkspaceBootstrap() {
       !importsQuery.isSuccess ||
       !nomenclaturesQuery.isSuccess
     ) return;
-    if (importId && !runsQuery.isSuccess) return;
 
     if (importId && !importsQuery.data.some((item) => item.id === importId)) {
       setImport(null);
-    } else if (runId && !runsQuery.data?.some((run) => run.id === runId)) {
-      setRun(null);
     }
     if (nomenclatureRunId && !nomenclaturesQuery.data.some((run) => run.id === nomenclatureRunId)) {
       setNomenclatureRun(null);
@@ -143,12 +122,8 @@ function WorkspaceBootstrap() {
     nomenclatureRunId,
     nomenclaturesQuery.data,
     nomenclaturesQuery.isSuccess,
-    runId,
-    runsQuery.data,
-    runsQuery.isSuccess,
     setImport,
     setNomenclatureRun,
-    setRun,
   ]);
 
   return null;
@@ -194,7 +169,7 @@ export function App() {
       <WorkspaceBootstrap />
       <div className="page-header">
         <h1>{t(meta.titleKey)}</h1>
-        <p>{t(meta.subKey)}</p>
+        {meta.subKey ? <p>{t(meta.subKey)}</p> : null}
       </div>
       <ErrorBoundary>
         <Routes>
@@ -202,11 +177,11 @@ export function App() {
           <Route path="/identification" element={<Identification />} />
           <Route path="/diff" element={<Diff />} />
           <Route path="/conversion" element={<Conversion />} />
-          <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />
-          <Route path="/colorization" element={<Colorization />} />
-          <Route path="/tree" element={<Tree />} />
-          <Route path="/suggestions" element={<Suggestions />} />
-          <Route path="/export" element={<Export />} />
+          <Route path="/colorization" element={<></>} />
+          <Route path="/tree" element={<></>} />
+          <Route path="/smgxml-recolor" element={<Navigate to="/colorization" replace />} />
+          <Route path="/suggestions" element={<Navigate to="/tree" replace />} />
+          <Route path="/export" element={<Navigate to="/identification" replace />} />
           <Route path="/smgxml-rename" element={<SmgxmlRename />} />
           <Route path="/replacement" element={<Replacement />} />
           <Route path="/qc" element={<Qc />} />

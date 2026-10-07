@@ -176,6 +176,39 @@ def test_all_rows_and_to_treat_non_empty(client, tmp_path):
     to_treat = client.get(f"/api/v1/identification/{run_id}/items", params={"to_treat": True}).json()
     assert {i["sin"] for i in to_treat} == {"SIN-1", "SIN-2"}
 
+def test_x000_filters_optimized_parts(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["CATPart", "SIN", "X000"])
+    ws.append(["P1.CATPart", "SIN-1", "x"])
+    ws.append(["P2.CATPart", "SIN-2", ""])
+    ws.append(["P3.CATPart", "SIN-3", "oui"])
+    xlsx = tmp_path / "optimized.xlsx"
+    wb.save(xlsx)
+
+    response = client.post(
+        "/api/v1/identification/nomenclature",
+        json={"scope": "input", "path": str(xlsx)},
+    )
+    assert response.status_code == 200, response.text
+    run = response.json()
+    assert run["summary"]["optimized"] == 1
+    assert "optimized" in run["summary"]["detected_columns"]
+
+    items = client.get(
+        f"/api/v1/identification/{run['id']}/items",
+        params={"optimized": True},
+    ).json()
+    assert {item["sin"] for item in items} == {"SIN-1"}
+
+    exported = client.get(
+        f"/api/v1/identification/{run['id']}/export.csv",
+        params={"optimized": True},
+    )
+    assert "P1.CATPart" in exported.text
+    assert "P2.CATPart" not in exported.text
+
 
 def _make_xlsx_full(tmp_path, name="nomen_full.xlsx"):
     """Nomenclature avec les colonnes remplacement + ref couleur + materiaux."""

@@ -13,20 +13,14 @@ from app.api import (
     admin,
     browse,
     checks,
-    colorization,
-    colorref,
     conversion,
     diff,
-    export,
     health,
     identification,
     imports,
-    optimize,
     qc,
     replacement,
     smgxml,
-    suggestions,
-    tree,
 )
 from app.api import settings as settings_route
 from app.config import settings
@@ -110,16 +104,10 @@ def create_app() -> FastAPI:
     api_v1.include_router(admin.router)
     api_v1.include_router(browse.router)
     api_v1.include_router(imports.router)
-    api_v1.include_router(tree.router)
-    api_v1.include_router(optimize.router)
-    api_v1.include_router(suggestions.router)
-    api_v1.include_router(export.router)
     api_v1.include_router(diff.router)
     api_v1.include_router(checks.router)
     api_v1.include_router(conversion.router)
     api_v1.include_router(replacement.router)
-    api_v1.include_router(colorization.router)
-    api_v1.include_router(colorref.router)
     api_v1.include_router(identification.router)
     api_v1.include_router(smgxml.router)
     api_v1.include_router(qc.router)

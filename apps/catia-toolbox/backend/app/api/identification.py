@@ -319,6 +319,7 @@ def get_run(run_id: uuid.UUID, db: Session = Depends(get_db)) -> NomenclatureRun
 def list_items(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
+    optimized: bool | None = Query(default=None),
     mono_color: bool | None = Query(default=None),
     mono_body: bool | None = Query(default=None),
     replaced: bool | None = Query(default=None),
@@ -330,6 +331,8 @@ def list_items(
     stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)
     if to_treat is not None:
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
+    if optimized is not None:
+        stmt = stmt.where(NomenclatureItem.optimized == optimized)
     if mono_color is not None:
         stmt = stmt.where(NomenclatureItem.mono_color == mono_color)
     if mono_body is not None:
@@ -351,6 +354,7 @@ def list_items(
 def export_csv(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
+    optimized: bool | None = Query(default=None),
     replaced: bool | None = Query(default=None),
     mono_body: bool | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -360,6 +364,8 @@ def export_csv(
     stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)
     if to_treat is not None:
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
+    if optimized is not None:
+        stmt = stmt.where(NomenclatureItem.optimized == optimized)
     if replaced is not None:
         stmt = stmt.where(NomenclatureItem.replaced == replaced)
     if mono_body is not None:

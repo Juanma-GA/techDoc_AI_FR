@@ -386,6 +386,7 @@ class NomenclatureItem(Base):
     to_treat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     # Contenu brut de la cellule "A TRAITER" (pour affichage / controle du filtre).
     to_treat_value: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    optimized: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     # Piece remplacee : ancien / nouveau PN et indice sur la meme ligne.
     replaced: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     old_pn: Mapped[str] = mapped_column(String(500), default="", server_default="")

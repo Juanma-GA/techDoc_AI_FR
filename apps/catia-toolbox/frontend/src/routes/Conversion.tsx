@@ -314,7 +314,7 @@ export function Conversion() {
       <article className="card">
         <h2 className="card-title">{t("conversion.planTitle")}</h2>
         <p className="banner warn">
-          <strong>{t("export.dryRunTitle")}</strong> {t("conversion.dryRun")}
+          <strong>{t("common.dryRunTitle")}</strong> {t("conversion.dryRun")}
         </p>
 
         <div className="field">

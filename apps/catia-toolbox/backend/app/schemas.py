@@ -137,17 +137,6 @@ class ZipImportIn(BaseModel):
 # ----- Ecriture des livrables dans le dossier de sortie ---------------------
 
 
-class ExportSaveIn(BaseModel):
-    filename: str = Field(..., min_length=1)
-    kind: str = Field(default="csv")  # csv | bat | sh
-    status: str = Field(default="accepted")
-
-
-class ExportSaveOut(BaseModel):
-    path: str
-    bytes_written: int
-
-
 class TestConnectionOut(BaseModel):
     ok: bool
     models: list[str] = Field(default_factory=list)
@@ -211,80 +200,6 @@ class ImportOut(BaseModel):
     node_count: int
     created_at: datetime
     metrics: dict = Field(default_factory=dict)
-
-
-class TreeNodeOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    rel_path: str
-    name: str
-    ext: str
-    kind: str
-    depth: int
-    size: int
-    mtime: Optional[datetime] = None
-    children: list["TreeNodeOut"] = Field(default_factory=list)
-
-
-class TreeOut(BaseModel):
-    import_id: uuid.UUID
-    root_label: str
-    node_count: int
-    metrics: dict = Field(default_factory=dict)
-    nodes: list[TreeNodeOut] = Field(default_factory=list)
-
-
-# ----- Optimisation ---------------------------------------------------------
-
-
-class OptimizeIn(BaseModel):
-    target_max_depth: int = Field(default=5, ge=1, le=20)
-    strategy: str = Field(default="by_type")
-    use_llm: bool = True
-
-
-class OptimizationRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    import_id: uuid.UUID
-    status: str
-    summary: dict = Field(default_factory=dict)
-    started_at: datetime
-    finished_at: Optional[datetime] = None
-
-
-# ----- Suggestions ----------------------------------------------------------
-
-
-class SuggestionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    run_id: uuid.UUID
-    old_path: str
-    new_path: str
-    action: str
-    rationale: str
-    confidence: str
-    source: str
-    status: str
-    created_at: datetime
-
-
-class SuggestionStatusIn(BaseModel):
-    status: str
-
-
-class SuggestionBulkStatusIn(BaseModel):
-    ids: list[uuid.UUID] = Field(default_factory=list)
-    status: str
-
-
-class SuggestionBulkStatusOut(BaseModel):
-    updated: int
-    status: str
 
 
 # ----- Module Comparaison ---------------------------------------------------
@@ -452,36 +367,6 @@ class ReplacementFromSourceIn(BaseModel):
 # ----- Module Colorisation --------------------------------------------------
 
 
-class ColorizationIn(BaseModel):
-    strategy: str = "by_type"  # by_change | by_type | by_depth
-    diff_run_id: Optional[uuid.UUID] = None  # requis si strategy == by_change
-
-
-class ColorizationItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    rel_path: str
-    color_r: int
-    color_g: int
-    color_b: int
-    reason: str
-
-
-class ColorizationRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    import_id: uuid.UUID
-    diff_run_id: Optional[uuid.UUID] = None
-    strategy: str
-    status: str
-    summary: dict = Field(default_factory=dict)
-    created_at: datetime
-
-    _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
-
-
 # ----- Etape 1 : Identification (nomenclature .xlsm + DE .zip) ---------------
 
 
@@ -496,6 +381,7 @@ class NomenclatureMapping(BaseModel):
     sin: Optional[int] = Field(default=None, ge=0)
     version: Optional[int] = Field(default=None, ge=0)
     to_treat: Optional[int] = Field(default=None, ge=0)
+    optimized: Optional[int] = Field(default=None, ge=0)
     color: Optional[int] = Field(default=None, ge=0)
     old_pn: Optional[int] = Field(default=None, ge=0)
     new_pn: Optional[int] = Field(default=None, ge=0)
@@ -574,6 +460,7 @@ class NomenclatureItemOut(BaseModel):
     version: str
     to_treat: bool
     to_treat_value: str
+    optimized: bool
     replaced: bool
     old_pn: str
     new_pn: str
@@ -656,7 +543,7 @@ class NomenclatureMatrixRowOut(BaseModel):
 class NomenclatureMultiCompareOut(BaseModel):
     mode: Literal["chronology", "reference"]
     run_ids: list[uuid.UUID]
-    reference_run_id: uuid.UUID | None = None
+    reference_run_id: Optional[uuid.UUID] = None
     comparisons: list[NomenclatureCompareOut] = Field(default_factory=list)
     matrix: list[NomenclatureMatrixRowOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
@@ -679,74 +566,6 @@ class ZipImportOut(ImportOut):
 
     count: int = 0
     entries: list[ZipEntryOut] = Field(default_factory=list)
-
-
-# ----- Etapes 3 & 4 : SMGXML ------------------------------------------------
-
-
-class ColorRefEntry(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    r: int = Field(default=0, ge=0, le=255)
-    g: int = Field(default=0, ge=0, le=255)
-    b: int = Field(default=0, ge=0, le=255)
-
-
-class ColorRefListIn(BaseModel):
-    entries: list[ColorRefEntry] = Field(default_factory=list)
-
-
-class ColorRefListOut(BaseModel):
-    entries: list[ColorRefEntry] = Field(default_factory=list)
-
-
-class TextureConfigIn(BaseModel):
-    """Config textures : bibliotheque de styles + extension (ex. .SMGStyleSet)."""
-
-    library: str = Field(default="", max_length=500)
-    ext: str = Field(default=".SMGStyleSet", max_length=40)
-
-
-class TextureConfigOut(BaseModel):
-    library: str = ""
-    ext: str = ".SMGStyleSet"
-
-
-class SmgxmlInspectIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
-
-
-class SmgxmlActorOut(BaseModel):
-    name: str
-    tag: str = ""
-    color: str = ""
-
-
-class SmgxmlTreeIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
-    max_nodes: int = Field(default=20000, ge=1, le=200000)
-
-
-class SmgxmlTreeNodeOut(BaseModel):
-    """Noeud de l'arbre XML brut d'un SMGXML (meme forme que TreeNodeOut cote
-    front, mais `id` est un chemin d'index, pas un UUID persiste)."""
-
-    id: str
-    rel_path: str = ""
-    name: str
-    ext: str = ""
-    kind: str
-    depth: int = 0
-    size: int = 0
-    mtime: Optional[datetime] = None
-    children: list["SmgxmlTreeNodeOut"] = Field(default_factory=list)
-
-
-class SmgxmlTreeOut(BaseModel):
-    root_label: str
-    node_count: int = 0
-    nodes: list[SmgxmlTreeNodeOut] = Field(default_factory=list)
 
 
 class SmgxmlBatchRenameIn(BaseModel):
@@ -778,18 +597,6 @@ class SmgxmlBatchItemOut(BaseModel):
 class SmgxmlBatchOut(BaseModel):
     items: list[SmgxmlBatchItemOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
-
-
-class SmgxmlRecolorIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
-    nomenclature_run_id: uuid.UUID  # source des pieces + couleurs / ref couleur
-    match_by: str = Field(default="sin")  # sin | catpart | pn
-    # Ne cibler que les pieces simples (mono-corps) : colonne Materiaux vide.
-    simple_only: bool = False
-    set_style: bool = True   # poser Actor.Style Value (nom de style depuis Ref Couleur)
-    set_color: bool = True   # poser Actor.Color RGB (SCLIT > Neutral)
-    apply: bool = False  # False = dry-run (rien ecrit)
 
 
 class RenamePair(BaseModel):

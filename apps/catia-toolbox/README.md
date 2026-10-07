@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Prepare reviewable CATIA and Composer document-structure plans and run confirmed, non-destructive conversions through the locally installed CATIA Composer Converter.
+Identify and compare CATIA delivery data, validate imported structures, and run confirmed conversions through the locally installed CATIA Composer Converter.
 
 ## Maturity
 
@@ -11,11 +11,12 @@ Prepare reviewable CATIA and Composer document-structure plans and run confirmed
 ## Features
 
 - Identify parts from nomenclature and delivery inputs.
+- Filter optimized parts using the `X000` marker in the nomenclature.
 - Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
-- Plan SMGXML colorization, tree optimization, and part replacement.
-- Produce CSV, script, macro, and visual simulation artifacts for user review.
+- Rename SMGXML references and prepare part replacement plans.
+- Colorization and tree optimization tabs are intentionally empty pending their next specification.
 - Use the native file/folder picker when no Source root is configured; selected
 	files are copied into the local application storage before processing.
 
@@ -29,7 +30,7 @@ The target default port is `8004`, followed by the next free port when needed. T
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is optional for optimization suggestions. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
+Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
 
 ## Start On Windows
 
@@ -49,23 +50,23 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
 ## Persistence
 
-SQLite stores imports, plans, checks, and runtime configuration under `backend/data/`. Generated plans remain subject to user review.
+SQLite stores imports, nomenclature analyses, workflow results, and runtime configuration under `backend/data/`. Existing colorization and optimization history is retained, although those workflows are currently unregistered.
 Native local selections are staged below `backend/data/storage/local/` and remain
 confined to that storage root for subsequent reads.
 
 ## LLM Configuration
 
-Mistral may suggest tree grouping. Deterministic type and naming heuristics remain available when LLM use is disabled.
+Mistral credentials can still be configured and tested in Settings; active workflows do not require an LLM.
 
 ## Tests
 
 Use the backend pytest suite and frontend scripts declared in `frontend/package.json`.
 The frontend `test` script excludes Playwright files; use `test:e2e` for browser
-scenarios. The backend suite currently passes 120 tests.
+scenarios.
 
 ## Limitations
 
-CATIA Toolbox auto-detects `ComposerConverter.exe` under the standard Dassault Systemes installation folder. A custom executable path and the required XML conversion profile can be configured on the Conversion screen. Real conversion requires a two-click confirmation, never modifies source CAD files, and reports a failure unless Composer creates or updates an expected `.smgXml` or `.smg` output. Generated macros and colorization scripts remain review artifacts.
+CATIA Toolbox auto-detects `ComposerConverter.exe` under the standard Dassault Systemes installation folder. A custom executable path and the required XML conversion profile can be configured on the Conversion screen. Real conversion requires a two-click confirmation, never modifies source CAD files, and reports a failure unless Composer creates or updates an expected `.smgXml` or `.smg` output.
 
 ## Standard Deviations
 

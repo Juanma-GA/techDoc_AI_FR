@@ -19,14 +19,12 @@ export type NomenMapping = { headerRow: number; cols: Record<string, number> };
 
 type WorkspaceState = {
   importId: string | null;
-  runId: string | null;
   nomenclatureRunId: string | null;
   /** Dernier chemin choisi par type de source (persiste). */
   sources: Record<SourceKind, string>;
   /** Dernier mapping nomenclature valide (null tant qu'aucune analyse). */
   nomenMapping: NomenMapping | null;
   setImport: (id: string | null) => void;
-  setRun: (id: string | null) => void;
   setNomenclatureRun: (id: string | null) => void;
   resetWorkspace: () => void;
   setSource: (kind: SourceKind, path: string) => void;
@@ -46,18 +44,14 @@ export const useWorkspace = create<WorkspaceState>()(
   persist(
     (set) => ({
       importId: null,
-      runId: null,
       nomenclatureRunId: null,
       sources: { ...EMPTY_SOURCES },
       nomenMapping: null,
-      // Changer d'import invalide le run courant.
-      setImport: (id) => set({ importId: id, runId: null }),
-      setRun: (id) => set({ runId: id }),
+      setImport: (id) => set({ importId: id }),
       setNomenclatureRun: (id) => set({ nomenclatureRunId: id }),
       resetWorkspace: () =>
         set({
           importId: null,
-          runId: null,
           nomenclatureRunId: null,
           sources: { ...EMPTY_SOURCES },
           nomenMapping: null,
