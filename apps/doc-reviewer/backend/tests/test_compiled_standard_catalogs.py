@@ -64,13 +64,13 @@ def _pdf(text: str) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
-def test_letter_digit_confusion_rule_flags_substitutions_not_identifiers() -> None:
+def test_letter_digit_confusion_rule_flags_words_not_identifiers() -> None:
     rule = _rule("CUSTOM_LETTER_DIGIT_CONFUSION")
     suspicious = _pdf(
         "1llustration, illustrat1ion, s3ction; numeric reference 1l00."
     )
     suspicious.pages[0].is_modified = True
-    ordinary = _pdf("TP1, A320 and F9111CMON.")
+    ordinary = _pdf("TP1, A320, F9111CMON, JZAGO3OTL and JZAGO1OTL.")
     ordinary.pages[0].is_modified = True
 
     suspicious_results, _ = execute_pdf_rules(suspicious, [rule])

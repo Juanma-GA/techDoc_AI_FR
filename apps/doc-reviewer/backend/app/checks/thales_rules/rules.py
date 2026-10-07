@@ -94,9 +94,10 @@ _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
 )
 _LETTER_DIGIT_CONFUSION_PATTERN = (
-    r"(?i)(?<!\w)(?:"
-    r"(?=(?:[a-z0-9]*[a-z]){3})[a-z]*[0-9][a-z]+[a-z]*"
-    r"|(?=[0-9ilo]*[0-9])[0-9ilo]*[ilo][0-9ilo]*"
+    r"(?<!\w)(?:"
+    r"(?![A-Z0-9]+\b)(?=[A-Za-z0-9]*[a-z])"
+    r"(?=(?:[A-Za-z0-9]*[A-Za-z]){3})[A-Za-z]*[0-9][A-Za-z]+[A-Za-z]*"
+    r"|(?i:(?=[0-9ilo]*[0-9])[0-9ilo]*[ilo][0-9ilo]*)"
     r")(?!\w)"
 )
 _COPYRIGHT_PATTERN = (
