@@ -134,6 +134,7 @@
     "start": {
       "title": "Démarrage de l'assistant",
       "starting": "Démarrage…",
+      "preparing": "Préparation des modules…",
       "failed": "Échec du démarrage.",
       "parse": "Lecture du document…",
       "ocr": "PDF scanné : OCR en cours (IA)…",
@@ -144,9 +145,9 @@
       "fallback": "Traitement…"
     },
     "resource": {
-      "notApplied": "Ressource attachée mais NON APPLIQUÉE — {{detail}}",
+      "notApplied": "Ressource non appliquée — {{detail}}",
       "headerLoaded": "Profil d’en-tête chargé",
-      "headerLoadedHelp": "Il sera appliqué aux XML lors de l’étape Génération."
+      "headerLoadedHelp": "Il sera appliqué aux XML générés."
     },
     "step": {
       "dmrl": "DMRL",
@@ -175,7 +176,8 @@
       "exclude": "Exclure"
     },
     "split": {
-      "title": "Découpage en Data Modules ({{count}})",
+      "title": "Découpage proposé ({{count}} Data Modules)",
+      "review": "Afficher ou modifier le découpage ({{count}} modules)",
       "dmrlDriven": "Découpage piloté par la DMRL ({{count}} DM attendus) : le niveau de titre est ignoré.",
       "level": "Niveau de découpage",
       "levelChapter": "Chapitre",
@@ -186,11 +188,15 @@
       "needTwo": "Coche au moins 2 DMs.",
       "hideZones": "Masquer entêtes/pieds",
       "undo": "Annuler",
-      "validate": "Valider le découpage →",
       "help": "Coche plusieurs DMs puis « Fusionner » ; édite un titre puis « Renommer » ; « Scinder » redécoupe ; « Exclure » retire le bruit.",
       "rename": "Renommer",
       "split": "Scinder",
       "exclude": "Exclure"
+    },
+    "analysis": {
+      "help": "Tu peux examiner ou modifier le découpage proposé, ou valider directement pour générer les Data Modules.",
+      "validate": "Valider et générer les Data Modules",
+      "processing": "Génération en cours…"
     },
     "type": {
       "title": "Type de chaque Data Module",
@@ -202,13 +208,11 @@
       "level": "niv. {{level}}"
     },
     "generate": {
-      "title": "Data Modules générés ({{count}})",
+      "title": "Analyse terminée — {{count}} Data Modules",
       "pmc": "Télécharger la PMC",
       "validate": "Vérifier les DM",
-      "violations": "{{count}} viol.",
-      "missingFields": "{{count}} rubrique(s) template vide(s)",
-      "cirUnresolved": "{{count}} réf. CIR non résolue(s)",
-      "xml": "XML",
+      "cirUnresolved": "{{count}} référence(s) de contenu partagé à vérifier",
+      "xml": "Télécharger le DM",
       "images": "Illustrations extraites ({{count}})",
       "imageAlt": "Illustration extraite {{index}}",
       "zip": "Télécharger tout (ZIP)"

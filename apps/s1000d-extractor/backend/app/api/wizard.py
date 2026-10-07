@@ -19,7 +19,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.core import wizard
+from app.core import wizard, wizard_resources as wres
 from app.core.errors import AppError
 from app.db.models import Document
 from app.db.session import SessionLocal, get_db
@@ -213,6 +213,9 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
             zf.writestr(_dm_filename(d), wizard.dm_xml(doc, d["dm_id"]))
+        pmc = wres.pmc_xml(doc)
+        if pmc:
+            zf.writestr(f"PMC/{doc.id}_pmc.xml", pmc)
         for img in _image_paths(doc_id):
             zf.write(img, f"illustrations/{img.name}")
     db.commit()

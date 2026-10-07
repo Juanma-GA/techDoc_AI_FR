@@ -134,6 +134,7 @@
     "start": {
       "title": "Starting the assistant",
       "starting": "Starting…",
+      "preparing": "Preparing modules…",
       "failed": "Startup failed.",
       "parse": "Reading the document…",
       "ocr": "Scanned PDF: running OCR (AI)…",
@@ -144,9 +145,9 @@
       "fallback": "Processing…"
     },
     "resource": {
-      "notApplied": "Resource attached but NOT APPLIED — {{detail}}",
+      "notApplied": "Resource not applied — {{detail}}",
       "headerLoaded": "Header profile loaded",
-      "headerLoadedHelp": "It will be applied to the XML files during the Generation step."
+      "headerLoadedHelp": "It will be applied to the generated XML files."
     },
     "step": {
       "dmrl": "DMRL",
@@ -175,7 +176,8 @@
       "exclude": "Exclude"
     },
     "split": {
-      "title": "Split into Data Modules ({{count}})",
+      "title": "Proposed split ({{count}} Data Modules)",
+      "review": "Show or edit the split ({{count}} modules)",
       "dmrlDriven": "Split driven by the DMRL ({{count}} expected DMs): the heading level is ignored.",
       "level": "Split level",
       "levelChapter": "Chapter",
@@ -186,11 +188,15 @@
       "needTwo": "Select at least 2 DMs.",
       "hideZones": "Hide headers/footers",
       "undo": "Undo",
-      "validate": "Validate the split →",
       "help": "Tick several DMs then \"Merge\"; edit a title then \"Rename\"; \"Split\" re-splits; \"Exclude\" removes noise.",
       "rename": "Rename",
       "split": "Split",
       "exclude": "Exclude"
+    },
+    "analysis": {
+      "help": "Review or edit the proposed split, or validate it now to generate the Data Modules.",
+      "validate": "Validate and generate Data Modules",
+      "processing": "Generating…"
     },
     "type": {
       "title": "Type of each Data Module",
@@ -202,13 +208,11 @@
       "level": "lvl. {{level}}"
     },
     "generate": {
-      "title": "Generated Data Modules ({{count}})",
+      "title": "Analysis complete — {{count}} Data Modules",
       "pmc": "Download the PMC",
       "validate": "Validate DMs",
-      "violations": "{{count}} viol.",
-      "missingFields": "{{count}} empty template section(s)",
-      "cirUnresolved": "{{count}} unresolved CIR ref(s)",
-      "xml": "XML",
+      "cirUnresolved": "{{count}} shared-content reference(s) to review",
+      "xml": "Download DM",
       "images": "Extracted illustrations ({{count}})",
       "imageAlt": "Extracted illustration {{index}}",
       "zip": "Download all (ZIP)"

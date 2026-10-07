@@ -23,9 +23,6 @@ import {
   type WizardState,
 } from "../lib/api";
 
-const DM_TYPES = ["descriptive", "procedural", "ipd"] as const;
-const DEFAULT_STEPS: WizardState["step"][] = ["split", "type", "structure", "generate"];
-
 function ConfirmButton({
   label,
   onConfirm,
@@ -61,7 +58,7 @@ function ConfirmButton({
 function DmTypeBadge({ type }: { type: string }) {
   const { t } = useTranslation();
   return (
-    <span className={`badge ${type === "procedural" ? "warn" : "ok"}`}>
+    <span className="badge info">
       {t(`dmType.${type}`, { defaultValue: type })}
     </span>
   );
@@ -270,9 +267,27 @@ export function Migration() {
 
   const refreshDocs = () => void qc.invalidateQueries({ queryKey: ["s1000d-docs"] });
 
+  const normalizeWizard = async (
+    id: string,
+    initial: WizardState,
+    includeSplit = false,
+  ): Promise<WizardState> => {
+    let state = initial;
+    if (state.step === "dmrl") state = await wizardApi.action(id, "advance", {});
+    if (state.step === "split") {
+      if (!includeSplit) return state;
+      state = await wizardApi.action(id, "advance", {});
+    }
+    if (state.step === "type") state = await wizardApi.action(id, "advance", { types: {} });
+    if (state.step === "structure") {
+      state = await wizardApi.action(id, "advance", { overrides: [] });
+    }
+    return state;
+  };
+
   const startAnalysis = async (id: string) => {
     setStarting({ pct: 5, label: t("migration.start.starting") });
-    await startWizardStream(id, onStreamEvent);
+    await startWizardStream(id, (ev, data) => onStreamEvent(ev, data, id));
     refreshDocs();
   };
 
@@ -301,13 +316,30 @@ export function Migration() {
   const stepLabel = (step: unknown) =>
     t(`migration.start.${String(step)}`, { defaultValue: t("migration.start.fallback") });
 
-  const onStreamEvent = (ev: string, data: Record<string, unknown>) => {
+  const onStreamEvent = (ev: string, data: Record<string, unknown>, activeDocId?: string) => {
     if (ev === "progress") {
       setStarting({ pct: (data.pct as number) || 0, label: stepLabel(data.step) });
     } else if (ev === "done") {
-      setStarting(null);
       setPdfCut(null);
-      setWiz(data as unknown as WizardState);
+      const id = activeDocId ?? docId;
+      const initial = data as unknown as WizardState;
+      if (!id) {
+        setStarting(null);
+        setWiz(initial);
+        return;
+      }
+      setStarting({ pct: 100, label: t("migration.start.preparing") });
+      setBusy(true);
+      void normalizeWizard(id, initial)
+        .then(setWiz)
+        .catch((error: unknown) => {
+          setWizError(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          setStarting(null);
+          setBusy(false);
+          refreshDocs();
+        });
     } else if (ev === "error") {
       setStarting(null);
       setWizError((data.message as string) || t("migration.start.failed"));
@@ -341,9 +373,9 @@ export function Migration() {
     setDocId(id);
     setWiz(null);
     setWizError(null);
+    let state: WizardState;
     try {
-      const st = await wizardApi.get(id);
-      setWiz(st);
+      state = await wizardApi.get(id);
     } catch {
       try {
         const doc = await documentsApi.get(id);
@@ -352,6 +384,12 @@ export function Migration() {
         setStarting(null);
         setWizError(e instanceof Error ? e.message : String(e));
       }
+      return;
+    }
+    try {
+      setWiz(await normalizeWizard(id, state));
+    } catch (e) {
+      setWizError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -407,10 +445,20 @@ export function Migration() {
     }
   };
 
-  // Valide le decoupage SANS renvoyer split_level : l'avancement ne doit pas
-  // re-decouper (sinon il ecrase les editions manuelles). Le niveau ne change
-  // que via « Re-analyser ».
-  const validateSplit = () => void wizAction("advance", {});
+  const validateAndGenerate = async () => {
+    if (!docId) return;
+    setBusy(true);
+    setWizError(null);
+    try {
+      const current = await wizardApi.get(docId);
+      setWiz(await normalizeWizard(docId, current, true));
+      refreshDocs();
+    } catch (error) {
+      setWizError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Valide la structure : applique les overrides accumules puis avance.
   const validateStructure = () => {
@@ -435,8 +483,6 @@ export function Migration() {
 
   const docs = docsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
-  const steps = wiz?.steps ?? DEFAULT_STEPS;
-
   return (
     <>
       <div className="page-header">
@@ -713,64 +759,8 @@ export function Migration() {
           </div>
         ) : null}
 
-        {wiz?.resources?.has_dm_header ? (
-          <div className="card">
-            <span className="badge ok">{t("migration.resource.headerLoaded")}</span>{" "}
-            <span className="label">{t("migration.resource.headerLoadedHelp")}</span>
-          </div>
-        ) : null}
-
         {wiz ? (
           <>
-            <div className="card">
-              <div className="row" style={{ alignItems: "center" }}>
-                {steps.map((s, i) => (
-                  <span key={s} style={{ display: "inline-flex", alignItems: "center" }}>
-                    {i > 0 ? <span className="label">&nbsp;→&nbsp;</span> : null}
-                    <span className={`badge ${s === wiz.step ? "ok" : ""}`}>
-                      {i + 1}. {t(`migration.step.${s}`)}
-                    </span>
-                  </span>
-                ))}
-                {wiz.resources?.dmrl_count && docId ? (
-                  <>
-                    <a
-                      className="btn secondary small"
-                      style={{ marginLeft: "auto" }}
-                      href={resourcesApi.pmcUrl(docId)}
-                    >
-                      {t("migration.generate.pmc")}
-                    </a>
-                    {wiz.step === "generate" ? (
-                      <a
-                        className="btn primary small"
-                        href={wizardApi.zipUrl(docId)}
-                      >
-                        {t("migration.generate.zip")}
-                      </a>
-                    ) : null}
-                  </>
-                ) : null}
-                {wiz.step === "generate" && docId && wiz.dms.some((dm) => dm.has_xml) ? (
-                  <button
-                    type="button"
-                    className="btn primary small"
-                    style={{ marginLeft: wiz.resources?.dmrl_count ? undefined : "auto" }}
-                    onClick={() => navigate("/validation", {
-                      state: {
-                        generated: {
-                          documentId: docId,
-                          dmIds: wiz.dms.filter((dm) => dm.has_xml).map((dm) => dm.dm_id),
-                        },
-                      },
-                    })}
-                  >
-                    <ShieldCheck aria-hidden="true" size={15} /> {t("migration.generate.validate")}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
             {wiz.step === "dmrl" ? (
               <div className="card">
                 <h2 className="card-title">
@@ -885,23 +875,16 @@ export function Migration() {
                 <h2 className="card-title">
                   {t("migration.split.title", { count: wiz.dms.length })}
                 </h2>
+                <p className="label">{t("migration.analysis.help")}</p>
                 {wiz.resources?.dmrl_count ? (
                   <p className="label">
-                    <span className="badge ok">{t("migration.step.dmrl")}</span>{" "}
                     {t("migration.split.dmrlDriven", { count: wiz.resources.dmrl_count })}
                   </p>
                 ) : null}
+                <details className="migration-split-review">
+                  <summary>{t("migration.split.review", { count: wiz.dms.length })}</summary>
+                  <div className="migration-split-review-content">
                 <div className="row" style={{ marginBottom: 10 }}>
-                  {steps.indexOf(wiz.step) > 0 ? (
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      disabled={busy}
-                      onClick={() => void wizAction("back")}
-                    >
-                      {t("common.back")}
-                    </button>
-                  ) : null}
                   <label>
                     <div className="label">{t("migration.split.level")}</div>
                     <select
@@ -955,15 +938,6 @@ export function Migration() {
                     {t("migration.split.undo")}
                   </button>
                   {splitMsg ? <span className="error grow">{splitMsg}</span> : null}
-                  <button
-                    type="button"
-                    className="btn primary"
-                    style={{ marginLeft: "auto" }}
-                    disabled={busy}
-                    onClick={validateSplit}
-                  >
-                    {t("migration.split.validate")}
-                  </button>
                 </div>
                 <p className="label">{t("migration.split.help")}</p>
                 <div>
@@ -1029,24 +1003,18 @@ export function Migration() {
                     </div>
                   ))}
                 </div>
-                <div className="row" style={{ marginTop: 12 }}>
-                  {steps.indexOf(wiz.step) > 0 ? (
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      disabled={busy}
-                      onClick={() => void wizAction("back")}
-                    >
-                      {t("common.back")}
-                    </button>
-                  ) : null}
+                  </div>
+                </details>
+                <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
                   <button
                     type="button"
                     className="btn primary"
                     disabled={busy}
-                    onClick={validateSplit}
+                    onClick={validateAndGenerate}
                   >
-                    {t("migration.split.validate")}
+                    {busy
+                      ? t("migration.analysis.processing")
+                      : t("migration.analysis.validate")}
                   </button>
                 </div>
               </div>
@@ -1192,19 +1160,39 @@ export function Migration() {
 
             {wiz.step === "generate" ? (
               <div className="card">
-                <div className="row" style={{ marginBottom: 12 }}>
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    disabled={busy}
-                    onClick={() => void wizAction("back")}
-                  >
-                    {t("common.back")}
-                  </button>
-                </div>
                 <h2 className="card-title">
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>
+                <div className="row" style={{ marginBottom: 12 }}>
+                  {wiz.resources?.dmrl_count && docId ? (
+                    <a className="btn secondary" href={resourcesApi.pmcUrl(docId)}>
+                      {t("migration.generate.pmc")}
+                    </a>
+                  ) : null}
+                  {docId && wiz.dms.some((dm) => dm.has_xml) ? (
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      onClick={() => navigate("/validation", {
+                        state: {
+                          generated: {
+                            documentId: docId,
+                            dmIds: wiz.dms.filter((dm) => dm.has_xml).map((dm) => dm.dm_id),
+                          },
+                        },
+                      })}
+                    >
+                      <ShieldCheck aria-hidden="true" size={15} /> {t("migration.generate.validate")}
+                    </button>
+                  ) : null}
+                  <a
+                    className="btn primary"
+                    style={{ marginLeft: "auto" }}
+                    href={docId ? wizardApi.zipUrl(docId) : "#"}
+                  >
+                    {t("migration.generate.zip")}
+                  </a>
+                </div>
                 <div>
                   {wiz.dms.map((d) => (
                     <div
@@ -1215,18 +1203,8 @@ export function Migration() {
                       <span className="grow">
                         {d.is_orphan ? t("migration.dm.orphan") : d.title}{" "}
                         <DmTypeBadge type={d.dm_type} />{" "}
-                        <span className={`badge ${d.violation_count ? "warn" : "ok"}`}>
-                          {t("migration.generate.violations", { count: d.violation_count })}
-                        </span>
-                        {d.missing_fields?.length ? (
-                          <span className="badge warn">
-                            {t("migration.generate.missingFields", {
-                              count: d.missing_fields.length,
-                            })}
-                          </span>
-                        ) : null}
                         {d.cir_unresolved?.length ? (
-                          <span className="badge warn">
+                          <span className="badge warn" title={d.cir_unresolved.join(", ")}>
                             {t("migration.generate.cirUnresolved", {
                               count: d.cir_unresolved.length,
                             })}
@@ -1279,22 +1257,6 @@ export function Migration() {
                     </div>
                   </div>
                 ) : null}
-                <div className="row" style={{ marginTop: 12 }}>
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    disabled={busy}
-                    onClick={() => void wizAction("back")}
-                  >
-                    {t("common.back")}
-                  </button>
-                  <a
-                    className="btn primary"
-                    href={docId ? wizardApi.zipUrl(docId) : "#"}
-                  >
-                    {t("migration.generate.zip")}
-                  </a>
-                </div>
               </div>
             ) : null}
           </>

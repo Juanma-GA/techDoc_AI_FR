@@ -107,6 +107,10 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .kpi-value.info { color: var(--info); }
 
 .form { display: flex; flex-direction: column; gap: 10px; }
+.migration-split-review { margin-top: 12px; border-top: 1px solid var(--border); }
+.migration-split-review summary { padding: 10px 0; color: var(--fg); cursor: pointer; font-weight: 600; }
+.migration-split-review[open] summary { margin-bottom: 8px; }
+.migration-split-review-content { display: flex; flex-direction: column; gap: 8px; }
 .input, .dw select, .dw textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
 .dw textarea { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
 .input:focus, .dw select:focus, .dw textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }

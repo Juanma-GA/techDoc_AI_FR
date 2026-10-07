@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
+from zipfile import ZipFile
 
 from app.core import xml_safe
 from app.core.ir import IRNode, to_dict
@@ -68,6 +70,70 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     z = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
     assert z.status_code == 200
     assert z.headers["content-type"] == "application/zip"
+
+
+def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    dmrl = [
+        {
+            "Arbo": "1",
+            "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+            "Titre": "Description",
+            "Type": "Descriptif",
+        },
+        {
+            "Arbo": "2",
+            "DMC": "DMC-PUMP-A-00-00-00-00A-520A-D",
+            "Titre": "Removal Procedure",
+            "Type": "Procedure",
+        },
+    ]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
+
+    detection_response = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection_response.status_code == 200, detection_response.text
+    detection = detection_response.json()
+    if detection["validation_required"] and (
+        detection["selected_page"] is None or detection["selected_end_page"] is None
+    ):
+        confirmed = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": detection["selected_page"] or detection["default_start_page"],
+                "end_page": detection["selected_end_page"] or detection["total_pages"],
+            },
+        )
+        assert confirmed.status_code == 200, confirmed.text
+
+    start_response = client.post(f"/api/v1/documents/{doc_id}/wizard/start")
+    assert start_response.status_code == 200, start_response.text
+    state = start_response.json()
+    assert state["step"] == "dmrl"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "split"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "type"
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/advance", json={"types": {}}
+    ).json()
+    assert state["step"] == "structure"
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}
+    ).json()
+    assert state["step"] == "generate"
+
+    archive_response = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+    assert archive_response.status_code == 200
+    pmc_path = f"PMC/{doc_id}_pmc.xml"
+    with ZipFile(BytesIO(archive_response.content)) as archive:
+        assert pmc_path in archive.namelist()
+        assert archive.read(pmc_path) == client.get(
+            f"/api/v1/documents/{doc_id}/pmc"
+        ).content
 
 
 def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
