@@ -96,9 +96,14 @@ export function Settings() {
       <section className="form">
         {/* 0. Configuration LLM (Mistral) — EN TETE, pliee par defaut. */}
         <Collapsible title={t("settings.llmSection")}>
+          <p id="mistral-settings-notice" className="banner warn" role="note">
+            {t("settings.mistral.developmentNotice")}
+          </p>
           <Card
             title={t("settings.mistral.title")}
             description={t("settings.mistral.description")}
+            disabled
+            disabledDescriptionId="mistral-settings-notice"
           >
             {mistral.isLoading ? (
               <p className="hint">{t("common.loading")}</p>
@@ -572,16 +577,30 @@ function Card({
   title,
   description,
   children,
+  disabled = false,
+  disabledDescriptionId,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  disabled?: boolean;
+  disabledDescriptionId?: string;
 }): JSX.Element {
   return (
-    <article className="card">
+    <article className="card" style={disabled ? { opacity: 0.5 } : undefined}>
       <h2 className="card-title">{title}</h2>
       {description ? <p className="card-sub">{description}</p> : null}
-      {children}
+      {disabled ? (
+        <fieldset
+          disabled
+          aria-describedby={disabledDescriptionId}
+          style={{ width: "100%", minWidth: 0, margin: 0, padding: 0, border: 0 }}
+        >
+          {children}
+        </fieldset>
+      ) : (
+        children
+      )}
     </article>
   );
 }

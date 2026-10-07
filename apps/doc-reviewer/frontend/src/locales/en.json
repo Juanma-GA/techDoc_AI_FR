@@ -583,6 +583,7 @@
     "standardsSummary.custom": "{{count}} custom",
     "standardsSummary.manage": "Manage standards",
     "mistral.title": "Mistral API",
+    "mistral.developmentNotice": "Mistral is not required to use the app. These settings are under development.",
     "mistral.description": "Required for AI enrichment of suggestions (STE100 rewrite, custom scan).",
     "mistral.llmEnabled": "LLM enabled",
     "mistral.llmEnabledHint": "Turns off every Mistral call (AI enrichment, rule suggestions, vision). The deterministic analysis pipeline keeps running.",

@@ -583,6 +583,7 @@
     "standardsSummary.custom": "{{count}} custom",
     "standardsSummary.manage": "Gérer les normes",
     "mistral.title": "API Mistral",
+    "mistral.developmentNotice": "Mistral n'est pas nécessaire pour utiliser l'application. Ces réglages sont en cours de développement.",
     "mistral.description": "Clé requise pour l'enrichissement IA des suggestions (réécriture STE100, scan custom).",
     "mistral.llmEnabled": "LLM activé",
     "mistral.llmEnabledHint": "Coupe tous les appels Mistral (enrichissement IA, suggestions de règles, vision). La pipeline d'analyse déterministe continue de tourner.",
