@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
+import { CircleHelp, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,6 @@ import { useNavigate } from "react-router-dom";
 import { DmPreview } from "../components/DmPreview";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
-  brexApi,
   documentsApi,
   migrationInputsApi,
   pdfCutApi,
@@ -157,14 +156,12 @@ export function Migration() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const brexQuery = useQuery({ queryKey: ["brex"], queryFn: brexApi.list });
   const docsQuery = useQuery({ queryKey: ["s1000d-docs"], queryFn: documentsApi.list });
 
   // Formulaire de chargement.
   const [file, setFile] = useState<File | null>(null);
   const [issue, setIssue] = useState<S1000dIssue>("4.2");
-  const [hint, setHint] = useState<ContextHint>("mixed");
-  const [brexId, setBrexId] = useState("");
+  const hint: ContextHint = "mixed";
   const [loadError, setLoadError] = useState<string | null>(null);
   // Ressources client optionnelles, attachees au document avant le decoupage.
   const [resourceFiles, setResourceFiles] = useState<Partial<Record<ResourceKind, File>>>({});
@@ -209,13 +206,11 @@ export function Migration() {
       try {
         const mapping = await migrationInputsApi.read();
         if (cancelled || mappingTouched.current) return;
-        setIssue(mapping.issue);
-        setHint(mapping.context_hint);
-        setBrexId(mapping.brex_id ?? "");
-        const entries = Object.entries(mapping.files) as [
+        setIssue(mapping.issue === "5.0" ? "4.2" : mapping.issue);
+        const entries = (Object.entries(mapping.files) as [
           MigrationInputKind,
           { filename: string },
-        ][];
+        ][]).filter(([kind]) => kind !== "brex_rules" && kind !== "cir");
         const loaded = await Promise.all(
           entries.map(async ([kind, metadata]) => {
             try {
@@ -329,7 +324,7 @@ export function Migration() {
     setWizError(null);
     setPdfCut(null);
     try {
-      const doc = await documentsApi.upload(file, issue, hint, brexId || undefined);
+      const doc = await documentsApi.upload(file, issue, hint);
       setDocId(doc.id);
       // La DMRL doit etre attachee AVANT le demarrage : elle pilote le decoupage.
       for (const [kind, resource] of Object.entries(resourceFiles)) {
@@ -438,7 +433,6 @@ export function Migration() {
     enabled: !!docId && wiz?.step === "generate",
   });
 
-  const brex = brexQuery.data ?? [];
   const docs = docsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
   const steps = wiz?.steps ?? DEFAULT_STEPS;
@@ -482,38 +476,22 @@ export function Migration() {
               >
                 <option value="4.2">{t("migration.upload.issueValue", { issue: "4.2" })}</option>
                 <option value="4.1">{t("migration.upload.issueValue", { issue: "4.1" })}</option>
-                <option value="5.0">{t("migration.upload.issueValue", { issue: "5.0" })}</option>
               </select>
             </label>
             <label className="grow">
-              <div className="label">{t("migration.upload.hint")}</div>
+              <div className="migration-upload-label">
+                <span className="label">{t("migration.upload.brex")}</span>
+                <span className="migration-upload-status" id="migration-brex-status">
+                  {t("migration.upload.inDevelopment")}
+                </span>
+              </div>
               <select
-                value={hint}
-                onChange={(e) => {
-                  mappingTouched.current = true;
-                  setHint(e.target.value as ContextHint);
-                }}
+                className="input"
+                value=""
+                disabled
+                aria-describedby="migration-brex-status"
               >
-                <option value="mixed">{t("migration.upload.hintMixed")}</option>
-                <option value="descriptive">{t("dmType.descriptive")}</option>
-                <option value="procedural">{t("dmType.procedural")}</option>
-              </select>
-            </label>
-            <label className="grow">
-              <div className="label">{t("migration.upload.brex")}</div>
-              <select
-                value={brexId}
-                onChange={(e) => {
-                  mappingTouched.current = true;
-                  setBrexId(e.target.value);
-                }}
-              >
-                <option value="">{t("migration.upload.brexNone")}</option>
-                {brex.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} [{b.s1000d_issue}]
-                  </option>
-                ))}
+                <option value="">{t("migration.upload.inDevelopment")}</option>
               </select>
             </label>
           </div>
@@ -534,38 +512,36 @@ export function Migration() {
               />
             </label>
             <label className="grow">
-              <div className="label">{t("migration.upload.cir")}</div>
+              <div className="migration-upload-label">
+                <span className="label">{t("migration.upload.cir")}</span>
+                <span className="migration-upload-status" id="migration-cir-status">
+                  {t("migration.upload.inDevelopment")}
+                </span>
+              </div>
               <input
                 className="input"
                 type="file"
                 accept=".xml"
-                ref={(element) => {
-                  inputRefs.current.cir = element;
-                }}
-                onChange={(e) => {
-                  mappingTouched.current = true;
-                  setResourceFiles((p) => ({ ...p, cir: e.target.files?.[0] }));
-                }}
+                disabled
+                aria-describedby="migration-cir-status"
               />
             </label>
-            <label className="grow">
-              <div className="label">{t("migration.upload.rules")}</div>
+            <div className="grow">
+              <div className="migration-upload-label">
+                <label className="label" htmlFor="migration-dm-header">
+                  {t("migration.upload.dmHeader")}
+                </label>
+                <button
+                  type="button"
+                  className="migration-upload-help"
+                  title={t("migration.upload.dmHeaderHelp")}
+                  aria-label={t("migration.upload.dmHeaderHelp")}
+                >
+                  <CircleHelp aria-hidden="true" size={15} />
+                </button>
+              </div>
               <input
-                className="input"
-                type="file"
-                accept=".json"
-                ref={(element) => {
-                  inputRefs.current.brex_rules = element;
-                }}
-                onChange={(e) => {
-                  mappingTouched.current = true;
-                  setResourceFiles((p) => ({ ...p, brex_rules: e.target.files?.[0] }));
-                }}
-              />
-            </label>
-            <label className="grow">
-              <div className="label">{t("migration.upload.dmHeader")}</div>
-              <input
+                id="migration-dm-header"
                 className="input"
                 type="file"
                 accept=".json,.xml"
@@ -577,7 +553,7 @@ export function Migration() {
                   setResourceFiles((p) => ({ ...p, dm_header: e.target.files?.[0] }));
                 }}
               />
-            </label>
+            </div>
           </div>
           <div className="row">
             <button

@@ -20,7 +20,7 @@ import {
   type DmValidationViolation,
 } from "../lib/api";
 
-const ISSUES = ["4.1", "4.2", "5.0"] as const;
+const ISSUES = ["4.1", "4.2"] as const;
 
 type ValidationItem = Omit<DmValidationResult, "status"> & {
   id: string;
