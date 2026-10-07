@@ -39,7 +39,7 @@
     "diff": { "title": "Compare", "sub": "Detect parts added / removed / modified between two imports." },
     "conversion": { "title": "Conversion", "sub": "CATIA 3D to Composer conversion plan (dry-run)." },
     "colorization": { "title": "Colorization", "sub": "" },
-    "optimizationTree": { "title": "Tree optimization", "sub": "" },
+    "optimizationTree": { "title": "Tree optimization", "sub": "Clean Composer XML files in a parts folder." },
     "smgxmlRename": { "title": "4 - SMGXML: rename", "sub": "Replace the old part name with the new one in the SMGXML (dry-run by default)." },
     "replacement": { "title": "Replacement", "sub": "Part replacement plan from a mapping." },
     "qc": { "title": "5 - Quality Control", "sub": "Checklist for verifying parts in the assembly." },
@@ -126,6 +126,21 @@
       "consistent": "Consistent",
       "inconsistent": "Inconsistent"
     }
+  },
+  "treeOptimization": {
+    "folderLabel": "Composer parts folder",
+    "absolutePathPlaceholder": "Absolute path to the Composer folder",
+    "noInputRootHint": "No Input root configured: browse local folders or paste an absolute path. No files are uploaded.",
+    "counting": "Counting .smgXml files…",
+    "filesToAnalyze": "{{count}} .smgXml file(s) to optimize.",
+    "confirmAnalyze": "Optimize these {{count}} files",
+    "resultTitle": "Result",
+    "filesScanned": ".smgXml files scanned: {{count}}",
+    "filesWithChanges": "Files to clean: {{count}}",
+    "filesModified": "Files cleaned: {{count}}",
+    "elementsRemoved": "XML elements removed: {{count}}",
+    "noFiles": "No .smgXml files in this folder.",
+    "noChanges": "No elements to remove."
   },
   "browse": {
     "title": "Browse OneDrive (input)",

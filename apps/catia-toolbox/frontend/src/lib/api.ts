@@ -55,6 +55,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 // Types DTO
 // ---------------------------------------------------------------------------
 
+export type TreeOptimizationCountDto = { path: string; files_count: number };
+
+export type TreeOptimizationRunDto = {
+  path: string;
+  applied: boolean;
+  files_scanned: number;
+  files_with_changes: number;
+  files_modified: number;
+  removed_elements: number;
+};
+
+export type TreeOptimizationFolderSelectionDto = { path: string | null };
+
 export type ImportDto = {
   id: string;
   source_mode: string;
@@ -489,6 +502,24 @@ export const importsApi = {
       body: JSON.stringify({ scope, path }),
     }),
   remove: (id: string) => request<void>(`/imports/${id}`, { method: "DELETE" }),
+};
+
+export const treeOptimizationApi = {
+  pickFolder: (initialPath?: string, title?: string) =>
+    request<TreeOptimizationFolderSelectionDto>("/tree-optimization/pick-folder", {
+      method: "POST",
+      body: JSON.stringify({ initial_path: initialPath, title }),
+    }),
+  count: (path: string) =>
+    request<TreeOptimizationCountDto>("/tree-optimization/count", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+  run: (path: string, apply = false) =>
+    request<TreeOptimizationRunDto>("/tree-optimization/run", {
+      method: "POST",
+      body: JSON.stringify({ path, apply }),
+    }),
 };
 
 export const browseApi = {

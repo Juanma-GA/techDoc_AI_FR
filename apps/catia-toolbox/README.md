@@ -15,8 +15,9 @@ Identify and compare CATIA delivery data, validate imported structures, and run 
 - Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
+- Clean top-level Composer `.smgXml` part files in place, keeping `.bak` backups in a `sauvegarde/` subfolder.
 - Rename SMGXML references and prepare part replacement plans.
-- Colorization and tree optimization tabs are intentionally empty pending their next specification.
+- The Colorisation tab is intentionally empty pending its next specification.
 - Use the native file/folder picker when no Source root is configured; selected
 	files are copied into the local application storage before processing.
 
@@ -50,7 +51,7 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
 ## Persistence
 
-SQLite stores imports, nomenclature analyses, workflow results, and runtime configuration under `backend/data/`. Existing colorization and optimization history is retained, although those workflows are currently unregistered.
+SQLite stores imports, nomenclature analyses, workflow results, and runtime configuration under `backend/data/`. Legacy colorization and plan history is retained; the new tree cleanup does not store run history.
 Native local selections are staged below `backend/data/storage/local/` and remain
 confined to that storage root for subsequent reads.
 

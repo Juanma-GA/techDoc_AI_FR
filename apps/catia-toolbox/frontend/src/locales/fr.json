@@ -39,7 +39,7 @@
     "diff": { "title": "Comparaison", "sub": "Détecter les pièces ajoutées / supprimées / modifiées entre deux imports." },
     "conversion": { "title": "Conversion", "sub": "Plan de conversion CATIA 3D vers Composer (dry-run)." },
     "colorization": { "title": "Colorisation", "sub": "" },
-    "optimizationTree": { "title": "Optimisation arbo", "sub": "" },
+    "optimizationTree": { "title": "Optimisation arbo", "sub": "Nettoyer les XML Composer d'un dossier de pièces." },
     "smgxmlRename": { "title": "4 - SMGXML : renommage", "sub": "Remplacer le nom de l'ancienne pièce par la nouvelle dans le SMGXML (dry-run par défaut)." },
     "replacement": { "title": "Remplacement", "sub": "Plan de remplacement de pièces à partir d'un mapping." },
     "qc": { "title": "5 - Contrôle Qualité", "sub": "Checklist de vérification des pièces dans l'assemblage." },
@@ -126,6 +126,21 @@
       "consistent": "Cohérent",
       "inconsistent": "Incohérent"
     }
+  },
+  "treeOptimization": {
+    "folderLabel": "Dossier des pièces Composer",
+    "absolutePathPlaceholder": "Chemin absolu du dossier Composer",
+    "noInputRootHint": "Aucune racine Input configurée : parcourez les dossiers locaux ou collez un chemin absolu. Aucun fichier n'est téléversé.",
+    "counting": "Comptage des fichiers .smgXml…",
+    "filesToAnalyze": "{{count}} fichier(s) .smgXml à optimiser.",
+    "confirmAnalyze": "Optimiser ces {{count}} fichiers",
+    "resultTitle": "Résultat",
+    "filesScanned": "Fichiers .smgXml balayés : {{count}}",
+    "filesWithChanges": "Fichiers à nettoyer : {{count}}",
+    "filesModified": "Fichiers nettoyés : {{count}}",
+    "elementsRemoved": "Éléments XML retirés : {{count}}",
+    "noFiles": "Aucun fichier .smgXml dans ce dossier.",
+    "noChanges": "Aucun élément à retirer."
   },
   "browse": {
     "title": "Naviguer OneDrive (entrée)",

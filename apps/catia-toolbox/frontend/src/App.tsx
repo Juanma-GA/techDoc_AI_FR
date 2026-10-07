@@ -16,6 +16,7 @@ import { Qc } from "./routes/Qc";
 import { Replacement } from "./routes/Replacement";
 import { Settings } from "./routes/Settings";
 import { SmgxmlRename } from "./routes/SmgxmlRename";
+import { TreeOptimization } from "./routes/TreeOptimization";
 import { useWorkspace } from "./stores/workspace";
 
 type NavLeaf = { to: string; labelKey: string; end?: boolean };
@@ -178,7 +179,7 @@ export function App() {
           <Route path="/diff" element={<Diff />} />
           <Route path="/conversion" element={<Conversion />} />
           <Route path="/colorization" element={<></>} />
-          <Route path="/tree" element={<></>} />
+          <Route path="/tree" element={<TreeOptimization />} />
           <Route path="/smgxml-recolor" element={<Navigate to="/colorization" replace />} />
           <Route path="/suggestions" element={<Navigate to="/tree" replace />} />
           <Route path="/export" element={<Navigate to="/identification" replace />} />

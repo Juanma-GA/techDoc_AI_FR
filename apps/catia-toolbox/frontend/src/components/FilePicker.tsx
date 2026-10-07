@@ -598,7 +598,7 @@ function LocalFolderPicker({ value, onChange, label }: Pick<FolderProps, "value"
         />
         <label className="btn secondary">
           {uploadMutation.isPending ? <span className="spinner" /> : null}
-          <span>{label ?? t("picker.browseLocal")}</span>
+          <span>{label ?? t("picker.chooseLocalFolder")}</span>
           <input
             type="file"
             hidden

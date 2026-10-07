@@ -21,6 +21,7 @@ from app.api import (
     qc,
     replacement,
     smgxml,
+    tree_optimization,
 )
 from app.api import settings as settings_route
 from app.config import settings
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(replacement.router)
     api_v1.include_router(identification.router)
     api_v1.include_router(smgxml.router)
+    api_v1.include_router(tree_optimization.router)
     api_v1.include_router(qc.router)
     app.include_router(api_v1)
 

@@ -676,3 +676,35 @@ class QcChecklistOut(BaseModel):
     created_at: datetime
     items: list[QcItemOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
+
+
+class TreeOptimizationCountIn(BaseModel):
+    path: str = Field(..., min_length=1)
+
+
+class TreeOptimizationCountOut(BaseModel):
+    path: str
+    files_count: int
+
+
+class TreeOptimizationIn(BaseModel):
+    path: str = Field(..., min_length=1)
+    apply: bool = False
+
+
+class TreeOptimizationFolderPickerIn(BaseModel):
+    initial_path: Optional[str] = None
+    title: str = Field(default="Select a folder", max_length=120)
+
+
+class TreeOptimizationFolderPickerOut(BaseModel):
+    path: Optional[str] = None
+
+
+class TreeOptimizationOut(BaseModel):
+    path: str
+    applied: bool
+    files_scanned: int
+    files_with_changes: int
+    files_modified: int
+    removed_elements: int
