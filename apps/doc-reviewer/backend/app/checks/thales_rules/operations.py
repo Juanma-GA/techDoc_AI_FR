@@ -335,7 +335,9 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
                     1.0,
                 )
                 if (
-                    line.bbox[1] - previous.bbox[1] > max(18.0, line_height * 1.8)
+                    line.line_index > previous.line_index + 1
+                    or line.bbox[1] - previous.bbox[1]
+                    > max(18.0, line_height * 1.8)
                     or _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
                     or _PARAGRAPH_TABLE_HEADER_MARKER.match(line.text) is not None
                 ):
@@ -389,10 +391,34 @@ def _paragraph_justification_issue(
     )
     right_tolerance = max(4.0, paragraph_width * 0.015)
     expected_right = median(right_edges)
+    misaligned = [
+        (index, line)
+        for index, line in measurable
+        if abs(line.bbox[2] - expected_right) > right_tolerance
+    ]
+    if (
+        misaligned
+        and len(measurable) - len(misaligned) >= 2
+        and all(
+            line.bbox[2] < expected_right - right_tolerance
+            and line.text.rstrip().endswith((".", "!", "?"))
+            for _index, line in misaligned
+        )
+    ):
+        misaligned_indexes = {index for index, _line in misaligned}
+        measurable = [
+            (index, line)
+            for index, line in measurable
+            if index not in misaligned_indexes
+        ]
+        right_edges = [line.bbox[2] for _index, line in measurable]
+        expected_right = median(right_edges)
+
     for _index, line in measurable:
         if abs(line.bbox[2] - expected_right) > right_tolerance:
             return False, line
 
+    interior_lines = [line for index, line in measurable if index > 0]
     if len(interior_lines) >= 2:
         left_edges = [line.bbox[0] for line in interior_lines]
         expected_left = median(left_edges)
