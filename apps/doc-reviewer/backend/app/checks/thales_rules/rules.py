@@ -1623,6 +1623,38 @@ CUSTOM_COPYRIGHT_POSITION = rule(
     },
 )
 
+CUSTOM_PAGE_CONTENT_POSITION = rule(
+    code="CUSTOM_PAGE_CONTENT_POSITION",
+    name="Position du contenu selon la parite de page",
+    description=(
+        "Sur chaque page PDF, la marge gauche mediane du contenu (hors ligne "
+        "copyright) doit etre a x=3.03 cm sur les pages impaires et x=1.76 cm "
+        "sur les pages paires. La tolerance est de 0.10 cm."
+    ),
+    message="Le contenu est mal positionne selon la parite de page.",
+    kind="field_required",
+    severity="warning",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="page_content_position",
+        ),
+    ],
+    failure_message="Position du contenu non conforme a la parite de page.",
+    translations={
+        "en": {
+            "description": (
+                "On every PDF page, the median left margin of the content "
+                "(excluding the copyright line) must be x=3.03 cm on odd pages "
+                "and x=1.76 cm on even pages. Tolerance is 0.10 cm."
+            ),
+            "message": "The content is incorrectly positioned for its page parity.",
+        }
+    },
+)
+
 CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
     code="CUSTOM_PDF_BOOKMARK_TITLE_MATCH",
     name="Titre des signets PDF present sur la page cible",
@@ -2403,6 +2435,7 @@ RULE_DEFINITIONS = (
     CUSTOM_TP2_IMPORTANT_NOTICE,
     CUSTOM_TITLE_PAGE_COPYRIGHT,
     CUSTOM_COPYRIGHT_POSITION,
+    CUSTOM_PAGE_CONTENT_POSITION,
     CUSTOM_PDF_BOOKMARK_TITLE_MATCH,
     CUSTOM_TP1_REVISION_NUMBER,
     CUSTOM_TP1_FIRST_ISSUE_DATE,

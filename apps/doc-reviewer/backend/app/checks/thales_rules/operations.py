@@ -58,6 +58,11 @@ _COPYRIGHT_POSITION_EXPECTED = (
     "pages impaires: x=3.03 cm, y=26.51 cm; pages paires: "
     "x=1.76 cm, y=26.51 cm (tolerance +/- 0.10 cm)"
 )
+_PAGE_CONTENT_POSITION_TOLERANCE_CM = _COPYRIGHT_POSITION_TOLERANCE_CM
+_PAGE_CONTENT_POSITION_EXPECTED = (
+    "marge gauche mediane du contenu: x=3.03 cm sur les pages impaires et "
+    "x=1.76 cm sur les pages paires (tolerance +/- 0.10 cm)"
+)
 _JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
 _PDF_BOOKMARK_EXPECTED = "Titre du signet present sur la page cible"
 _JUSTIFICATION_MIN_LINE_CHARACTERS = 24
@@ -1588,6 +1593,91 @@ def _evaluate_copyright_position(
     )
 
 
+def _evaluate_page_content_position(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> OperationResult:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PAGE_CONTENT_POSITION_EXPECTED,
+        )
+
+    target_pages = {target.raw_page for target in getattr(context, "targets", ())}
+    pages = [page for page in parsed_pdf.pages if page.page in target_pages]
+    if not pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PAGE_CONTENT_POSITION_EXPECTED,
+        )
+
+    inconclusive_pages: list[int] = []
+    for page in pages:
+        expected_x_cm = (
+            _COPYRIGHT_POSITION_ODD_X_CM
+            if page.page % 2
+            else _COPYRIGHT_POSITION_EVEN_X_CM
+        )
+        parity = "impaire" if page.page % 2 else "paire"
+        expected = (
+            f"page {page.page} ({parity}): marge gauche mediane du contenu "
+            f"a x={expected_x_cm:.2f} cm "
+            f"(+/- {_PAGE_CONTENT_POSITION_TOLERANCE_CM:.2f} cm)"
+        )
+        content_lines = [
+            (line.text, line.bbox)
+            for line in page.lines
+            if line.text.strip()
+            and not _COPYRIGHT_POSITION_MARKER_RE.search(line.text)
+        ]
+        if not content_lines:
+            content_lines = [
+                (span.text, span.bbox)
+                for span in page.spans
+                if span.text.strip()
+                and not _COPYRIGHT_POSITION_MARKER_RE.search(span.text)
+            ]
+        if not content_lines:
+            inconclusive_pages.append(page.page)
+            continue
+
+        observed_x = median(line_bbox[0] for _, line_bbox in content_lines)
+        observed_x_cm = observed_x / _POINTS_PER_CENTIMETER
+        if abs(observed_x_cm - expected_x_cm) > _PAGE_CONTENT_POSITION_TOLERANCE_CM:
+            evidence_text, evidence_bbox = min(
+                content_lines,
+                key=lambda item: abs(item[1][0] - observed_x),
+            )
+            observed = f"marge gauche mediane a x={observed_x_cm:.2f} cm"
+            return OperationResult(
+                status="FAIL",
+                observed=observed,
+                expected=expected,
+                message=(
+                    f"Le contenu de la page {page.page} commence en {observed}; "
+                    f"position attendue : {expected}."
+                ),
+                original=evidence_text,
+                page=page.page,
+                bbox=evidence_bbox,
+            )
+
+    if inconclusive_pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PAGE_CONTENT_POSITION_EXPECTED,
+            page=inconclusive_pages[0],
+            inconclusive_pages=inconclusive_pages,
+        )
+    return OperationResult(
+        status="PASS",
+        expected=_PAGE_CONTENT_POSITION_EXPECTED,
+        page=pages[-1].page,
+    )
+
+
 REVISION_CONSISTENCY = ClientOperation(
     name="revision_consistency",
     execute=_evaluate_revision_consistency,
@@ -1621,6 +1711,10 @@ COPYRIGHT_POSITION = ClientOperation(
     name="copyright_position",
     execute=_evaluate_copyright_position,
 )
+PAGE_CONTENT_POSITION = ClientOperation(
+    name="page_content_position",
+    execute=_evaluate_page_content_position,
+)
 DOCUMENT_STRUCTURE = ClientOperation(
     name="document_structure",
     execute=_evaluate_document_structure,
@@ -1641,6 +1735,7 @@ OPERATIONS = {
         PARAGRAPH_JUSTIFICATION,
         HIGHLIGHTS_LEGEND_FOOTER,
         COPYRIGHT_POSITION,
+        PAGE_CONTENT_POSITION,
         DOCUMENT_STRUCTURE,
         PDF_BOOKMARKS,
     )

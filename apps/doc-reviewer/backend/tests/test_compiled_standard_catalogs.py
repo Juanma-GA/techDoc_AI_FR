@@ -3380,6 +3380,66 @@ def test_copyright_position_matches_pdf_page_parity_and_coordinates() -> None:
     assert blank_pages[0].inconclusive_pages == ["2", "4"]
 
 
+def test_page_content_position_matches_pdf_page_parity_and_coordinates() -> None:
+    rule = _rule("CUSTOM_PAGE_CONTENT_POSITION")
+    points_per_cm = 72.0 / 2.54
+    page_positions = {
+        1: 3.03,
+        2: 1.76,
+        3: 3.03,
+        4: 1.76,
+    }
+
+    def build_pdf(overrides: dict[int, float] | None = None) -> ParsedPdf:
+        overrides = overrides or {}
+        pages = []
+        for page_number, expected_x_cm in page_positions.items():
+            x_cm = overrides.get(page_number, expected_x_cm)
+            lines = [
+                PdfLine(
+                    text=f"Body line {line_number} on page {page_number}.",
+                    bbox=(
+                        x_cm * points_per_cm,
+                        100.0 + line_number * 12.0,
+                        400.0,
+                        110.0 + line_number * 12.0,
+                    ),
+                    block_index=0,
+                    line_index=line_number,
+                )
+                for line_number in range(5)
+            ]
+            lines.append(
+                PdfLine(
+                    text="Indented paragraph line.",
+                    bbox=(300.0, 180.0, 450.0, 190.0),
+                    block_index=1,
+                    line_index=0,
+                )
+            )
+            pages.append(
+                ParsedPage(
+                    page=page_number,
+                    text="\n".join(line.text for line in lines),
+                    lines=lines,
+                )
+            )
+        return ParsedPdf(
+            page_count=4,
+            pages=pages,
+            full_text="\n".join(page.text for page in pages),
+            is_signed=False,
+        )
+
+    valid, _ = execute_pdf_rules(build_pdf(), [rule])
+    assert valid[0].status == "PASS"
+
+    invalid, _ = execute_pdf_rules(build_pdf({3: 1.76}), [rule])
+    assert invalid[0].status == "FAIL"
+    assert invalid[0].evidence is not None
+    assert invalid[0].evidence.page == "3"
+
+
 def test_mat_reference_format_is_passed_and_failed_by_the_compiled_executor() -> None:
     rule = _rule("MAT_REF_FORMAT")
     valid, _ = execute_pdf_rules(_pdf("See MAT-24-21-00-001."), [rule])
