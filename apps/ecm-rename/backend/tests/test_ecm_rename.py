@@ -662,6 +662,7 @@ def test_windows_picker_uses_powershell_without_exposing_other_environment(
 
     monkeypatch.setattr(path_picker.subprocess, "run", run_picker)
 
+    monkeypatch.setenv("ECM_RENAME_TEST_SECRET", "do-not-leak")
     result = path_picker._pick_with_windows(kind, "Select", "en", r"C:\ECM")
 
     assert result == selected_paths or result is None
@@ -669,4 +670,4 @@ def test_windows_picker_uses_powershell_without_exposing_other_environment(
     assert "$dialog.Multiselect = ($kind -eq 'source_files')" in captured["command"][-1]
     assert captured["options"]["env"]["ECM_RENAME_PICKER_KIND"] == kind
     assert captured["options"]["env"]["ECM_RENAME_PICKER_INITIAL_DIRECTORY"] == r"C:\ECM"
-    assert "MISTRAL_API_KEY" not in captured["options"]["env"]
+    assert "ECM_RENAME_TEST_SECRET" not in captured["options"]["env"]

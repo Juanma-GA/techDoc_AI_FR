@@ -1,22 +1,12 @@
-"""Routes /api/v1/admin - stats globales + operations de reset.
-
-Version generique : compte uniquement `AppConfig`. Chaque POC doit
-remplacer le contenu de `stats()` et `reset_all()` pour ses propres tables.
-La cle Mistral (table app_config) est preservee par convention.
-"""
+"""Routes /api/v1/admin - stats globales + operations de reset."""
 
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from fastapi import APIRouter
 
-from app.db.models import AppConfig
-from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
-
 
 log = logging.getLogger("ecm_rename.admin")
 
@@ -24,19 +14,18 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.get("/stats", response_model=AdminStatsOut)
-def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
+def stats() -> AdminStatsOut:
     """Compteurs sommaires pour l'onglet Donnees.
 
     TODO POC : remplacer par des `db.scalar(select(func.count(Modele.id)))`
     sur tes propres tables.
     """
-    _ = db.scalar(select(func.count(AppConfig.key)))  # noop, exemple
     return AdminStatsOut()
 
 
 @router.post("/reset/all", response_model=AdminResetOut)
-def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
-    """Reset complet sauf `app_config` (preserve la cle Mistral).
+def reset_all() -> AdminResetOut:
+    """Reset no-op : aucune donnée métier n'est persistée par l'application.
 
     TODO POC : etendre pour purger les tables specifiques du POC.
     """

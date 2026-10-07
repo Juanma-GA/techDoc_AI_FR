@@ -10,20 +10,16 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import admin, ecm_rename, health
-from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
 
-
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 
-# Hotes consideres « locaux » (palier 1, regle #8). Tant que le bind reste l'un
-# d'eux, la posture local-first s'applique : chiffrement et origines CORS prod
-# restent optionnels. Des que l'IT bascule sur un bind expose (deploiement
-# palier 2/3 via .env), les protections deviennent OBLIGATOIRES (fail-fast).
+# Hôtes locaux : les origines CORS de développement sont tolérées en local.
+# Un bind exposé exige une liste CORS sans origine locale.
 _LOCAL_BIND_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -43,11 +39,6 @@ def _validate_security_posture() -> None:
         return
 
     problems: list[str] = []
-    if not settings.encryption_configured:
-        problems.append(
-            "ENCRYPTION_KEY manquante ou trop courte : la cle Mistral serait "
-            "stockee en clair. Generer une cle via app.core.encryption.generate_key()."
-        )
     leftover = [o for o in settings.cors_origins if _is_local_origin(o)]
     if leftover:
         problems.append(
@@ -88,7 +79,6 @@ def create_app() -> FastAPI:
 
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(health.router)
-    api_v1.include_router(settings_route.router)
     api_v1.include_router(admin.router)
     api_v1.include_router(ecm_rename.router)
     app.include_router(api_v1)

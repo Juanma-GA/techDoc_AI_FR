@@ -7,7 +7,6 @@ from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -27,9 +26,8 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'ecm-rename.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")
 
-    # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
-    # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les
-    # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).
+    # Hote de bind uvicorn. En local : 127.0.0.1. Un bind expose doit utiliser
+    # une liste CORS configuree pour les origines autorisees.
     bind_host: str = "127.0.0.1"
 
     cors_origins: list[str] = [
@@ -38,16 +36,6 @@ class Settings(BaseSettings):
         "http://localhost:8009",
     ]
     max_upload_size_mb: int = 50
-
-    # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
-    # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit
-    # via .env — la generer avec app.core.encryption.generate_key() (cf. .env.example).
-    encryption_key: str = ""
-
-    mistral_api_key: str = ""
-    mistral_base_url: str = "https://api.mistral.ai"
-    mistral_chat_model: str = "mistral-small-latest"
-    mistral_embed_model: str = "mistral-embed"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -59,15 +47,6 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
-
-    @property
-    def llm_configured(self) -> bool:
-        return bool(self.mistral_api_key)
-
-    @property
-    def encryption_configured(self) -> bool:
-        """Cle de chiffrement presente et assez longue pour Fernet."""
-        return bool(self.encryption_key and len(self.encryption_key) >= 32)
 
 
 settings = Settings()

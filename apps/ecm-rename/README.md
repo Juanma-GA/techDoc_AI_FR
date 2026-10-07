@@ -25,7 +25,7 @@ Port par défaut : `8009`. Les launchers essaient le port suivant si celui-ci es
 
 - Python 3.11 ou plus récent.
 - Node 20 et pnpm 9 pour développer ou reconstruire le frontend.
-- Aucun compte, clé Mistral ou accès réseau n'est nécessaire au workflow métier.
+- Aucun compte ni accès réseau n'est nécessaire au workflow métier.
 
 ## Auth
 
@@ -58,9 +58,9 @@ FastAPI sert l'application React compilée depuis `frontend/dist/` à `/`. Si le
 Le tracker choisi est mis à jour en place après confirmation ; les PDF sont copiés dans les dossiers créés. Aucune sauvegarde secondaire n'est créée. Les fichiers métier ne sont pas conservés dans la base SQLite ; celle-ci sert à la configuration standard de l'app.
 Les PDF et trackers ne sont pas conservés dans la base SQLite. La table `path_preferences`, gérée par Alembic, mémorise localement le dernier chemin source, le tracker et le dossier de sortie.
 
-## LLM Configuration
+## Traitement IA et réseau
 
-Le traitement ECM n'utilise ni LLM, ni API externe, ni OCR. Les endpoints Mistral du socle standard restent présents dans le backend, mais l'interface ne propose aucune configuration IA.
+L'extraction est déterministe et locale : l'application n'utilise aucun modèle IA, OCR ni API externe. Aucun appel réseau n'est effectué pendant le workflow ECM.
 
 ## Tests
 
