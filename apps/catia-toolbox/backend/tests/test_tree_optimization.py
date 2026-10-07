@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -203,6 +204,36 @@ def test_api_analyzes_then_applies_with_backup(client, tmp_path):
     assert "files" not in body
     assert (folder / "sauvegarde" / "piece.smgXml.bak").read_text(encoding="utf-8") == original
     assert ET.parse(xml_path).find(".//CLitTargetObject") is None
+
+
+def test_api_streams_tree_optimization_progress(client, tmp_path):
+    assert (
+        client.post(
+            "/api/v1/settings",
+            json={"onedrive_input_root": str(tmp_path)},
+        ).status_code
+        == 200
+    )
+    folder = tmp_path / "composer"
+    folder.mkdir()
+    (folder / "first.smgXml").write_text("<Document />", encoding="utf-8")
+    (folder / "second.smgXml").write_text("<Document />", encoding="utf-8")
+
+    response = client.post(
+        "/api/v1/tree-optimization/run-stream",
+        json={"path": str(folder), "apply": False},
+    )
+
+    assert response.status_code == 200, response.text
+    events = [json.loads(line) for line in response.text.splitlines()]
+    progress = [event for event in events if event["type"] == "progress"]
+    assert [(event["files_scanned"], event["files_total"]) for event in progress] == [
+        (0, 2),
+        (1, 2),
+        (2, 2),
+    ]
+    assert events[-1]["type"] == "complete"
+    assert events[-1]["result"]["files_scanned"] == 2
 
 
 def test_api_rejects_folder_outside_input_root(client, tmp_path):

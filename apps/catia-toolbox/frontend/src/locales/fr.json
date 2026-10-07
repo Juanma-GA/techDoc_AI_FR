@@ -132,6 +132,7 @@
     "absolutePathPlaceholder": "Chemin absolu du dossier Composer",
     "noInputRootHint": "Aucune racine Input configurée : parcourez les dossiers locaux ou collez un chemin absolu. Aucun fichier n'est téléversé.",
     "counting": "Comptage des fichiers .smgXml…",
+    "progress": "Fichiers analysés : {{scanned}} / {{total}}",
     "filesToAnalyze": "{{count}} fichier(s) .smgXml à optimiser.",
     "confirmAnalyze": "Optimiser ces {{count}} fichiers",
     "resultTitle": "Résultat",

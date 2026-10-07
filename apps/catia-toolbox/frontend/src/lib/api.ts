@@ -66,6 +66,16 @@ export type TreeOptimizationRunDto = {
   removed_elements: number;
 };
 
+export type TreeOptimizationProgressDto = {
+  files_scanned: number;
+  files_total: number;
+};
+
+type TreeOptimizationRunStreamEvent =
+  | ({ type: "progress" } & TreeOptimizationProgressDto)
+  | { type: "complete"; result: TreeOptimizationRunDto }
+  | { type: "error"; message: string };
+
 export type TreeOptimizationFolderSelectionDto = { path: string | null };
 
 export type ImportDto = {
@@ -520,6 +530,62 @@ export const treeOptimizationApi = {
       method: "POST",
       body: JSON.stringify({ path, apply }),
     }),
+  runWithProgress: async (
+    path: string,
+    apply: boolean,
+    onProgress: (progress: TreeOptimizationProgressDto) => void,
+  ): Promise<TreeOptimizationRunDto> => {
+    const response = await fetch(`${API_BASE}/tree-optimization/run-stream`, {
+      method: "POST",
+      headers: {
+        Accept: "application/x-ndjson",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path, apply }),
+    });
+    if (!response.ok) {
+      let payload: ApiError;
+      try {
+        payload = (await response.json()) as ApiError;
+      } catch {
+        payload = { code: "UNKNOWN", message: response.statusText, detail: null, request_id: "" };
+      }
+      throw new ApiClientError(payload, response.status);
+    }
+    if (!response.body) throw new Error("The server did not return a progress stream.");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let result: TreeOptimizationRunDto | null = null;
+    const processLine = (line: string) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line) as TreeOptimizationRunStreamEvent;
+      if (event.type === "progress") {
+        onProgress({ files_scanned: event.files_scanned, files_total: event.files_total });
+      } else if (event.type === "complete") {
+        result = event.result;
+      } else {
+        throw new Error(event.message);
+      }
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? "";
+        lines.forEach(processLine);
+        if (done) break;
+      }
+      processLine(buffer);
+    } finally {
+      reader.releaseLock();
+    }
+    if (!result) throw new Error("The progress stream ended before optimization completed.");
+    return result;
+  },
 };
 
 export const browseApi = {

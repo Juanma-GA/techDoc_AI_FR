@@ -132,6 +132,7 @@
     "absolutePathPlaceholder": "Absolute path to the Composer folder",
     "noInputRootHint": "No Input root configured: browse local folders or paste an absolute path. No files are uploaded.",
     "counting": "Counting .smgXml files…",
+    "progress": "Files analyzed: {{scanned}} / {{total}}",
     "filesToAnalyze": "{{count}} .smgXml file(s) to optimize.",
     "confirmAnalyze": "Optimize these {{count}} files",
     "resultTitle": "Result",

@@ -15,6 +15,7 @@ export function TreeOptimization() {
   const [path, setPath] = useState("");
   const selectedPathRef = useRef("");
   const [filesToAnalyze, setFilesToAnalyze] = useState<number | null>(null);
+  const [progress, setProgress] = useState<{ filesScanned: number; filesTotal: number } | null>(null);
   const [result, setResult] = useState<TreeOptimizationRunDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const rootsQuery = useQuery({ queryKey: ["browse", "roots"], queryFn: browseApi.roots });
@@ -28,6 +29,7 @@ export function TreeOptimization() {
     onSuccess: ({ folderPath, data }) => {
       if (folderPath !== selectedPathRef.current) return;
       setFilesToAnalyze(data.files_count);
+      setProgress(null);
       setResult(null);
       setError(null);
     },
@@ -42,6 +44,7 @@ export function TreeOptimization() {
       selectedPathRef.current = selectedPath;
       setPath(selectedPath);
       setFilesToAnalyze(null);
+      setProgress(null);
       setError(null);
       countMutation.mutate(selectedPath);
     },
@@ -50,18 +53,38 @@ export function TreeOptimization() {
   });
 
   const optimizeMutation = useMutation({
-    mutationFn: () => treeOptimizationApi.run(path.trim(), true),
-    onSuccess: (data) => {
+    mutationFn: (folderPath: string) =>
+      treeOptimizationApi.runWithProgress(folderPath, true, (nextProgress) => {
+        if (folderPath !== selectedPathRef.current) return;
+        setProgress({
+          filesScanned: nextProgress.files_scanned,
+          filesTotal: nextProgress.files_total,
+        });
+      }),
+    onMutate: (folderPath) => {
+      if (folderPath === selectedPathRef.current) {
+        setProgress({ filesScanned: 0, filesTotal: filesToAnalyze ?? 0 });
+      }
+    },
+    onSuccess: (data, folderPath) => {
+      if (folderPath !== selectedPathRef.current) return;
       setResult(data);
       setFilesToAnalyze(null);
+      setProgress(null);
       setError(null);
     },
-    onError: (reason: unknown) =>
-      setError(reason instanceof ApiClientError ? reason.message : String(reason)),
+    onError: (reason: unknown, folderPath) => {
+      if (folderPath !== selectedPathRef.current) return;
+      setProgress(null);
+      setError(reason instanceof Error ? reason.message : String(reason));
+    },
   });
 
   const isPending =
     pickFolderMutation.isPending || countMutation.isPending || optimizeMutation.isPending;
+  const progressPercentage = progress
+    ? Math.round((progress.filesScanned / Math.max(progress.filesTotal, 1)) * 100)
+    : 0;
 
   return (
     <div className="flex max-w-5xl flex-col gap-4">
@@ -80,6 +103,7 @@ export function TreeOptimization() {
                 selectedPathRef.current = nextPath;
                 setPath(nextPath);
                 setFilesToAnalyze(null);
+                setProgress(null);
                 setResult(null);
                 setError(null);
                 if (nextPath.trim()) countMutation.mutate(nextPath.trim());
@@ -97,6 +121,7 @@ export function TreeOptimization() {
                     selectedPathRef.current = event.target.value;
                     setPath(event.target.value);
                     setFilesToAnalyze(null);
+                    setProgress(null);
                     setResult(null);
                     setError(null);
                   }}
@@ -126,6 +151,28 @@ export function TreeOptimization() {
             <span className="hint">{t("treeOptimization.counting")}</span>
           </div>
         ) : null}
+        {optimizeMutation.isPending && progress ? (
+          <div style={{ marginTop: "0.75rem" }} role="status" aria-live="polite">
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: "0.35rem" }}>
+              <span className="hint">
+                {t("treeOptimization.progress", {
+                  scanned: progress.filesScanned,
+                  total: progress.filesTotal,
+                })}
+              </span>
+              <span className="badge info">{progressPercentage}%</span>
+            </div>
+            <progress
+              value={progress.filesScanned}
+              max={Math.max(progress.filesTotal, 1)}
+              aria-label={t("treeOptimization.progress", {
+                scanned: progress.filesScanned,
+                total: progress.filesTotal,
+              })}
+              style={{ width: "100%", height: "0.65rem" }}
+            />
+          </div>
+        ) : null}
         {filesToAnalyze !== null ? (
           <div className="row" style={{ flexWrap: "wrap", marginTop: "0.75rem" }} role="status">
             {filesToAnalyze === 0 ? (
@@ -138,7 +185,7 @@ export function TreeOptimization() {
                 <button
                   type="button"
                   className="btn primary"
-                  onClick={() => optimizeMutation.mutate()}
+                  onClick={() => optimizeMutation.mutate(path.trim())}
                   disabled={isPending || countMutation.isPending}
                 >
                   {optimizeMutation.isPending ? <span className="spinner" /> : null}

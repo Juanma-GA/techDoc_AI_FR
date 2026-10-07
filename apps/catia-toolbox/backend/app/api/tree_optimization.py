@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core import onedrive
 from app.core.errors import AppError
 from app.core.security import safe_under_root
-from app.core.tree_optimization import count_smgxml_files, optimize_folder
+from app.core.tree_optimization import (
+    FolderResult,
+    count_smgxml_files,
+    iter_optimize_folder_events,
+    optimize_folder,
+)
 from app.db.session import get_db
 from app.schemas import (
     TreeOptimizationCountIn,
@@ -161,6 +169,17 @@ def _resolve_input_folder(db: Session, path: str) -> Path:
     return folder
 
 
+def _tree_optimization_out(result: FolderResult) -> TreeOptimizationOut:
+    return TreeOptimizationOut(
+        path=result["path"],
+        applied=result["applied"],
+        files_scanned=result["files_scanned"],
+        files_with_changes=result["files_with_changes"],
+        files_modified=result["files_modified"],
+        removed_elements=result["removed_elements"],
+    )
+
+
 @router.post("/count", response_model=TreeOptimizationCountOut)
 def count_tree_optimization_files(
     payload: TreeOptimizationCountIn,
@@ -194,11 +213,39 @@ def run_tree_optimization(
             status_code=400,
             detail={"path": str(folder)},
         ) from exc
-    return TreeOptimizationOut(
-        path=result["path"],
-        applied=result["applied"],
-        files_scanned=result["files_scanned"],
-        files_with_changes=result["files_with_changes"],
-        files_modified=result["files_modified"],
-        removed_elements=result["removed_elements"],
+    return _tree_optimization_out(result)
+
+
+@router.post("/run-stream")
+def stream_tree_optimization(
+    payload: TreeOptimizationIn,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    folder = _resolve_input_folder(db, payload.path)
+
+    def generate_events():
+        try:
+            for event in iter_optimize_folder_events(folder, apply=payload.apply):
+                if event["type"] == "complete":
+                    output_event = {
+                        "type": "complete",
+                        "result": jsonable_encoder(_tree_optimization_out(event["result"])),
+                    }
+                else:
+                    output_event = event
+                yield json.dumps(output_event, ensure_ascii=False) + "\n"
+        except OSError:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": "Lecture du dossier impossible.",
+                    "detail": {"path": str(folder)},
+                },
+                ensure_ascii=False,
+            ) + "\n"
+
+    return StreamingResponse(
+        generate_events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -10,6 +10,7 @@ import stat
 import tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Literal, TypedDict
 
@@ -36,6 +37,17 @@ class FolderResult(TypedDict):
     files_modified: int
     removed_elements: int
     files: list[FileResult]
+
+
+class FolderProgressEvent(TypedDict):
+    type: Literal["progress"]
+    files_scanned: int
+    files_total: int
+
+
+class FolderCompleteEvent(TypedDict):
+    type: Literal["complete"]
+    result: FolderResult
 
 
 def _local_name(tag: object) -> str | None:
@@ -250,16 +262,39 @@ def count_smgxml_files(folder: str | Path) -> int:
     return len(_list_smgxml_files(Path(folder)))
 
 
-def optimize_folder(folder: str | Path, *, apply: bool = False) -> FolderResult:
+def iter_optimize_folder_events(
+    folder: str | Path, *, apply: bool = False
+) -> Iterator[FolderProgressEvent | FolderCompleteEvent]:
     directory = Path(folder)
     files = _list_smgxml_files(directory)
-    results = [_process_file(path, apply=apply) for path in files]
-    return {
-        "path": str(directory),
-        "applied": apply,
-        "files_scanned": len(results),
-        "files_with_changes": sum(item["removed_elements"] > 0 for item in results),
-        "files_modified": sum(item["status"] == "optimized" for item in results),
-        "removed_elements": sum(item["removed_elements"] for item in results),
-        "files": results,
+    results: list[FileResult] = []
+    files_total = len(files)
+    yield {"type": "progress", "files_scanned": 0, "files_total": files_total}
+
+    for files_scanned, path in enumerate(files, start=1):
+        results.append(_process_file(path, apply=apply))
+        yield {
+            "type": "progress",
+            "files_scanned": files_scanned,
+            "files_total": files_total,
+        }
+
+    yield {
+        "type": "complete",
+        "result": {
+            "path": str(directory),
+            "applied": apply,
+            "files_scanned": len(results),
+            "files_with_changes": sum(item["removed_elements"] > 0 for item in results),
+            "files_modified": sum(item["status"] == "optimized" for item in results),
+            "removed_elements": sum(item["removed_elements"] for item in results),
+            "files": results,
+        },
     }
+
+
+def optimize_folder(folder: str | Path, *, apply: bool = False) -> FolderResult:
+    for event in iter_optimize_folder_events(folder, apply=apply):
+        if event["type"] == "complete":
+            return event["result"]
+    raise RuntimeError("Folder optimization ended without a result.")
