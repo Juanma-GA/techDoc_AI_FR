@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.table import Table
 
 from app.core.errors import AppError
-from app.services import ecm_rename_tracker_3
+from app.services import ecm_automation_tracker_3
 from app.services.path_picker import BrowseKind
 
 HEADERS = [
@@ -55,10 +55,10 @@ def test_open_tracker_uses_one_excel_instance_and_closes_it(monkeypatch, tmp_pat
     book = MagicMock()
     book.api.ReadOnly = False
     app.books.open.return_value = book
-    monkeypatch.setattr(ecm_rename_tracker_3.xw, "App", lambda **_: app)
+    monkeypatch.setattr(ecm_automation_tracker_3.xw, "App", lambda **_: app)
 
     tracker_path = tmp_path / "Tracker.xlsx"
-    with ecm_rename_tracker_3.open_tracker(tracker_path, read_only=False) as opened_book:
+    with ecm_automation_tracker_3.open_tracker(tracker_path, read_only=False) as opened_book:
         assert opened_book is book
 
     app.books.open.assert_called_once_with(
@@ -76,10 +76,10 @@ def test_open_tracker_rejects_read_only_and_closes_it(monkeypatch, tmp_path) -> 
     book = MagicMock()
     book.api.ReadOnly = True
     app.books.open.return_value = book
-    monkeypatch.setattr(ecm_rename_tracker_3.xw, "App", lambda **_: app)
+    monkeypatch.setattr(ecm_automation_tracker_3.xw, "App", lambda **_: app)
 
     with pytest.raises(AppError) as error:
-        with ecm_rename_tracker_3.open_tracker(tmp_path / "Tracker.xlsx", read_only=False):
+        with ecm_automation_tracker_3.open_tracker(tmp_path / "Tracker.xlsx", read_only=False):
             pytest.fail("A read-only workbook must not be yielded for writing.")
 
     assert error.value.code == "TRACKER_READ_ONLY"
@@ -88,7 +88,7 @@ def test_open_tracker_rejects_read_only_and_closes_it(monkeypatch, tmp_path) -> 
 
 
 def test_path_preferences_are_persisted(client) -> None:
-    empty = client.get("/api/v1/ecm-rename/paths")
+    empty = client.get("/api/v1/ecm-automation/paths")
 
     assert empty.status_code == 200
     assert empty.json() == {"source_path": "", "tracker_path": "", "output_path": ""}
@@ -98,8 +98,8 @@ def test_path_preferences_are_persisted(client) -> None:
         "tracker_path": r"C:\ECM\tracker.xlsx",
         "output_path": r"C:\ECM\processed",
     }
-    saved = client.put("/api/v1/ecm-rename/paths", json=paths)
-    loaded = client.get("/api/v1/ecm-rename/paths")
+    saved = client.put("/api/v1/ecm-automation/paths", json=paths)
+    loaded = client.get("/api/v1/ecm-automation/paths")
 
     assert saved.status_code == 200
     assert saved.json() == paths
@@ -107,11 +107,25 @@ def test_path_preferences_are_persisted(client) -> None:
     assert loaded.json() == paths
 
     changed_paths = {**paths, "output_path": r"C:\ECM\final"}
-    updated = client.put("/api/v1/ecm-rename/paths", json=changed_paths)
+    updated = client.put("/api/v1/ecm-automation/paths", json=changed_paths)
 
     assert updated.status_code == 200
     assert updated.json() == changed_paths
-    assert client.get("/api/v1/ecm-rename/paths").json() == changed_paths
+    assert client.get("/api/v1/ecm-automation/paths").json() == changed_paths
+
+
+def test_default_database_url_preserves_existing_legacy_database(monkeypatch, tmp_path) -> None:
+    from app import config
+
+    monkeypatch.setattr(config, "BASE_DIR", tmp_path)
+    new_database = tmp_path / "data" / "ecm-automation.db"
+    legacy_database = tmp_path / "data" / "ecm-rename.db"
+
+    assert config._default_database_url() == f"sqlite:///{new_database}"
+
+    legacy_database.parent.mkdir()
+    legacy_database.touch()
+    assert config._default_database_url() == f"sqlite:///{legacy_database}"
 
 
 def test_preview_extracts_text_and_tracker_values(client, tmp_path) -> None:
@@ -121,7 +135,7 @@ def test_preview_extracts_text_and_tracker_values(client, tmp_path) -> None:
     _write_tracker(tracker_path)
 
     response = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     )
 
@@ -159,7 +173,7 @@ def test_existing_folders_are_renamed_without_moving_their_pdfs(client, tmp_path
     _write_tracker(tracker_path)
 
     preview_response = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={
             "source_path": str(parent),
             "tracker_path": str(tracker_path),
@@ -174,7 +188,7 @@ def test_existing_folders_are_renamed_without_moving_their_pdfs(client, tmp_path
 
     output_path = tmp_path / "unused-output"
     rename_response = client.post(
-        "/api/v1/ecm-rename/folders",
+        "/api/v1/ecm-automation/folders",
         json={
             "source_path": str(parent),
             "output_path": str(output_path),
@@ -209,7 +223,7 @@ def test_existing_folders_are_renamed_without_moving_their_pdfs(client, tmp_path
 
 
 def test_pdf_sources_resolves_only_selected_paths(tmp_path) -> None:
-    from app.services.ecm_rename import _pdf_sources
+    from app.services.ecm_automation import _pdf_sources
 
     source_folder = tmp_path / "pdfs"
     source_folder.mkdir()
@@ -228,7 +242,7 @@ def test_pdf_sources_resolves_only_selected_paths(tmp_path) -> None:
 
 
 def test_create_folders_copies_only_selected_pdf_paths(tmp_path) -> None:
-    from app.services.ecm_rename import create_folders_batch
+    from app.services.ecm_automation import create_folders_batch
 
     source_folder = tmp_path / "pdfs"
     source_folder.mkdir()
@@ -288,7 +302,7 @@ def test_preview_extracts_primary_fields_before_reply_section(client, tmp_path) 
     _write_tracker(tracker_path)
 
     response = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     )
 
@@ -306,7 +320,7 @@ def test_preview_extracts_primary_fields_before_reply_section(client, tmp_path) 
 def test_subject_starting_with_reponse_is_not_treated_as_response_label(
     yes_mark: str, no_mark: str, expected_response: str
 ) -> None:
-    from app.services.ecm_rename_pdf import column_values, extract_fields
+    from app.services.ecm_automation_pdf import column_values, extract_fields
 
     pdf_text = "\n".join(
         [
@@ -336,7 +350,7 @@ def test_subject_starting_with_reponse_is_not_treated_as_response_label(
 def test_date_req_d_populates_response_date_only_when_response_is_yes(
     yes_mark: str, no_mark: str, expected_response: str, expected_date: str, date_label: str
 ) -> None:
-    from app.services.ecm_rename_pdf import column_values, extract_fields
+    from app.services.ecm_automation_pdf import column_values, extract_fields
 
     pdf_text = "\n".join(
         [
@@ -364,7 +378,7 @@ def test_create_folders_copies_pdf_without_updating_tracker(client, tmp_path) ->
     original_pdf = pdf_path.read_bytes()
 
     preview = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     ).json()
     record = preview["records"][0]
@@ -383,7 +397,7 @@ def test_create_folders_copies_pdf_without_updating_tracker(client, tmp_path) ->
             }
         ],
     }
-    response = client.post("/api/v1/ecm-rename/folders", json=request)
+    response = client.post("/api/v1/ecm-automation/folders", json=request)
 
     assert response.status_code == 200
     result = response.json()
@@ -394,7 +408,7 @@ def test_create_folders_copies_pdf_without_updating_tracker(client, tmp_path) ->
     assert result == {"created_folders": [str(expected_folder)], "existing_folders": []}
     assert tracker_path.read_bytes() == tracker_before
 
-    repeated_response = client.post("/api/v1/ecm-rename/folders", json=request)
+    repeated_response = client.post("/api/v1/ecm-automation/folders", json=request)
 
     assert repeated_response.status_code == 200
     assert repeated_response.json() == {"created_folders": [], "existing_folders": [str(expected_folder)]}
@@ -426,13 +440,13 @@ def test_append_tracker_row_preserves_workbook_contents(client, tmp_path) -> Non
     workbook.save(tracker_path)
     workbook.close()
     preview = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     ).json()
     record = preview["records"][0]
 
     response = client.post(
-        "/api/v1/ecm-rename/tracker",
+        "/api/v1/ecm-automation/tracker",
         json={
             "tracker_path": preview["tracker_path"],
             "sheet_name": preview["sheet_name"],
@@ -512,7 +526,7 @@ def test_append_with_bilingual_headers_uses_first_fully_empty_row(client, tmp_pa
     )
 
     preview_response = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     )
 
@@ -539,7 +553,7 @@ def test_append_with_bilingual_headers_uses_first_fully_empty_row(client, tmp_pa
     assert record["tracker_values"] == expected_values
 
     response = client.post(
-        "/api/v1/ecm-rename/tracker",
+        "/api/v1/ecm-automation/tracker",
         json={
             "tracker_path": preview["tracker_path"],
             "sheet_name": preview["sheet_name"],
@@ -567,7 +581,7 @@ def test_preview_rejects_scanned_pdf_without_ocr(client, tmp_path) -> None:
     _write_tracker(tracker_path)
 
     response = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(pdf_path), "tracker_path": str(tracker_path)},
     )
 
@@ -585,7 +599,7 @@ def test_preview_scans_multiple_pdfs_in_selected_folder(client, tmp_path) -> Non
     _write_tracker(tracker_path)
 
     response = client.post(
-        "/api/v1/ecm-rename/preview",
+        "/api/v1/ecm-automation/preview",
         json={"source_path": str(source_folder), "tracker_path": str(tracker_path)},
     )
 
@@ -609,7 +623,7 @@ def test_preview_scans_multiple_pdfs_in_selected_folder(client, tmp_path) -> Non
 def test_browse_path_uses_native_picker_and_returns_selection(
     client, monkeypatch, kind: str, selected_paths: list[str]
 ) -> None:
-    from app.api import ecm_rename as ecm_rename_route
+    from app.api import ecm_automation as ecm_automation_route
 
     picker_calls = []
 
@@ -617,10 +631,10 @@ def test_browse_path_uses_native_picker_and_returns_selection(
         picker_calls.append((request_kind, current_path, language))
         return selected_paths
 
-    monkeypatch.setattr(ecm_rename_route, "choose_path", select_path)
+    monkeypatch.setattr(ecm_automation_route, "choose_path", select_path)
 
     response = client.post(
-        "/api/v1/ecm-rename/browse",
+        "/api/v1/ecm-automation/browse",
         json={"kind": kind, "current_path": r"C:\ECM", "language": "fr"},
     )
 
@@ -662,12 +676,12 @@ def test_windows_picker_uses_powershell_without_exposing_other_environment(
 
     monkeypatch.setattr(path_picker.subprocess, "run", run_picker)
 
-    monkeypatch.setenv("ECM_RENAME_TEST_SECRET", "do-not-leak")
+    monkeypatch.setenv("ECM_AUTOMATION_TEST_SECRET", "do-not-leak")
     result = path_picker._pick_with_windows(kind, "Select", "en", r"C:\ECM")
 
     assert result == selected_paths or result is None
     assert "-STA" in captured["command"]
     assert "$dialog.Multiselect = ($kind -eq 'source_files')" in captured["command"][-1]
-    assert captured["options"]["env"]["ECM_RENAME_PICKER_KIND"] == kind
-    assert captured["options"]["env"]["ECM_RENAME_PICKER_INITIAL_DIRECTORY"] == r"C:\ECM"
-    assert "ECM_RENAME_TEST_SECRET" not in captured["options"]["env"]
+    assert captured["options"]["env"]["ECM_AUTOMATION_PICKER_KIND"] == kind
+    assert captured["options"]["env"]["ECM_AUTOMATION_PICKER_INITIAL_DIRECTORY"] == r"C:\ECM"
+    assert "ECM_AUTOMATION_TEST_SECRET" not in captured["options"]["env"]

@@ -9,7 +9,7 @@ from typing import Any
 import xlwings as xw
 
 from app.core.errors import AppError
-from app.services.ecm_rename_pdf import field_for_label
+from app.services.ecm_automation_pdf import field_for_label
 
 
 @contextmanager

@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.db.models import PathPreference
 from app.db.session import get_db
-from app.services.ecm_rename import append_tracker_batch, create_folders_batch, preview_batch
+from app.services.ecm_automation import append_tracker_batch, create_folders_batch, preview_batch
 from app.services.path_picker import BrowseKind, BrowseLanguage, choose_path
 
-router = APIRouter(prefix="/ecm-rename", tags=["ecm-rename"])
+router = APIRouter(prefix="/ecm-automation", tags=["ecm-automation"])
 
 
 class PreviewRequest(BaseModel):

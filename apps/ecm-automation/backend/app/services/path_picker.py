@@ -33,14 +33,14 @@ $ErrorActionPreference = 'Stop'
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 [Console]::OutputEncoding = $utf8
 Add-Type -AssemblyName System.Windows.Forms
-$kind = $env:ECM_RENAME_PICKER_KIND
-$title = $env:ECM_RENAME_PICKER_TITLE
-$initialDirectory = $env:ECM_RENAME_PICKER_INITIAL_DIRECTORY
+$kind = $env:ECM_AUTOMATION_PICKER_KIND
+$title = $env:ECM_AUTOMATION_PICKER_TITLE
+$initialDirectory = $env:ECM_AUTOMATION_PICKER_INITIAL_DIRECTORY
 
 if ($kind -eq 'source_files' -or $kind -eq 'tracker_file') {
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
     $dialog.Title = $title
-    $dialog.Filter = $env:ECM_RENAME_PICKER_FILTER
+    $dialog.Filter = $env:ECM_AUTOMATION_PICKER_FILTER
     $dialog.Multiselect = ($kind -eq 'source_files')
     if ($initialDirectory -and (Test-Path -LiteralPath $initialDirectory -PathType Container)) {
         $dialog.InitialDirectory = $initialDirectory
@@ -107,10 +107,10 @@ def _pick_with_windows(
     }
     environment.update(
         {
-            "ECM_RENAME_PICKER_KIND": kind,
-            "ECM_RENAME_PICKER_TITLE": title,
-            "ECM_RENAME_PICKER_FILTER": _FILE_FILTERS.get(kind, {}).get(language, ""),
-            "ECM_RENAME_PICKER_INITIAL_DIRECTORY": initial_directory or "",
+            "ECM_AUTOMATION_PICKER_KIND": kind,
+            "ECM_AUTOMATION_PICKER_TITLE": title,
+            "ECM_AUTOMATION_PICKER_FILTER": _FILE_FILTERS.get(kind, {}).get(language, ""),
+            "ECM_AUTOMATION_PICKER_INITIAL_DIRECTORY": initial_directory or "",
         }
     )
     command = [

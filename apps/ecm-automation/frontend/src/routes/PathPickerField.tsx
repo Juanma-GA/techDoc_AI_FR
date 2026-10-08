@@ -32,7 +32,7 @@ export function PathPickerField({
   onBrowse,
 }: PathPickerFieldProps) {
   const { t } = useTranslation();
-  const inputId = `ecm-rename-${field}-path`;
+  const inputId = `ecm-automation-${field}-path`;
   const sourcePaths = field === "source" ? value.split(/\r?\n/).filter(Boolean) : [];
   const hasMultipleSourcePaths = sourceBrowseKind === "source_files" && sourcePaths.length > 1;
   const inputValue = hasMultipleSourcePaths

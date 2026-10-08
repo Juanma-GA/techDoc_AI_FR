@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.core.errors import AppError
-from app.services.ecm_rename_pdf import column_values, extract_fields, list_pdf_files, read_pdf_text
-from app.services.ecm_rename_tracker_3 import (
+from app.services.ecm_automation_pdf import column_values, extract_fields, list_pdf_files, read_pdf_text
+from app.services.ecm_automation_tracker_3 import (
     append_tracker_rows,
     find_tracker_layout,
     open_tracker,
@@ -269,7 +269,7 @@ def create_folders_batch(
     try:
         if pending_folders:
             output.mkdir(parents=True, exist_ok=True)
-            stage_root = Path(tempfile.mkdtemp(prefix=".ecm-rename-", dir=output))
+            stage_root = Path(tempfile.mkdtemp(prefix=".ecm-automation-", dir=output))
             for record, folder_name, _ in pending_folders:
                 source_file = file_by_path[str(Path(record["source_path"]).resolve())]
                 staged_folder = stage_root / folder_name

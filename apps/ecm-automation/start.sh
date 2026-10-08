@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ecm-rename — Lancement local Unix.
+# ecm-automation — Lancement local Unix.
 # Détection Python 3.11+, venv, deps, migrations, rebuild front auto, uvicorn.
 # Le front React est reconstruit automatiquement quand frontend/dist est absent
 # OU qu'une source front est plus récente (comparaison find -newer) : une modif
@@ -14,7 +14,7 @@ APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="${APP_DIR}/backend"
 
 echo "============================================================"
-echo " ecm-rename - Lancement local"
+echo " ecm-automation - Lancement local"
 echo "============================================================"
 
 if ! command -v python3 >/dev/null 2>&1; then

@@ -96,16 +96,16 @@ export type PathPreferencesDto = {
   output_path: string;
 };
 
-export const ecmRenameApi = {
-  getPathPreferences: () => api<PathPreferencesDto>("/ecm-rename/paths"),
+export const ecmAutomationApi = {
+  getPathPreferences: () => api<PathPreferencesDto>("/ecm-automation/paths"),
   savePathPreferences: (body: PathPreferencesDto) =>
-    api<PathPreferencesDto>("/ecm-rename/paths", { method: "PUT", body: JSON.stringify(body) }),
+    api<PathPreferencesDto>("/ecm-automation/paths", { method: "PUT", body: JSON.stringify(body) }),
   browse: (body: BrowseRequest) =>
-    api<BrowseResponse>("/ecm-rename/browse", { method: "POST", body: JSON.stringify(body) }),
+    api<BrowseResponse>("/ecm-automation/browse", { method: "POST", body: JSON.stringify(body) }),
   preview: (body: PreviewRequest) =>
-    api<PreviewDto>("/ecm-rename/preview", { method: "POST", body: JSON.stringify(body) }),
+    api<PreviewDto>("/ecm-automation/preview", { method: "POST", body: JSON.stringify(body) }),
   createFolders: (body: CreateFoldersRequest) =>
-    api<CreateFoldersDto>("/ecm-rename/folders", { method: "POST", body: JSON.stringify(body) }),
+    api<CreateFoldersDto>("/ecm-automation/folders", { method: "POST", body: JSON.stringify(body) }),
   appendTracker: (body: AppendTrackerRequest) =>
-    api<AppendTrackerDto>("/ecm-rename/tracker", { method: "POST", body: JSON.stringify(body) }),
+    api<AppendTrackerDto>("/ecm-automation/tracker", { method: "POST", body: JSON.stringify(body) }),
 };

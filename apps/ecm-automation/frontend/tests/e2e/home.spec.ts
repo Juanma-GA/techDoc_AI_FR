@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test("ECM Automation workspace renders", async ({ page }) => {
-  await page.route("**/api/v1/ecm-rename/paths", (route) =>
+  await page.route("**/api/v1/ecm-automation/paths", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -11,7 +11,7 @@ test("ECM Automation workspace renders", async ({ page }) => {
           : JSON.stringify({ source_path: "", tracker_path: "", output_path: "" }),
     }),
   );
-  await page.route("**/api/v1/ecm-rename/browse", (route) => {
+  await page.route("**/api/v1/ecm-automation/browse", (route) => {
     const selections: Record<string, string[]> = {
       source_files: ["C:\\ECM\\ECN-A.pdf", "C:\\ECM\\ECN-B.pdf"],
       source_directory: ["C:\\ECM\\à traiter"],
@@ -26,7 +26,7 @@ test("ECM Automation workspace renders", async ({ page }) => {
   });
   let analyzedSourcePath = "";
   let analyzedFolderMode = "";
-  await page.route("**/api/v1/ecm-rename/preview", async (route) => {
+  await page.route("**/api/v1/ecm-automation/preview", async (route) => {
     analyzedSourcePath = route.request().postDataJSON().source_path as string;
     analyzedFolderMode = route.request().postDataJSON().folder_mode as string;
     await route.fulfill({
@@ -64,7 +64,7 @@ test("ECM Automation workspace renders", async ({ page }) => {
       }),
     });
   });
-  await page.route("**/api/v1/ecm-rename/folders", (route) =>
+  await page.route("**/api/v1/ecm-automation/folders", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -77,7 +77,7 @@ test("ECM Automation workspace renders", async ({ page }) => {
       }),
     }),
   );
-  await page.route("**/api/v1/ecm-rename/tracker", (route) =>
+  await page.route("**/api/v1/ecm-automation/tracker", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",

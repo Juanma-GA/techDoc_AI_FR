@@ -19,7 +19,7 @@ class AdminStatsOut(BaseModel):
 
     Les champs sont volontairement generiques : chaque POC peut surcharger
     `admin.stats()` pour compter ses propres tables. Les compteurs métier
-    restent à zéro car ECM-rename n'enregistre pas de documents en base.
+    restent à zéro car ECM Automation n'enregistre pas de documents en base.
     """
 
     documents: int = 0

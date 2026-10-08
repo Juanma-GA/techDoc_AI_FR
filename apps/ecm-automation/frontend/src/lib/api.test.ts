@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ecmRenameApi } from "./api";
+import { ecmAutomationApi } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("ecmRenameApi", () => {
+describe("ecmAutomationApi", () => {
   it("requests a native picker for the selected local path kind", async () => {
     const response = { ok: true, json: async () => ({ path: "C:\\ECM\\ECN.pdf" }) };
     const fetchMock = vi.fn().mockResolvedValue(response);
@@ -17,10 +17,10 @@ describe("ecmRenameApi", () => {
       language: "fr" as const,
     };
 
-    await ecmRenameApi.browse(request);
+    await ecmAutomationApi.browse(request);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/ecm-rename/browse",
+      "/api/v1/ecm-automation/browse",
       expect.objectContaining({ method: "POST", body: JSON.stringify(request) }),
     );
   });
@@ -35,10 +35,10 @@ describe("ecmRenameApi", () => {
       folder_mode: "create" as const,
     };
 
-    await ecmRenameApi.preview(request);
+    await ecmAutomationApi.preview(request);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/ecm-rename/preview",
+      "/api/v1/ecm-automation/preview",
       expect.objectContaining({ method: "POST", body: JSON.stringify(request) }),
     );
   });

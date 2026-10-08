@@ -1,6 +1,6 @@
-# ECM-rename — backend
+# ECM Automation — backend
 
-FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog. Le workflow métier est porté par `/api/v1/ecm-rename` ; les tests créent des PDF et trackers synthétiques.
+FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog. Le workflow métier est porté par `/api/v1/ecm-automation` ; les tests créent des PDF et trackers synthétiques.
 
 ## Démarrage local
 

@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { usePathPreferences } from "../hooks/usePathPreferences";
 import {
-  ecmRenameApi,
+  ecmAutomationApi,
   type BrowseKind,
   type PreviewDto,
   type PreviewRequest,
@@ -69,7 +69,7 @@ export function Home({
   const [folderMode, setFolderMode] = useState<FolderMode>("create");
 
   const previewMutation = useMutation({
-    mutationFn: ecmRenameApi.preview,
+    mutationFn: ecmAutomationApi.preview,
     onSuccess: (result) => {
       setPreview(result);
       setSheetName(result.sheet_name);
@@ -80,17 +80,17 @@ export function Home({
   });
 
   const folderMutation = useMutation({
-    mutationFn: ecmRenameApi.createFolders,
+    mutationFn: ecmAutomationApi.createFolders,
     onSuccess: onFoldersCreated,
   });
 
   const trackerMutation = useMutation({
-    mutationFn: ecmRenameApi.appendTracker,
+    mutationFn: ecmAutomationApi.appendTracker,
     onSuccess: onTrackerUpdated,
   });
 
   const browseMutation = useMutation({
-    mutationFn: ecmRenameApi.browse,
+    mutationFn: ecmAutomationApi.browse,
     onSuccess: ({ paths }, request) => {
       if (paths.length === 0) return;
       if (request.kind === "source_files" || request.kind === "source_directory") {
@@ -248,11 +248,11 @@ export function Home({
         <CardContent className="flex flex-col gap-4">
           <div className="flex items-center gap-2">
             <label
-              htmlFor="ecm-rename-existing-folders"
+              htmlFor="ecm-automation-existing-folders"
               className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-fg"
             >
               <input
-                id="ecm-rename-existing-folders"
+                id="ecm-automation-existing-folders"
                 type="checkbox"
                 className="h-4 w-4 accent-brand-blue"
                 checked={folderMode === "rename"}

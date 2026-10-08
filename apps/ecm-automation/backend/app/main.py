@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, ecm_rename, health
+from app.api import admin, ecm_automation, health
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -80,7 +80,7 @@ def create_app() -> FastAPI:
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(health.router)
     api_v1.include_router(admin.router)
-    api_v1.include_router(ecm_rename.router)
+    api_v1.include_router(ecm_automation.router)
     app.include_router(api_v1)
 
     _mount_frontend(app)

@@ -2,8 +2,8 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
 
-const e2ePort = process.env.ECM_RENAME_E2E_PORT;
-const apiProxyTarget = process.env.ECM_RENAME_API_PROXY_TARGET ?? "http://127.0.0.1:8009";
+const e2ePort = process.env.ECM_AUTOMATION_E2E_PORT;
+const apiProxyTarget = process.env.ECM_AUTOMATION_API_PROXY_TARGET ?? "http://127.0.0.1:8009";
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],

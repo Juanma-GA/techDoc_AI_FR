@@ -1,4 +1,4 @@
-# ECM-rename
+# ECM Automation
 
 ## Purpose
 
@@ -44,7 +44,7 @@ Lancer `bash start.sh`. L'URL par défaut est `http://127.0.0.1:8009/`.
 Depuis la racine du monorepo :
 
 ```bash
-pnpm dev:ecm-rename
+pnpm dev:ecm-automation
 ```
 
 Vite utilise le proxy API vers le backend local sur le port `8009`.
@@ -64,10 +64,10 @@ L'extraction est déterministe et locale : l'application n'utilise aucun modèle
 
 ## Tests
 
-- Backend : `python -m pytest tests/` depuis `apps/ecm-rename/backend`.
-- Frontend : `pnpm --filter @apps/ecm-rename-frontend typecheck`, `test`, `build` et `test:e2e`.
+- Backend : `python -m pytest tests/` depuis `apps/ecm-automation/backend`.
+- Frontend : `pnpm --filter @apps/ecm-automation-frontend typecheck`, `test`, `build` et `test:e2e`.
 - Standard : `bash scripts/check_standard.sh` depuis la racine.
-- Packaging : `apps/ecm-rename/package.bat` (sortie sous `apps/ecm-rename/dist/`).
+- Packaging : `apps/ecm-automation/package.bat` (sortie sous `apps/ecm-automation/dist/`).
 
 ## Limitations
 

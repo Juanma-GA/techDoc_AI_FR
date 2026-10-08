@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _default_database_url() -> str:
+    legacy_database = BASE_DIR / "data" / "ecm-rename.db"
+    if legacy_database.is_file():
+        return f"sqlite:///{legacy_database}"
+    return f"sqlite:///{BASE_DIR / 'data' / 'ecm-automation.db'}"
 
 
 class Settings(BaseSettings):
@@ -18,12 +25,12 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    app_name: str = "ECM-rename"
+    app_name: str = "ECM Automation"
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"
 
-    database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'ecm-rename.db'}"
+    database_url: str = Field(default_factory=_default_database_url)
     storage_dir: str = str(BASE_DIR / "data" / "storage")
 
     # Hote de bind uvicorn. En local : 127.0.0.1. Un bind expose doit utiliser

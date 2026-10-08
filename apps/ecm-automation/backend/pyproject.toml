@@ -1,7 +1,7 @@
 [project]
-name = "ecm-rename-backend"
+name = "ecm-automation-backend"
 version = "0.1.0"
-description = "ECM-rename — local ECM PDF and Excel tracker preparation."
+description = "ECM Automation — local ECM PDF and Excel tracker preparation."
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "Proprietary" }

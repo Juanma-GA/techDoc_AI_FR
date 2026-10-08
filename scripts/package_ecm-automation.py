@@ -1,15 +1,15 @@
-"""Package the ecm-rename app into a standalone zip ready to share.
+"""Package the ecm-automation app into a standalone zip ready to share.
 
 This is the canonical packaging script for new POCs. To instantiate :
 
-    cp scripts/package_ecm-rename.py scripts/package_<poc>.py
+    cp scripts/package_ecm-automation.py scripts/package_<poc>.py
 
-Then replace `ecm-rename`/`template` with the new POC name throughout
+Then replace `ecm-automation`/`template` with the new POC name throughout
 (name, default --out, sources list, embed prefix, LISEZ-MOI/PACKAGE_README).
 
 Layout of the produced archive (with `--embed-python`, default ON):
 
-    ecm-rename-vX.Y.Z-YYYYMMDD/
+    ecm-automation-vX.Y.Z-YYYYMMDD/
     ├── start.bat               # one-click launcher → calls apps/<poc>/start.bat
     ├── LISEZ-MOI.txt           # quick-start FR for the colleague
     ├── PACKAGE_README.md       # detailed reference
@@ -19,9 +19,9 @@ Layout of the produced archive (with `--embed-python`, default ON):
     └── python-embed/           # bundled Python 3.11 (Windows embeddable + bootstrapped pip)
 
 Usage:
-    python scripts/package_ecm-rename.py
-    python scripts/package_ecm-rename.py --version 0.2.0 --out dist
-    python scripts/package_ecm-rename.py --no-embed-python
+    python scripts/package_ecm-automation.py
+    python scripts/package_ecm-automation.py --version 0.2.0 --out dist
+    python scripts/package_ecm-automation.py --no-embed-python
 """
 
 from __future__ import annotations
@@ -39,9 +39,9 @@ from pathlib import Path
 
 # =====================================================================
 # Variables a adapter par POC :
-APP_NAME = "ECM-rename"
-APP_SLUG = "ecm-rename"      # nom du dossier sous apps/
-EMBED_PREFIX = "ecm_rename"   # prefixe du dossier temp pour l'embed Python
+APP_NAME = "ECM Automation"
+APP_SLUG = "ecm-automation"      # nom du dossier sous apps/
+EMBED_PREFIX = "ecm_automation"   # prefixe du dossier temp pour l'embed Python
 # =====================================================================
 
 

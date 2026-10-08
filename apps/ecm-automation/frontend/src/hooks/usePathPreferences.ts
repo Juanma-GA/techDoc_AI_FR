@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { ecmRenameApi, type PathPreferencesDto } from "../lib/api";
+import { ecmAutomationApi, type PathPreferencesDto } from "../lib/api";
 
 const EMPTY_PATHS: PathPreferencesDto = {
   source_path: "",
@@ -11,13 +11,13 @@ const EMPTY_PATHS: PathPreferencesDto = {
 
 export function usePathPreferences() {
   const preferencesQuery = useQuery({
-    queryKey: ["ecm-rename", "path-preferences"],
-    queryFn: ecmRenameApi.getPathPreferences,
+    queryKey: ["ecm-automation", "path-preferences"],
+    queryFn: ecmAutomationApi.getPathPreferences,
   });
   const [editedPaths, setEditedPaths] = useState<PathPreferencesDto | null>(null);
   const saveMutation = useMutation({
-    mutationFn: ecmRenameApi.savePathPreferences,
-    scope: { id: "ecm-rename-path-preferences" },
+    mutationFn: ecmAutomationApi.savePathPreferences,
+    scope: { id: "ecm-automation-path-preferences" },
   });
   const paths = editedPaths ?? preferencesQuery.data ?? EMPTY_PATHS;
 

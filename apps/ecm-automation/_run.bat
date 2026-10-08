@@ -1,9 +1,11 @@
 @echo off
-chcp 65001 >nul
 setlocal
+set "NoDefaultCurrentDirectoryInExePath=1"
+set "SYS32=%SystemRoot%\System32"
+"%SYS32%\chcp.com" 65001 >nul
 
 REM ===========================================================================
-REM  ecm-rename - Lancement local
+REM  ecm-automation - Lancement local
 REM
 REM  Detection automatique de Python (3 tiers, dans l'ordre):
 REM   1. Python embeddable bundled (..\..\python-embed\python.exe)
@@ -19,7 +21,7 @@ set "BACKEND_DIR=%APP_DIR%backend"
 set "REPO_ROOT=%APP_DIR%..\.."
 
 echo ============================================================
-echo  ecm-rename - Lancement local
+echo  ecm-automation - Lancement local
 echo ============================================================
 echo.
 
@@ -28,12 +30,12 @@ set "USE_EMBED=0"
 if exist "%EMBED_PY%" (
     set "USE_EMBED=1"
     set "PYTHON=%EMBED_PY%"
-    set "INSTALLED_MARK=%APP_DIR%..\..\python-embed\.ecm-rename_installed"
+    set "INSTALLED_MARK=%APP_DIR%..\..\python-embed\.ecm-automation_installed"
     echo [info] Python embarque detecte.
     goto :have_python
 )
 
-where python >nul 2>nul
+"%SYS32%\where.exe" python >nul 2>nul
 if not errorlevel 1 (
     set "PYTHON=python"
     set "INSTALLED_MARK=%BACKEND_DIR%\.venv\.installed"
@@ -60,7 +62,7 @@ if errorlevel 1 (
 for /f "skip=2 tokens=2,*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USER_PATH=%%B"
 if defined USER_PATH set "PATH=%USER_PATH%;%PATH%"
 
-where python >nul 2>nul
+"%SYS32%\where.exe" python >nul 2>nul
 if errorlevel 1 (
     echo [erreur] Python installe mais introuvable. Relance dans une nouvelle fenetre.
     pause
@@ -86,13 +88,13 @@ if "%USE_EMBED%"=="0" (
         )
     )
     call .venv\Scripts\activate.bat
-    set "PYTHON=python"
+    set "PYTHON=%BACKEND_DIR%\.venv\Scripts\python.exe"
 )
 
 if not exist "%INSTALLED_MARK%" (
     echo [setup] Installation des deps Python - 1 a 3 min...
-    "%PYTHON%" -m pip install --upgrade pip >nul
-    "%PYTHON%" -m pip install -e .
+    "%PYTHON%" -s -m pip install --upgrade pip >nul
+    "%PYTHON%" -s -m pip install -e .
     if errorlevel 1 (
         echo [erreur] Echec installation des deps.
         pause
@@ -102,7 +104,7 @@ if not exist "%INSTALLED_MARK%" (
 )
 
 echo [setup] Migrations Alembic...
-"%PYTHON%" -m alembic upgrade head
+"%PYTHON%" -s -m alembic upgrade head
 if errorlevel 1 (
     echo [erreur] Echec migrations.
     pause
@@ -114,7 +116,7 @@ set /a PORT_TRY=%PORT%
 set /a PORT_MAX=%PORT% + 20
 
 :find_port
-netstat -ano | findstr ":%PORT_TRY%" | findstr "LISTENING" >nul 2>nul
+"%SYS32%\NETSTAT.EXE" -ano | "%SYS32%\findstr.exe" ":%PORT_TRY%" | "%SYS32%\findstr.exe" "LISTENING" >nul 2>nul
 if errorlevel 1 goto :port_ok
 set /a PORT_TRY=PORT_TRY + 1
 if %PORT_TRY% GTR %PORT_MAX% goto :no_port
@@ -139,13 +141,13 @@ set "NODE_DIR="
 for /d %%D in ("%LOCALAPPDATA%\node-portable\node-v*-win-x64") do set "NODE_DIR=%%D"
 if defined NODE_DIR set "PATH=%NODE_DIR%;%PATH%"
 
-where pnpm >nul 2>nul
+"%SYS32%\where.exe" pnpm >nul 2>nul
 if errorlevel 1 goto :front_ready
 
 set "NEED_BUILD=0"
 if not exist "%FRONTEND_DIR%\dist\index.html" set "NEED_BUILD=1"
 if "%NEED_BUILD%"=="0" if exist "%APP_DIR%_needs_rebuild.ps1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%"
+    "%SYS32%\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%"
     if errorlevel 1 set "NEED_BUILD=1"
 )
 if "%NEED_BUILD%"=="0" goto :front_ready
@@ -165,7 +167,7 @@ echo       Ctrl+C ici pour arreter.
 echo.
 
 start "" "http://127.0.0.1:%PORT%/"
-"%PYTHON%" -m uvicorn app.main:app --host 127.0.0.1 --port %PORT%
+"%PYTHON%" -s -m uvicorn app.main:app --host 127.0.0.1 --port %PORT%
 
 echo.
 echo [info] uvicorn arrete.

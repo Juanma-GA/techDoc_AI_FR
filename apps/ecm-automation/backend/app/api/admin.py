@@ -8,7 +8,7 @@ from fastapi import APIRouter
 
 from app.schemas import AdminResetOut, AdminStatsOut
 
-log = logging.getLogger("ecm_rename.admin")
+log = logging.getLogger("ecm_automation.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 

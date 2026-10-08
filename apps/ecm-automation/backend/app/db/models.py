@@ -1,4 +1,4 @@
-"""SQLAlchemy models for ECM-rename path preferences."""
+"""SQLAlchemy models for ECM Automation path preferences."""
 
 from __future__ import annotations
 
