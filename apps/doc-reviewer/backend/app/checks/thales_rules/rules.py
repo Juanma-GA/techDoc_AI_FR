@@ -763,6 +763,42 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
     },
 )
 
+CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
+    code="CUSTOM_TP1_REVISION_BAR_FOOTER",
+    name="Barre de revision sur tout le footer de la TP1",
+    description=(
+        "Sur la page TP 1 declaree R, une barre de revision noire doit longer le "
+        "footer depuis la ligne Revision, en couvrant First Issue, jusqu'en dessous "
+        "de la derniere ligne du copyright."
+    ),
+    message="La TP1/R n'a pas de barre de revision sur toute la hauteur du footer.",
+    kind="field_required",
+    severity="error",
+    target=_TP1_REVISION_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "revision_bar_tp1_footer"},
+        )
+    ],
+    failure_message=(
+        "La barre TP1/R doit partir de Revision, couvrir First Issue et descendre "
+        "sous le copyright."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "On TP 1 declared R, a black revision bar must run through the "
+                "footer from Revision, covering First Issue, to below the final "
+                "copyright line."
+            ),
+            "message": "The TP1/R revision bar does not span the full footer.",
+        }
+    },
+)
+
 CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
     code="CUSTOM_TP2_REVISION_BAR_BODY_ONLY",
     name="Barre TP2/R limitee au texte du corps",
@@ -2651,6 +2687,7 @@ RULE_DEFINITIONS = (
     CUSTOM_REVISION_BAR_NEW_PAGE,
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_MARGIN_POSITION,
+    CUSTOM_TP1_REVISION_BAR_FOOTER,
     CUSTOM_TP2_REVISION_BAR_BODY_ONLY,
     CUSTOM_VENDOR_CODE_LIST_REFERENCE,
     CUSTOM_NI_PART_NUMBER_ORDER,

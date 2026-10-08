@@ -8,6 +8,7 @@ from app.checks.thales_rules.revision_engine import HighlightsEntry, RevisionSta
 from app.checks.thales_rules.rules import (
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_NEW_PAGE,
+    CUSTOM_TP1_REVISION_BAR_FOOTER,
 )
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import (
@@ -64,7 +65,13 @@ def _context(
     page_type: str | None = None,
     spans: list[Span] | None = None,
 ) -> SimpleNamespace:
-    page_key = "TP 2" if page_type == "TP2" else f"TEST {page_number}"
+    page_key = (
+        "TP 1"
+        if page_type == "TP1"
+        else "TP 2"
+        if page_type == "TP2"
+        else f"TEST {page_number}"
+    )
     page = ParsedPage(
         page=page_number,
         text="\n".join(span.text for span in spans or []),
@@ -169,6 +176,81 @@ def test_tp2_new_page_is_not_applicable_to_the_tp2_modified_bar_rule() -> None:
     result = _execute("revision_bar_tp2_body", _context("N", [], page_type="TP2"))
 
     assert result.status == "PASS"
+
+
+def test_tp1_modified_bar_spans_revision_first_issue_and_full_copyright() -> None:
+    spans = [
+        Span("Revision No.0", (86.66, 718.54, 153.31, 730.54), 3, "Arial", 10.0),
+        Span("First issue: JUL 30/26", (86.42, 735.46, 180.0, 747.46), 3, "Arial", 10.0),
+        Span(
+            "\uFFFD 1973-2026 THALES AVS FRANCE SAS. This document and any data",
+            (85.94, 751.98, 312.51, 759.74),
+            3,
+            "Arial",
+            9.0,
+        ),
+        Span(
+            "included are the property of THALES AVS FRANCE SAS.",
+            (85.94, 760.02, 316.80, 767.78),
+            3,
+            "Arial",
+            9.0,
+        ),
+        Span("TP 1", (500.0, 751.2, 560.0, 763.2), 3, "Arial", 9.0),
+        Span("JUL 30/26", (500.0, 765.4, 560.0, 777.4), 3, "Arial", 9.0),
+    ]
+    valid = _execute(
+        "revision_bar_tp1_footer",
+        _context("R", [_bar(75.65, 720.7, 770.0)], page_number=3, page_type="TP1", spans=spans),
+    )
+    misses_revision = _execute(
+        "revision_bar_tp1_footer",
+        _context("R", [_bar(75.65, 735.0, 770.0)], page_number=3, page_type="TP1", spans=spans),
+    )
+    stops_inside_copyright = _execute(
+        "revision_bar_tp1_footer",
+        _context("R", [_bar(75.65, 718.0, 761.0)], page_number=3, page_type="TP1", spans=spans),
+    )
+
+    assert valid.status == "PASS"
+    assert misses_revision.status == "FAIL"
+    assert stops_inside_copyright.status == "FAIL"
+
+
+def test_missing_tp1_footer_bar_creates_compiled_suggestion() -> None:
+    spans = [
+        Span("Revision No.0", (86.66, 718.54, 153.31, 730.54), 3, "Arial", 10.0),
+        Span("First issue: JUL 30/26", (86.42, 735.46, 180.0, 747.46), 3, "Arial", 10.0),
+        Span(
+            "\uFFFD 1973-2026 THALES AVS FRANCE SAS. This document and any data",
+            (85.94, 751.98, 312.51, 759.74),
+            3,
+            "Arial",
+            9.0,
+        ),
+        Span(
+            "included are the property of THALES AVS FRANCE SAS.",
+            (85.94, 760.02, 316.80, 767.78),
+            3,
+            "Arial",
+            9.0,
+        ),
+        Span("TP 1", (500.0, 751.2, 560.0, 763.2), 3, "Arial", 9.0),
+        Span("JUL 30/26", (500.0, 765.4, 560.0, 777.4), 3, "Arial", 9.0),
+    ]
+    context = _context("R", [], page_number=3, page_type="TP1", spans=spans)
+    results, suggestions = execute_pdf_rules(
+        context.runtime.parsed_pdf,
+        [CUSTOM_TP1_REVISION_BAR_FOOTER.compiled_rule],
+        client_operations=operations.OPERATIONS,
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+    assert suggestions[0].rule_code == CUSTOM_TP1_REVISION_BAR_FOOTER.code
+    assert suggestions[0].page == 3
+    assert suggestions[0].original == ""
+    assert suggestions[0].bbox is not None
 
 
 def test_compiled_bar_rules_emit_suggestions_for_every_failing_page(monkeypatch) -> None:

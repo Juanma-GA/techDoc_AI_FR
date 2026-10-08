@@ -130,6 +130,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_REVISION_BAR_NEW_PAGE": "error",
         "CUSTOM_REVISION_BAR_MODIFIED_PAGE": "error",
         "CUSTOM_REVISION_BAR_MARGIN_POSITION": "error",
+        "CUSTOM_TP1_REVISION_BAR_FOOTER": "error",
         "CUSTOM_TP2_REVISION_BAR_BODY_ONLY": "error",
         "CUSTOM_LETTER_DIGIT_CONFUSION": "warning",
         "CUSTOM_PAGE_CONTENT_POSITION": "warning",

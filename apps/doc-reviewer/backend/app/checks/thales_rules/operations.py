@@ -77,6 +77,12 @@ _REVISION_BAR_MIN_LENGTH = 8.0
 _REVISION_BAR_MIN_THICKNESS = 1.0
 _REVISION_BAR_MAX_THICKNESS = 4.5
 _REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
+_TP1_REVISION_LABEL_RE = re.compile(r"(?i)\bRevision\s+No\b")
+_TP1_FIRST_ISSUE_RE = re.compile(r"(?i)\bFirst\s+issue\b")
+_TP1_COPYRIGHT_FOOTER_RE = re.compile(
+    r"(?i)(?:\u00a9|\ufffd|\bCopyright\b)\s*\d{4}\s*[-\u2010-\u2015]\s*"
+    r"\d{4}\s+THALES\s+AVS\s+FRANCE\b"
+)
 _COPYRIGHT_POSITION_EXPECTED = (
     "pages impaires: x=3.03 cm, y=26.51 cm; pages paires: "
     "x=1.76 cm, y=26.51 cm (tolerance +/- 0.10 cm)"
@@ -1869,6 +1875,7 @@ def _revision_bar_findings(
         "revision_bar_new": "Barre noire presque pleine hauteur pour chaque page N",
         "revision_bar_modified": "Au moins une barre noire sur chaque page R",
         "revision_bar_margin": "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm)",
+        "revision_bar_tp1_footer": "Barre TP1/R de Revision jusqu'en dessous du copyright",
         "revision_bar_tp2_body": "Barre TP2/R uniquement en regard du corps de texte",
     }
     expected = expected_by_control.get(control)
@@ -1895,6 +1902,11 @@ def _revision_bar_findings(
         if control == "revision_bar_modified" and status != "R":
             continue
         if control == "revision_bar_margin" and status not in {"N", "R"}:
+            continue
+        if (
+            control == "revision_bar_tp1_footer"
+            and (status != "R" or page.page_type != "TP1" or page_key != "TP 1")
+        ):
             continue
         is_tp2 = page.page_type == "TP2" or (
             page_key is not None
@@ -1992,6 +2004,72 @@ def _revision_bar_findings(
                         ),
                     )
                 )
+        elif control == "revision_bar_tp1_footer":
+            revision_spans = [
+                span for span in page.spans if _TP1_REVISION_LABEL_RE.search(span.text)
+            ]
+            first_issue_spans = [
+                span for span in page.spans if _TP1_FIRST_ISSUE_RE.search(span.text)
+            ]
+            copyright_spans = [
+                span for span in page.spans if _TP1_COPYRIGHT_FOOTER_RE.search(span.text)
+            ]
+            if not revision_spans or not first_issue_spans or not copyright_spans:
+                continue
+
+            revision_top = min(span.bbox[1] for span in revision_spans)
+            first_issue_top = min(span.bbox[1] for span in first_issue_spans)
+            first_issue_bottom = max(span.bbox[3] for span in first_issue_spans)
+            copyright_top = min(span.bbox[1] for span in copyright_spans)
+            page_width = page.page_width or max(
+                (span.bbox[2] for span in page.spans),
+                default=0.0,
+            )
+            copyright_bottom = max(
+                span.bbox[3]
+                for span in page.spans
+                if span.bbox[1] >= copyright_top - 2.0
+                and span.bbox[0] < page_width * 0.75
+            )
+            checked += 1
+            spans_footer_content = any(
+                bar.top <= revision_top + 3.0
+                and bar.bottom >= copyright_bottom - 2.0
+                and bar.top <= first_issue_top
+                and bar.bottom >= first_issue_bottom
+                for bar in bars
+            )
+            if spans_footer_content:
+                continue
+
+            margin_x_cm = (
+                _COPYRIGHT_POSITION_ODD_X_CM
+                if page.page % 2
+                else _COPYRIGHT_POSITION_EVEN_X_CM
+            )
+            expected_x = (
+                margin_x_cm + _REVISION_BAR_MARGIN_OFFSET_CM
+            ) * _POINTS_PER_CENTIMETER
+            half_thickness = 2.28 / 2
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=f"{page_label} (TP1/R)",
+                    expected=expected,
+                    message=(
+                        f"La barre TP1 de « {page_label} » doit commencer au niveau "
+                        "de Revision, couvrir First Issue et descendre sous le copyright."
+                    ),
+                    original="",
+                    page=page.page,
+                    bbox=(
+                        expected_x - half_thickness,
+                        revision_top,
+                        expected_x + half_thickness,
+                        copyright_bottom,
+                    ),
+                )
+            )
         else:
             checked += 1
             page_height = page.page_height or max(
@@ -2077,6 +2155,7 @@ def _document_structure_findings(
         "revision_bar_new",
         "revision_bar_modified",
         "revision_bar_margin",
+        "revision_bar_tp1_footer",
         "revision_bar_tp2_body",
     }:
         return _revision_bar_findings(context, control)
