@@ -2388,6 +2388,39 @@ def test_list_of_materials_code_must_not_contain_uppercase_letters() -> None:
     ]
 
 
+def test_list_of_materials_supplier_requires_fscm_in_parentheses() -> None:
+    rule = _rule("CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM")
+    valid, valid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [
+                ("RED PAINT", "pa-pa-024", "ACME AEROSPACE (FSCM 12345)"),
+                ("BLUE PAINT", "pa-pa-025", "(FSCM 67890)"),
+            ]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [
+                ("RED PAINT", "pa-pa-024", "ACME AEROSPACE"),
+                ("BLUE PAINT", "pa-pa-025", "ACME COMPONENTS FSCM 12345"),
+                ("GREEN PAINT", "pa-pa-026", "ACME PARTS (FSCM 1234)"),
+            ]
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 3
+    assert [item.original for item in invalid_suggestions] == [
+        "ACME AEROSPACE",
+        "ACME COMPONENTS FSCM 12345",
+        "ACME PARTS (FSCM 1234)",
+    ]
+
+
 def test_numerical_index_part_numbers_are_sorted_across_logical_pages() -> None:
     rule = _rule("CUSTOM_NI_PART_NUMBER_ORDER")
     valid, valid_suggestions = execute_pdf_rules(

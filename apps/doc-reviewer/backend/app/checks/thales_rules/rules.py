@@ -632,6 +632,41 @@ CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE = rule(
     },
 )
 
+CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM",
+    name="Numero FSCM obligatoire dans la colonne fournisseur",
+    description=(
+        "Dans la colonne SUPPLIERS TRADE NAME AND CODE FSCM de la LIST OF "
+        "MATERIALS, chaque nom de fournisseur doit etre suivi d'un numero FSCM "
+        "a cinq caracteres entre parentheses : (FSCM XXXXX)."
+    ),
+    message="Un fournisseur de la LIST OF MATERIALS n'a pas de numero FSCM valide.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_supplier_fscm"},
+        )
+    ],
+    failure_message=(
+        "Chaque nom de fournisseur doit etre suivi d'un numero au format (FSCM XXXXX)."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "In the SUPPLIERS TRADE NAME AND CODE FSCM column of the LIST OF "
+                "MATERIALS, each supplier name must be followed by a five-character "
+                "FSCM number in parentheses: (FSCM XXXXX)."
+            ),
+            "message": "A LIST OF MATERIALS supplier is missing a valid FSCM number.",
+        }
+    },
+)
+
 CUSTOM_VENDOR_CODE_LIST_REFERENCE = rule(
     code="CUSTOM_VENDOR_CODE_LIST_REFERENCE",
     name="Correspondance des codes et adresses de la VENDOR CODE LIST",
@@ -2483,6 +2518,7 @@ RULE_DEFINITIONS = (
     CUSTOM_CHAPTER_NUMBER_SEQUENCE,
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
+    CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM,
     CUSTOM_VENDOR_CODE_LIST_REFERENCE,
     CUSTOM_NI_PART_NUMBER_ORDER,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,

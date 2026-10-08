@@ -89,6 +89,7 @@ _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
 _ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
+_FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
 _VENDOR_CODE_LIST_TITLE_RE = re.compile(r"(?i)^\s*VENDOR\s+CODE\s+LIST\s*:?[ \t]*$")
 _VENDOR_CODE_HEADER = "code"
 _VENDOR_ADDRESS_HEADER = "vendorsaddress"
@@ -1085,7 +1086,81 @@ def _list_materials_code_findings(
         first_data_top = min(span.bbox[1] for span in designation_data)
         checked_pages += 1
 
-        for row in revision.visual_rows(page.spans):
+        visual_rows = revision.visual_rows(page.spans)
+        if control == "list_materials_supplier_fscm":
+            use_header = next(
+                (span for span in page.spans if span.text.strip().upper() == "USE"),
+                None,
+            )
+            supplier_right = (
+                (suppliers_center + (use_header.bbox[0] + use_header.bbox[2]) / 2) / 2
+                if use_header is not None
+                else max(span.bbox[2] for span in page.spans)
+            )
+            supplier_cells: list[list[Span]] = []
+            current_supplier_cell: list[Span] | None = None
+            for row in visual_rows:
+                if min(span.bbox[1] for span in row) < first_data_top - 3.0:
+                    continue
+                code_row = any(
+                    column_left <= (span.bbox[0] + span.bbox[2]) / 2 < column_right
+                    for span in row
+                )
+                supplier_spans = [
+                    span
+                    for span in row
+                    if column_right
+                    <= (span.bbox[0] + span.bbox[2]) / 2
+                    < supplier_right
+                ]
+                if code_row:
+                    if current_supplier_cell is not None:
+                        supplier_cells.append(current_supplier_cell)
+                    current_supplier_cell = supplier_spans
+                elif current_supplier_cell is not None:
+                    current_supplier_cell.extend(supplier_spans)
+            if current_supplier_cell is not None:
+                supplier_cells.append(current_supplier_cell)
+
+            for supplier_spans in supplier_cells:
+                supplier_name = " ".join(
+                    " ".join(span.text.split())
+                    for span in supplier_spans
+                    if span.text.strip()
+                )
+                if not supplier_name or not any(char.isalpha() for char in supplier_name):
+                    continue
+                fscm_match = _FSCM_SUFFIX_RE.search(supplier_name)
+                if fscm_match is not None:
+                    company_name = supplier_name[: fscm_match.start()].strip()
+                    if not any(char.isalpha() for char in company_name):
+                        continue
+                    continue
+                if re.match(r"(?i)^\(?\s*FSCM\b", supplier_name):
+                    continue
+                bbox = (
+                    min(span.bbox[0] for span in supplier_spans),
+                    min(span.bbox[1] for span in supplier_spans),
+                    max(span.bbox[2] for span in supplier_spans),
+                    max(span.bbox[3] for span in supplier_spans),
+                )
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=supplier_name,
+                        expected="Nom fournisseur (FSCM XXXXX)",
+                        message=(
+                            f"Le fournisseur « {supplier_name} » doit comporter un "
+                            "numero FSCM au format « (FSCM XXXXX) »."
+                        ),
+                        original=supplier_name,
+                        page=page.page,
+                        bbox=bbox,
+                    )
+                )
+            continue
+
+        for row in visual_rows:
             if min(span.bbox[1] for span in row) < first_data_top - 3.0:
                 continue
             for span in row:
@@ -1683,13 +1758,15 @@ def _document_structure_findings(
     elif control in {
         "list_materials_code_parentheses",
         "list_materials_code_lowercase",
+        "list_materials_supplier_fscm",
     }:
         findings, checked = _list_materials_code_findings(context, control)
-        expected = (
-            "Code de la LIST OF MATERIALS sans parentheses"
-            if control == "list_materials_code_parentheses"
-            else "Code de la LIST OF MATERIALS en minuscules"
-        )
+        if control == "list_materials_code_parentheses":
+            expected = "Code de la LIST OF MATERIALS sans parentheses"
+        elif control == "list_materials_code_lowercase":
+            expected = "Code de la LIST OF MATERIALS en minuscules"
+        else:
+            expected = "Nom fournisseur suivi de (FSCM XXXXX)"
     elif control == "ni_part_number_order":
         findings, checked = _numerical_index_order_findings(context)
         expected = "Part Number numeriques en ordre croissant"
