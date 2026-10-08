@@ -113,3 +113,17 @@ def test_parse_pdf_preserves_bookmark_titles_and_destinations(tmp_path) -> None:
         ("INTRODUCTION", 1),
         ("REPAIR", 2),
     ]
+
+
+def test_parse_pdf_reports_progress_per_page(tmp_path) -> None:
+    doc = fitz.open()
+    doc.new_page(width=400, height=300)
+    doc.new_page(width=400, height=300)
+    out = tmp_path / "progress.pdf"
+    doc.save(str(out))
+    doc.close()
+    progress: list[tuple[int, int]] = []
+
+    parse_pdf(out, progress_cb=lambda current, total: progress.append((current, total)))
+
+    assert progress == [(1, 2), (2, 2)]

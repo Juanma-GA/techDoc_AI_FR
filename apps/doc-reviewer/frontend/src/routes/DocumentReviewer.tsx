@@ -256,7 +256,12 @@ export function DocumentReviewer() {
             />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
-                <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
+                <span className="progress">
+                  <div
+                    className={`progress-bar${analyze.progressIndeterminate ? " indeterminate" : ""}`}
+                    style={analyze.progressIndeterminate ? undefined : { width: `${analyze.progress}%` }}
+                  />
+                </span>
                 <span className="label">{analyze.progress}%</span>
               </span>
             ) : null}

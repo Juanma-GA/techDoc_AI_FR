@@ -105,6 +105,14 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     assert b"run_started" in body
     assert b"done" in body
     assert b"event: page_statuses" in body
+    assert b'"unit": "page"' in body
+    assert b'"step": "suggestions"' in body
+    parse_complete = body.find(b'"step": "parse", "pct": 95')
+    rules_started = body.find(b'"step": "rules", "pct": 95')
+    rules_complete = body.find(b'"step": "finalize", "pct": 97')
+    suggestions_complete = body.find(b'"step": "suggestions", "pct": 99')
+    done = body.find(b"event: done")
+    assert 0 <= parse_complete < rules_started < rules_complete < suggestions_complete < done
 
     sugs = client.get(f"/api/v1/documents/{doc_id}/suggestions")
     assert sugs.status_code == 200

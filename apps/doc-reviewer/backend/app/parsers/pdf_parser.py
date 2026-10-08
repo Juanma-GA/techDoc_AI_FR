@@ -12,6 +12,7 @@ Also flags PDFs that won't allow safe in-place edits:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -78,7 +79,11 @@ class ParsedPdf:
     bookmarks: list[PdfBookmark] = field(default_factory=list)
 
 
-def parse_pdf(path: str | Path | bytes) -> ParsedPdf:
+def parse_pdf(
+    path: str | Path | bytes,
+    *,
+    progress_cb: Callable[[int, int], None] | None = None,
+) -> ParsedPdf:
     doc = fitz.open(stream=path, filetype="pdf") if isinstance(path, bytes) else fitz.open(str(path))
     try:
         is_signed = _has_digital_signature(doc)
@@ -148,6 +153,8 @@ def parse_pdf(path: str | Path | bytes) -> ParsedPdf:
                 )
             )
             all_text.append(f"[PAGE: {idx}]\n{text}")
+            if progress_cb is not None:
+                progress_cb(idx, doc.page_count)
 
         return ParsedPdf(
             page_count=doc.page_count,

@@ -1,7 +1,7 @@
 {
   "client_code": "THALES",
   "label": "THALES",
-  "bundle_version": "1.2.7",
+  "bundle_version": "1.2.8",
   "contract_version": "1",
   "catalogs": [
     {
@@ -10,7 +10,8 @@
     }
   ],
   "files": {
-    "mapping": "mapping.json"
+    "mapping": "mapping.json",
+    "vendor_code_reference": "vendor_code_reference.json"
   },
   "modules": {
     "rules": "rules.py",

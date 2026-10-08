@@ -5,7 +5,7 @@ import { API_BASE_URL, api, CSRF_HEADERS } from "../lib/api";
 import { useClientConfig } from "./useClientConfig";
 import { useFiltersStore } from "../stores/filtersStore";
 import { missingDocumentContext } from "../types/domain";
-import type { Document } from "../types/domain";
+import type { Document, Suggestion } from "../types/domain";
 
 type AnalyzeStatus = "idle" | "running" | "done" | "error";
 
@@ -49,8 +49,10 @@ export function useAnalyze(
     : undefined;
   const missingContextFields = missingDocumentContext(document, requiredFields);
   const contextReady = Boolean(document) && missingContextFields.length === 0;
+  const parseProgressIsIndeterminate = document?.working_format === "docx";
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);
+  const [progressIndeterminate, setProgressIndeterminate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quality, setQuality] = useState<AnalyzeQuality | null>(null);
   // Avertissements non bloquants (ex. scan checklist/IA interrompu par une
@@ -74,6 +76,7 @@ export function useAnalyze(
     }
     setStatus("running");
     setProgress(0);
+    setProgressIndeterminate(parseProgressIsIndeterminate);
     setError(null);
     setQuality(null);
     setWarnings([]);
@@ -115,6 +118,16 @@ export function useAnalyze(
         }
         throw new Error(message);
       }
+      const suggestionsKey = ["suggestions", documentId] as const;
+      await qc.cancelQueries({ queryKey: suggestionsKey });
+      qc.setQueryData<Suggestion[]>(suggestionsKey, (current) => {
+        if (!current) return current;
+        return current.filter((suggestion) =>
+          suggestion.status === "applied" ||
+          suggestion.status === "rejected" ||
+          (options.pageNumber !== undefined && suggestion.page !== options.pageNumber),
+        );
+      });
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -138,8 +151,17 @@ export function useAnalyze(
               const data = line.slice(5).trim();
               if (currentEvent === "progress") {
                 try {
-                  const parsed = JSON.parse(data) as { pct?: number };
+                  const parsed = JSON.parse(data) as {
+                    step?: string;
+                    pct?: number;
+                    total?: number;
+                  };
                   if (typeof parsed.pct === "number") setProgress(parsed.pct);
+                  setProgressIndeterminate(
+                    parsed.step === "parse" &&
+                      parseProgressIsIndeterminate &&
+                      typeof parsed.total !== "number",
+                  );
                 } catch {
                   /* ignore */
                 }
@@ -160,6 +182,24 @@ export function useAnalyze(
                 try {
                   const parsed = JSON.parse(data) as { pages?: PageRevisionStatus[] };
                   if (Array.isArray(parsed.pages)) setPageStatuses(parsed.pages);
+                } catch {
+                  /* ignore */
+                }
+              } else if (currentEvent === "suggestion") {
+                try {
+                  const parsed = JSON.parse(data) as Suggestion;
+                  if (parsed.id && parsed.document_id === documentId) {
+                    qc.setQueryData<Suggestion[]>(["suggestions", documentId], (current) => {
+                      const suggestions = current ?? [];
+                      if (suggestions.some((suggestion) => suggestion.id === parsed.id)) {
+                        return suggestions;
+                      }
+                      return [...suggestions, parsed].sort(
+                        (left, right) =>
+                          left.page - right.page || left.created_at.localeCompare(right.created_at),
+                      );
+                    });
+                  }
                 } catch {
                   /* ignore */
                 }
@@ -192,10 +232,13 @@ export function useAnalyze(
       qc.invalidateQueries({ queryKey: ["document", documentId] });
       if (status !== "error") setStatus("done");
     } catch (exc) {
+      if (documentId) {
+        qc.invalidateQueries({ queryKey: ["suggestions", documentId] });
+      }
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive]);
+  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive, parseProgressIsIndeterminate]);
 
   const correctPageStatus = useCallback((pageNumber: number, isModified: boolean) => {
     const nextOverrides = { ...pageOverrides, [pageNumber]: isModified };
@@ -227,6 +270,7 @@ export function useAnalyze(
   return {
     status,
     progress,
+    progressIndeterminate,
     error,
     quality,
     warnings,

@@ -632,6 +632,43 @@ CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE = rule(
     },
 )
 
+CUSTOM_VENDOR_CODE_LIST_REFERENCE = rule(
+    code="CUSTOM_VENDOR_CODE_LIST_REFERENCE",
+    name="Correspondance des codes et adresses de la VENDOR CODE LIST",
+    description=(
+        "Les pages sont detectees par les en-tetes CODE et VENDOR'S ADDRESS; le "
+        "titre VENDOR CODE LIST en gras est facultatif sur les pages de "
+        "continuation. Chaque code ou adresse connu doit correspondre au "
+        "referentiel partage vendor_code_reference.json, dans les deux sens."
+    ),
+    message="Un code et une adresse de la VENDOR CODE LIST ne correspondent pas au referentiel.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="vendor_code_list",
+            operation_params={"control": "reference"},
+        )
+    ],
+    failure_message=(
+        "La VENDOR CODE LIST contient une association code/adresse incorrecte."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "Pages are detected by the CODE and VENDOR'S ADDRESS headers; the "
+                "bold VENDOR CODE LIST title is optional on continuation pages. "
+                "Each known code or address must match the shared "
+                "vendor_code_reference.json in both directions."
+            ),
+            "message": "A VENDOR CODE LIST code and address do not match the reference.",
+        }
+    },
+)
+
 CUSTOM_NI_PART_NUMBER_ORDER = rule(
     code="CUSTOM_NI_PART_NUMBER_ORDER",
     name="Numerical Index trie par Part Number croissant",
@@ -2446,6 +2483,7 @@ RULE_DEFINITIONS = (
     CUSTOM_CHAPTER_NUMBER_SEQUENCE,
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
+    CUSTOM_VENDOR_CODE_LIST_REFERENCE,
     CUSTOM_NI_PART_NUMBER_ORDER,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
     CUSTOM_HIGHLIGHTS_HOLDER,

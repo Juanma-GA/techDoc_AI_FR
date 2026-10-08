@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
+import unicodedata
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
 from statistics import median
 from typing import Any
 
@@ -17,7 +21,7 @@ from .rules import (
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
 )
 from app.core.logging import get_logger
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span
 
 
 _logger = get_logger(__name__)
@@ -85,12 +89,46 @@ _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
 _ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
+_VENDOR_CODE_LIST_TITLE_RE = re.compile(r"(?i)^\s*VENDOR\s+CODE\s+LIST\s*:?[ \t]*$")
+_VENDOR_CODE_HEADER = "code"
+_VENDOR_ADDRESS_HEADER = "vendorsaddress"
+_VENDOR_CODE_PREFIX_RE = re.compile(r"(?i)^([A-Z]{1,3}\d{4,5})\b")
+_VENDOR_TABLE_END_RE = re.compile(
+    r"(?i)(?:\u00a9|\ufffd)\s*\d{4}\s*[-\u2010-\u2015]\s*\d{4}\s+"
+    r"THALES\s+AVS\s+FRANCE\b|\bCopyright\b|"
+    r"\bThis\s+document\s+and\s+any\s+data\b"
+)
 _NUMERICAL_INDEX_PAGE_RE = re.compile(
     r"(?i)^NI/NUM\s+(?P<manual>.+?)\s+(?P<page>\d+)$"
 )
 _NI_HEADER_LABELS = frozenset(
     {"PART NUMBER", "AIRLINE", "STOCK NO.", "FIGURE", "ITEM", "TTL", "REQ"}
 )
+
+
+def _load_vendor_code_reference() -> dict[str, str]:
+    payload = json.loads(
+        Path(__file__).with_name("vendor_code_reference.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    vendors = payload.get("vendors") if isinstance(payload, dict) else None
+    if not isinstance(vendors, dict):
+        raise ValueError("vendor_code_reference.json must contain a vendors object")
+
+    reference: dict[str, str] = {}
+    for code, address in vendors.items():
+        if not isinstance(code, str) or not code.strip():
+            raise ValueError("vendor reference codes must be non-empty strings")
+        if not isinstance(address, str) or not address.strip():
+            raise ValueError(
+                f"vendor reference address for {code!r} must be a non-empty string"
+            )
+        reference[code.strip()] = address.strip()
+    return reference
+
+
+_VENDOR_CODE_REFERENCE = _load_vendor_code_reference()
 
 
 def shop_verification_text(document: object | None) -> str:
@@ -1286,6 +1324,344 @@ def _numerical_index_order_findings(
     return findings, checked_numbers
 
 
+@dataclass(frozen=True)
+class _VendorColumnPair:
+    code_left: float
+    code_right: float
+    code_origin: float
+    address_left: float
+    address_right: float
+    header_bottom: float
+
+
+@dataclass
+class _VendorTableRow:
+    page: int
+    code_parts: list[str] = field(default_factory=list)
+    address_parts: list[str] = field(default_factory=list)
+    bbox: tuple[float, float, float, float] | None = None
+
+    @property
+    def code(self) -> str:
+        return " ".join(part for part in self.code_parts if part).strip()
+
+    @property
+    def address(self) -> str:
+        return " ".join(part for part in self.address_parts if part).strip()
+
+
+def _vendor_join_spans(spans: list[Span]) -> str:
+    return " ".join(" ".join(span.text.split()) for span in spans if span.text.strip())
+
+
+def _vendor_code_parts(value: str) -> tuple[str, str]:
+    normalized = " ".join(value.split())
+    match = _VENDOR_CODE_PREFIX_RE.match(normalized)
+    if match is None:
+        return "", ""
+    return match.group(1), normalized[match.end() :].strip()
+
+
+def _vendor_header_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _vendor_title_bottom(page: ParsedPage) -> float | None:
+    for row in revision.visual_rows(page.spans):
+        text = _vendor_join_spans(row)
+        if _VENDOR_CODE_LIST_TITLE_RE.fullmatch(text) and any(
+            "bold" in span.font.casefold() for span in row
+        ):
+            return max(span.bbox[3] for span in row)
+    return None
+
+
+def _vendor_header_cells(
+    page: ParsedPage,
+    expected: str,
+) -> list[tuple[float, float, tuple[float, float, float, float]]]:
+    cells: list[tuple[float, float, tuple[float, float, float, float]]] = []
+    for row in revision.visual_rows(page.spans):
+        for start in range(len(row)):
+            for width in range(1, min(3, len(row) - start) + 1):
+                group = row[start : start + width]
+                if _vendor_header_key(_vendor_join_spans(group)) != expected:
+                    continue
+                bbox = (
+                    min(span.bbox[0] for span in group),
+                    min(span.bbox[1] for span in group),
+                    max(span.bbox[2] for span in group),
+                    max(span.bbox[3] for span in group),
+                )
+                cells.append(
+                    (
+                        (bbox[0] + bbox[2]) / 2,
+                        (bbox[1] + bbox[3]) / 2,
+                        bbox,
+                    )
+                )
+    return cells
+
+
+def _vendor_column_pairs(
+    page: ParsedPage,
+    *,
+    minimum_y: float = 0.0,
+) -> list[_VendorColumnPair]:
+    code_headers = sorted(
+        (
+            cell
+            for cell in _vendor_header_cells(page, _VENDOR_CODE_HEADER)
+            if cell[2][3] > minimum_y
+        ),
+        key=lambda cell: cell[0],
+    )
+    address_headers = _vendor_header_cells(page, _VENDOR_ADDRESS_HEADER)
+    matched: list[
+        tuple[
+            tuple[float, float, tuple[float, float, float, float]],
+            tuple[float, float, tuple[float, float, float, float]],
+        ]
+    ] = []
+    for index, code in enumerate(code_headers):
+        next_code_x = (
+            code_headers[index + 1][0]
+            if index + 1 < len(code_headers)
+            else float("inf")
+        )
+        candidates = [
+            address
+            for address in address_headers
+            if code[0] < address[0] < next_code_x
+            and address[2][3] > minimum_y
+            and abs(address[1] - code[1]) <= 24.0
+        ]
+        if candidates:
+            matched.append(
+                (code, min(candidates, key=lambda item: abs(item[1] - code[1])))
+            )
+
+    if not matched:
+        return []
+
+    page_left = min(span.bbox[0] for span in page.spans)
+    page_right = max(span.bbox[2] for span in page.spans)
+    pairs: list[_VendorColumnPair] = []
+    for index, (code, address) in enumerate(matched):
+        code_x, address_x = code[0], address[0]
+        code_left = (
+            page_left
+            if index == 0
+            else (matched[index - 1][1][0] + code_x) / 2
+        )
+        code_right = (code_x + address_x) / 2
+        address_right = (
+            (address_x + matched[index + 1][0][0]) / 2
+            if index + 1 < len(matched)
+            else page_right + 1.0
+        )
+        pairs.append(
+            _VendorColumnPair(
+                code_left=code_left,
+                code_right=code_right,
+                code_origin=code[2][0],
+                address_left=code_right,
+                address_right=address_right,
+                header_bottom=max(code[2][3], address[2][3]),
+            )
+        )
+    return pairs
+
+
+def _merge_vendor_bbox(
+    current: tuple[float, float, float, float] | None,
+    spans: list[Span],
+) -> tuple[float, float, float, float] | None:
+    if not spans:
+        return current
+    bbox = (
+        min(span.bbox[0] for span in spans),
+        min(span.bbox[1] for span in spans),
+        max(span.bbox[2] for span in spans),
+        max(span.bbox[3] for span in spans),
+    )
+    if current is None:
+        return bbox
+    return (
+        min(current[0], bbox[0]),
+        min(current[1], bbox[1]),
+        max(current[2], bbox[2]),
+        max(current[3], bbox[3]),
+    )
+
+
+def _vendor_page_rows(
+    page: ParsedPage,
+    column_pairs: list[_VendorColumnPair],
+    *,
+    start_y: float,
+) -> list[_VendorTableRow]:
+    entries: list[_VendorTableRow] = []
+    visual_rows = revision.visual_rows(page.spans)
+    for pair in column_pairs:
+        current: _VendorTableRow | None = None
+        for row in visual_rows:
+            if max(span.bbox[3] for span in row) <= start_y + 1.0:
+                continue
+            if any(_VENDOR_TABLE_END_RE.search(span.text) for span in row):
+                break
+            code_candidates = [
+                span
+                for span in row
+                if (
+                    pair.code_left
+                    <= (span.bbox[0] + span.bbox[2]) / 2
+                    < pair.code_right
+                    or abs(span.bbox[0] - pair.code_origin) <= 12.0
+                )
+            ]
+            code, inline_address = _vendor_code_parts(
+                _vendor_join_spans(code_candidates)
+            )
+            code_spans = code_candidates if code else []
+            address_spans = [
+                span
+                for span in row
+                if pair.address_left
+                <= (span.bbox[0] + span.bbox[2]) / 2
+                < pair.address_right
+                and span not in code_spans
+            ]
+            address = " ".join(
+                part
+                for part in (inline_address, _vendor_join_spans(address_spans))
+                if part
+            )
+            if (
+                _vendor_header_key(code) == _VENDOR_CODE_HEADER
+                or _vendor_header_key(address) == _VENDOR_ADDRESS_HEADER
+            ):
+                continue
+            if not code and not address:
+                continue
+
+            if code:
+                if current is not None:
+                    entries.append(current)
+                current = _VendorTableRow(page=page.page)
+                current.code_parts.append(code)
+                current.address_parts.append(address)
+                current.bbox = _merge_vendor_bbox(None, code_spans + address_spans)
+            else:
+                if current is None:
+                    continue
+                current.address_parts.append(address)
+                current.bbox = _merge_vendor_bbox(current.bbox, address_spans)
+        if current is not None:
+            entries.append(current)
+    return entries
+
+
+def _vendor_normalize_code(value: str) -> str:
+    compact = re.sub(r"\s+", "", unicodedata.normalize("NFKC", value))
+    return compact.casefold()
+
+
+def _vendor_normalize_address(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value).casefold()
+    return "".join(
+        character
+        for character in decomposed
+        if not unicodedata.combining(character) and character.isalnum()
+    )
+
+
+def _vendor_reference_by_code() -> dict[str, str]:
+    return {
+        _vendor_normalize_code(code): address
+        for code, address in _VENDOR_CODE_REFERENCE.items()
+    }
+
+
+def _vendor_reference_by_address() -> dict[str, list[str]]:
+    addresses: dict[str, list[str]] = defaultdict(list)
+    for code, address in _VENDOR_CODE_REFERENCE.items():
+        addresses[_vendor_normalize_address(address)].append(code)
+    return addresses
+
+
+def _vendor_list_rows(
+    context: Any,
+) -> tuple[list[_VendorTableRow], bool]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], False
+
+    pages = parsed_pdf.full_document_pages or parsed_pdf.pages
+    table_found = False
+    entries: list[_VendorTableRow] = []
+    for page in pages:
+        title_bottom = _vendor_title_bottom(page)
+        pairs = _vendor_column_pairs(page, minimum_y=title_bottom or 0.0)
+        if not pairs:
+            continue
+        table_found = True
+        entries.extend(
+            _vendor_page_rows(
+                page,
+                pairs,
+                start_y=max(pair.header_bottom for pair in pairs),
+            )
+        )
+    return entries, table_found
+
+
+def _vendor_reference_findings(
+    entries: list[_VendorTableRow],
+) -> tuple[list[OperationResult], int]:
+    by_code = _vendor_reference_by_code()
+    by_address = _vendor_reference_by_address()
+    findings: list[OperationResult] = []
+    checked = 0
+    for row in entries:
+        code_key = _vendor_normalize_code(row.code)
+        address_key = _vendor_normalize_address(row.address)
+        expected_address = by_code.get(code_key)
+        expected_codes = by_address.get(address_key, [])
+        if expected_address is None and not expected_codes:
+            continue
+        checked += 1
+        if expected_address is not None:
+            if address_key == _vendor_normalize_address(expected_address):
+                continue
+            expected = expected_address
+            message = (
+                f"Le code « {row.code or '(vide)'} » doit correspondre a "
+                f"l'adresse « {expected_address} », pas a « {row.address or '(vide)'} »."
+            )
+        else:
+            if code_key in {_vendor_normalize_code(code) for code in expected_codes}:
+                continue
+            expected = ", ".join(expected_codes)
+            message = (
+                f"L'adresse « {row.address} » doit correspondre au code "
+                f"« {expected} », pas a « {row.code or '(vide)'} »."
+            )
+        findings.append(
+            OperationResult(
+                status="FAIL",
+                observed=f"{row.code or '(vide)'} | {row.address or '(vide)'}",
+                expected=expected,
+                message=message,
+                original=row.address or row.code,
+                page=row.page,
+                bbox=row.bbox,
+            )
+        )
+    return findings, checked
+
+
 def _document_structure_findings(
     context: Any,
     parameters: Mapping[str, Any],
@@ -1449,6 +1825,47 @@ def _suggest_document_structure(
     parameters: Mapping[str, Any],
 ) -> list[OperationResult]:
     findings, _checked, _expected = _document_structure_findings(context, parameters)
+    return findings
+
+
+def _vendor_code_list_findings(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> tuple[list[OperationResult], int, str]:
+    control = parameters.get("control")
+    if control != "reference":
+        raise ValueError(f"unknown VENDOR CODE LIST control: {control}")
+    expected = "Code et VENDOR'S ADDRESS concordants avec vendor_code_reference.json"
+
+    entries, table_found = _vendor_list_rows(context)
+    if not table_found:
+        return [], 0, expected
+    findings, checked = _vendor_reference_findings(entries)
+    return findings, checked, expected
+
+
+def _evaluate_vendor_code_list(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> OperationResult:
+    findings, checked, expected = _vendor_code_list_findings(context, parameters)
+    if findings:
+        return findings[0]
+    if checked == 0:
+        return OperationResult(status="INCONCLUSIVE", expected=expected)
+    targets = getattr(context, "targets", ())
+    return OperationResult(
+        status="PASS",
+        expected=expected,
+        page=targets[-1].raw_page if targets else None,
+    )
+
+
+def _suggest_vendor_code_list(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> list[OperationResult]:
+    findings, _checked, _expected = _vendor_code_list_findings(context, parameters)
     return findings
 
 
@@ -1746,6 +2163,11 @@ DOCUMENT_STRUCTURE = ClientOperation(
     execute=_evaluate_document_structure,
     suggestions=_suggest_document_structure,
 )
+VENDOR_CODE_LIST = ClientOperation(
+    name="vendor_code_list",
+    execute=_evaluate_vendor_code_list,
+    suggestions=_suggest_vendor_code_list,
+)
 PDF_BOOKMARKS = ClientOperation(
     name="pdf_bookmarks",
     execute=_evaluate_pdf_bookmarks,
@@ -1763,6 +2185,7 @@ OPERATIONS = {
         COPYRIGHT_POSITION,
         PAGE_CONTENT_POSITION,
         DOCUMENT_STRUCTURE,
+        VENDOR_CODE_LIST,
         PDF_BOOKMARKS,
     )
 }
