@@ -667,6 +667,135 @@ CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM = rule(
     },
 )
 
+CUSTOM_REVISION_BAR_NEW_PAGE = rule(
+    code="CUSTOM_REVISION_BAR_NEW_PAGE",
+    name="Barre de revision pleine hauteur sur les pages nouvelles",
+    description=(
+        "Chaque page declaree N dans les Highlights doit porter une barre de "
+        "revision noire presque pleine hauteur, du haut du contenu jusqu'au "
+        "pied de page."
+    ),
+    message="Une page nouvelle ne comporte pas de barre de revision pleine hauteur.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "revision_bar_new"},
+        )
+    ],
+    failure_message=(
+        "Chaque page N doit porter une barre de revision noire du logo au pied de page."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "Every page declared N in Highlights must have a nearly full-height "
+                "black revision bar from the top of the content to the footer."
+            ),
+            "message": "A new page is missing its full-height revision bar.",
+        }
+    },
+)
+
+CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
+    code="CUSTOM_REVISION_BAR_MODIFIED_PAGE",
+    name="Barre de revision presente sur les pages modifiees",
+    description=(
+        "Chaque page declaree R dans les Highlights doit porter au moins une "
+        "barre de revision noire."
+    ),
+    message="Une page modifiee ne comporte pas de barre de revision.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "revision_bar_modified"},
+        )
+    ],
+    failure_message="Chaque page R doit comporter au moins une barre de revision noire.",
+    translations={
+        "en": {
+            "description": (
+                "Every page declared R in Highlights must have at least one black "
+                "revision bar."
+            ),
+            "message": "A modified page is missing a revision bar.",
+        }
+    },
+)
+
+CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
+    code="CUSTOM_REVISION_BAR_MARGIN_POSITION",
+    name="Position de la barre de revision par rapport a la marge",
+    description=(
+        "Sur les pages N et R portant une barre, son ecart horizontal par rapport "
+        "a la marge gauche doit etre l=-0,38 cm (tolerance +/- 0,10 cm)."
+    ),
+    message="Une barre de revision est mal positionnee par rapport a la marge.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "revision_bar_margin"},
+        )
+    ],
+    failure_message="La barre de revision doit etre a l=-0,38 cm de la marge gauche.",
+    translations={
+        "en": {
+            "description": (
+                "On N and R pages with a revision bar, its horizontal offset from "
+                "the left margin must be l=-0.38 cm (tolerance +/- 0.10 cm)."
+            ),
+            "message": "A revision bar is incorrectly positioned relative to the margin.",
+        }
+    },
+)
+
+CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
+    code="CUSTOM_TP2_REVISION_BAR_BODY_ONLY",
+    name="Barre TP2/R limitee au texte du corps",
+    description=(
+        "Sur une page TP2 declaree R, la barre de revision doit se trouver en "
+        "regard du texte du corps, sans traverser l'en-tete ni le pied de page."
+    ),
+    message="La barre de revision d'une page TP2/R est dans l'en-tete ou le pied de page.",
+    kind="field_required",
+    severity="error",
+    target=_TP2_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "revision_bar_tp2_body"},
+        )
+    ],
+    failure_message=(
+        "Sur TP2/R, la barre ne doit apparaitre qu'en regard du texte modifie."
+    ),
+    translations={
+        "en": {
+            "description": (
+                "On a TP2 page declared R, the revision bar must align with body "
+                "text and must not run through the header or footer."
+            ),
+            "message": "A TP2/R revision bar appears in the header or footer.",
+        }
+    },
+)
+
 CUSTOM_VENDOR_CODE_LIST_REFERENCE = rule(
     code="CUSTOM_VENDOR_CODE_LIST_REFERENCE",
     name="Correspondance des codes et adresses de la VENDOR CODE LIST",
@@ -2519,6 +2648,10 @@ RULE_DEFINITIONS = (
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
     CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM,
+    CUSTOM_REVISION_BAR_NEW_PAGE,
+    CUSTOM_REVISION_BAR_MODIFIED_PAGE,
+    CUSTOM_REVISION_BAR_MARGIN_POSITION,
+    CUSTOM_TP2_REVISION_BAR_BODY_ONLY,
     CUSTOM_VENDOR_CODE_LIST_REFERENCE,
     CUSTOM_NI_PART_NUMBER_ORDER,
     CUSTOM_INTRODUCTION_SHOP_VERIFICATION,

@@ -12,6 +12,13 @@ from pathlib import Path
 from statistics import median
 from typing import Any
 
+from app.parsers.pdf_parser import (
+    ParsedPage,
+    ParsedPdf,
+    PdfLine,
+    PdfVectorPrimitive,
+    Span,
+)
 from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
 from .revision_engine import _highlights_previous_revision_findings
@@ -21,7 +28,13 @@ from .rules import (
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
 )
 from app.core.logging import get_logger
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span
+from app.parsers.pdf_parser import (
+    ParsedPage,
+    ParsedPdf,
+    PdfLine,
+    PdfVectorPrimitive,
+    Span,
+)
 
 
 _logger = get_logger(__name__)
@@ -58,6 +71,12 @@ _COPYRIGHT_POSITION_ODD_X_CM = 3.03
 _COPYRIGHT_POSITION_EVEN_X_CM = 1.76
 _COPYRIGHT_POSITION_Y_CM = 26.51
 _COPYRIGHT_POSITION_TOLERANCE_CM = 0.10
+_REVISION_BAR_MARGIN_OFFSET_CM = -0.38
+_REVISION_BAR_POSITION_TOLERANCE_CM = 0.10
+_REVISION_BAR_MIN_LENGTH = 8.0
+_REVISION_BAR_MIN_THICKNESS = 1.0
+_REVISION_BAR_MAX_THICKNESS = 4.5
+_REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
 _COPYRIGHT_POSITION_EXPECTED = (
     "pages impaires: x=3.03 cm, y=26.51 cm; pages paires: "
     "x=1.76 cm, y=26.51 cm (tolerance +/- 0.10 cm)"
@@ -1409,6 +1428,14 @@ class _VendorColumnPair:
     header_bottom: float
 
 
+@dataclass(frozen=True)
+class _RevisionBar:
+    x: float
+    top: float
+    bottom: float
+    thickness: float
+
+
 @dataclass
 class _VendorTableRow:
     page: int
@@ -1737,6 +1764,285 @@ def _vendor_reference_findings(
     return findings, checked
 
 
+def _revision_bar_is_black(color: tuple[float, ...] | None) -> bool:
+    return color is not None and len(color) >= 3 and all(
+        component <= 0.05 for component in color[:3]
+    )
+
+
+def _revision_bars(page: ParsedPage) -> list[_RevisionBar]:
+    page_width = page.page_width or max(
+        (span.bbox[2] for span in page.spans),
+        default=0.0,
+    )
+    if page_width <= 0:
+        return []
+
+    bars: list[_RevisionBar] = []
+    for primitive in page.vector_primitives:
+        x0, y0, x1, y1 = primitive.bbox
+        primitive_width = abs(x1 - x0)
+        primitive_height = abs(y1 - y0)
+        if primitive.kind == "line" and _revision_bar_is_black(primitive.color):
+            thickness = primitive.width
+            if (
+                primitive_width > max(2.0, thickness * 1.5)
+                or not _REVISION_BAR_MIN_THICKNESS
+                <= thickness
+                <= _REVISION_BAR_MAX_THICKNESS
+            ):
+                continue
+        elif primitive.kind == "rect" and _revision_bar_is_black(primitive.fill):
+            thickness = primitive_width
+            if not _REVISION_BAR_MIN_THICKNESS <= thickness <= 6.0:
+                continue
+        else:
+            continue
+
+        center_x = (x0 + x1) / 2
+        if (
+            primitive_height < _REVISION_BAR_MIN_LENGTH
+            or center_x > page_width * 0.25
+        ):
+            continue
+        bars.append(
+            _RevisionBar(
+                x=center_x,
+                top=min(y0, y1),
+                bottom=max(y0, y1),
+                thickness=thickness,
+            )
+        )
+    return bars
+
+
+def _revision_page_status(
+    page: ParsedPage,
+    state: revision.RevisionState,
+) -> tuple[str | None, str | None]:
+    fallback_key = state.expected_footer_keys.get(page.page)
+    footer = revision.extract_footer(page, fallback_key)
+    page_key = footer.page_key if footer is not None else fallback_key
+    if not page_key:
+        return None, None
+    lep_entry = state.lep_entry_for_key(page_key)
+    status = (
+        state.highlights_status_for_lep(lep_entry)
+        if lep_entry is not None
+        else state.status_by_key.get(page_key)
+    )
+    return status, page_key
+
+
+def _expected_revision_bar_bbox(
+    page: ParsedPage,
+    *,
+    top_fraction: float,
+    bottom_fraction: float,
+) -> tuple[float, float, float, float]:
+    margin_x_cm = (
+        _COPYRIGHT_POSITION_ODD_X_CM
+        if page.page % 2
+        else _COPYRIGHT_POSITION_EVEN_X_CM
+    )
+    bar_x = (
+        margin_x_cm + _REVISION_BAR_MARGIN_OFFSET_CM
+    ) * _POINTS_PER_CENTIMETER
+    page_height = page.page_height or max(
+        (span.bbox[3] for span in page.spans),
+        default=0.0,
+    )
+    half_thickness = 2.28 / 2
+    return (
+        bar_x - half_thickness,
+        page_height * top_fraction,
+        bar_x + half_thickness,
+        page_height * bottom_fraction,
+    )
+
+
+def _revision_bar_findings(
+    context: Any,
+    control: str,
+) -> tuple[list[OperationResult], int, str]:
+    expected_by_control = {
+        "revision_bar_new": "Barre noire presque pleine hauteur pour chaque page N",
+        "revision_bar_modified": "Au moins une barre noire sur chaque page R",
+        "revision_bar_margin": "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm)",
+        "revision_bar_tp2_body": "Barre TP2/R uniquement en regard du corps de texte",
+    }
+    expected = expected_by_control.get(control)
+    if expected is None:
+        raise ValueError(f"unknown revision bar control: {control}")
+
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0, expected
+
+    state = revision_state(parsed_pdf, getattr(runtime, "document", None))
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    findings: list[OperationResult] = []
+    checked = 0
+
+    for page in parsed_pdf.pages:
+        if target_pages and page.page not in target_pages:
+            continue
+        status, page_key = _revision_page_status(page, state)
+        if control == "revision_bar_new" and status != "N":
+            continue
+        if control == "revision_bar_modified" and status != "R":
+            continue
+        if control == "revision_bar_margin" and status not in {"N", "R"}:
+            continue
+        is_tp2 = page.page_type == "TP2" or (
+            page_key is not None
+            and re.sub(r"\s+", "", page_key).casefold() == "tp2"
+        )
+        if control == "revision_bar_tp2_body" and (status != "R" or not is_tp2):
+            continue
+
+        bars = _revision_bars(page)
+        page_label = page_key or f"page PDF {page.page}"
+        if control == "revision_bar_new":
+            checked += 1
+            page_height = page.page_height or max(
+                (span.bbox[3] for span in page.spans),
+                default=0.0,
+            )
+            has_full_height_bar = any(
+                bar.top <= page_height * _REVISION_BAR_FULL_PAGE_TOLERANCE
+                and bar.bottom
+                >= page_height * (1.0 - _REVISION_BAR_FULL_PAGE_TOLERANCE)
+                for bar in bars
+            )
+            if not has_full_height_bar:
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label} (N)",
+                        expected=expected,
+                        message=(
+                            f"La page nouvelle « {page_label} » doit avoir une barre "
+                            "noire du haut du contenu jusqu'au pied de page."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=_expected_revision_bar_bbox(
+                            page,
+                            top_fraction=_REVISION_BAR_FULL_PAGE_TOLERANCE,
+                            bottom_fraction=1.0 - _REVISION_BAR_FULL_PAGE_TOLERANCE,
+                        ),
+                    )
+                )
+        elif control == "revision_bar_modified":
+            checked += 1
+            if not bars:
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label} (R)",
+                        expected=expected,
+                        message=(
+                            f"La page modifiee « {page_label} » ne comporte pas de "
+                            "barre de revision noire."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=_expected_revision_bar_bbox(
+                            page,
+                            top_fraction=0.10,
+                            bottom_fraction=0.90,
+                        ),
+                    )
+                )
+        elif control == "revision_bar_margin":
+            margin_x_cm = (
+                _COPYRIGHT_POSITION_ODD_X_CM
+                if page.page % 2
+                else _COPYRIGHT_POSITION_EVEN_X_CM
+            )
+            margin_x = margin_x_cm * _POINTS_PER_CENTIMETER
+            for bar in bars:
+                checked += 1
+                offset_cm = (bar.x - margin_x) / _POINTS_PER_CENTIMETER
+                if (
+                    abs(offset_cm - _REVISION_BAR_MARGIN_OFFSET_CM)
+                    <= _REVISION_BAR_POSITION_TOLERANCE_CM
+                ):
+                    continue
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label}: l={offset_cm:.2f} cm",
+                        expected=expected,
+                        message=(
+                            f"La barre de revision de « {page_label} » est a "
+                            f"l={offset_cm:.2f} cm de la marge, au lieu de "
+                            f"l={_REVISION_BAR_MARGIN_OFFSET_CM:.2f} cm."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=(
+                            bar.x - bar.thickness / 2,
+                            bar.top,
+                            bar.x + bar.thickness / 2,
+                            bar.bottom,
+                        ),
+                    )
+                )
+        else:
+            checked += 1
+            page_height = page.page_height or max(
+                (span.bbox[3] for span in page.spans),
+                default=0.0,
+            )
+            header_bottom = page_height * 0.10
+            footer_top = page_height * 0.90
+            body_spans = [
+                span
+                for span in page.spans
+                if span.text.strip()
+                and span.bbox[1] >= header_bottom
+                and span.bbox[3] <= footer_top
+                and _HIGHLIGHTS_FOOTER_COPYRIGHT_RE.search(span.text) is None
+            ]
+            for bar in bars:
+                overlaps_body = any(
+                    bar.bottom >= span.bbox[1] and bar.top <= span.bbox[3]
+                    for span in body_spans
+                )
+                if (
+                    bar.top >= header_bottom
+                    and bar.bottom <= footer_top
+                    and overlaps_body
+                ):
+                    continue
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label} (TP2/R)",
+                        expected=expected,
+                        message=(
+                            f"La barre TP2/R de « {page_label} » doit etre placee "
+                            "uniquement en regard du texte du corps, hors en-tete "
+                            "et pied de page."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=(
+                            bar.x - bar.thickness / 2,
+                            bar.top,
+                            bar.x + bar.thickness / 2,
+                            bar.bottom,
+                        ),
+                    )
+                )
+
+    return findings, checked, expected
+
+
 def _document_structure_findings(
     context: Any,
     parameters: Mapping[str, Any],
@@ -1767,6 +2073,13 @@ def _document_structure_findings(
             expected = "Code de la LIST OF MATERIALS en minuscules"
         else:
             expected = "Nom fournisseur suivi de (FSCM XXXXX)"
+    elif control in {
+        "revision_bar_new",
+        "revision_bar_modified",
+        "revision_bar_margin",
+        "revision_bar_tp2_body",
+    }:
+        return _revision_bar_findings(context, control)
     elif control == "ni_part_number_order":
         findings, checked = _numerical_index_order_findings(context)
         expected = "Part Number numeriques en ordre croissant"
@@ -1783,6 +2096,13 @@ def _evaluate_document_structure(
     if findings:
         return findings[0]
     if checked == 0:
+        if parameters.get("control") == "revision_bar_tp2_body":
+            targets = getattr(context, "targets", ())
+            return OperationResult(
+                status="PASS",
+                expected=expected,
+                page=targets[0].raw_page if targets else None,
+            )
         return OperationResult(status="INCONCLUSIVE", expected=expected)
     targets = getattr(context, "targets", ())
     return OperationResult(

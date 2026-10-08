@@ -13,9 +13,9 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 66
+    assert len(payload) == 70
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "4ec0b78165c6563e8ef8d83cbdefab2620e1afbd1d8293faa2e10bf9703f79c5"
+        "6fc342dc0c63144de1468c2fb530fac9e11f81461b5722279d4fe0446380cea6"
     )
 
     expected_controls = {
@@ -70,6 +70,22 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM": (
             "document_structure",
             {"control": "list_materials_supplier_fscm"},
+        ),
+        "CUSTOM_REVISION_BAR_NEW_PAGE": (
+            "document_structure",
+            {"control": "revision_bar_new"},
+        ),
+        "CUSTOM_REVISION_BAR_MODIFIED_PAGE": (
+            "document_structure",
+            {"control": "revision_bar_modified"},
+        ),
+        "CUSTOM_REVISION_BAR_MARGIN_POSITION": (
+            "document_structure",
+            {"control": "revision_bar_margin"},
+        ),
+        "CUSTOM_TP2_REVISION_BAR_BODY_ONLY": (
+            "document_structure",
+            {"control": "revision_bar_tp2_body"},
         ),
         "CUSTOM_VENDOR_CODE_LIST_REFERENCE": (
             "vendor_code_list",
