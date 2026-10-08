@@ -157,7 +157,6 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION": "error",
         "CUSTOM_FORBIDDEN_CONSUMABLES": "error",
         "CUSTOM_REPLACE_LEGACY_NAMES": "warning",
-        "CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR": "warning",
         "CUSTOM_PDF_BOOKMARK_TITLE_MATCH": "warning",
         "CUSTOM_NO_DEGREE_C_SYMBOL": "info",
         "CUSTOM_NO_DEGREE_F_SYMBOL": "info",

@@ -101,7 +101,7 @@ _LETTER_DIGIT_CONFUSION_PATTERN = (
     r")(?!\w)"
 )
 _COPYRIGHT_PATTERN = (
-    r"\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
+    r"(?i)\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
     r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
     r"This\s+document\s+and\s+any\s+data\s+included\s+are\s+the\s+property\s+of\s+"
     r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
@@ -1297,9 +1297,9 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
     name="Ponctuation obligatoire absente des phrases et enumerations",
     description=(
         "Sur les pages modifiees, chaque phrase doit se terminer par un point et "
-        "chaque element d'enumeration par le signe attendu : virgule pour les "
-        "elements intermediaires, point pour le dernier. Signale les signes "
-        "obligatoires manquants."
+        "chaque enumeration doit suivre le signe terminal majoritaire (point, "
+        "point-virgule, virgule ou absence de signe). En cas d'egalite, les "
+        "elements intermediaires prennent une virgule et le dernier un point."
     ),
     message="Une ponctuation obligatoire est absente.",
     kind="field_required",
@@ -1317,9 +1317,9 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
         "en": {
             "description": (
                 "On modified pages, every sentence must end with a full stop and "
-                "every enumeration item with the required mark: a comma for "
-                "intermediate items and a full stop for the last. Reports missing "
-                "required marks."
+                "every enumeration must follow its most common terminal mark "
+                "(full stop, semicolon, comma, or no mark). Ties use commas for "
+                "intermediate items and a full stop for the last."
             ),
             "message": "A required punctuation mark is missing.",
         }
@@ -2155,36 +2155,6 @@ CUSTOM_LETTER_DIGIT_CONFUSION = rule(
     },
 )
 
-CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR = rule(
-    code="CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR",
-    name="Identification a remplacer par indicator",
-    description=(
-        "Le terme identification doit etre remplace par indicator dans le contenu "
-        "des pages modifiees."
-    ),
-    message="Remplacer identification par indicator.",
-    kind="regex_flag",
-    severity="warning",
-    target=_MODIFIED_TARGET,
-    checks=[
-        Check(
-            field="text",
-            operator="regex",
-            expected=r"(?i)\bidentification\b",
-            replacement="indicator",
-        ),
-    ],
-    failure_message="Le terme identification doit etre remplace par indicator.",
-    translations={
-        "en": {
-            "description": (
-                "Replace the term identification with indicator in modified-page content."
-            ),
-            "message": "Replace identification with indicator.",
-        }
-    },
-)
-
 CUSTOM_REVISION_LEP_STAR = rule(
     code="CUSTOM_REVISION_LEP_STAR",
     name="Etoile LEP presente pour chaque page revisee ou nouvelle",
@@ -2719,7 +2689,6 @@ RULE_DEFINITIONS = (
     CUSTOM_FORBIDDEN_CONSUMABLES,
     CUSTOM_REPLACE_LEGACY_NAMES,
     CUSTOM_LETTER_DIGIT_CONFUSION,
-    CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,
 )

@@ -2191,6 +2191,28 @@ def _evaluate_document_structure(
     )
 
 
+def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> bool:
+    if page.page_height <= 0 or line.bbox[3] > page.page_height * 0.15:
+        return False
+    line_spans = [
+        span
+        for span in page.spans
+        if span.size > 0
+        and span.bbox[0] < line.bbox[2]
+        and span.bbox[2] > line.bbox[0]
+        and span.bbox[1] < line.bbox[3]
+        and span.bbox[3] > line.bbox[1]
+    ]
+    body_font_sizes = [
+        span.size
+        for span in page.spans
+        if span.size > 0 and span.bbox[1] >= page.page_height * 0.15
+    ]
+    if not line_spans or not body_font_sizes:
+        return True
+    return median(span.size for span in line_spans) < median(body_font_sizes) * 0.85
+
+
 def _pdf_bookmark_findings(
     context: Any,
 ) -> tuple[list[OperationResult], int, list[int]]:
@@ -2203,6 +2225,23 @@ def _pdf_bookmark_findings(
     target_pages = {target.raw_page for target in targets}
     document_pages = parsed_pdf.full_document_pages or parsed_pdf.pages
     pages_by_number = {page.page: page for page in document_pages}
+    repeated_header_titles: set[str] = set()
+    for bookmark in parsed_pdf.bookmarks:
+        normalized_title = " ".join(bookmark.title.split()).casefold()
+        if not normalized_title:
+            continue
+        pages_with_title_in_header = {
+            document_page.page
+            for document_page in document_pages
+            if document_page.page_height > 0
+            and any(
+                _pdf_bookmark_line_is_running_header(document_page, line)
+                and normalized_title in " ".join(line.text.split()).casefold()
+                for line in document_page.lines
+            )
+        }
+        if len(pages_with_title_in_header) > 1:
+            repeated_header_titles.add(normalized_title)
     findings: list[OperationResult] = []
     checked = 0
     inconclusive_pages: set[int] = set()
@@ -2239,7 +2278,21 @@ def _pdf_bookmark_findings(
             continue
 
         checked += 1
-        page_text = " ".join(page.text.split()).casefold()
+        if page.lines and page.page_height > 0 and repeated_header_titles:
+            page_body_lines = [
+                line.text
+                for line in page.lines
+                if not (
+                    _pdf_bookmark_line_is_running_header(page, line)
+                    and any(
+                        title in " ".join(line.text.split()).casefold()
+                        for title in repeated_header_titles
+                    )
+                )
+            ]
+            page_text = " ".join(" ".join(page_body_lines).split()).casefold()
+        else:
+            page_text = " ".join(page.text.split()).casefold()
         if title in page_text:
             continue
         findings.append(

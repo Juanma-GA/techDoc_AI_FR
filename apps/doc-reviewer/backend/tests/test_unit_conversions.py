@@ -7,7 +7,8 @@ from app.core.compiled_rule_operators import (
     pressure_conversion_issues,
     unit_conversion_issues,
 )
-from app.parsers.pdf_parser import parse_pdf
+from app.core.compiled_rule_runtime import page_span_ranges
+from app.parsers.pdf_parser import ParsedPage, Span, parse_pdf
 
 
 @pytest.mark.parametrize(
@@ -126,6 +127,72 @@ def test_missing_or_invalid_conversions_propose_the_expected_pair(
 
 def test_unknown_unit_conversion_policy_has_no_findings() -> None:
     assert unit_conversion_issues("Pressure: 101325 Pa", "unknown_policy") == []
+
+
+def test_metric_conversion_rules_skip_list_of_materials_pages() -> None:
+    text = "LIST OF MATERIALS\nSpacer, 25.4 mm\nWasher, 2.54 cm"
+
+    assert unit_conversion_issues(text, "metric_length_to_inch") == []
+
+
+@pytest.mark.parametrize(
+    ("policy", "measurements"),
+    [
+        ("bar_to_psi", ["0.7 bar", "0.8 bar", "0.9 bar"]),
+        ("pascal_to_inhg", ["10 kPa", "20 kPa", "30 kPa"]),
+        ("metric_length_to_inch", ["2.5 mm", "4 mm", "6 mm"]),
+        ("metric_mass_to_lb", ["2 kg", "4 kg", "6 kg"]),
+        ("metric_torque_to_lbf_in", ["1 N.m", "2 N.m", "3 N.m"]),
+    ],
+)
+def test_all_conversion_policies_skip_values_in_geometric_table_rows(
+    policy: str,
+    measurements: list[str],
+) -> None:
+    lines: list[str] = []
+    spans: list[Span] = []
+    for row_index, measurement in enumerate(measurements):
+        y = 100.0 + row_index * 20.0
+        cells = (str(row_index + 1), f"20000{row_index + 1}", measurement)
+        lines.append(" ".join(cells))
+        for cell, x0, x1 in zip(
+            cells,
+            (40.0, 80.0, 160.0),
+            (48.0, 125.0, 320.0),
+            strict=True,
+        ):
+            spans.append(
+                Span(
+                    text=cell,
+                    bbox=(x0, y, x1, y + 12.0),
+                    page=1,
+                    font="Arial",
+                    size=10.0,
+                )
+            )
+    text = "\n".join(lines)
+    page = ParsedPage(page=1, text=text, spans=spans, page_height=792.0)
+    span_ranges = page_span_ranges(page)
+
+    issues = (
+        pressure_conversion_issues(text, span_ranges=span_ranges)
+        if policy == "bar_to_psi"
+        else unit_conversion_issues(text, policy, span_ranges=span_ranges)
+    )
+
+    assert issues == []
+
+
+def test_metric_length_ranges_accept_and_correct_paired_conversions() -> None:
+    valid = "Length: 25.4 mm and 50.8 mm (1.00 in. and 2.00 in.)"
+    invalid = "Length: 25.4 mm and 50.8 mm (1.10 in. and 2.00 in.)"
+
+    assert unit_conversion_issues(valid, "metric_length_to_inch") == []
+    issues = unit_conversion_issues(invalid, "metric_length_to_inch")
+
+    assert len(issues) == 1
+    assert issues[0].original == "25.4 mm and 50.8 mm (1.10 in. and 2.00 in.)"
+    assert issues[0].proposed == "25.4 mm and 50.8 mm (1.00 in. and 2.00 in.)"
 
 
 @pytest.mark.parametrize(

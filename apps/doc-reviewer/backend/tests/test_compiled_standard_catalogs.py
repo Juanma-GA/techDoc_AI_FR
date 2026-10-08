@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
 from app.checks.thales_rules.operations import shop_verification_text
@@ -30,7 +32,7 @@ from app.checks.thales_rules.rules import (
 )
 
 from app.core.compiled_rule_executor import execute_docx_rules, execute_pdf_rules as _execute_pdf_rules
-from app.core.compiled_rule_operators import extract_year
+from app.core.compiled_rule_operators import extract_year, sentence_punctuation_issues
 from app.core.page_range import filter_pdf_pages
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
@@ -423,6 +425,55 @@ def test_modified_pages_require_sentence_and_enumeration_punctuation() -> None:
     assert [(item.original, item.proposed) for item in swap_suggestions] == [
         ("- first item.", "- first item,"),
         ("- last item,", "- last item."),
+    ]
+
+    semicolon_page = ParsedPage(
+        page=1,
+        text="- first item;\n- second item;\n- last item,",
+        is_modified=True,
+    )
+    semicolon_results, semicolon_suggestions = execute_pdf_rules(
+        ParsedPdf(
+            page_count=1,
+            pages=[semicolon_page],
+            full_text=semicolon_page.text,
+            is_signed=False,
+        ),
+        [missing_rule, swap_rule],
+    )
+
+    assert [result.status for result in semicolon_results] == ["FAIL", "PASS"]
+    assert [(item.original, item.proposed) for item in semicolon_suggestions] == [
+        ("- last item,", "- last item;")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("marks", "expected_mark", "mismatched_index"),
+    [
+        ([".", ".", ".", ","], ".", 3),
+        ([";", ";", ";", ","], ";", 3),
+        ([",", ",", ",", "."], ",", 3),
+        (["", "", "", ","], "", 3),
+    ],
+)
+def test_enumeration_punctuation_follows_the_dominant_separator(
+    marks: list[str],
+    expected_mark: str,
+    mismatched_index: int,
+) -> None:
+    lines = [
+        f"- item {index + 1}{mark}"
+        for index, mark in enumerate(marks)
+    ]
+    issues = sentence_punctuation_issues("\n".join(lines))
+
+    assert [(issue.original, issue.proposed, issue.expected) for issue in issues] == [
+        (
+            lines[mismatched_index],
+            f"- item {mismatched_index + 1}{expected_mark}",
+            expected_mark,
+        )
     ]
 
 
@@ -2317,6 +2368,56 @@ def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
     ]
 
 
+def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
+    header = "COMPONENT MAINTENANCE MANUAL"
+    pages = [
+        ParsedPage(
+            page=1,
+            text=f"{header} 79-30-02 PAGE 1\nLIST OF EFFECTIVE PAGES\nINTRODUCTION",
+            lines=[
+                PdfLine(f"{header} 79-30-02 PAGE 1", (30.0, 18.0, 400.0, 30.0), 0, 0),
+                PdfLine("LIST OF EFFECTIVE PAGES", (70.0, 85.0, 280.0, 105.0), 1, 0),
+                PdfLine("INTRODUCTION", (70.0, 180.0, 230.0, 200.0), 1, 0),
+            ],
+            spans=[
+                Span(f"{header} 79-30-02 PAGE 1", (30.0, 18.0, 400.0, 30.0), 1, "Arial", 8.0),
+                Span("LIST OF EFFECTIVE PAGES", (70.0, 85.0, 280.0, 105.0), 1, "Arial-Bold", 18.0),
+                Span("INTRODUCTION", (70.0, 180.0, 230.0, 200.0), 1, "Arial", 12.0),
+            ],
+            page_height=792.0,
+        ),
+        ParsedPage(
+            page=2,
+            text=f"{header} 79-30-02 PAGE 2\nREPAIR PROCEDURE",
+            lines=[
+                PdfLine(f"{header} 79-30-02 PAGE 2", (30.0, 18.0, 400.0, 30.0), 0, 0),
+                PdfLine("REPAIR PROCEDURE", (70.0, 180.0, 250.0, 200.0), 1, 0),
+            ],
+            spans=[
+                Span(f"{header} 79-30-02 PAGE 2", (30.0, 18.0, 400.0, 30.0), 2, "Arial", 8.0),
+                Span("REPAIR PROCEDURE", (70.0, 180.0, 250.0, 200.0), 2, "Arial", 12.0),
+            ],
+            page_height=792.0,
+        ),
+    ]
+    parsed = ParsedPdf(
+        page_count=2,
+        pages=pages,
+        full_text="\n".join(page.text for page in pages),
+        is_signed=False,
+        bookmarks=[
+            PdfBookmark(title=header, page=1),
+            PdfBookmark(title="LIST OF EFFECTIVE PAGE", page=1),
+            PdfBookmark(title="INTRODUCTION", page=1),
+        ],
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
+
+    assert results[0].status == "FAIL"
+    assert [(item.original, item.page) for item in suggestions] == [(header, 1)]
+
+
 def test_pdf_bookmark_inconclusive_pages_survive_modified_only_filtering() -> None:
     rule = _rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")
     parsed = ParsedPdf(
@@ -2996,6 +3097,10 @@ def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion()
         _pdf("Temperature: 15 to 35 deg. C (59 to 95 deg. F)"),
         [rule],
     )
+    materials, materials_suggestions = execute_pdf_rules(
+        _pdf("LIST OF MATERIALS\nTemperature: 15 deg. C"),
+        [rule],
+    )
     missing, missing_suggestions = execute_pdf_rules(
         _pdf("Temperature: 15 to 35 deg. C"),
         [rule],
@@ -3007,6 +3112,8 @@ def test_temperature_in_celsius_requires_a_parenthesized_fahrenheit_conversion()
 
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
+    assert materials[0].status == "PASS"
+    assert materials_suggestions == []
     assert missing[0].status == "FAIL"
     assert missing_suggestions[0].original == "Temperature: 15 to 35 deg. C"
     assert missing_suggestions[0].proposed == (
@@ -3125,6 +3232,70 @@ def test_thales_si_units_require_parenthesized_imperial_conversions() -> None:
         assert invalid_suggestions[0].proposed == expected_proposal, rule_code
 
 
+def test_metric_length_conversion_skips_table_but_checks_body_text() -> None:
+    rows = [
+        ("1", "200001", "Washer 2.5 mm"),
+        ("2", "200002", "Spacer 4 mm, Temperature: 15 deg. C"),
+        ("3", "200003", "Sleeve 6 mm"),
+    ]
+    lines: list[str] = []
+    spans: list[Span] = []
+    for row_index, cells in enumerate(rows):
+        y = 100.0 + row_index * 20.0
+        lines.append(" ".join(cells))
+        for cell, x0, x1 in zip(
+            cells,
+            (40.0, 80.0, 160.0),
+            (48.0, 125.0, 320.0),
+            strict=True,
+        ):
+            spans.append(
+                Span(
+                    text=cell,
+                    bbox=(x0, y, x1, y + 12.0),
+                    page=1,
+                    font="Arial",
+                    size=10.0,
+                )
+            )
+    body_lines = ["Outside the table: 25.4 mm", "Temperature: 15 deg. C"]
+    lines.extend(body_lines)
+    for row_index, body_line in enumerate(body_lines, start=3):
+        y = 100.0 + row_index * 20.0
+        spans.append(
+            Span(
+                text=body_line,
+                bbox=(40.0, y, 250.0, y + 12.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            )
+        )
+    text = "\n".join(lines)
+    page = ParsedPage(page=1, text=text, spans=spans, page_height=792.0)
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [_rule("CUSTOM_METRIC_LENGTH_INCH_CONVERSION")],
+    )
+
+    assert results[0].status == "FAIL"
+    assert [(suggestion.original, suggestion.proposed) for suggestion in suggestions] == [
+        ("25.4 mm", "25.4 mm (1.00 in.)")
+    ]
+
+    temperature_results, temperature_suggestions = execute_pdf_rules(
+        parsed,
+        [_rule("CUSTOM_TEMPERATURE_FAHRENHEIT")],
+    )
+
+    assert temperature_results[0].status == "FAIL"
+    assert [suggestion.original for suggestion in temperature_suggestions] == [
+        "Temperature: 15 deg. C"
+    ]
+
+
 def test_forbidden_consumables_are_reported_by_one_rule() -> None:
     rule = _rule("CUSTOM_FORBIDDEN_CONSUMABLES")
 
@@ -3173,22 +3344,6 @@ def test_legacy_thales_references_are_proposed_as_thales() -> None:
     assert {item.proposed for item in invalid_suggestions} == {"THALES"}
 
 
-def test_identification_is_replaced_with_indicator() -> None:
-    rule = _rule("CUSTOM_REPLACE_IDENTIFICATION_WITH_INDICATOR")
-
-    valid, valid_suggestions = execute_pdf_rules(_pdf("Use the indicator."), [rule])
-    invalid, invalid_suggestions = execute_pdf_rules(
-        _pdf("Check the identification number."), [rule]
-    )
-
-    assert valid[0].status == "PASS"
-    assert valid_suggestions == []
-    assert invalid[0].status == "FAIL"
-    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("identification", "indicator")
-    ]
-
-
 def test_temperature_unit_symbols_are_replaced_with_deg_notation() -> None:
     celsius_rule = _rule("CUSTOM_NO_DEGREE_C_SYMBOL")
     fahrenheit_rule = _rule("CUSTOM_NO_DEGREE_F_SYMBOL")
@@ -3228,6 +3383,9 @@ def test_title_page_copyright_matches_revision_year_in_footer() -> None:
     valid, valid_suggestions = execute_pdf_rules(
         _title_page_copyright_pdf(valid_footer), [rule], document=document
     )
+    uppercase, uppercase_suggestions = execute_pdf_rules(
+        _title_page_copyright_pdf(valid_footer.upper()), [rule], document=document
+    )
     invalid, invalid_suggestions = execute_pdf_rules(
         _title_page_copyright_pdf(invalid_year_footer), [rule], document=document
     )
@@ -3242,6 +3400,8 @@ def test_title_page_copyright_matches_revision_year_in_footer() -> None:
 
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
+    assert uppercase[0].status == "PASS"
+    assert uppercase_suggestions == []
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
         ("2025", "2026")

@@ -69,6 +69,7 @@ _BAR_PSI_CONVERSION_RE = re.compile(
     re.IGNORECASE,
 )
 _PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
+_LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _BAR_TO_PSI = Decimal("14.5037738")
 _KG_TO_LB = Decimal(1) / Decimal("0.45359237")
 _NM_TO_LBF_IN = Decimal("8.850745767378715")
@@ -173,6 +174,21 @@ _UNIT_CONVERSION_POLICIES = {
         source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
     ),
 }
+_METRIC_LENGTH_RANGE_RE = re.compile(
+    rf"(?<![\w.])(?P<first_source>(?P<first_source_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?P<first_source_unit>km|cm|mm|m)\b)"
+    r"[ \t]+and[ \t]+"
+    rf"(?P<second_source>(?P<second_source_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?P<second_source_unit>km|cm|mm|m)\b)"
+    r"[ \t]*\([ \t]*"
+    rf"(?P<first_target>(?P<first_target_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?:inch(?:es)?|in\.?))"
+    r"[ \t]+and[ \t]+"
+    rf"(?P<second_target>(?P<second_target_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?:inch(?:es)?|in\.?))"
+    r"[ \t]*\)",
+    re.IGNORECASE,
+)
 FONT_SIZE_TOLERANCE = 0.1
 _ENUMERATION_START_RE = re.compile(
     r"^\s*(?P<marker>(?:[-*]|\([A-Za-z0-9]+\)|[A-Z]\.\s*|\d+[.)]\s+))"
@@ -228,12 +244,52 @@ class _PunctuationBlock:
     last_end: int
 
 
+def _table_row_span_ranges(
+    span_ranges: tuple[_SpanRange, ...],
+) -> tuple[_SpanRange, ...]:
+    rows: list[tuple[float, list[_SpanRange]]] = []
+    for item in sorted(span_ranges, key=lambda item: item[2][1]):
+        center = (item[2][1] + item[2][3]) / 2
+        if rows and abs(center - rows[-1][0]) <= 3.0:
+            rows[-1][1].append(item)
+        else:
+            rows.append((center, [item]))
+    table_rows = [
+        row
+        for row in rows
+        if len(row[1]) >= 3
+        and max(item[2][2] for item in row[1])
+        - min(item[2][0] for item in row[1])
+        > 40.0
+    ]
+    if len(table_rows) < 3:
+        return ()
+    return tuple(item for _center, row in table_rows for item in row)
+
+
+def _span_overlaps_table_row(
+    span: tuple[int, int],
+    table_span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    start, end = span
+    return any(item[1] > start and item[0] < end for item in table_span_ranges)
+
+
+def is_table_row_match(
+    span: tuple[int, int],
+    span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    return _span_overlaps_table_row(span, _table_row_span_ranges(span_ranges))
+
+
 def pressure_conversion_issues(
     text: str,
     policy: str = "bar_to_psi",
+    *,
+    span_ranges: tuple[_SpanRange, ...] = (),
 ) -> list[PressureConversionIssue]:
     """Return bar values missing or carrying an incorrect psi conversion."""
-    return unit_conversion_issues(text, policy)
+    return unit_conversion_issues(text, policy, span_ranges=span_ranges)
 
 
 def _uncertainty_key(modifier: str | None) -> tuple[str, Decimal] | None:
@@ -257,18 +313,115 @@ def _uncertainty_matches(source: str | None, converted: str | None) -> bool:
     return _uncertainty_key(source) == _uncertainty_key(converted)
 
 
+def is_list_of_materials_page(text: str) -> bool:
+    return _LIST_OF_MATERIALS_TITLE_RE.search(text) is not None
+
+
+def _format_expected_conversion(
+    source_value: Decimal,
+    factor: Decimal,
+    policy: UnitConversionPolicy,
+    modifier: str | None = None,
+) -> tuple[str, Decimal, Decimal]:
+    expected_value = source_value * factor
+    if policy.significant_digits is not None and expected_value != 0:
+        precision = policy.significant_digits - 1 - expected_value.adjusted()
+    elif policy.significant_digits is not None:
+        precision = policy.significant_digits - 1
+    else:
+        absolute_value = abs(expected_value)
+        precision = (
+            2
+            if absolute_value >= Decimal("0.01") or absolute_value == 0
+            else 4
+            if absolute_value >= Decimal("0.0001")
+            else 8
+        )
+    display_quantum = Decimal(1).scaleb(-precision)
+    formatted_value = expected_value.quantize(
+        display_quantum,
+        rounding=ROUND_HALF_UP,
+    )
+    rendered_precision = max(precision, 0)
+    expected_conversion = (
+        f"({formatted_value:.{rendered_precision}f} {policy.target_unit}"
+    )
+    if modifier is not None:
+        expected_conversion += f" {modifier}"
+    return f"{expected_conversion})", expected_value, display_quantum
+
+
 def unit_conversion_issues(
     text: str,
     policy: str,
+    *,
+    span_ranges: tuple[_SpanRange, ...] = (),
 ) -> list[PressureConversionIssue]:
     """Return SI values missing or carrying an incorrect paired conversion."""
+    if is_list_of_materials_page(text):
+        return []
     conversion_policy = _UNIT_CONVERSION_POLICIES.get(policy)
     if conversion_policy is None:
         return []
 
     issues: list[PressureConversionIssue] = []
+    paired_ranges: list[tuple[int, int]] = []
+    table_span_ranges = _table_row_span_ranges(span_ranges)
+    if policy == "metric_length_to_inch":
+        for match in _METRIC_LENGTH_RANGE_RE.finditer(text):
+            if _span_overlaps_table_row(match.span(), table_span_ranges):
+                continue
+            paired_ranges.append(match.span())
+            source_units = (
+                match.group("first_source_unit").casefold(),
+                match.group("second_source_unit").casefold(),
+            )
+            source_values = (
+                Decimal(match.group("first_source_value").replace(",", ".")),
+                Decimal(match.group("second_source_value").replace(",", ".")),
+            )
+            target_values = (
+                Decimal(match.group("first_target_value").replace(",", ".")),
+                Decimal(match.group("second_target_value").replace(",", ".")),
+            )
+            expected_conversions: list[str] = []
+            pair_is_valid = True
+            for unit, source_value, target_value in zip(
+                source_units,
+                source_values,
+                target_values,
+                strict=True,
+            ):
+                expected, expected_value, quantum = _format_expected_conversion(
+                    source_value,
+                    conversion_policy.factors[unit],
+                    conversion_policy,
+                )
+                expected_conversions.append(expected[1:-1])
+                pair_is_valid = pair_is_valid and (
+                    abs(target_value - expected_value) <= quantum / 2
+                )
+            if not pair_is_valid:
+                expected = f"({' and '.join(expected_conversions)})"
+                proposed = (
+                    f"{match.group('first_source')} and {match.group('second_source')} "
+                    f"{expected}"
+                )
+                issues.append(
+                    PressureConversionIssue(
+                        original=match.group(0),
+                        proposed=proposed,
+                        expected=expected,
+                        span=match.span(),
+                    )
+                )
+
     ignored_until = 0
     for source_match in conversion_policy.source_pattern.finditer(text):
+        if _span_overlaps_table_row(source_match.span(), table_span_ranges):
+            continue
+        if any(start <= source_match.start() < end for start, end in paired_ranges):
+            continue
         if source_match.start() < ignored_until:
             continue
         try:
@@ -303,34 +456,14 @@ def unit_conversion_issues(
             else None
         )
 
-        expected_value = source_value * factor
-        if conversion_policy.significant_digits is not None and expected_value != 0:
-            precision = (
-                conversion_policy.significant_digits - 1 - expected_value.adjusted()
+        expected_conversion, expected_value, display_quantum = (
+            _format_expected_conversion(
+                source_value,
+                factor,
+                conversion_policy,
+                source_modifier,
             )
-        elif conversion_policy.significant_digits is not None:
-            precision = conversion_policy.significant_digits - 1
-        else:
-            absolute_value = abs(expected_value)
-            precision = (
-                2
-                if absolute_value >= Decimal("0.01") or absolute_value == 0
-                else 4
-                if absolute_value >= Decimal("0.0001")
-                else 8
-            )
-        display_quantum = Decimal(1).scaleb(-precision)
-        formatted_value = expected_value.quantize(
-            display_quantum,
-            rounding=ROUND_HALF_UP,
         )
-        rendered_precision = max(precision, 0)
-        expected_conversion = (
-            f"({formatted_value:.{rendered_precision}f} {conversion_policy.target_unit}"
-        )
-        if source_modifier is not None:
-            expected_conversion += f" {source_modifier}"
-        expected_conversion += ")"
         conversion_match = conversion_policy.target_pattern.match(
             text,
             conversion_start,
@@ -447,27 +580,11 @@ def _block_is_table_like(
     span_ranges: tuple[_SpanRange, ...],
 ) -> bool:
     relevant = _block_span_ranges(block, span_ranges)
-    if not relevant:
+    table_spans = _table_row_span_ranges(span_ranges)
+    if not relevant or not table_spans:
         return False
-    rows: list[tuple[float, list[_SpanRange]]] = []
-    for item in sorted(span_ranges, key=lambda item: item[2][1]):
-        center = (item[2][1] + item[2][3]) / 2
-        if rows and abs(center - rows[-1][0]) <= 3.0:
-            rows[-1][1].append(item)
-        else:
-            rows.append((center, [item]))
-    table_rows = [
-        row
-        for row in rows
-        if len(row[1]) >= 3
-        and max(item[2][0] for item in row[1])
-        - min(item[2][0] for item in row[1])
-        > 40.0
-    ]
-    if len(table_rows) < 3:
-        return False
-    table_top = min(item[2][1] for _center, row in table_rows for item in row) - 70.0
-    table_bottom = max(item[2][3] for _center, row in table_rows for item in row) + 5.0
+    table_top = min(item[2][1] for item in table_spans) - 70.0
+    table_bottom = max(item[2][3] for item in table_spans) + 5.0
     return any(
         table_top
         <= (item[2][1] + item[2][3]) / 2
@@ -529,6 +646,13 @@ def _replace_terminal_punctuation(value: str, expected: str) -> str:
     return f"{stripped}{expected}{closing_quotes}"
 
 
+def _terminal_punctuation(value: str) -> str:
+    terminal = value.rstrip()
+    while terminal and terminal[-1] in "\"'»”":
+        terminal = terminal[:-1].rstrip()
+    return terminal[-1] if terminal and terminal[-1] in ".,;:!?" else ""
+
+
 def sentence_punctuation_issues(
     text: str,
     span_ranges: tuple[_SpanRange, ...] = (),
@@ -548,6 +672,40 @@ def sentence_punctuation_issues(
         and not _is_non_sentence_block(block.text)
     ]
     classified = [(block, _enumeration_family(block.text)) for block in candidates]
+    enumeration_expected: dict[int, str] = {}
+    group_start = 0
+    while group_start < len(classified):
+        family = classified[group_start][1]
+        if family is None:
+            group_start += 1
+            continue
+        group_end = group_start
+        while group_end + 1 < len(classified) and classified[group_end + 1][1] == family:
+            group_end += 1
+        group_indexes = list(range(group_start, group_end + 1))
+        observed_marks = [
+            _terminal_punctuation(classified[index][0].last_line)
+            for index in group_indexes
+        ]
+        vote_marks = [
+            mark
+            for member_index, mark in zip(group_indexes, observed_marks, strict=True)
+            if mark in {"", ".", ",", ";"}
+            and not classified[member_index][0].last_line.rstrip().endswith(":")
+        ]
+        dominant_mark = max(set(vote_marks), key=vote_marks.count) if vote_marks else ""
+        has_majority = (
+            len(group_indexes) > 1
+            and vote_marks.count(dominant_mark) > len(vote_marks) / 2
+        )
+        for index in group_indexes:
+            enumeration_expected[index] = (
+                dominant_mark
+                if has_majority
+                else "," if index < group_end else "."
+            )
+        group_start = group_end + 1
+
     issues: list[SentencePunctuationIssue] = []
     for index, (block, family) in enumerate(classified):
         next_family = classified[index + 1][1] if index + 1 < len(classified) else None
@@ -556,13 +714,7 @@ def sentence_punctuation_issues(
             if block.text.rstrip().endswith(":"):
                 continue
         else:
-            group_end = index
-            while (
-                group_end + 1 < len(classified)
-                and classified[group_end + 1][1] == family
-            ):
-                group_end += 1
-            expected = "," if group_end > index else "."
+            expected = enumeration_expected[index]
             if (
                 block.text.rstrip().endswith(":")
                 and next_family is not None
@@ -573,11 +725,16 @@ def sentence_punctuation_issues(
         terminal = observed.rstrip()
         while terminal and terminal[-1] in "\"'»”":
             terminal = terminal[:-1].rstrip()
-        if terminal.endswith(expected):
+        terminal_punctuation = _terminal_punctuation(terminal)
+        if (
+            terminal_punctuation == expected
+            if family is not None
+            else terminal.endswith(".")
+        ):
             continue
-        terminal_punctuation = terminal[-1] if terminal else ""
         enumeration_swap = (
             family is not None
+            and expected in {".", ","}
             and terminal_punctuation in {".", ","}
             and terminal_punctuation != expected
         )
@@ -672,6 +829,14 @@ def evaluate_check(
         for target in targets
     ]
     expected = None if check.expected is None or isinstance(check.expected, list) else str(check.expected)
+    if check.replacement == "{{temperature_fahrenheit}}":
+        values = [
+            (target, value)
+            for target, value in values
+            if not is_list_of_materials_page(target.text)
+        ]
+        if not values:
+            return "PASS", targets[0], None, expected
     if check.operator == "exists":
         match = next(((target, value) for target, value in values if value and (expected is None or expected in value)), None)
         target, observed = match or (targets[0], None)
@@ -687,7 +852,11 @@ def evaluate_check(
     if check.operator == "pressure_conversion":
         policy = str(check.expected)
         for target, value in values:
-            issues = pressure_conversion_issues(value or "", policy)
+            issues = pressure_conversion_issues(
+                value or "",
+                policy,
+                span_ranges=target.span_ranges,
+            )
             if issues:
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected
@@ -695,7 +864,11 @@ def evaluate_check(
     if check.operator == "unit_conversion":
         policy = str(check.expected)
         for target, value in values:
-            issues = unit_conversion_issues(value or "", policy)
+            issues = unit_conversion_issues(
+                value or "",
+                policy,
+                span_ranges=target.span_ranges,
+            )
             if issues:
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected
@@ -1114,6 +1287,12 @@ def evaluate_regex(
         except TimeoutError:
             _logger.warning("compiled_regex_timeout", rule_id=rule_id, page=target.page)
             return "INCONCLUSIVE", target, None, expected
+        if check.replacement == "{{temperature_fahrenheit}}":
+            matches = [
+                match
+                for match in matches
+                if not is_table_row_match(match.span(), target.span_ranges)
+            ]
         _logger.info(
             "compiled_regex_evaluated",
             rule_id=rule_id,
