@@ -33,7 +33,9 @@ __all__ = [
 _ALIASES: dict[str, tuple[str, ...]] = {
     "arbo": ("arbo", "arborescence", "hierarchie", "niveau", "level", "position", "index"),
     "dmc": ("dmc", "data module code", "code dm", "dm code", "code"),
-    "title": ("title", "titre", "dmtitle", "titre dm", "libelle", "designation"),
+    "title": (
+        "title", "titre", "dmtitle", "titre dm", "titre noeud", "libelle", "designation",
+    ),
     "dm_type": (
         "dm type", "type dm", "type de dm", "type", "nature", "info type", "categorie",
     ),
@@ -46,12 +48,16 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "model_ident_code": ("mic", "model ident code", "modelidentcode"),
     "system_diff_code": ("sdc", "system diff code", "systemdiffcode"),
-    "system_code": ("sc", "system code", "systemcode"),
-    "sub_system_code": ("sub system code", "subsystemcode"),
-    "sub_sub_system_code": ("sssc", "sub sub system code", "subsubsystemcode"),
-    "assy_code": ("ac", "assy code", "assycode"),
-    "disassy_code": ("dc", "disassy code", "disassycode"),
-    "disassy_code_variant": ("dcv", "disassy code variant", "disassycodevariant"),
+    "system_code": ("sc", "system", "system code", "systemcode"),
+    "sub_system_code": ("sub system code", "subsystemcode", "ssystem"),
+    "sub_sub_system_code": (
+        "sssc", "sub sub system code", "subsubsystemcode", "sssystem",
+    ),
+    "assy_code": ("ac", "assy", "assy code", "assycode"),
+    "disassy_code": ("dc", "discode", "disassy code", "disassycode"),
+    "disassy_code_variant": (
+        "dcv", "discodev", "disassy code variant", "disassycodevariant",
+    ),
     "info_code_variant": ("icv", "info code variant", "infocodevariant"),
     "item_location_code": ("ilc", "item location code", "itemlocationcode"),
 }
@@ -149,7 +155,8 @@ def normalize(text: str) -> str:
 
 
 def _norm_header(name: object) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(name or "").lower()).strip()
+    text = str(name or "").translate(str.maketrans({"œ": "oe", "Œ": "OE", "æ": "ae", "Æ": "AE"}))
+    return normalize(text)
 
 
 def _map_row(row: dict) -> DmrlEntry:

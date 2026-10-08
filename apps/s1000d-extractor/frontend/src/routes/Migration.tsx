@@ -166,7 +166,11 @@ export function Migration() {
   // Assistant.
   const [docId, setDocId] = useState<string | null>(null);
   const [wiz, setWiz] = useState<WizardState | null>(null);
-  const [starting, setStarting] = useState<{ pct: number; label: string } | null>(null);
+  const [starting, setStarting] = useState<{
+    pct: number;
+    label: string;
+    indeterminate?: boolean;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [wizError, setWizError] = useState<string | null>(null);
   const [pdfCut, setPdfCut] = useState<{
@@ -286,13 +290,13 @@ export function Migration() {
   };
 
   const startAnalysis = async (id: string) => {
-    setStarting({ pct: 5, label: t("migration.start.starting") });
+    setStarting({ pct: 5, label: t("migration.start.starting"), indeterminate: true });
     await startWizardStream(id, (ev, data) => onStreamEvent(ev, data, id));
     refreshDocs();
   };
 
   const startDocument = async (id: string, sourceFormat: string) => {
-    setStarting({ pct: 5, label: t("migration.start.starting") });
+    setStarting({ pct: 5, label: t("migration.start.starting"), indeterminate: true });
     if (sourceFormat === "pdf") {
       const detection = await pdfCutApi.detect(id);
       if (
@@ -318,7 +322,12 @@ export function Migration() {
 
   const onStreamEvent = (ev: string, data: Record<string, unknown>, activeDocId?: string) => {
     if (ev === "progress") {
-      setStarting({ pct: (data.pct as number) || 0, label: stepLabel(data.step) });
+      const step = String(data.step ?? "");
+      setStarting({
+        pct: typeof data.pct === "number" ? data.pct : 0,
+        label: stepLabel(step),
+        indeterminate: ["ocr", "infer", "split", "classify"].includes(step),
+      });
     } else if (ev === "done") {
       setPdfCut(null);
       const id = activeDocId ?? docId;
@@ -617,16 +626,19 @@ export function Migration() {
                   style={{ display: "flex", justifyContent: "space-between", gap: 12 }}
                 >
                   <span>{starting.label}</span>
-                  <span>{starting.pct}%</span>
+                  {starting.indeterminate ? null : <span>{starting.pct}%</span>}
                 </div>
                 <div
-                  className="progress"
+                  className={`progress${starting.indeterminate ? " indeterminate" : ""}`}
                   role="progressbar"
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  aria-valuenow={starting.pct}
+                  aria-valuenow={starting.indeterminate ? undefined : starting.pct}
+                  aria-valuetext={starting.indeterminate ? starting.label : undefined}
                 >
-                  <span style={{ width: `${starting.pct}%` }} />
+                  <span
+                    style={starting.indeterminate ? undefined : { width: `${starting.pct}%` }}
+                  />
                 </div>
               </div>
             ) : null}

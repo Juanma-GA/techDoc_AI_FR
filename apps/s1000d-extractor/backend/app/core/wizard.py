@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from time import perf_counter
 
 import structlog
 from sqlalchemy.orm import Session
@@ -63,7 +64,7 @@ def images_dir(doc_id: str) -> Path:
     return Path(settings.storage_dir) / f"document_{doc_id}_images"
 
 
-def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
+def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> int:
     """Extrait les images du PDF en JPG et pose l'ICN sur les figures (no-op si
     echec / pas d'image). Le dossier est purge d'abord : relancer l'assistant ne
     doit pas empiler des doublons d'illustrations."""
@@ -74,15 +75,16 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
             for old in out_dir.iterdir():
                 if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
                     old.unlink(missing_ok=True)
-        illustrations.attach_illustrations(
+        return illustrations.attach_illustrations(
             root,
             pdf_path=doc.pdf_cut_path or doc.storage_path,
             out_dir=out_dir,
             doc_id=doc.id,
             dm_level=splitter.level_of(_DEFAULT_LEVEL),
         )
-    except Exception:  # jamais bloquant : le squelette reste generable sans images
-        pass
+    except Exception as exc:  # jamais bloquant : le squelette reste generable sans images
+        log.warning("wizard_illustrations_failed", error_type=type(exc).__name__)
+        return 0
 
 
 def _apply_dmrl_icns(
@@ -134,6 +136,7 @@ def start(
     """
     from app.core.pdf_cut import prepare_source
 
+    total_started = perf_counter()
     previous_dm_count = len(ws.load_dms(doc))
     doc.dms_json = "[]"
     doc.dms_history_json = None
@@ -147,6 +150,7 @@ def start(
         start_page=start_page,
         end_page=end_page,
     )
+    stage_started = perf_counter()
     source_path = prepare_source(
         doc,
         db,
@@ -154,9 +158,23 @@ def start(
         start_page=start_page,
         end_page=end_page,
     )
+    log.info(
+        "wizard_stage_timing",
+        stage="source_preparation",
+        duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+        source_format=doc.source_format,
+        page_count=doc.page_count,
+    )
     progress_cb("parse", 10)
+    stage_started = perf_counter()
     blocks = ingest.extract_blocks(
         source_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
+    )
+    log.info(
+        "wizard_stage_timing",
+        stage="document_ingest",
+        duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+        block_count=len(blocks),
     )
     log.info(
         "wizard_source_parsed",
@@ -165,9 +183,23 @@ def start(
         block_count=len(blocks),
     )
     progress_cb("infer", 40)
+    stage_started = perf_counter()
     root = structure_infer.build_ir(blocks)
+    log.info(
+        "wizard_stage_timing",
+        stage="structure_inference",
+        duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+        block_count=len(blocks),
+    )
     if doc.source_format == "pdf":
-        _extract_illustrations(doc, root)
+        stage_started = perf_counter()
+        illustration_count = _extract_illustrations(doc, root)
+        log.info(
+            "wizard_stage_timing",
+            stage="illustration_extraction",
+            duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+            image_count=illustration_count,
+        )
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
@@ -191,6 +223,12 @@ def start(
     )
     progress_cb("done", 100)
     db.commit()
+    log.info(
+        "wizard_stage_timing",
+        stage="wizard_total",
+        duration_ms=round((perf_counter() - total_started) * 1000, 1),
+        dm_count=len(rebuilt_dms),
+    )
     return state(doc)
 
 
@@ -201,14 +239,29 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     liste des DM attendus par le client.
     """
     progress_cb("split", 60)
+    split_started = perf_counter()
     root = ir_mod.from_dict(json.loads(doc.ir_json))
     entries = wres.dmrl_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     if entries:
         _apply_dmrl_icns(units, entries, images_dir(doc.id))
         doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
+    log.info(
+        "wizard_stage_timing",
+        stage="dm_split",
+        duration_ms=round((perf_counter() - split_started) * 1000, 1),
+        dm_count=len(units),
+        dmrl_entry_count=len(entries),
+    )
     progress_cb("classify", 80)
+    classify_started = perf_counter()
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
+    log.info(
+        "wizard_stage_timing",
+        stage="dm_classification",
+        duration_ms=round((perf_counter() - classify_started) * 1000, 1),
+        dm_count=len(units),
+    )
     dmrl_types = {e.dmc: e.dm_type for e in entries if e.dmc and e.dm_type}
     dms = [
         {

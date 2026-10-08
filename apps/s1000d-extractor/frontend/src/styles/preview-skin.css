@@ -264,6 +264,14 @@ table.data-table tr:hover td { background: var(--bg-2); }
 /* --- s1000d-extractor : assistant (barre de progression + arbre) --- */
 .progress { height: 6px; background: var(--bg-2); border-radius: 3px; overflow: hidden; margin: 10px 0; }
 .progress > span { display: block; height: 100%; background: var(--brand); transition: width 0.2s; }
+.progress.indeterminate > span { width: 35%; animation: progress-indeterminate 1.5s ease-in-out infinite; }
+@keyframes progress-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(286%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress.indeterminate > span { animation: none; }
+}
 .tree { font-size: 0.85rem; }
 .tree ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px solid var(--border); }
 .tree > ul { padding-left: 0; border-left: none; }

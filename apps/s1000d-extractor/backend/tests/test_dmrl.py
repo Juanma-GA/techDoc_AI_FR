@@ -100,6 +100,37 @@ def test_load_dmrl_splits_ssc_into_subsystem_components(tmp_path):
     assert entry.sub_sub_system_code == "2"
 
 
+def test_load_dmrl_maps_node_title_and_client_code_columns(tmp_path):
+    path = tmp_path / "dmrl.json"
+    path.write_text(json.dumps([{
+        "Titre Nœud": "Dépose de la roue",
+        "Techname": "Roue",
+        "Infoname": "Dépose",
+        "SDC": "A",
+        "System": "01",
+        "Ssystem": "2",
+        "SSSystem": "3",
+        "Assy": "04",
+        "Discode": "05",
+        "DiscodeV": "B",
+        "Infocode": "520",
+    }]), encoding="utf-8")
+
+    entry = load_dmrl(path)[0]
+
+    assert entry.title == "Dépose de la roue"
+    assert entry.tech_name == "Roue"
+    assert entry.info_name == "Dépose"
+    assert entry.system_diff_code == "A"
+    assert entry.system_code == "01"
+    assert entry.sub_system_code == "2"
+    assert entry.sub_sub_system_code == "3"
+    assert entry.assy_code == "04"
+    assert entry.disassy_code == "05"
+    assert entry.disassy_code_variant == "B"
+    assert entry.info_code == "520"
+
+
 def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
     path = tmp_path / "dmrl.json"
     icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"

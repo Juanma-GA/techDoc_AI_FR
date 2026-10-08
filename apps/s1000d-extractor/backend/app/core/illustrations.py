@@ -34,7 +34,7 @@ def slugify(text: str, *, maxlen: int = 60) -> str:
 
 def _save_pixmap(doc, xref: int, dest: Path) -> bool:
     """Enregistre l'image `xref` en JPG. Convertit CMYK/alpha en RGB. Best-effort."""
-    import fitz
+    import pymupdf as fitz
 
     try:
         pix = fitz.Pixmap(doc, xref)
@@ -58,7 +58,7 @@ def _save_pixmap(doc, xref: int, dest: Path) -> bool:
 
 def _image_digest(doc, xref: int) -> str | None:
     """Return a stable digest of the decoded image pixels."""
-    import fitz
+    import pymupdf as fitz
 
     try:
         pix = fitz.Pixmap(doc, xref)
@@ -74,7 +74,7 @@ def _normalize_text(text: str) -> str:
 
 
 def _caption_rect(page, caption: str):
-    import fitz
+    import pymupdf as fitz
 
     wanted = _normalize_text(caption)
     for block in page.get_text("blocks"):
@@ -95,7 +95,7 @@ def _figure_caption_rect(page, caption: str):
 
 def _image_records(page):
     """Return unique page image resources with their displayed rectangles."""
-    import fitz
+    import pymupdf as fitz
 
     records = []
     seen: set[int] = set()
@@ -116,7 +116,7 @@ def _image_records(page):
 
 def _looks_like_pictogram(doc, xref: int) -> bool:
     """Detecte exclusivement les images dont les pixels source font au plus 65x65."""
-    import fitz
+    import pymupdf as fitz
 
     try:
         pix = fitz.Pixmap(doc, xref)
@@ -189,7 +189,7 @@ def _set_figure_icn(figure: IRNode, name: str) -> None:
 
 
 def _vector_rects(page, caption_rect):
-    import fitz
+    import pymupdf as fitz
 
     text_rects = [
         fitz.Rect(block[:4])
@@ -251,7 +251,7 @@ def _vector_rects(page, caption_rect):
 
 
 def _save_vector_figure(page, caption: str, dest: Path) -> bool:
-    import fitz
+    import pymupdf as fitz
 
     caption_rect = _caption_rect(page, caption)
     if caption_rect is None:
@@ -284,7 +284,7 @@ def _is_composite_overlay_text(text: str) -> bool:
 
 
 def _composite_bounds(page, image_rects):
-    import fitz
+    import pymupdf as fitz
 
     image_bounds = image_rects[0]
     for rect in image_rects[1:]:
@@ -323,7 +323,7 @@ def _composite_bounds(page, image_rects):
 
 
 def _subtract_rect(rect, keep_rects):
-    import fitz
+    import pymupdf as fitz
 
     pieces = [rect]
     for keep in keep_rects:
@@ -347,7 +347,7 @@ def _subtract_rect(rect, keep_rects):
 
 def _save_composite_figure(page, image_rects, dest: Path) -> bool:
     """Rasterise une figure composee et ses annotations vectorielles."""
-    import fitz
+    import pymupdf as fitz
 
     if not image_rects:
         return False
@@ -381,7 +381,7 @@ def _save_composite_figure(page, image_rects, dest: Path) -> bool:
 
 
 def _has_figure_overlays(page, image_rects) -> bool:
-    import fitz
+    import pymupdf as fitz
 
     if not image_rects:
         return False
@@ -419,7 +419,7 @@ def attach_illustrations(
     conserver aussi les annotations vectorielles superposees. Renvoie le nombre
     de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
     try:
-        import fitz
+        import pymupdf as fitz
     except Exception:
         return 0
     try:
@@ -576,7 +576,7 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
         if current.suffix.lower() == target.suffix.lower():
             source.replace(destination)
         else:
-            import fitz
+            import pymupdf as fitz
 
             pixmap = fitz.Pixmap(str(source))
             if pixmap.n >= 5 or pixmap.alpha:

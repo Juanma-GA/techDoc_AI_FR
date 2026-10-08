@@ -11,11 +11,12 @@ correctement couvert, sans perdre les pages scannees ni re-OCR les pages texte.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-import re
 
-import fitz  # PyMuPDF
+import pymupdf as fitz
 
 from app.core.ir import InlineRun, RawBlock
 from app.core.pdf_overlays import is_large_red_image_cross
@@ -230,19 +231,27 @@ def _table_blocks(
     return blocks, bboxes
 
 
-def parse_pdf_pages(path: str | Path) -> list[PageParse]:
+def parse_pdf_pages(
+    path: str | Path,
+    *,
+    progress_cb: Callable[[int, int], None] | None = None,
+) -> list[PageParse]:
     """Parse le PDF page par page ; chaque page sait si elle a une couche texte.
 
     Detecte aussi les tableaux (modele CALS) et exclut le texte qui tombe dans un
-    tableau pour ne pas le dupliquer en paragraphes."""
+    tableau pour ne pas le dupliquer en paragraphes. `progress_cb` recoit le
+    nombre de pages terminees et le total apres chaque page."""
     doc = fitz.open(str(path))
     try:
         out: list[PageParse] = []
+        total_pages = doc.page_count
         for idx, page in enumerate(doc, start=1):
             raw_text = page.get_text("text") or ""
             has_text = len(raw_text.strip()) >= _MIN_TEXT_CHARS
             if not has_text:
                 out.append(PageParse(index=idx, blocks=[], has_text=False))
+                if progress_cb:
+                    progress_cb(idx, total_pages)
                 continue
             page_height = None if int(page.rotation) != 0 else round(float(page.rect.height), 1)
             tbl_blocks, tbl_bboxes = _table_blocks(page, idx, page_height)
@@ -255,6 +264,8 @@ def parse_pdf_pages(path: str | Path) -> list[PageParse]:
                 ]
             merged = sorted(text_blocks + tbl_blocks, key=lambda b: (b.y0 if b.y0 is not None else 0.0))
             out.append(PageParse(index=idx, blocks=merged, has_text=True))
+            if progress_cb:
+                progress_cb(idx, total_pages)
         return out
     finally:
         doc.close()

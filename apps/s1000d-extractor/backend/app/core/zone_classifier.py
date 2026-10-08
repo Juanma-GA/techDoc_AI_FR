@@ -66,16 +66,16 @@ def classify_zones(blocks: list[RawBlock]) -> None:
     # Une page portant un titre de sommaire ou plusieurs lignes pointillees est
     # une page de table des matieres, quel que soit son numero ou la langue du
     # titre. Le signal structurel evite de dependre d'un vocabulaire fixe.
-    toc_pages = {
-        page for page in {b.page for b in geo if b.page is not None}
-        if any(
-            b.page == page and _TOC_RE.search(b.text)
-            for b in geo
-        ) or sum(
-            b.page == page and bool(_TOC_ENTRY_RE.match(b.text))
-            for b in geo
-        ) >= 2
-    }
+    toc_pages: set[int] = set()
+    toc_entries: dict[int, int] = defaultdict(int)
+    for block in geo:
+        if block.page is None:
+            continue
+        if _TOC_RE.search(block.text):
+            toc_pages.add(block.page)
+        if _TOC_ENTRY_RE.match(block.text):
+            toc_entries[block.page] += 1
+    toc_pages.update(page for page, count in toc_entries.items() if count >= 2)
 
     for b in geo:
         assert b.page_height and b.y0 is not None and b.y1 is not None

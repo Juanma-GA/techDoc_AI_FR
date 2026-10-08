@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-import fitz
+import pymupdf as fitz
 from sqlalchemy.orm import Session
 
 from app.config import settings
