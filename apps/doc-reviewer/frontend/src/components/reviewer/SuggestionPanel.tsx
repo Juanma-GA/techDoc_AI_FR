@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { ConfirmDialog } from "../ConfirmDialog";
 import { useFiltersStore } from "../../stores/filtersStore";
 import { localizedRuleCode, localizedSuggestionMessage } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
@@ -13,6 +14,7 @@ type Props = {
   onSelect: (id: string) => void;
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
+  onRejectAll: (ids: string[]) => void;
   onSaveEdit: (id: string, newProposed: string) => void;
   onSaveFeedback: (id: string, feedback: string) => void;
   onUnreject: (id: string) => void;
@@ -30,6 +32,7 @@ export function SuggestionPanel({
   onSelect,
   onAccept,
   onReject,
+  onRejectAll,
   onSaveEdit,
   onSaveFeedback,
   onUnreject,
@@ -44,6 +47,10 @@ export function SuggestionPanel({
   // Groupes replies par defaut ; un groupe explicitement deplie par
   // l'utilisateur reste ouvert tant qu'il ne le referme pas.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [pendingBulkReject, setPendingBulkReject] = useState<{
+    ids: string[];
+    count: number;
+  } | null>(null);
   const lastSelectedId = useRef<string | null>(null);
   const pendingScrollId = useRef<string | null>(null);
 
@@ -154,6 +161,9 @@ export function SuggestionPanel({
           buckets.map(({ key, items }) => {
             const isCollapsible = items.length > 1;
             const isExpanded = !isCollapsible || expanded.has(key);
+            const rejectableItems = items.filter(
+              (item) => item.status !== "applied" && item.status !== "rejected",
+            );
             const head = items[0]!;
             const headMessage = localizedSuggestionMessage(head, t);
             return (
@@ -179,8 +189,25 @@ export function SuggestionPanel({
                       </span>
                     </button>
                     <span className="badge default">
-                      {t("reviewer.panel.group.occurrences", { count: items.length })}
+                      {t("reviewer.panel.group.count", { count: items.length })}
                     </span>
+                    {rejectableItems.length > 1 ? (
+                      <button
+                        type="button"
+                        className="btn danger small"
+                        title={t("reviewer.suggestion.rejectAll")}
+                        aria-label={t("reviewer.suggestion.rejectAll")}
+                        onClick={() =>
+                          setPendingBulkReject({
+                            ids: rejectableItems.map((item) => item.id),
+                            count: rejectableItems.length,
+                          })
+                        }
+                      >
+                        <X size={12} aria-hidden="true" />
+                        {t("reviewer.suggestion.rejectAllShort")}
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
                 {isExpanded
@@ -206,6 +233,19 @@ export function SuggestionPanel({
           })
         )}
       </div>
+      <ConfirmDialog
+        open={pendingBulkReject !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingBulkReject(null);
+        }}
+        title={t("reviewer.bulkReject.title", { count: pendingBulkReject?.count ?? 0 })}
+        confirmLabel={t("reviewer.bulkReject.confirm")}
+        cancelLabel={t("common.cancel")}
+        destructive
+        onConfirm={() => {
+          if (pendingBulkReject) onRejectAll(pendingBulkReject.ids);
+        }}
+      />
     </aside>
   );
 }

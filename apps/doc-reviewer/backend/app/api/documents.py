@@ -25,6 +25,7 @@ from app.core.document_context import (
 )
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
+from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
 from app.core.security import read_upload_bounded
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Document, EditHistory, StandardVersion
@@ -91,6 +92,17 @@ def _validate_client_metadata_patch(
         if definition.allowed_values is not None:
             candidates = value if definition.type == "string_list" else [value]
             if any(item not in definition.allowed_values for item in candidates):
+                value_is_valid = False
+        if definition.pattern is not None and value_is_valid:
+            candidates = value if definition.type == "string_list" else [value]
+            pattern = compile_user_regex(definition.pattern)
+            try:
+                if any(
+                    pattern.fullmatch(item, timeout=USER_REGEX_TIMEOUT_SECONDS) is None
+                    for item in candidates
+                ):
+                    value_is_valid = False
+            except TimeoutError:
                 value_is_valid = False
         if not value_is_valid:
             raise AppError(

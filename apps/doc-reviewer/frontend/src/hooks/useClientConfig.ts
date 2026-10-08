@@ -16,6 +16,8 @@ export type ClientMappingField = {
   max_length?: number | null;
   max_items?: number | null;
   allowed_values?: string[] | null;
+  pattern?: string | null;
+  format_hint?: Record<string, string> | null;
 };
 
 export type ClientConfig = {

@@ -165,6 +165,10 @@ def analyze_stream(
         ge=1,
         description="Relancer une seule page apres correction manuelle de son statut.",
     ),
+    additional_pages: list[int] | None = Query(
+        default=None,
+        description="Pages manuellement modifiees a ajouter au perimetre precedent.",
+    ),
     page_overrides: Optional[str] = Query(
         default=None,
         description="JSON des statuts de page corriges manuellement, indexe par numero physique.",
@@ -245,6 +249,27 @@ def analyze_stream(
             status_code=409,
         )
     parsed_page_overrides = _parse_page_overrides(page_overrides, doc.page_count)
+    additional_page_numbers = additional_pages or []
+    if page_number is not None and additional_page_numbers:
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "Une relance d'une seule page ne peut pas inclure de pages supplementaires.",
+            status_code=422,
+        )
+    if len(set(additional_page_numbers)) != len(additional_page_numbers):
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "La liste des pages supplementaires contient des doublons.",
+            status_code=422,
+        )
+    for requested_page in additional_page_numbers:
+        resolve_page_range(requested_page, requested_page, doc.page_count)
+        if parsed_page_overrides.get(requested_page) is not True:
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Chaque page supplementaire doit etre marquee comme modifiee.",
+                status_code=422,
+            )
     if page_number is not None:
         resolve_page_range(page_number, page_number, doc.page_count)
         if page_number not in parsed_page_overrides:
@@ -262,6 +287,13 @@ def analyze_stream(
         )
     partial_page_range = (
         page_number is not None
+        or (
+            not modified_only
+            and any(
+                page < resolved_first_page or page > resolved_last_page
+                for page in additional_page_numbers
+            )
+        )
         or resolved_first_page != 1
         or resolved_last_page != doc.page_count
     )
@@ -274,6 +306,7 @@ def analyze_stream(
         last_page=resolved_last_page,
         modified_only=modified_only,
         page_number=page_number,
+        additional_pages=additional_page_numbers,
         checklist_enabled=checklist,
         vision_override=vision,
     )
@@ -438,6 +471,7 @@ def analyze_stream(
     doc_page_count_value = doc.page_count
     modified_only_value = modified_only
     page_number_value = page_number
+    additional_pages_value = additional_page_numbers
     page_overrides_value = parsed_page_overrides
 
     async def event_gen():
@@ -603,6 +637,10 @@ def analyze_stream(
                         for version in versions:
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
+                    revision_state = getattr(parsed, "_thales_revision_state", None)
+                    revision_classification_available = bool(
+                        getattr(revision_state, "available", False)
+                    )
                     for page in parsed.pages:
                         if page.page in page_overrides_value:
                             page.is_modified = page_overrides_value[page.page]
@@ -611,6 +649,7 @@ def analyze_stream(
                             "page": page.page,
                             "is_modified": page.is_modified,
                             "source": "manual" if page.page in page_overrides_value else "detected",
+                            "requires_review": revision_classification_available and page.is_modified is None,
                         }
                         for page in parsed.pages
                     ]
@@ -624,6 +663,8 @@ def analyze_stream(
                         last_page=None if modified_only_value or page_number_value is not None else last_page_value,
                         modified_only=modified_only_value,
                         page_number=page_number_value,
+                        additional_pages=additional_pages_value,
+                        include_undecided=not revision_classification_available,
                     )
                     cached_revision_state = getattr(parsed, "_thales_revision_state", None)
                     parsed = filter_pdf_pages(parsed, selected_page_numbers)
@@ -658,6 +699,7 @@ def analyze_stream(
                         "last_page": last_page_value,
                         "modified_only": modified_only_value,
                         "page_number": page_number_value,
+                        "additional_pages": additional_pages_value,
                         "selected_pages": selected_page_numbers,
                         "page_overrides": page_overrides_value,
                     }

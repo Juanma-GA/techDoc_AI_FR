@@ -15,7 +15,12 @@ import {
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocxBlocks, useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
+import {
+  useBulkStatus,
+  usePatchSuggestion,
+  useRuleResults,
+  useSuggestions,
+} from "../hooks/useSuggestions";
 import { useViewerStore } from "../stores/viewerStore";
 
 /**
@@ -38,6 +43,7 @@ export function DocxReviewer({
   const apply = useApplySuggestion(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
+  const bulkStatus = useBulkStatus(documentId);
 
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
@@ -201,6 +207,7 @@ export function DocxReviewer({
         onSelect={setSelected}
         onAccept={handleAccept}
         onReject={handleReject}
+        onRejectAll={(ids) => bulkStatus.mutate({ ids, status: "rejected" })}
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}

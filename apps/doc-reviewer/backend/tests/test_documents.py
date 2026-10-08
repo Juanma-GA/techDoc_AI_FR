@@ -141,6 +141,13 @@ def test_client_metadata_patch_validates_manifest_fields(
     assert invalid_value.status_code == 422
     assert invalid_value.json()["code"] == "CLIENT_METADATA_INVALID"
 
+    invalid_format = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_cmm_number": "7930-02"}},
+    )
+    assert invalid_format.status_code == 422
+    assert invalid_format.json()["code"] == "CLIENT_METADATA_INVALID"
+
 
 def test_client_metadata_supports_multiple_pnr_values(
     client: TestClient,

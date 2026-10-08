@@ -329,7 +329,7 @@ def test_unchanged_page_is_removed_before_rules_run(
         "POST",
         f"/api/v1/documents/{document_id}/analyze",
         params={
-            "modified_only": "true",
+            "modified_only": "false",
             "page_overrides": json.dumps({"1": False}),
         },
     ) as stream:
@@ -338,6 +338,52 @@ def test_unchanged_page_is_removed_before_rules_run(
 
     assert b"done" in body
     assert analyzed_pages == [2]
+
+
+def test_page_review_rerun_adds_manually_modified_pages_outside_original_range(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    for page_number in range(1, 4):
+        page = pdf.new_page(width=400, height=300)
+        page.insert_text((40, 100), f"Manual text on page {page_number}.")
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("three-pages.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    analyzed_pages: list[int] = []
+
+    def capture_rule_pages(parsed, *_args, **_kwargs):
+        analyzed_pages.extend(page.page for page in parsed.pages)
+        return []
+
+    monkeypatch.setattr(analyze_api, "run_all", capture_rule_pages)
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        params=[
+            ("first_page", "2"),
+            ("last_page", "3"),
+            ("additional_pages", "1"),
+            ("page_overrides", json.dumps({"1": True, "2": True, "3": False})),
+        ],
+    ) as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes())
+
+    assert b"done" in body
+    assert analyzed_pages == [1, 2]
 
 
 def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) -> None:
