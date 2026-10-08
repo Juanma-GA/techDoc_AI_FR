@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 from app.config import settings
-from app.core.pdf_cut import _score_page
+from app.core.pdf_cut import _score_page, detect_start_pages
 
 
 def _upload(client, data: bytes) -> str:
@@ -27,6 +28,40 @@ def test_score_penalizes_table_of_contents() -> None:
     assert "toc_like_lines" in toc_reasons
     assert "text_density" in chapter_reasons
     assert chapter_score > toc_score
+
+
+def test_start_page_skips_table_lists_and_blank_pages(tmp_path) -> None:
+    import fitz
+
+    pdf_path = tmp_path / "lists-and-blank-pages.pdf"
+    pdf = fitz.open()
+    pdf.new_page().insert_text(
+        (72, 72),
+        "Description\nIntroductory material for the maintenance manual. "
+        "This text is deliberately dense enough to score as a candidate.",
+    )
+    pdf.new_page().insert_text((72, 72), "LIST OF TABLES")
+    pdf.new_page().insert_text((72, 72), "LIST OF TABLES (continued)")
+    pdf.new_page().insert_text((72, 72), "PAGE INTENTIONALLY LEFT BLANK")
+    pdf.new_page().insert_text(
+        (72, 72),
+        "Title 1\nChapter 1: Hydraulic system description.",
+    )
+    pdf.new_page().insert_text((72, 72), "Page immediately after Title 1.")
+    pdf.save(str(pdf_path))
+    pdf.close()
+
+    document = SimpleNamespace(
+        source_format="pdf",
+        storage_path=str(pdf_path),
+        dmrl_json=json.dumps([{"title": "Description"}]),
+    )
+
+    candidates = detect_start_pages(document)
+
+    assert candidates[0]["page"] == 5
+    assert "after_list_of_tables" in candidates[0]["reasons"]
+    assert all("LIST OF TABLES" not in candidate["preview"] for candidate in candidates)
 
 
 def test_pdf_cut_can_preview_and_confirm_page(client, pdf_bytes_headers, monkeypatch) -> None:

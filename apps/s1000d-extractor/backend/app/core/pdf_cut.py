@@ -16,6 +16,10 @@ from app.db.models import Document
 
 _TOC_LINE = re.compile(r"(?:\.{2,}|·{2,}|-{2,})\s*\d+\s*$")
 _CHAPTER = re.compile(r"^(?:chapter|chapitre)\s+1(?:\b|\s*[-:.])", re.IGNORECASE)
+_LIST_OF_TABLES = re.compile(r"\blist\s+of\s+tables\b", re.IGNORECASE)
+_INTENTIONALLY_BLANK = re.compile(
+    r"\bpage\s+intentionally\s+left\s+blank\b", re.IGNORECASE
+)
 
 
 def _first_dm_title(doc: Document) -> str:
@@ -30,6 +34,26 @@ def _first_dm_title(doc: Document) -> str:
 
 def _page_text(page: fitz.Page) -> str:
     return (page.get_text("text") or "").strip()
+
+
+def _start_page_after_tables_list(page_texts: list[str]) -> int | None:
+    list_pages = [
+        index for index, text in enumerate(page_texts) if _LIST_OF_TABLES.search(text)
+    ]
+    if not list_pages:
+        return None
+
+    boundary_index = list_pages[-1] + 1
+    skipped_blank_page = False
+    while boundary_index < len(page_texts):
+        text = page_texts[boundary_index]
+        if text.strip() and not _INTENTIONALLY_BLANK.search(text):
+            break
+        skipped_blank_page = True
+        boundary_index += 1
+
+    start_index = boundary_index if skipped_blank_page else boundary_index + 1
+    return start_index + 1 if start_index < len(page_texts) else None
 
 
 def _score_page(text: str, title: str) -> tuple[float, list[str]]:
@@ -85,17 +109,26 @@ def detect_start_pages(doc: Document) -> list[dict]:
     source = fitz.open(str(path))
     try:
         candidates = []
-        for index, page in enumerate(source, start=1):
-            text = _page_text(page)
+        page_texts = [_page_text(page) for page in source]
+        preferred_start_page = _start_page_after_tables_list(page_texts)
+        for index, text in enumerate(page_texts, start=1):
+            if _LIST_OF_TABLES.search(text):
+                continue
             score, reasons = _score_page(text, title)
-            if score > 0 or index == 1:
+            if index == preferred_start_page:
+                reasons.append("after_list_of_tables")
+            if score > 0 or index == 1 or index == preferred_start_page:
                 candidates.append({
                     "page": index,
                     "score": score,
                     "reasons": reasons,
                     "preview": text[:500],
                 })
-        candidates.sort(key=lambda item: (-item["score"], item["page"]))
+        candidates.sort(key=lambda item: (
+            item["page"] != preferred_start_page,
+            -item["score"],
+            item["page"],
+        ))
         return candidates or [{"page": 1, "score": 0, "reasons": [], "preview": ""}]
     finally:
         source.close()

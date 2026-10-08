@@ -11,10 +11,12 @@ correctement couvert, sans perdre les pages scannees ni re-OCR les pages texte.
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from time import perf_counter
 
 import pymupdf as fitz
 
@@ -29,6 +31,9 @@ _ITALIC_FONT = re.compile(r"(?:^|[-_])(?:lt|md|bd)?it$")
 # En-dessous de ce nombre de caracteres, on considere la page non lisible
 # (scannee) et on la bascule vers l'OCR.
 _MIN_TEXT_CHARS = 16
+_TEXT_DICT_FLAGS = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+
+log = logging.getLogger("s1000d_extractor.pdf_parser")
 
 
 @dataclass
@@ -36,6 +41,16 @@ class PageParse:
     index: int                                   # 1-indexe
     blocks: list[RawBlock] = field(default_factory=list)
     has_text: bool = False
+
+
+@dataclass
+class _PageBlockProfile:
+    text_dict_ms: float = 0.0
+    image_info_ms: float = 0.0
+    transform_ms: float = 0.0
+    image_info_count: int = 0
+    span_count: int = 0
+
 
 def _line_text(spans: list[dict]) -> str:
     """Normalise les puces encodees par un glyphe Webdings/Wingdings."""
@@ -108,7 +123,7 @@ def _block_is_bold(spans: list[dict]) -> bool:
 
 def _image_infos(page: fitz.Page) -> list[dict]:
     try:
-        return page.get_image_info(xrefs=True)
+        return page.get_image_info()
     except Exception:
         return []
 
@@ -134,17 +149,29 @@ def _block_has_pictogram(bbox: tuple, pictograms: list[fitz.Rect]) -> bool:
     )
 
 
-def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
-    data = page.get_text("dict")
+def _page_blocks(
+    page: fitz.Page,
+    page_idx: int,
+    profile: _PageBlockProfile | None = None,
+) -> list[RawBlock]:
+    stage_started = perf_counter()
+    data = page.get_text("dict", flags=_TEXT_DICT_FLAGS)
+    if profile is not None:
+        profile.text_dict_ms += (perf_counter() - stage_started) * 1000
     blocks: list[RawBlock] = []
     # Bbox PyMuPDF : origine coin HAUT-gauche, y croissant vers le BAS => un entete
     # a un petit y0, un pied de page un grand y1. Pour une page tournee, ce mapping
     # est faux -> on neutralise la geometrie (page_height=None) et zone reste body.
     rotated = int(page.rotation) != 0
     page_height = None if rotated else round(float(page.rect.height), 1)
+    stage_started = perf_counter()
     image_infos = _image_infos(page)
     image_rects = [fitz.Rect(info["bbox"]) for info in image_infos if info.get("bbox")]
     pictograms = _pictogram_rects(image_infos)
+    if profile is not None:
+        profile.image_info_ms += (perf_counter() - stage_started) * 1000
+        profile.image_info_count += len(image_infos)
+    stage_started = perf_counter()
     for block in data.get("blocks", []):
         lines = block.get("lines", [])
         if not lines:
@@ -154,6 +181,8 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
         spans_all: list[dict] = []
         max_size = 0.0
         for line in lines:
+            if profile is not None:
+                profile.span_count += len(line.get("spans", []))
             line_spans = [
                 span for span in line.get("spans", [])
                 if not is_large_red_image_cross(span, image_rects)
@@ -184,6 +213,8 @@ def _page_blocks(page: fitz.Page, page_idx: int) -> list[RawBlock]:
                 is_pictogram=_block_has_pictogram(bbox, pictograms),
             )
         )
+    if profile is not None:
+        profile.transform_ms += (perf_counter() - stage_started) * 1000
     return blocks
 
 
@@ -245,17 +276,30 @@ def parse_pdf_pages(
     try:
         out: list[PageParse] = []
         total_pages = doc.page_count
+        text_extract_ms = 0.0
+        table_detect_ms = 0.0
+        block_extract_ms = 0.0
+        text_page_count = 0
+        table_count = 0
+        block_count = 0
+        block_profile = _PageBlockProfile()
         for idx, page in enumerate(doc, start=1):
+            stage_started = perf_counter()
             raw_text = page.get_text("text") or ""
             has_text = len(raw_text.strip()) >= _MIN_TEXT_CHARS
+            text_extract_ms += (perf_counter() - stage_started) * 1000
             if not has_text:
                 out.append(PageParse(index=idx, blocks=[], has_text=False))
                 if progress_cb:
                     progress_cb(idx, total_pages)
                 continue
             page_height = None if int(page.rotation) != 0 else round(float(page.rect.height), 1)
+            stage_started = perf_counter()
             tbl_blocks, tbl_bboxes = _table_blocks(page, idx, page_height)
-            text_blocks = _page_blocks(page, idx)
+            table_detect_ms += (perf_counter() - stage_started) * 1000
+            stage_started = perf_counter()
+            text_blocks = _page_blocks(page, idx, block_profile)
+            block_extract_ms += (perf_counter() - stage_started) * 1000
             if tbl_bboxes:
                 text_blocks = [
                     b for b in text_blocks
@@ -264,8 +308,29 @@ def parse_pdf_pages(
                 ]
             merged = sorted(text_blocks + tbl_blocks, key=lambda b: (b.y0 if b.y0 is not None else 0.0))
             out.append(PageParse(index=idx, blocks=merged, has_text=True))
+            text_page_count += 1
+            table_count += len(tbl_blocks)
+            block_count += len(merged)
             if progress_cb:
                 progress_cb(idx, total_pages)
+        log.info(
+            "pdf_parse_breakdown page_count=%d text_page_count=%d block_count=%d "
+            "table_count=%d text_extract_ms=%.1f table_detect_ms=%.1f block_extract_ms=%.1f "
+            "text_dict_ms=%.1f image_info_ms=%.1f block_transform_ms=%.1f "
+            "image_info_count=%d span_count=%d",
+            total_pages,
+            text_page_count,
+            block_count,
+            table_count,
+            text_extract_ms,
+            table_detect_ms,
+            block_extract_ms,
+            block_profile.text_dict_ms,
+            block_profile.image_info_ms,
+            block_profile.transform_ms,
+            block_profile.image_info_count,
+            block_profile.span_count,
+        )
         return out
     finally:
         doc.close()

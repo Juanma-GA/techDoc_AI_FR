@@ -40,10 +40,11 @@ def test_rename_illustration_to_icn_png(tmp_path) -> None:
     assert (tmp_path / name).read_bytes().startswith(b"\x89PNG")
 
 
-def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path) -> None:
+def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path, monkeypatch) -> None:
+    import hashlib
     import fitz
 
-    from app.core.illustrations import _save_pixmap
+    from app.core.illustrations import _image_digest, _save_pixmap
 
     source_path = tmp_path / "source.jpg"
     source_pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 32, 24))
@@ -62,6 +63,12 @@ def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path) -> None:
     extracted = embedded.extract_image(xref)
     destination = tmp_path / "output.jpg"
 
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError("An embedded JPEG should not be decoded to pixels.")
+
+    monkeypatch.setattr(fitz, "Pixmap", fail_if_decoded)
+
+    assert _image_digest(embedded, xref) == hashlib.sha256(extracted["image"]).hexdigest()
     assert _save_pixmap(embedded, xref, destination) is True
     assert extracted["ext"] in {"jpg", "jpeg"}
     assert destination.read_bytes() == extracted["image"]
