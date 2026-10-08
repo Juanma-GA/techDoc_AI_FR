@@ -94,7 +94,12 @@ export function Dashboard(): JSX.Element {
           <div className="kpi-grid">
             <Kpi label={t("dashboard.kpi.pdfs")} value={docList.length} tone="info" />
             <Kpi label={t("dashboard.kpi.open")} value={proposed} tone="warn" />
-            <Kpi label={t("dashboard.kpi.rejected")} value={rejected} tone="danger" />
+            <Kpi
+              label={t("dashboard.kpi.rejected")}
+              value={rejected}
+              tone="danger"
+              onClick={() => navigate("/rejections")}
+            />
           </div>
         )}
       </Card>
@@ -180,17 +185,29 @@ function Kpi({
   label,
   value,
   tone,
+  onClick,
 }: {
   label: string;
   value: number;
   tone: KpiTone;
+  onClick?: () => void;
 }): JSX.Element {
-  return (
-    <div className="kpi">
+  const content = (
+    <>
       <span className="label">{label}</span>
-      <div className={["kpi-value", KPI_TONE[tone]].filter(Boolean).join(" ")}>
+      <span className={["kpi-value", KPI_TONE[tone]].filter(Boolean).join(" ")}>
         {value}
-      </div>
+      </span>
+    </>
+  );
+
+  return onClick ? (
+    <button type="button" className="kpi kpi-clickable" onClick={onClick}>
+      {content}
+    </button>
+  ) : (
+    <div className="kpi">
+      {content}
     </div>
   );
 }

@@ -20,11 +20,11 @@ export function useRuleResults(documentId: string | undefined) {
 }
 
 /** Synthèse IA des rejets (agrégat par règle + paragraphe Mistral). */
-export function useRejectionsSummary() {
+export function useRejectionsSummary(synthesize = true) {
   return useQuery({
-    queryKey: ["suggestions", "rejections-summary"],
+    queryKey: ["suggestions", "rejections-summary", synthesize],
     queryFn: () =>
-      api.get<RejectionsSummary>("/suggestions/rejections-summary?synthesize=true"),
+      api.get<RejectionsSummary>(`/suggestions/rejections-summary?synthesize=${synthesize}`),
   });
 }
 

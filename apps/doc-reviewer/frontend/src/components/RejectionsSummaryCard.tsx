@@ -1,10 +1,10 @@
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useRejectionsSummary } from "../hooks/useSuggestions";
 import { toCsv } from "../lib/csv";
 import { isAiGeneratedSuggestion, localizedRuleCode } from "../lib/suggestionText";
-
-import { BarList, type BarItem } from "./BarList";
+import type { RejectionItem } from "../types/domain";
 
 const SEV_CLASS: Record<string, string> = {
   error: "danger",
@@ -12,26 +12,20 @@ const SEV_CLASS: Record<string, string> = {
   info: "info",
 };
 
-function truncate(s: string, n = 90): string {
-  const t = (s ?? "").replace(/\s+/g, " ").trim();
-  return t.length > n ? `${t.slice(0, n)}…` : t;
-}
-
-/**
- * Synthèse des rejets (parité 1:1 avec corpus-agent) : paragraphe de synthèse
- * IA (motifs récurrents, règles à affiner) + répartition des rejets par règle
- * + tableau exploitable (fichier, règle, sévérité, message, motif) + export CSV.
- * Tout provient de `GET /suggestions/rejections-summary`.
- */
 export function RejectionsSummaryCard() {
   const { t } = useTranslation();
-  const q = useRejectionsSummary();
+  const q = useRejectionsSummary(false);
   const data = q.data;
-
-  const byRule: BarItem[] = (data?.by_rule ?? []).map((r) => ({
-    label: r.rule_code ? localizedRuleCode(r.rule_code, t) : t("data.rejects.noRule"),
-    value: r.count,
-  }));
+  const byDocument = new Map<string, { file: string; items: RejectionItem[] }>();
+  for (const item of data?.items ?? []) {
+    const group = byDocument.get(item.document_id);
+    if (group) group.items.push(item);
+    else byDocument.set(item.document_id, { file: item.file, items: [item] });
+  }
+  const documents = Array.from(byDocument, ([documentId, group]) => ({
+    documentId,
+    ...group,
+  })).sort((left, right) => left.file.localeCompare(right.file));
 
   const exportCsv = (): void => {
     if (!data) return;
@@ -56,9 +50,9 @@ export function RejectionsSummaryCard() {
   return (
     <article className="card">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h2 className="card-title" style={{ margin: 0 }}>
-          {t("data.rejects.title")}
-        </h2>
+        {data ? (
+          <span className="label">{t("data.rejects.total", { count: data.total })}</span>
+        ) : <span />}
         <button
           type="button"
           className="btn ghost small"
@@ -68,82 +62,68 @@ export function RejectionsSummaryCard() {
           {t("data.rejects.export")}
         </button>
       </div>
-      <p className="card-sub">{t("data.rejects.subtitle")}</p>
 
       {q.isLoading ? (
         <div className="empty-state">{t("common.loading")}</div>
+      ) : q.error ? (
+        <div className="empty-state error">{q.error.message}</div>
       ) : !data || data.total === 0 ? (
         <div className="empty-state">{t("data.rejects.empty")}</div>
       ) : (
-        <>
-          <div className="label" style={{ margin: "4px 0 10px" }}>
-            {t("data.rejects.total", { count: data.total })}
-          </div>
-
-          {/* Synthèse IA (ou note si indisponible). */}
-          {data.llm_used && data.synthese ? (
-            <div
-              className="banner"
-              style={{ display: "block", marginBottom: 12, lineHeight: 1.5, whiteSpace: "pre-wrap" }}
-            >
-              <strong style={{ display: "block", marginBottom: 4 }}>
-                {t("data.rejects.aiTitle")}
-              </strong>
-              {data.synthese}
-            </div>
-          ) : (
-            <p className="hint" style={{ marginBottom: 12 }}>
-              {t("data.rejects.aiDisabled")}
-            </p>
-          )}
-
-          {/* Répartition par règle (indice de faux positifs par règle). */}
-          <h3 className="card-title">
-            {t("data.rejects.byRule")}
-          </h3>
-          <div style={{ marginBottom: 12 }}>
-            <BarList items={byRule} />
-          </div>
-
-          {/* Tableau exploitable des rejets. */}
-          <div className="table-scroll">
-            <table className="rules-table">
-              <thead>
-                <tr>
-                  <th>{t("data.rejects.document")}</th>
-                  <th>{t("data.rejects.rule")}</th>
-                  <th>{t("data.rejects.colSeverity")}</th>
-                  <th>{t("data.rejects.colMessage")}</th>
-                  <th>{t("data.rejects.motifs")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((i) => (
-                  <tr key={i.id}>
-                    <td title={i.file}>{truncate(i.file, 34)}</td>
-                    <td>
-                      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                        <span className="badge default">
-                          {localizedRuleCode(i.rule_code, t)}
-                        </span>
-                        {isAiGeneratedSuggestion(i.source_kind, i.rule_code) ? (
-                          <span className="badge info">{t("reviewer.source.ai")}</span>
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          {documents.map((document) => (
+            <details className="collapsible" key={document.documentId}>
+              <summary
+                className="collapsible-summary"
+                style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
+              >
+                <ChevronRight size={16} aria-hidden="true" />
+                <strong
+                  className="grow"
+                  title={document.file}
+                  style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                >
+                  {document.file}
+                </strong>
+                <span className="label" style={{ whiteSpace: "nowrap" }}>
+                  {t("data.rejects.total", { count: document.items.length })}
+                </span>
+              </summary>
+              <ul style={{ listStyle: "none", margin: 0, padding: "0 10px" }}>
+                {document.items.map((item) => (
+                  <li
+                    key={item.id}
+                    style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}
+                  >
+                    <div className="row" style={{ alignItems: "flex-start" }}>
+                      <div className="grow" style={{ minWidth: 0 }}>
+                        <div className="row" style={{ gap: 6 }}>
+                          <span className="badge default">
+                            {localizedRuleCode(item.rule_code, t)}
+                          </span>
+                          <span className={`badge ${SEV_CLASS[item.severity] ?? "info"}`}>
+                            {t(`reviewer.suggestion.severity.${item.severity}`)}
+                          </span>
+                          {isAiGeneratedSuggestion(item.source_kind, item.rule_code) ? (
+                            <span className="badge info">{t("reviewer.source.ai")}</span>
+                          ) : null}
+                        </div>
+                        <p style={{ margin: "8px 0 0", overflowWrap: "anywhere" }}>
+                          {item.message}
+                        </p>
+                        {item.feedback?.trim() ? (
+                          <p style={{ margin: "6px 0 0", overflowWrap: "anywhere" }}>
+                            <strong>{t("data.rejects.motifs")}:</strong> {item.feedback}
+                          </p>
                         ) : null}
                       </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${SEV_CLASS[i.severity] ?? "info"}`}>
-                        {t(`reviewer.suggestion.severity.${i.severity}`)}
-                      </span>
-                    </td>
-                    <td title={i.message}>{truncate(i.message)}</td>
-                    <td>{i.feedback?.trim() ? i.feedback : <span className="label">—</span>}</td>
-                  </tr>
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            </details>
+          ))}
           </div>
-        </>
       )}
     </article>
   );
