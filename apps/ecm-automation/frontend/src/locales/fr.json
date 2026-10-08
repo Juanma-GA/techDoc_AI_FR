@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "ECM-rename",
+    "title": "ECM Automation",
     "version": "0.1.0",
     "description": "Préparation locale des dossiers et du tracker ECM",
     "navigation": "Navigation principale",

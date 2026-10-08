@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("ECM Rename workspace renders", async ({ page }) => {
+test("ECM Automation workspace renders", async ({ page }) => {
   await page.route("**/api/v1/ecm-rename/paths", (route) =>
     route.fulfill({
       status: 200,
@@ -112,7 +112,7 @@ test("ECM Rename workspace renders", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Prévisualisation et corrections|Preview and corrections/ })).toBeVisible();
   expect(analyzedFolderMode).toBe("rename");
   await renameExistingFolders.uncheck();
-  await expect(page.getByRole("complementary").getByText("ECM-rename", { exact: true })).toBeVisible();
+  await expect(page.getByRole("complementary").getByText("ECM Automation", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Analyser les PDF|Analyze PDFs/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Données|Data/ })).toHaveCount(0);
   await expect(
