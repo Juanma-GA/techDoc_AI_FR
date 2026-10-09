@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { ConfirmDialog } from "../ConfirmDialog";
+import { useClientRules } from "../../hooks/useClientConfig";
 import { useFiltersStore } from "../../stores/filtersStore";
 import { localizedRuleCode, localizedSuggestionMessage } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
@@ -39,6 +41,7 @@ export function SuggestionPanel({
   onUndo,
 }: Props) {
   const { t } = useTranslation();
+  const clientRules = useClientRules();
   const showUnits = useFiltersStore((s) => s.showUnitConversions);
   const hideAccepted = useFiltersStore((s) => s.hideAccepted);
   const ruleCodeFilter = useFiltersStore((s) => s.ruleCodeFilter);
@@ -58,6 +61,11 @@ export function SuggestionPanel({
     const set = new Set(suggestions.map((s) => s.rule_code));
     return Array.from(set).sort();
   }, [suggestions]);
+
+  const ruleNumberByCode = useMemo(
+    () => new Map((clientRules.data ?? []).map((rule) => [rule.code, rule.rule_number])),
+    [clientRules.data],
+  );
 
   const visible = useMemo(() => {
     return suggestions.filter((s) => {
@@ -161,6 +169,8 @@ export function SuggestionPanel({
           buckets.map(({ key, items }) => {
             const isCollapsible = items.length > 1;
             const isExpanded = !isCollapsible || expanded.has(key);
+            const ruleNumber = ruleNumberByCode.get(items[0]!.rule_code);
+            const ruleHref = `/rules?rule=${encodeURIComponent(items[0]!.rule_code)}`;
             const rejectableItems = items.filter(
               (item) => item.status !== "applied" && item.status !== "rejected",
             );
@@ -188,6 +198,17 @@ export function SuggestionPanel({
                         {headMessage}
                       </span>
                     </button>
+                    {ruleNumber != null ? (
+                      <Link
+                        className="badge default suggestion-rule-number"
+                        to={ruleHref}
+                        title={t("rules.client.openRule", { number: ruleNumber })}
+                        aria-label={t("rules.client.openRule", { number: ruleNumber })}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        #{ruleNumber}
+                      </Link>
+                    ) : null}
                     <span className="badge default">
                       {t("reviewer.panel.group.count", { count: items.length })}
                     </span>
@@ -216,6 +237,7 @@ export function SuggestionPanel({
                         <SuggestionItem
                           key={s.id}
                           suggestion={s}
+                          ruleNumber={ruleNumberByCode.get(s.rule_code) ?? null}
                           isSelected={s.id === selectedId}
                           onSelect={() => onSelect(s.id)}
                           onAccept={() => onAccept(s.id)}

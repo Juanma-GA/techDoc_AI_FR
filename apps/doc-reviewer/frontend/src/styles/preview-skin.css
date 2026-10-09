@@ -491,3 +491,12 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .rules-table td input, .rules-table td textarea, .rules-table td select { width: 100%; }
 .rules-table textarea { min-height: 38px; resize: vertical; font-family: inherit; }
 .rules-table tr.row-selected { background: var(--card-hover); }
+.client-rules-table { table-layout: fixed; min-width: 0; }
+.client-rules-table th:first-child, .client-rules-table td:first-child { width: 48px; }
+.client-rules-table .rule-name-cell { min-width: 0; }
+.client-rule-summary { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.client-rule-summary strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.client-rule-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.client-rule-description { width: 100%; max-width: 72ch; margin: 8px 0 4px; white-space: normal; overflow-wrap: anywhere; }
+a.suggestion-rule-number { text-decoration: none; }
+a.suggestion-rule-number:hover { text-decoration: underline; }

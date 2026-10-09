@@ -284,6 +284,7 @@
       "rule": "Rule",
       "mode": "Execution mode",
       "description": "Description",
+      "openRule": "Open rule #{{number}} in Rules",
       "search": "Search rules",
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",

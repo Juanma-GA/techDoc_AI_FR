@@ -158,6 +158,7 @@ def list_client_rules(
                 name=definition.name,
                 description=definition.description,
                 message=definition.message,
+                rule_number=len(results) + 1,
                 kind=definition.kind,
                 severity=definition.presentation_severity or compiled.severity,
                 execution=compiled.execution,
@@ -185,6 +186,11 @@ def patch_client_rule(
     catalog = _client_rule_catalog(configuration.bundle, rule_code)
     if definition is None or catalog is None:
         raise AppError("CLIENT_RULE_NOT_FOUND", "Règle client introuvable", status_code=404)
+    rule_number = next(
+        index
+        for index, item in enumerate(configuration.bundle.rules, start=1)
+        if item.code == rule_code
+    )
     version = next(
         (
             item
@@ -212,6 +218,7 @@ def patch_client_rule(
         name=definition.name,
         description=definition.description,
         message=definition.message,
+        rule_number=rule_number,
         kind=definition.kind,
         severity=definition.presentation_severity or compiled.severity,
         execution=compiled.execution,

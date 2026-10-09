@@ -335,8 +335,9 @@ CUSTOM_CMM_NUMBER = rule(
     code="CUSTOM_CMM_NUMBER",
     name="Numero CMM conforme au contexte du document",
     description=(
-        "Le numero present dans le document doit correspondre a la valeur "
-        "meta_cmm_number saisie dans le contexte du document."
+        "Le numero ATA/CMM present dans le pied de page doit correspondre a "
+        "meta_cmm_number dans le contexte du document. Ce controle verifie la "
+        "valeur; la taille de 23 pt est controlee par une regle distincte."
     ),
     message="Le numero CMM ne correspond pas au contexte du document.",
     kind="field_required",
@@ -356,8 +357,9 @@ CUSTOM_CMM_NUMBER = rule(
     translations={
         "en": {
             "description": (
-                "The number in the document must match the meta_cmm_number value "
-                "entered in the document context."
+                "The ATA/CMM number in the footer must match meta_cmm_number in "
+                "the document context. This check validates the value; a separate "
+                "rule checks the 23 pt font size."
             ),
             "message": "The CMM number does not match the document context.",
         }
@@ -370,7 +372,9 @@ CUSTOM_TP1_REVISION_NUMBER = rule(
     description=(
         "Chaque page TP1 doit contenir dans son footer 'Revision No. 0X' "
         "au-dessus de 'First Issue', avec 0X egal au numero de revision "
-        "saisi dans le mapping (sans le prefixe 'Rev.')."
+        "saisi dans le mapping (sans le prefixe 'Rev.'). La checklist demande "
+        "aussi que ce numero soit celui de la revision precedente + 1; cette "
+        "progression n'est pas calculee par cette regle."
     ),
     message=(
         "Le numero de revision du footer TP1 est absent ou ne correspond "
@@ -394,7 +398,9 @@ CUSTOM_TP1_REVISION_NUMBER = rule(
         "en": {
             "description": (
                 "Each TP1 page must contain 'Revision No. 0X' above 'First Issue' "
-                "in its footer, with 0X equal to the revision number in the mapping."
+                "in its footer, with 0X equal to the revision number in the mapping. "
+                "The checklist also requires the previous revision number plus 1; "
+                "this rule does not calculate that progression."
             ),
             "message": "The TP1 footer revision number is missing or does not match the mapping.",
         }
@@ -1784,9 +1790,9 @@ CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
     code="CUSTOM_TITLE_PAGE_COPYRIGHT",
     name="Copyright du footer conforme a l'annee de revision",
     description=(
-        "Le footer des pages modifiees par la revision doit contenir le "
-        "copyright THALES avec l'annee de premiere issue et l'annee de revision "
-        "du document."
+        "Le footer des pages modifiees doit contenir le texte integral du "
+        "copyright THALES de reference. L'annee de debut doit correspondre a "
+        "l'annee de premiere issue et l'annee de fin a l'annee de revision du document."
     ),
     message="Le copyright du footer est absent ou une annee est incorrecte.",
     kind="field_required",
@@ -1822,8 +1828,8 @@ CUSTOM_TITLE_PAGE_COPYRIGHT = rule(
         "en": {
             "description": (
                 "The footer of pages modified by the revision must contain the "
-                "THALES copyright with the first issue year and the document "
-                "revision year."
+                "full reference THALES copyright text. Its start year must match "
+                "the first issue year, and its end year the document revision year."
             ),
             "message": "The footer copyright is missing or contains an incorrect year.",
         }

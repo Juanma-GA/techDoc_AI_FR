@@ -43,6 +43,7 @@ export type ClientRule = {
   name: string;
   description: string;
   message: string;
+  rule_number: number;
   kind: string;
   severity: "info" | "warning" | "error";
   execution: "deterministic" | "semantic" | "manual" | "unsupported";

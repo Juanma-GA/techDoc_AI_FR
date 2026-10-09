@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, FileSearch } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
 import { SeverityBadge } from "../components/SeverityBadge";
+import { useClientRules } from "../hooks/useClientConfig";
 import { useDocuments } from "../hooks/useDocuments";
 import { api } from "../lib/api";
 import { localizedRuleCode, localizedSuggestionMessage } from "../lib/suggestionText";
@@ -28,6 +29,7 @@ type BarRow = { label: string; count: number; fill: string };
 
 type FrequentError = {
   ruleCode: string;
+  ruleNumber: number | null;
   message: string;
   severity: Severity;
   count: number;
@@ -37,10 +39,14 @@ export function Dashboard(): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const docs = useDocuments();
+  const clientRules = useClientRules();
   const suggestions = useQuery({
     queryKey: ["suggestions", "all"],
     queryFn: () => api.get<Suggestion[]>("/suggestions"),
   });
+  const ruleNumberByCode = new Map(
+    (clientRules.data ?? []).map((rule) => [rule.code, rule.rule_number]),
+  );
 
   const docList = docs.data ?? [];
   const sugList = suggestions.data ?? [];
@@ -71,6 +77,7 @@ export function Dashboard(): JSX.Element {
     } else {
       errorsByRule.set(ruleCode, {
         ruleCode,
+        ruleNumber: ruleNumberByCode.get(ruleCode) ?? null,
         message: localizedSuggestionMessage(s, t) || localizedRuleCode(ruleCode, t),
         severity: s.severity,
         count: 1,
@@ -125,6 +132,16 @@ export function Dashboard(): JSX.Element {
                     <div className="row" style={{ alignItems: "flex-start" }}>
                       <div className="grow" style={{ minWidth: 0 }}>
                         <div className="row" style={{ gap: 8 }}>
+                          {error.ruleNumber != null ? (
+                            <Link
+                              className="badge default suggestion-rule-number"
+                              to={`/rules?rule=${encodeURIComponent(error.ruleCode)}`}
+                              title={t("rules.client.openRule", { number: error.ruleNumber })}
+                              aria-label={t("rules.client.openRule", { number: error.ruleNumber })}
+                            >
+                              #{error.ruleNumber}
+                            </Link>
+                          ) : null}
                           <strong
                             title={localizedRuleCode(error.ruleCode, t)}
                             style={{ overflow: "hidden", textOverflow: "ellipsis" }}

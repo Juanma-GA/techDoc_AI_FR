@@ -39,6 +39,7 @@ from app.checks.thales_rules.rules import (
     DOCUMENT_TYPE_PATTERN,
     DOCUMENT_TYPES,
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
+    IMPORTANT_NOTICE_TEXT,
 )
 from app.checks.thales_rules.operations import highlights_document_type_expected
 
@@ -171,43 +172,7 @@ def test_tp2_important_notice_bundle_definition_keeps_text_and_normalization() -
     assert definition.code == "CUSTOM_TP2_IMPORTANT_NOTICE"
     assert definition.compiled_rule.target.page_type == "TP2"
     assert check.operator == "normalized_equals"
-    assert check.expected == (
-        "IMPORTANT NOTICE\n"
-        "This document and any information contained herein are the sole property "
-        "of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. "
-        "They cannot be used, reproduced or disclosed without the prior express "
-        "written approval of THALES AVS FRANCE SAS.\n"
-        "In particular, they shall not be used in the creation, manufacture, "
-        "development or derivation of any repairs, modifications, spare parts, "
-        "design, or configuration changes or to obtain EASA, FAA or any other "
-        "government or regulatory approval to do so.\n"
-        "Should THALES AVS FRANCE SAS consent be given for reproduction in whole "
-        "or in part, this notice and the notice set forth on each page of this "
-        "document shall appear in any such reproduction in whole or in part.\n"
-        "The recipient shall not use this document for any purpose other than the "
-        "one stated in the relevant applicable License agreement under which it "
-        "has been disclosed and it shall be returned to THALES AVS FRANCE SAS "
-        "immediately upon request.\n"
-        "TO BE CONSIDERED VALID FOR PART 145 REQUIREMENTS, ALL MAINTENANCE "
-        "DOCUMENTATION HAS TO BE IDENTIFIED ON EACH PAGE WITH A WATERMARK "
-        "AUTHORIZING ITS USE BY THE END USER COMPANY. SUCH WATERMARK MIGHT BE AS "
-        "FOLLOWS:\n"
-        "\u201cProvided to [USER_ID] for [COMPANY_NAME] only under license agreement "
-        "[LICENSE_NUMBER] for year [YEAR] only\u201d\n"
-        "Users are kindly requested to notify THALES AVS FRANCE SAS of any "
-        "discrepancy, omission or error found in this manual.\n"
-        "Please send your comments to:\n"
-        "THALES AVS FRANCE SAS\n"
-        "Technical Publications Department\n"
-        "AGS, Campus Thales Bordeaux\n"
-        "75-77 Avenue Marcel Dassault\n"
-        "33700 Merignac\n"
-        "France\n"
-        "E-mail: techpubs.frontoffice@fr.thalesgroup.com\n"
-        "If you do not yet have access to our website, you can apply through the "
-        "following address:\n"
-        "https://www.thalesgroup.com/customer-online"
-    )
+    assert check.expected == IMPORTANT_NOTICE_TEXT
     assert check.normalization == ["unicode", "spaces", "line_breaks", "trim"]
 
 

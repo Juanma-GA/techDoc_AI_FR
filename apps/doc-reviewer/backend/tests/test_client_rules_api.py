@@ -23,11 +23,12 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
     assert config["client_code"] == "THALES"
     assert config["bundle"] == "thales_rules"
-    assert config["bundle_version"] == "1.2.14"
+    assert config["bundle_version"] == "1.2.15"
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
     assert config["catalogs"][0]["code"] == "THALES-CUSTOM"
     assert len(rules) == 71
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 72))
     assert all(rule["active"] for rule in rules)
     assert all(rule["description"] and rule["message"] for rule in rules)
 
@@ -36,6 +37,11 @@ def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -
     config = client.get("/api/v1/client-config").json()
     version_id = uuid.UUID(config["catalogs"][0]["standard_version_id"])
     rule_code = "CUSTOM_CMM_NUMBER"
+    rule_number = next(
+        rule["rule_number"]
+        for rule in client.get("/api/v1/client-rules").json()
+        if rule["code"] == rule_code
+    )
 
     disabled = client.patch(
         f"/api/v1/client-rules/{rule_code}",
@@ -44,6 +50,7 @@ def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -
 
     assert disabled.status_code == 200, disabled.text
     assert disabled.json()["active"] is False
+    assert disabled.json()["rule_number"] == rule_number
 
     with SessionLocal() as session:
         version = session.get(StandardVersion, version_id)
@@ -63,6 +70,7 @@ def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -
     )
     assert enabled.status_code == 200, enabled.text
     assert enabled.json()["active"] is True
+    assert enabled.json()["rule_number"] == rule_number
 
 
 def test_client_rule_toggle_rejects_unknown_codes(client: TestClient) -> None:

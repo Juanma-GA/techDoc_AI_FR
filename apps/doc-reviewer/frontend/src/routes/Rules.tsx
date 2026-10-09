@@ -1,6 +1,7 @@
 import { Check, CheckCheck, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 import { ChecklistImportCard } from "./ChecklistImportCard";
 import { ConfirmDialog } from "../components/ConfirmDialog";
@@ -342,10 +343,22 @@ function RuleRow({
 
 function ClientRules() {
   const { t, i18n } = useTranslation();
+  const [searchParams] = useSearchParams();
   const config = useClientConfig();
   const clientRules = useClientRules();
   const patchClientRule = usePatchClientRule();
   const [search, setSearch] = useState("");
+  const [expandedRuleCodes, setExpandedRuleCodes] = useState<Set<string>>(() => new Set());
+  const targetRuleCode = searchParams.get("rule");
+
+  useEffect(() => {
+    if (!targetRuleCode || !clientRules.data?.some((rule) => rule.code === targetRuleCode)) return;
+    setExpandedRuleCodes((current) => new Set(current).add(targetRuleCode));
+    const row = document.getElementById(`client-rule-${targetRuleCode}`);
+    if (typeof row?.scrollIntoView === "function") {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [clientRules.data, targetRuleCode]);
 
   if (config.isLoading || clientRules.isLoading) {
     return <p className="empty-state">{t("common.loading")}</p>;
@@ -369,33 +382,35 @@ function ClientRules() {
   }
 
   const query = search.trim().toLocaleLowerCase();
+  const numberQuery = query.startsWith("#") ? query.slice(1) : query;
   const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
   const localized = (rule: ClientRule, field: "name" | "description" | "message") =>
     rule.translations[locale]?.[field] ?? rule[field];
   const filtered = clientRules.data.filter((rule) =>
-    [rule.code, rule.name, localized(rule, "name"), localized(rule, "description"), localized(rule, "message")].some((value) =>
-      value.toLocaleLowerCase().includes(query),
-    ),
+    [rule.code, rule.name, localized(rule, "name"), localized(rule, "description")].some(
+      (value) => value.toLocaleLowerCase().includes(query),
+    ) || String(rule.rule_number).includes(numberQuery),
   );
   const executionLabel = (execution: ClientRule["execution"]) =>
     t(`rules.compiled.${execution}`);
 
   const renderRules = (rows: ClientRule[]) => (
     <div className="table-scroll">
-      <table className="rules-table">
+      <table className="rules-table client-rules-table">
         <thead>
           <tr>
             <th>{t("rules.form.enabled")}</th>
             <th>{t("rules.client.rule")}</th>
-            <th>{t("rules.client.mode")}</th>
-            <th>{t("rules.form.severity")}</th>
-            <th>{t("rules.client.description")}</th>
-            <th>{t("rules.form.message")}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((rule) => (
-            <tr key={rule.code} style={rule.active ? undefined : { opacity: 0.62 }}>
+            <tr
+              id={`client-rule-${rule.code}`}
+              key={rule.code}
+              className={rule.code === targetRuleCode ? "row-selected" : undefined}
+              style={rule.active ? undefined : { opacity: 0.62 }}
+            >
               <td>
                 <label
                   className="switch"
@@ -414,21 +429,34 @@ function ClientRules() {
                 </label>
               </td>
               <td className="rule-name-cell">
-                <strong>{localized(rule, "name")}</strong>
-                <div className="label">{localizedRuleCode(rule.code, t)}</div>
+                <details
+                  open={expandedRuleCodes.has(rule.code)}
+                  onToggle={(event) => {
+                    const isOpen = event.currentTarget.open;
+                    setExpandedRuleCodes((current) => {
+                      const next = new Set(current);
+                      if (isOpen) next.add(rule.code);
+                      else next.delete(rule.code);
+                      return next;
+                    });
+                  }}
+                >
+                  <summary className="client-rule-summary">
+                    <span className="badge default">#{rule.rule_number}</span>
+                    <strong>{localized(rule, "name")}</strong>
+                    <span className="label">{localizedRuleCode(rule.code, t)}</span>
+                  </summary>
+                  <p className="client-rule-description">{localized(rule, "description")}</p>
+                </details>
+                <div className="client-rule-meta">
+                  <span className={`badge ${rule.execution === "unsupported" ? "default" : "success"}`}>
+                    {executionLabel(rule.execution)}
+                  </span>
+                  <span className="badge default">
+                    {t(`reviewer.suggestion.severity.${rule.severity}`)}
+                  </span>
+                </div>
               </td>
-              <td>
-                <span className={`badge ${rule.execution === "unsupported" ? "default" : "success"}`}>
-                  {executionLabel(rule.execution)}
-                </span>
-              </td>
-              <td>
-                <span className="badge default">
-                  {t(`reviewer.suggestion.severity.${rule.severity}`)}
-                </span>
-              </td>
-              <td>{localized(rule, "description")}</td>
-              <td>{localized(rule, "message")}</td>
             </tr>
           ))}
         </tbody>

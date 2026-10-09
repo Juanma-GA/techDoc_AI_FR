@@ -1,6 +1,7 @@
 import { Check, Pencil, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { DiffInline } from "../DiffInline";
 import { SeverityBadge } from "../SeverityBadge";
@@ -14,6 +15,7 @@ import type { Suggestion } from "../../types/domain";
 
 type Props = {
   suggestion: Suggestion;
+  ruleNumber: number | null;
   isSelected: boolean;
   onSelect: () => void;
   onAccept: () => void;
@@ -28,6 +30,7 @@ type Props = {
 
 export function SuggestionItem({
   suggestion,
+  ruleNumber,
   isSelected,
   onSelect,
   onAccept,
@@ -69,6 +72,17 @@ export function SuggestionItem({
         <span className="suggestion-loc">
           p.{suggestion.page} · {ruleCodeLabel}
         </span>
+        {ruleNumber != null ? (
+          <Link
+            className="badge default suggestion-rule-number"
+            to={`/rules?rule=${encodeURIComponent(suggestion.rule_code)}`}
+            title={t("rules.client.openRule", { number: ruleNumber })}
+            aria-label={t("rules.client.openRule", { number: ruleNumber })}
+            onClick={(event) => event.stopPropagation()}
+          >
+            #{ruleNumber}
+          </Link>
+        ) : null}
         <span className="badge default" title={t(`reviewer.source.${sourceKind}`)}>
           {t(`reviewer.source.${sourceKind}`)}
         </span>

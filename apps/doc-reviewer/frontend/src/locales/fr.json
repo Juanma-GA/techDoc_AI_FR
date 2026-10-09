@@ -284,6 +284,7 @@
       "rule": "Règle",
       "mode": "Mode d'exécution",
       "description": "Description",
+      "openRule": "Ouvrir la règle n°{{number}} dans l'onglet Règles",
       "search": "Rechercher une règle",
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
