@@ -205,6 +205,13 @@ _PAGE_LABEL_RE = re.compile(
     r"(?:PAGE\s+)?\d+\s*$"
 )
 _HEADING_RE = re.compile(r"^\s*(?:\d+\.\s+|[A-Z]\.\s+)[A-Z].*$")
+_FIGURE_CAPTION_RE = re.compile(r"(?i)^\s*(?:table|figure|fig\.?)\s+\d+\b")
+_COLUMN_LABEL_RE = re.compile(
+    r"(?i)^\s*[-*]\s*\d+(?:st|nd|rd|th)\s+column\s*:"
+)
+_FIGURE_ITEM_LIST_LABEL_RE = re.compile(
+    r"(?i)^\s*[-*]\s*the\s+figure\s+and\s+item\s+number\b.*\blist\s*$"
+)
 _STRUCTURAL_PAGE_RE = re.compile(
     r"(?im)^\s*(?:HIGHLIGHTS|LIST OF EFFECTIVE PAGES|"
     r"RECORD OF REVISIONS|TABLE OF CONTENTS)\s*$"
@@ -254,16 +261,35 @@ def _table_row_span_ranges(
             rows[-1][1].append(item)
         else:
             rows.append((center, [item]))
-    table_rows = [
+    candidate_rows = [
         row
         for row in rows
-        if len(row[1]) >= 3
+        if len(row[1]) >= 2
         and max(item[2][2] for item in row[1])
         - min(item[2][0] for item in row[1])
         > 40.0
     ]
-    if len(table_rows) < 3:
+    if len(candidate_rows) < 3:
         return ()
+    table_rows: list[tuple[float, list[_SpanRange]]] = []
+    for row in candidate_rows:
+        anchors = sorted(item[2][0] for item in row[1])[:2]
+        aligned_rows = [
+            candidate
+            for candidate in candidate_rows
+            if all(
+                abs(candidate_anchor - anchor) <= 5.0
+                for candidate_anchor, anchor in zip(
+                    sorted(item[2][0] for item in candidate[1])[:2],
+                    anchors,
+                    strict=True,
+                )
+            )
+        ]
+        if len(aligned_rows) >= 3:
+            for candidate in aligned_rows:
+                if candidate not in table_rows:
+                    table_rows.append(candidate)
     return tuple(item for _center, row in table_rows for item in row)
 
 
@@ -614,7 +640,11 @@ def _is_non_sentence_block(text: str) -> bool:
         compact,
     ):
         return True
-    if re.match(r"(?i)^\s*(?:table|figure)\s+\d+\b", compact):
+    if (
+        _FIGURE_CAPTION_RE.match(compact)
+        or _COLUMN_LABEL_RE.match(compact)
+        or _FIGURE_ITEM_LIST_LABEL_RE.match(compact)
+    ):
         return True
     if _HEADING_RE.fullmatch(compact):
         return True

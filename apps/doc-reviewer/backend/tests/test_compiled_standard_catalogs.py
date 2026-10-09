@@ -568,6 +568,52 @@ def test_sentence_punctuation_rule_ignores_multi_column_table_cells() -> None:
     assert suggestions == []
 
 
+def test_sentence_punctuation_ignores_two_column_tables() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    rows = [
+        ("AR:", "As Required"),
+        ("DET:", "Detail"),
+        ("EFF:", "Effectivity"),
+        ("SUPSDS:", "Supersedes"),
+    ]
+    spans = []
+    for index, (label, description) in enumerate(rows):
+        y = 450.0 + index * 15.0
+        spans.extend(
+            [
+                Span(label, (120.0, y, 180.0, y + 12.0), 1, "Arial", 10.0),
+                Span(description, (280.0, y, 400.0, y + 12.0), 1, "Arial", 10.0),
+            ]
+        )
+    page = ParsedPage(
+        page=1,
+        text="\n".join(f"{label} {description}" for label, description in rows),
+        spans=spans,
+        is_modified=True,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_sentence_punctuation_ignores_figure_titles_and_column_labels() -> None:
+    text = (
+        "Then refer to the EDI to find:\n"
+        "- The figure and item number of the component in the Detailed Parts\n"
+        "List\n"
+        "- 1st column: Figure Item - Figure and Item number\n\n"
+        "Figure 12: Pump assembly\n\n"
+        "Fig. 13: Pump assembly"
+    )
+
+    assert sentence_punctuation_issues(text) == []
+
+
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
     rule = _rule("CUSTOM_CMM_NUMBER")
 
@@ -2321,13 +2367,27 @@ def test_chapter_number_sequence_ignores_numbered_prose() -> None:
 
 def test_chapter_sequence_uses_full_document_for_a_single_page_analysis() -> None:
     rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    valid_full = _numbered_chapter_pdf(
+        [("701", ["1. INFORMATION"]), ("702", ["2. LEAK TESTS"])]
+    )
+    valid_full.pages[0].is_modified = False
+    valid_full.pages[1].is_modified = True
+    valid_results, valid_suggestions = execute_pdf_rules(
+        filter_pdf_pages(valid_full, [2]),
+        [rule],
+    )
+
     full = _numbered_chapter_pdf(
         [("701", ["1. INFORMATION"]), ("702", ["3. LEAK TESTS"])]
     )
+    full.pages[0].is_modified = False
+    full.pages[1].is_modified = True
     partial = filter_pdf_pages(full, [2])
 
     results, suggestions = execute_pdf_rules(partial, [rule])
 
+    assert valid_results[0].status == "PASS"
+    assert valid_suggestions == []
     assert results[0].status == "FAIL"
     assert suggestions[0].page == 2
     assert suggestions[0].proposed == "2. LEAK TESTS"
