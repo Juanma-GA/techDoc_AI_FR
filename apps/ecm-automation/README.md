@@ -85,3 +85,7 @@ L'extraction est déterministe et locale : l'application n'utilise aucun modèle
 - [STANDARD_POC.md](../../STANDARD_POC.md)
 - [Application inventory](../../docs/apps/README.md)
 - [Application README template](../../docs/standards/app-readme-template.md)
+
+## Profiles
+
+- `local-first`
