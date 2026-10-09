@@ -46,6 +46,11 @@ _HEADER_TARGET = RuleTarget(
     region="header",
     excluded_page_types=["TP1"],
 )
+_HIGHLIGHTS_HEADER_TARGET = RuleTarget(
+    page="all",
+    region="header",
+    page_types=["HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"],
+)
 _TP1_DOCUMENT_TARGET = RuleTarget(
     page="all",
     region="body",
@@ -84,7 +89,6 @@ _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
     r"{{meta_revision_date}}(?!\w)"
 )
 _EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
-_EXPECTED_HIGHLIGHTS_PNR_PATTERN = r"(?<!\w){{meta_first_pnr_number}}(?!\w)"
 _UNEXPECTED_PNR_PATTERN = (
     r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
@@ -945,31 +949,29 @@ CUSTOM_HIGHLIGHTS_ATA_NUMBER = rule(
 
 CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     code="CUSTOM_HIGHLIGHTS_PNR_HEADER",
-    name="Numero PNR present et conforme dans l'en-tete des pages",
+    name="Numeros PNR presents et conformes dans l'en-tete Highlights",
     description=(
-        "L'en-tete de chaque page doit contenir le numero PNR correspondant "
-        "au mapping du document."
+        "L'en-tete de chaque page Highlights doit contenir tous les numeros "
+        "PNR renseignes dans le mapping du document."
     ),
-    message="Le numero PNR de l'en-tete est absent ou incorrect.",
+    message="Un ou plusieurs numeros PNR de l'en-tete Highlights sont absents ou incorrects.",
     kind="field_required",
     severity="error",
-    target=_HEADER_TARGET,
+    target=_HIGHLIGHTS_HEADER_TARGET,
     checks=[
         Check(
             field="text",
-            operator="regex_exists",
-            expected=_EXPECTED_HIGHLIGHTS_PNR_PATTERN,
-            require_all=True,
-            expected_display="{{meta_first_pnr_number}}",
-            suggestion_mode="all",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_pnr_header"},
         ),
     ],
-    failure_message="Numero PNR de l'en-tete non conforme.",
+    failure_message="Numeros PNR de l'en-tete Highlights manquants ou non conformes.",
     only_if=Condition(field="meta_pnr_number", state="present"),
     translations={
         "en": {
-            "description": "The header of every page must contain the PNR number matching the document mapping.",
-            "message": "The header PNR number is missing or incorrect.",
+            "description": "The header of every Highlights page must contain all PNR numbers in the document mapping.",
+            "message": "One or more Highlights header PNR numbers are missing or incorrect.",
         }
     },
 )

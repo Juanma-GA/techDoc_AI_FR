@@ -52,6 +52,12 @@ A.  Verification of the procedures in this manual
 (1)  Testing and Fault Isolation: shop verification done JUN 24/88."""
 _HIGHLIGHTS_CONTENT_MARKER = re.compile(r"(?im)^\s*HIGHLIGHTS\s*$")
 _HIGHLIGHTS_HOLDER_RE = re.compile(r"(?i)^TO\s*:\s*HOLDER\s+OF\s+")
+_PNR_HEADER_LABEL_RE = re.compile(r"(?i)\bPNR\s*:\s*")
+_PNR_HEADER_TOKEN_RE = re.compile(
+    r"(?i)(?<![A-Z0-9])(?P<value>[A-Z0-9]+"
+    r"(?:\s*[-\u2010-\u2015\u2212]\s*[A-Z0-9]+)+)(?![A-Z0-9])"
+)
+_PNR_HEADER_SEPARATOR_RE = re.compile(r"[\s,;&]*(?:and[\s,;&]*)?", re.IGNORECASE)
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
 _HIGHLIGHTS_LEGEND_RE = re.compile(r"(?i)\bN\s*:\s*New\b.*\bD\s*:\s*Deleted\b")
@@ -861,10 +867,17 @@ def _chapter_heading(line: PdfLine) -> tuple[int, str] | None:
     title = match.group("title").strip()
     words = re.findall(r"[^\W_]+", title)
     title_case = bool(words) and all(
-        word[0].isupper() or word.casefold() in _CHAPTER_TITLE_CONNECTORS
+        not word.isalpha()
+        or word[0].isupper()
+        or word.casefold() in _CHAPTER_TITLE_CONNECTORS
         for word in words
     )
-    if not title or title[-1] in ".!?;:" or not (title.isupper() or title_case):
+    sentence_case = bool(words) and len(words) <= 3 and words[0][0].isupper()
+    if (
+        not title
+        or title[-1] in ".!?;:"
+        or not (title.isupper() or title_case or sentence_case)
+    ):
         return None
     return int(match.group("number")), title
 
@@ -963,6 +976,140 @@ def _chapter_sequence_findings(
             if number > expected_number:
                 expected_number = number + 1
     return findings, candidate_count
+
+
+def _pnr_value_pattern(value: str) -> re.Pattern[str] | None:
+    tokens = re.findall(r"\w+|[^\w\s]+", value.strip())
+    if not tokens:
+        return None
+    pattern = [re.escape(tokens[0])]
+    previous_is_word = tokens[0][0].isalnum() or tokens[0][0] == "_"
+    for token in tokens[1:]:
+        is_word = token[0].isalnum() or token[0] == "_"
+        pattern.append(r"\s+" if previous_is_word and is_word else r"\s*")
+        pattern.append(re.escape(token))
+        previous_is_word = is_word
+    return re.compile(
+        rf"(?i)(?<![A-Z0-9]){''.join(pattern)}(?![A-Z0-9])"
+    )
+
+
+def _format_pnr_values(values: list[str]) -> str:
+    if len(values) < 2:
+        return values[0]
+    return f"{', '.join(values[:-1])} and {values[-1]}"
+
+
+def _pnr_header_matches(text: str) -> list[re.Match[str]]:
+    labels = list(_PNR_HEADER_LABEL_RE.finditer(text))
+    if not labels:
+        return list(_PNR_HEADER_TOKEN_RE.finditer(text))
+
+    matches: list[re.Match[str]] = []
+    for index, label in enumerate(labels):
+        end = labels[index + 1].start() if index + 1 < len(labels) else len(text)
+        cursor = label.end()
+        for match in _PNR_HEADER_TOKEN_RE.finditer(text, cursor, end):
+            if not _PNR_HEADER_SEPARATOR_RE.fullmatch(text[cursor : match.start()]):
+                break
+            matches.append(match)
+            cursor = match.end()
+    return matches
+
+
+def _highlights_pnr_header_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    document = getattr(runtime, "document", None)
+    metadata = getattr(document, "client_metadata", None)
+    raw_values = (
+        metadata.get("meta_pnr_number")
+        if isinstance(metadata, Mapping) and "meta_pnr_number" in metadata
+        else getattr(document, "meta_pnr_number", None)
+    )
+    if isinstance(raw_values, str):
+        raw_values = [raw_values]
+    if not isinstance(raw_values, (list, tuple)):
+        return [], 0
+    pnr_values = list(
+        dict.fromkeys(
+            str(value).strip()
+            for value in raw_values
+            if value is not None and str(value).strip()
+        )
+    )
+    if not pnr_values:
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    expected = _format_pnr_values(pnr_values)
+    expected_patterns = [
+        (value, _pnr_value_pattern(value)) for value in pnr_values
+    ]
+    findings: list[OperationResult] = []
+    for target in targets:
+        missing = [
+            value
+            for value, pattern in expected_patterns
+            if pattern is not None and pattern.search(target.text) is None
+        ]
+        if not missing:
+            continue
+
+        matches = _pnr_header_matches(target.text)
+        if len(pnr_values) == 1 and expected_patterns[0][1] is not None:
+            invalid_matches = [
+                match
+                for match in matches
+                if expected_patterns[0][1].search(match.group("value")) is None
+            ]
+            if invalid_matches:
+                findings.extend(
+                    OperationResult(
+                        status="FAIL",
+                        observed=match.group("value"),
+                        expected=pnr_values[0],
+                        message=(
+                            "Numero PNR de l'en-tete non conforme. "
+                            f"Numero attendu : {pnr_values[0]}."
+                        ),
+                        original=match.group("value"),
+                        proposed=pnr_values[0],
+                        page=target.raw_page,
+                    )
+                    for match in invalid_matches
+                )
+                continue
+
+        label = _PNR_HEADER_LABEL_RE.search(target.text)
+        if matches:
+            original = target.text[matches[0].start() : matches[-1].end()]
+            proposed = expected
+            observed = original
+        elif label is not None:
+            original = label.group().strip()
+            proposed = f"{original} {expected}"
+            observed = None
+        else:
+            original = None
+            proposed = expected
+            observed = None
+        findings.append(
+            OperationResult(
+                status="FAIL",
+                observed=observed,
+                expected=expected,
+                message=(
+                    "Numeros PNR manquants dans l'en-tete : "
+                    f"{', '.join(missing)}."
+                ),
+                original=original,
+                proposed=proposed,
+                page=target.raw_page,
+            )
+        )
+    return findings, len(targets)
 
 
 def _highlights_description_findings(
@@ -2129,6 +2276,9 @@ def _document_structure_findings(
     if control == "chapter_sequence":
         findings, checked = _chapter_sequence_findings(context)
         expected = "Chapitres numerotes dans l'ordre 1, 2, 3..."
+    elif control == "highlights_pnr_header":
+        findings, checked = _highlights_pnr_header_findings(context)
+        expected = "Tous les numeros PNR du mapping dans chaque en-tete"
     elif control in {
         "highlights_deleted_description",
         "highlights_revised_description",

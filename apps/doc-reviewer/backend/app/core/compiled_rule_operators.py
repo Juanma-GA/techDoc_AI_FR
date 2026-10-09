@@ -261,14 +261,20 @@ def _table_row_span_ranges(
             rows[-1][1].append(item)
         else:
             rows.append((center, [item]))
-    candidate_rows = [
-        row
-        for row in rows
-        if len(row[1]) >= 2
-        and max(item[2][2] for item in row[1])
-        - min(item[2][0] for item in row[1])
-        > 40.0
-    ]
+    candidate_rows: list[tuple[float, list[_SpanRange]]] = []
+    for center, _row in rows:
+        nearby = [
+            item
+            for item in span_ranges
+            if abs((item[2][1] + item[2][3]) / 2 - center) <= 16.0
+        ]
+        if (
+            len(nearby) >= 2
+            and max(item[2][2] for item in nearby)
+            - min(item[2][0] for item in nearby)
+            > 40.0
+        ):
+            candidate_rows.append((center, nearby))
     if len(candidate_rows) < 3:
         return ()
     table_rows: list[tuple[float, list[_SpanRange]]] = []

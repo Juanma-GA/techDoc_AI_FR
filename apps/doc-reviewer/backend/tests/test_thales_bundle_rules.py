@@ -242,10 +242,15 @@ def test_highlights_pnr_header_rule_keeps_header_scope_and_all_suggestions() -> 
     check = definition.compiled_rule.checks[0]
 
     assert definition.compiled_rule.target.region == "header"
-    assert definition.compiled_rule.target.excluded_page_types == ["TP1"]
+    assert definition.compiled_rule.target.page_types == [
+        "HIGHLIGHTS",
+        "HIGHLIGHTS_PAGE_1",
+    ]
     assert definition.compiled_rule.only_if is not None
     assert definition.compiled_rule.only_if.field == "meta_pnr_number"
-    assert check.suggestion_mode == "all"
+    assert check.operator == "client_operation"
+    assert check.operation == "document_structure"
+    assert check.operation_params == {"control": "highlights_pnr_header"}
 
 
 def test_document_type_rules_use_bundle_patterns_and_preserve_scopes() -> None:

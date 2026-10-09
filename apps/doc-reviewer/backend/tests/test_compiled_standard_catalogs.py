@@ -568,6 +568,49 @@ def test_sentence_punctuation_rule_ignores_multi_column_table_cells() -> None:
     assert suggestions == []
 
 
+def test_sentence_punctuation_ignores_wrapped_table_rows() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    row_data = [
+        ("AMDt.", 107.6, 419.9),
+        ("BRIEF DESCRIPTION", 230.2, 419.9),
+        ("APPLICABLE TO VERSION", 420.1, 419.9),
+        ("A", 118.9, 441.5),
+        ("Elimination of 130C scale mark", 188.2, 441.5),
+        ("From n 380", 450.1, 441.5),
+        ("B", 118.9, 469.3),
+        ("Dial colour zones made with four", 189.6, 462.2),
+        ("Oct. 1981", 456.1, 469.3),
+        ("coats paint", 188.8, 476.3),
+        ("C", 118.9, 497.0),
+        ("Replacement of the shield plate", 188.2, 497.0),
+        ("Apr. 2001", 456.1, 497.0),
+    ]
+    spans = [
+        Span(
+            text,
+            (x, y, x + max(12.0, len(text) * 6.0), y + 14.2),
+            1,
+            "Arial",
+            10.0,
+        )
+        for text, x, y in row_data
+    ]
+    page = ParsedPage(
+        page=1,
+        text="\n".join(span.text for span in spans),
+        spans=spans,
+        is_modified=True,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
 def test_sentence_punctuation_ignores_two_column_tables() -> None:
     rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
     rows = [
@@ -1460,7 +1503,7 @@ def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> 
     assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
 
 
-def test_highlights_pnr_header_uses_only_the_first_mapping_value() -> None:
+def test_highlights_pnr_header_requires_all_mapping_values() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(
         client_metadata={"meta_pnr_number": ["33140-02", "33140-03"]}
@@ -1486,17 +1529,19 @@ def test_highlights_pnr_header_uses_only_the_first_mapping_value() -> None:
         return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
     valid, valid_suggestions = execute_pdf_rules(
-        build_page("33140 - 02"), [rule], document=document
+        build_page("33140 - 02 and 33140 - 03"), [rule], document=document
     )
-    invalid, invalid_suggestions = execute_pdf_rules(
-        build_page("33140 - 03"), [rule], document=document
+    incomplete, incomplete_suggestions = execute_pdf_rules(
+        build_page("33140 - 02"), [rule], document=document
     )
 
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
-    assert invalid[0].status == "FAIL"
-    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
-        ("33140 - 03", "33140-02")
+    assert incomplete[0].status == "FAIL"
+    assert [
+        (item.original, item.proposed) for item in incomplete_suggestions
+    ] == [
+        ("33140 - 02", "33140-02 and 33140-03")
     ]
 
 
@@ -1793,10 +1838,15 @@ def test_pnr_header_reports_each_invalid_page() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(meta_pnr_number="1-879-SB")
 
+    page_data = [
+        (1, HIGHLIGHTS_FIRST_PAGE_TYPE, "1-878-SB"),
+        (2, HIGHLIGHTS_PAGE_TYPE, "1-877-SB"),
+        (3, HIGHLIGHTS_PAGE_TYPE, "1-876-SB"),
+    ]
     pages = [
         ParsedPage(
             page=page_number,
-            page_type=None,
+            page_type=page_type,
             text=f"PNR: {pnr}\nHighlights page {page_number}",
             spans=[
                 Span(
@@ -1815,11 +1865,11 @@ def test_pnr_header_reports_each_invalid_page() -> None:
                 ),
             ],
         )
-        for page_number, pnr in ((1, "1-878-SB"), (2, "1-877-SB"))
+        for page_number, page_type, pnr in page_data
     ]
 
     results, suggestions = execute_pdf_rules(
-        ParsedPdf(page_count=2, pages=pages, full_text="\n".join(page.text for page in pages), is_signed=False),
+        ParsedPdf(page_count=3, pages=pages, full_text="\n".join(page.text for page in pages), is_signed=False),
         [rule],
         document=document,
     )
@@ -1828,6 +1878,7 @@ def test_pnr_header_reports_each_invalid_page() -> None:
     assert [(suggestion.page, suggestion.original) for suggestion in suggestions] == [
         (1, "1-878-SB"),
         (2, "1-877-SB"),
+        (3, "1-876-SB"),
     ]
 
 
@@ -1836,7 +1887,7 @@ def test_pnr_header_reports_each_invalid_occurrence() -> None:
     document = SimpleNamespace(meta_pnr_number="1-879-SB")
     page = ParsedPage(
         page=1,
-        page_type=None,
+        page_type=HIGHLIGHTS_PAGE_TYPE,
         text="PNR: 1-878-SB | PNR: 1-877-SB\nHighlights page 1",
         spans=[
             Span(
@@ -1869,7 +1920,7 @@ def test_pnr_header_reports_each_invalid_occurrence() -> None:
     ]
 
 
-def test_pnr_header_is_not_checked_on_tp1_pages() -> None:
+def test_pnr_header_is_not_checked_outside_highlights_pages() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(meta_pnr_number="1-879-SB")
     tp1_page = ParsedPage(
@@ -1893,7 +1944,7 @@ def test_pnr_header_is_not_checked_on_tp1_pages() -> None:
             ),
         ],
     )
-    non_tp1_page = ParsedPage(
+    regular_page = ParsedPage(
         page=2,
         page_type=None,
         text="PNR: 1-878-SB\nRegular page 2",
@@ -1920,18 +1971,16 @@ def test_pnr_header_is_not_checked_on_tp1_pages() -> None:
         [rule],
         document=document,
     )
-    non_tp1_results, non_tp1_suggestions = execute_pdf_rules(
-        ParsedPdf(1, [non_tp1_page], non_tp1_page.text, False),
+    regular_results, regular_suggestions = execute_pdf_rules(
+        ParsedPdf(1, [regular_page], regular_page.text, False),
         [rule],
         document=document,
     )
 
     assert tp1_results == []
     assert tp1_suggestions == []
-    assert non_tp1_results[0].status == "FAIL"
-    assert [(item.original, item.proposed) for item in non_tp1_suggestions] == [
-        ("1-878-SB", "1-879-SB")
-    ]
+    assert regular_results == []
+    assert regular_suggestions == []
 
 
 def test_pnr_in_page_is_checked_when_present_but_not_required() -> None:
@@ -2380,6 +2429,25 @@ def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> No
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].page == 2
     assert invalid_suggestions[0].proposed == "2. LEAK TESTS"
+
+
+def test_chapter_number_sequence_accepts_sentence_case_and_figure_titles() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    results, suggestions = execute_pdf_rules(
+        _numbered_chapter_pdf(
+            [
+                ("701", ["1. Assembly (Figure 301)", "2. Storage"]),
+                (
+                    "901",
+                    ["1. Special tools", "2. Standard tools", "3. Consumables"],
+                ),
+            ]
+        ),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_chapter_number_sequence_ignores_numbered_prose() -> None:
