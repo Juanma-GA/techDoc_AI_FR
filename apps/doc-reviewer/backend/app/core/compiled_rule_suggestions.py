@@ -122,7 +122,10 @@ def deterministic_suggestions(
         }:
             operation_name = check.operation or check.operator
             operation = (ctx.client_operations or {}).get(operation_name)
-            if operation is not None and operation.suggestions is None:
+            if operation is not None and (
+                operation.suggestions is None
+                or check.operation_params.get("suppress_fallback_suggestion") is True
+            ):
                 has_non_repairable_check = True
             suggestions.extend(
                 client_operation_suggestions_for_rule(

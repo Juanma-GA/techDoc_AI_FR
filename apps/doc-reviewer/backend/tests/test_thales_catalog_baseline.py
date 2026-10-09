@@ -15,7 +15,7 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
 
     assert len(payload) == 71
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "d6f62c900c3c67a9a6567a5691d4376e8ff5cbaf7a2d0672322ded707848c576"
+        "d1c1f6167e008df7d608edd1453a46464732f3b4fedb9c28a7fef1e6d7a26b82"
     )
 
     expected_controls = {
@@ -95,6 +95,13 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         "CUSTOM_TP1_REVISION_BAR_FOOTER": (
             "document_structure",
             {"control": "revision_bar_tp1_footer"},
+        ),
+        "CUSTOM_TP1_PNR_PAGE_VALUE": (
+            "document_structure",
+            {
+                "control": "tp1_pnr_page_value",
+                "suppress_fallback_suggestion": True,
+            },
         ),
         "CUSTOM_VENDOR_CODE_LIST_REFERENCE": (
             "vendor_code_list",

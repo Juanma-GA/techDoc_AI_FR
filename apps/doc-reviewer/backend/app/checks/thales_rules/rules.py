@@ -89,10 +89,6 @@ _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
     r"{{meta_revision_date}}(?!\w)"
 )
 _EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
-_UNEXPECTED_PNR_PATTERN = (
-    r"(?i)(?<!\w)(?!{{meta_pnr_number}}(?!\w))"
-    r"\d+-\d{3}-[A-Z]{2}(?!\w)"
-)
 _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
@@ -1083,8 +1079,8 @@ CUSTOM_TP1_PNR_PAGE_VALUE = rule(
     code="CUSTOM_TP1_PNR_PAGE_VALUE",
     name="Numero PNR present dans la page TP1 conforme au mapping",
     description=(
-        "Tout numero PNR explicitement present dans le corps d'une page TP1 "
-        "doit correspondre au mapping du document."
+        "Toute valeur PNR presente dans le corps d'une page TP1 doit correspondre "
+        "a l'une des valeurs du mapping du document."
     ),
     message="Le numero PNR de la page TP1 ne correspond pas au mapping.",
     kind="regex_flag",
@@ -1093,9 +1089,12 @@ CUSTOM_TP1_PNR_PAGE_VALUE = rule(
     checks=[
         Check(
             field="text",
-            operator="regex",
-            expected=_UNEXPECTED_PNR_PATTERN,
-            replacement="{{meta_pnr_number}}",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={
+                "control": "tp1_pnr_page_value",
+                "suppress_fallback_suggestion": True,
+            },
         ),
     ],
     failure_message="Numero PNR present dans la page TP1 non conforme.",
@@ -1103,8 +1102,8 @@ CUSTOM_TP1_PNR_PAGE_VALUE = rule(
     translations={
         "en": {
             "description": (
-                "Every PNR number explicitly present in the body of a TP1 page "
-                "must match the document mapping."
+                "Every PNR value in the body of a TP1 page must match one of the "
+                "document mapping values."
             ),
             "message": "The TP1 page PNR number does not match the mapping.",
         }

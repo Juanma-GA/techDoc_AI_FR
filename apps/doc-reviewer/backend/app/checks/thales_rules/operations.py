@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import Any, cast
 
 from app.parsers.pdf_parser import (
     ParsedPage,
@@ -58,6 +58,7 @@ _PNR_HEADER_TOKEN_RE = re.compile(
     r"(?:\s*[-\u2010-\u2015\u2212]\s*[A-Z0-9]+)+)(?![A-Z0-9])"
 )
 _PNR_HEADER_SEPARATOR_RE = re.compile(r"[\s,;&]*(?:and[\s,;&]*)?", re.IGNORECASE)
+_PNR_VALUE_LIST_SEPARATOR_RE = re.compile(r"(?i)\s*(?:,|;|\band\b)\s*")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
 _HIGHLIGHTS_LEGEND_RE = re.compile(r"(?i)\bN\s*:\s*New\b.*\bD\s*:\s*Deleted\b")
@@ -994,6 +995,69 @@ def _pnr_value_pattern(value: str) -> re.Pattern[str] | None:
     )
 
 
+def _document_pnr_values(document: Any | None) -> list[str]:
+    metadata = getattr(document, "client_metadata", None)
+    raw_values = (
+        cast(Mapping[str, Any], metadata).get("meta_pnr_number")
+        if isinstance(metadata, Mapping) and "meta_pnr_number" in metadata
+        else getattr(document, "meta_pnr_number", None)
+    )
+    if isinstance(raw_values, str):
+        raw_values = [raw_values]
+    if not isinstance(raw_values, (list, tuple)):
+        return []
+    return list(
+        dict.fromkeys(
+            str(value).strip()
+            for value in raw_values
+            if value is not None and str(value).strip()
+        )
+    )
+
+
+def _normalize_pnr_separators(value: str) -> str:
+    return re.sub(r"\s*([-\u2010-\u2015\u2212_/.:])\s*", r"\1", value.strip())
+
+
+def _is_tp1_pnr_candidate(value: str) -> bool:
+    separators = "-\u2010\u2011\u2012\u2013\u2014\u2015\u2212_/.:"
+    return (
+        len(value) >= 4
+        and any(character.isdigit() for character in value)
+        and all(character.isalnum() or character in separators for character in value)
+    )
+
+
+def _tp1_pnr_candidates(
+    text: str,
+    span_ranges: Any,
+) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    for start, end, _bbox, _size, _font in span_ranges:
+        span_text = text[start:end].strip()
+        if not span_text:
+            continue
+        label = _PNR_HEADER_LABEL_RE.match(span_text)
+        values = (
+            _PNR_VALUE_LIST_SEPARATOR_RE.split(span_text[label.end() :])
+            if label is not None
+            else _PNR_VALUE_LIST_SEPARATOR_RE.split(span_text)
+        )
+        for raw_value in values:
+            original = raw_value.strip()
+            if not original:
+                continue
+            normalized = _normalize_pnr_separators(original)
+            if label is not None or _is_tp1_pnr_candidate(normalized):
+                candidates.append((original, normalized))
+                continue
+            for token in original.split():
+                normalized_token = _normalize_pnr_separators(token)
+                if _is_tp1_pnr_candidate(normalized_token):
+                    candidates.append((token, normalized_token))
+    return candidates
+
+
 def _format_pnr_values(values: list[str]) -> str:
     if len(values) < 2:
         return values[0]
@@ -1017,28 +1081,76 @@ def _pnr_header_matches(text: str) -> list[re.Match[str]]:
     return matches
 
 
+def _tp1_pnr_page_value_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    pnr_values = _document_pnr_values(getattr(runtime, "document", None))
+    if not pnr_values:
+        return [], 0
+
+    expected_patterns = [
+        (value, _pnr_value_pattern(value)) for value in pnr_values
+    ]
+    expected = _format_pnr_values(pnr_values)
+    findings: list[OperationResult] = []
+    targets = tuple(getattr(context, "targets", ()))
+    for target in targets:
+        candidates = _tp1_pnr_candidates(
+            target.text,
+            target.span_ranges,
+        )
+        invalid_candidates: list[str] = []
+        present_values: set[str] = set()
+        for original, normalized in candidates:
+            matching_value = next(
+                (
+                    value
+                    for value, pattern in expected_patterns
+                    if pattern is not None and pattern.fullmatch(normalized)
+                ),
+                None,
+            )
+            if matching_value is None:
+                invalid_candidates.append(original)
+            else:
+                present_values.add(matching_value)
+
+        missing_values = [value for value in pnr_values if value not in present_values]
+        if not invalid_candidates:
+            continue
+        for original in invalid_candidates:
+            proposed: str | None = None
+            if len(pnr_values) == 1:
+                proposed = pnr_values[0]
+            elif (
+                len(invalid_candidates) == 1
+                and len(missing_values) == 1
+                and len(candidates) == len(pnr_values)
+            ):
+                proposed = missing_values[0]
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=original,
+                    expected=proposed or expected,
+                    message=(
+                        "Numero PNR present dans la page TP1 non conforme au mapping: "
+                        f"{original}."
+                    ),
+                    original=original if proposed else None,
+                    proposed=proposed,
+                    page=target.raw_page,
+                )
+            )
+    return findings, len(targets)
+
+
 def _highlights_pnr_header_findings(
     context: Any,
 ) -> tuple[list[OperationResult], int]:
     runtime = getattr(context, "runtime", context)
-    document = getattr(runtime, "document", None)
-    metadata = getattr(document, "client_metadata", None)
-    raw_values = (
-        metadata.get("meta_pnr_number")
-        if isinstance(metadata, Mapping) and "meta_pnr_number" in metadata
-        else getattr(document, "meta_pnr_number", None)
-    )
-    if isinstance(raw_values, str):
-        raw_values = [raw_values]
-    if not isinstance(raw_values, (list, tuple)):
-        return [], 0
-    pnr_values = list(
-        dict.fromkeys(
-            str(value).strip()
-            for value in raw_values
-            if value is not None and str(value).strip()
-        )
-    )
+    pnr_values = _document_pnr_values(getattr(runtime, "document", None))
     if not pnr_values:
         return [], 0
 
@@ -2276,6 +2388,9 @@ def _document_structure_findings(
     if control == "chapter_sequence":
         findings, checked = _chapter_sequence_findings(context)
         expected = "Chapitres numerotes dans l'ordre 1, 2, 3..."
+    elif control == "tp1_pnr_page_value":
+        findings, checked = _tp1_pnr_page_value_findings(context)
+        expected = "Valeurs PNR du corps TP1 conformes au mapping"
     elif control == "highlights_pnr_header":
         findings, checked = _highlights_pnr_header_findings(context)
         expected = "Tous les numeros PNR du mapping dans chaque en-tete"

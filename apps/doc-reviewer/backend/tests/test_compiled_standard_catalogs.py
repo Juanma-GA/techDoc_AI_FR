@@ -2018,7 +2018,7 @@ def test_pnr_in_page_is_checked_when_present_but_not_required() -> None:
     invalid_page = ParsedPage(
         page=2,
         page_type=TP1_PAGE_TYPE,
-        text="PNR: 1-878-SB\nDocument body - 1-878-SB",
+        text="PNR: 1-878-SB\nDocument body\n1-878-SB",
         spans=[
             Span(
                 text="PNR: 1-878-SB",
@@ -2028,8 +2028,15 @@ def test_pnr_in_page_is_checked_when_present_but_not_required() -> None:
                 size=8.0,
             ),
             Span(
-                text="Document body - 1-878-SB",
-                bbox=(40.0, 400.0, 300.0, 410.0),
+                text="Document body",
+                bbox=(40.0, 400.0, 180.0, 410.0),
+                page=2,
+                font="Arial",
+                size=8.0,
+            ),
+            Span(
+                text="1-878-SB",
+                bbox=(40.0, 420.0, 120.0, 430.0),
                 page=2,
                 font="Arial",
                 size=8.0,
@@ -2081,6 +2088,66 @@ def test_pnr_in_page_is_checked_when_present_but_not_required() -> None:
     ]
     assert ignored == []
     assert ignored_suggestions == []
+
+
+def test_tp1_pnr_page_value_uses_mapping_without_a_fixed_format() -> None:
+    rule = _rule("CUSTOM_TP1_PNR_PAGE_VALUE")
+    pnr_values = [
+        "5306-255-00-09",
+        "5306-265-00-10",
+        "5306-266-20-10",
+        "5306-266-20-11",
+        "5306-261-00-11",
+    ]
+    document = SimpleNamespace(client_metadata={"meta_pnr_number": pnr_values})
+
+    def build_pdf(values: list[str]) -> ParsedPdf:
+        spans = [
+            Span("TP1 header", (40.0, 100.0, 120.0, 110.0), 1, "Arial", 8.0),
+            Span(
+                "OIL TEMPERATURE INDICATOR",
+                (40.0, 250.0, 300.0, 265.0),
+                1,
+                "Arial",
+                10.0,
+            ),
+        ]
+        for index, value in enumerate(values):
+            y = 300.0 + index * 22.0
+            spans.append(
+                Span(value, (40.0, y, 220.0, y + 12.0), 1, "Arial", 10.0)
+            )
+        spans.extend(
+            [
+                Span(
+                    "COMPONENT MAINTENANCE MANUAL",
+                    (40.0, 500.0, 300.0, 515.0),
+                    1,
+                    "Arial",
+                    10.0,
+                ),
+                Span("Footer", (40.0, 760.0, 100.0, 770.0), 1, "Arial", 8.0),
+            ]
+        )
+        text = "\n".join(span.text for span in spans)
+        page = ParsedPage(page=1, page_type=TP1_PAGE_TYPE, text=text, spans=spans)
+        return ParsedPdf(1, [page], text, False)
+
+    valid, valid_suggestions = execute_pdf_rules(
+        build_pdf(pnr_values), [rule], document=document
+    )
+    incorrect_values = ["5306-255-00-11", *pnr_values[1:]]
+    invalid, invalid_suggestions = execute_pdf_rules(
+        build_pdf(incorrect_values), [rule], document=document
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert invalid[0].evidence.observed_value == "5306-255-00-11"
+    assert [
+        (item.original, item.proposed) for item in invalid_suggestions
+    ] == [("5306-255-00-11", "5306-255-00-09")]
 
 
 def test_highlights_pnr_label_is_checked_without_rechecking_the_header() -> None:
