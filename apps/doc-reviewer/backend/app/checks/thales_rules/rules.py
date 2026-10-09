@@ -840,14 +840,14 @@ CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
 
 CUSTOM_VENDOR_CODE_LIST_REFERENCE = rule(
     code="CUSTOM_VENDOR_CODE_LIST_REFERENCE",
-    name="Correspondance des codes et adresses de la VENDOR CODE LIST",
+    name="Code fournisseur et adresse THALES",
     description=(
-        "Les pages sont detectees par les en-tetes CODE et VENDOR'S ADDRESS; le "
-        "titre VENDOR CODE LIST en gras est facultatif sur les pages de "
-        "continuation. Chaque code ou adresse connu doit correspondre au "
-        "referentiel partage vendor_code_reference.json, dans les deux sens."
+        "Seule l'entree THALES est verifiee dans les tableaux de codes fournisseurs: "
+        "le code VF9111 doit correspondre a l'adresse officielle THALES AVS FRANCE "
+        "SAS, 75-77 AV MARCEL DASSAULT, CAMPUS THALES BORDEAUX, 33700 MERIGNAC, "
+        "FRANCE. Les autres fournisseurs ne sont pas controles."
     ),
-    message="Un code et une adresse de la VENDOR CODE LIST ne correspondent pas au referentiel.",
+    message="Le code fournisseur ou l'adresse THALES ne correspond pas aux valeurs attendues.",
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -860,17 +860,17 @@ CUSTOM_VENDOR_CODE_LIST_REFERENCE = rule(
         )
     ],
     failure_message=(
-        "La VENDOR CODE LIST contient une association code/adresse incorrecte."
+        "L'entree THALES ne correspond pas au code et a l'adresse attendus."
     ),
     translations={
         "en": {
             "description": (
-                "Pages are detected by the CODE and VENDOR'S ADDRESS headers; the "
-                "bold VENDOR CODE LIST title is optional on continuation pages. "
-                "Each known code or address must match the shared "
-                "vendor_code_reference.json in both directions."
+                "Only the THALES entry in vendor code tables is validated: code "
+                "VF9111 must match the official THALES AVS FRANCE SAS address at "
+                "75-77 AV MARCEL DASSAULT, CAMPUS THALES BORDEAUX, 33700 MERIGNAC, "
+                "FRANCE. Other vendors are ignored."
             ),
-            "message": "A VENDOR CODE LIST code and address do not match the reference.",
+            "message": "The THALES vendor code or address does not match the expected values.",
         }
     },
 )
@@ -2088,7 +2088,7 @@ CUSTOM_FORBIDDEN_CONSUMABLES = rule(
         Check(
             field="text",
             operator="contains_none",
-            expected=["Silica gel", "dessicant bag"],
+            expected=["Silica gel", "dessicant bag", "desiccant", "freon", "flugene"],
             replacement="",
         ),
     ],

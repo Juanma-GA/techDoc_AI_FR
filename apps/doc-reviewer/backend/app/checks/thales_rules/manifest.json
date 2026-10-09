@@ -10,8 +10,7 @@
     }
   ],
   "files": {
-    "mapping": "mapping.json",
-    "vendor_code_reference": "vendor_code_reference.json"
+    "mapping": "mapping.json"
   },
   "modules": {
     "rules": "rules.py",

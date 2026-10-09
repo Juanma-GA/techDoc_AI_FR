@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from statistics import median
 from typing import Any, cast
 
@@ -126,6 +124,12 @@ _VENDOR_CODE_LIST_TITLE_RE = re.compile(r"(?i)^\s*VENDOR\s+CODE\s+LIST\s*:?[ \t]
 _VENDOR_CODE_HEADER = "code"
 _VENDOR_ADDRESS_HEADER = "vendorsaddress"
 _VENDOR_CODE_PREFIX_RE = re.compile(r"(?i)^([A-Z]{1,3}\d{4,5})\b")
+_THALES_VENDOR_CODE = "VF9111"
+_THALES_VENDOR_ADDRESS = (
+    "THALES AVS FRANCE SAS 75\u201377 AV MARCEL DASSAULT "
+    "CAMPUS THALES BORDEAUX 33700 MERIGNAC FRANCE"
+)
+_THALES_VENDOR_ADDRESS_MARKER = "THALES AVS FRANCE SAS"
 _VENDOR_TABLE_END_RE = re.compile(
     r"(?i)(?:\u00a9|\ufffd)\s*\d{4}\s*[-\u2010-\u2015]\s*\d{4}\s+"
     r"THALES\s+AVS\s+FRANCE\b|\bCopyright\b|"
@@ -137,31 +141,6 @@ _NUMERICAL_INDEX_PAGE_RE = re.compile(
 _NI_HEADER_LABELS = frozenset(
     {"PART NUMBER", "AIRLINE", "STOCK NO.", "FIGURE", "ITEM", "TTL", "REQ"}
 )
-
-
-def _load_vendor_code_reference() -> dict[str, str]:
-    payload = json.loads(
-        Path(__file__).with_name("vendor_code_reference.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    vendors = payload.get("vendors") if isinstance(payload, dict) else None
-    if not isinstance(vendors, dict):
-        raise ValueError("vendor_code_reference.json must contain a vendors object")
-
-    reference: dict[str, str] = {}
-    for code, address in vendors.items():
-        if not isinstance(code, str) or not code.strip():
-            raise ValueError("vendor reference codes must be non-empty strings")
-        if not isinstance(address, str) or not address.strip():
-            raise ValueError(
-                f"vendor reference address for {code!r} must be a non-empty string"
-            )
-        reference[code.strip()] = address.strip()
-    return reference
-
-
-_VENDOR_CODE_REFERENCE = _load_vendor_code_reference()
 
 
 def shop_verification_text(document: object | None) -> str:
@@ -1943,20 +1922,6 @@ def _vendor_normalize_address(value: str) -> str:
     )
 
 
-def _vendor_reference_by_code() -> dict[str, str]:
-    return {
-        _vendor_normalize_code(code): address
-        for code, address in _VENDOR_CODE_REFERENCE.items()
-    }
-
-
-def _vendor_reference_by_address() -> dict[str, list[str]]:
-    addresses: dict[str, list[str]] = defaultdict(list)
-    for code, address in _VENDOR_CODE_REFERENCE.items():
-        addresses[_vendor_normalize_address(address)].append(code)
-    return addresses
-
-
 def _vendor_list_rows(
     context: Any,
 ) -> tuple[list[_VendorTableRow], bool]:
@@ -1984,36 +1949,33 @@ def _vendor_list_rows(
     return entries, table_found
 
 
-def _vendor_reference_findings(
+def _vendor_thales_findings(
     entries: list[_VendorTableRow],
 ) -> tuple[list[OperationResult], int]:
-    by_code = _vendor_reference_by_code()
-    by_address = _vendor_reference_by_address()
+    expected_code = _vendor_normalize_code(_THALES_VENDOR_CODE)
+    expected_address = _vendor_normalize_address(_THALES_VENDOR_ADDRESS)
+    thales_marker = _vendor_normalize_address(_THALES_VENDOR_ADDRESS_MARKER)
     findings: list[OperationResult] = []
     checked = 0
     for row in entries:
         code_key = _vendor_normalize_code(row.code)
         address_key = _vendor_normalize_address(row.address)
-        expected_address = by_code.get(code_key)
-        expected_codes = by_address.get(address_key, [])
-        if expected_address is None and not expected_codes:
+        if code_key != expected_code and thales_marker not in address_key:
             continue
         checked += 1
-        if expected_address is not None:
-            if address_key == _vendor_normalize_address(expected_address):
-                continue
-            expected = expected_address
+        if code_key == expected_code and address_key == expected_address:
+            continue
+        if code_key == expected_code:
+            expected = _THALES_VENDOR_ADDRESS
             message = (
-                f"Le code « {row.code or '(vide)'} » doit correspondre a "
-                f"l'adresse « {expected_address} », pas a « {row.address or '(vide)'} »."
+                f"Le code « {_THALES_VENDOR_CODE} » doit correspondre a l'adresse "
+                f"« {_THALES_VENDOR_ADDRESS} », pas a « {row.address or '(vide)'} »."
             )
         else:
-            if code_key in {_vendor_normalize_code(code) for code in expected_codes}:
-                continue
-            expected = ", ".join(expected_codes)
+            expected = _THALES_VENDOR_CODE
             message = (
-                f"L'adresse « {row.address} » doit correspondre au code "
-                f"« {expected} », pas a « {row.code or '(vide)'} »."
+                f"L'adresse THALES « {row.address or '(vide)'} » doit correspondre "
+                f"au code « {_THALES_VENDOR_CODE} », pas a « {row.code or '(vide)'} »."
             )
         findings.append(
             OperationResult(
@@ -2629,12 +2591,12 @@ def _vendor_code_list_findings(
     control = parameters.get("control")
     if control != "reference":
         raise ValueError(f"unknown VENDOR CODE LIST control: {control}")
-    expected = "Code et VENDOR'S ADDRESS concordants avec vendor_code_reference.json"
+    expected = f"{_THALES_VENDOR_CODE} | {_THALES_VENDOR_ADDRESS}"
 
     entries, table_found = _vendor_list_rows(context)
     if not table_found:
         return [], 0, expected
-    findings, checked = _vendor_reference_findings(entries)
+    findings, checked = _vendor_thales_findings(entries)
     return findings, checked, expected
 
 

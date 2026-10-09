@@ -15,7 +15,7 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
 
     assert len(payload) == 71
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "d1c1f6167e008df7d608edd1453a46464732f3b4fedb9c28a7fef1e6d7a26b82"
+        "d5e66c76c378c390afe8570c2368e2c4f0c0be8b41a5711404caffdfd519b828"
     )
 
     expected_controls = {
