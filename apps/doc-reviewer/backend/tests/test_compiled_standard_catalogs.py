@@ -3529,7 +3529,7 @@ def test_forbidden_consumables_are_reported_by_one_rule() -> None:
         [rule],
     )
     invalid, invalid_suggestions = execute_pdf_rules(
-        _pdf("Use Silica gel and dessicant bag."),
+        _pdf("Use Silica gel, dessicant bag, desiccant, freon, and flugene."),
         [rule],
     )
 
@@ -3539,6 +3539,9 @@ def test_forbidden_consumables_are_reported_by_one_rule() -> None:
     assert {item.original for item in invalid_suggestions} == {
         "Silica gel",
         "dessicant bag",
+        "desiccant",
+        "freon",
+        "flugene",
     }
     assert {item.proposed for item in invalid_suggestions} == {""}
     assert {item.rule_code for item in invalid_suggestions} == {

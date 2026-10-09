@@ -129,7 +129,7 @@ def test_forbidden_consumables_rule_keeps_terms_and_removal_proposal() -> None:
     check = CUSTOM_FORBIDDEN_CONSUMABLES.compiled_rule.checks[0]
 
     assert check.operator == "contains_none"
-    assert check.expected == ["Silica gel", "dessicant bag"]
+    assert check.expected == ["Silica gel", "dessicant bag", "desiccant", "freon", "flugene"]
     assert check.replacement == ""
 
 
