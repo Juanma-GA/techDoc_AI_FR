@@ -41,6 +41,42 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 
 _HIGHLIGHTS_STATUSES = frozenset({"N", "D", "R", "U"})
 _MODIFIED_STATUSES = frozenset({"N", "R"})
+_HIGHLIGHTS_CHAPTERS = (
+    "Assembly",
+    "Assembly and Storage",
+    "Assembly Including Storage",
+    "Assembly (Including Storage)",
+    "Check",
+    "Cleaning",
+    "Description and Operation",
+    "Disassembly",
+    "Fault Isolation",
+    "Illustrated Parts List",
+    "Introduction",
+    "List of Effective Pages",
+    "List of Illustrations",
+    "List of Materials",
+    "List of Approved Repairs",
+    "Record of Revisions",
+    "Record of Temporary Revisions",
+    "Repair",
+    "Service Bulletin List",
+    "Special Equipment and Tooling",
+    "Special Tools, Fixtures and Equipment",
+    "Special Tools, Fixtures, Equipment and Consumables",
+    "Special Tools, Fixtures and Equipment - List of Special Materials",
+    "Storage",
+    "Storage Instructions",
+    "Table of Contents",
+    "Testing",
+    "Testing and Fault Isolation",
+    "Testing and Trouble Shooting",
+    "Title Page",
+    "Vendor Code List",
+)
+_ALLOWED_HIGHLIGHTS_CHAPTERS = frozenset(
+    " ".join(chapter.split()).casefold() for chapter in _HIGHLIGHTS_CHAPTERS
+)
 
 _MONTHS = (
     "JAN",
@@ -131,6 +167,7 @@ class HighlightsEntry:
     description_bbox: tuple[float, float, float, float] | None = None
     subject_description: str = ""
     subject_description_bbox: tuple[float, float, float, float] | None = None
+    subject_bbox: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -654,6 +691,7 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
     entries: list[HighlightsEntry] = []
     subject = ""
     pending: list[str] = []
+    subject_bbox: tuple[float, float, float, float] | None = None
     subject_description = ""
     subject_description_bbox: tuple[float, float, float, float] | None = None
     previous_was_subject = False
@@ -703,11 +741,24 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
             if designation_cells:
                 previous_was_subject = False
                 continue
+            if expand_page_range(_join_cell(pages_cells)):
+                pending = []
+                subject = ""
+                subject_bbox = None
+                subject_description = ""
+                subject_description_bbox = None
+                previous_was_subject = False
+                continue
             if not previous_was_subject:
                 pending = []
+                subject_bbox = None
                 subject_description = ""
                 subject_description_bbox = None
             pending.append(_join_cell(pages_cells))
+            subject_bbox = _merge_bbox_values(
+                subject_bbox,
+                _merge_bbox(pages_cells),
+            )
             subject = _join_subject(pending)
             if description_cells:
                 subject_description = _append_highlights_text(
@@ -747,6 +798,7 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
                 description_bbox=description_bbox,
                 subject_description=subject_description,
                 subject_description_bbox=subject_description_bbox,
+                subject_bbox=subject_bbox,
             )
         )
     return entries
@@ -1464,6 +1516,7 @@ LEP_DATE = "lep_date"
 FOOTER_DATE = "footer_date"
 HIGHLIGHTS_STATUS_CONSISTENCY = "highlights_status_consistency"
 HIGHLIGHTS_DESIGNATION_REQUIRED = "highlights_designation_required"
+HIGHLIGHTS_CHAPTER = "highlights_chapter"
 UNDECLARED_PAGE = "undeclared_page"
 PAGE_NOT_IN_LEP = "page_not_in_lep"
 MODIFIED_PAGE_ABSENT = "modified_page_absent"
@@ -1909,6 +1962,30 @@ def _missing_highlights_designation_findings(
     ]
 
 
+def _highlights_chapter_findings(
+    state: RevisionState,
+) -> list[RevisionFinding]:
+    findings: list[RevisionFinding] = []
+    for entry in state.highlights:
+        normalized_subject = " ".join(entry.subject.split()).casefold()
+        if normalized_subject in _ALLOWED_HIGHLIGHTS_CHAPTERS:
+            continue
+        findings.append(
+            RevisionFinding(
+                control=HIGHLIGHTS_CHAPTER,
+                message=(
+                    f"Le chapitre « {entry.subject} » n'est pas un intitulé "
+                    "autorisé dans les Highlights."
+                ),
+                original=entry.subject,
+                proposed="",
+                page=entry.page,
+                bbox=entry.subject_bbox or entry.bbox,
+            )
+        )
+    return findings
+
+
 def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
     revision = state.revision_date
     assert revision is not None
@@ -2338,6 +2415,7 @@ def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     findings: list[RevisionFinding] = (
         _missing_highlights_designation_findings(state)
         + _invalid_highlights_designation_findings(state)
+        + _highlights_chapter_findings(state)
         + _highlights_status_findings(state)
     )
     if state.available:

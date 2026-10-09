@@ -1341,6 +1341,151 @@ def test_highlights_page_row_without_designation_is_reported() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Assembly",
+        "Assembly and Storage",
+        "Assembly Including Storage",
+        "Assembly (Including Storage)",
+        "Check",
+        "Cleaning",
+        "Description and Operation",
+        "Disassembly",
+        "Fault Isolation",
+        "Illustrated Parts List",
+        "Introduction",
+        "List of Effective Pages",
+        "List of Illustrations",
+        "List of Materials",
+        "Record of Revisions",
+        "Record of Temporary Revisions",
+        "Repair",
+        "Service Bulletin List",
+        "Special Tools, Fixtures and Equipment",
+        "Special Tools, Fixtures, Equipment and Consumables",
+        "Special Tools, Fixtures and Equipment - List of Special Materials",
+        "Storage",
+        "Table of Contents",
+        "Testing",
+        "Testing and Fault Isolation",
+        "Testing and Trouble Shooting",
+        "Title Page",
+        "Vendor Code List",
+    ],
+)
+def test_highlights_chapter_rule_accepts_catalog_titles(chapter: str) -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            (chapter, "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repa ir", "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+    finding = next(item for item in suggestions if item.rule_code == rule.id)
+    subject_bbox = revision.extract_highlights(parsed.pages[0])[-1].subject_bbox
+
+    assert results[0].status == "FAIL"
+    assert finding.original == "Repa ir"
+    assert finding.proposed == ""
+    assert finding.bbox == subject_bbox
+
+
+def test_highlights_chapter_rule_ignores_case_and_repeated_spaces() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("aSSEMBLY   and Storage", "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_highlights_chapter_rule_does_not_merge_subject_across_page_row() -> None:
+    spans = [
+        Span("Chapter/Section and Page No", (69.8, 179.9, 231.8, 194.1), 1, "Arial", 10.0),
+        Span("Designation", (255.4, 179.9, 321.4, 194.1), 1, "Arial", 10.0),
+        Span("Description of Change", (363.5, 179.9, 489.5, 194.1), 1, "Arial", 10.0),
+        Span("Testing", (54.0, 194.6, 96.0, 208.8), 1, "Arial", 10.0),
+        Span("Pages 701 to 702 ", (54.0, 208.7, 156.0, 222.9), 1, "Arial", 10.0),
+        Span("Environmental conditions and ", (329.0, 208.7, 500.2, 222.9), 1, "Arial", 10.0),
+        Span("minor technical correction added.", (329.0, 222.9, 511.1, 237.1), 1, "Arial", 10.0),
+        Span("Storage Instructions", (54.0, 251.2, 174.0, 265.4), 1, "Arial", 10.0),
+        Span("Page  901 ", (54.0, 265.4, 114.0, 279.6), 1, "Arial", 10.0),
+        Span("R ", (285.5, 265.4, 297.5, 279.6), 1, "Arial", 10.0),
+        Span("Environmental conditions and ", (329.0, 265.4, 500.2, 279.6), 1, "Arial", 10.0),
+    ]
+    highlights_page = ParsedPage(
+        page=1,
+        text="\n".join(span.text for span in spans),
+        spans=spans,
+        page_type="HIGHLIGHTS_PAGE_1",
+    )
+    parsed = _consistent_document()
+    parsed.pages[0] = highlights_page
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+    chapter_suggestions = [
+        item for item in suggestions if item.rule_code == rule.id
+    ]
+
+    assert results[0].status == "FAIL"
+    assert [item.original for item in chapter_suggestions] == ["Storage Instructions"]
+
+
 def test_deleted_highlights_status_conflicts_with_page_still_in_current_document() -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(
@@ -1815,6 +1960,7 @@ def test_revised_page_without_footer_number_is_reported() -> None:
 
 def test_compiled_rules_emit_one_suggestion_per_divergence() -> None:
     parsed = _consistent_document()
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
     parsed.pages[2] = _page(3, _footer(3, "Page 401", "JAN 27/26"))
 
     results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)

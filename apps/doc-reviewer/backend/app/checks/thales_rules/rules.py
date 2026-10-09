@@ -2290,6 +2290,38 @@ CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED = rule(
     },
 )
 
+CUSTOM_HIGHLIGHTS_CHAPTER = rule(
+    code="CUSTOM_HIGHLIGHTS_CHAPTER",
+    name="Intitule de chapitre autorise dans les Highlights",
+    description=(
+        "Chaque chapitre ou section des Highlights doit utiliser l'un des "
+        "intitules autorises du catalogue THALES."
+    ),
+    message="Un chapitre des Highlights n'est pas autorise.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="revision_consistency",
+            operation_params={"control": "highlights_chapter"},
+        )
+    ],
+    failure_message="intitule de chapitre non autorise dans les Highlights.",
+    only_if=Condition(field="meta_revision_date", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Every chapter or section in Highlights must use one of the "
+                "chapter titles authorized by the THALES catalog."
+            ),
+            "message": "A Highlights chapter title is not authorized.",
+        }
+    },
+)
+
 CUSTOM_REVISION_LEP_BLANK_STAR = rule(
     code="CUSTOM_REVISION_LEP_BLANK_STAR",
     name="Etoile LEP des pages Blank selon le statut New de la page impaire",
@@ -2621,6 +2653,7 @@ REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_UNDECLARED_STAR,
     CUSTOM_REVISION_HIGHLIGHTS_STATUS,
     CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED,
+    CUSTOM_HIGHLIGHTS_CHAPTER,
     CUSTOM_REVISION_LEP_BLANK_STAR,
     CUSTOM_REVISION_LEP_DATE,
     CUSTOM_REVISION_FOOTER_DATE,

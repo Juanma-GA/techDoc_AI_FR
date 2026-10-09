@@ -13,9 +13,9 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 70
+    assert len(payload) == 71
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "fa5a2ae52b94d61355569a1566342a418e62bcfffa9f06c2706515d8b6ed4fa7"
+        "d6f62c900c3c67a9a6567a5691d4376e8ff5cbaf7a2d0672322ded707848c576"
     )
 
     expected_controls = {
@@ -23,6 +23,7 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         "CUSTOM_REVISION_UNDECLARED_STAR": "undeclared_star",
         "CUSTOM_REVISION_HIGHLIGHTS_STATUS": "highlights_status_consistency",
         "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED": "highlights_designation_required",
+        "CUSTOM_HIGHLIGHTS_CHAPTER": "highlights_chapter",
         "CUSTOM_REVISION_LEP_BLANK_STAR": "blank_lep_star",
         "CUSTOM_REVISION_LEP_DATE": "lep_date",
         "CUSTOM_REVISION_FOOTER_DATE": "footer_date",
@@ -42,6 +43,10 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         assert check["operation"] == "revision_consistency"
         assert check["operation_params"] == {"control": control}
         assert check["expected"] is None
+    assert by_code["CUSTOM_HIGHLIGHTS_CHAPTER"]["target"]["page_types"] == [
+        "HIGHLIGHTS",
+        "HIGHLIGHTS_PAGE_1",
+    ]
 
     expected_operations = {
         "CUSTOM_INTRODUCTION_SHOP_VERIFICATION": ("shop_verification", {}),
