@@ -669,6 +669,36 @@ def test_user_cmm_font_size_rule_accepts_pdf_rounding_and_rejects_wrong_size() -
     assert "23 pt" in invalid_suggestions[0].message
 
 
+def test_user_cmm_font_size_ignores_ata_references_in_body_paragraphs() -> None:
+    rule = _rule("CUSTOM_CMM_NUMBER_FONT_SIZE")
+    spans = [
+        Span("Body", (40.0, 100.0, 100.0, 112.0), 1, "Arial", 10.0),
+        Span(
+            "ATA reference 79-30-02 appears in this paragraph",
+            (40.0, 640.0, 470.0, 652.0),
+            1,
+            "Arial",
+            10.0,
+        ),
+        Span("79-30-02", (40.0, 760.0, 200.0, 780.0), 1, "Arial", 23.0),
+    ]
+    page = ParsedPage(
+        page=1,
+        text="\n".join(span.text for span in spans),
+        spans=spans,
+        page_height=792.0,
+    )
+
+    results, suggestions = execute_pdf_rules(
+        ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02"),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
 def test_thales_logo_font_size_rules_split_normal_pages_from_tp1() -> None:
     normal_rule = _rule("CUSTOM_THALES_LOGO_FONT_SIZE")
     tp1_rule = _rule("CUSTOM_TP1_THALES_LOGO_FONT_SIZE")

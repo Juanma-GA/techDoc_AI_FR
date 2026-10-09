@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.thales_rules import revision_engine as revision
 from app.checks.thales_rules.page_classifier import classify_pages
@@ -494,6 +496,25 @@ def test_ror_insertion_date_mismatch_is_reported_with_the_expected_month() -> No
     assert findings[0].proposed == "AUG 26"
 
 
+def test_ror_insertion_date_only_checks_the_last_table_row() -> None:
+    spans = [
+        _span("RECORD OF REVISIONS", 100.0, 100.0, 1),
+        _span("REVISION DATE", 200.0, 140.0, 1),
+        _span("INSERTION DATE", 350.0, 140.0, 1),
+        _span("DEC 15/20", 200.0, 170.0, 1),
+        _span("FEB 21", 350.0, 170.0, 1),
+        _span("JUL 27/26", 200.0, 190.0, 1),
+        _span("AUG 26", 350.0, 190.0, 1),
+    ]
+    document = SimpleNamespace(
+        meta_revision_date="JUL 27/26",
+        meta_first_issue_date="JUL 1966",
+        meta_last_issue_date="MAR 77",
+    )
+
+    assert _codes(_document([_page(1, spans)]), document) == []
+
+
 def test_ror_revision_date_must_match_the_highlights_revision_date() -> None:
     assert _codes(_document([_ror_page(_REVISION_DATE, "AUG 26")])) == []
 
@@ -502,6 +523,50 @@ def test_ror_revision_date_must_match_the_highlights_revision_date() -> None:
     assert [finding.control for finding in findings] == [revision.ROR_REVISION_DATE]
     assert findings[0].original == "JUN 27/26"
     assert findings[0].proposed == _REVISION_DATE
+
+
+@pytest.mark.parametrize(
+    ("highlights_pages", "lep_subject"),
+    [
+        ("Intro Page 1", "Introduction"),
+        ("TC page 1", "TP"),
+        ("TC page 1", "Title Page"),
+    ],
+)
+def test_lep_star_matches_intro_and_title_page_aliases(
+    highlights_pages: str,
+    lep_subject: str,
+) -> None:
+    revision_date = revision.parse_date(_REVISION_DATE)
+    assert revision_date is not None
+    highlights = revision.HighlightsEntry(
+        subject="Introduction",
+        pages_text=highlights_pages,
+        page_keys=revision.expand_page_range(highlights_pages),
+        status="R",
+        page=1,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+        status_bbox=(0.0, 0.0, 1.0, 1.0),
+    )
+    lep_entry = revision.LepEntry(
+        subject=lep_subject,
+        page_key="1",
+        date=revision_date,
+        date_text=_REVISION_DATE,
+        is_blank=False,
+        starred=False,
+        page=2,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+    )
+    state = revision.RevisionState(
+        revision_date=revision_date,
+        highlights=[highlights],
+        lep=[lep_entry],
+    )
+
+    findings = revision._lep_findings(state)
+
+    assert revision.LEP_STAR in [finding.control for finding in findings]
 
 
 def test_page_keys_accept_any_section_abbreviation() -> None:

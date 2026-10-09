@@ -84,6 +84,13 @@ HIGHLIGHTS_KEY_PREFIX = "HIGHLIGHTS"
 _PAGE_KEY_RE = re.compile(
     r"(?i)^(?:(?P<prefix>.+?)\s+)?(?P<number>\d+(?:-\d+)?)$"
 )
+_LEP_PAGE_PREFIX_ALIASES = {
+    "intro": ("introduction",),
+    "introduction": ("intro",),
+    "tc": ("tp", "title page"),
+    "tp": ("tc", "title page"),
+    "title page": ("tc", "tp"),
+}
 _RANGE_SPLIT_RE = re.compile(
     r"(?i)\s+(?:to|thru|through)\s+|\s+[-–—]\s+|(?<=\d)[–—](?=\d)"
 )
@@ -157,7 +164,7 @@ class LepEntry:
 
 def _lep_page_key_aliases(entry: LepEntry, page_key: str | None = None) -> set[str]:
     target_key = page_key or entry.page_key
-    aliases = {target_key}
+    aliases = _page_key_prefix_aliases(target_key)
     subject_parts = entry.subject.split()
     for start in range(len(subject_parts)):
         subject_suffix = " ".join(subject_parts[start:])
@@ -165,7 +172,25 @@ def _lep_page_key_aliases(entry: LepEntry, page_key: str | None = None) -> set[s
             continue
         alias = normalize_page_key(f"{subject_suffix} Page {target_key}")
         if alias is not None:
-            aliases.add(alias)
+            aliases.update(_page_key_prefix_aliases(alias))
+    return aliases
+
+
+def _page_key_prefix_aliases(page_key: str) -> set[str]:
+    match = re.fullmatch(r"(?P<prefix>.+?) (?P<number>\d+(?:-\d+)?)", page_key)
+    aliases = {page_key}
+    if match is None:
+        return aliases
+    prefix = match.group("prefix")
+    folded_prefix = prefix.casefold()
+    for source, replacements in _LEP_PAGE_PREFIX_ALIASES.items():
+        folded_source = source.casefold()
+        if folded_prefix == folded_source or folded_prefix.startswith(f"{folded_source} "):
+            suffix = prefix[len(source) :]
+            aliases.update(
+                f"{replacement.upper()}{suffix} {match.group('number')}"
+                for replacement in replacements
+            )
     return aliases
 
 
@@ -2234,41 +2259,46 @@ def _expected_ror_insertion_date(revision_date: DocDate) -> DocDate:
 
 
 def _ror_insertion_findings(state: RevisionState) -> list[RevisionFinding]:
-    findings: list[RevisionFinding] = []
-    for entry in state.ror_entries:
-        if entry.revision_date is None:
-            continue
-        expected = _expected_ror_insertion_date(entry.revision_date)
-        observed = entry.insertion_date
-        if (
-            observed is not None
-            and observed.day is None
-            and observed.month == expected.month
-            and observed.year == expected.year
-        ):
-            continue
-        if observed is None:
-            message = (
-                f"La date d'insertion du ROR est absente pour la date de revision "
-                f"{entry.revision_date.text} : elle doit etre {expected.text}."
-            )
-        else:
-            message = (
-                f"La date d'insertion « {entry.insertion_date_text} » du ROR est "
-                f"incorrecte pour la date de revision {entry.revision_date.text} : "
-                f"elle doit etre {expected.text}."
-            )
-        findings.append(
-            RevisionFinding(
-                control=ROR_INSERTION_DATE,
-                message=message,
-                original=entry.insertion_date_text,
-                proposed=expected.text,
-                page=entry.page,
-                bbox=entry.bbox,
-            )
+    entry = next(
+        (
+            candidate
+            for candidate in reversed(state.ror_entries)
+            if candidate.revision_date is not None
+        ),
+        None,
+    )
+    if entry is None or entry.revision_date is None:
+        return []
+    expected = _expected_ror_insertion_date(entry.revision_date)
+    observed = entry.insertion_date
+    if (
+        observed is not None
+        and observed.day is None
+        and observed.month == expected.month
+        and observed.year == expected.year
+    ):
+        return []
+    if observed is None:
+        message = (
+            f"La date d'insertion du ROR est absente pour la date de revision "
+            f"{entry.revision_date.text} : elle doit etre {expected.text}."
         )
-    return findings
+    else:
+        message = (
+            f"La date d'insertion « {entry.insertion_date_text} » du ROR est "
+            f"incorrecte pour la date de revision {entry.revision_date.text} : "
+            f"elle doit etre {expected.text}."
+        )
+    return [
+        RevisionFinding(
+            control=ROR_INSERTION_DATE,
+            message=message,
+            original=entry.insertion_date_text,
+            proposed=expected.text,
+            page=entry.page,
+            bbox=entry.bbox,
+        )
+    ]
 
 
 def _ror_revision_findings(state: RevisionState) -> list[RevisionFinding]:
