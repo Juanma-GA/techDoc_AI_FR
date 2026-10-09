@@ -140,6 +140,12 @@ def test_client_metadata_patch_validates_manifest_fields(
     )
     assert invalid_value.status_code == 422
     assert invalid_value.json()["code"] == "CLIENT_METADATA_INVALID"
+    valid_cmm_suffix = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_cmm_number": "79-30-02A"}},
+    )
+    assert valid_cmm_suffix.status_code == 200, valid_cmm_suffix.text
+    assert valid_cmm_suffix.json()["client_metadata"]["meta_cmm_number"] == "79-30-02A"
 
     invalid_format = client.patch(
         f"/api/v1/documents/{doc['id']}",

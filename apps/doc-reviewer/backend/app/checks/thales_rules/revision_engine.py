@@ -123,9 +123,10 @@ _PAGE_KEY_RE = re.compile(
 _LEP_PAGE_PREFIX_ALIASES = {
     "intro": ("introduction",),
     "introduction": ("intro",),
-    "tc": ("tp", "title page"),
-    "tp": ("tc", "title page"),
-    "title page": ("tc", "tp"),
+    "tc": ("table of contents",),
+    "table of contents": ("tc",),
+    "tp": ("title page",),
+    "title page": ("tp",),
 }
 _RANGE_SPLIT_RE = re.compile(
     r"(?i)\s+(?:to|thru|through)\s+|\s+[-–—]\s+|(?<=\d)[–—](?=\d)"

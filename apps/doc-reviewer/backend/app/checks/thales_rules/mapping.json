@@ -13,8 +13,8 @@
       "required": true,
       "labels": {"fr": "Numéro CMM", "en": "CMM number"},
       "max_length": 120,
-      "pattern": "^\\d{2}-\\d{2}-\\d{2}$",
-      "format_hint": {"fr": "Format NN-NN-NN, par exemple 79-30-02.", "en": "NN-NN-NN format, for example 79-30-02."}
+      "pattern": "^\\d{2}-\\d{2}-\\d{2}[A-Za-z]?$",
+      "format_hint": {"fr": "Format NN-NN-NN ou NN-NN-NNA, par exemple 79-30-02 ou 79-30-02A.", "en": "NN-NN-NN or NN-NN-NNA format, for example 79-30-02 or 79-30-02A."}
     },
     "meta_first_issue_date": {
       "type": "string",
@@ -68,7 +68,7 @@
     }
   },
   "entities": {
-    "cmm_number": "(?<!\\w)(\\d{2}-\\d{2}-\\d{2})(?!\\w)",
+    "cmm_number": "(?<!\\w)(\\d{2}-\\d{2}-\\d{2}[A-Za-z]?)(?!\\w)",
     "thales_logo_t": "^\\s*(T)\\s*$",
     "revision_number": "(?i)\\b(?:rev(?:ision)?\\s*(?:no\\.?|number)?\\s*[:#-]?\\s*)([^\\n|]+)",
     "revision_date": "(?i)\\brevision\\s+date\\s*[:#-]?\\s*([^\\n|]+)",

@@ -529,11 +529,11 @@ def test_ror_revision_date_must_match_the_highlights_revision_date() -> None:
     ("highlights_pages", "lep_subject"),
     [
         ("Intro Page 1", "Introduction"),
-        ("TC page 1", "TP"),
-        ("TC page 1", "Title Page"),
+        ("TC page 1", "Table of Contents"),
+        ("TP page 1", "Title Page"),
     ],
 )
-def test_lep_star_matches_intro_and_title_page_aliases(
+def test_lep_star_matches_intro_and_section_aliases(
     highlights_pages: str,
     lep_subject: str,
 ) -> None:
@@ -567,6 +567,48 @@ def test_lep_star_matches_intro_and_title_page_aliases(
     findings = revision._lep_findings(state)
 
     assert revision.LEP_STAR in [finding.control for finding in findings]
+
+
+def test_table_of_contents_status_does_not_contaminate_title_page_status() -> None:
+    revision_date = revision.parse_date(_REVISION_DATE)
+    assert revision_date is not None
+    highlights = [
+        revision.HighlightsEntry(
+            subject="Table of Contents",
+            pages_text="TC Page 1 to TC Page 2",
+            page_keys=revision.expand_page_range("TC Page 1 to TC Page 2"),
+            status="R",
+            page=1,
+            bbox=(0.0, 0.0, 1.0, 1.0),
+            status_bbox=(0.0, 0.0, 1.0, 1.0),
+        ),
+        revision.HighlightsEntry(
+            subject="Title Page",
+            pages_text="TP 2",
+            page_keys=revision.expand_page_range("TP 2"),
+            status="N",
+            page=1,
+            bbox=(0.0, 0.0, 1.0, 1.0),
+            status_bbox=(0.0, 0.0, 1.0, 1.0),
+        ),
+    ]
+    title_page = revision.LepEntry(
+        subject="Title Page",
+        page_key="TP 2",
+        date=revision_date,
+        date_text=f"{_REVISION_DATE} *",
+        is_blank=False,
+        starred=True,
+        page=2,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+    )
+    state = revision.RevisionState(
+        revision_date=revision_date,
+        highlights=highlights,
+        lep=[title_page],
+    )
+
+    assert state.highlights_status_for_lep(title_page, "TP 2") == "N"
 
 
 def test_page_keys_accept_any_section_abbreviation() -> None:
@@ -1447,7 +1489,7 @@ def test_highlights_chapter_rule_ignores_case_and_repeated_spaces() -> None:
     assert suggestions == []
 
 
-def test_highlights_chapter_rule_does_not_merge_subject_across_page_row() -> None:
+def test_highlights_extraction_does_not_merge_subject_across_page_row() -> None:
     spans = [
         Span("Chapter/Section and Page No", (69.8, 179.9, 231.8, 194.1), 1, "Arial", 10.0),
         Span("Designation", (255.4, 179.9, 321.4, 194.1), 1, "Arial", 10.0),
@@ -1467,23 +1509,12 @@ def test_highlights_chapter_rule_does_not_merge_subject_across_page_row() -> Non
         spans=spans,
         page_type="HIGHLIGHTS_PAGE_1",
     )
-    parsed = _consistent_document()
-    parsed.pages[0] = highlights_page
-    rule = next(
-        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
-    )
+    entries = revision.extract_highlights(highlights_page)
 
-    results, suggestions = execute_pdf_rules(
-        parsed,
-        [rule],
-        document=_DOCUMENT,
-    )
-    chapter_suggestions = [
-        item for item in suggestions if item.rule_code == rule.id
-    ]
-
-    assert results[0].status == "FAIL"
-    assert [item.original for item in chapter_suggestions] == ["Storage Instructions"]
+    assert [
+        (entry.subject, entry.pages_text, entry.status)
+        for entry in entries
+    ] == [("Storage Instructions", "Page  901", "R")]
 
 
 def test_deleted_highlights_status_conflicts_with_page_still_in_current_document() -> None:
