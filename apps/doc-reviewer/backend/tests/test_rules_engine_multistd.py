@@ -203,6 +203,33 @@ def test_layout_rules_require_explicit_opt_in(monkeypatch) -> None:
         session.close()
 
 
+def test_chapter_parity_is_transverse_and_not_gated_by_layout_toggle() -> None:
+    session = SessionLocal()
+    try:
+        page_texts = (
+            "Cover page",
+            "CHAPTER 1: INTRODUCTION",
+            "Chapter content",
+            "End matter",
+        )
+        pages = [
+            ParsedPage(page=page_number, text=text)
+            for page_number, text in enumerate(page_texts, start=1)
+        ]
+        parsed = ParsedPdf(
+            page_count=len(pages),
+            pages=pages,
+            full_text="\n".join(page_texts),
+            is_signed=False,
+        )
+
+        findings = run_all(parsed, _doc(), session, None, layout_enabled=False)
+
+        assert "LAYOUT_CHAPTER_PARITY" in {finding.rule_code for finding in findings}
+    finally:
+        session.close()
+
+
 def test_accent_fix_only_runs_for_explicit_french() -> None:
     session = SessionLocal()
     try:

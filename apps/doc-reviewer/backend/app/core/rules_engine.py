@@ -19,7 +19,14 @@ from typing import Any, Callable, Iterable, Literal, Optional
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.checks import catalog_runner, custom_rules, layout_checks, units_check, vision_checks
+from app.checks import (
+    catalog_runner,
+    custom_rules,
+    layout_checks,
+    pagination_checks,
+    units_check,
+    vision_checks,
+)
 from app.checks.client_bundle import ClientBundle
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.raw import RawSuggestion
@@ -235,6 +242,15 @@ def run_all(
             status: sum(1 for result in compiled_results_for_log if result.status == status)
             for status in ("PASS", "FAIL", "INCONCLUSIVE", "MANUAL", "UNSUPPORTED")
         },
+    )
+
+    stage_start = len(out)
+    out.extend(pagination_checks.run(parsed))
+    _logger.info(
+        "rules_stage_finished",
+        stage="pagination",
+        enabled=True,
+        raw_suggestion_count=len(out) - stage_start,
     )
 
     stage_start = len(out)
