@@ -114,6 +114,7 @@
       "dmHeaderHelp": "This JSON or XML file supplies shared Data Module header metadata, such as language, security classification, responsible or originating organization, and applicability.",
       "start": "Generate",
       "noFile": "Select a PDF or Word file to start a new generation.",
+      "selectedFile": "File sent to Generate: {{filename}}",
       "lastDocument": "Last file used: {{filename}}. Select a source file to generate.",
       "pdfCut": {
         "title": "Set the page range to analyse",

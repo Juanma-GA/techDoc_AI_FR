@@ -27,7 +27,11 @@ import {
 export function isRestorableMigrationInput(
   kind: MigrationInputKind,
 ): kind is "dmrl" | "dm_header" {
-  return kind === "dmrl" || kind === "dm_header";
+  return kind === "document" || kind === "dmrl" || kind === "dm_header";
+}
+
+export function generationFile(inputFile: File | null, stateFile: File | null): File | null {
+  return inputFile ?? stateFile;
 }
 
 export function getCommonMissingFields(
@@ -245,7 +249,8 @@ export function Migration() {
           const [kind, restoredFile] = item;
           if (!isRestorableMigrationInput(kind)) continue;
           restoreFileInput(kind, restoredFile);
-          restoredResources[kind] = restoredFile;
+          if (kind === "document") setFile(restoredFile);
+          else restoredResources[kind] = restoredFile;
         }
         setResourceFiles(restoredResources);
       } catch {
@@ -373,16 +378,19 @@ export function Migration() {
   };
 
   const doStart = async () => {
-    if (!file) {
+    const selectedFile = generationFile(inputRefs.current.document?.files?.[0] ?? null, file);
+    if (!selectedFile) {
       setLoadError(t("migration.upload.noFile"));
       return;
     }
     setLoadError(null);
+    setFile(selectedFile);
+    setLastDocumentName(selectedFile.name);
     setWiz(null);
     setWizError(null);
     setPdfCut(null);
     try {
-      const doc = await documentsApi.upload(file, issue, hint);
+      const doc = await documentsApi.upload(selectedFile, issue, hint);
       setDocId(doc.id);
       // La DMRL doit etre attachee AVANT le demarrage : elle pilote le decoupage.
       for (const [kind, resource] of Object.entries(resourceFiles)) {
@@ -545,7 +553,11 @@ export function Migration() {
                   setLoadError(null);
                 }}
               />
-              {!file && lastDocumentName ? (
+              {file ? (
+                <div className="label" role="status">
+                  {t("migration.upload.selectedFile", { filename: file.name })}
+                </div>
+              ) : lastDocumentName ? (
                 <div className="label" role="status">
                   {t("migration.upload.lastDocument", { filename: lastDocumentName })}
                 </div>

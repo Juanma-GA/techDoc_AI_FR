@@ -114,6 +114,7 @@
       "dmHeaderHelp": "Ce fichier JSON ou XML fournit les métadonnées communes de l’en-tête des Data Modules : langue, sécurité, société responsable ou émettrice, applicabilité, etc.",
       "start": "Générer",
       "noFile": "Sélectionne un fichier PDF ou Word pour lancer une nouvelle génération.",
+      "selectedFile": "Fichier envoyé à Générer : {{filename}}",
       "lastDocument": "Dernier fichier utilisé : {{filename}}. Sélectionne un fichier source pour générer.",
       "pdfCut": {
         "title": "Définir la plage de pages à analyser",

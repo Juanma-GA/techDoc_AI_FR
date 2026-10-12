@@ -1,13 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { getCommonMissingFields, isRestorableMigrationInput } from "./Migration";
+import { generationFile, getCommonMissingFields, isRestorableMigrationInput } from "./Migration";
 
 describe("restored migration inputs", () => {
-  it("restores shared resources but requires an explicit PDF selection", () => {
-    expect(isRestorableMigrationInput("document")).toBe(false);
+  it("restores the PDF and shared resources as generation inputs", () => {
+    expect(isRestorableMigrationInput("document")).toBe(true);
     expect(isRestorableMigrationInput("dmrl")).toBe(true);
     expect(isRestorableMigrationInput("dm_header")).toBe(true);
     expect(isRestorableMigrationInput("cir")).toBe(false);
+  });
+
+  it("sends the file selected in the input instead of stale state", () => {
+    const previouslyRestored = new File(["old"], "old.pdf");
+    const currentlyDisplayed = new File(["new"], "new.pdf");
+
+    expect(generationFile(currentlyDisplayed, previouslyRestored)).toBe(currentlyDisplayed);
+    expect(generationFile(null, previouslyRestored)).toBe(previouslyRestored);
   });
 });
 
