@@ -24,6 +24,7 @@ When live AACF content cannot be fetched, report `AACF NON VERIFIABLE`. Local do
 
 - [Local audit report protocol](../PROMPT_AUDIT_STANDARD.md)
 - [Application README template](standards/app-readme-template.md)
+- [Demo mode and shared identity integration](standards/demo-mode-integration.md)
 - [Portable skill contract](standards/portable-skill-contract.md)
 - [Operational validation guide](../AACF_TESTING_GUIDE.md)
 

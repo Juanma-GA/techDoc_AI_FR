@@ -2,7 +2,7 @@
 
 Version generique : compte uniquement `AppConfig`. Chaque POC doit
 remplacer le contenu de `stats()` et `reset_all()` pour ses propres tables.
-La cle Mistral (table app_config) est preservee par convention.
+La table app_config est preservee par convention (cle Mistral et mode demo).
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
 
 @router.post("/reset/all", response_model=AdminResetOut)
 def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
-    """Reset complet sauf `app_config` (preserve la cle Mistral).
+    """Reset complet sauf `app_config` (preserve les reglages et preferences).
 
     TODO POC : etendre pour purger les tables specifiques du POC — garder le
     log structure `admin_reset_all` (scope + deleted) comme trace d'audit de
