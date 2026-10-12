@@ -94,7 +94,7 @@ export const settingsApi = {
 
 // ----- Domain types ---------------------------------------------------------
 
-export type S1000dIssue = "4.1" | "4.2" | "5.0";
+export type S1000dIssue = "4.1" | "4.2";
 export type ContextHint = "mixed" | "descriptive" | "procedural";
 
 export type BrexProfile = {
@@ -194,6 +194,8 @@ export type WizardDm = {
   has_xml?: boolean;
   preview?: DmPreview;
   missing_fields?: string[];
+  xsd_valid?: boolean;
+  xsd_violations?: DmValidationViolation[];
   cir_unresolved?: string[];
   is_orphan?: boolean;
 };
@@ -303,7 +305,7 @@ export type ResourceKind = "dmrl" | "cir" | "brex_rules" | "dm_header";
 export type ResourceUploadDto = { kind: ResourceKind; count: number };
 export type MigrationInputKind = "document" | ResourceKind;
 export type MigrationInputMapping = {
-  issue: S1000dIssue;
+  issue: S1000dIssue | "5.0";
   context_hint: ContextHint;
   brex_id: string | null;
   files: Partial<Record<MigrationInputKind, { filename: string }>>;

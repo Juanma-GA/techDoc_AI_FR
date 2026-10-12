@@ -117,6 +117,58 @@ def test_generate_dm_dispatches_content_and_converts_lists():
     etree.fromstring(f"<root>{out['content_xml']}</root>".encode())
 
 
+def test_generate_dm_routes_unheaded_body_to_required_description():
+    dm = {"dm_id": "dm1", "title": "Frein", "dm_type": "descriptive"}
+    text = "Le frein ralentit la roue.\nIl est actionne par le circuit hydraulique."
+
+    out = dm_templates.generate_dm(dm, _TEMPLATE, text)
+    sections = {section["key"]: section for section in out["sections"]}
+
+    assert sections["introduction"]["content"] == ""
+    assert sections["description"]["content"] == text
+    assert out["missing_fields"] == []
+
+
+def test_generate_dm_matches_numbered_section_headings():
+    dm = {"dm_id": "dm1", "title": "Frein", "dm_type": "descriptive"}
+    text = "1. Introduction\nVue generale.\n2. Description\nFonctionnement du frein."
+
+    out = dm_templates.generate_dm(dm, _TEMPLATE, text)
+    sections = {section["key"]: section for section in out["sections"]}
+
+    assert sections["introduction"]["content"] == "Vue generale."
+    assert sections["description"]["content"] == "Fonctionnement du frein."
+    assert out["missing_fields"] == []
+
+
+def test_procedural_dm_without_preliminary_requirements_has_no_warning():
+    template = dm_templates.load_templates()["procedural"]
+    dm = {"dm_id": "dm1", "title": "Frein", "dm_type": "procedural"}
+
+    out = dm_templates.generate_dm(dm, template, "Déposer le capot.")
+    sections = {section["key"]: section for section in out["sections"]}
+
+    assert sections["preliminary"]["content"] == ""
+    assert sections["procedure"]["content"] == "Déposer le capot."
+    assert out["missing_fields"] == []
+
+
+def test_procedural_dm_keeps_preliminary_requirements_when_present():
+    template = dm_templates.load_templates()["procedural"]
+    dm = {"dm_id": "dm1", "title": "Frein", "dm_type": "procedural"}
+    text = (
+        "Conditions préalables\nIsoler l'alimentation.\n"
+        "Procédure\nDéposer le capot."
+    )
+
+    out = dm_templates.generate_dm(dm, template, text)
+    sections = {section["key"]: section for section in out["sections"]}
+
+    assert sections["preliminary"]["content"] == "Isoler l'alimentation."
+    assert sections["procedure"]["content"] == "Déposer le capot."
+    assert out["missing_fields"] == []
+
+
 def test_generate_dm_slices_on_dmrl_boundaries():
     text = "AVANT\nIntroduction\nContenu du DM.\nAPRES"
     dm = {"dm_id": "dm1", "title": "T", "dm_type": "descriptive",

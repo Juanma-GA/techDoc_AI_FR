@@ -30,8 +30,13 @@ from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.errors import AppError
-from app.core.s1000d_serializer import build_reference_index, content_node_count, serialize
-from app.core.validator import validate_document
+from app.core.s1000d_serializer import (
+    build_reference_index,
+    content_node_count,
+    missing_data_fields,
+    serialize,
+)
+from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, Document
 
 STEPS = ("split", "type", "structure", "generate")
@@ -331,7 +336,14 @@ def advance(db: Session, doc: Document, params: dict) -> dict:
         _apply_overrides(doc, params.get("overrides") or [])
         _generate_all(db, doc)
         doc.wizard_step = "generate"
-        doc.status = "extracted"
+        doc.status = (
+            "incomplete"
+            if any(
+                dm.get("xsd_valid") is not True or dm.get("missing_fields")
+                for dm in ws.load_dms(doc)
+            )
+            else "extracted"
+        )
     elif step == "generate":
         return state(doc)
     db.commit()
@@ -416,6 +428,7 @@ def _generate_all(db: Session, doc: Document) -> None:
         try:
             enriched, extra = wres.apply_resources(dm, res)
             root = ir_mod.from_dict(enriched["tree"])
+            template_missing_fields = enriched.get("missing_fields") or []
             xml = serialize(
                 root,
                 issue=doc.s1000d_issue,
@@ -425,6 +438,7 @@ def _generate_all(db: Session, doc: Document) -> None:
                 table_offset=table_offset,
                 section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+                missing_fields=template_missing_fields,
                 header_template=res.header_template,
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
@@ -439,10 +453,13 @@ def _generate_all(db: Session, doc: Document) -> None:
                 if k not in ("xml", "violations", "content_html", "content_xml")
             })
             dm["xml"] = xml
+            dm["template_missing_fields"] = template_missing_fields
+            dm["missing_fields"] = missing_data_fields(xml, template_missing_fields)
             dm["violations"] = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"], brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
             ) + extra
+            dm["xsd_valid"] = xsd_is_valid(dm["violations"])
             log.info(
                 "dm_generated",
                 document_id=doc.id,
@@ -458,6 +475,7 @@ def _generate_all(db: Session, doc: Document) -> None:
                 "severity": "error", "rule": "GENERATE",
                 "message": f"Generation impossible pour ce DM : {exc}", "path": "/",
             }]
+            dm["xsd_valid"] = False
     ws.save_dms(doc, dms)
 
 
@@ -485,6 +503,11 @@ def state(doc: Document) -> dict:
             entry["violation_count"] = len(dm.get("violations") or [])
             entry["has_xml"] = bool(dm.get("xml"))
             entry["missing_fields"] = dm.get("missing_fields") or []
+            entry["xsd_valid"] = dm.get("xsd_valid") is True
+            entry["xsd_violations"] = [
+                violation for violation in dm.get("violations") or []
+                if violation.get("rule") in {"XSD", "WELLFORMED"}
+            ]
             entry["cir_unresolved"] = dm.get("cir_unresolved") or []
         out_dms.append(entry)
     out = {
@@ -535,6 +558,12 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 raise AppError("NO_XML", "XML non genere : termine l'etape Generation.", 409)
             # Le tree est la source de verite : un XML persiste peut provenir
             # d'une generation precedente ou d'un serializer ancien.
+            enriched, template_extra = wres.apply_resources(dm, res)
+            template_missing_fields = enriched.get("missing_fields") or []
+            template_violations = [
+                violation for violation in template_extra
+                if violation.get("rule") == "TEMPLATE"
+            ]
             xml = serialize(
                 ir_mod.from_dict(dm["tree"]),
                 issue=doc.s1000d_issue,
@@ -544,11 +573,32 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 table_offset=table_offset,
                 section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
+                missing_fields=template_missing_fields,
                 header_template=res.header_template,
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
             )
             dm["xml"] = xml
+            dm["template_missing_fields"] = template_missing_fields
+            xsd_results = validate_document(
+                xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"],
+            )
+            dm["violations"] = [
+                violation for violation in dm.get("violations") or []
+                if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE"}
+            ] + xsd_results + template_violations
+            dm["xsd_valid"] = xsd_is_valid(xsd_results)
+            dm["missing_fields"] = missing_data_fields(
+                xml, template_missing_fields,
+            )
+            doc.status = (
+                "incomplete"
+                if any(
+                    item.get("xsd_valid") is not True or item.get("missing_fields")
+                    for item in dms
+                )
+                else "extracted"
+            )
             ws.save_dms(doc, dms)
             return xml
         root = ir_mod.from_dict(dm["tree"]) if dm.get("tree") else None

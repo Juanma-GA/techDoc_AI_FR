@@ -33,7 +33,7 @@ def test_stats_and_reset_preserve_brex(client, pdf_bytes, brex_xml) -> None:
     client.post(
         "/api/v1/documents",
         files={"file": ("m.pdf", pdf_bytes)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     stats = client.get("/api/v1/admin/stats").json()
     assert stats["documents"] == 1 and stats["brex_profiles"] == 1

@@ -56,6 +56,7 @@ def run(
 
     progress_cb("context", 45)
     dm_type = context_classifier.classify(root, hint=hint, db=db)
+    context_classifier.apply_dm_type(root, dm_type)
 
     progress_cb("form", 60)
     form_segmenter.segment(root, db=db, progress_cb=lambda pct: progress_cb("form", pct))

@@ -209,10 +209,21 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     ready = [d for d in dms if d.get("xml")]
     if not ready:
         raise AppError("NO_XML", "Aucun XML genere : termine l'etape Generation.", 409)
+    if len(ready) != len(dms):
+        raise AppError(
+            "DM_INCOMPLETE",
+            "Export ZIP impossible : certains DMs n'ont pas pu etre generes.",
+            409,
+        )
+    xml_by_dm = {
+        dm["dm_id"]: wizard.dm_xml(doc, dm["dm_id"])
+        for dm in ready
+    }
+    db.commit()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
-            zf.writestr(_dm_filename(d), wizard.dm_xml(doc, d["dm_id"]))
+            zf.writestr(_dm_filename(d), xml_by_dm[d["dm_id"]])
         pmc = wres.pmc_xml(doc)
         if pmc:
             zf.writestr(f"PMC/{doc.id}_pmc.xml", pmc)

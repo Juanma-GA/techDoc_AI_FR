@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from xml.sax.saxutils import escape
 
 from app.core.dmrl import normalize
@@ -113,25 +114,40 @@ def _slice_for(dm: dict, document_text: str) -> str:
 def _dispatch(body: str, sections: list[dict]) -> None:
     """Repartit les lignes du corps dans les rubriques du template.
 
-    Une ligne dont le titre normalise correspond a un `match` de rubrique ouvre
-    cette rubrique ; les lignes suivantes lui sont rattachees. Ce qui precede la
-    premiere rubrique va dans la premiere rubrique du template (rien n'est
-    jete).
+    Les numeros de titres sont ignores pendant la detection. Si le document ne
+    contient aucun titre reconnu, le texte est affecte a sa rubrique principale
+    obligatoire plutot qu'a une rubrique facultative vide.
     """
     if not sections:
         return
     buckets: dict[str, list[str]] = {s["key"]: [] for s in sections}
     current = sections[0]["key"]
+    matched_heading = False
     for line in body.splitlines():
         norm = normalize(line)
+        heading = re.sub(r"^(?:\d+\s+)+", "", norm).strip()
         hit = next(
-            (s for s in sections if norm and any(m and norm.startswith(m) for m in s["match"])),
+            (
+                s for s in sections
+                if heading and any(m and heading.startswith(m) for m in s["match"])
+            ),
             None,
         )
         if hit is not None:
             current = hit["key"]
+            matched_heading = True
             continue
         buckets[current].append(line)
+    if not matched_heading:
+        fallback = next(
+            (section for section in sections
+             if section["required"] and section["key"] in {"description", "procedure"}),
+            None,
+        ) or next((section for section in sections if section["required"]), sections[0])
+        source_key = sections[0]["key"]
+        if fallback["key"] != source_key:
+            buckets[fallback["key"]].extend(buckets[source_key])
+            buckets[source_key] = []
     for sec in sections:
         sec["content"] = "\n".join(buckets[sec["key"]]).strip()
 

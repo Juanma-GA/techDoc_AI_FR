@@ -215,7 +215,12 @@
       "xml": "Download DM",
       "images": "Extracted illustrations ({{count}})",
       "imageAlt": "Extracted illustration {{index}}",
-      "zip": "Download all (ZIP)"
+      "zip": "Download all (ZIP)",
+      "generationPending": "Download unavailable until DM generation is complete.",
+      "xsdIncomplete": "Incomplete DM: XSD validation failed.",
+      "xsdNoDetails": "The schema could not be run or returned no details.",
+      "missingDataWarning": "The XSD passes, but some business data still needs confirmation.",
+      "missingFields": "{{count}} item(s) to complete"
     }
   },
   "validation": {

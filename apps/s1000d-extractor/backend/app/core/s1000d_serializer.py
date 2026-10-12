@@ -1,9 +1,9 @@
 """Serialiseur : IR resolu -> squelette XML S1000D (lxml).
 
 ATTENTION (ecart assume) : la sortie est un SQUELETTE STRUCTUREL best-effort,
-PAS un Data Module valide. Les metadonnees non recuperables d'un PDF/Word
-(DMC, SNS, applicabilite, securite, ICN des graphics) sont des placeholders
-marques `<!-- TODO ... -->` a completer par un humain.
+pas un Data Module pret a publier. Les metadonnees non recuperables d'un PDF/Word
+(DMC, SNS, applicabilite, securite, ICN des graphics) utilisent des valeurs
+compatibles avec le XSD et sont signalees par des commentaires de remplacement.
 
 Noms d'elements conformes Issue 4.1 / 4.2 / 5.0 (stables entre les trois) :
 - bloc d'identification : `identAndStatusSection` (`dmAddress` + `dmStatus`,
@@ -25,6 +25,7 @@ import unicodedata
 
 from lxml import etree
 
+from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
 from app.core.ir import IRNode, InlineRun
 from app.core.pmc import parse_dmc
@@ -32,9 +33,10 @@ from app.core.s1000d_codes import emphasis_code_for_style, get_code
 
 _BANNER = (
     " Squelette structurel best-effort genere par s1000d extractor. "
-    "NON valide comme Data Module : DMC / SNS / applicabilite / securite / ICN "
-    "a completer manuellement (voir les commentaires TODO). "
+    "DMC / SNS / applicabilite / securite / ICN et contenu metier a confirmer "
+    "avant publication (voir le recapitulatif des champs manquants). "
 )
+_MISSING_DATA_COMMENT_PREFIX = "A REMPLACER AVANT PUBLICATION:"
 
 # Caracteres de controle interdits en XML 1.0 (le texte d'un PDF en contient
 # souvent : form feed, NUL...). lxml leve une ValueError -> 500 cote API. On les
@@ -65,17 +67,17 @@ _SCHEMA_NAMES = {
     "ipd": "ipd.xsd",
 }
 _DM_CODE_DEFAULTS = {
-    "assyCode": "00",
-    "disassyCode": "00",
-    "disassyCodeVariant": "A",
-    "infoCode": "040",
-    "infoCodeVariant": "A",
-    "itemLocationCode": "D",
-    "modelIdentCode": "TODO",
-    "subSubSystemCode": "0",
-    "subSystemCode": "0",
-    "systemCode": "00",
-    "systemDiffCode": "A",
+    "assyCode": "ZZ",
+    "disassyCode": "ZZ",
+    "disassyCodeVariant": "Z",
+    "infoCode": "ZZZ",
+    "infoCodeVariant": "Z",
+    "itemLocationCode": "T",
+    "modelIdentCode": "ZZ",
+    "subSubSystemCode": "Z",
+    "subSystemCode": "Z",
+    "systemCode": "ZZ",
+    "systemDiffCode": "Z",
 }
 _DM_FIELD_NAMES = {
     "modelIdentCode": "model_ident_code",
@@ -320,7 +322,7 @@ def _doctype(root: IRNode) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
     declared: set[str] = set()
-    placeholder_ident = "ICN-TODO-00000"
+    placeholder_ident = "ICN-ZZZ-00000"
     for node in root.walk():
         if node.kind != "figure":
             continue
@@ -352,7 +354,7 @@ def _schema_location(issue: str, dm_type: str) -> str:
     return f"http://www.s1000d.org/S1000D_{issue_path}/xml_schema_flat/{schema_name}"
 
 
-def _dm_code(metadata: Mapping[str, object] | None, dm_type: str) -> dict[str, str]:
+def _dm_code(metadata: Mapping[str, object] | None) -> dict[str, str]:
     data = metadata or {}
     values = dict(_DM_CODE_DEFAULTS)
     parsed = parse_dmc(str(data.get("dmc") or ""))
@@ -362,9 +364,66 @@ def _dm_code(metadata: Mapping[str, object] | None, dm_type: str) -> dict[str, s
         value = data.get(field_name)
         if value:
             values[xml_name] = str(value).strip()
-    if not parsed and not data.get("info_code"):
-        values["infoCode"] = {"procedural": "520", "ipd": "941"}.get(dm_type, "040")
     return {key: xml_text(value) for key, value in values.items()}
+
+
+def _missing_dm_code_fields(metadata: Mapping[str, object] | None) -> list[str]:
+    data = metadata or {}
+    if parse_dmc(str(data.get("dmc") or "")):
+        return []
+    base_path = "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode"
+    return [
+        f"{base_path}/@{xml_name} (DMC source a renseigner)"
+        for xml_name, field_name in _DM_FIELD_NAMES.items()
+        if not data.get(field_name)
+    ]
+
+
+def _is_placeholder(value: str) -> bool:
+    normalized = value.strip().casefold()
+    return any(marker in normalized for marker in (
+        "a remplacer", "example organization", "unverified",
+    ))
+
+
+def _collect_missing_data_fields(
+    root: etree._Element,
+    extra_fields: Sequence[str] = (),
+) -> list[str]:
+    missing = [str(field).strip() for field in extra_fields if str(field).strip()]
+    tree = root.getroottree()
+    for node in root.iter():
+        if isinstance(node, etree._Comment):
+            text = (node.text or "").strip()
+            if text.startswith(_MISSING_DATA_COMMENT_PREFIX):
+                summary = text[len(_MISSING_DATA_COMMENT_PREFIX):].strip()
+                missing.extend(field.strip() for field in summary.split(";") if field.strip())
+                continue
+            if _is_placeholder(text):
+                missing.append(f"Commentaire XML: {text}")
+            continue
+        if not isinstance(node.tag, str):
+            continue
+        path = tree.getpath(node)
+        if path.startswith("/dmodule/identAndStatusSection/dmStatus"):
+            continue
+        if etree.QName(node).localname == "unverified":
+            missing.append(f"{path} (assurance qualité à valider)")
+        for name, value in node.attrib.items():
+            local_name = etree.QName(name).localname
+            if _is_placeholder(value) or (local_name == "enterpriseCode" and value == "EX"):
+                missing.append(f"{path}/@{local_name}")
+        text = (node.text or "").strip()
+        if _is_placeholder(text):
+            missing.append(f"{path}/text()")
+        elif etree.QName(node).localname == "simplePara" and text.casefold() == "all" and "/applic" in path:
+            missing.append(f"{path}/text() (applicabilité à confirmer)")
+    return list(dict.fromkeys(missing))
+
+
+def missing_data_fields(xml: str, extra_fields: Sequence[str] = ()) -> list[str]:
+    root = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    return _collect_missing_data_fields(root, extra_fields)
 
 
 def _text(value: object, fallback: str = "") -> str:
@@ -445,7 +504,7 @@ def _emit_header(
     ident = etree.SubElement(dmodule, "identAndStatusSection")
     address = etree.SubElement(ident, "dmAddress")
     dm_ident = etree.SubElement(address, "dmIdent")
-    etree.SubElement(dm_ident, "dmCode", **_dm_code(metadata, dm_type))
+    etree.SubElement(dm_ident, "dmCode", **_dm_code(metadata))
     language = template.get("language") or {}
     etree.SubElement(dm_ident, "language", countryIsoCode=_text(language.get("countryIsoCode"), "FR"), languageIsoCode=_text(language.get("languageIsoCode"), "fr"))
     etree.SubElement(dm_ident, "issueInfo", inWork="00", issueNumber="001")
@@ -630,7 +689,7 @@ def _emit_reference(
                 referredFragment=target.target_id,
             )
             ident = etree.SubElement(dm_ref, "dmRefIdent")
-            etree.SubElement(ident, "dmCode", **_dm_code({"dmc": target.dmc}, "descriptive"))
+            etree.SubElement(ident, "dmCode", **_dm_code({"dmc": target.dmc}))
             dm_ref.append(_comment(
                 f" cible {ref.get('text', '')} dans le DM {target.dmc} "
             ))
@@ -770,8 +829,8 @@ def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> No
         for icn in _figure_icns(node):
             etree.SubElement(fig, "graphic", infoEntityIdent=_graphic_ident(icn))
     else:
-        fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
-        etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")
+        fig.append(_comment("A REMPLACER: reference ICN de l'illustration."))
+        etree.SubElement(fig, "graphic", infoEntityIdent="ICN-ZZZ-00000")
 
 
 def _emit_admonition(
@@ -1002,11 +1061,12 @@ def _emit_material_requirements(
         item = etree.SubElement(group, item_tag)
         name = etree.SubElement(item, "name")
         name.text = xml_text(text)
+        item.append(_comment("A REMPLACER: code fabricant, quantite et unite de mesure."))
         ident_number = etree.SubElement(item, "identNumber")
         manufacturer = etree.SubElement(ident_number, "manufacturerCode")
-        manufacturer.text = "TODO"
-        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure="TODO")
-        quantity.text = "TODO"
+        manufacturer.text = "A REMPLACER"
+        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure="A REMPLACER")
+        quantity.text = "A REMPLACER"
 
 
 def _emit_safety_requirements(
@@ -1403,13 +1463,27 @@ def _build_content(
             reference_index=reference_index,
             current_dm_id=current_dm_id,
         )
+        if not any(isinstance(child.tag, str) for child in main):
+            counters["section"] += 1
+            placeholder_step = etree.SubElement(
+                main,
+                "proceduralStep",
+                id=f"par-{counters['section']:04d}",
+            )
+            placeholder_step.append(_comment(
+                "A REMPLACER: aucune etape de procedure n'a ete detectee dans la source."
+            ))
+            etree.SubElement(placeholder_step, "title").text = "Etape a renseigner"
+            etree.SubElement(placeholder_step, "para").text = (
+                "Etape de procedure a completer a partir de la source."
+            )
         close = etree.SubElement(proc, "closeRqmts")
         _emit_no_req_cond_group(close)
     else:
         desc = etree.SubElement(content, "description")
         if dm_type == "ipd":
             desc.append(etree.Comment(
-                " TODO: catalogue de pieces (IPD/IPC) - structurer en catalogSeqNumber/itemSeqNumber "
+                " Catalogue de pieces a structurer selon les informations de la source. "
             ))
         _emit_children(
             desc,
@@ -1431,6 +1505,7 @@ def serialize(
     table_offset: int = 0,
     section_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
+    missing_fields: Sequence[str] = (),
     header_template: Mapping[str, object] | None = None,
     reference_index: ReferenceIndex | None = None,
     reference_dm_id: str = "",
@@ -1474,6 +1549,13 @@ def serialize(
         reference_index=reference_index,
         current_dm_id=reference_dm_id,
     ))
+    missing = list(missing_fields)
+    missing.extend(_missing_dm_code_fields(dm_metadata))
+    missing = _collect_missing_data_fields(dmodule, missing)
+    if missing:
+        dmodule.append(_comment(
+            _MISSING_DATA_COMMENT_PREFIX + " " + "; ".join(missing)
+        ))
 
     tree = dmodule.getroottree()
     return etree.tostring(

@@ -22,9 +22,9 @@ from app.core import migration_inputs
 from app.core import pipeline
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
-from app.core.s1000d_schema import SUPPORTED_ISSUES
-from app.core.s1000d_serializer import serialize
-from app.core.validator import validate_document
+from app.core.s1000d_schema import SELECTABLE_ISSUES
+from app.core.s1000d_serializer import missing_data_fields, serialize
+from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import SessionLocal, get_db
 from app.parsers import detect_format
@@ -103,7 +103,7 @@ async def upload_document(
     brex_id: str | None = Form(None),
     db: Session = Depends(get_db),
 ) -> DocumentOut:
-    if s1000d_issue not in SUPPORTED_ISSUES:
+    if s1000d_issue not in SELECTABLE_ISSUES:
         raise AppError("BAD_ISSUE", f"Issue non supportee : {s1000d_issue}", 422)
     if context_hint not in _HINTS:
         raise AppError("BAD_HINT", f"Hint invalide : {context_hint}", 422)
@@ -209,9 +209,26 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
             header_template=resources.header_template,
         )
         Path(doc.xml_path).write_text(xml, encoding="utf-8")
+    violations = validate_document(
+        xml,
+        issue=doc.s1000d_issue,
+        dm_type=doc.dm_type or "descriptive",
+    )
+    doc.violations_json = json.dumps(violations, ensure_ascii=False)
+    missing_fields = missing_data_fields(xml)
+    doc.status = (
+        "incomplete"
+        if not xsd_is_valid(violations) or missing_fields
+        else "extracted"
+    )
+    db.commit()
     return Response(
         content=xml, media_type="application/xml",
-        headers={"Content-Disposition": f'attachment; filename="{doc.id}.xml"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{doc.id}.xml"',
+            "X-S1000D-XSD-Valid": str(xsd_is_valid(violations)).lower(),
+            "X-S1000D-Missing-Fields": str(len(missing_fields)),
+        },
     )
 
 
@@ -248,6 +265,12 @@ def override_node(
         issue=doc.s1000d_issue,
         dm_type=doc.dm_type or "descriptive",
         brex_xml=brex_xml,
+    )
+    missing_fields = missing_data_fields(xml)
+    doc.status = (
+        "incomplete"
+        if not xsd_is_valid(violations) or missing_fields
+        else "extracted"
     )
     Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
@@ -305,7 +328,12 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         doc.dm_type = result.dm_type
         doc.ir_json = json.dumps(result.tree, ensure_ascii=False)
         doc.violations_json = json.dumps(result.violations, ensure_ascii=False)
-        doc.status = "extracted"
+        missing_fields = missing_data_fields(result.xml)
+        doc.status = (
+            "incomplete"
+            if not xsd_is_valid(result.violations) or missing_fields
+            else "extracted"
+        )
         db.commit()
         return {
             "document_id": doc.id, "dm_type": result.dm_type,

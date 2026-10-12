@@ -6,6 +6,7 @@ from app.core.dm_validation import validate_dm
 from app.core.ir import IRNode
 from app.core.resolver import resolve
 from app.core.s1000d_serializer import serialize
+from app.core.validator import xsd_is_valid
 
 
 def _valid_dm(issue: str = "4.1", dm_type: str = "descriptive") -> str:
@@ -18,7 +19,21 @@ def _valid_dm(issue: str = "4.1", dm_type: str = "descriptive") -> str:
         section,
     ])
     resolve(root)
-    return serialize(root, issue=issue, dm_type=dm_type)
+    info_code = "520" if dm_type == "procedural" else "040"
+    return serialize(
+        root,
+        issue=issue,
+        dm_type=dm_type,
+        dm_metadata={"dmc": f"DMC-WEG-A-00-00-00-00A-{info_code}A-D"},
+    )
+
+
+def test_xsd_gate_rejects_errors_and_unverifiable_issues_but_ignores_brex() -> None:
+    assert xsd_is_valid([])
+    assert not xsd_is_valid([{"rule": "XSD", "severity": "info"}])
+    assert not xsd_is_valid([{"rule": "XSD", "severity": "error"}])
+    assert not xsd_is_valid([{"rule": "WELLFORMED", "severity": "error"}])
+    assert xsd_is_valid([{"rule": "BREX", "severity": "error"}])
 
 
 def test_detects_issue_and_schema_from_schema_location() -> None:

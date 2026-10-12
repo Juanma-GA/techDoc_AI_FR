@@ -5,8 +5,9 @@ Les jeux de schemas officiels (volumineux) sont charges depuis
 signalee "non installee" (degradation gracieuse), mais le vocabulaire intern
 (table ci-dessous) reste disponible pour la resolution.
 
-Issues supportees : 4.1, 4.2 et 5.0. Les noms d'elements du squelette sont stables
-entre les deux (heritage du redesign Issue 4.0).
+Issues reconnues par le validateur : 4.1, 4.2 et 5.0. Issue 5.0 reste
+disponible pour verifier les anciens fichiers, mais sans XSD local elle est
+non verifiable. Seules 4.1 et 4.2 sont selectionnables pour la generation.
 """
 
 from __future__ import annotations
@@ -19,7 +20,17 @@ from lxml import etree
 from app.core import xml_safe
 
 SUPPORTED_ISSUES = ("4.1", "4.2", "5.0")
+SELECTABLE_ISSUES = ("4.1", "4.2")
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
+_DM_SCHEMA_STEMS = {
+    "descriptive": "descript",
+    "description": "descript",
+    "descript": "descript",
+    "procedural": "proced",
+    "procedure": "proced",
+    "proced": "proced",
+    "ipd": "ipd",
+}
 
 # Vocabulaire d'elements legaux par contexte (sous-ensemble structurel v1).
 # Sert de garde-fou meme sans XSD officiel installe.
@@ -54,24 +65,14 @@ def is_installed(issue: str) -> bool:
 
 def _find_dm_xsd(issue: str, dm_type: str | None = None) -> Path | None:
     d = _issue_dir(issue)
-    if not d.is_dir():
+    if not d.is_dir() or not dm_type:
         return None
-    schema_stem = {
-        "descriptive": "descript",
-        "procedural": "proced",
-    }.get((dm_type or "").lower(), (dm_type or "").lower().removesuffix(".xsd"))
-    if schema_stem and re.fullmatch(r"[a-z][a-z0-9_-]*", schema_stem):
-        explicit = d / f"{schema_stem}.xsd"
-        if explicit.is_file():
-            return explicit
-    preferred = "proced*.xsd" if dm_type == "procedural" else "descript*.xsd"
-    # Le type du DM choisit le schema correspondant ; le premier schema reste
-    # un repli pour les anciennes installations mono-XSD.
-    for pat in (preferred, "descript*.xsd", "proced*.xsd", "*.xsd"):
-        hits = sorted(d.glob(pat))
-        if hits:
-            return hits[0]
-    return None
+    normalized_type = dm_type.lower().removesuffix(".xsd")
+    schema_stem = _DM_SCHEMA_STEMS.get(normalized_type)
+    if schema_stem is None or not re.fullmatch(r"[a-z][a-z0-9_-]*", schema_stem):
+        return None
+    schema_path = d / f"{schema_stem}.xsd"
+    return schema_path if schema_path.is_file() else None
 
 
 def validate_xsd(
@@ -95,15 +96,23 @@ def validate_xsd(
             f"(app/s1000d_schemas/issue-{issue}/). Validation XSD ignoree.",
             "/",
         )]
-    xsd_path = _find_dm_xsd(issue, dm_type)
-    if xsd_path is None:
-        return [_v("info", "XSD", f"Aucun .xsd trouve pour l'Issue {issue}.", "/")]
     try:
         doc = xml_safe.fromstring(xml, allow_internal_dtd=allow_internal_dtd)
         selected_type = dm_type
         if selected_type is None:
-            selected_type = "procedural" if doc.find("./content/procedure") is not None else "descriptive"
-        xsd_path = _find_dm_xsd(issue, selected_type) or xsd_path
+            if doc.find("./content/procedure") is not None:
+                selected_type = "procedural"
+            elif doc.find("./content/ipd") is not None:
+                selected_type = "ipd"
+            else:
+                selected_type = "descriptive"
+        xsd_path = _find_dm_xsd(issue, selected_type)
+        if xsd_path is None:
+            return [_v(
+                "info", "XSD",
+                f"Aucun schema DM correspondant au type '{selected_type}' pour l'Issue {issue}.",
+                "/",
+            )]
         schema = etree.XMLSchema(xml_safe.parse(str(xsd_path)))
     except etree.XMLSyntaxError as exc:
         return [_v("error", "XSD", f"XML mal forme : {exc}", "/")]

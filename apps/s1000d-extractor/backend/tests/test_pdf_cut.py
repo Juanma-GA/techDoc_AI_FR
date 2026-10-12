@@ -13,7 +13,7 @@ def _upload(client, data: bytes) -> str:
     response = client.post(
         "/api/v1/documents",
         files={"file": ("manual.pdf", data)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]

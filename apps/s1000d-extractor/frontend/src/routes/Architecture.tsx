@@ -1,8 +1,8 @@
 // Contenu FR (le preview source est FR-only).
 export function Architecture() {
   const workflow = [
-    "Paramètres → clé Mistral (active OCR scans + classification IA). BREX optionnel.",
-    "Charger → PDF/Word + version S1000D (4.2/5.0) + nature dominante + BREX → « Démarrer l'assistant ».",
+    "Paramètres → clé Mistral (active OCR scans + classification IA) ; validation BREX à venir.",
+    "Charger → PDF/Word + version S1000D (4.1/4.2) + nature dominante → « Démarrer l'assistant ».",
     "Découpage → choisir le niveau (chapitre/section/sous-section), revoir les Data Modules détectés.",
     "Types → corriger le type de chaque DM (descriptive / procedural / ipd).",
     "Structure → arbre par DM, trancher les nœuds ambigus (para ↔ proceduralStep).",
@@ -14,7 +14,7 @@ export function Architecture() {
     "découpage (étape 1) → 1 Data Module par section/chapitre/sous-section.",
     "typage par DM (étape 2) → descriptive / procedural / ipd (heuristique + IA Mistral).",
     "résolution (étape 3) → élément S1000D selon contexte × forme ; candidats multiples si ambigu.",
-    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD + BREX (porte).",
+    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD ; BREX à venir.",
   ];
 
   return (
@@ -38,9 +38,9 @@ export function Architecture() {
           <div className="arch-split">
             <div className="label accent-color">CE QUI VARIE PAR PROJET</div>
             <div>
-              La <strong>version S1000D</strong> (4.2 / 5.0 → jeu de schémas XSD) et le{" "}
-              <strong>BREX</strong> (règles projet) sont chargés en données, une fois par
-              projet. Le moteur de mapping, lui, ne change jamais.
+              La <strong>version S1000D</strong> (4.1 / 4.2 → schémas XSD locaux) et les
+              règles <strong>BREX</strong> seront prises en compte séparément. Le moteur
+              de mapping, lui, ne change jamais.
             </div>
           </div>
         </div>

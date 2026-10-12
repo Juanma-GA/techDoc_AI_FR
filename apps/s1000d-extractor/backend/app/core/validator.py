@@ -82,3 +82,11 @@ def validate_document(
             )
 
     return violations
+
+
+def xsd_is_valid(violations: list[dict]) -> bool:
+    """Return false unless the XML is well formed and its exact XSD check passed."""
+    return not any(
+        violation.get("rule") in {"XSD", "WELLFORMED"}
+        for violation in violations
+    )

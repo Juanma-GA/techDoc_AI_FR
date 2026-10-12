@@ -1197,38 +1197,105 @@ export function Migration() {
                       <ShieldCheck aria-hidden="true" size={15} /> {t("migration.generate.validate")}
                     </button>
                   ) : null}
-                  <a
+                  <button
+                    type="button"
                     className="btn primary"
                     style={{ marginLeft: "auto" }}
-                    href={docId ? wizardApi.zipUrl(docId) : "#"}
+                    disabled={
+                      busy ||
+                      !docId ||
+                      wiz.dms.length === 0 ||
+                      wiz.dms.some((dm) => !dm.has_xml)
+                    }
+                    title={
+                      wiz.dms.some((dm) => !dm.has_xml)
+                        ? t("migration.generate.generationPending")
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (docId) window.location.assign(wizardApi.zipUrl(docId));
+                    }}
                   >
                     {t("migration.generate.zip")}
-                  </a>
+                  </button>
                 </div>
                 <div>
-                  {wiz.dms.map((d) => (
+                  {wiz.dms.map((dm) => (
                     <div
-                      key={d.dm_id}
-                      className="row"
+                      key={dm.dm_id}
                       style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}
                     >
-                      <span className="grow">
-                        {d.is_orphan ? t("migration.dm.orphan") : d.title}{" "}
-                        <DmTypeBadge type={d.dm_type} />{" "}
-                        {d.cir_unresolved?.length ? (
-                          <span className="badge warn" title={d.cir_unresolved.join(", ")}>
-                            {t("migration.generate.cirUnresolved", {
-                              count: d.cir_unresolved.length,
+                      <div className="row">
+                        <span className="grow">
+                          {dm.is_orphan ? t("migration.dm.orphan") : dm.title}{" "}
+                          <DmTypeBadge type={dm.dm_type} />{" "}
+                          {dm.cir_unresolved?.length ? (
+                            <span className="badge warn" title={dm.cir_unresolved.join(", ")}>
+                              {t("migration.generate.cirUnresolved", {
+                                count: dm.cir_unresolved.length,
+                              })}
+                            </span>
+                          ) : null}
+                        </span>
+                        {docId && dm.has_xml ? (
+                          <a
+                            className="btn secondary small"
+                            href={wizardApi.dmXmlUrl(docId, dm.dm_id)}
+                          >
+                            {t("migration.generate.xml")}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn secondary small"
+                            disabled
+                            title={t("migration.generate.generationPending")}
+                          >
+                            {t("migration.generate.xml")}
+                          </button>
+                        )}
+                      </div>
+                      {dm.xsd_valid !== true || dm.missing_fields?.length ? (
+                        <div
+                          className={dm.xsd_valid === false ? "alert error" : "banner warn"}
+                          role={dm.xsd_valid === false ? "alert" : "status"}
+                          style={{ marginTop: 8 }}
+                        >
+                          <strong>
+                            {dm.xsd_valid === false
+                              ? t("migration.generate.xsdIncomplete")
+                              : t("migration.generate.missingDataWarning")}
+                          </strong>
+                          {dm.xsd_valid === false && dm.xsd_violations?.length ? (
+                            <ul>
+                              {dm.xsd_violations.map((violation, index) => (
+                                <li key={`${violation.rule}-${index}`}>
+                                  <code>{violation.path}</code>: {violation.message}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {dm.xsd_valid === false && !dm.xsd_violations?.length ? (
+                            <p>{t("migration.generate.xsdNoDetails")}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {dm.missing_fields?.length ? (
+                        <details style={{ marginTop: 8 }}>
+                          <summary>
+                            {t("migration.generate.missingFields", {
+                              count: dm.missing_fields.length,
                             })}
-                          </span>
-                        ) : null}
-                      </span>
-                      <a
-                        className="btn secondary small"
-                        href={docId ? wizardApi.dmXmlUrl(docId, d.dm_id) : "#"}
-                      >
-                        {t("migration.generate.xml")}
-                      </a>
+                          </summary>
+                          <ul>
+                            {dm.missing_fields.map((field) => (
+                              <li key={field} style={{ overflowWrap: "anywhere" }}>
+                                {field}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ) : null}
                     </div>
                   ))}
                 </div>

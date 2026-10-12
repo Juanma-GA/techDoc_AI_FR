@@ -15,17 +15,51 @@ def _upload(client, data: bytes) -> str:
     r = client.post(
         "/api/v1/documents",
         files={"file": ("manual.pdf", data)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     assert r.status_code == 201, r.text
-    return r.json()["id"]
+    doc_id = r.json()["id"]
+    detection = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection.status_code == 200, detection.text
+    cut = detection.json()
+    if cut["validation_required"]:
+        confirmation = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": cut["selected_page"] or cut["default_start_page"],
+                "end_page": cut["selected_end_page"] or cut["total_pages"],
+            },
+        )
+        assert confirmation.status_code == 200, confirmation.text
+    return doc_id
 
 
 def test_wizard_full_flow(client, pdf_bytes) -> None:
     doc_id = _upload(client, pdf_bytes)
+    dmrl = [
+        {
+            "Arbo": "1",
+            "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+            "Titre": "Description",
+            "Type": "Descriptif",
+        },
+        {
+            "Arbo": "2",
+            "DMC": "DMC-PUMP-A-00-00-00-00A-520A-D",
+            "Titre": "Removal Procedure",
+            "Type": "Procedure",
+        },
+    ]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
 
-    # start -> etape split
+    # start -> validation de la DMRL -> etape split
     st = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    assert st["step"] == "dmrl"
+    st = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
     assert st["step"] == "split"
 
     # re-decouper par chapitre -> 2 DMs (Description + Removal Procedure)
@@ -70,6 +104,46 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     z = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
     assert z.status_code == 200
     assert z.headers["content-type"] == "application/zip"
+
+
+def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes) -> None:
+    doc_id = _upload(client, pdf_bytes)
+    client.post(f"/api/v1/documents/{doc_id}/wizard/start")
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/advance",
+        json={"split_level": "chapter"},
+    ).json()
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/advance", json={"types": {}}
+    ).json()
+    dm = next(item for item in state["dms"] if item["dm_type"] == "descriptive")
+    node = next(iter(dm["tree"].get("children") or []), None)
+    assert node is not None
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/advance",
+        json={"overrides": [{
+            "dm_id": dm["dm_id"],
+            "node_id": node["id"],
+            "element": "proceduralStep",
+        }]},
+    ).json()
+
+    assert state["step"] == "generate"
+    invalid_dm = next(item for item in state["dms"] if not item["xsd_valid"])
+    assert any(violation["rule"] == "XSD" for violation in invalid_dm["xsd_violations"])
+    assert client.get(f"/api/v1/documents/{doc_id}").json()["status"] == "incomplete"
+
+    dm_download = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/dm/{invalid_dm['dm_id']}/xml"
+    )
+    zip_download = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+
+    assert dm_download.status_code == 200
+    assert dm_download.text.startswith("<?xml")
+    assert zip_download.status_code == 200
+    assert zip_download.headers["content-type"] == "application/zip"
+    with ZipFile(BytesIO(zip_download.content)) as archive:
+        assert any(name.endswith(".xml") for name in archive.namelist())
 
 
 def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
@@ -127,7 +201,7 @@ def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
     assert state["step"] == "generate"
 
     archive_response = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
-    assert archive_response.status_code == 200
+    assert archive_response.status_code == 200, archive_response.text
     pmc_path = f"PMC/{doc_id}_pmc.xml"
     with ZipFile(BytesIO(archive_response.content)) as archive:
         assert pmc_path in archive.namelist()
@@ -149,6 +223,7 @@ def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
                     "dm_id": "dm1",
                     "title": "First",
                     "dm_type": "descriptive",
+                    "dmc": "DMC-WEG-A-00-00-00-00A-040A-D",
                     "tree": to_dict(IRNode(
                         id="r1",
                         kind="section",
@@ -159,6 +234,7 @@ def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
                     "dm_id": "dm2",
                     "title": "Second",
                     "dm_type": "descriptive",
+                    "dmc": "DMC-WEG-A-00-00-00-00A-040A-D",
                     "tree": to_dict(IRNode(
                         id="r2",
                         kind="section",
@@ -169,6 +245,9 @@ def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
                     )),
                 },
             ]),
+            dmrl_json=json.dumps([
+                {"dmc": "DMC-WEG-A-00-00-00-00A-040A-D", "title": "First"},
+            ]),
         )
         db.add(doc)
         db.commit()
@@ -177,9 +256,60 @@ def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
     first = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm1/xml")
     second = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/dm2/xml")
 
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
     assert 'id="fig-0001"' in first.text
     assert 'id="fig-0002"' in second.text
     assert 'id="tbl-0001"' in second.text
+
+
+def test_dm_xml_recomputes_stale_template_warning_from_current_tree() -> None:
+    from app.core import wizard as wizard_core
+    from app.db.models import Document
+
+    dmc = "DMC-WEG-A-00-00-00-00A-040A-D"
+    root = IRNode(id="root", kind="section", level=0, children=[
+        IRNode(
+            id="foundations",
+            kind="section",
+            level=1,
+            text="FONDATIONS",
+            children=[IRNode(
+                id="foundation-text",
+                kind="paragraph",
+                text="La fondation assure la stabilité du moteur.",
+            )],
+        ),
+    ])
+    stale_dm = {
+        "dm_id": "dm1",
+        "title": "Fondation",
+        "dm_type": "descriptive",
+        "dmc": dmc,
+        "tree": to_dict(root),
+        "template_missing_fields": ["description"],
+        "missing_fields": ["description"],
+        "violations": [{
+            "severity": "warning",
+            "rule": "TEMPLATE",
+            "message": "Rubrique obligatoire du template vide : description",
+            "path": "/",
+        }],
+    }
+    doc = Document(
+        s1000d_issue="4.2",
+        dmrl_json=json.dumps([{"dmc": dmc, "title": "Fondation"}]),
+        dms_json=json.dumps([stale_dm]),
+    )
+
+    xml = wizard_core.dm_xml(doc, "dm1")
+    refreshed = json.loads(doc.dms_json)[0]
+
+    assert "<title>FONDATIONS</title>" in xml
+    assert "A REMPLACER AVANT PUBLICATION: description" not in xml
+    assert refreshed["missing_fields"] == []
+    assert refreshed["template_missing_fields"] == []
+    assert not [v for v in refreshed["violations"] if v["rule"] == "TEMPLATE"]
 
 
 def _split_state(client, doc_id):
@@ -389,7 +519,18 @@ def test_split_one_into_subdms() -> None:
 
 def test_wizard_type_override(client, pdf_bytes) -> None:
     doc_id = _upload(client, pdf_bytes)
-    client.post(f"/api/v1/documents/{doc_id}/wizard/start")
+    dmrl = [
+        {"DMC": "DMC-WEG-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-WEG-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
+    assert state["step"] == "dmrl"
+    client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/advance", json={"split_level": "chapter"}
     ).json()
@@ -476,7 +617,13 @@ def test_wizard_splits_inline_numbered_actions_after_procedural_type_selection()
     from app.core.s1000d_schema import validate_xsd
     from app.core.s1000d_serializer import serialize
 
-    xml = serialize(generated, issue="4.2", dm_type="procedural", title="Procédures W22")
+    xml = serialize(
+        generated,
+        issue="4.2",
+        dm_type="procedural",
+        title="Procédures W22",
+        dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-520A-D"},
+    )
     violations = validate_xsd(
         xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
     )

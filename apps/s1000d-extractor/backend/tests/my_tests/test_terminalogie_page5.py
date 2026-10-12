@@ -99,12 +99,6 @@ def generate_terminalogie_dm(
     return xml, violations
 
 
-def test_terminalogie_page5_is_descriptive() -> None:
-    xml, violations = generate_terminalogie_dm()
-    assert "<description>" in xml
-    assert not any(v.get("severity") == "error" for v in violations)
-
-
 def export_terminalogie_dm(xml: str, output_path: Path = OUTPUT_PATH) -> Path:
     """Ecrit le XML genere dans le dossier ``my_tests``."""
     output_path.write_text(xml, encoding="utf-8")

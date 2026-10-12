@@ -32,6 +32,39 @@ def _upload(client, data: bytes, name: str, fmt_field: dict) -> str:
     return r.json()["id"]
 
 
+def test_upload_rejects_issue_without_local_schema(client, pdf_bytes) -> None:
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("manual.pdf", pdf_bytes)},
+        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "BAD_ISSUE"
+
+
+def test_missing_direct_dmc_is_reported_but_downloadable(client, pdf_bytes) -> None:
+    doc_id = _upload(
+        client,
+        pdf_bytes,
+        "manual.pdf",
+        {"s1000d_issue": "4.2", "context_hint": "mixed"},
+    )
+    result = _extract(client, doc_id)
+
+    assert not [
+        violation for violation in result["violations"]
+        if violation["rule"] == "XSD" and violation["severity"] == "error"
+    ]
+    assert client.get(f"/api/v1/documents/{doc_id}").json()["status"] == "incomplete"
+    response = client.get(f"/api/v1/documents/{doc_id}/xml")
+
+    assert response.status_code == 200
+    assert response.content.startswith(b"<?xml")
+    assert response.headers["x-s1000d-xsd-valid"] == "true"
+    assert int(response.headers["x-s1000d-missing-fields"]) > 0
+
+
 def _extract(client, doc_id: str) -> dict:
     with client.stream("POST", f"/api/v1/documents/{doc_id}/extract") as r:
         assert r.status_code == 200
@@ -44,7 +77,7 @@ def _extract(client, doc_id: str) -> dict:
 
 
 def test_delete_document_requires_confirmation_and_removes_it(client, pdf_bytes) -> None:
-    doc_id = _upload(client, pdf_bytes, "manual.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
+    doc_id = _upload(client, pdf_bytes, "manual.pdf", {"s1000d_issue": "4.2", "context_hint": "mixed"})
 
     assert client.delete(f"/api/v1/documents/{doc_id}").status_code == 422
     response = client.delete(f"/api/v1/documents/{doc_id}?confirm_token=confirmed-token")
@@ -53,7 +86,17 @@ def test_delete_document_requires_confirmation_and_removes_it(client, pdf_bytes)
 
 
 def test_pdf_extract_flow(client, pdf_bytes) -> None:
-    doc_id = _upload(client, pdf_bytes, "manual.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
+    doc_id = _upload(client, pdf_bytes, "manual.pdf", {"s1000d_issue": "4.2", "context_hint": "mixed"})
+    dmrl = [{
+        "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+        "Titre": "Description",
+        "Type": "Descriptif",
+    }]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
     done = _extract(client, doc_id)
     tree = done["tree"]
     kinds = {n["kind"] for n in _walk(tree)}
@@ -66,7 +109,7 @@ def test_pdf_extract_flow(client, pdf_bytes) -> None:
 
 
 def test_result_persisted_and_retrievable(client, pdf_bytes) -> None:
-    doc_id = _upload(client, pdf_bytes, "m.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
+    doc_id = _upload(client, pdf_bytes, "m.pdf", {"s1000d_issue": "4.2", "context_hint": "mixed"})
     _extract(client, doc_id)
     # Le resultat est consultable sans relancer l'extraction.
     r = client.get(f"/api/v1/documents/{doc_id}/result")
@@ -77,20 +120,42 @@ def test_result_persisted_and_retrievable(client, pdf_bytes) -> None:
 
 
 def test_result_before_extract_409(client, pdf_bytes) -> None:
-    doc_id = _upload(client, pdf_bytes, "m.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
+    doc_id = _upload(client, pdf_bytes, "m.pdf", {"s1000d_issue": "4.2", "context_hint": "mixed"})
     r = client.get(f"/api/v1/documents/{doc_id}/result")
     assert r.status_code == 409
 
 
 def test_docx_extract_flow(client, docx_bytes) -> None:
     doc_id = _upload(client, docx_bytes, "manual.docx", {"s1000d_issue": "4.2", "context_hint": "mixed"})
+    dmrl = [{
+        "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+        "Titre": "Description",
+        "Type": "Descriptif",
+    }]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
     done = _extract(client, doc_id)
-    xml = client.get(f"/api/v1/documents/{doc_id}/xml").text
+    xml_response = client.get(f"/api/v1/documents/{doc_id}/xml")
+    assert xml_response.status_code == 200, xml_response.text
+    xml = xml_response.text
     assert "randomList" in xml  # les puces -> randomList en descriptif
 
 
-def test_override_node_changes_xml(client, docx_bytes) -> None:
-    doc_id = _upload(client, docx_bytes, "m.docx", {"s1000d_issue": "5.0", "context_hint": "descriptive"})
+def test_invalid_node_override_is_downloadable_with_xsd_warning(client, docx_bytes) -> None:
+    doc_id = _upload(client, docx_bytes, "m.docx", {"s1000d_issue": "4.2", "context_hint": "descriptive"})
+    dmrl = [{
+        "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+        "Titre": "Description",
+        "Type": "Descriptif",
+    }]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
     done = _extract(client, doc_id)
     # Force un paragraphe descriptif en proceduralStep (revue humaine).
     para = next((n for n in _walk(done["tree"]) if n["kind"] == "paragraph"), None)
@@ -100,7 +165,11 @@ def test_override_node_changes_xml(client, docx_bytes) -> None:
         json={"element": "proceduralStep"},
     )
     assert r.status_code == 200, r.text
-    assert "proceduralStep" in client.get(f"/api/v1/documents/{doc_id}/xml").text
+    assert any(violation["rule"] == "XSD" for violation in r.json()["violations"])
+    xml_response = client.get(f"/api/v1/documents/{doc_id}/xml")
+    assert xml_response.status_code == 200
+    assert xml_response.headers["x-s1000d-xsd-valid"] == "false"
+    assert "proceduralStep" in xml_response.text
 
 
 def test_no_text_layer_pdf_rejected(client) -> None:
@@ -110,7 +179,7 @@ def test_no_text_layer_pdf_rejected(client) -> None:
     doc.new_page()  # page vide, aucune couche texte
     data = doc.tobytes()
     doc.close()
-    doc_id = _upload(client, data, "blank.pdf", {"s1000d_issue": "5.0", "context_hint": "mixed"})
+    doc_id = _upload(client, data, "blank.pdf", {"s1000d_issue": "4.2", "context_hint": "mixed"})
     with client.stream("POST", f"/api/v1/documents/{doc_id}/extract") as r:
         body = "".join(r.iter_text())
     events = _parse_sse(body)

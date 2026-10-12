@@ -19,10 +19,23 @@ def _upload(client, data: bytes, name: str = "manual.pdf") -> str:
     r = client.post(
         "/api/v1/documents",
         files={"file": (name, data)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     assert r.status_code == 201, r.text
-    return r.json()["id"]
+    doc_id = r.json()["id"]
+    detection = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection.status_code == 200, detection.text
+    cut = detection.json()
+    if cut["validation_required"]:
+        confirmation = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": cut["selected_page"] or cut["default_start_page"],
+                "end_page": cut["selected_end_page"] or cut["total_pages"],
+            },
+        )
+        assert confirmation.status_code == 200, confirmation.text
+    return doc_id
 
 
 def _run_wizard(client, doc_id: str) -> dict:
@@ -84,6 +97,15 @@ def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> N
 
 def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
     doc_id = _upload(client, pdf_bytes)
+    dmrl = [
+        {"DMC": "DMC-PUMP-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-PUMP-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
     client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
     for params in ({}, {"types": {}}, {"overrides": []}, {}):
         response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=params)
