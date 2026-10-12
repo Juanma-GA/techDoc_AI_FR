@@ -120,6 +120,20 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
         "slot_cols": parsed["slot_cols"],
     }
 
+    # Conserve la reference de slot unique pour que l'etape Colorisation puisse
+    # retrouver le meme profil Composer sans relire ni remapper le classeur.
+    mono_texture_by_identity: dict[str, str] = {}
+    for material_item in parsed["items"]:
+        identity = str(material_item.get("identity") or "").strip()
+        if not identity:
+            continue
+        unique_slots = list(dict.fromkeys(str(slot or "").strip() for slot in material_item["slots"] if str(slot or "").strip()))
+        mono_texture_by_identity[identity] = (
+            unique_slots[0]
+            if material_item["mono_body"] and len(unique_slots) == 1
+            else ""
+        )
+
     # Optionnel : applique mono_body aux pieces du run par le champ d'identite.
     old_pn_by_identity: dict[str, str] = {}
     if payload.run_id is not None:
@@ -133,6 +147,7 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
             key = (getattr(it, payload.identity_field) or "").strip()
             is_mono = bool(key and ident_map.get(key, False))
             it.mono_body = is_mono
+            it.mono_texture = mono_texture_by_identity.get(key, "") if is_mono else ""
             if key and key in ident_map:
                 matched += 1
                 old_pn_by_identity[key] = it.old_pn or ""
@@ -150,6 +165,7 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
         MonoCorpsItemOut(
             **it,
             old_pn=old_pn_by_identity.get(str(it.get("identity") or "").strip(), ""),
+            mono_texture=mono_texture_by_identity.get(str(it.get("identity") or "").strip(), ""),
         )
         for it in parsed["items"][:2000]
     ]

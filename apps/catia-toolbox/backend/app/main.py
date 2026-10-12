@@ -13,6 +13,7 @@ from app.api import (
     admin,
     browse,
     checks,
+    colorization,
     conversion,
     diff,
     health,
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(imports.router)
     api_v1.include_router(diff.router)
     api_v1.include_router(checks.router)
+    api_v1.include_router(colorization.router)
     api_v1.include_router(conversion.router)
     api_v1.include_router(replacement.router)
     api_v1.include_router(identification.router)

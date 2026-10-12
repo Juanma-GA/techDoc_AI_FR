@@ -320,6 +320,7 @@ export type NomenclatureItemDto = {
   color_ref: string;
   materials: string;
   mono_body: boolean;
+  mono_texture: string;
   mono_color: boolean;
   color_r: number;
   color_g: number;
@@ -374,6 +375,32 @@ export type MonoCorpsItemDto = { identity: string; old_pn: string; slots: string
 export type MonoCorpsResultDto = {
   items: MonoCorpsItemDto[];
   summary: Record<string, number | boolean | number[]>;
+};
+
+export type MonoBodyColorizationInput = {
+  scope?: BrowseScope;
+  pieces_root: string;
+  profiles_root: string;
+  nomenclature_run_id: string;
+  apply?: boolean;
+};
+
+export type MonoBodyColorizationItemDto = {
+  old_pn: string;
+  texture_ref: string;
+  profile_path: string;
+  path: string;
+  status: string;
+  actors_total: number;
+  actors_changed: number;
+  backup_path: string;
+  message: string;
+  applied: boolean;
+};
+
+export type MonoBodyColorizationDto = {
+  items: MonoBodyColorizationItemDto[];
+  summary: Record<string, number | boolean>;
 };
 
 export type ZipEntryDto = { name: string; size: number; is_dir: boolean };
@@ -758,6 +785,14 @@ export const identificationApi = {
       body: JSON.stringify({ scope: "input", ...body }),
     }),
   remove: (id: string) => request<void>(`/identification/${id}`, { method: "DELETE" }),
+};
+
+export const colorizationApi = {
+  monoBody: (body: MonoBodyColorizationInput) =>
+    request<MonoBodyColorizationDto>("/colorization/mono-body", {
+      method: "POST",
+      body: JSON.stringify({ scope: "input", apply: false, ...body }),
+    }),
 };
 
 export const smgxmlApi = {

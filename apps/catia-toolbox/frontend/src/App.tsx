@@ -8,6 +8,7 @@ import { LlmBadge } from "./components/LlmBadge";
 import i18n from "./i18n";
 import { healthApi, importsApi, identificationApi } from "./lib/api";
 import { Checks } from "./routes/Checks";
+import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
 import { Data } from "./routes/Data";
 import { Diff } from "./routes/Diff";
@@ -178,7 +179,7 @@ export function App() {
           <Route path="/identification" element={<Identification />} />
           <Route path="/diff" element={<Diff />} />
           <Route path="/conversion" element={<Conversion />} />
-          <Route path="/colorization" element={<></>} />
+          <Route path="/colorization" element={<Colorization />} />
           <Route path="/tree" element={<TreeOptimization />} />
           <Route path="/smgxml-recolor" element={<Navigate to="/colorization" replace />} />
           <Route path="/suggestions" element={<Navigate to="/tree" replace />} />

@@ -474,6 +474,9 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     assert r.json()["summary"]["applied"] is True and r.json()["summary"]["mono"] == 2
     response_items = {item["identity"]: item for item in r.json()["items"]}
     assert response_items["P1.CATPart"]["old_pn"] == "OLD-SIN-001"
+    assert response_items["P1.CATPart"]["mono_texture"] == "A"
+    assert response_items["P2.CATPart"]["mono_texture"] == "A"
+    assert response_items["P3.CATPart"]["mono_texture"] == ""
     assert client.get(f"/api/v1/identification/{run_id}").json()["summary"]["mono_body"] == 2
 
     mono = client.get(f"/api/v1/identification/{run_id}/items", params={"mono_body": True}).json()

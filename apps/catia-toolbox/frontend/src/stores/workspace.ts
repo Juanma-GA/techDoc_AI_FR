@@ -9,7 +9,8 @@ export type SourceKind =
   | "mapping"
   | "composerRoot"
   | "convertedRoot"
-  | "smgxmlFolder";
+  | "smgxmlFolder"
+  | "profilesRoot";
 
 /** Etat de travail partage entre onglets : import courant, run courant, et les
  *  chemins de fichiers source deja choisis (pre-remplissage des selecteurs). */
@@ -38,6 +39,7 @@ const EMPTY_SOURCES: Record<SourceKind, string> = {
   composerRoot: "",
   convertedRoot: "",
   smgxmlFolder: "",
+  profilesRoot: "",
 };
 
 export const useWorkspace = create<WorkspaceState>()(

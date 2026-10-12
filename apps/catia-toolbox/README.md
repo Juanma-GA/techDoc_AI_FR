@@ -17,7 +17,7 @@ Identify and compare CATIA delivery data, validate imported structures, and run 
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
 - Clean top-level Composer `.smgXml` part files in place, keeping `.bak` backups in a `sauvegarde/` subfolder.
 - Rename SMGXML references and prepare part replacement plans.
-- The Colorisation tab is intentionally empty pending its next specification.
+- Colorize mono-body SMGXML pieces from the profile reference in the nomenclature's Materials slots, matching every file with the same OLD P/N. Dry-run is the default; confirmed writes keep `.bak` backups.
 - Use the native file/folder picker when no Source root is configured; selected
 	files are copied into the local application storage before processing.
 

@@ -367,6 +367,32 @@ class ReplacementFromSourceIn(BaseModel):
 # ----- Module Colorisation --------------------------------------------------
 
 
+class MonoBodyColorizationIn(BaseModel):
+    scope: str = Field(default="input")
+    pieces_root: str = Field(..., min_length=1)
+    profiles_root: str = Field(..., min_length=1)
+    nomenclature_run_id: uuid.UUID
+    apply: bool = False
+
+
+class MonoBodyColorizationItemOut(BaseModel):
+    old_pn: str = ""
+    texture_ref: str = ""
+    profile_path: str = ""
+    path: str = ""
+    status: str = ""
+    actors_total: int = 0
+    actors_changed: int = 0
+    backup_path: str = ""
+    message: str = ""
+    applied: bool = False
+
+
+class MonoBodyColorizationOut(BaseModel):
+    items: list[MonoBodyColorizationItemOut] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+
+
 # ----- Etape 1 : Identification (nomenclature .xlsm + DE .zip) ---------------
 
 
@@ -420,6 +446,7 @@ class MonoCorpsItemOut(BaseModel):
     old_pn: str = ""
     slots: list[str] = Field(default_factory=list)
     mono_body: bool = False
+    mono_texture: str = ""
 
 
 class MonoCorpsResultOut(BaseModel):
@@ -469,6 +496,7 @@ class NomenclatureItemOut(BaseModel):
     color_ref: str
     materials: str
     mono_body: bool
+    mono_texture: str
     mono_color: bool
     color_r: int
     color_g: int
