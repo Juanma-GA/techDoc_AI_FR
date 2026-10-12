@@ -23,7 +23,7 @@ from app.core import pipeline
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
 from app.core.s1000d_schema import SELECTABLE_ISSUES
-from app.core.s1000d_serializer import missing_data_fields, serialize
+from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields, serialize
 from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import SessionLocal, get_db
@@ -196,7 +196,8 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
-    if "<!DOCTYPE dmodule [" not in xml and doc.ir_json:
+    serialization = SerializationDiagnostics()
+    if doc.ir_json:
         root = ir_mod.from_dict(json.loads(doc.ir_json))
         resources = wres.load_resources(doc)
         entries = wres.dmrl_entries(doc)
@@ -207,6 +208,7 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
             dm_type=doc.dm_type or "descriptive",
             dm_metadata=metadata,
             header_template=resources.header_template,
+            diagnostics=serialization,
         )
         Path(doc.xml_path).write_text(xml, encoding="utf-8")
     violations = validate_document(
@@ -214,6 +216,7 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
         issue=doc.s1000d_issue,
         dm_type=doc.dm_type or "descriptive",
     )
+    violations.extend(serialization.xsd_violations)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)
     missing_fields = missing_data_fields(xml)
     doc.status = (
@@ -252,12 +255,14 @@ def override_node(
     resources = wres.load_resources(doc)
     entries = wres.dmrl_entries(doc)
     metadata = entries[0].to_dict() if entries else None
+    serialization = SerializationDiagnostics()
     xml = serialize(
         root,
         issue=doc.s1000d_issue,
         dm_type=doc.dm_type or "descriptive",
         dm_metadata=metadata,
         header_template=resources.header_template,
+        diagnostics=serialization,
     )
     brex_xml = _brex_xml(db, doc.brex_id)
     violations = validate_document(
@@ -266,6 +271,7 @@ def override_node(
         dm_type=doc.dm_type or "descriptive",
         brex_xml=brex_xml,
     )
+    violations.extend(serialization.xsd_violations)
     missing_fields = missing_data_fields(xml)
     doc.status = (
         "incomplete"

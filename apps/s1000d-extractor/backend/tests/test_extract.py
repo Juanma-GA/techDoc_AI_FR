@@ -165,11 +165,12 @@ def test_invalid_node_override_is_downloadable_with_xsd_warning(client, docx_byt
         json={"element": "proceduralStep"},
     )
     assert r.status_code == 200, r.text
-    assert any(violation["rule"] == "XSD" for violation in r.json()["violations"])
+    xsd_issues = [violation for violation in r.json()["violations"] if violation["rule"] == "XSD"]
+    assert any("proceduralStep" in violation["message"] for violation in xsd_issues)
     xml_response = client.get(f"/api/v1/documents/{doc_id}/xml")
     assert xml_response.status_code == 200
     assert xml_response.headers["x-s1000d-xsd-valid"] == "false"
-    assert "proceduralStep" in xml_response.text
+    assert "proceduralStep" not in xml_response.text
 
 
 def test_no_text_layer_pdf_rejected(client) -> None:

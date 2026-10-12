@@ -220,6 +220,7 @@
       "xsdIncomplete": "DM incomplet : la validation XSD a échoué.",
       "xsdNoDetails": "Le schéma n’a pas pu être exécuté ou n’a retourné aucun détail.",
       "missingDataWarning": "Le XSD passe, mais des données métier restent à confirmer.",
+      "commonMissingFields": "Informations à vérifier ou compléter dans tous les DMs.",
       "missingFields": "{{count}} information(s) à compléter"
     }
   },

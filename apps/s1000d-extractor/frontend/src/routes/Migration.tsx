@@ -20,8 +20,17 @@ import {
   type ResourceKind,
   type S1000dIssue,
   type TreeNode,
+  type WizardDm,
   type WizardState,
 } from "../lib/api";
+
+export function getCommonMissingFields(
+  dms: readonly Pick<WizardDm, "missing_fields">[],
+): string[] {
+  if (dms.length < 2) return [];
+  const firstFields = [...new Set(dms[0].missing_fields ?? [])];
+  return firstFields.filter((field) => dms.every((dm) => dm.missing_fields?.includes(field)));
+}
 
 function ConfirmButton({
   label,
@@ -492,6 +501,9 @@ export function Migration() {
 
   const docs = docsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
+  const generationDms = wiz?.step === "generate" ? wiz.dms : [];
+  const commonMissingFields = getCommonMissingFields(generationDms);
+  const commonMissingFieldSet = new Set(commonMissingFields);
   return (
     <>
       <div className="page-header">
@@ -1219,85 +1231,112 @@ export function Migration() {
                     {t("migration.generate.zip")}
                   </button>
                 </div>
+                {commonMissingFields.length ? (
+                  <div className="banner warn" role="status" style={{ marginBottom: 12 }}>
+                    <strong>{t("migration.generate.commonMissingFields")}</strong>
+                    <details style={{ marginTop: 8 }}>
+                      <summary>
+                        {t("migration.generate.missingFields", {
+                          count: commonMissingFields.length,
+                        })}
+                      </summary>
+                      <ul>
+                        {commonMissingFields.map((field) => (
+                          <li key={field} style={{ overflowWrap: "anywhere" }}>
+                            {field}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  </div>
+                ) : null}
                 <div>
-                  {wiz.dms.map((dm) => (
-                    <div
-                      key={dm.dm_id}
-                      style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}
-                    >
-                      <div className="row">
-                        <span className="grow">
-                          {dm.is_orphan ? t("migration.dm.orphan") : dm.title}{" "}
-                          <DmTypeBadge type={dm.dm_type} />{" "}
-                          {dm.cir_unresolved?.length ? (
-                            <span className="badge warn" title={dm.cir_unresolved.join(", ")}>
-                              {t("migration.generate.cirUnresolved", {
-                                count: dm.cir_unresolved.length,
+                  {wiz.dms.map((dm) => {
+                    const dmMissingFields = (dm.missing_fields ?? []).filter(
+                      (field) => !commonMissingFieldSet.has(field),
+                    );
+                    const hasXsdFailure = dm.xsd_valid === false;
+                    return (
+                      <div
+                        key={dm.dm_id}
+                        style={{ borderBottom: "1px solid var(--border)", padding: "8px 0" }}
+                      >
+                        <div className="row">
+                          <span className="grow">
+                            {dm.is_orphan ? t("migration.dm.orphan") : dm.title}{" "}
+                            <DmTypeBadge type={dm.dm_type} />{" "}
+                            {dm.cir_unresolved?.length ? (
+                              <span className="badge warn" title={dm.cir_unresolved.join(", ")}>
+                                {t("migration.generate.cirUnresolved", {
+                                  count: dm.cir_unresolved.length,
+                                })}
+                              </span>
+                            ) : null}
+                          </span>
+                          {docId && dm.has_xml ? (
+                            <a
+                              className="btn secondary small"
+                              href={wizardApi.dmXmlUrl(docId, dm.dm_id)}
+                            >
+                              {t("migration.generate.xml")}
+                            </a>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn secondary small"
+                              disabled
+                              title={t("migration.generate.generationPending")}
+                            >
+                              {t("migration.generate.xml")}
+                            </button>
+                          )}
+                        </div>
+                        {hasXsdFailure || dmMissingFields.length ? (
+                          <div
+                            className={hasXsdFailure ? "alert error" : "banner warn"}
+                            role={hasXsdFailure ? "alert" : "status"}
+                            style={{ marginTop: 8 }}
+                          >
+                            <strong>
+                              {hasXsdFailure
+                                ? t("migration.generate.xsdIncomplete")
+                                : dm.xsd_valid === true
+                                  ? t("migration.generate.missingDataWarning")
+                                  : t("migration.generate.xsdNoDetails")}
+                            </strong>
+                            {hasXsdFailure && dm.xsd_violations?.length ? (
+                              <ul>
+                                {dm.xsd_violations.map((violation, index) => (
+                                  <li key={`${violation.rule}-${index}`}>
+                                    <code>{violation.path}</code>: {violation.message}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                            {hasXsdFailure && !dm.xsd_violations?.length ? (
+                              <p>{t("migration.generate.xsdNoDetails")}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        {dmMissingFields.length ? (
+                          <details style={{ marginTop: 8 }}>
+                            <summary>
+                              {t("migration.generate.missingFields", {
+                                count: dmMissingFields.length,
                               })}
-                            </span>
-                          ) : null}
-                        </span>
-                        {docId && dm.has_xml ? (
-                          <a
-                            className="btn secondary small"
-                            href={wizardApi.dmXmlUrl(docId, dm.dm_id)}
-                          >
-                            {t("migration.generate.xml")}
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn secondary small"
-                            disabled
-                            title={t("migration.generate.generationPending")}
-                          >
-                            {t("migration.generate.xml")}
-                          </button>
-                        )}
-                      </div>
-                      {dm.xsd_valid !== true || dm.missing_fields?.length ? (
-                        <div
-                          className={dm.xsd_valid === false ? "alert error" : "banner warn"}
-                          role={dm.xsd_valid === false ? "alert" : "status"}
-                          style={{ marginTop: 8 }}
-                        >
-                          <strong>
-                            {dm.xsd_valid === false
-                              ? t("migration.generate.xsdIncomplete")
-                              : t("migration.generate.missingDataWarning")}
-                          </strong>
-                          {dm.xsd_valid === false && dm.xsd_violations?.length ? (
+                            </summary>
                             <ul>
-                              {dm.xsd_violations.map((violation, index) => (
-                                <li key={`${violation.rule}-${index}`}>
-                                  <code>{violation.path}</code>: {violation.message}
+                              {dmMissingFields.map((field) => (
+                                <li key={field} style={{ overflowWrap: "anywhere" }}>
+                                  {field}
                                 </li>
                               ))}
                             </ul>
-                          ) : null}
-                          {dm.xsd_valid === false && !dm.xsd_violations?.length ? (
-                            <p>{t("migration.generate.xsdNoDetails")}</p>
-                          ) : null}
-                        </div>
-                      ) : null}
-                      {dm.missing_fields?.length ? (
-                        <details style={{ marginTop: 8 }}>
-                          <summary>
-                            {t("migration.generate.missingFields", {
-                              count: dm.missing_fields.length,
-                            })}
-                          </summary>
-                          <ul>
-                            {dm.missing_fields.map((field) => (
-                              <li key={field} style={{ overflowWrap: "anywhere" }}>
-                                {field}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      ) : null}
-                    </div>
-                  ))}
+                          </details>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
                 {images.length ? (
                   <div style={{ marginTop: 16 }}>

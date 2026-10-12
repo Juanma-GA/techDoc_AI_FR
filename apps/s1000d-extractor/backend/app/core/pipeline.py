@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core import context_classifier, form_segmenter, ingest, resolver, structure_infer
 from app.core.ir import IRNode, to_dict
-from app.core.s1000d_serializer import serialize
+from app.core.s1000d_serializer import SerializationDiagnostics, serialize
 
 ProgressCb = Callable[[str, int], None]
 
@@ -65,16 +65,19 @@ def run(
     resolver.resolve(root)
 
     progress_cb("serialize", 85)
+    serialization = SerializationDiagnostics()
     xml = serialize(
         root,
         issue=issue,
         dm_type=dm_type,
         dm_metadata=dm_metadata,
         header_template=header_template,
+        diagnostics=serialization,
     )
 
     progress_cb("validate", 95)
     violations = _validate(xml, issue=issue, dm_type=dm_type, brex_xml=brex_xml)
+    violations.extend(serialization.xsd_violations)
 
     progress_cb("done", 100)
     return PipelineResult(

@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Transform PDF or Word source documents into a best-effort S1000D XML structure through a reusable intermediate representation and configurable target rules.
+Transform PDF or Word source documents into an S1000D XML structure constrained by the local Issue 4.1 and 4.2 XSDs through a reusable intermediate representation and configurable target rules.
 
 ## Maturity
 
-**Status:** To be confirmed. S1000D output validity and workflow claims were not revalidated during this documentation reorganization.
+**Status:** Generation is constrained and checked against local Issue 4.1 and 4.2 XSDs for descriptive, procedural, and IPD data modules. Issue 5.0 remains validation-only and is not a generation target.
 
 ## Features
 
@@ -14,7 +14,9 @@ Transform PDF or Word source documents into a best-effort S1000D XML structure t
 - Classify, segment, map, and resolve S1000D element candidates.
 - Accept optional DMRL, CIR, BREX, and client-rule resources.
 - Generate data-module and publication-module skeletons.
-- Collect XSD, BREX, metadata, and mapping validation findings.
+- Build issue/type-specific content models from the local XSDs and constrain generated elements, order, cardinality, attributes, and values.
+- Collect XSD/mapping errors separately from provisional business fields that need confirmation.
+- Keep XML and ZIP downloads available when generation reports XSD or mapping problems.
 
 ## Auth
 
@@ -54,11 +56,11 @@ Mistral supports context classification. Behavior with LLM disabled is not suffi
 
 ## Tests
 
-Use synthetic fixtures with the backend pytest suite and the frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:s1000d-extractor`. No tests were executed during this documentation change.
+Use synthetic fixtures with the backend pytest suite and the frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:s1000d-extractor`.
 
 ## Limitations
 
-Generated XML is a best-effort skeleton. Client-specific identifiers, applicability, security, references, and media may remain explicit TODO items.
+Generated XML remains an incomplete working skeleton until its listed provisional business fields are confirmed. Source structures without a supported mapping are omitted from the XML and reported; IPD catalogs currently receive only the minimum XSD-compatible provisional structure when no part records are available. Generated XML never uses `TODO` as a value.
 
 ## Standard Deviations
 

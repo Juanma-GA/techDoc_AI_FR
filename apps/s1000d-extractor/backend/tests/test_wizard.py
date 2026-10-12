@@ -131,6 +131,8 @@ def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes) -
     assert state["step"] == "generate"
     invalid_dm = next(item for item in state["dms"] if not item["xsd_valid"])
     assert any(violation["rule"] == "XSD" for violation in invalid_dm["xsd_violations"])
+    assert any("proceduralStep" in violation["message"] for violation in invalid_dm["xsd_violations"])
+    assert invalid_dm["missing_fields"]
     assert client.get(f"/api/v1/documents/{doc_id}").json()["status"] == "incomplete"
 
     dm_download = client.get(
@@ -140,10 +142,17 @@ def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes) -
 
     assert dm_download.status_code == 200
     assert dm_download.text.startswith("<?xml")
+    assert "proceduralStep" not in dm_download.text
     assert zip_download.status_code == 200
     assert zip_download.headers["content-type"] == "application/zip"
     with ZipFile(BytesIO(zip_download.content)) as archive:
-        assert any(name.endswith(".xml") for name in archive.namelist())
+        xml_names = [name for name in archive.namelist() if name.endswith(".xml")]
+        assert xml_names
+        invalid_name = next(
+            name for name in xml_names
+            if name in {f"{invalid_dm['dm_id']}.xml", f"{invalid_dm.get('dmc')}.xml"}
+        )
+        assert "proceduralStep" not in archive.read(invalid_name).decode("utf-8")
 
 
 def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
@@ -307,7 +316,8 @@ def test_dm_xml_recomputes_stale_template_warning_from_current_tree() -> None:
 
     assert "<title>FONDATIONS</title>" in xml
     assert "A REMPLACER AVANT PUBLICATION: description" not in xml
-    assert refreshed["missing_fields"] == []
+    assert not any(field == "description" for field in refreshed["missing_fields"])
+    assert any("dataHandling" in field for field in refreshed["missing_fields"])
     assert refreshed["template_missing_fields"] == []
     assert not [v for v in refreshed["violations"] if v["rule"] == "TEMPLATE"]
 

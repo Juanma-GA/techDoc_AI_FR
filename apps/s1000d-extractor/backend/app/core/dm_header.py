@@ -11,51 +11,37 @@ from lxml import etree
 
 DEFAULT_HEADER_TEMPLATE: dict = {
     "security": {"securityClassification": "02"},
+    "language": {"countryIsoCode": "FR", "languageIsoCode": "fr"},
     "dataRestrictions": {
         "restrictionInstructions": {
-            "dataDistribution": "To be made available to all users.",
+            "dataDistribution": "A REMPLACER",
             "exportControl": {
                 "exportRegistrationStmt": {
-                    "simplePara": "Export and storage of this module is to be at the discretion of the organization."
+                    "simplePara": "A REMPLACER"
                 }
             },
-            "dataHandling": "There are no specific handling instructions for this module.",
-            "dataDestruction": "Users may destroy this module in accordance with their own local procedures.",
-            "dataDisclosure": "There are no dissemination limitations that apply to this module.",
+            "dataHandling": "A REMPLACER",
+            "dataDestruction": "A REMPLACER",
+            "dataDisclosure": "A REMPLACER",
         },
         "restrictionInfo": {
             "copyright": {
-                "copyrightPara": [
-                    "© Example Organization",
-                    "The information in this module is the property of Example Organization. The information may not be copied, or communicated to a third party, or used for any purpose other than that for which it is intended, without the prior written consent of Example Organization.",
-                ]
+                "copyrightPara": ["A REMPLACER"]
             },
-            "dataConds": "There are no known conditions that would change the data restrictions for, or security classification of, this module.",
+            "dataConds": "A REMPLACER",
         },
     },
     "responsiblePartnerCompany": {
         "enterpriseCode": "EX",
-        "enterpriseName": "EXAMPLE ORGANIZATION",
+        "enterpriseName": "A REMPLACER",
     },
     "originator": {
         "enterpriseCode": "EX",
-        "enterpriseName": "EXAMPLE ORGANIZATION",
+        "enterpriseName": "A REMPLACER",
     },
-    "applicability": "All",
+    "applicability": "A REMPLACER",
     "brexDmRef": {
-        "dmCode": {
-            "assyCode": "0301",
-            "disassyCode": "00",
-            "disassyCodeVariant": "A",
-            "infoCode": "022",
-            "infoCodeVariant": "A",
-            "itemLocationCode": "D",
-            "modelIdentCode": "S1000D",
-            "subSubSystemCode": "0",
-            "subSystemCode": "1",
-            "systemCode": "04",
-            "systemDiffCode": "E",
-        }
+        "dmCode": {},
     },
     "qualityAssurance": "unverified",
 }

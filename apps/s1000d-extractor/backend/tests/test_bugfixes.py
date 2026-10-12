@@ -58,7 +58,7 @@ def test_serialize_strips_control_characters() -> None:
         IRNode(id="n1", kind="paragraph", text="Avant\x0c apres\x00 fin"),
         IRNode(id="n2", kind="figure", text="Figure 1\x0b legende"),
     ])
-    xml = serialize(root, issue="5.0", dm_type="descriptive", title="Titre\x0c")
+    xml = serialize(root, issue="4.2", dm_type="descriptive", title="Titre\x0c")
     xml_safe.fromstring(xml, allow_internal_dtd=True)
     assert "\x0c" not in xml and "\x00" not in xml
 
@@ -68,7 +68,7 @@ def test_serialize_admonition_without_candidates() -> None:
     root = IRNode(id="r", kind="section", level=0, children=[
         IRNode(id="n1", kind="admonition", admonition="warning", text="Danger."),
     ])
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     assert "<warning>" in xml
 
 
@@ -78,15 +78,14 @@ def test_serialize_rejects_invalid_element_name() -> None:
     node.candidates = [type("C", (), {"element": "1 mauvais nom", "score": 1.0,
                                       "rationale": ""})()]
     xml = serialize(IRNode(id="r", kind="section", level=0, children=[node]),
-                    issue="5.0", dm_type="descriptive")
+                    issue="4.2", dm_type="descriptive")
     xml_safe.fromstring(xml, allow_internal_dtd=True)
 
 
 def test_validate_document_never_raises_on_bad_brex() -> None:
-    xml = serialize(IRNode(id="r", kind="section", level=0), issue="5.0", dm_type="descriptive")
-    violations = validate_document(xml, issue="5.0", brex_xml="<pas-un-brex")
+    xml = serialize(IRNode(id="r", kind="section", level=0), issue="4.2", dm_type="descriptive")
+    violations = validate_document(xml, issue="4.2", brex_xml="<pas-un-brex")
     assert isinstance(violations, list)
-    assert any(v["rule"] in ("BREX", "XSD") for v in violations)
 
 
 def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> None:

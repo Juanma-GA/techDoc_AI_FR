@@ -34,6 +34,7 @@ from app.core.s1000d_serializer import (
     build_reference_index,
     content_node_count,
     missing_data_fields,
+    SerializationDiagnostics,
     serialize,
 )
 from app.core.validator import validate_document, xsd_is_valid
@@ -429,6 +430,7 @@ def _generate_all(db: Session, doc: Document) -> None:
             enriched, extra = wres.apply_resources(dm, res)
             root = ir_mod.from_dict(enriched["tree"])
             template_missing_fields = enriched.get("missing_fields") or []
+            serialization = SerializationDiagnostics()
             xml = serialize(
                 root,
                 issue=doc.s1000d_issue,
@@ -442,6 +444,7 @@ def _generate_all(db: Session, doc: Document) -> None:
                 header_template=res.header_template,
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
+                diagnostics=serialization,
             )
             figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
             table_offset += sum(1 for node in root.walk() if node.kind == "table")
@@ -458,7 +461,7 @@ def _generate_all(db: Session, doc: Document) -> None:
             dm["violations"] = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"], brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
-            ) + extra
+            ) + serialization.xsd_violations + extra
             dm["xsd_valid"] = xsd_is_valid(dm["violations"])
             log.info(
                 "dm_generated",
@@ -564,6 +567,7 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 violation for violation in template_extra
                 if violation.get("rule") == "TEMPLATE"
             ]
+            serialization = SerializationDiagnostics()
             xml = serialize(
                 ir_mod.from_dict(dm["tree"]),
                 issue=doc.s1000d_issue,
@@ -577,12 +581,14 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 header_template=res.header_template,
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
+                diagnostics=serialization,
             )
             dm["xml"] = xml
             dm["template_missing_fields"] = template_missing_fields
             xsd_results = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"],
             )
+            xsd_results.extend(serialization.xsd_violations)
             dm["violations"] = [
                 violation for violation in dm.get("violations") or []
                 if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE"}
