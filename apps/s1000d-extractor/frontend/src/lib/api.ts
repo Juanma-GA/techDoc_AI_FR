@@ -402,7 +402,7 @@ export const validationApi = {
 };
 
 /**
- * Lance le demarrage de l'assistant et consomme le flux SSE (fetch +
+ * Lance la generation et consomme le flux SSE (fetch +
  * ReadableStream ; EventSource ne sait pas POST). `onEvent(event, data)`.
  */
 export async function startWizardStream(

@@ -100,7 +100,7 @@
   },
   "migration": {
     "title": "Migration",
-    "subtitle": "Guided legacy → S1000D assistant.",
+    "subtitle": "Guided generation of S1000D Data Modules.",
     "upload": {
       "title": "Upload a document",
       "file": "PDF or Word document",
@@ -112,8 +112,9 @@
       "cir": "CIR (xml) — shared content",
       "dmHeader": "Client DM header (json / xml)",
       "dmHeaderHelp": "This JSON or XML file supplies shared Data Module header metadata, such as language, security classification, responsible or originating organization, and applicability.",
-      "start": "Start the assistant",
-      "noFile": "Pick a PDF or Word file.",
+      "start": "Generate",
+      "noFile": "Select a PDF or Word file to start a new generation.",
+      "lastDocument": "Last file used: {{filename}}. Select a source file to generate.",
       "pdfCut": {
         "title": "Set the page range to analyse",
         "help": "The suggested range starts at the first detected chapter and ends at the last page.",
@@ -128,14 +129,14 @@
     "docs": {
       "title": "Documents",
       "empty": "No document yet. Upload a PDF/Word file above.",
-      "open": "Open the assistant",
+      "open": "Resume generation",
       "delete": "Delete"
     },
     "start": {
-      "title": "Starting the assistant",
-      "starting": "Starting…",
+      "title": "Document generation",
+      "starting": "Generating…",
       "preparing": "Preparing modules…",
-      "failed": "Startup failed.",
+      "failed": "Generation failed.",
       "parse": "Reading the document…",
       "ocr": "Scanned PDF: running OCR (AI)…",
       "infer": "Analysing the structure…",

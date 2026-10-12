@@ -100,7 +100,7 @@
   },
   "migration": {
     "title": "Migration",
-    "subtitle": "Assistant guidé legacy → S1000D.",
+    "subtitle": "Génération guidée de Data Modules S1000D.",
     "upload": {
       "title": "Charger un document",
       "file": "Document PDF ou Word",
@@ -112,8 +112,9 @@
       "cir": "CIR (xml) — contenus partagés",
       "dmHeader": "En-tête DM client (json / xml)",
       "dmHeaderHelp": "Ce fichier JSON ou XML fournit les métadonnées communes de l’en-tête des Data Modules : langue, sécurité, société responsable ou émettrice, applicabilité, etc.",
-      "start": "Démarrer l'assistant",
-      "noFile": "Choisis un fichier PDF ou Word.",
+      "start": "Générer",
+      "noFile": "Sélectionne un fichier PDF ou Word pour lancer une nouvelle génération.",
+      "lastDocument": "Dernier fichier utilisé : {{filename}}. Sélectionne un fichier source pour générer.",
       "pdfCut": {
         "title": "Définir la plage de pages à analyser",
         "help": "La sélection proposée commence au premier chapitre détecté et va jusqu'à la dernière page.",
@@ -128,14 +129,14 @@
     "docs": {
       "title": "Documents",
       "empty": "Aucun document. Charge un PDF/Word ci-dessus.",
-      "open": "Ouvrir l'assistant",
+      "open": "Reprendre la génération",
       "delete": "Supprimer"
     },
     "start": {
-      "title": "Démarrage de l'assistant",
-      "starting": "Démarrage…",
+      "title": "Génération du document",
+      "starting": "Génération en cours…",
       "preparing": "Préparation des modules…",
-      "failed": "Échec du démarrage.",
+      "failed": "Échec de la génération.",
       "parse": "Lecture du document…",
       "ocr": "PDF scanné : OCR en cours (IA)…",
       "infer": "Analyse de la structure…",

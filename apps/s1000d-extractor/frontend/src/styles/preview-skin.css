@@ -261,7 +261,7 @@ table.data-table tr:hover td { background: var(--bg-2); }
 .msg-role { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); margin-bottom: 6px; }
 .msg-citations { margin-top: 8px; font-size: 0.8rem; color: var(--fg-dim); font-family: "JetBrains Mono", monospace; }
 
-/* --- s1000d-extractor : assistant (barre de progression + arbre) --- */
+/* --- s1000d-extractor : generation (barre de progression + arbre) --- */
 .progress { height: 6px; background: var(--bg-2); border-radius: 3px; overflow: hidden; margin: 10px 0; }
 .progress > span { display: block; height: 100%; background: var(--brand); transition: width 0.2s; }
 .progress.indeterminate > span { width: 35%; animation: progress-indeterminate 1.5s ease-in-out infinite; }

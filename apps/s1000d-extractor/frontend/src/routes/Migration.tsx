@@ -24,6 +24,12 @@ import {
   type WizardState,
 } from "../lib/api";
 
+export function isRestorableMigrationInput(
+  kind: MigrationInputKind,
+): kind is "dmrl" | "dm_header" {
+  return kind === "dmrl" || kind === "dm_header";
+}
+
 export function getCommonMissingFields(
   dms: readonly Pick<WizardDm, "missing_fields">[],
 ): string[] {
@@ -166,13 +172,14 @@ export function Migration() {
 
   // Formulaire de chargement.
   const [file, setFile] = useState<File | null>(null);
+  const [lastDocumentName, setLastDocumentName] = useState<string | null>(null);
   const [issue, setIssue] = useState<S1000dIssue>("4.2");
   const hint: ContextHint = "mixed";
   const [loadError, setLoadError] = useState<string | null>(null);
   // Ressources client optionnelles, attachees au document avant le decoupage.
   const [resourceFiles, setResourceFiles] = useState<Partial<Record<ResourceKind, File>>>({});
 
-  // Assistant.
+  // Flux de génération.
   const [docId, setDocId] = useState<string | null>(null);
   const [wiz, setWiz] = useState<WizardState | null>(null);
   const [starting, setStarting] = useState<{
@@ -217,10 +224,11 @@ export function Migration() {
         const mapping = await migrationInputsApi.read();
         if (cancelled || mappingTouched.current) return;
         setIssue(mapping.issue === "5.0" ? "4.2" : mapping.issue);
+        setLastDocumentName(mapping.files.document?.filename ?? null);
         const entries = (Object.entries(mapping.files) as [
           MigrationInputKind,
           { filename: string },
-        ][]).filter(([kind]) => kind !== "brex_rules" && kind !== "cir");
+        ][]).filter(([kind]) => isRestorableMigrationInput(kind));
         const loaded = await Promise.all(
           entries.map(async ([kind, metadata]) => {
             try {
@@ -235,9 +243,9 @@ export function Migration() {
         for (const item of loaded) {
           if (!item) continue;
           const [kind, restoredFile] = item;
+          if (!isRestorableMigrationInput(kind)) continue;
           restoreFileInput(kind, restoredFile);
-          if (kind === "document") setFile(restoredFile);
-          else restoredResources[kind] = restoredFile;
+          restoredResources[kind] = restoredFile;
         }
         setResourceFiles(restoredResources);
       } catch {
@@ -524,11 +532,24 @@ export function Migration() {
                 ref={(element) => {
                   inputRefs.current.document = element;
                 }}
+                disabled={busy || starting !== null || pdfCutBusy}
                 onChange={(e) => {
                   mappingTouched.current = true;
                   setFile(e.target.files?.[0] ?? null);
+                  setLastDocumentName(null);
+                  setDocId(null);
+                  setWiz(null);
+                  setStarting(null);
+                  setPdfCut(null);
+                  setWizError(null);
+                  setLoadError(null);
                 }}
               />
+              {!file && lastDocumentName ? (
+                <div className="label" role="status">
+                  {t("migration.upload.lastDocument", { filename: lastDocumentName })}
+                </div>
+              ) : null}
             </label>
           </div>
           <div className="row">
@@ -769,7 +790,7 @@ export function Migration() {
         )}
       </div>
 
-      {/* Assistant */}
+      {/* Generation */}
       <div ref={wizRef}>
         {wizError ? <div className="card"><div className="error">{wizError}</div></div> : null}
 

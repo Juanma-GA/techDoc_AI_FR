@@ -112,7 +112,14 @@ def apply_resources(dm: dict, res: Resources, document_text: str = "") -> tuple[
         out = cir_mod.resolve_cir_references(out, res.cir)
     template = dm_templates.template_for(res.templates, out.get("dm_type", ""))
     if template:
-        out = dm_templates.generate_dm(out, template, document_text or _tree_text(out.get("tree")))
+        tree = out.get("tree")
+        from_tree = not document_text and isinstance(tree, dict)
+        out = dm_templates.generate_dm(
+            out,
+            template,
+            document_text or _tree_text(tree if isinstance(tree, dict) else None),
+            section_heading_keys=dm_templates._section_heading_keys(tree) if from_tree else None,
+        )
     violations: list[dict] = []
     if res.brex_rules:
         violations = brex_rules_mod.validate_dm_against_brex(out, res.brex_rules)

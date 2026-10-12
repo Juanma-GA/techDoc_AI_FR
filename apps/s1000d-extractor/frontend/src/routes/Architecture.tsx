@@ -2,7 +2,7 @@
 export function Architecture() {
   const workflow = [
     "Paramètres → clé Mistral (active OCR scans + classification IA) ; validation BREX à venir.",
-    "Charger → PDF/Word + version S1000D (4.1/4.2) + nature dominante → « Démarrer l'assistant ».",
+    "Charger → PDF/Word + version S1000D (4.1/4.2) + nature dominante → « Générer ».",
     "Découpage → choisir le niveau (chapitre/section/sous-section), revoir les Data Modules détectés.",
     "Types → corriger le type de chaque DM (descriptive / procedural / ipd).",
     "Structure → arbre par DM, trancher les nœuds ambigus (para ↔ proceduralStep).",
@@ -21,7 +21,7 @@ export function Architecture() {
     <>
       <div className="page-header">
         <h1>Architecture</h1>
-        <p>Pipeline générique, workflow assistant, et détail par étape.</p>
+        <p>Pipeline générique, workflow de génération et détail par étape.</p>
       </div>
 
       <div className="card">
@@ -47,7 +47,7 @@ export function Architecture() {
       </div>
 
       <div className="card">
-        <h2 className="card-title">Workflow utilisateur — assistant guidé</h2>
+        <h2 className="card-title">Workflow utilisateur — génération guidée</h2>
         <p className="label">
           Étapes bloquantes : on valide chacune avant la suivante. L'IA dégrossit,
           l'humain tranche.

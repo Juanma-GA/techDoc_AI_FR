@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { getCommonMissingFields } from "./Migration";
+import { getCommonMissingFields, isRestorableMigrationInput } from "./Migration";
+
+describe("restored migration inputs", () => {
+  it("restores shared resources but requires an explicit PDF selection", () => {
+    expect(isRestorableMigrationInput("document")).toBe(false);
+    expect(isRestorableMigrationInput("dmrl")).toBe(true);
+    expect(isRestorableMigrationInput("dm_header")).toBe(true);
+    expect(isRestorableMigrationInput("cir")).toBe(false);
+  });
+});
 
 describe("common wizard missing fields", () => {
   it("returns only fields shared by every DM", () => {

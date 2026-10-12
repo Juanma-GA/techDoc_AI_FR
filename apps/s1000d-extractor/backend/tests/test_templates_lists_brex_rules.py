@@ -11,6 +11,7 @@ from app.core import dm_templates
 from app.core.brex_rules import load_brex_rules, validate_dm_against_brex
 from app.core.errors import AppError
 from app.core.lists import parse_lists, to_s1000d
+from app.core.wizard_resources import Resources, apply_resources
 
 # --- listes a puces ---------------------------------------------------------
 
@@ -127,6 +128,60 @@ def test_generate_dm_routes_unheaded_body_to_required_description():
     assert sections["introduction"]["content"] == ""
     assert sections["description"]["content"] == text
     assert out["missing_fields"] == []
+
+
+def test_generate_dm_does_not_treat_generalement_as_general_heading():
+    dm = {"dm_id": "dm1", "title": "Fondations", "dm_type": "descriptive"}
+    template = dm_templates.load_templates()["descriptive"]
+    text = (
+        "6.1. FONDATIONS\n"
+        "Généralement utilisés, les systèmes de transmission reposent sur des courroies."
+    )
+
+    out = dm_templates.generate_dm(dm, template, text)
+    sections = {section["key"]: section for section in out["sections"]}
+
+    assert sections["introduction"]["content"] == ""
+    assert sections["description"]["content"] == text
+    assert out["missing_fields"] == []
+
+
+def test_apply_resources_does_not_treat_paragraph_as_template_heading():
+    dm = {
+        "dm_id": "dm1",
+        "title": "ALIGNEMENT",
+        "dm_type": "descriptive",
+        "tree": {
+            "id": "root",
+            "kind": "section",
+            "text": "",
+            "children": [{
+                "id": "section",
+                "kind": "section",
+                "text": "ALIGNEMENT",
+                "children": [
+                    {"id": "paragraph", "kind": "paragraph", "text": "fonctionnement."},
+                    {"id": "details", "kind": "paragraph", "text": "Reglage et controle."},
+                ],
+            }],
+        },
+    }
+    resources = Resources(
+        templates=dm_templates.load_templates(),
+        cir={},
+        brex_rules={},
+        header_template={},
+        errors=[],
+    )
+
+    enriched, violations = apply_resources(dm, resources)
+    sections = {section["key"]: section for section in enriched["sections"]}
+
+    assert sections["introduction"]["content"] == ""
+    assert sections["operation"]["content"] == ""
+    assert sections["description"]["content"] == "ALIGNEMENT\nfonctionnement.\nReglage et controle."
+    assert enriched["missing_fields"] == []
+    assert not [violation for violation in violations if violation["rule"] == "TEMPLATE"]
 
 
 def test_generate_dm_matches_numbered_section_headings():
