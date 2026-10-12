@@ -112,6 +112,36 @@ def test_validator_runs_the_issue_4_1_procedural_schema() -> None:
     assert not [violation for violation in violations if violation["rule"] == "XSD"]
 
 
+def test_compiled_xsd_is_reused_for_validations_in_the_same_thread(monkeypatch) -> None:
+    root = _root()
+    resolve(root)
+    xml = serialize(
+        root,
+        issue="4.2",
+        dm_type="descriptive",
+        dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-040A-D"},
+    )
+    cached_schemas = getattr(s1000d_schema._SCHEMA_CACHE, "schemas", None)
+    if cached_schemas is not None:
+        cached_schemas.clear()
+    original_compiler = s1000d_schema.etree.XMLSchema
+    compile_count = 0
+
+    def count_compilation(document):
+        nonlocal compile_count
+        compile_count += 1
+        return original_compiler(document)
+
+    monkeypatch.setattr(s1000d_schema.etree, "XMLSchema", count_compilation)
+    for _ in range(2):
+        violations = s1000d_schema.validate_xsd(
+            xml, "4.2", dm_type="descriptive", allow_internal_dtd=True,
+        )
+        assert not [item for item in violations if item["severity"] == "error"], violations
+
+    assert compile_count == 1
+
+
 def test_generated_outputs_validate_for_all_local_issue_and_dm_type_pairs() -> None:
     info_codes = {"descriptive": "040", "procedural": "520", "ipd": "941"}
     for issue in ("4.1", "4.2"):
@@ -140,6 +170,89 @@ def test_generated_outputs_validate_for_all_local_issue_and_dm_type_pairs() -> N
                 assert doc.find("./content/procedure/mainProcedure") is not None
             else:
                 assert doc.find("./content/description") is not None
+
+
+def test_large_descriptive_levelled_para_has_bounded_match_states(monkeypatch) -> None:
+    children = [
+        IRNode(id=f"paragraph-{index}", kind="paragraph", text=f"Texte {index}.")
+        for index in range(23)
+    ]
+    children.extend(
+        IRNode(
+            id=f"warning-{index}",
+            kind="admonition",
+            admonition="warning",
+            text=f"Attention {index}.",
+        )
+        for index in range(8)
+    )
+    children.extend(
+        IRNode(
+            id=f"table-{index}",
+            kind="table",
+            table_rows=[[f"En-tete {index}"], [f"Valeur {index}"]],
+        )
+        for index in range(4)
+    )
+    children.extend(
+        IRNode(id=f"figure-{index}", kind="figure", text=f"Figure {index}", icn=f"figure-{index}.jpg")
+        for index in range(3)
+    )
+    children.extend(
+        IRNode(
+            id=f"section-{index}",
+            kind="section",
+            level=2,
+            text=f"{index} Sous-section",
+            children=[IRNode(id=f"nested-{index}", kind="paragraph", text=f"Sous-texte {index}.")],
+        )
+        for index in range(2)
+    )
+    children.append(IRNode(
+        id="list",
+        kind="item-sequence",
+        form="bullet",
+        children=[IRNode(id="list-item", kind="item", text="Element de liste")],
+    ))
+    root = IRNode(id="root", kind="section", level=0, children=[IRNode(
+        id="main-section", kind="section", level=1, text="Section principale", children=children,
+    )])
+    resolve(root)
+
+    model = load_xsd_model("4.2", "descriptive")
+    original_prune = model._prune_matches
+    prune_calls = 0
+
+    def count_prunes(matches):
+        nonlocal prune_calls
+        prune_calls += 1
+        return original_prune(matches)
+
+    monkeypatch.setattr(model, "_prune_matches", count_prunes)
+    xml = serialize(
+        root,
+        issue="4.2",
+        dm_type="descriptive",
+        dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-040A-D"},
+    )
+    violations = s1000d_schema.validate_xsd(
+        xml, "4.2", dm_type="descriptive", allow_internal_dtd=True,
+    )
+    doc = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    level = doc.find("./content/description/levelledPara")
+
+    assert prune_calls < 50_000
+    assert not [item for item in violations if item["severity"] == "error"], violations
+    assert level is not None
+    assert sum(
+        "Texte " in "".join(paragraph.itertext())
+        for paragraph in level.findall("./para")
+    ) == 23
+    assert level.find("./para/randomList") is not None
+    assert len(level.findall("./warning")) == 8
+    assert len(level.findall("./table")) == 4
+    assert len(level.findall("./figure")) == 3
+    assert len(level.findall("./levelledPara")) == 2
 
 
 def test_ipd_unmapped_source_remains_downloadable_and_is_reported() -> None:

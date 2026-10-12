@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from threading import local
 
 from lxml import etree
 
@@ -22,6 +23,7 @@ from app.core import xml_safe
 SUPPORTED_ISSUES = ("4.1", "4.2", "5.0")
 SELECTABLE_ISSUES = ("4.1", "4.2")
 _SCHEMA_ROOT = Path(__file__).resolve().parent.parent / "s1000d_schemas"
+_SCHEMA_CACHE = local()
 _DM_SCHEMA_STEMS = {
     "descriptive": "descript",
     "description": "descript",
@@ -75,6 +77,19 @@ def _find_dm_xsd(issue: str, dm_type: str | None = None) -> Path | None:
     return schema_path if schema_path.is_file() else None
 
 
+def _compiled_schema(path: Path) -> etree.XMLSchema:
+    schemas = getattr(_SCHEMA_CACHE, "schemas", None)
+    if schemas is None:
+        schemas = {}
+        _SCHEMA_CACHE.schemas = schemas
+    resolved_path = path.resolve()
+    schema = schemas.get(resolved_path)
+    if schema is None:
+        schema = etree.XMLSchema(xml_safe.parse(str(resolved_path)))
+        schemas[resolved_path] = schema
+    return schema
+
+
 def validate_xsd(
     xml: str | bytes,
     issue: str,
@@ -113,7 +128,7 @@ def validate_xsd(
                 f"Aucun schema DM correspondant au type '{selected_type}' pour l'Issue {issue}.",
                 "/",
             )]
-        schema = etree.XMLSchema(xml_safe.parse(str(xsd_path)))
+        schema = _compiled_schema(xsd_path)
     except etree.XMLSyntaxError as exc:
         return [_v("error", "XSD", f"XML mal forme : {exc}", "/")]
     except Exception as exc:

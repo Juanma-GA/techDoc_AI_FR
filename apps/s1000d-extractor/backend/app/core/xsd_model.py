@@ -7,8 +7,9 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 import re
+from typing import TypeAlias
 
-from lxml import etree
+import lxml.etree as etree
 
 _XS_NS = "http://www.w3.org/2001/XMLSchema"
 _XS = f"{{{_XS_NS}}}"
@@ -25,7 +26,7 @@ _SCHEMA_STEMS = {
     "ipd": "ipd",
 }
 QName = tuple[str | None, str]
-XmlElement = etree._Element
+XmlElement: TypeAlias = etree._Element
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,9 @@ class _Match:
     remaining: tuple[XmlElement, ...]
     matched: int
     generated: int
+
+
+MatchCache = dict[tuple[int, tuple[int, ...]], list[_Match]]
 
 
 def _local_name(node: XmlElement) -> str:
@@ -227,6 +231,8 @@ class XsdModel:
         if inline is not None:
             return inline
         type_name = self._resolve_qname(declaration, declaration.get("type"))
+        if type_name is None:
+            return None
         type_node = self.types.get(type_name)
         return type_node if type_node is not None else self.simple_types.get(type_name)
 
@@ -355,7 +361,12 @@ class XsdModel:
         type_name: QName | None,
         inline_type: XmlElement | None = None,
     ) -> SimpleFacets:
-        current = inline_type or self.simple_types.get(type_name)
+        if inline_type is not None:
+            current = inline_type
+        elif type_name is not None:
+            current = self.simple_types.get(type_name)
+        else:
+            current = None
         enumerations: list[str] = []
         patterns: list[str] = []
         lengths: list[int] = []
@@ -392,7 +403,9 @@ class XsdModel:
                 (child for child in restriction if isinstance(child.tag, str) and _local_name(child) == "simpleType"),
                 None,
             )
-            current = inline_base or self.simple_types.get(base)
+            current = inline_base
+            if current is None and base is not None:
+                current = self.simple_types.get(base)
         return SimpleFacets(
             enumerations=tuple(dict.fromkeys(enumerations)),
             patterns=tuple(dict.fromkeys(patterns)),
@@ -686,7 +699,7 @@ class XsdModel:
             best = _Match((), (), 0, 0)
             remaining = children
         else:
-            matches = self._match_particle(particle, children)
+            matches = self._match_particle(particle, children, {})
             best = max(matches, key=lambda match: (match.matched, -match.generated)) if matches else _Match((), children, 0, 0)
             remaining = best.remaining
         for dropped in remaining:
@@ -729,7 +742,12 @@ class XsdModel:
             names.update(self._particle_names(child))
         return names
 
-    def _match_once(self, particle: Particle, candidates: tuple[XmlElement, ...]) -> list[_Match]:
+    def _match_once(
+        self,
+        particle: Particle,
+        candidates: tuple[XmlElement, ...],
+        cache: MatchCache,
+    ) -> list[_Match]:
         if particle.kind == "element":
             for index, candidate in enumerate(candidates):
                 if _element_qname(candidate) == particle.name:
@@ -744,7 +762,7 @@ class XsdModel:
             for child_particle in particle.children:
                 next_states: list[_Match] = []
                 for state in states:
-                    for child_match in self._match_particle(child_particle, state.remaining):
+                    for child_match in self._match_particle(child_particle, state.remaining, cache):
                         next_states.append(_Match(
                             state.items + child_match.items,
                             child_match.remaining,
@@ -756,16 +774,37 @@ class XsdModel:
         if particle.kind == "choice":
             results: list[_Match] = []
             for child_particle in particle.children:
-                results.extend(self._match_particle(child_particle, candidates))
+                results.extend(self._match_particle(child_particle, candidates, cache))
             return self._prune_matches(results)
         if particle.kind == "group" and particle.children:
-            return self._match_particle(particle.children[0], candidates)
+            return self._match_particle(particle.children[0], candidates, cache)
         if particle.kind == "any" and candidates:
             candidate = candidates[0]
             return [_Match((_MatchItem(candidate, False, self.elements.get(_element_qname(candidate))),), candidates[1:], 1, 0)]
         return [_Match((), candidates, 0, 0)]
 
-    def _match_particle(self, particle: Particle, candidates: tuple[XmlElement, ...]) -> list[_Match]:
+    def _match_particle(
+        self,
+        particle: Particle,
+        candidates: tuple[XmlElement, ...],
+        cache: MatchCache,
+    ) -> list[_Match]:
+        key = (id(particle), tuple(id(candidate) for candidate in candidates))
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+        matches = self._match_particle_uncached(particle, candidates, cache)
+        cache[key] = matches
+        return matches
+
+    def _match_particle_uncached(
+        self,
+        particle: Particle,
+        candidates: tuple[XmlElement, ...],
+        cache: MatchCache,
+    ) -> list[_Match]:
+        if particle.kind == "choice" and particle.max_occurs is None:
+            return self._match_repeating_choice(particle, candidates, cache)
         candidate_limit = len(candidates) + particle.min_occurs + 1
         upper = candidate_limit if particle.max_occurs is None else min(particle.max_occurs, candidate_limit)
         upper = max(upper, particle.min_occurs)
@@ -778,7 +817,7 @@ class XsdModel:
                 break
             next_states: list[_Match] = []
             for state in states:
-                for unit in self._match_once(particle, state.remaining):
+                for unit in self._match_once(particle, state.remaining, cache):
                     next_states.append(_Match(
                         state.items + unit.items,
                         unit.remaining,
@@ -789,6 +828,63 @@ class XsdModel:
             if not states:
                 break
         return self._prune_matches(results)
+
+    def _match_repeating_choice(
+        self,
+        particle: Particle,
+        candidates: tuple[XmlElement, ...],
+        cache: MatchCache,
+    ) -> list[_Match]:
+        # Les choix XSD compilés sont non ambigus : la première branche qui
+        # consomme un enfant source évite d'enumerer toutes les partitions.
+        upper = len(candidates) + particle.min_occurs + 1
+        state = _Match((), candidates, 0, 0)
+        results = [state] if particle.min_occurs == 0 else []
+
+        for occurrence in range(upper):
+            matches: list[tuple[tuple[int, int, int], _Match]] = []
+            empty_matches: list[tuple[int, _Match]] = []
+            for child_particle in particle.children:
+                for match in self._match_particle(child_particle, state.remaining, cache):
+                    if match.matched:
+                        first = self._first_consumed_index(state.remaining, match.remaining)
+                        matches.append(((first, -match.matched, match.generated), match))
+                    else:
+                        empty_matches.append((match.generated, match))
+
+            if matches:
+                unit = min(matches, key=lambda option: option[0])[1]
+            elif occurrence < particle.min_occurs:
+                unit = min(empty_matches, key=lambda option: option[0])[1] if empty_matches else _Match(
+                    (), state.remaining, 0, 0,
+                )
+            else:
+                break
+
+            state = _Match(
+                state.items + unit.items,
+                unit.remaining,
+                state.matched + unit.matched,
+                state.generated + unit.generated,
+            )
+            completed = occurrence + 1
+            if completed >= particle.min_occurs:
+                results.append(state)
+            if unit.matched == 0 and completed >= particle.min_occurs:
+                break
+
+        return self._prune_matches(results)
+
+    @staticmethod
+    def _first_consumed_index(
+        candidates: tuple[XmlElement, ...],
+        remaining: tuple[XmlElement, ...],
+    ) -> int:
+        remaining_ids = {id(candidate) for candidate in remaining}
+        return next(
+            (index for index, candidate in enumerate(candidates) if id(candidate) not in remaining_ids),
+            len(candidates),
+        )
 
     def _prune_matches(self, matches: list[_Match]) -> list[_Match]:
         best_by_remaining: dict[tuple[int, ...], _Match] = {}

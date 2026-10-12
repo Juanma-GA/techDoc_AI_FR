@@ -425,9 +425,19 @@ def _generate_all(db: Session, doc: Document) -> None:
         )
         for dm in dms
     ])
-    for dm in dms:
+    for dm_index, dm in enumerate(dms, start=1):
+        dm_started = perf_counter()
+        resources_ms = 0.0
+        serialization_ms = 0.0
+        validation_ms = 0.0
+        stage = "resources"
+        stage_started = dm_started
         try:
             enriched, extra = wres.apply_resources(dm, res)
+            resources_ms = (perf_counter() - stage_started) * 1000
+
+            stage = "serialization"
+            stage_started = perf_counter()
             root = ir_mod.from_dict(enriched["tree"])
             template_missing_fields = enriched.get("missing_fields") or []
             serialization = SerializationDiagnostics()
@@ -457,22 +467,51 @@ def _generate_all(db: Session, doc: Document) -> None:
             })
             dm["xml"] = xml
             dm["template_missing_fields"] = template_missing_fields
+
+            serialization_ms = (perf_counter() - stage_started) * 1000
+            stage = "validation"
+            stage_started = perf_counter()
             dm["missing_fields"] = missing_data_fields(xml, template_missing_fields)
             dm["violations"] = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"], brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
             ) + serialization.xsd_violations + extra
             dm["xsd_valid"] = xsd_is_valid(dm["violations"])
+            validation_ms = (perf_counter() - stage_started) * 1000
             log.info(
                 "dm_generated",
                 document_id=doc.id,
                 dm_id=dm["dm_id"],
+                dm_index=dm_index,
+                dm_count=len(dms),
                 icn_count=sum(1 for node in root.walk() if node.kind == "figure" and node.icn),
                 has_doctype="<!DOCTYPE dmodule [" in xml,
                 xml_length=len(xml),
+                resources_ms=round(resources_ms, 1),
+                serialization_ms=round(serialization_ms, 1),
+                validation_ms=round(validation_ms, 1),
+                total_ms=round((perf_counter() - dm_started) * 1000, 1),
             )
         except Exception as exc:
-            log.exception("dm_generation_failed", document_id=doc.id, dm_id=dm.get("dm_id"))
+            failed_phase_ms = (perf_counter() - stage_started) * 1000
+            if stage == "resources":
+                resources_ms = failed_phase_ms
+            elif stage == "serialization":
+                serialization_ms = failed_phase_ms
+            else:
+                validation_ms = failed_phase_ms
+            log.exception(
+                "dm_generation_failed",
+                document_id=doc.id,
+                dm_id=dm.get("dm_id"),
+                dm_index=dm_index,
+                dm_count=len(dms),
+                failed_stage=stage,
+                resources_ms=round(resources_ms, 1),
+                serialization_ms=round(serialization_ms, 1),
+                validation_ms=round(validation_ms, 1),
+                total_ms=round((perf_counter() - dm_started) * 1000, 1),
+            )
             dm["xml"] = None
             dm["violations"] = [{
                 "severity": "error", "rule": "GENERATE",
