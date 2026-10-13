@@ -243,6 +243,9 @@ def test_selected_rule_bundle_adds_catalog_and_group_metadata(tmp_path: Path) ->
     assert rule.code == "ADDON_RULE"
     assert rule.bundle_code == "synthetic_rules"
     assert rule.bundle_label == "Synthetic rules"
+    assert configuration.bundle.standard_specs["ADDON"][
+        "default_disabled_rule_codes_by_version"
+    ] == {"v1": ["ADDON_RULE"]}
 
 
 def test_declared_rules_module_must_export_definitions(tmp_path: Path) -> None:

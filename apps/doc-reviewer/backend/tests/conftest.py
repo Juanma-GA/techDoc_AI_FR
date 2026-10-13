@@ -44,6 +44,8 @@ def _seed_builtin_standards() -> None:
     from app.db.models import Standard, StandardVersion
     from app.db.session import SessionLocal
 
+    configuration = load_active_client_configuration()
+    client_standard_specs = configuration.bundle.standard_specs
     session = SessionLocal()
     try:
         existing_codes = {
@@ -61,17 +63,23 @@ def _seed_builtin_standards() -> None:
             session.add(std)
             session.flush()
             for label in spec["versions"]:
+                default_disabled_codes = (
+                    client_standard_specs.get(spec["code"], {})
+                    .get("default_disabled_rule_codes_by_version", {})
+                    .get(label, [])
+                )
                 session.add(
                     StandardVersion(
                         standard_id=std.id,
                         label=label,
                         builtin=True,
                         catalog_json=json.dumps(serialize_builtin_version(spec, label)),
+                        disabled_rule_codes=json.dumps(default_disabled_codes),
                     )
                 )
             sync_user_standard(
                 session,
-                load_active_client_configuration().bundle.standard_specs,
+                client_standard_specs,
             )
     finally:
         session.close()

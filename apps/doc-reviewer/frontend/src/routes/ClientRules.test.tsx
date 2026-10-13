@@ -94,6 +94,14 @@ describe("ClientRuleBundles", () => {
 
     const panels = container.querySelectorAll<HTMLDetailsElement>("details.collapsible");
     expect(panels).toHaveLength(2);
+    expect(
+      [...panels].every(
+        (panel) =>
+          panel.parentElement?.style.width === "100%" &&
+          panel.parentElement.style.flexWrap === "nowrap" &&
+          panel.parentElement.querySelector("button")?.style.width === "140px",
+      ),
+    ).toBe(true);
     expect([...panels].map((panel) => panel.querySelector("strong")?.textContent)).toEqual([
       "THALES",
       "ASD-STE100",

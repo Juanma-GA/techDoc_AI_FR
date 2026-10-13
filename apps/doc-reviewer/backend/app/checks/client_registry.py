@@ -407,7 +407,20 @@ def _build_client_bundle(
             raise ClientConfigurationError(
                 f"standard specs are selected by more than one bundle: {names}"
             )
-        standard_specs.update(rule_bundle.standard_specs)
+        rule_bundle_specs = dict(rule_bundle.standard_specs)
+        for catalog in rule_bundle.manifest.catalogs:
+            spec = rule_bundle_specs[catalog.code]
+            versions = spec["versions"]
+            default_disabled_rule_codes = {
+                catalog.version: sorted(
+                    {str(rule.id) for rule in versions[catalog.version]}
+                )
+            }
+            rule_bundle_specs[catalog.code] = {
+                **spec,
+                "default_disabled_rule_codes_by_version": default_disabled_rule_codes,
+            }
+        standard_specs.update(rule_bundle_specs)
         all_rules.extend(rule_bundle.rules)
 
     classifier = getattr(modules.get("page_classifier"), "classify_pages", None)

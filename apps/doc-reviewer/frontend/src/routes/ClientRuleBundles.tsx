@@ -152,7 +152,17 @@ export function ClientRuleBundles({
         const allActive = group.allRules.every((rule) => rule.active);
         const actionKey = allActive ? "rules.client.disableAll" : "rules.client.enableAll";
         return (
-          <div key={group.code} className="row" style={{ alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+          <div
+            key={group.code}
+            className="row"
+            style={{
+              alignItems: "flex-start",
+              flexWrap: "nowrap",
+              gap: 8,
+              marginBottom: 8,
+              width: "100%",
+            }}
+          >
             <details
               className="collapsible"
               open={isOpen}
@@ -183,7 +193,7 @@ export function ClientRuleBundles({
               disabled={bulkUpdatePending}
               aria-label={`${t(actionKey)} ${group.label}`}
               onClick={() => onToggleBundle(group.allRules, !allActive)}
-              style={{ flexShrink: 0, minHeight: 40 }}
+              style={{ flexShrink: 0, minHeight: 40, width: 140, justifyContent: "center" }}
             >
               {t(actionKey)}
             </button>

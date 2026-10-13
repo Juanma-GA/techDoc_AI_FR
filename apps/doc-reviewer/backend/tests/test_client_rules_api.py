@@ -31,7 +31,10 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
     assert config["catalogs"][1]["code"] == "ASD-STE100"
     assert len(rules) == 79
     assert [rule["rule_number"] for rule in rules] == list(range(1, 80))
-    assert all(rule["active"] for rule in rules)
+    thales_rules = [rule for rule in rules if rule["bundle_code"] == "thales_rules"]
+    ste_rules = [rule for rule in rules if rule["bundle_code"] == "ste100_rules"]
+    assert all(rule["active"] for rule in thales_rules)
+    assert ste_rules and all(not rule["active"] for rule in ste_rules)
     assert all(rule["description"] and rule["message"] for rule in rules)
     ste_rule = next(rule for rule in rules if rule["code"] == "STE_NO_MAYBE")
     assert ste_rule["bundle_code"] == "ste100_rules"
@@ -115,3 +118,9 @@ def test_ste_rule_toggle_uses_the_ste100_catalog(client: TestClient) -> None:
 
     assert enabled.status_code == 200, enabled.text
     assert enabled.json()["active"] is True
+
+    with SessionLocal() as session:
+        sync_user_standard(session)
+
+    refreshed = client.get("/api/v1/client-rules").json()
+    assert next(item for item in refreshed if item["code"] == rule_code)["active"] is True
