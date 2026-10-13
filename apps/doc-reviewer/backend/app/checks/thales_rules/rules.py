@@ -301,6 +301,42 @@ CUSTOM_THALES_LOGO_FONT_SIZE = rule(
     },
 )
 
+CUSTOM_CMM_MAPPING_SUSPECT = rule(
+    code="CUSTOM_CMM_MAPPING_SUSPECT",
+    name="Verification du numero CMM renseigne dans le mapping",
+    description=(
+        "Avertit lorsque le meme numero CMM, different du mapping, est detecte "
+        "dans au moins 90 % des pieds de page exploitables."
+    ),
+    message=(
+        "Au moins 90 % des pages indiquent un numero CMM different de celui du mapping."
+    ),
+    kind="field_required",
+    severity="warning",
+    presentation_severity="warning",
+    target=RuleTarget(page="all", region="footer"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="cmm_mapping_consistency",
+        )
+    ],
+    failure_message="Le numero CMM dominant des pieds de page differe du mapping.",
+    only_if=Condition(field="meta_cmm_number", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Warns when the same CMM number, different from the mapping, is "
+                "detected in at least 90% of usable footers."
+            ),
+            "message": (
+                "At least 90% of pages show a CMM number different from the mapping."
+            ),
+        }
+    },
+)
+
 CUSTOM_CMM_NUMBER_FONT_SIZE = rule(
     code="CUSTOM_CMM_NUMBER_FONT_SIZE",
     name="Taille de police du numero CMM (ATA)",
@@ -2677,6 +2713,7 @@ REVISION_RULE_DEFINITIONS = (
 RULE_DEFINITIONS = (
     *REVISION_RULE_DEFINITIONS,
     CUSTOM_CMM_NUMBER,
+    CUSTOM_CMM_MAPPING_SUSPECT,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
     CUSTOM_THALES_LOGO_FONT_SIZE,
     CUSTOM_TP1_THALES_LOGO_FONT_SIZE,

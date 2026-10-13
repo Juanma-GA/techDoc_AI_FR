@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from statistics import median
@@ -2418,6 +2418,75 @@ def _evaluate_document_structure(
     )
 
 
+def _evaluate_cmm_mapping_consistency(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> OperationResult:
+    runtime = getattr(context, "runtime", context)
+    if getattr(runtime, "is_docx", False) or getattr(runtime, "parsed_pdf", None) is None:
+        return OperationResult(status="INCONCLUSIVE")
+
+    document = getattr(runtime, "document", None)
+    mapped_value = str(getattr(document, "meta_cmm_number", "") or "").strip()
+    if not mapped_value:
+        return OperationResult(status="INCONCLUSIVE")
+
+    entities = getattr(runtime, "client_entities", None)
+    pattern_source = entities.get("cmm_number") if isinstance(entities, Mapping) else None
+    if not isinstance(pattern_source, str) or not pattern_source:
+        raise ValueError("cmm_mapping_consistency requires the cmm_number mapping entity")
+    pattern = re.compile(pattern_source)
+    if pattern.groups < 1:
+        raise ValueError("cmm_number mapping entity must define a capture group")
+
+    values_by_page: dict[int, set[str]] = defaultdict(set)
+    for target in getattr(context, "targets", ()):
+        page_number = getattr(target, "raw_page", None)
+        text = getattr(target, "text", None)
+        if not isinstance(page_number, int) or not isinstance(text, str):
+            continue
+        values_by_page[page_number].update(
+            match.group(1).strip().upper()
+            for match in pattern.finditer(text)
+            if match.group(1).strip()
+        )
+
+    values_by_page = {
+        page: values
+        for page, values in values_by_page.items()
+        if len(values) == 1
+    }
+    if not values_by_page:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=mapped_value,
+            message="Aucun numero CMM non ambigu detecte dans les pieds de page.",
+        )
+
+    counts = Counter(next(iter(values)) for values in values_by_page.values())
+    dominant_value, dominant_count = counts.most_common(1)[0]
+    sample_size = len(values_by_page)
+    is_mapping_suspect = (
+        dominant_value != mapped_value.upper()
+        and dominant_count * 100 >= sample_size * 90
+    )
+    first_dominant_page = next(
+        page for page, values in values_by_page.items() if next(iter(values)) == dominant_value
+    )
+    return OperationResult(
+        status="FAIL" if is_mapping_suspect else "PASS",
+        severity="warning" if is_mapping_suspect else None,
+        observed=dominant_value,
+        expected=mapped_value,
+        page=first_dominant_page,
+        message=(
+            "Le numero CMM dominant des pieds de page differe du mapping."
+            if is_mapping_suspect
+            else None
+        ),
+    )
+
+
 def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> bool:
     if page.page_height <= 0 or line.bbox[3] > page.page_height * 0.15:
         return False
@@ -2929,6 +2998,10 @@ PDF_BOOKMARKS = ClientOperation(
     execute=_evaluate_pdf_bookmarks,
     suggestions=_suggest_pdf_bookmarks,
 )
+CMM_MAPPING_CONSISTENCY = ClientOperation(
+    name="cmm_mapping_consistency",
+    execute=_evaluate_cmm_mapping_consistency,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -2943,5 +3016,6 @@ OPERATIONS = {
         DOCUMENT_STRUCTURE,
         VENDOR_CODE_LIST,
         PDF_BOOKMARKS,
+        CMM_MAPPING_CONSISTENCY,
     )
 }
