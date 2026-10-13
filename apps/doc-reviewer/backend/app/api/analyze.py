@@ -12,7 +12,7 @@ from typing import Optional
 
 import fitz
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -112,6 +112,29 @@ def latest_rule_results(
         return []
 
 
+@router.delete(
+    "/documents/{document_id}/pages/{page_number}/suggestions",
+    status_code=204,
+)
+def clear_pending_page_suggestions(
+    document_id: uuid.UUID,
+    page_number: int,
+    db: Session = Depends(get_db),
+) -> None:
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
+    resolve_page_range(page_number, page_number, doc.page_count)
+    db.execute(
+        delete(Suggestion).where(
+            Suggestion.document_id == document_id,
+            Suggestion.page == page_number,
+            Suggestion.status.notin_(("applied", "rejected")),
+        )
+    )
+    db.commit()
+
+
 @router.post("/documents/{document_id}/analyze")
 def analyze_stream(
     document_id: uuid.UUID,
@@ -141,6 +164,10 @@ def analyze_stream(
         default=None,
         ge=1,
         description="Relancer une seule page apres correction manuelle de son statut.",
+    ),
+    additional_pages: list[int] | None = Query(
+        default=None,
+        description="Pages manuellement modifiees a ajouter au perimetre precedent.",
     ),
     page_overrides: Optional[str] = Query(
         default=None,
@@ -222,6 +249,27 @@ def analyze_stream(
             status_code=409,
         )
     parsed_page_overrides = _parse_page_overrides(page_overrides, doc.page_count)
+    additional_page_numbers = additional_pages or []
+    if page_number is not None and additional_page_numbers:
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "Une relance d'une seule page ne peut pas inclure de pages supplementaires.",
+            status_code=422,
+        )
+    if len(set(additional_page_numbers)) != len(additional_page_numbers):
+        raise AppError(
+            "PAGE_OVERRIDE_INVALID",
+            "La liste des pages supplementaires contient des doublons.",
+            status_code=422,
+        )
+    for requested_page in additional_page_numbers:
+        resolve_page_range(requested_page, requested_page, doc.page_count)
+        if parsed_page_overrides.get(requested_page) is not True:
+            raise AppError(
+                "PAGE_OVERRIDE_INVALID",
+                "Chaque page supplementaire doit etre marquee comme modifiee.",
+                status_code=422,
+            )
     if page_number is not None:
         resolve_page_range(page_number, page_number, doc.page_count)
         if page_number not in parsed_page_overrides:
@@ -239,6 +287,13 @@ def analyze_stream(
         )
     partial_page_range = (
         page_number is not None
+        or (
+            not modified_only
+            and any(
+                page < resolved_first_page or page > resolved_last_page
+                for page in additional_page_numbers
+            )
+        )
         or resolved_first_page != 1
         or resolved_last_page != doc.page_count
     )
@@ -251,6 +306,7 @@ def analyze_stream(
         last_page=resolved_last_page,
         modified_only=modified_only,
         page_number=page_number,
+        additional_pages=additional_page_numbers,
         checklist_enabled=checklist,
         vision_override=vision,
     )
@@ -415,6 +471,7 @@ def analyze_stream(
     doc_page_count_value = doc.page_count
     modified_only_value = modified_only
     page_number_value = page_number
+    additional_pages_value = additional_page_numbers
     page_overrides_value = parsed_page_overrides
 
     async def event_gen():
@@ -436,20 +493,94 @@ def analyze_stream(
             }),
         }
 
+        progress_q: "SimpleQueue[dict[str, object]]" = SimpleQueue()
+        loop = asyncio.get_running_loop()
+        parse_end_pct = 95
+        main_parse_end_pct = 90 if previous_revision_bytes_value is not None else parse_end_pct
+
+        def _queue_progress(payload: dict[str, object]) -> None:
+            loop.call_soon_threadsafe(progress_q.put_nowait, payload)
+
+        def _on_parse_progress(current_page: int, total_pages: int | None) -> None:
+            if total_pages is None:
+                _queue_progress({
+                    "step": "parse",
+                    "pct": 0,
+                    "current": current_page,
+                    "unit": "block",
+                })
+                return
+            pct = round(main_parse_end_pct * current_page / max(total_pages, 1))
+            _queue_progress({
+                "step": "parse",
+                "pct": pct,
+                "current": current_page,
+                "total": total_pages,
+                "unit": "page",
+            })
+
+        def _on_previous_revision_progress(current_page: int, total_pages: int) -> None:
+            pct = main_parse_end_pct + round(
+                (parse_end_pct - main_parse_end_pct) * current_page / max(total_pages, 1)
+            )
+            _queue_progress({
+                "step": "parse_previous",
+                "pct": pct,
+                "current": current_page,
+                "total": total_pages,
+                "unit": "page",
+            })
+
+        async def _progress_events_until_done(task):
+            while not task.done():
+                try:
+                    payload = progress_q.get_nowait()
+                except Empty:
+                    await asyncio.sleep(0.2)
+                else:
+                    yield {"event": "progress", "data": json.dumps(payload)}
+            await asyncio.sleep(0)
+            while True:
+                try:
+                    payload = progress_q.get_nowait()
+                except Empty:
+                    break
+                yield {"event": "progress", "data": json.dumps(payload)}
+
         try:
-            yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 5})}
+            yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 0})}
             if is_docx_value:
                 from app.parsers.docx_parser import parse_docx
 
-                parsed = await asyncio.to_thread(parse_docx, src_path)
-                parsed = filter_docx(parsed, first_page_value, last_page_value)
+                parse_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        lambda: parse_docx(src_path, progress_cb=_on_parse_progress)
+                    )
+                )
             else:
-                parsed = await asyncio.to_thread(parse_pdf, src_path)
-            previous_parsed = (
-                await asyncio.to_thread(parse_pdf, previous_revision_bytes_value)
-                if previous_revision_bytes_value is not None
-                else None
-            )
+                parse_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        lambda: parse_pdf(src_path, progress_cb=_on_parse_progress)
+                    )
+                )
+            async for event in _progress_events_until_done(parse_task):
+                yield event
+            parsed = await parse_task
+            if is_docx_value:
+                parsed = filter_docx(parsed, first_page_value, last_page_value)
+            previous_parsed = None
+            if previous_revision_bytes_value is not None:
+                previous_parse_task = asyncio.create_task(
+                    asyncio.to_thread(
+                        lambda: parse_pdf(
+                            previous_revision_bytes_value,
+                            progress_cb=_on_previous_revision_progress,
+                        )
+                    )
+                )
+                async for event in _progress_events_until_done(previous_parse_task):
+                    yield event
+                previous_parsed = await previous_parse_task
             # `page.page_type` (le cas echeant) n'est peuple qu'une fois les
             # standards selectionnes connus : voir le classifieur invoque par
             # `rules_engine.run_all` plus bas, jamais ici (pipeline generique).
@@ -469,7 +600,7 @@ def analyze_stream(
                 text_chars=parsed_text_chars,
                 span_count=span_count,
             )
-            yield {"event": "progress", "data": json.dumps({"step": "parse", "pct": 30})}
+            yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 95})}
 
             # Build a lightweight Document-like with target_unit_system (we
             # don't reuse the ORM session inside the worker thread).
@@ -506,6 +637,10 @@ def analyze_stream(
                         for version in versions:
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
+                    revision_state = getattr(parsed, "_thales_revision_state", None)
+                    revision_classification_available = bool(
+                        getattr(revision_state, "available", False)
+                    )
                     for page in parsed.pages:
                         if page.page in page_overrides_value:
                             page.is_modified = page_overrides_value[page.page]
@@ -514,6 +649,7 @@ def analyze_stream(
                             "page": page.page,
                             "is_modified": page.is_modified,
                             "source": "manual" if page.page in page_overrides_value else "detected",
+                            "requires_review": revision_classification_available and page.is_modified is None,
                         }
                         for page in parsed.pages
                     ]
@@ -527,6 +663,8 @@ def analyze_stream(
                         last_page=None if modified_only_value or page_number_value is not None else last_page_value,
                         modified_only=modified_only_value,
                         page_number=page_number_value,
+                        additional_pages=additional_pages_value,
+                        include_undecided=not revision_classification_available,
                     )
                     cached_revision_state = getattr(parsed, "_thales_revision_state", None)
                     parsed = filter_pdf_pages(parsed, selected_page_numbers)
@@ -561,6 +699,7 @@ def analyze_stream(
                         "last_page": last_page_value,
                         "modified_only": modified_only_value,
                         "page_number": page_number_value,
+                        "additional_pages": additional_pages_value,
                         "selected_pages": selected_page_numbers,
                         "page_overrides": page_overrides_value,
                     }
@@ -580,11 +719,10 @@ def analyze_stream(
                 # donnant l'impression qu'elle "disparaissait". `progress_q`
                 # relie le callback (appele depuis le thread) au generateur
                 # SSE (event loop) via `call_soon_threadsafe`.
-                progress_q: "SimpleQueue[int]" = SimpleQueue()
-                loop = asyncio.get_running_loop()
-
                 def _on_progress(pct: int) -> None:
-                    loop.call_soon_threadsafe(progress_q.put_nowait, pct)
+                    normalized_pct = min(max(pct, 35), 65)
+                    rules_pct = 95 + round((normalized_pct - 35) * 2 / 30)
+                    _queue_progress({"step": "rules", "pct": rules_pct})
 
                 # Echecs du scan checklist/IA (Mistral mal configure, quota,
                 # modele invalide sur un endpoint prive…) : remontes ici au
@@ -619,14 +757,10 @@ def analyze_stream(
                             )
                         )
                     )
-                    while not task.done():
-                        try:
-                            pct = progress_q.get_nowait()
-                            yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
-                        except Empty:
-                            await asyncio.sleep(0.2)
+                    async for event in _progress_events_until_done(task):
+                        yield event
                     raws = await task
-                    yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
+                    yield {"event": "progress", "data": json.dumps({"step": "finalize", "pct": 97})}
                     rows = docx_pipeline.materialize_docx(
                         raws, parsed, document_id_value, run_id_value
                     )
@@ -651,16 +785,12 @@ def analyze_stream(
                                 )
                             )
                         )
-                        while not task.done():
-                            try:
-                                pct = progress_q.get_nowait()
-                                yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": pct})}
-                            except Empty:
-                                await asyncio.sleep(0.2)
+                        async for event in _progress_events_until_done(task):
+                            yield event
                         raws = await task
                     else:
                         raws = []
-                    yield {"event": "progress", "data": json.dumps({"step": "rules", "pct": 70})}
+                    yield {"event": "progress", "data": json.dumps({"step": "finalize", "pct": 97})}
                     rows = materialize(raws, parsed, document_id_value, run_id_value, src_path=src_path)
                     rows = [row for row in rows if row.page in set(selected_page_numbers)]
                     # A ce stade, le classifieur du ClientBundle invoque par
@@ -687,18 +817,29 @@ def analyze_stream(
 
                 total = 0
                 suppressed_rejected = 0
-                for sug in rows:
+                total_rows = len(rows)
+                for row_index, sug in enumerate(rows, start=1):
                     # Rejection memory: suppress a re-detection the reviewer
                     # already rejected on this document (same rule_code + text).
                     if (sug.rule_code, sug.original_text) in rejected_sigs_value:
                         suppressed_rejected += 1
-                        continue
-                    scoped_session.add(sug)
-                    scoped_session.commit()
-                    scoped_session.refresh(sug)
-                    payload = SuggestionOut.model_validate(sug).model_dump(mode="json")
-                    yield {"event": "suggestion", "data": json.dumps(payload)}
-                    total += 1
+                    else:
+                        scoped_session.add(sug)
+                        scoped_session.commit()
+                        scoped_session.refresh(sug)
+                        payload = SuggestionOut.model_validate(sug).model_dump(mode="json")
+                        yield {"event": "suggestion", "data": json.dumps(payload)}
+                        total += 1
+                    if total_rows:
+                        yield {
+                            "event": "progress",
+                            "data": json.dumps({
+                                "step": "suggestions",
+                                "pct": 97 + int(2 * row_index / total_rows),
+                                "current": row_index,
+                                "total": total_rows,
+                            }),
+                        }
 
                 run_row = scoped_session.get(AnalysisRun, run_id_value)
                 if run_row is not None:

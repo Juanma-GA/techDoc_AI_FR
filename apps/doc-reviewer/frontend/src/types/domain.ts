@@ -89,6 +89,7 @@ export type QualityState = "analyzable" | "degraded" | "unusable";
 export type RejectionRuleCount = { rule_code: string; count: number };
 export type RejectionItem = {
   id: string;
+  document_id: string;
   file: string;
   rule_code: string;
   source_kind: SourceKind;

@@ -8,12 +8,17 @@ Référence technique des règles de développement. Lue par les humains et par 
 
 ### Profils d'application
 
-Les règles communes s'appliquent à tous les POCs. Les capacités optionnelles sont déclarées dans le README de l'app :
+Les règles communes s'appliquent à tous les POCs. Chaque app déclare explicitement ses profils dans une section `## Profiles` de son README, avec un profil par puce Markdown. Les capacités optionnelles s'appliquent uniquement si le profil correspondant est déclaré. Une app déterministe sans IA déclare par exemple `local-first` sans `llm` :
+
+```markdown
+## Profiles
+- `local-first`
+```
 
 | Profil | Obligations supplémentaires |
 |---|---|
 | `local-first` | SQLite local, React/Vite buildé, bind `127.0.0.1` |
-| `llm` | Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
+| `llm` | Pour les apps qui appellent une IA : Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
 | `files` | Validation MIME/taille, stockage sous `data/storage`, SHA-256 et versionnage |
 | `production` | Hors scope POC : PostgreSQL, authentification, déploiement et contrôles d'exploitation dédiés |
 
@@ -126,7 +131,7 @@ apps/<poc>/backend/
 | Règle | Standard |
 |---|---|
 | Préfixe URL | `/api/v1/` obligatoire dès J1 |
-| Health check | `GET /api/v1/health` → `{status, version, db, llm}` |
+| Health check | `GET /api/v1/health` → `{status, version, db}` ; le champ `llm` et ses états s'appliquent uniquement au profil `llm` (cf. §3.7). |
 | Format d'erreur | `{code, message, detail, request_id}` partout |
 | Codes HTTP | 400 / 401 / 403 / 404 / 422 / 500 explicites |
 | IDs ressources | UUID v4 (jamais d'auto-incrément exposé) |
@@ -208,7 +213,7 @@ async def create_project(request: Request):
 |---|---|
 | Logs backend | `structlog` JSON, niveau via env var |
 | `request_id` | uuid4 en header `X-Request-Id`, propagé via `contextvars` dans toute la chaîne |
-| Health check | `GET /api/v1/health` retournant `{status, version, db, llm}` |
+| Health check | `GET /api/v1/health` retournant `{status, version, db}` ; le champ `llm` et ses états s'appliquent uniquement au profil `llm` (cf. §3.7). |
 | Logs frontend | `console.error` en dev OK, jamais de `console.log` committé |
 | ErrorBoundary | Obligatoire au niveau App + par route React |
 
@@ -438,6 +443,8 @@ Toggle dark/light dans l'app React :
 **`meta color-scheme`** : valeur `"dark light"` dans le `<head>` (les deux thèmes supportés). Jamais `"dark"` seul (forcerait le scrollbar dark même en mode light).
 
 ## 6. LLM
+
+Les règles de cette section s'appliquent uniquement aux apps qui déclarent le profil `llm` dans leur README. Une app déterministe sans appel IA ne déclare pas ce profil et n'a pas à implémenter Mistral, `AppConfig`, l'audit ou l'interrupteur `llm_enabled`.
 
 | Règle | Standard |
 |---|---|

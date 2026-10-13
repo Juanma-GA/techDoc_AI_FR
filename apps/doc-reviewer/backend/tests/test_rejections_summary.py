@@ -58,6 +58,8 @@ def test_rejections_summary_aggregates(client: TestClient) -> None:
     # items exploitables (parite corpus-agent) : fichier + regle + motif.
     assert len(body["items"]) == 4
     assert all(i["file"] == "manual.pdf" for i in body["items"])
+    assert len({i["document_id"] for i in body["items"]}) == 1
+    assert all(uuid.UUID(i["document_id"]) for i in body["items"])
     ai_item = next(item for item in body["items"] if item["rule_code"] == "AI_SCAN")
     assert ai_item["source_kind"] == "ai"
     motifs = {i["feedback"] for i in body["items"]}

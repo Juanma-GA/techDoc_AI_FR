@@ -20,6 +20,27 @@
     "untested": "À TESTER",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "MODE DÉMO",
+    "panelTitle": "Scénario de démonstration",
+    "panelDescription": "Le traitement est local et déterministe. Les saisies restent séparées des données utilisateur et ne sont pas envoyées à un service externe.",
+    "scenarioLabel": "Scénario",
+    "sampleFiles": "Fichiers d'exemple",
+    "run": "Exécuter localement",
+    "reset": "Réinitialiser le scénario",
+    "result": "Résultat",
+    "empty": "Aucun scénario démo n'est configuré.",
+    "error": "Le scénario n'a pas pu être exécuté.",
+    "scenarioTitle": "Résumé de texte",
+    "scenarioDescription": "Compter les mots et caractères d'un texte synthétique.",
+    "textLabel": "Texte à analyser",
+    "sampleText": "Bonjour depuis l’exemple AI4TECHDOC.",
+    "sampleFileName": "exemple.txt",
+    "sampleFileContent": "Fichier synthétique créé en mémoire.\nAucune donnée métier ou client.",
+    "outputWords": "Mots",
+    "outputCharacters": "Caractères",
+    "outputFileCharacters": "Caractères du fichier"
+  },
   "common": {
     "loading": "Chargement…",
     "confirm": "Confirmer",
@@ -44,6 +65,11 @@
     "resetDone": "Réinitialisation terminée ({{count}} éléments supprimés)."
   },
   "settings": {
+    "demo.title": "Mode de fonctionnement",
+    "demo.hint": "Le mode normal est sélectionné par défaut. Le choix est enregistré dans la configuration locale de l’application.",
+    "demo.normal": "Mode normal",
+    "demo.demo": "Mode démo",
+    "demo.saveError": "Impossible d'enregistrer le mode.",
     "ai.title": "Intelligence artificielle",
     "ai.toggleLabel": "LLM actif",
     "ai.toggleHint": "Désactiver saute les tâches confiées à l'IA. La clé Mistral est conservée.",

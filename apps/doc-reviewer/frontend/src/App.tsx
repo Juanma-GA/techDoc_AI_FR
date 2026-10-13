@@ -26,6 +26,9 @@ const Settings = lazy(async () => ({
 const Rules = lazy(async () => ({
   default: (await import("./routes/Rules")).Rules,
 }));
+const Rejections = lazy(async () => ({
+  default: (await import("./routes/Rejections")).Rejections,
+}));
 
 function RouteFallback() {
   return (
@@ -39,6 +42,7 @@ function RouteFallback() {
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
+  { to: "/rejections", labelKey: "nav.rejections" },
   { to: "/rules", labelKey: "nav.rules" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
@@ -101,6 +105,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/documents" element={<DocumentsList />} />
+            <Route path="/rejections" element={<Rejections />} />
             <Route path="/rules" element={<Rules />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

@@ -9,6 +9,8 @@ import pytest
 from docx import Document as Docx
 from fastapi.testclient import TestClient
 
+from app.parsers.docx_parser import parse_docx
+
 
 def _docx_bytes(text: str) -> bytes:
     d = Docx()
@@ -39,6 +41,22 @@ def _set_document_context(client: TestClient, document_id: str) -> None:
         },
     )
     assert response.status_code == 200, response.text
+
+
+def test_parse_docx_reports_progress_by_block(tmp_path) -> None:
+    doc = Docx()
+    for block_number in range(51):
+        doc.add_paragraph(f"Paragraph {block_number}")
+    path = tmp_path / "progress.docx"
+    doc.save(path)
+    progress: list[tuple[int, int | None]] = []
+
+    parsed = parse_docx(path, progress_cb=lambda current, total: progress.append((current, total)))
+
+    expected = [(count, None) for count in range(25, parsed.block_count + 1, 25)]
+    if parsed.block_count % 25:
+        expected.append((parsed.block_count, None))
+    assert progress == expected
 
 
 def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
@@ -73,6 +91,7 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
         assert stream.status_code == 200
         body = b"".join(stream.iter_bytes())
     assert b"done" in body
+    assert b'"unit": "block"' in body
 
     # 3. La regle STE_VOCAB_NON_APPROVED (term_replace utilize->use) doit sortir,
     #    localisee par target_id (bloc docx), pas par bbox.

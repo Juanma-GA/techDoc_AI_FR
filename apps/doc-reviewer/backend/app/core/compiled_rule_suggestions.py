@@ -31,6 +31,8 @@ from app.core.compiled_rule_operators import (
     normalize,
     pressure_conversion_issues,
     unit_conversion_issues,
+    is_list_of_materials_page,
+    is_table_row_match,
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
@@ -120,7 +122,10 @@ def deterministic_suggestions(
         }:
             operation_name = check.operation or check.operator
             operation = (ctx.client_operations or {}).get(operation_name)
-            if operation is not None and operation.suggestions is None:
+            if operation is not None and (
+                operation.suggestions is None
+                or check.operation_params.get("suppress_fallback_suggestion") is True
+            ):
                 has_non_repairable_check = True
             suggestions.extend(
                 client_operation_suggestions_for_rule(
@@ -1102,6 +1107,10 @@ def regex_suggestions(
     message: str,
     ctx: _EvalContext,
 ) -> list[RawSuggestion]:
+    if check.replacement == _TEMPERATURE_FAHRENHEIT_REPLACEMENT:
+        targets = [target for target in targets if not is_list_of_materials_page(target.text)]
+        if not targets:
+            return []
     resolved_pattern, _context_fields, missing_context = resolve_regex_pattern(
         str(check.expected), ctx
     )
@@ -1113,6 +1122,10 @@ def regex_suggestions(
         for target in targets
         for match in pattern.finditer(target.text, timeout=USER_REGEX_TIMEOUT_SECONDS)
         if match.group(0)
+        and (
+            check.replacement != _TEMPERATURE_FAHRENHEIT_REPLACEMENT
+            or not is_table_row_match(match.span(), target.span_ranges)
+        )
     ]
     suggestions: list[RawSuggestion] = []
     replacement = resolve_replacement_template(check.replacement, ctx.document)
@@ -1182,9 +1195,17 @@ def unit_conversion_suggestions(
     suggestions: list[RawSuggestion] = []
     for target in targets:
         issues = (
-            pressure_conversion_issues(target.text, str(check.expected))
+            pressure_conversion_issues(
+                target.text,
+                str(check.expected),
+                span_ranges=target.span_ranges,
+            )
             if check.operator == "pressure_conversion"
-            else unit_conversion_issues(target.text, str(check.expected))
+            else unit_conversion_issues(
+                target.text,
+                str(check.expected),
+                span_ranges=target.span_ranges,
+            )
         )
         for issue in issues:
             suggestions.append(

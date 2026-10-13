@@ -22,10 +22,12 @@ export function IncompleteChecksNotice({ results, isRunning }: Props) {
   if (isRunning || inconclusive.length === 0) return null;
 
   return (
-    <section className="banner warn" role="status" aria-live="polite">
-      <strong>
-        {t("reviewer.analysis.incomplete.title", { count: inconclusive.length })}
-      </strong>
+    <details className="banner warn" role="status" aria-live="polite">
+      <summary className="incomplete-checks-summary">
+        <strong>
+          {t("reviewer.analysis.incomplete.title", { count: inconclusive.length })}
+        </strong>
+      </summary>
       <p>{t("reviewer.analysis.incomplete.description")}</p>
       <ul>
         {inconclusive.map((result) => {
@@ -53,6 +55,6 @@ export function IncompleteChecksNotice({ results, isRunning }: Props) {
           );
         })}
       </ul>
-    </section>
+    </details>
   );
 }

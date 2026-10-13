@@ -67,7 +67,7 @@ def test_repository_active_client_configuration_loads() -> None:
     assert configuration.mapping_hash
     assert configuration.configuration_hash
     assert configuration.bundle_hash == configuration.configuration_hash
-    assert len(configuration.bundle.rules) == 62
+    assert len(configuration.bundle.rules) == 71
     assert set(configuration.bundle.operations) == {
         "revision_consistency",
         "shop_verification",
@@ -76,7 +76,9 @@ def test_repository_active_client_configuration_loads() -> None:
         "paragraph_justification",
         "highlights_legend_footer",
         "copyright_position",
+        "page_content_position",
         "document_structure",
+        "vendor_code_list",
         "pdf_bookmarks",
     }
     assert configuration.bundle.page_classifier is not None

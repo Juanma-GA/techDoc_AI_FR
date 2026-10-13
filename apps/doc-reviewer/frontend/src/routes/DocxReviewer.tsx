@@ -15,7 +15,12 @@ import {
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocxBlocks, useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
+import {
+  useBulkStatus,
+  usePatchSuggestion,
+  useRuleResults,
+  useSuggestions,
+} from "../hooks/useSuggestions";
 import { useViewerStore } from "../stores/viewerStore";
 
 /**
@@ -38,6 +43,7 @@ export function DocxReviewer({
   const apply = useApplySuggestion(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
+  const bulkStatus = useBulkStatus(documentId);
 
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
@@ -112,7 +118,12 @@ export function DocxReviewer({
             />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
-                <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
+                <span className="progress">
+                  <div
+                    className={`progress-bar${analyze.progressIndeterminate ? " indeterminate" : ""}`}
+                    style={analyze.progressIndeterminate ? undefined : { width: `${analyze.progress}%` }}
+                  />
+                </span>
                 <span className="label">{analyze.progress}%</span>
               </span>
             ) : null}
@@ -196,6 +207,7 @@ export function DocxReviewer({
         onSelect={setSelected}
         onAccept={handleAccept}
         onReject={handleReject}
+        onRejectAll={(ids) => bulkStatus.mutate({ ids, status: "rejected" })}
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}

@@ -12,6 +12,8 @@ Provide the required FastAPI and React/Vite foundation for a new local-first POC
 
 - Standard health, settings, admin statistics, and reset endpoints under `/api/v1/`.
 - Runtime Mistral configuration through `AppConfig`.
+- Normal/demo mode setting persisted through `AppConfig`, with a local synthetic scenario.
+- AI4TECHDOC identity through the shared `@internal/ui` logo component.
 - React/Vite frontend served by FastAPI at `/`.
 - Windows and Unix launchers, conditional frontend rebuild, and Windows packaging wrappers.
 
@@ -61,10 +63,12 @@ The scaffold provides runtime settings, health states, connection testing, and t
 ## Tests
 
 - Backend: run the declared pytest suite under `backend/tests/`.
+- Demo-mode settings: `pytest -q tests/test_settings.py` from `backend/`.
+- Shared demo UI: `pnpm --filter @internal/ui test` from the repository root.
 - Frontend: add and run Vitest and Playwright coverage for the instantiated workflows.
 - Repository: run `bash scripts/check_standard.sh` when Bash is available.
 
-No test command was executed during the documentation reorganization.
+For scenario registration and the shared icon path, see the [frontend integration guide](frontend/README.md).
 
 ## Limitations
 

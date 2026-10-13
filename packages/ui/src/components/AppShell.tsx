@@ -76,8 +76,5 @@ export function AppShell({
 }
 
 export function sidebarNavItemClass(isActive: boolean): string {
-  return cn(
-    "ui-nav-item",
-    isActive && "ui-nav-item-active",
-  );
+  return cn("ui-nav-item", isActive && "ui-nav-item-active");
 }

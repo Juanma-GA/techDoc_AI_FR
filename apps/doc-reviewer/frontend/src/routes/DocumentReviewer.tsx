@@ -29,7 +29,12 @@ import {
   useRevertSuggestion,
 } from "../hooks/useApplySuggestion";
 import { useDocument } from "../hooks/useDocuments";
-import { usePatchSuggestion, useRuleResults, useSuggestions } from "../hooks/useSuggestions";
+import {
+  useBulkStatus,
+  usePatchSuggestion,
+  useRuleResults,
+  useSuggestions,
+} from "../hooks/useSuggestions";
 import { API_BASE_URL } from "../lib/api";
 import { useViewerStore } from "../stores/viewerStore";
 
@@ -50,15 +55,26 @@ export function DocumentReviewer() {
     isModified: boolean | null;
     requiresChoice: boolean;
   } | null>(null);
+  const [activeReviewPage, setActiveReviewPage] = useState<number | null>(null);
+  const [pageReviewChoices, setPageReviewChoices] = useState<Record<number, boolean>>({});
   const apply = useApplySuggestion(documentId);
   const revert = useRevertSuggestion(documentId);
   const patch = usePatchSuggestion(documentId);
+  const bulkStatus = useBulkStatus(documentId);
 
   const pdfVersion = useViewerStore((s) => s.pdfVersion);
   const setPdfVersion = useViewerStore((s) => s.setPdfVersion);
   const currentPage = useViewerStore((s) => s.currentPage);
   const setCurrentPage = useViewerStore((s) => s.setCurrentPage);
   const currentPageStatus = analyze.pageStatuses.find((page) => page.page === currentPage);
+  const pagesToReview = analyze.pageStatuses.filter(
+    (page) => page.requires_review && page.is_modified === null,
+  );
+  const remainingPagesToReview = pagesToReview.filter(
+    (page) => !Object.prototype.hasOwnProperty.call(pageReviewChoices, page.page),
+  );
+  const nextReviewPage = remainingPagesToReview[0];
+  const reviewFlowActive = activeReviewPage !== null || Object.keys(pageReviewChoices).length > 0;
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
   const zoom = useViewerStore((s) => s.zoom);
@@ -71,6 +87,11 @@ export function DocumentReviewer() {
   useEffect(() => {
     if (document.data) setPdfVersion(document.data.current_version);
   }, [document.data, setPdfVersion]);
+
+  useEffect(() => {
+    setActiveReviewPage(null);
+    setPageReviewChoices({});
+  }, [documentId]);
 
   // Image PNG rendue serveur pour la page courante (cf. PdfViewer). `v=`
   // casse le cache apres une edition (nouvelle version du PDF).
@@ -124,6 +145,21 @@ export function DocumentReviewer() {
   // precedente ; cascade les patchs appliques par-dessus).
   const handleUndo = (id: string): void => {
     revert.mutate(id);
+  };
+
+  const handlePageReviewChoice = (isModified: boolean): void => {
+    if (activeReviewPage === null) return;
+    const nextChoices = { ...pageReviewChoices, [activeReviewPage]: isModified };
+    const hasRemainingPages = pagesToReview.some(
+      (page) => !Object.prototype.hasOwnProperty.call(nextChoices, page.page),
+    );
+    setActiveReviewPage(null);
+    if (hasRemainingPages) {
+      setPageReviewChoices(nextChoices);
+    } else {
+      setPageReviewChoices({});
+      analyze.correctPageStatuses(nextChoices);
+    }
   };
 
   // Barre minimale (demande utilisateur) : Retour | navigation pages | Export.
@@ -202,7 +238,7 @@ export function DocumentReviewer() {
               <button
                 type="button"
                 className="btn ghost small"
-                disabled={analyze.status === "running"}
+                disabled={analyze.status === "running" || reviewFlowActive}
                 onClick={() => {
                   const requiresChoice = currentPageStatus.is_modified === null;
                   setPendingPageStatus({
@@ -256,7 +292,12 @@ export function DocumentReviewer() {
             />
             {analyze.status === "running" ? (
               <span className="row" style={{ gap: 6, alignItems: "center" }}>
-                <span className="progress"><div className="progress-bar" style={{ width: `${analyze.progress}%` }} /></span>
+                <span className="progress">
+                  <div
+                    className={`progress-bar${analyze.progressIndeterminate ? " indeterminate" : ""}`}
+                    style={analyze.progressIndeterminate ? undefined : { width: `${analyze.progress}%` }}
+                  />
+                </span>
                 <span className="label">{analyze.progress}%</span>
               </span>
             ) : null}
@@ -273,6 +314,54 @@ export function DocumentReviewer() {
         </div>
 
         <AnalysisTargetBanner />
+        {remainingPagesToReview.length > 0 ? (
+          <section className="banner warn" role="status" aria-live="polite">
+            <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+              <span>
+                {t("reviewer.pageStatus.reviewNotice", {
+                  pages: remainingPagesToReview.map((page) => page.page).join(", "),
+                })}
+              </span>
+              {activeReviewPage !== null ? (
+                <div className="row" role="group" aria-label={t("reviewer.pageStatus.chooseLabel")}>
+                  <span className="label">
+                    {t("reviewer.pageStatus.chooseTitle", { page: activeReviewPage })}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    disabled={analyze.status === "running"}
+                    onClick={() => handlePageReviewChoice(true)}
+                  >
+                    <CircleCheck size={14} aria-hidden="true" />
+                    {t("reviewer.pageStatus.modified")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    disabled={analyze.status === "running"}
+                    onClick={() => handlePageReviewChoice(false)}
+                  >
+                    <CircleMinus size={14} aria-hidden="true" />
+                    {t("reviewer.pageStatus.unchanged")}
+                  </button>
+                </div>
+              ) : nextReviewPage ? (
+                <button
+                  type="button"
+                  className="btn secondary small"
+                  disabled={analyze.status === "running"}
+                  onClick={() => {
+                    setCurrentPage(nextReviewPage.page);
+                    setActiveReviewPage(nextReviewPage.page);
+                  }}
+                >
+                  {t("reviewer.pageStatus.reviewNext", { page: nextReviewPage.page })}
+                </button>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
         <IncompleteChecksNotice
           results={ruleResults.data ?? []}
           isRunning={analyze.status === "running"}
@@ -301,6 +390,7 @@ export function DocumentReviewer() {
         }}
         onAccept={handleAccept}
         onReject={handleReject}
+        onRejectAll={(ids) => bulkStatus.mutate({ ids, status: "rejected" })}
         onSaveEdit={handleSaveEdit}
         onSaveFeedback={handleSaveFeedback}
         onUnreject={handleUnreject}

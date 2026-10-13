@@ -41,6 +41,42 @@ _FOOTER_BAND_MIN_HEIGHT = 80.0
 
 _HIGHLIGHTS_STATUSES = frozenset({"N", "D", "R", "U"})
 _MODIFIED_STATUSES = frozenset({"N", "R"})
+_HIGHLIGHTS_CHAPTERS = (
+    "Assembly",
+    "Assembly and Storage",
+    "Assembly Including Storage",
+    "Assembly (Including Storage)",
+    "Check",
+    "Cleaning",
+    "Description and Operation",
+    "Disassembly",
+    "Fault Isolation",
+    "Illustrated Parts List",
+    "Introduction",
+    "List of Effective Pages",
+    "List of Illustrations",
+    "List of Materials",
+    "List of Approved Repairs",
+    "Record of Revisions",
+    "Record of Temporary Revisions",
+    "Repair",
+    "Service Bulletin List",
+    "Special Equipment and Tooling",
+    "Special Tools, Fixtures and Equipment",
+    "Special Tools, Fixtures, Equipment and Consumables",
+    "Special Tools, Fixtures and Equipment - List of Special Materials",
+    "Storage",
+    "Storage Instructions",
+    "Table of Contents",
+    "Testing",
+    "Testing and Fault Isolation",
+    "Testing and Trouble Shooting",
+    "Title Page",
+    "Vendor Code List",
+)
+_ALLOWED_HIGHLIGHTS_CHAPTERS = frozenset(
+    " ".join(chapter.split()).casefold() for chapter in _HIGHLIGHTS_CHAPTERS
+)
 
 _MONTHS = (
     "JAN",
@@ -84,6 +120,14 @@ HIGHLIGHTS_KEY_PREFIX = "HIGHLIGHTS"
 _PAGE_KEY_RE = re.compile(
     r"(?i)^(?:(?P<prefix>.+?)\s+)?(?P<number>\d+(?:-\d+)?)$"
 )
+_LEP_PAGE_PREFIX_ALIASES = {
+    "intro": ("introduction",),
+    "introduction": ("intro",),
+    "tc": ("table of contents",),
+    "table of contents": ("tc",),
+    "tp": ("title page",),
+    "title page": ("tp",),
+}
 _RANGE_SPLIT_RE = re.compile(
     r"(?i)\s+(?:to|thru|through)\s+|\s+[-–—]\s+|(?<=\d)[–—](?=\d)"
 )
@@ -124,6 +168,7 @@ class HighlightsEntry:
     description_bbox: tuple[float, float, float, float] | None = None
     subject_description: str = ""
     subject_description_bbox: tuple[float, float, float, float] | None = None
+    subject_bbox: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -157,7 +202,7 @@ class LepEntry:
 
 def _lep_page_key_aliases(entry: LepEntry, page_key: str | None = None) -> set[str]:
     target_key = page_key or entry.page_key
-    aliases = {target_key}
+    aliases = _page_key_prefix_aliases(target_key)
     subject_parts = entry.subject.split()
     for start in range(len(subject_parts)):
         subject_suffix = " ".join(subject_parts[start:])
@@ -165,7 +210,25 @@ def _lep_page_key_aliases(entry: LepEntry, page_key: str | None = None) -> set[s
             continue
         alias = normalize_page_key(f"{subject_suffix} Page {target_key}")
         if alias is not None:
-            aliases.add(alias)
+            aliases.update(_page_key_prefix_aliases(alias))
+    return aliases
+
+
+def _page_key_prefix_aliases(page_key: str) -> set[str]:
+    match = re.fullmatch(r"(?P<prefix>.+?) (?P<number>\d+(?:-\d+)?)", page_key)
+    aliases = {page_key}
+    if match is None:
+        return aliases
+    prefix = match.group("prefix")
+    folded_prefix = prefix.casefold()
+    for source, replacements in _LEP_PAGE_PREFIX_ALIASES.items():
+        folded_source = source.casefold()
+        if folded_prefix == folded_source or folded_prefix.startswith(f"{folded_source} "):
+            suffix = prefix[len(source) :]
+            aliases.update(
+                f"{replacement.upper()}{suffix} {match.group('number')}"
+                for replacement in replacements
+            )
     return aliases
 
 
@@ -521,6 +584,11 @@ def normalize_page_key(value: str) -> str | None:
         return None
     prefix = match.group("prefix")
     number = match.group("number")
+    numbered_page = re.fullmatch(r"(?P<chapter>\d{4})-(?P<page>[1-9]\d*)", number)
+    if numbered_page is not None:
+        page = int(numbered_page.group("page"))
+        chapter = int(numbered_page.group("chapter")) + page - 1
+        number = f"{chapter} {page}"
     return f"{' '.join(prefix.upper().split())} {number}" if prefix else number
 
 
@@ -624,6 +692,7 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
     entries: list[HighlightsEntry] = []
     subject = ""
     pending: list[str] = []
+    subject_bbox: tuple[float, float, float, float] | None = None
     subject_description = ""
     subject_description_bbox: tuple[float, float, float, float] | None = None
     previous_was_subject = False
@@ -673,11 +742,24 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
             if designation_cells:
                 previous_was_subject = False
                 continue
+            if expand_page_range(_join_cell(pages_cells)):
+                pending = []
+                subject = ""
+                subject_bbox = None
+                subject_description = ""
+                subject_description_bbox = None
+                previous_was_subject = False
+                continue
             if not previous_was_subject:
                 pending = []
+                subject_bbox = None
                 subject_description = ""
                 subject_description_bbox = None
             pending.append(_join_cell(pages_cells))
+            subject_bbox = _merge_bbox_values(
+                subject_bbox,
+                _merge_bbox(pages_cells),
+            )
             subject = _join_subject(pending)
             if description_cells:
                 subject_description = _append_highlights_text(
@@ -717,6 +799,7 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
                 description_bbox=description_bbox,
                 subject_description=subject_description,
                 subject_description_bbox=subject_description_bbox,
+                subject_bbox=subject_bbox,
             )
         )
     return entries
@@ -1434,6 +1517,7 @@ LEP_DATE = "lep_date"
 FOOTER_DATE = "footer_date"
 HIGHLIGHTS_STATUS_CONSISTENCY = "highlights_status_consistency"
 HIGHLIGHTS_DESIGNATION_REQUIRED = "highlights_designation_required"
+HIGHLIGHTS_CHAPTER = "highlights_chapter"
 UNDECLARED_PAGE = "undeclared_page"
 PAGE_NOT_IN_LEP = "page_not_in_lep"
 MODIFIED_PAGE_ABSENT = "modified_page_absent"
@@ -1879,6 +1963,30 @@ def _missing_highlights_designation_findings(
     ]
 
 
+def _highlights_chapter_findings(
+    state: RevisionState,
+) -> list[RevisionFinding]:
+    findings: list[RevisionFinding] = []
+    for entry in state.highlights:
+        normalized_subject = " ".join(entry.subject.split()).casefold()
+        if normalized_subject in _ALLOWED_HIGHLIGHTS_CHAPTERS:
+            continue
+        findings.append(
+            RevisionFinding(
+                control=HIGHLIGHTS_CHAPTER,
+                message=(
+                    f"Le chapitre « {entry.subject} » n'est pas un intitulé "
+                    "autorisé dans les Highlights."
+                ),
+                original=entry.subject,
+                proposed="",
+                page=entry.page,
+                bbox=entry.subject_bbox or entry.bbox,
+            )
+        )
+    return findings
+
+
 def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
     revision = state.revision_date
     assert revision is not None
@@ -2129,6 +2237,7 @@ def _pairing_findings(state: RevisionState) -> list[RevisionFinding]:
     findings: list[RevisionFinding] = []
     for entry in state.highlights:
         missing: list[str] = []
+        entry_numbers = {page_number_of(key) for key in entry.page_keys}
         for key in entry.page_keys:
             number = page_number_of(key)
             if number is None:
@@ -2136,7 +2245,7 @@ def _pairing_findings(state: RevisionState) -> list[RevisionFinding]:
             prefix = page_key_prefix(key)
             neighbour = number + 1 if number % 2 else number - 1
             expected = f"{prefix} {neighbour}" if prefix else str(neighbour)
-            if expected in listed or expected in missing:
+            if expected in listed or neighbour in entry_numbers or expected in missing:
                 continue
             missing.append(expected)
         if not missing:
@@ -2228,41 +2337,46 @@ def _expected_ror_insertion_date(revision_date: DocDate) -> DocDate:
 
 
 def _ror_insertion_findings(state: RevisionState) -> list[RevisionFinding]:
-    findings: list[RevisionFinding] = []
-    for entry in state.ror_entries:
-        if entry.revision_date is None:
-            continue
-        expected = _expected_ror_insertion_date(entry.revision_date)
-        observed = entry.insertion_date
-        if (
-            observed is not None
-            and observed.day is None
-            and observed.month == expected.month
-            and observed.year == expected.year
-        ):
-            continue
-        if observed is None:
-            message = (
-                f"La date d'insertion du ROR est absente pour la date de revision "
-                f"{entry.revision_date.text} : elle doit etre {expected.text}."
-            )
-        else:
-            message = (
-                f"La date d'insertion « {entry.insertion_date_text} » du ROR est "
-                f"incorrecte pour la date de revision {entry.revision_date.text} : "
-                f"elle doit etre {expected.text}."
-            )
-        findings.append(
-            RevisionFinding(
-                control=ROR_INSERTION_DATE,
-                message=message,
-                original=entry.insertion_date_text,
-                proposed=expected.text,
-                page=entry.page,
-                bbox=entry.bbox,
-            )
+    entry = next(
+        (
+            candidate
+            for candidate in reversed(state.ror_entries)
+            if candidate.revision_date is not None
+        ),
+        None,
+    )
+    if entry is None or entry.revision_date is None:
+        return []
+    expected = _expected_ror_insertion_date(entry.revision_date)
+    observed = entry.insertion_date
+    if (
+        observed is not None
+        and observed.day is None
+        and observed.month == expected.month
+        and observed.year == expected.year
+    ):
+        return []
+    if observed is None:
+        message = (
+            f"La date d'insertion du ROR est absente pour la date de revision "
+            f"{entry.revision_date.text} : elle doit etre {expected.text}."
         )
-    return findings
+    else:
+        message = (
+            f"La date d'insertion « {entry.insertion_date_text} » du ROR est "
+            f"incorrecte pour la date de revision {entry.revision_date.text} : "
+            f"elle doit etre {expected.text}."
+        )
+    return [
+        RevisionFinding(
+            control=ROR_INSERTION_DATE,
+            message=message,
+            original=entry.insertion_date_text,
+            proposed=expected.text,
+            page=entry.page,
+            bbox=entry.bbox,
+        )
+    ]
 
 
 def _ror_revision_findings(state: RevisionState) -> list[RevisionFinding]:
@@ -2302,6 +2416,7 @@ def revision_findings(state: RevisionState) -> list[RevisionFinding]:
     findings: list[RevisionFinding] = (
         _missing_highlights_designation_findings(state)
         + _invalid_highlights_designation_findings(state)
+        + _highlights_chapter_findings(state)
         + _highlights_status_findings(state)
     )
     if state.available:

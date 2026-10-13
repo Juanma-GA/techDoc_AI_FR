@@ -16,6 +16,8 @@ export type ClientMappingField = {
   max_length?: number | null;
   max_items?: number | null;
   allowed_values?: string[] | null;
+  pattern?: string | null;
+  format_hint?: Record<string, string> | null;
 };
 
 export type ClientConfig = {
@@ -41,6 +43,7 @@ export type ClientRule = {
   name: string;
   description: string;
   message: string;
+  rule_number: number;
   kind: string;
   severity: "info" | "warning" | "error";
   execution: "deterministic" | "semantic" | "manual" | "unsupported";
