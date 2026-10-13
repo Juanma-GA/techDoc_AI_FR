@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  Ai4TechDocLogo,
   AppShell,
+  DemoModeBadge,
+  DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
   LlmStatus,
@@ -9,7 +12,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { healthApi, type HealthDto } from "./lib/api";
+import { healthApi, settingsApi, type HealthDto, type SettingsDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Home } from "./routes/Home";
 import { Settings } from "./routes/Settings";
@@ -24,14 +27,27 @@ export function App() {
     queryFn: healthApi.read,
     refetchInterval: 15_000,
   });
+  const settingsQuery = useQuery<SettingsDto>({
+    queryKey: ["settings"],
+    queryFn: settingsApi.read,
+  });
+  const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
   return (
     <AppShell
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
       themeToggleLabel={t("nav.themeToggle")}
+      sidebarTop={
+        demoEnabled ? (
+          <div className="border-b border-md px-4 py-2">
+            <DemoModeBadge label={t("demo.badge")} />
+          </div>
+        ) : null
+      }
       navigation={
         <>
           <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
@@ -67,13 +83,18 @@ export function App() {
         />
       }
     >
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/data" element={<Data />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </ErrorBoundary>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/data" element={<Data />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </ErrorBoundary>
+      </DemoModeProvider>
     </AppShell>
   );
 }

@@ -1,5 +1,10 @@
 // Atoms
 export { AppShell, sidebarNavItemClass, type AppShellProps } from "./components/AppShell";
+export {
+  Ai4TechDocLogo,
+  setAi4TechDocFavicon,
+  type Ai4TechDocLogoProps,
+} from "./components/Ai4TechDocLogo";
 export { Badge, badgeVariants, type BadgeProps } from "./components/Badge";
 export { Button, buttonVariants, type ButtonProps } from "./components/Button";
 export { Card, CardContent, CardHeader, CardTitle } from "./components/Card";
@@ -21,6 +26,22 @@ export {
 
 // Business
 export { ChartCard, type ChartCardProps } from "./components/ChartCard";
+export {
+  DemoModeBadge,
+  DemoModeProvider,
+  DemoModeSelector,
+  useDemoMode,
+  type DemoMode,
+  type DemoModeBadgeProps,
+  type DemoModeContextValue,
+  type DemoModeProviderProps,
+  type DemoModeSelectorProps,
+} from "./components/DemoMode";
+export {
+  DemoScenarioPanel,
+  type DemoScenarioPanelLabels,
+  type DemoScenarioPanelProps,
+} from "./components/DemoScenarioPanel";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { FileDropzone, type FileDropzoneProps } from "./components/FileDropzone";
 export { KpiCard, type KpiCardProps, type KpiDelta } from "./components/KpiCard";
@@ -68,3 +89,11 @@ export { ErrorBoundary, type ErrorBoundaryProps } from "./components/ErrorBounda
 // Hooks & utils
 export { useMediaQuery } from "./hooks/useMediaQuery";
 export { cn } from "./lib/utils";
+export {
+  createDemoFile,
+  type DemoInputField,
+  type DemoSampleFile,
+  type DemoScenario,
+  type DemoScenarioContext,
+  type DemoScenarioResult,
+} from "./lib/demo";
