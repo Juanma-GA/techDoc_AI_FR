@@ -131,7 +131,7 @@ def get_client_config(
                 version=catalog.version,
                 standard_version_id=version_ids[(catalog.code, catalog.version)],
             )
-            for catalog in configuration.manifest.catalogs
+            for catalog in configuration.bundle.catalogs
         ],
         mapping=configuration.mapping.model_dump(mode="json"),
         ui_options=configuration.manifest.ui_options,
@@ -155,6 +155,8 @@ def list_client_rules(
         results.append(
             ClientRuleOut(
                 code=definition.code,
+                bundle_code=definition.bundle_code,
+                bundle_label=definition.bundle_label,
                 name=definition.name,
                 description=definition.description,
                 message=definition.message,
@@ -215,6 +217,8 @@ def patch_client_rule(
     compiled = definition.compiled_rule
     return ClientRuleOut(
         code=definition.code,
+        bundle_code=definition.bundle_code,
+        bundle_label=definition.bundle_label,
         name=definition.name,
         description=definition.description,
         message=definition.message,

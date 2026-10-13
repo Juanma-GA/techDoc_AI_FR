@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import re
 import sys
 import types
-import importlib.util
 from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
@@ -36,6 +37,17 @@ class _StrictModel(BaseModel):
 
 class ClientSelection(_StrictModel):
     bundle: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    rule_bundles: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_rule_bundles(self) -> ClientSelection:
+        if len(self.rule_bundles) != len(set(self.rule_bundles)):
+            raise ValueError("rule_bundles must not contain duplicates")
+        if self.bundle in self.rule_bundles:
+            raise ValueError("the primary bundle cannot also be a rule bundle")
+        if any(not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name) for name in self.rule_bundles):
+            raise ValueError("rule bundle names must be lowercase slugs")
+        return self
 
 
 class ClientManifest(_StrictModel):
@@ -70,6 +82,30 @@ class ClientManifest(_StrictModel):
         return self
 
 
+class ClientRuleBundleManifest(_StrictModel):
+    label: str = Field(min_length=1, max_length=200)
+    bundle_version: str = Field(pattern=r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+    catalogs: list[ClientCatalog] = Field(min_length=1)
+    modules: dict[str, str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_declarations(self) -> ClientRuleBundleManifest:
+        if set(self.modules) != {"rules"}:
+            raise ValueError("rule bundles must declare exactly one rules module")
+        catalog_codes = [catalog.code for catalog in self.catalogs]
+        if len(catalog_codes) != len(set(catalog_codes)):
+            raise ValueError("rule bundle catalog codes must be unique")
+        for relative_path in self.modules.values():
+            path = Path(relative_path)
+            if (
+                not relative_path.strip()
+                or path.is_absolute()
+                or ".." in path.parts
+            ):
+                raise ValueError("rule bundle module paths must stay inside the bundle")
+        return self
+
+
 @dataclass(frozen=True)
 class LoadedClientConfiguration:
     selection: ClientSelection
@@ -86,6 +122,16 @@ class LoadedClientConfiguration:
         return self.configuration_hash
 
 
+@dataclass(frozen=True)
+class _LoadedRuleBundle:
+    code: str
+    manifest: ClientRuleBundleManifest
+    manifest_payload: bytes
+    module_payloads: Mapping[str, bytes]
+    rules: tuple[ClientRuleDefinition, ...]
+    standard_specs: Mapping[str, Mapping[str, Any]]
+
+
 def active_standard_versions(
     db: Session,
     configuration: LoadedClientConfiguration | None = None,
@@ -93,7 +139,7 @@ def active_standard_versions(
     """Resolve manifest catalog identifiers to their synchronized DB versions."""
     active_configuration = configuration or load_active_client_configuration()
     resolved: list[StandardVersion] = []
-    for catalog in active_configuration.manifest.catalogs:
+    for catalog in active_configuration.bundle.catalogs:
         standard = db.scalar(select(Standard).where(Standard.code == catalog.code))
         if standard is None:
             raise ClientConfigurationError(
@@ -180,6 +226,103 @@ def _load_bundle_modules(
     return loaded
 
 
+def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
+    bundle_dir = (root / bundle_code).resolve()
+    try:
+        bundle_dir.relative_to(root)
+    except ValueError as exc:
+        raise ClientConfigurationError(
+            "selected rule bundle must stay inside checks directory"
+        ) from exc
+
+    manifest_payload = _read_bytes(bundle_dir / "manifest.json", "rule bundle manifest")
+    manifest = _parse_model(
+        ClientRuleBundleManifest,
+        manifest_payload,
+        f"rule bundle '{bundle_code}' manifest",
+    )
+    module_payloads = {
+        f"module:{name}": _read_bytes(
+            _bundle_file(bundle_dir, relative_path, f"module:{name}"),
+            f"rule bundle module '{name}'",
+        )
+        for name, relative_path in manifest.modules.items()
+    }
+    module_digest = sha256(manifest_payload)
+    for role, payload in sorted(module_payloads.items()):
+        module_digest.update(b"\0")
+        module_digest.update(role.encode("utf-8"))
+        module_digest.update(b"\0")
+        module_digest.update(payload)
+    namespace_hash = module_digest.hexdigest()[:16]
+    modules = _load_bundle_modules(bundle_dir, manifest.modules, namespace_hash)
+    rules_module = modules["rules"]
+    raw_rules = getattr(rules_module, "RULE_DEFINITIONS", None)
+    if not isinstance(raw_rules, (list, tuple)) or any(
+        not isinstance(definition, ClientRuleDefinition) for definition in raw_rules
+    ):
+        raise ClientConfigurationError(
+            f"rule bundle '{bundle_code}' must export RULE_DEFINITIONS"
+        )
+
+    exported_specs = getattr(rules_module, "STANDARD_SPECS", None)
+    if exported_specs is None:
+        exported_spec = getattr(rules_module, "STANDARD_SPEC", None)
+        exported_specs = (
+            {str(exported_spec.get("code")): exported_spec}
+            if isinstance(exported_spec, Mapping)
+            else None
+        )
+    if not isinstance(exported_specs, Mapping):
+        raise ClientConfigurationError(
+            f"rule bundle '{bundle_code}' must export STANDARD_SPEC or STANDARD_SPECS"
+        )
+    standard_specs = {str(code): spec for code, spec in exported_specs.items()}
+
+    catalog_rule_codes: set[str] = set()
+    for code, spec in standard_specs.items():
+        if not isinstance(spec, Mapping) or str(spec.get("code")) != code:
+            raise ClientConfigurationError(
+                f"rule bundle '{bundle_code}' standard spec key does not match its code"
+            )
+    for catalog in manifest.catalogs:
+        spec = standard_specs.get(catalog.code)
+        versions = spec.get("versions") if spec is not None else None
+        if not isinstance(versions, Mapping) or catalog.version not in versions:
+            raise ClientConfigurationError(
+                f"rule bundle '{bundle_code}' does not define catalog "
+                f"{catalog.code}:{catalog.version}"
+            )
+        rules = versions[catalog.version]
+        if not isinstance(rules, (list, tuple)):
+            raise ClientConfigurationError(
+                f"rule bundle '{bundle_code}' catalog "
+                f"{catalog.code}:{catalog.version} must contain a rule list"
+            )
+        catalog_rule_codes.update(
+            str(getattr(rule, "id", "")) for rule in rules
+        )
+    if any(definition.code not in catalog_rule_codes for definition in raw_rules):
+        raise ClientConfigurationError(
+            f"rule bundle '{bundle_code}' contains a rule outside its declared catalogs"
+        )
+
+    rules = tuple(
+        definition.model_copy(
+            update={"bundle_code": bundle_code, "bundle_label": manifest.label}
+        )
+        for definition in raw_rules
+    )
+    return _LoadedRuleBundle(
+        code=bundle_code,
+        manifest=manifest,
+        manifest_payload=manifest_payload,
+        module_payloads=module_payloads,
+        rules=rules,
+        standard_specs=standard_specs,
+    )
+
+
 def _build_client_bundle(
     selection: ClientSelection,
     manifest: ClientManifest,
@@ -188,6 +331,7 @@ def _build_client_bundle(
     manifest_hash: str,
     mapping_hash: str,
     configuration_hash: str,
+    rule_bundles: tuple[_LoadedRuleBundle, ...] = (),
 ) -> ClientBundle[Any]:
     namespace_hash = sha256(
         f"{configuration_hash}:{bundle_dir}".encode("utf-8")
@@ -229,6 +373,15 @@ def _build_client_bundle(
             raise ClientConfigurationError("rules module STANDARD_SPECS must be a mapping")
         standard_specs = {str(code): spec for code, spec in exported_specs.items()}
 
+    primary_rules = tuple(
+        definition.model_copy(
+            update={"bundle_code": selection.bundle, "bundle_label": manifest.label}
+        )
+        for definition in raw_rules
+    )
+    catalogs = list(manifest.catalogs)
+    all_rules = list(primary_rules)
+    catalog_codes = {catalog.code for catalog in catalogs}
     for catalog in manifest.catalogs:
         spec = standard_specs.get(catalog.code)
         if spec is None:
@@ -239,6 +392,23 @@ def _build_client_bundle(
                 f"rules module does not define manifest catalog "
                 f"{catalog.code}:{catalog.version}"
             )
+
+    for rule_bundle in rule_bundles:
+        for catalog in rule_bundle.manifest.catalogs:
+            if catalog.code in catalog_codes:
+                raise ClientConfigurationError(
+                    f"catalog code is selected by more than one bundle: {catalog.code}"
+                )
+            catalog_codes.add(catalog.code)
+            catalogs.append(catalog)
+        duplicate_specs = set(standard_specs).intersection(rule_bundle.standard_specs)
+        if duplicate_specs:
+            names = ", ".join(sorted(duplicate_specs))
+            raise ClientConfigurationError(
+                f"standard specs are selected by more than one bundle: {names}"
+            )
+        standard_specs.update(rule_bundle.standard_specs)
+        all_rules.extend(rule_bundle.rules)
 
     classifier = getattr(modules.get("page_classifier"), "classify_pages", None)
     if "page_classifier" in manifest.modules and not callable(classifier):
@@ -254,9 +424,9 @@ def _build_client_bundle(
             manifest_hash=manifest_hash,
             mapping_hash=mapping_hash,
             bundle_hash=configuration_hash,
-            catalogs=tuple(manifest.catalogs),
+            catalogs=tuple(catalogs),
             mapping=mapping,
-            rules=tuple(raw_rules),
+            rules=tuple(all_rules),
             operations=dict(operations),
             standard_specs=standard_specs,
             page_classifier=classifier,
@@ -307,13 +477,28 @@ def load_active_client_configuration(
         declared_payloads[role] = _read_bytes(declared_path, f"declared file '{role}'")
 
     mapping = _parse_model(ClientMapping, declared_payloads["mapping"], "mapping file")
+    rule_bundles = tuple(
+        _load_rule_bundle(root, bundle_code)
+        for bundle_code in selection.rule_bundles
+    )
     configuration_digest = sha256()
+    configuration_digest.update(selection.model_dump_json().encode("utf-8"))
     configuration_digest.update(manifest_payload)
     for role, payload in sorted(declared_payloads.items()):
         configuration_digest.update(b"\0")
         configuration_digest.update(role.encode("utf-8"))
         configuration_digest.update(b"\0")
         configuration_digest.update(payload)
+    for rule_bundle in rule_bundles:
+        configuration_digest.update(b"\0")
+        configuration_digest.update(rule_bundle.code.encode("utf-8"))
+        configuration_digest.update(b"\0")
+        configuration_digest.update(rule_bundle.manifest_payload)
+        for role, payload in sorted(rule_bundle.module_payloads.items()):
+            configuration_digest.update(b"\0")
+            configuration_digest.update(role.encode("utf-8"))
+            configuration_digest.update(b"\0")
+            configuration_digest.update(payload)
 
     manifest_hash = sha256(manifest_payload).hexdigest()
     mapping_hash = sha256(declared_payloads["mapping"]).hexdigest()
@@ -326,6 +511,7 @@ def load_active_client_configuration(
         manifest_hash,
         mapping_hash,
         configuration_hash,
+        rule_bundles,
     )
 
     return LoadedClientConfiguration(

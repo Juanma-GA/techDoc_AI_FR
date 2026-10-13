@@ -40,6 +40,8 @@ export type ClientConfig = {
 
 export type ClientRule = {
   code: string;
+  bundle_code: string;
+  bundle_label: string;
   name: string;
   description: string;
   message: string;
@@ -73,5 +75,18 @@ export function usePatchClientRule() {
     mutationFn: ({ code, active }: { code: string; active: boolean }) =>
       api.patch<ClientRule>(`/client-rules/${encodeURIComponent(code)}`, { active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["client-rules"] }),
+  });
+}
+
+export function usePatchClientRuleBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ rules, active }: { rules: ClientRule[]; active: boolean }) => {
+      for (const rule of rules) {
+        if (rule.active === active) continue;
+        await api.patch<ClientRule>(`/client-rules/${encodeURIComponent(rule.code)}`, { active });
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["client-rules"] }),
   });
 }

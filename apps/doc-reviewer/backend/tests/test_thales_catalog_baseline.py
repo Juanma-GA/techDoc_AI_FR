@@ -13,9 +13,9 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 71
+    assert len(payload) == 72
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "79c44a42844bcccada270f372747b71ef6628ca0bd080287ff6d0e8a94782d00"
+        "b21f1286965e6f3bbe5b1f474f7d4cb236a0eb5b640457282c454d6e81021659"
     )
 
     expected_controls = {

@@ -291,8 +291,11 @@
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "rules",
+      "enableAll": "Enable all",
+      "disableAll": "Disable all",
       "loadFailed": "Could not load the active client catalog.",
-      "saveFailed": "Could not save this rule's status. Try again."
+      "saveFailed": "Could not save this rule's status. Try again.",
+      "bulkSaveFailed": "Some rules may not have been updated. Check their status and try again."
     },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Revised or new page marked with a star in the LEP",

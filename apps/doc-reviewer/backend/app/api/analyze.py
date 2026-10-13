@@ -380,12 +380,13 @@ def analyze_stream(
         {
             "client_bundle": {
                 "bundle": client_configuration.selection.bundle,
+                "rule_bundles": client_configuration.selection.rule_bundles,
                 "client_code": client_configuration.manifest.client_code,
                 "bundle_version": client_configuration.manifest.bundle_version,
                 "contract_version": client_configuration.manifest.contract_version,
                 "catalogs": [
                     catalog.model_dump(mode="json")
-                    for catalog in client_configuration.manifest.catalogs
+                    for catalog in client_configuration.bundle.catalogs
                 ],
                 "manifest_hash": client_configuration.manifest_hash,
                 "mapping_hash": client_configuration.mapping_hash,

@@ -291,8 +291,11 @@
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "règles",
+      "enableAll": "Tout activer",
+      "disableAll": "Tout désactiver",
       "loadFailed": "Impossible de charger le catalogue du client actif.",
-      "saveFailed": "Impossible d'enregistrer le statut de cette règle. Réessayez."
+      "saveFailed": "Impossible d'enregistrer le statut de cette règle. Réessayez.",
+      "bulkSaveFailed": "Certaines règles n'ont peut-être pas été modifiées. Vérifiez leur statut et réessayez."
     },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Etoile LEP presente pour chaque page revisee ou nouvelle",

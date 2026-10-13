@@ -318,6 +318,8 @@ class ClientConfigOut(BaseModel):
 
 class ClientRuleOut(BaseModel):
     code: str
+    bundle_code: str
+    bundle_label: str
     name: str
     description: str
     message: str
