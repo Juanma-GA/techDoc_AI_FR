@@ -196,7 +196,12 @@ def scope_targets(
         if target_spec.region == "header":
             spans = [span for span in page.spans if span.bbox[1] <= min_y + height * 0.25]
         elif target_spec.region == "footer":
-            spans = [span for span in page.spans if span.bbox[3] >= max_y - height * 0.25]
+            footer_top = (
+                page.page_height * 0.9
+                if page.page_height > 0
+                else max_y - max(height * 0.1, 50.0)
+            )
+            spans = [span for span in page.spans if span.bbox[1] >= footer_top]
         else:
             spans = [
                 span

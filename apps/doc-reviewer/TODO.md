@@ -1,6 +1,6 @@
 FRONT :
 
-- Dans l'onglet "règles" il faut pas que quand on desactive ou active ça mette en bas la regle, faut qu'elle reste au meme endroit juste on voit que c'est désactivé quoi aussi simple que ça
+
 
 BACK :
 

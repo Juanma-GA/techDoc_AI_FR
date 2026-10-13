@@ -253,6 +253,7 @@ class RejectionRuleCount(BaseModel):
 
 class RejectionItem(BaseModel):
     id: uuid.UUID
+    document_id: uuid.UUID
     file: str
     rule_code: str
     source_kind: str
@@ -340,6 +341,7 @@ def rejections_summary(
     items = [
         RejectionItem(
             id=s.id,
+            document_id=s.document_id,
             file=doc_names.get(s.document_id) or "document inconnu",
             rule_code=s.rule_code,
             source_kind=(

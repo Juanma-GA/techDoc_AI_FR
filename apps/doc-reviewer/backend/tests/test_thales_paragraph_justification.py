@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import fitz
 
 from app.checks.client_registry import load_active_client_configuration
+from app.checks.thales_rules.operations import _paragraphs_from_pdf_page
 from app.checks.thales_rules.page_classifier import classify_pages
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span, parse_pdf
@@ -99,13 +100,17 @@ def _three_line_pdf(right_edges: list[float]) -> ParsedPdf:
     )
 
 
-def _layout_pdf(lines: list[tuple[str, float, float]]) -> ParsedPdf:
+def _layout_pdf(
+    lines: list[tuple[str, float, float]],
+    *,
+    line_indexes: list[int] | None = None,
+) -> ParsedPdf:
     pdf_lines = [
         PdfLine(
             text,
             (left, 150.0 + index * 16.0, right, 161.0 + index * 16.0),
             block_index=1,
-            line_index=index,
+            line_index=index if line_indexes is None else line_indexes[index],
         )
         for index, (text, left, right) in enumerate(lines)
     ]
@@ -159,6 +164,38 @@ def test_justified_paragraph_passes_and_final_line_may_be_short() -> None:
 
     assert results[0].status == "PASS"
     assert suggestions == []
+
+
+def test_short_sentence_final_line_is_ignored_when_other_edges_align() -> None:
+    parsed = _layout_pdf(
+        [
+            ("The first justified line reaches the right margin as expected.", 50.0, 500.0),
+            ("The second justified line reaches the same right margin too.", 50.0, 500.0),
+            ("source. A pressure increase of 15 mb for 10 minutes is tolerated.", 50.0, 465.0),
+            ("For example: in case of a leak the pointer shifts from zero.", 50.0, 430.0),
+        ]
+    )
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_missing_pdf_line_index_splits_paragraphs() -> None:
+    parsed = _layout_pdf(
+        [
+            ("The first justified line has enough words for measurement.", 50.0, 500.0),
+            ("The second justified line shares its right edge exactly.", 50.0, 500.0),
+            ("short final line without terminal punctuation", 50.0, 400.0),
+            ("A separate short note starts after an empty PDF line", 50.0, 450.0),
+        ],
+        line_indexes=[0, 1, 2, 4],
+    )
+
+    paragraphs = _paragraphs_from_pdf_page(parsed.pages[0])
+
+    assert [len(paragraph) for paragraph in paragraphs] == [3, 1]
 
 
 def test_left_aligned_paragraph_fails_without_text_replacement_suggestion() -> None:

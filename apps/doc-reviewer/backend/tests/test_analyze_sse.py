@@ -105,6 +105,14 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     assert b"run_started" in body
     assert b"done" in body
     assert b"event: page_statuses" in body
+    assert b'"unit": "page"' in body
+    assert b'"step": "suggestions"' in body
+    parse_complete = body.find(b'"step": "parse", "pct": 95')
+    rules_started = body.find(b'"step": "rules", "pct": 95')
+    rules_complete = body.find(b'"step": "finalize", "pct": 97')
+    suggestions_complete = body.find(b'"step": "suggestions", "pct": 99')
+    done = body.find(b"event: done")
+    assert 0 <= parse_complete < rules_started < rules_complete < suggestions_complete < done
 
     sugs = client.get(f"/api/v1/documents/{doc_id}/suggestions")
     assert sugs.status_code == 200
@@ -259,22 +267,28 @@ def test_manual_page_rerun_preserves_suggestions_on_other_pages(
     after = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
     assert page_two_ids <= {item["id"] for item in after}
 
-    with client.stream(
-        "POST",
-        f"/api/v1/documents/{document_id}/analyze",
-        params={
-            "modified_only": "false",
-            "page_number": "1",
-            "page_overrides": json.dumps({"1": False}),
-        },
-    ) as stream:
-        assert stream.status_code == 200
-        unchanged_body = b"".join(stream.iter_bytes())
+    with SessionLocal() as session:
+        run_ids_before_delete = session.scalars(
+            select(AnalysisRun.id).where(
+                AnalysisRun.document_id == uuid.UUID(document_id)
+            )
+        ).all()
 
-    assert b'"is_modified": false' in unchanged_body
+    cleared = client.delete(
+        f"/api/v1/documents/{document_id}/pages/1/suggestions"
+    )
+    assert cleared.status_code == 204, cleared.text
+
     unchanged = client.get(f"/api/v1/documents/{document_id}/suggestions").json()
     assert not any(item["page"] == 1 and item["status"] not in {"applied", "rejected"} for item in unchanged)
     assert page_two_ids <= {item["id"] for item in unchanged}
+    with SessionLocal() as session:
+        run_ids_after_delete = session.scalars(
+            select(AnalysisRun.id).where(
+                AnalysisRun.document_id == uuid.UUID(document_id)
+            )
+        ).all()
+    assert run_ids_after_delete == run_ids_before_delete
 
 
 def test_unchanged_page_is_removed_before_rules_run(
@@ -315,7 +329,7 @@ def test_unchanged_page_is_removed_before_rules_run(
         "POST",
         f"/api/v1/documents/{document_id}/analyze",
         params={
-            "modified_only": "true",
+            "modified_only": "false",
             "page_overrides": json.dumps({"1": False}),
         },
     ) as stream:
@@ -324,6 +338,52 @@ def test_unchanged_page_is_removed_before_rules_run(
 
     assert b"done" in body
     assert analyzed_pages == [2]
+
+
+def test_page_review_rerun_adds_manually_modified_pages_outside_original_range(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    for page_number in range(1, 4):
+        page = pdf.new_page(width=400, height=300)
+        page.insert_text((40, 100), f"Manual text on page {page_number}.")
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    upload = client.post(
+        "/api/v1/documents?target=imperial",
+        files={"file": ("three-pages.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    analyzed_pages: list[int] = []
+
+    def capture_rule_pages(parsed, *_args, **_kwargs):
+        analyzed_pages.extend(page.page for page in parsed.pages)
+        return []
+
+    monkeypatch.setattr(analyze_api, "run_all", capture_rule_pages)
+
+    with client.stream(
+        "POST",
+        f"/api/v1/documents/{document_id}/analyze",
+        params=[
+            ("first_page", "2"),
+            ("last_page", "3"),
+            ("additional_pages", "1"),
+            ("page_overrides", json.dumps({"1": True, "2": True, "3": False})),
+        ],
+    ) as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes())
+
+    assert b"done" in body
+    assert analyzed_pages == [1, 2]
 
 
 def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) -> None:

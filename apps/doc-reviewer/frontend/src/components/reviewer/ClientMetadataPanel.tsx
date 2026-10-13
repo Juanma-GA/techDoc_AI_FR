@@ -50,6 +50,19 @@ function hasValue(value: unknown): boolean {
   return String(value ?? "").trim().length > 0;
 }
 
+function matchesPattern(value: unknown, definition: ClientMappingField): boolean {
+  if (!definition.pattern || !hasValue(value)) return true;
+  const candidates = definition.type === "string_list" && Array.isArray(value)
+    ? value
+    : [value];
+  try {
+    const pattern = new RegExp(`^(?:${definition.pattern})$`);
+    return candidates.every((item) => pattern.test(String(item ?? "").trim()));
+  } catch {
+    return true;
+  }
+}
+
 function serializeValue(value: unknown, definition: ClientMappingField): unknown {
   if (definition.type === "string_list") {
     return Array.isArray(value)
@@ -71,6 +84,7 @@ function serializeValue(value: unknown, definition: ClientMappingField): unknown
 
 export function ClientMetadataPanel({ document }: Props) {
   const { t, i18n } = useTranslation();
+  const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
   const config = useClientConfig();
   const fields = config.data?.mapping.fields ?? {};
   const fieldEntries = Object.entries(fields);
@@ -104,6 +118,11 @@ export function ClientMetadataPanel({ document }: Props) {
   const savedDraft = createDraft(document, fields);
   const dirty = JSON.stringify(draft) !== JSON.stringify(savedDraft);
   const draftComplete = requiredFields.every((field) => hasValue(draft[field]));
+  const invalidFormatFields = new Set(
+    fieldEntries
+      .filter(([name, definition]) => !matchesPattern(draft[name], definition))
+      .map(([name]) => name),
+  );
 
   function updateField(name: string, value: unknown): void {
     setSaveState("idle");
@@ -111,6 +130,7 @@ export function ClientMetadataPanel({ document }: Props) {
   }
 
   function save(): void {
+    if (invalidFormatFields.size > 0) return;
     const clientMetadata = Object.fromEntries(
       fieldEntries.map(([name, definition]) => [name, serializeValue(draft[name], definition)]),
     );
@@ -147,7 +167,6 @@ export function ClientMetadataPanel({ document }: Props) {
     );
   }
 
-  const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
   return (
     <section className="card document-meta-panel" aria-labelledby="document-meta-title">
       <div className="document-meta-panel-head">
@@ -182,6 +201,8 @@ export function ClientMetadataPanel({ document }: Props) {
         {fieldEntries.map(([name, definition]) => {
           const label = definition.labels?.[locale] ?? definition.labels?.fr ?? name.replaceAll("_", " ");
           const value = draft[name];
+          const formatHint = definition.format_hint?.[locale] ?? definition.format_hint?.fr;
+          const invalidFormat = invalidFormatFields.has(name);
           return (
             <label className="field" key={name}>
               <span className="field-label">
@@ -212,6 +233,7 @@ export function ClientMetadataPanel({ document }: Props) {
                   maxLength={definition.max_length ?? undefined}
                   aria-label={`${label}. ${t("reviewer.meta.listHint")}`}
                   title={t("reviewer.meta.listHint")}
+                  aria-invalid={invalidFormat}
                 />
               ) : definition.type === "boolean" ? (
                 <input
@@ -228,8 +250,13 @@ export function ClientMetadataPanel({ document }: Props) {
                   value={String(value ?? "")}
                   onChange={(event) => updateField(name, event.target.value)}
                   required={definition.required}
+                  aria-invalid={invalidFormat}
                 />
               )}
+              {formatHint ? <span className="hint">{formatHint}</span> : null}
+              {invalidFormat ? (
+                <span className="error">{t("reviewer.meta.invalidFormat")}</span>
+              ) : null}
             </label>
           );
         })}
@@ -258,7 +285,7 @@ export function ClientMetadataPanel({ document }: Props) {
             type="button"
             className="btn primary small"
             onClick={save}
-            disabled={!dirty || patch.isPending}
+            disabled={!dirty || patch.isPending || invalidFormatFields.size > 0}
           >
             <Save size={14} />
             {patch.isPending ? t("reviewer.meta.saving") : t("reviewer.meta.save")}

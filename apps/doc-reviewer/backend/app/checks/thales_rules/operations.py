@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from statistics import median
-from typing import Any
+from typing import Any, cast
 
+from app.parsers.pdf_parser import (
+    ParsedPage,
+    ParsedPdf,
+    PdfLine,
+    PdfVectorPrimitive,
+    Span,
+)
 from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
 from .revision_engine import _highlights_previous_revision_findings
@@ -17,7 +26,13 @@ from .rules import (
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
 )
 from app.core.logging import get_logger
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine
+from app.parsers.pdf_parser import (
+    ParsedPage,
+    ParsedPdf,
+    PdfLine,
+    PdfVectorPrimitive,
+    Span,
+)
 
 
 _logger = get_logger(__name__)
@@ -35,6 +50,13 @@ A.  Verification of the procedures in this manual
 (1)  Testing and Fault Isolation: shop verification done JUN 24/88."""
 _HIGHLIGHTS_CONTENT_MARKER = re.compile(r"(?im)^\s*HIGHLIGHTS\s*$")
 _HIGHLIGHTS_HOLDER_RE = re.compile(r"(?i)^TO\s*:\s*HOLDER\s+OF\s+")
+_PNR_HEADER_LABEL_RE = re.compile(r"(?i)\bPNR\s*:\s*")
+_PNR_HEADER_TOKEN_RE = re.compile(
+    r"(?i)(?<![A-Z0-9])(?P<value>[A-Z0-9]+"
+    r"(?:\s*[-\u2010-\u2015\u2212]\s*[A-Z0-9]+)+)(?![A-Z0-9])"
+)
+_PNR_HEADER_SEPARATOR_RE = re.compile(r"[\s,;&]*(?:and[\s,;&]*)?", re.IGNORECASE)
+_PNR_VALUE_LIST_SEPARATOR_RE = re.compile(r"(?i)\s*(?:,|;|\band\b)\s*")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
 _HIGHLIGHTS_LEGEND_RE = re.compile(r"(?i)\bN\s*:\s*New\b.*\bD\s*:\s*Deleted\b")
@@ -54,9 +76,26 @@ _COPYRIGHT_POSITION_ODD_X_CM = 3.03
 _COPYRIGHT_POSITION_EVEN_X_CM = 1.76
 _COPYRIGHT_POSITION_Y_CM = 26.51
 _COPYRIGHT_POSITION_TOLERANCE_CM = 0.10
+_REVISION_BAR_MARGIN_OFFSET_CM = -0.38
+_REVISION_BAR_POSITION_TOLERANCE_CM = 0.10
+_REVISION_BAR_MIN_LENGTH = 8.0
+_REVISION_BAR_MIN_THICKNESS = 1.0
+_REVISION_BAR_MAX_THICKNESS = 4.5
+_REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
+_TP1_REVISION_LABEL_RE = re.compile(r"(?i)\bRevision\s+No\b")
+_TP1_FIRST_ISSUE_RE = re.compile(r"(?i)\bFirst\s+issue\b")
+_TP1_COPYRIGHT_FOOTER_RE = re.compile(
+    r"(?i)(?:\u00a9|\ufffd|\bCopyright\b)\s*\d{4}\s*[-\u2010-\u2015]\s*"
+    r"\d{4}\s+THALES\s+AVS\s+FRANCE\b"
+)
 _COPYRIGHT_POSITION_EXPECTED = (
     "pages impaires: x=3.03 cm, y=26.51 cm; pages paires: "
     "x=1.76 cm, y=26.51 cm (tolerance +/- 0.10 cm)"
+)
+_PAGE_CONTENT_POSITION_TOLERANCE_CM = _COPYRIGHT_POSITION_TOLERANCE_CM
+_PAGE_CONTENT_POSITION_EXPECTED = (
+    "marge gauche mediane du contenu: x=3.03 cm sur les pages impaires et "
+    "x=1.76 cm sur les pages paires (tolerance +/- 0.10 cm)"
 )
 _JUSTIFICATION_EXPECTED = "visuellement justifie a gauche et a droite, hors derniere ligne"
 _PDF_BOOKMARK_EXPECTED = "Titre du signet present sur la page cible"
@@ -80,6 +119,22 @@ _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
 _ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
+_FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
+_VENDOR_CODE_LIST_TITLE_RE = re.compile(r"(?i)^\s*VENDOR\s+CODE\s+LIST\s*:?[ \t]*$")
+_VENDOR_CODE_HEADER = "code"
+_VENDOR_ADDRESS_HEADER = "vendorsaddress"
+_VENDOR_CODE_PREFIX_RE = re.compile(r"(?i)^([A-Z]{1,3}\d{4,5})\b")
+_THALES_VENDOR_CODE = "VF9111"
+_THALES_VENDOR_ADDRESS = (
+    "THALES AVS FRANCE SAS 75\u201377 AV MARCEL DASSAULT "
+    "CAMPUS THALES BORDEAUX 33700 MERIGNAC FRANCE"
+)
+_THALES_VENDOR_ADDRESS_MARKER = "THALES AVS FRANCE SAS"
+_VENDOR_TABLE_END_RE = re.compile(
+    r"(?i)(?:\u00a9|\ufffd)\s*\d{4}\s*[-\u2010-\u2015]\s*\d{4}\s+"
+    r"THALES\s+AVS\s+FRANCE\b|\bCopyright\b|"
+    r"\bThis\s+document\s+and\s+any\s+data\b"
+)
 _NUMERICAL_INDEX_PAGE_RE = re.compile(
     r"(?i)^NI/NUM\s+(?P<manual>.+?)\s+(?P<page>\d+)$"
 )
@@ -330,7 +385,9 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
                     1.0,
                 )
                 if (
-                    line.bbox[1] - previous.bbox[1] > max(18.0, line_height * 1.8)
+                    line.line_index > previous.line_index + 1
+                    or line.bbox[1] - previous.bbox[1]
+                    > max(18.0, line_height * 1.8)
                     or _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
                     or _PARAGRAPH_TABLE_HEADER_MARKER.match(line.text) is not None
                 ):
@@ -384,10 +441,34 @@ def _paragraph_justification_issue(
     )
     right_tolerance = max(4.0, paragraph_width * 0.015)
     expected_right = median(right_edges)
+    misaligned = [
+        (index, line)
+        for index, line in measurable
+        if abs(line.bbox[2] - expected_right) > right_tolerance
+    ]
+    if (
+        misaligned
+        and len(measurable) - len(misaligned) >= 2
+        and all(
+            line.bbox[2] < expected_right - right_tolerance
+            and line.text.rstrip().endswith((".", "!", "?"))
+            for _index, line in misaligned
+        )
+    ):
+        misaligned_indexes = {index for index, _line in misaligned}
+        measurable = [
+            (index, line)
+            for index, line in measurable
+            if index not in misaligned_indexes
+        ]
+        right_edges = [line.bbox[2] for _index, line in measurable]
+        expected_right = median(right_edges)
+
     for _index, line in measurable:
         if abs(line.bbox[2] - expected_right) > right_tolerance:
             return False, line
 
+    interior_lines = [line for index, line in measurable if index > 0]
     if len(interior_lines) >= 2:
         left_edges = [line.bbox[0] for line in interior_lines]
         expected_left = median(left_edges)
@@ -766,10 +847,17 @@ def _chapter_heading(line: PdfLine) -> tuple[int, str] | None:
     title = match.group("title").strip()
     words = re.findall(r"[^\W_]+", title)
     title_case = bool(words) and all(
-        word[0].isupper() or word.casefold() in _CHAPTER_TITLE_CONNECTORS
+        not word.isalpha()
+        or word[0].isupper()
+        or word.casefold() in _CHAPTER_TITLE_CONNECTORS
         for word in words
     )
-    if not title or title[-1] in ".!?;:" or not (title.isupper() or title_case):
+    sentence_case = bool(words) and len(words) <= 3 and words[0][0].isupper()
+    if (
+        not title
+        or title[-1] in ".!?;:"
+        or not (title.isupper() or title_case or sentence_case)
+    ):
         return None
     return int(match.group("number")), title
 
@@ -868,6 +956,251 @@ def _chapter_sequence_findings(
             if number > expected_number:
                 expected_number = number + 1
     return findings, candidate_count
+
+
+def _pnr_value_pattern(value: str) -> re.Pattern[str] | None:
+    tokens = re.findall(r"\w+|[^\w\s]+", value.strip())
+    if not tokens:
+        return None
+    pattern = [re.escape(tokens[0])]
+    previous_is_word = tokens[0][0].isalnum() or tokens[0][0] == "_"
+    for token in tokens[1:]:
+        is_word = token[0].isalnum() or token[0] == "_"
+        pattern.append(r"\s+" if previous_is_word and is_word else r"\s*")
+        pattern.append(re.escape(token))
+        previous_is_word = is_word
+    return re.compile(
+        rf"(?i)(?<![A-Z0-9]){''.join(pattern)}(?![A-Z0-9])"
+    )
+
+
+def _document_pnr_values(document: Any | None) -> list[str]:
+    metadata = getattr(document, "client_metadata", None)
+    raw_values = (
+        cast(Mapping[str, Any], metadata).get("meta_pnr_number")
+        if isinstance(metadata, Mapping) and "meta_pnr_number" in metadata
+        else getattr(document, "meta_pnr_number", None)
+    )
+    if isinstance(raw_values, str):
+        raw_values = [raw_values]
+    if not isinstance(raw_values, (list, tuple)):
+        return []
+    return list(
+        dict.fromkeys(
+            str(value).strip()
+            for value in raw_values
+            if value is not None and str(value).strip()
+        )
+    )
+
+
+def _normalize_pnr_separators(value: str) -> str:
+    return re.sub(r"\s*([-\u2010-\u2015\u2212_/.:])\s*", r"\1", value.strip())
+
+
+def _is_tp1_pnr_candidate(value: str) -> bool:
+    separators = "-\u2010\u2011\u2012\u2013\u2014\u2015\u2212_/.:"
+    return (
+        len(value) >= 4
+        and any(character.isdigit() for character in value)
+        and all(character.isalnum() or character in separators for character in value)
+    )
+
+
+def _tp1_pnr_candidates(
+    text: str,
+    span_ranges: Any,
+) -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    for start, end, _bbox, _size, _font in span_ranges:
+        span_text = text[start:end].strip()
+        if not span_text:
+            continue
+        label = _PNR_HEADER_LABEL_RE.match(span_text)
+        values = (
+            _PNR_VALUE_LIST_SEPARATOR_RE.split(span_text[label.end() :])
+            if label is not None
+            else _PNR_VALUE_LIST_SEPARATOR_RE.split(span_text)
+        )
+        for raw_value in values:
+            original = raw_value.strip()
+            if not original:
+                continue
+            normalized = _normalize_pnr_separators(original)
+            if label is not None or _is_tp1_pnr_candidate(normalized):
+                candidates.append((original, normalized))
+                continue
+            for token in original.split():
+                normalized_token = _normalize_pnr_separators(token)
+                if _is_tp1_pnr_candidate(normalized_token):
+                    candidates.append((token, normalized_token))
+    return candidates
+
+
+def _format_pnr_values(values: list[str]) -> str:
+    if len(values) < 2:
+        return values[0]
+    return f"{', '.join(values[:-1])} and {values[-1]}"
+
+
+def _pnr_header_matches(text: str) -> list[re.Match[str]]:
+    labels = list(_PNR_HEADER_LABEL_RE.finditer(text))
+    if not labels:
+        return list(_PNR_HEADER_TOKEN_RE.finditer(text))
+
+    matches: list[re.Match[str]] = []
+    for index, label in enumerate(labels):
+        end = labels[index + 1].start() if index + 1 < len(labels) else len(text)
+        cursor = label.end()
+        for match in _PNR_HEADER_TOKEN_RE.finditer(text, cursor, end):
+            if not _PNR_HEADER_SEPARATOR_RE.fullmatch(text[cursor : match.start()]):
+                break
+            matches.append(match)
+            cursor = match.end()
+    return matches
+
+
+def _tp1_pnr_page_value_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    pnr_values = _document_pnr_values(getattr(runtime, "document", None))
+    if not pnr_values:
+        return [], 0
+
+    expected_patterns = [
+        (value, _pnr_value_pattern(value)) for value in pnr_values
+    ]
+    expected = _format_pnr_values(pnr_values)
+    findings: list[OperationResult] = []
+    targets = tuple(getattr(context, "targets", ()))
+    for target in targets:
+        candidates = _tp1_pnr_candidates(
+            target.text,
+            target.span_ranges,
+        )
+        invalid_candidates: list[str] = []
+        present_values: set[str] = set()
+        for original, normalized in candidates:
+            matching_value = next(
+                (
+                    value
+                    for value, pattern in expected_patterns
+                    if pattern is not None and pattern.fullmatch(normalized)
+                ),
+                None,
+            )
+            if matching_value is None:
+                invalid_candidates.append(original)
+            else:
+                present_values.add(matching_value)
+
+        missing_values = [value for value in pnr_values if value not in present_values]
+        if not invalid_candidates:
+            continue
+        for original in invalid_candidates:
+            proposed: str | None = None
+            if len(pnr_values) == 1:
+                proposed = pnr_values[0]
+            elif (
+                len(invalid_candidates) == 1
+                and len(missing_values) == 1
+                and len(candidates) == len(pnr_values)
+            ):
+                proposed = missing_values[0]
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=original,
+                    expected=proposed or expected,
+                    message=(
+                        "Numero PNR present dans la page TP1 non conforme au mapping: "
+                        f"{original}."
+                    ),
+                    original=original if proposed else None,
+                    proposed=proposed,
+                    page=target.raw_page,
+                )
+            )
+    return findings, len(targets)
+
+
+def _highlights_pnr_header_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    pnr_values = _document_pnr_values(getattr(runtime, "document", None))
+    if not pnr_values:
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    expected = _format_pnr_values(pnr_values)
+    expected_patterns = [
+        (value, _pnr_value_pattern(value)) for value in pnr_values
+    ]
+    findings: list[OperationResult] = []
+    for target in targets:
+        missing = [
+            value
+            for value, pattern in expected_patterns
+            if pattern is not None and pattern.search(target.text) is None
+        ]
+        if not missing:
+            continue
+
+        matches = _pnr_header_matches(target.text)
+        if len(pnr_values) == 1 and expected_patterns[0][1] is not None:
+            invalid_matches = [
+                match
+                for match in matches
+                if expected_patterns[0][1].search(match.group("value")) is None
+            ]
+            if invalid_matches:
+                findings.extend(
+                    OperationResult(
+                        status="FAIL",
+                        observed=match.group("value"),
+                        expected=pnr_values[0],
+                        message=(
+                            "Numero PNR de l'en-tete non conforme. "
+                            f"Numero attendu : {pnr_values[0]}."
+                        ),
+                        original=match.group("value"),
+                        proposed=pnr_values[0],
+                        page=target.raw_page,
+                    )
+                    for match in invalid_matches
+                )
+                continue
+
+        label = _PNR_HEADER_LABEL_RE.search(target.text)
+        if matches:
+            original = target.text[matches[0].start() : matches[-1].end()]
+            proposed = expected
+            observed = original
+        elif label is not None:
+            original = label.group().strip()
+            proposed = f"{original} {expected}"
+            observed = None
+        else:
+            original = None
+            proposed = expected
+            observed = None
+        findings.append(
+            OperationResult(
+                status="FAIL",
+                observed=observed,
+                expected=expected,
+                message=(
+                    "Numeros PNR manquants dans l'en-tete : "
+                    f"{', '.join(missing)}."
+                ),
+                original=original,
+                proposed=proposed,
+                page=target.raw_page,
+            )
+        )
+    return findings, len(targets)
 
 
 def _highlights_description_findings(
@@ -1016,7 +1349,81 @@ def _list_materials_code_findings(
         first_data_top = min(span.bbox[1] for span in designation_data)
         checked_pages += 1
 
-        for row in revision.visual_rows(page.spans):
+        visual_rows = revision.visual_rows(page.spans)
+        if control == "list_materials_supplier_fscm":
+            use_header = next(
+                (span for span in page.spans if span.text.strip().upper() == "USE"),
+                None,
+            )
+            supplier_right = (
+                (suppliers_center + (use_header.bbox[0] + use_header.bbox[2]) / 2) / 2
+                if use_header is not None
+                else max(span.bbox[2] for span in page.spans)
+            )
+            supplier_cells: list[list[Span]] = []
+            current_supplier_cell: list[Span] | None = None
+            for row in visual_rows:
+                if min(span.bbox[1] for span in row) < first_data_top - 3.0:
+                    continue
+                code_row = any(
+                    column_left <= (span.bbox[0] + span.bbox[2]) / 2 < column_right
+                    for span in row
+                )
+                supplier_spans = [
+                    span
+                    for span in row
+                    if column_right
+                    <= (span.bbox[0] + span.bbox[2]) / 2
+                    < supplier_right
+                ]
+                if code_row:
+                    if current_supplier_cell is not None:
+                        supplier_cells.append(current_supplier_cell)
+                    current_supplier_cell = supplier_spans
+                elif current_supplier_cell is not None:
+                    current_supplier_cell.extend(supplier_spans)
+            if current_supplier_cell is not None:
+                supplier_cells.append(current_supplier_cell)
+
+            for supplier_spans in supplier_cells:
+                supplier_name = " ".join(
+                    " ".join(span.text.split())
+                    for span in supplier_spans
+                    if span.text.strip()
+                )
+                if not supplier_name or not any(char.isalpha() for char in supplier_name):
+                    continue
+                fscm_match = _FSCM_SUFFIX_RE.search(supplier_name)
+                if fscm_match is not None:
+                    company_name = supplier_name[: fscm_match.start()].strip()
+                    if not any(char.isalpha() for char in company_name):
+                        continue
+                    continue
+                if re.match(r"(?i)^\(?\s*FSCM\b", supplier_name):
+                    continue
+                bbox = (
+                    min(span.bbox[0] for span in supplier_spans),
+                    min(span.bbox[1] for span in supplier_spans),
+                    max(span.bbox[2] for span in supplier_spans),
+                    max(span.bbox[3] for span in supplier_spans),
+                )
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=supplier_name,
+                        expected="Nom fournisseur (FSCM XXXXX)",
+                        message=(
+                            f"Le fournisseur « {supplier_name} » doit comporter un "
+                            "numero FSCM au format « (FSCM XXXXX) »."
+                        ),
+                        original=supplier_name,
+                        page=page.page,
+                        bbox=bbox,
+                    )
+                )
+            continue
+
+        for row in visual_rows:
             if min(span.bbox[1] for span in row) < first_data_top - 3.0:
                 continue
             for span in row:
@@ -1255,6 +1662,686 @@ def _numerical_index_order_findings(
     return findings, checked_numbers
 
 
+@dataclass(frozen=True)
+class _VendorColumnPair:
+    code_left: float
+    code_right: float
+    code_origin: float
+    address_left: float
+    address_right: float
+    header_bottom: float
+
+
+@dataclass(frozen=True)
+class _RevisionBar:
+    x: float
+    top: float
+    bottom: float
+    thickness: float
+
+
+@dataclass
+class _VendorTableRow:
+    page: int
+    code_parts: list[str] = field(default_factory=list)
+    address_parts: list[str] = field(default_factory=list)
+    bbox: tuple[float, float, float, float] | None = None
+
+    @property
+    def code(self) -> str:
+        return " ".join(part for part in self.code_parts if part).strip()
+
+    @property
+    def address(self) -> str:
+        return " ".join(part for part in self.address_parts if part).strip()
+
+
+def _vendor_join_spans(spans: list[Span]) -> str:
+    return " ".join(" ".join(span.text.split()) for span in spans if span.text.strip())
+
+
+def _vendor_code_parts(value: str) -> tuple[str, str]:
+    normalized = " ".join(value.split())
+    match = _VENDOR_CODE_PREFIX_RE.match(normalized)
+    if match is None:
+        return "", ""
+    return match.group(1), normalized[match.end() :].strip()
+
+
+def _vendor_header_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _vendor_title_bottom(page: ParsedPage) -> float | None:
+    for row in revision.visual_rows(page.spans):
+        text = _vendor_join_spans(row)
+        if _VENDOR_CODE_LIST_TITLE_RE.fullmatch(text) and any(
+            "bold" in span.font.casefold() for span in row
+        ):
+            return max(span.bbox[3] for span in row)
+    return None
+
+
+def _vendor_header_cells(
+    page: ParsedPage,
+    expected: str,
+) -> list[tuple[float, float, tuple[float, float, float, float]]]:
+    cells: list[tuple[float, float, tuple[float, float, float, float]]] = []
+    for row in revision.visual_rows(page.spans):
+        for start in range(len(row)):
+            for width in range(1, min(3, len(row) - start) + 1):
+                group = row[start : start + width]
+                if _vendor_header_key(_vendor_join_spans(group)) != expected:
+                    continue
+                bbox = (
+                    min(span.bbox[0] for span in group),
+                    min(span.bbox[1] for span in group),
+                    max(span.bbox[2] for span in group),
+                    max(span.bbox[3] for span in group),
+                )
+                cells.append(
+                    (
+                        (bbox[0] + bbox[2]) / 2,
+                        (bbox[1] + bbox[3]) / 2,
+                        bbox,
+                    )
+                )
+    return cells
+
+
+def _vendor_column_pairs(
+    page: ParsedPage,
+    *,
+    minimum_y: float = 0.0,
+) -> list[_VendorColumnPair]:
+    code_headers = sorted(
+        (
+            cell
+            for cell in _vendor_header_cells(page, _VENDOR_CODE_HEADER)
+            if cell[2][3] > minimum_y
+        ),
+        key=lambda cell: cell[0],
+    )
+    address_headers = _vendor_header_cells(page, _VENDOR_ADDRESS_HEADER)
+    matched: list[
+        tuple[
+            tuple[float, float, tuple[float, float, float, float]],
+            tuple[float, float, tuple[float, float, float, float]],
+        ]
+    ] = []
+    for index, code in enumerate(code_headers):
+        next_code_x = (
+            code_headers[index + 1][0]
+            if index + 1 < len(code_headers)
+            else float("inf")
+        )
+        candidates = [
+            address
+            for address in address_headers
+            if code[0] < address[0] < next_code_x
+            and address[2][3] > minimum_y
+            and abs(address[1] - code[1]) <= 24.0
+        ]
+        if candidates:
+            matched.append(
+                (code, min(candidates, key=lambda item: abs(item[1] - code[1])))
+            )
+
+    if not matched:
+        return []
+
+    page_left = min(span.bbox[0] for span in page.spans)
+    page_right = max(span.bbox[2] for span in page.spans)
+    pairs: list[_VendorColumnPair] = []
+    for index, (code, address) in enumerate(matched):
+        code_x, address_x = code[0], address[0]
+        code_left = (
+            page_left
+            if index == 0
+            else (matched[index - 1][1][0] + code_x) / 2
+        )
+        code_right = (code_x + address_x) / 2
+        address_right = (
+            (address_x + matched[index + 1][0][0]) / 2
+            if index + 1 < len(matched)
+            else page_right + 1.0
+        )
+        pairs.append(
+            _VendorColumnPair(
+                code_left=code_left,
+                code_right=code_right,
+                code_origin=code[2][0],
+                address_left=code_right,
+                address_right=address_right,
+                header_bottom=max(code[2][3], address[2][3]),
+            )
+        )
+    return pairs
+
+
+def _merge_vendor_bbox(
+    current: tuple[float, float, float, float] | None,
+    spans: list[Span],
+) -> tuple[float, float, float, float] | None:
+    if not spans:
+        return current
+    bbox = (
+        min(span.bbox[0] for span in spans),
+        min(span.bbox[1] for span in spans),
+        max(span.bbox[2] for span in spans),
+        max(span.bbox[3] for span in spans),
+    )
+    if current is None:
+        return bbox
+    return (
+        min(current[0], bbox[0]),
+        min(current[1], bbox[1]),
+        max(current[2], bbox[2]),
+        max(current[3], bbox[3]),
+    )
+
+
+def _vendor_page_rows(
+    page: ParsedPage,
+    column_pairs: list[_VendorColumnPair],
+    *,
+    start_y: float,
+) -> list[_VendorTableRow]:
+    entries: list[_VendorTableRow] = []
+    visual_rows = revision.visual_rows(page.spans)
+    for pair in column_pairs:
+        current: _VendorTableRow | None = None
+        for row in visual_rows:
+            if max(span.bbox[3] for span in row) <= start_y + 1.0:
+                continue
+            if any(_VENDOR_TABLE_END_RE.search(span.text) for span in row):
+                break
+            code_candidates = [
+                span
+                for span in row
+                if (
+                    pair.code_left
+                    <= (span.bbox[0] + span.bbox[2]) / 2
+                    < pair.code_right
+                    or abs(span.bbox[0] - pair.code_origin) <= 12.0
+                )
+            ]
+            code, inline_address = _vendor_code_parts(
+                _vendor_join_spans(code_candidates)
+            )
+            code_spans = code_candidates if code else []
+            address_spans = [
+                span
+                for span in row
+                if pair.address_left
+                <= (span.bbox[0] + span.bbox[2]) / 2
+                < pair.address_right
+                and span not in code_spans
+            ]
+            address = " ".join(
+                part
+                for part in (inline_address, _vendor_join_spans(address_spans))
+                if part
+            )
+            if (
+                _vendor_header_key(code) == _VENDOR_CODE_HEADER
+                or _vendor_header_key(address) == _VENDOR_ADDRESS_HEADER
+            ):
+                continue
+            if not code and not address:
+                continue
+
+            if code:
+                if current is not None:
+                    entries.append(current)
+                current = _VendorTableRow(page=page.page)
+                current.code_parts.append(code)
+                current.address_parts.append(address)
+                current.bbox = _merge_vendor_bbox(None, code_spans + address_spans)
+            else:
+                if current is None:
+                    continue
+                current.address_parts.append(address)
+                current.bbox = _merge_vendor_bbox(current.bbox, address_spans)
+        if current is not None:
+            entries.append(current)
+    return entries
+
+
+def _vendor_normalize_code(value: str) -> str:
+    compact = re.sub(r"\s+", "", unicodedata.normalize("NFKC", value))
+    return compact.casefold()
+
+
+def _vendor_normalize_address(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value).casefold()
+    return "".join(
+        character
+        for character in decomposed
+        if not unicodedata.combining(character) and character.isalnum()
+    )
+
+
+def _vendor_list_rows(
+    context: Any,
+) -> tuple[list[_VendorTableRow], bool]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], False
+
+    pages = parsed_pdf.full_document_pages or parsed_pdf.pages
+    table_found = False
+    entries: list[_VendorTableRow] = []
+    for page in pages:
+        title_bottom = _vendor_title_bottom(page)
+        pairs = _vendor_column_pairs(page, minimum_y=title_bottom or 0.0)
+        if not pairs:
+            continue
+        table_found = True
+        entries.extend(
+            _vendor_page_rows(
+                page,
+                pairs,
+                start_y=max(pair.header_bottom for pair in pairs),
+            )
+        )
+    return entries, table_found
+
+
+def _vendor_thales_findings(
+    entries: list[_VendorTableRow],
+) -> tuple[list[OperationResult], int]:
+    expected_code = _vendor_normalize_code(_THALES_VENDOR_CODE)
+    expected_address = _vendor_normalize_address(_THALES_VENDOR_ADDRESS)
+    thales_marker = _vendor_normalize_address(_THALES_VENDOR_ADDRESS_MARKER)
+    findings: list[OperationResult] = []
+    checked = 0
+    for row in entries:
+        code_key = _vendor_normalize_code(row.code)
+        address_key = _vendor_normalize_address(row.address)
+        if code_key != expected_code and thales_marker not in address_key:
+            continue
+        checked += 1
+        if code_key == expected_code and address_key == expected_address:
+            continue
+        if code_key == expected_code:
+            expected = _THALES_VENDOR_ADDRESS
+            message = (
+                f"Le code « {_THALES_VENDOR_CODE} » doit correspondre a l'adresse "
+                f"« {_THALES_VENDOR_ADDRESS} », pas a « {row.address or '(vide)'} »."
+            )
+        else:
+            expected = _THALES_VENDOR_CODE
+            message = (
+                f"L'adresse THALES « {row.address or '(vide)'} » doit correspondre "
+                f"au code « {_THALES_VENDOR_CODE} », pas a « {row.code or '(vide)'} »."
+            )
+        findings.append(
+            OperationResult(
+                status="FAIL",
+                observed=f"{row.code or '(vide)'} | {row.address or '(vide)'}",
+                expected=expected,
+                message=message,
+                original=row.address or row.code,
+                page=row.page,
+                bbox=row.bbox,
+            )
+        )
+    return findings, checked
+
+
+def _revision_bar_is_black(color: tuple[float, ...] | None) -> bool:
+    return color is not None and len(color) >= 3 and all(
+        component <= 0.05 for component in color[:3]
+    )
+
+
+def _revision_bars(page: ParsedPage) -> list[_RevisionBar]:
+    page_width = page.page_width or max(
+        (span.bbox[2] for span in page.spans),
+        default=0.0,
+    )
+    if page_width <= 0:
+        return []
+
+    bars: list[_RevisionBar] = []
+    for primitive in page.vector_primitives:
+        x0, y0, x1, y1 = primitive.bbox
+        primitive_width = abs(x1 - x0)
+        primitive_height = abs(y1 - y0)
+        if primitive.kind == "line" and _revision_bar_is_black(primitive.color):
+            thickness = primitive.width
+            if (
+                primitive_width > max(2.0, thickness * 1.5)
+                or not _REVISION_BAR_MIN_THICKNESS
+                <= thickness
+                <= _REVISION_BAR_MAX_THICKNESS
+            ):
+                continue
+        elif primitive.kind == "rect" and _revision_bar_is_black(primitive.fill):
+            thickness = primitive_width
+            if not _REVISION_BAR_MIN_THICKNESS <= thickness <= 6.0:
+                continue
+        else:
+            continue
+
+        center_x = (x0 + x1) / 2
+        if (
+            primitive_height < _REVISION_BAR_MIN_LENGTH
+            or center_x > page_width * 0.25
+        ):
+            continue
+        bars.append(
+            _RevisionBar(
+                x=center_x,
+                top=min(y0, y1),
+                bottom=max(y0, y1),
+                thickness=thickness,
+            )
+        )
+    return bars
+
+
+def _revision_page_status(
+    page: ParsedPage,
+    state: revision.RevisionState,
+) -> tuple[str | None, str | None]:
+    fallback_key = state.expected_footer_keys.get(page.page)
+    footer = revision.extract_footer(page, fallback_key)
+    page_key = footer.page_key if footer is not None else fallback_key
+    if not page_key:
+        return None, None
+    lep_entry = state.lep_entry_for_key(page_key)
+    status = (
+        state.highlights_status_for_lep(lep_entry)
+        if lep_entry is not None
+        else state.status_by_key.get(page_key)
+    )
+    return status, page_key
+
+
+def _expected_revision_bar_bbox(
+    page: ParsedPage,
+    *,
+    top_fraction: float,
+    bottom_fraction: float,
+) -> tuple[float, float, float, float]:
+    margin_x_cm = (
+        _COPYRIGHT_POSITION_ODD_X_CM
+        if page.page % 2
+        else _COPYRIGHT_POSITION_EVEN_X_CM
+    )
+    bar_x = (
+        margin_x_cm + _REVISION_BAR_MARGIN_OFFSET_CM
+    ) * _POINTS_PER_CENTIMETER
+    page_height = page.page_height or max(
+        (span.bbox[3] for span in page.spans),
+        default=0.0,
+    )
+    half_thickness = 2.28 / 2
+    return (
+        bar_x - half_thickness,
+        page_height * top_fraction,
+        bar_x + half_thickness,
+        page_height * bottom_fraction,
+    )
+
+
+def _revision_bar_findings(
+    context: Any,
+    control: str,
+) -> tuple[list[OperationResult], int, str]:
+    expected_by_control = {
+        "revision_bar_new": "Barre noire presque pleine hauteur pour chaque page N",
+        "revision_bar_modified": "Au moins une barre noire sur chaque page R",
+        "revision_bar_margin": "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm)",
+        "revision_bar_tp1_footer": "Barre TP1/R de Revision jusqu'en dessous du copyright",
+        "revision_bar_tp2_body": "Barre TP2/R uniquement en regard du corps de texte",
+    }
+    expected = expected_by_control.get(control)
+    if expected is None:
+        raise ValueError(f"unknown revision bar control: {control}")
+
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0, expected
+
+    state = revision_state(parsed_pdf, getattr(runtime, "document", None))
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    findings: list[OperationResult] = []
+    checked = 0
+
+    for page in parsed_pdf.pages:
+        if target_pages and page.page not in target_pages:
+            continue
+        status, page_key = _revision_page_status(page, state)
+        if control == "revision_bar_new" and status != "N":
+            continue
+        if control == "revision_bar_modified" and status != "R":
+            continue
+        if control == "revision_bar_margin" and status not in {"N", "R"}:
+            continue
+        if (
+            control == "revision_bar_tp1_footer"
+            and (status != "R" or page.page_type != "TP1" or page_key != "TP 1")
+        ):
+            continue
+        is_tp2 = page.page_type == "TP2" or (
+            page_key is not None
+            and re.sub(r"\s+", "", page_key).casefold() == "tp2"
+        )
+        if control == "revision_bar_tp2_body" and (status != "R" or not is_tp2):
+            continue
+
+        bars = _revision_bars(page)
+        page_label = page_key or f"page PDF {page.page}"
+        if control == "revision_bar_new":
+            checked += 1
+            page_height = page.page_height or max(
+                (span.bbox[3] for span in page.spans),
+                default=0.0,
+            )
+            has_full_height_bar = any(
+                bar.top <= page_height * _REVISION_BAR_FULL_PAGE_TOLERANCE
+                and bar.bottom
+                >= page_height * (1.0 - _REVISION_BAR_FULL_PAGE_TOLERANCE)
+                for bar in bars
+            )
+            if not has_full_height_bar:
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label} (N)",
+                        expected=expected,
+                        message=(
+                            f"La page nouvelle « {page_label} » doit avoir une barre "
+                            "noire du haut du contenu jusqu'au pied de page."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=_expected_revision_bar_bbox(
+                            page,
+                            top_fraction=_REVISION_BAR_FULL_PAGE_TOLERANCE,
+                            bottom_fraction=1.0 - _REVISION_BAR_FULL_PAGE_TOLERANCE,
+                        ),
+                    )
+                )
+        elif control == "revision_bar_modified":
+            checked += 1
+            if not bars:
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label} (R)",
+                        expected=expected,
+                        message=(
+                            f"La page modifiee « {page_label} » ne comporte pas de "
+                            "barre de revision noire."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=_expected_revision_bar_bbox(
+                            page,
+                            top_fraction=0.10,
+                            bottom_fraction=0.90,
+                        ),
+                    )
+                )
+        elif control == "revision_bar_margin":
+            margin_x_cm = (
+                _COPYRIGHT_POSITION_ODD_X_CM
+                if page.page % 2
+                else _COPYRIGHT_POSITION_EVEN_X_CM
+            )
+            margin_x = margin_x_cm * _POINTS_PER_CENTIMETER
+            for bar in bars:
+                checked += 1
+                offset_cm = (bar.x - margin_x) / _POINTS_PER_CENTIMETER
+                if (
+                    abs(offset_cm - _REVISION_BAR_MARGIN_OFFSET_CM)
+                    <= _REVISION_BAR_POSITION_TOLERANCE_CM
+                ):
+                    continue
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label}: l={offset_cm:.2f} cm",
+                        expected=expected,
+                        message=(
+                            f"La barre de revision de « {page_label} » est a "
+                            f"l={offset_cm:.2f} cm de la marge, au lieu de "
+                            f"l={_REVISION_BAR_MARGIN_OFFSET_CM:.2f} cm."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=(
+                            bar.x - bar.thickness / 2,
+                            bar.top,
+                            bar.x + bar.thickness / 2,
+                            bar.bottom,
+                        ),
+                    )
+                )
+        elif control == "revision_bar_tp1_footer":
+            revision_spans = [
+                span for span in page.spans if _TP1_REVISION_LABEL_RE.search(span.text)
+            ]
+            first_issue_spans = [
+                span for span in page.spans if _TP1_FIRST_ISSUE_RE.search(span.text)
+            ]
+            copyright_spans = [
+                span for span in page.spans if _TP1_COPYRIGHT_FOOTER_RE.search(span.text)
+            ]
+            if not revision_spans or not first_issue_spans or not copyright_spans:
+                continue
+
+            revision_top = min(span.bbox[1] for span in revision_spans)
+            first_issue_top = min(span.bbox[1] for span in first_issue_spans)
+            first_issue_bottom = max(span.bbox[3] for span in first_issue_spans)
+            copyright_top = min(span.bbox[1] for span in copyright_spans)
+            page_width = page.page_width or max(
+                (span.bbox[2] for span in page.spans),
+                default=0.0,
+            )
+            copyright_bottom = max(
+                span.bbox[3]
+                for span in page.spans
+                if span.bbox[1] >= copyright_top - 2.0
+                and span.bbox[0] < page_width * 0.75
+            )
+            checked += 1
+            spans_footer_content = any(
+                bar.top <= revision_top + 3.0
+                and bar.bottom >= copyright_bottom - 2.0
+                and bar.top <= first_issue_top
+                and bar.bottom >= first_issue_bottom
+                for bar in bars
+            )
+            if spans_footer_content:
+                continue
+
+            margin_x_cm = (
+                _COPYRIGHT_POSITION_ODD_X_CM
+                if page.page % 2
+                else _COPYRIGHT_POSITION_EVEN_X_CM
+            )
+            expected_x = (
+                margin_x_cm + _REVISION_BAR_MARGIN_OFFSET_CM
+            ) * _POINTS_PER_CENTIMETER
+            half_thickness = 2.28 / 2
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=f"{page_label} (TP1/R)",
+                    expected=expected,
+                    message=(
+                        f"La barre TP1 de « {page_label} » doit commencer au niveau "
+                        "de Revision, couvrir First Issue et descendre sous le copyright."
+                    ),
+                    original="",
+                    page=page.page,
+                    bbox=(
+                        expected_x - half_thickness,
+                        revision_top,
+                        expected_x + half_thickness,
+                        copyright_bottom,
+                    ),
+                )
+            )
+        else:
+            checked += 1
+            page_height = page.page_height or max(
+                (span.bbox[3] for span in page.spans),
+                default=0.0,
+            )
+            header_bottom = page_height * 0.10
+            footer_top = page_height * 0.90
+            body_spans = [
+                span
+                for span in page.spans
+                if span.text.strip()
+                and span.bbox[1] >= header_bottom
+                and span.bbox[3] <= footer_top
+                and _HIGHLIGHTS_FOOTER_COPYRIGHT_RE.search(span.text) is None
+            ]
+            for bar in bars:
+                overlaps_body = any(
+                    bar.bottom >= span.bbox[1] and bar.top <= span.bbox[3]
+                    for span in body_spans
+                )
+                if (
+                    bar.top >= header_bottom
+                    and bar.bottom <= footer_top
+                    and overlaps_body
+                ):
+                    continue
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=f"{page_label} (TP2/R)",
+                        expected=expected,
+                        message=(
+                            f"La barre TP2/R de « {page_label} » doit etre placee "
+                            "uniquement en regard du texte du corps, hors en-tete "
+                            "et pied de page."
+                        ),
+                        original="",
+                        page=page.page,
+                        bbox=(
+                            bar.x - bar.thickness / 2,
+                            bar.top,
+                            bar.x + bar.thickness / 2,
+                            bar.bottom,
+                        ),
+                    )
+                )
+
+    return findings, checked, expected
+
+
 def _document_structure_findings(
     context: Any,
     parameters: Mapping[str, Any],
@@ -1263,6 +2350,12 @@ def _document_structure_findings(
     if control == "chapter_sequence":
         findings, checked = _chapter_sequence_findings(context)
         expected = "Chapitres numerotes dans l'ordre 1, 2, 3..."
+    elif control == "tp1_pnr_page_value":
+        findings, checked = _tp1_pnr_page_value_findings(context)
+        expected = "Valeurs PNR du corps TP1 conformes au mapping"
+    elif control == "highlights_pnr_header":
+        findings, checked = _highlights_pnr_header_findings(context)
+        expected = "Tous les numeros PNR du mapping dans chaque en-tete"
     elif control in {
         "highlights_deleted_description",
         "highlights_revised_description",
@@ -1276,13 +2369,23 @@ def _document_structure_findings(
     elif control in {
         "list_materials_code_parentheses",
         "list_materials_code_lowercase",
+        "list_materials_supplier_fscm",
     }:
         findings, checked = _list_materials_code_findings(context, control)
-        expected = (
-            "Code de la LIST OF MATERIALS sans parentheses"
-            if control == "list_materials_code_parentheses"
-            else "Code de la LIST OF MATERIALS en minuscules"
-        )
+        if control == "list_materials_code_parentheses":
+            expected = "Code de la LIST OF MATERIALS sans parentheses"
+        elif control == "list_materials_code_lowercase":
+            expected = "Code de la LIST OF MATERIALS en minuscules"
+        else:
+            expected = "Nom fournisseur suivi de (FSCM XXXXX)"
+    elif control in {
+        "revision_bar_new",
+        "revision_bar_modified",
+        "revision_bar_margin",
+        "revision_bar_tp1_footer",
+        "revision_bar_tp2_body",
+    }:
+        return _revision_bar_findings(context, control)
     elif control == "ni_part_number_order":
         findings, checked = _numerical_index_order_findings(context)
         expected = "Part Number numeriques en ordre croissant"
@@ -1299,6 +2402,13 @@ def _evaluate_document_structure(
     if findings:
         return findings[0]
     if checked == 0:
+        if parameters.get("control") == "revision_bar_tp2_body":
+            targets = getattr(context, "targets", ())
+            return OperationResult(
+                status="PASS",
+                expected=expected,
+                page=targets[0].raw_page if targets else None,
+            )
         return OperationResult(status="INCONCLUSIVE", expected=expected)
     targets = getattr(context, "targets", ())
     return OperationResult(
@@ -1306,6 +2416,28 @@ def _evaluate_document_structure(
         expected=expected,
         page=targets[-1].raw_page if targets else None,
     )
+
+
+def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> bool:
+    if page.page_height <= 0 or line.bbox[3] > page.page_height * 0.15:
+        return False
+    line_spans = [
+        span
+        for span in page.spans
+        if span.size > 0
+        and span.bbox[0] < line.bbox[2]
+        and span.bbox[2] > line.bbox[0]
+        and span.bbox[1] < line.bbox[3]
+        and span.bbox[3] > line.bbox[1]
+    ]
+    body_font_sizes = [
+        span.size
+        for span in page.spans
+        if span.size > 0 and span.bbox[1] >= page.page_height * 0.15
+    ]
+    if not line_spans or not body_font_sizes:
+        return True
+    return median(span.size for span in line_spans) < median(body_font_sizes) * 0.85
 
 
 def _pdf_bookmark_findings(
@@ -1320,6 +2452,23 @@ def _pdf_bookmark_findings(
     target_pages = {target.raw_page for target in targets}
     document_pages = parsed_pdf.full_document_pages or parsed_pdf.pages
     pages_by_number = {page.page: page for page in document_pages}
+    repeated_header_titles: set[str] = set()
+    for bookmark in parsed_pdf.bookmarks:
+        normalized_title = " ".join(bookmark.title.split()).casefold()
+        if not normalized_title:
+            continue
+        pages_with_title_in_header = {
+            document_page.page
+            for document_page in document_pages
+            if document_page.page_height > 0
+            and any(
+                _pdf_bookmark_line_is_running_header(document_page, line)
+                and normalized_title in " ".join(line.text.split()).casefold()
+                for line in document_page.lines
+            )
+        }
+        if len(pages_with_title_in_header) > 1:
+            repeated_header_titles.add(normalized_title)
     findings: list[OperationResult] = []
     checked = 0
     inconclusive_pages: set[int] = set()
@@ -1356,7 +2505,21 @@ def _pdf_bookmark_findings(
             continue
 
         checked += 1
-        page_text = " ".join(page.text.split()).casefold()
+        if page.lines and page.page_height > 0 and repeated_header_titles:
+            page_body_lines = [
+                line.text
+                for line in page.lines
+                if not (
+                    _pdf_bookmark_line_is_running_header(page, line)
+                    and any(
+                        title in " ".join(line.text.split()).casefold()
+                        for title in repeated_header_titles
+                    )
+                )
+            ]
+            page_text = " ".join(" ".join(page_body_lines).split()).casefold()
+        else:
+            page_text = " ".join(page.text.split()).casefold()
         if title in page_text:
             continue
         findings.append(
@@ -1418,6 +2581,47 @@ def _suggest_document_structure(
     parameters: Mapping[str, Any],
 ) -> list[OperationResult]:
     findings, _checked, _expected = _document_structure_findings(context, parameters)
+    return findings
+
+
+def _vendor_code_list_findings(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> tuple[list[OperationResult], int, str]:
+    control = parameters.get("control")
+    if control != "reference":
+        raise ValueError(f"unknown VENDOR CODE LIST control: {control}")
+    expected = f"{_THALES_VENDOR_CODE} | {_THALES_VENDOR_ADDRESS}"
+
+    entries, table_found = _vendor_list_rows(context)
+    if not table_found:
+        return [], 0, expected
+    findings, checked = _vendor_thales_findings(entries)
+    return findings, checked, expected
+
+
+def _evaluate_vendor_code_list(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> OperationResult:
+    findings, checked, expected = _vendor_code_list_findings(context, parameters)
+    if findings:
+        return findings[0]
+    if checked == 0:
+        return OperationResult(status="INCONCLUSIVE", expected=expected)
+    targets = getattr(context, "targets", ())
+    return OperationResult(
+        status="PASS",
+        expected=expected,
+        page=targets[-1].raw_page if targets else None,
+    )
+
+
+def _suggest_vendor_code_list(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> list[OperationResult]:
+    findings, _checked, _expected = _vendor_code_list_findings(context, parameters)
     return findings
 
 
@@ -1588,6 +2792,91 @@ def _evaluate_copyright_position(
     )
 
 
+def _evaluate_page_content_position(
+    context: Any,
+    _parameters: Mapping[str, Any],
+) -> OperationResult:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PAGE_CONTENT_POSITION_EXPECTED,
+        )
+
+    target_pages = {target.raw_page for target in getattr(context, "targets", ())}
+    pages = [page for page in parsed_pdf.pages if page.page in target_pages]
+    if not pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PAGE_CONTENT_POSITION_EXPECTED,
+        )
+
+    inconclusive_pages: list[int] = []
+    for page in pages:
+        expected_x_cm = (
+            _COPYRIGHT_POSITION_ODD_X_CM
+            if page.page % 2
+            else _COPYRIGHT_POSITION_EVEN_X_CM
+        )
+        parity = "impaire" if page.page % 2 else "paire"
+        expected = (
+            f"page {page.page} ({parity}): marge gauche mediane du contenu "
+            f"a x={expected_x_cm:.2f} cm "
+            f"(+/- {_PAGE_CONTENT_POSITION_TOLERANCE_CM:.2f} cm)"
+        )
+        content_lines = [
+            (line.text, line.bbox)
+            for line in page.lines
+            if line.text.strip()
+            and not _COPYRIGHT_POSITION_MARKER_RE.search(line.text)
+        ]
+        if not content_lines:
+            content_lines = [
+                (span.text, span.bbox)
+                for span in page.spans
+                if span.text.strip()
+                and not _COPYRIGHT_POSITION_MARKER_RE.search(span.text)
+            ]
+        if not content_lines:
+            inconclusive_pages.append(page.page)
+            continue
+
+        observed_x = median(line_bbox[0] for _, line_bbox in content_lines)
+        observed_x_cm = observed_x / _POINTS_PER_CENTIMETER
+        if abs(observed_x_cm - expected_x_cm) > _PAGE_CONTENT_POSITION_TOLERANCE_CM:
+            evidence_text, evidence_bbox = min(
+                content_lines,
+                key=lambda item: abs(item[1][0] - observed_x),
+            )
+            observed = f"marge gauche mediane a x={observed_x_cm:.2f} cm"
+            return OperationResult(
+                status="FAIL",
+                observed=observed,
+                expected=expected,
+                message=(
+                    f"Le contenu de la page {page.page} commence en {observed}; "
+                    f"position attendue : {expected}."
+                ),
+                original=evidence_text,
+                page=page.page,
+                bbox=evidence_bbox,
+            )
+
+    if inconclusive_pages:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=_PAGE_CONTENT_POSITION_EXPECTED,
+            page=inconclusive_pages[0],
+            inconclusive_pages=inconclusive_pages,
+        )
+    return OperationResult(
+        status="PASS",
+        expected=_PAGE_CONTENT_POSITION_EXPECTED,
+        page=pages[-1].page,
+    )
+
+
 REVISION_CONSISTENCY = ClientOperation(
     name="revision_consistency",
     execute=_evaluate_revision_consistency,
@@ -1621,10 +2910,19 @@ COPYRIGHT_POSITION = ClientOperation(
     name="copyright_position",
     execute=_evaluate_copyright_position,
 )
+PAGE_CONTENT_POSITION = ClientOperation(
+    name="page_content_position",
+    execute=_evaluate_page_content_position,
+)
 DOCUMENT_STRUCTURE = ClientOperation(
     name="document_structure",
     execute=_evaluate_document_structure,
     suggestions=_suggest_document_structure,
+)
+VENDOR_CODE_LIST = ClientOperation(
+    name="vendor_code_list",
+    execute=_evaluate_vendor_code_list,
+    suggestions=_suggest_vendor_code_list,
 )
 PDF_BOOKMARKS = ClientOperation(
     name="pdf_bookmarks",
@@ -1641,7 +2939,9 @@ OPERATIONS = {
         PARAGRAPH_JUSTIFICATION,
         HIGHLIGHTS_LEGEND_FOOTER,
         COPYRIGHT_POSITION,
+        PAGE_CONTENT_POSITION,
         DOCUMENT_STRUCTURE,
+        VENDOR_CODE_LIST,
         PDF_BOOKMARKS,
     )
 }
