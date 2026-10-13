@@ -109,7 +109,7 @@ _COPYRIGHT_PATTERN = (
     r"without\s+the\s+company's\s+prior\s+written\s+approval\.?"
 )
 IMPORTANT_NOTICE_TEXT = """IMPORTANT NOTICE
-This document and any information contained here in are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
+This document and any information contained herein are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
 In particular, they shall not be used in the creation, manufacture, development or derivation of any repairs, modifications, spare parts, design, or configuration changes or to obtain EASA, FAA or any other government or regulatory approval to do so.
 Should THALES AVS FRANCE SAS consent be given for reproduction in whole or in part, this notice and the notice set forth on each page of this document shall appear in any such reproduction in whole or in part.
 The recipient shall not use this document for any purpose other than the one stated in the relevant applicable License agreement under which it has been disclosed and it shall be returned to THALES AVS FRANCE SAS immediately upon request.

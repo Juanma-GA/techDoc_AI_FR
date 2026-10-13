@@ -798,6 +798,12 @@ def test_tp2_important_notice_matches_the_exact_ata100_model() -> None:
         _tp2_notice_pdf(_IMPORTANT_NOTICE_TEXT.replace("sole property", "sole propriety", 1)),
         [rule],
     )
+    invalid_spacing, _ = execute_pdf_rules(
+        _tp2_notice_pdf(
+            _IMPORTANT_NOTICE_TEXT.replace("contained herein", "contained here in", 1)
+        ),
+        [rule],
+    )
     missing, missing_suggestions = execute_pdf_rules(
         _tp2_notice_pdf("TP2 notice missing", page_type=TP2_PAGE_TYPE),
         [rule],
@@ -806,6 +812,7 @@ def test_tp2_important_notice_matches_the_exact_ata100_model() -> None:
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
     assert invalid[0].status == "FAIL"
+    assert invalid_spacing[0].status == "FAIL"
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].proposed == "property"
     assert "Texte attendu" in invalid_suggestions[0].message
