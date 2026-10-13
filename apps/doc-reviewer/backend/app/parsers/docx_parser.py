@@ -16,7 +16,7 @@ highlights_table...) est faite a part par `app.core.docx_zones.recognize_zones`.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -259,7 +259,11 @@ def _make_block(index: int, zone: str, kind_hint: str, ctx: dict, paragraph: Par
     return block, rev
 
 
-def parse_docx(path: str | Path) -> ParsedDocx:
+def parse_docx(
+    path: str | Path,
+    *,
+    progress_cb: Callable[[int, int | None], None] | None = None,
+) -> ParsedDocx:
     doc = Document(str(path))
     blocks: list[Block] = []
     revisions: list[Revision] = []
@@ -277,12 +281,17 @@ def parse_docx(path: str | Path) -> ParsedDocx:
             block.page = page
             page_has_content = True
         blocks.append(block)
+        if progress_cb is not None and len(blocks) % 25 == 0:
+            progress_cb(len(blocks), None)
         if rev is not None:
             revisions.append(rev)
         if zone == "header" and block.text.strip():
             header_parts.append(block.text)
         elif zone == "footer" and block.text.strip():
             footer_parts.append(block.text)
+
+    if progress_cb is not None and blocks and len(blocks) % 25:
+        progress_cb(len(blocks), None)
 
     full_text = "\n".join(f"[BLOCK: {b.target_id}]\n{b.text}" for b in blocks)
 

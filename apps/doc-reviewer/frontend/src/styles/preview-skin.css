@@ -86,6 +86,7 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .banner { background: var(--card); border: 1px solid var(--border-bright); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--fg-dim); }
 .banner strong { color: var(--fg); }
 .banner.warn { border-color: var(--warning); color: var(--warning); }
+.incomplete-checks-summary { cursor: pointer; }
 .banner code { font-family: "JetBrains Mono", monospace; background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
 
 .card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: clamp(14px, 2vw, 20px); box-shadow: var(--shadow-card); margin-bottom: 16px; }
@@ -104,7 +105,10 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 12px; }
 .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-.kpi-value { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
+.kpi-clickable { appearance: none; width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.kpi-clickable:hover { background: var(--card-hover); border-color: var(--border-bright); }
+.kpi-clickable:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+.kpi-value { display: block; font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
 .kpi-value.ok { color: var(--success); }
 .kpi-value.warn { color: var(--warning); }
 .kpi-value.err { color: var(--danger); }
@@ -487,3 +491,12 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .rules-table td input, .rules-table td textarea, .rules-table td select { width: 100%; }
 .rules-table textarea { min-height: 38px; resize: vertical; font-family: inherit; }
 .rules-table tr.row-selected { background: var(--card-hover); }
+.client-rules-table { table-layout: fixed; min-width: 0; }
+.client-rules-table th:first-child, .client-rules-table td:first-child { width: 48px; }
+.client-rules-table .rule-name-cell { min-width: 0; }
+.client-rule-summary { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.client-rule-summary strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.client-rule-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.client-rule-description { width: 100%; max-width: 72ch; margin: 8px 0 4px; white-space: normal; overflow-wrap: anywhere; }
+a.suggestion-rule-number { text-decoration: none; }
+a.suggestion-rule-number:hover { text-decoration: underline; }

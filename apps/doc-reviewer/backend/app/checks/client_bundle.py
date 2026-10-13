@@ -25,6 +25,8 @@ class ClientMappingField(_StrictModel):
     max_length: int | None = Field(default=None, gt=0)
     max_items: int | None = Field(default=None, gt=0)
     allowed_values: list[str] | None = None
+    pattern: str | None = None
+    format_hint: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_field_definition(self) -> ClientMappingField:
@@ -39,6 +41,13 @@ class ClientMappingField(_StrictModel):
             raise ValueError("max_length is only valid for string and enum fields")
         if self.max_items is not None and self.type != "string_list":
             raise ValueError("max_items is only valid for string_list fields")
+        if self.pattern is not None:
+            if self.type not in {"string", "enum", "string_list"}:
+                raise ValueError("pattern is only valid for string-like fields")
+            try:
+                compile_user_regex(self.pattern)
+            except UserRegexPatternError as exc:
+                raise ValueError(f"invalid field pattern: {exc.message}") from exc
 
         if self.default is None:
             return self

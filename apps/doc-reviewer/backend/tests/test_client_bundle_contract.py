@@ -72,6 +72,8 @@ def test_client_mapping_validates_field_types_and_entity_patterns() -> None:
 
     with pytest.raises(ValidationError, match="enum fields require allowed_values"):
         ClientMappingField(type="enum")
+    with pytest.raises(ValidationError, match="invalid field pattern"):
+        ClientMappingField(type="string", pattern="[")
     with pytest.raises(ValidationError, match="invalid entity pattern"):
         ClientMapping(entities={"broken": "["})
 

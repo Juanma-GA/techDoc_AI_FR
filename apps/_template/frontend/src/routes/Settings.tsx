@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Switch } from "@internal/ui";
 
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
+import { DemoModeSettings } from "./DemoModeSettings";
 
 /**
  * Mistral configuration page — same fields/behavior on every POC (STANDARD_POC.md
@@ -73,6 +74,7 @@ export function Settings() {
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
+      <DemoModeSettings />
       <Card>
         <CardHeader>
           <CardTitle>{t("settings.ai.title")}</CardTitle>

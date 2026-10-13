@@ -116,6 +116,42 @@ def test_every_analysis_scope_excludes_explicitly_unchanged_pages() -> None:
     assert all(page.is_modified is not False for page in scoped.pages)
 
 
+def test_review_required_pages_are_excluded_when_undecided_pages_are_disabled() -> None:
+    parsed = _parsed_pdf()
+    for page, is_modified in zip(parsed.pages, [True, None, False, None, True]):
+        page.is_modified = is_modified
+
+    assert select_pdf_page_numbers(
+        parsed,
+        first_page=1,
+        last_page=None,
+        modified_only=False,
+        include_undecided=False,
+    ) == [1, 5]
+    assert select_pdf_page_numbers(
+        parsed,
+        first_page=1,
+        last_page=None,
+        modified_only=False,
+        page_number=2,
+        include_undecided=False,
+    ) == []
+
+
+def test_additional_modified_pages_extend_a_range_without_including_unchanged_pages() -> None:
+    parsed = _parsed_pdf()
+    for page, is_modified in zip(parsed.pages, [True, True, False, True, False]):
+        page.is_modified = is_modified
+
+    assert select_pdf_page_numbers(
+        parsed,
+        first_page=2,
+        last_page=3,
+        modified_only=False,
+        additional_pages=[1],
+    ) == [1, 2]
+
+
 def test_explicitly_unchanged_page_is_excluded_from_manual_rerun() -> None:
     parsed = _parsed_pdf()
     parsed.pages[3].is_modified = False

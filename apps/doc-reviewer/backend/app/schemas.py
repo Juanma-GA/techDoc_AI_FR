@@ -321,6 +321,7 @@ class ClientRuleOut(BaseModel):
     name: str
     description: str
     message: str
+    rule_number: int
     kind: str
     severity: Literal["info", "warning", "error"]
     execution: Literal["deterministic", "semantic", "manual", "unsupported"]

@@ -1,11 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { API_BASE_URL, CSRF_HEADERS } from "../lib/api";
+import { API_BASE_URL, api, CSRF_HEADERS } from "../lib/api";
 import { useClientConfig } from "./useClientConfig";
 import { useFiltersStore } from "../stores/filtersStore";
 import { missingDocumentContext } from "../types/domain";
-import type { Document } from "../types/domain";
+import type { Document, Suggestion } from "../types/domain";
 
 type AnalyzeStatus = "idle" | "running" | "done" | "error";
 
@@ -23,6 +23,7 @@ export type AnalyzeOptions = {
   lastPage?: number;
   modifiedOnly?: boolean;
   pageNumber?: number;
+  additionalPages?: number[];
   pageOverrides?: Record<number, boolean>;
 };
 
@@ -30,6 +31,7 @@ export type PageRevisionStatus = {
   page: number;
   is_modified: boolean | null;
   source: "detected" | "manual";
+  requires_review: boolean;
 };
 
 export function useAnalyze(
@@ -49,8 +51,10 @@ export function useAnalyze(
     : undefined;
   const missingContextFields = missingDocumentContext(document, requiredFields);
   const contextReady = Boolean(document) && missingContextFields.length === 0;
+  const parseProgressIsIndeterminate = document?.working_format === "docx";
   const [status, setStatus] = useState<AnalyzeStatus>("idle");
   const [progress, setProgress] = useState(0);
+  const [progressIndeterminate, setProgressIndeterminate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [quality, setQuality] = useState<AnalyzeQuality | null>(null);
   // Avertissements non bloquants (ex. scan checklist/IA interrompu par une
@@ -59,10 +63,12 @@ export function useAnalyze(
   const [warnings, setWarnings] = useState<string[]>([]);
   const [pageStatuses, setPageStatuses] = useState<PageRevisionStatus[]>([]);
   const [pageOverrides, setPageOverrides] = useState<Record<number, boolean>>({});
+  const lastAnalysisOptions = useRef<AnalyzeOptions>({});
 
   useEffect(() => {
     setPageStatuses([]);
     setPageOverrides({});
+    lastAnalysisOptions.current = {};
   }, [documentId]);
 
   const start = useCallback(async (options: AnalyzeOptions = {}) => {
@@ -72,8 +78,10 @@ export function useAnalyze(
       setError("DOCUMENT_CONTEXT_INCOMPLETE");
       return;
     }
+    lastAnalysisOptions.current = options;
     setStatus("running");
     setProgress(0);
+    setProgressIndeterminate(parseProgressIsIndeterminate);
     setError(null);
     setQuality(null);
     setWarnings([]);
@@ -90,6 +98,9 @@ export function useAnalyze(
       }
       if (options.pageNumber !== undefined) {
         params.set("page_number", String(options.pageNumber));
+      }
+      for (const pageNumber of options.additionalPages ?? []) {
+        params.append("additional_pages", String(pageNumber));
       }
       const overrides = options.pageOverrides ?? pageOverrides;
       if (Object.keys(overrides).length > 0) {
@@ -115,6 +126,19 @@ export function useAnalyze(
         }
         throw new Error(message);
       }
+      const suggestionsKey = ["suggestions", documentId] as const;
+      const pagesBeingRerun = options.pageNumber !== undefined
+        ? new Set([options.pageNumber])
+        : null;
+      await qc.cancelQueries({ queryKey: suggestionsKey });
+      qc.setQueryData<Suggestion[]>(suggestionsKey, (current) => {
+        if (!current) return current;
+        return current.filter((suggestion) =>
+          suggestion.status === "applied" ||
+          suggestion.status === "rejected" ||
+          (pagesBeingRerun !== null && !pagesBeingRerun.has(suggestion.page)),
+        );
+      });
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -138,8 +162,17 @@ export function useAnalyze(
               const data = line.slice(5).trim();
               if (currentEvent === "progress") {
                 try {
-                  const parsed = JSON.parse(data) as { pct?: number };
+                  const parsed = JSON.parse(data) as {
+                    step?: string;
+                    pct?: number;
+                    total?: number;
+                  };
                   if (typeof parsed.pct === "number") setProgress(parsed.pct);
+                  setProgressIndeterminate(
+                    parsed.step === "parse" &&
+                      parseProgressIsIndeterminate &&
+                      typeof parsed.total !== "number",
+                  );
                 } catch {
                   /* ignore */
                 }
@@ -160,6 +193,24 @@ export function useAnalyze(
                 try {
                   const parsed = JSON.parse(data) as { pages?: PageRevisionStatus[] };
                   if (Array.isArray(parsed.pages)) setPageStatuses(parsed.pages);
+                } catch {
+                  /* ignore */
+                }
+              } else if (currentEvent === "suggestion") {
+                try {
+                  const parsed = JSON.parse(data) as Suggestion;
+                  if (parsed.id && parsed.document_id === documentId) {
+                    qc.setQueryData<Suggestion[]>(["suggestions", documentId], (current) => {
+                      const suggestions = current ?? [];
+                      if (suggestions.some((suggestion) => suggestion.id === parsed.id)) {
+                        return suggestions;
+                      }
+                      return [...suggestions, parsed].sort(
+                        (left, right) =>
+                          left.page - right.page || left.created_at.localeCompare(right.created_at),
+                      );
+                    });
+                  }
                 } catch {
                   /* ignore */
                 }
@@ -192,37 +243,79 @@ export function useAnalyze(
       qc.invalidateQueries({ queryKey: ["document", documentId] });
       if (status !== "error") setStatus("done");
     } catch (exc) {
+      if (documentId) {
+        qc.invalidateQueries({ queryKey: ["suggestions", documentId] });
+      }
       setStatus("error");
       setError(exc instanceof Error ? exc.message : "error");
     }
-  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive]);
+  }, [contextReady, documentId, pageOverrides, previousRevisionFile, qc, status, checklistActive, parseProgressIsIndeterminate]);
 
-  const correctPageStatus = useCallback((pageNumber: number, isModified: boolean) => {
-    const nextOverrides = { ...pageOverrides, [pageNumber]: isModified };
+  const correctPageStatuses = useCallback((statuses: Record<number, boolean>) => {
+    const entries = Object.entries(statuses).map(([page, isModified]) => [
+      Number(page),
+      isModified,
+    ] as const);
+    if (!documentId || entries.length === 0) return;
+
+    const nextOverrides = { ...pageOverrides, ...statuses };
+    const analysisOptions = { ...lastAnalysisOptions.current };
     setPageOverrides(nextOverrides);
     setPageStatuses((current) =>
       current.map((page) =>
-        page.page === pageNumber
-          ? { ...page, is_modified: isModified, source: "manual" }
+        entries.some(([pageNumber]) => page.page === pageNumber)
+          ? {
+              ...page,
+              is_modified: nextOverrides[page.page] ?? null,
+              source: "manual",
+              requires_review: false,
+            }
           : page,
       ),
     );
-    void start({
-      modifiedOnly: false,
-      pageNumber,
-      pageOverrides: nextOverrides,
-    });
-  }, [pageOverrides, start]);
+    const unchangedPages = entries.filter(([, isModified]) => !isModified).map(([page]) => page);
+    void (async () => {
+      try {
+        await Promise.all(
+          unchangedPages.map((page) =>
+            api.delete<void>(`/documents/${documentId}/pages/${page}/suggestions`),
+          ),
+        );
+        if (entries.some(([, isModified]) => isModified)) {
+          const additionalPages = Object.entries(nextOverrides)
+            .filter(([, isModified]) => isModified)
+            .map(([page]) => Number(page));
+          await start({
+            ...analysisOptions,
+            pageNumber: undefined,
+            additionalPages,
+            pageOverrides: nextOverrides,
+          });
+        } else {
+          await qc.invalidateQueries({ queryKey: ["suggestions", documentId] });
+        }
+      } catch (exc: unknown) {
+          setStatus("error");
+          setError(exc instanceof Error ? exc.message : "error");
+      }
+    })();
+  }, [documentId, pageOverrides, qc, start]);
+
+  const correctPageStatus = useCallback((pageNumber: number, isModified: boolean) => {
+    correctPageStatuses({ [pageNumber]: isModified });
+  }, [correctPageStatuses]);
 
   return {
     status,
     progress,
+    progressIndeterminate,
     error,
     quality,
     warnings,
     pageStatuses,
     start,
     correctPageStatus,
+    correctPageStatuses,
     contextReady,
     missingContextFields,
   };

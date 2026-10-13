@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.core.errors import AppError
 from app.parsers.docx_parser import ParsedDocx
-from app.parsers.pdf_parser import ParsedPdf
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 
 def resolve_page_range(
@@ -52,22 +52,32 @@ def select_pdf_page_numbers(
     last_page: int | None,
     modified_only: bool,
     page_number: int | None = None,
+    additional_pages: list[int] | None = None,
+    include_undecided: bool = True,
 ) -> list[int]:
+    """Select pages, optionally excluding unresolved revision statuses."""
+    def is_selected(page: ParsedPage) -> bool:
+        return page.is_modified is True or (include_undecided and page.is_modified is None)
+
     if page_number is not None:
         resolve_page_range(page_number, page_number, parsed.page_count)
         page = next((item for item in parsed.pages if item.page == page_number), None)
-        return [page_number] if page is not None and page.is_modified is not False else []
+        return [page_number] if page is not None and is_selected(page) else []
     if modified_only:
-        return [page.page for page in parsed.pages if page.is_modified is not False]
+        return [page.page for page in parsed.pages if is_selected(page)]
     resolved_first, resolved_last = resolve_page_range(
         first_page,
         last_page,
         parsed.page_count,
     )
+    additional = set(additional_pages or [])
+    for requested_page in additional:
+        resolve_page_range(requested_page, requested_page, parsed.page_count)
     return [
         page.page
         for page in parsed.pages
-        if resolved_first <= page.page <= resolved_last and page.is_modified is not False
+        if (resolved_first <= page.page <= resolved_last or page.page in additional)
+        and is_selected(page)
     ]
 
 

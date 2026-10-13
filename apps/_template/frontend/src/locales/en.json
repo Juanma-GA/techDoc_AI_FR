@@ -20,6 +20,27 @@
     "untested": "UNTESTED",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "DEMO MODE",
+    "panelTitle": "Demonstration scenario",
+    "panelDescription": "Processing is local and deterministic. Inputs stay separate from user data and are not sent to external services.",
+    "scenarioLabel": "Scenario",
+    "sampleFiles": "Sample files",
+    "run": "Run locally",
+    "reset": "Reset scenario",
+    "result": "Result",
+    "empty": "No demo scenario is configured.",
+    "error": "The scenario could not be run.",
+    "scenarioTitle": "Text summary",
+    "scenarioDescription": "Count the words and characters in synthetic text.",
+    "textLabel": "Text to analyze",
+    "sampleText": "Hello from the AI4TECHDOC example.",
+    "sampleFileName": "example.txt",
+    "sampleFileContent": "Synthetic file created in memory.\nNo business or client data.",
+    "outputWords": "Words",
+    "outputCharacters": "Characters",
+    "outputFileCharacters": "File characters"
+  },
   "common": {
     "loading": "Loading…",
     "confirm": "Confirm",
@@ -44,6 +65,11 @@
     "resetDone": "Reset complete ({{count}} items deleted)."
   },
   "settings": {
+    "demo.title": "Operating mode",
+    "demo.hint": "Normal mode is selected by default. The choice is stored in the app's local configuration.",
+    "demo.normal": "Normal mode",
+    "demo.demo": "Demo mode",
+    "demo.saveError": "Could not save the mode.",
     "ai.title": "Artificial intelligence",
     "ai.toggleLabel": "LLM enabled",
     "ai.toggleHint": "Disabling skips tasks delegated to AI. The Mistral key is kept.",

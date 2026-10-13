@@ -20,11 +20,11 @@ export function useRuleResults(documentId: string | undefined) {
 }
 
 /** Synthèse IA des rejets (agrégat par règle + paragraphe Mistral). */
-export function useRejectionsSummary() {
+export function useRejectionsSummary(synthesize = true) {
   return useQuery({
-    queryKey: ["suggestions", "rejections-summary"],
+    queryKey: ["suggestions", "rejections-summary", synthesize],
     queryFn: () =>
-      api.get<RejectionsSummary>("/suggestions/rejections-summary?synthesize=true"),
+      api.get<RejectionsSummary>(`/suggestions/rejections-summary?synthesize=${synthesize}`),
   });
 }
 
@@ -57,11 +57,17 @@ export function usePatchSuggestion(_documentId: string | undefined) {
 export function useBulkStatus(_documentId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, status }: { ids: string[]; status: SuggestionStatus }) =>
-      api.post<{ updated: number; status: string }>("/suggestions/bulk-status", {
-        ids,
-        status,
-      }),
+    mutationFn: async ({ ids, status }: { ids: string[]; status: SuggestionStatus }) => {
+      let updated = 0;
+      for (let index = 0; index < ids.length; index += 1000) {
+        const response = await api.post<{ updated: number; status: string }>(
+          "/suggestions/bulk-status",
+          { ids: ids.slice(index, index + 1000), status },
+        );
+        updated += response.updated;
+      }
+      return { updated, status };
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["suggestions"] }),
   });
 }

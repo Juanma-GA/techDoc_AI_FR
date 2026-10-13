@@ -194,9 +194,17 @@ function DocRow({
           <p className="hint">{t("reviewer.meta.required")}</p>
         ) : null}
         {analyze.status === "running" ? (
-          <div className="progress" style={{ marginTop: 6 }}>
-            <div className="progress-bar" style={{ width: `${analyze.progress}%` }} />
-          </div>
+          <>
+            <div className="progress" style={{ marginTop: 6 }}>
+              <div
+                className={`progress-bar${analyze.progressIndeterminate ? " indeterminate" : ""}`}
+                style={analyze.progressIndeterminate ? undefined : { width: `${analyze.progress}%` }}
+              />
+            </div>
+            <p className="item-meta" aria-live="polite" style={{ marginTop: 4 }}>
+              {analyze.progress}%
+            </p>
+          </>
         ) : null}
       </div>
 

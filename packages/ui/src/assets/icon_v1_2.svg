@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="7 -2 170 170" width="170" height="170">
+  <defs>
+    <!-- Document 44 x 46 : coin coupé à 45° de (28,0) à (44,16) -->
+    <g id="doc">
+      <path d="M6 0 H28 L44 16 V40 Q44 46 38 46 H6 Q0 46 0 40 V6 Q0 0 6 0 Z"/>
+      <!-- Pli : l'hypoténuse (28,0)→(44,16) est exactement la ligne de coupe -->
+      <path d="M28 0 L44 16 H32 Q28 16 28 12 Z" fill="#fff" fill-opacity="0.25"/>
+    </g>
+  </defs>
+
+  <!-- Connecteurs : 3 branches à 120°, même longueur (40), depuis le centre (91,100) -->
+  <g stroke="#2a64c5" stroke-width="6" stroke-linecap="round" fill="none">
+    <line x1="91" y1="100" x2="91" y2="60"/>
+    <line x1="91" y1="100" x2="56.4" y2="120"/>
+    <line x1="91" y1="100" x2="125.6" y2="120"/>
+  </g>
+
+  <!-- Documents (bas gauche / bas droite décalés pour égaliser la longueur visible des connecteurs) -->
+  <g fill="#001e60"><use href="#doc" x="69" y="17"/></g>
+  <g fill="#307fe2"><use href="#doc" x="21" y="104"/></g>
+  <g fill="#20a0d3"><use href="#doc" x="120" y="104"/></g>
+
+  <!-- Cercle central -->
+  <circle cx="91" cy="100" r="14" fill="#2a64c5"/>
+</svg>

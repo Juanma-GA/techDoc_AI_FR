@@ -37,6 +37,7 @@ export type SettingsDto = {
   chat_model: string;
   embed_model: string;
   llm_enabled: boolean;
+  demo_enabled: boolean;
   llm_tested: boolean;
 };
 export type SettingsInput = {
@@ -45,6 +46,7 @@ export type SettingsInput = {
   chat_model?: string;
   embed_model?: string;
   llm_enabled?: boolean;
+  demo_enabled?: boolean;
 };
 export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
 
