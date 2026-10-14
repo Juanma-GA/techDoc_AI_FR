@@ -138,27 +138,49 @@ def _figure_caption_rect(
     return _caption_rect(page, caption, page_analysis)
 
 
-def _image_records(page):
+def _image_records(page, xref_digest_cache: dict[int, bytes] | None = None):
     """Return unique page image resources with their displayed rectangles."""
     import pymupdf as fitz
 
     records = []
     seen: set[int] = set()
     try:
-        infos = page.get_image_info(xrefs=True)
+        infos = page.get_image_info(hashes=True)
+        image_refs = page.get_images()
     except Exception:
         infos = []
-    for info in infos:
-        xref = int(info.get("xref", 0))
-        if not xref or xref in seen:
-            continue
-        seen.add(xref)
-        records.append((
-            xref,
-            fitz.Rect(info["bbox"]),
-            int(info.get("width", 0)),
-            int(info.get("height", 0)),
-        ))
+        image_refs = []
+    if infos:
+        xrefs_by_digest: dict[bytes, int] = {}
+        lookup_failed = False
+        for image in image_refs:
+            xref = int(image[0])
+            if not xref:
+                continue
+            digest = xref_digest_cache.get(xref) if xref_digest_cache is not None else None
+            if digest is None:
+                try:
+                    pixmap = fitz.Pixmap(page.parent, xref)
+                    digest = pixmap.digest
+                    del pixmap
+                except Exception:
+                    lookup_failed = True
+                    break
+                if xref_digest_cache is not None:
+                    xref_digest_cache[xref] = digest
+            xrefs_by_digest[digest] = xref
+        if not lookup_failed:
+            for info in infos:
+                xref = xrefs_by_digest.get(info.get("digest"), 0)
+                if not xref or xref in seen:
+                    continue
+                seen.add(xref)
+                records.append((
+                    xref,
+                    fitz.Rect(info["bbox"]),
+                    int(info.get("width", 0)),
+                    int(info.get("height", 0)),
+                ))
     if records:
         return records
     return [
@@ -545,6 +567,7 @@ def attach_illustrations(
     # qu'UNE fois, sinon le dossier se remplit de doublons.
     seen: set[int] = set()
     seen_digests: set[str] = set()
+    xref_digest_cache: dict[int, bytes] = {}
     try:
         for pidx, page in enumerate(doc, start=1):
             page_analysis = _PageAnalysis(page)
@@ -556,7 +579,7 @@ def attach_illustrations(
             ]
             timings["caption_lookup_ms"] += (perf_counter() - stage_started) * 1000
             stage_started = perf_counter()
-            image_records = _image_records(page)
+            image_records = _image_records(page, xref_digest_cache)
             timings["image_info_ms"] += (perf_counter() - stage_started) * 1000
             image_occurrence_count += len(image_records)
             standard_matches = {
