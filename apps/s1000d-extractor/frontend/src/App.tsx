@@ -1,4 +1,9 @@
-import { AppShell, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
+import {
+  Ai4TechDocLogo,
+  AppShell,
+  LanguageSwitcher,
+  sidebarNavItemClass,
+} from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
@@ -31,6 +36,7 @@ export function App() {
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      headerStart={<Ai4TechDocLogo alt="" />}
       llmStatus={<LlmBadge />}
       navigation={navItems.map(({ to, labelKey }) => (
         <NavLink
