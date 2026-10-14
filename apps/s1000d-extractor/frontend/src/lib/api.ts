@@ -145,6 +145,7 @@ export type PdfCutDetection = {
   selected_end_page: number | null;
   default_start_page: number;
   total_pages: number;
+  dmrl_titles: string[];
   candidates: PdfCutCandidate[];
 };
 
@@ -241,6 +242,7 @@ export type DmrlRow = {
   title: string;
   dm_type: string;
   icn: string;
+  is_pm_title: boolean;
   matched: boolean;
   match_rank: DmrlMatchRank;
   page: number | null;
@@ -250,6 +252,7 @@ export type DmrlRow = {
 export type WizardState = {
   step: WizardStep;
   split_level: string;
+  dmrl_dm_count?: number;
   steps?: WizardStep[];
   dms: WizardDm[];
   can_undo?: boolean;
@@ -292,8 +295,11 @@ export const documentsApi = {
 };
 
 export const pdfCutApi = {
-  detect: (docId: string) =>
-    api<PdfCutDetection>(`/documents/${docId}/pdf-cut/detect`, { method: "POST" }),
+  detect: (docId: string, title?: string) =>
+    api<PdfCutDetection>(`/documents/${docId}/pdf-cut/detect`, {
+      method: "POST",
+      body: JSON.stringify(title ? { title } : {}),
+    }),
   confirm: (docId: string, startPage: number, endPage: number) =>
     api<{ page: number; start_page: number; end_page: number; page_count: number; status: string }>(
       `/documents/${docId}/pdf-cut/confirm`,

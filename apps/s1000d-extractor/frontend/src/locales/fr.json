@@ -129,6 +129,9 @@
       "pdfCut": {
         "title": "Définir la plage de pages à analyser",
         "help": "La sélection proposée commence au premier chapitre détecté et va jusqu'à la dernière page.",
+        "firstDmTitle": "Titre du premier DM à rechercher",
+        "detectWithTitle": "Rechercher avec ce titre",
+        "searching": "Recherche en cours…",
         "startPage": "De la page",
         "endPage": "À la page",
         "candidate": "Page {{page}} — score {{score}}",
@@ -179,13 +182,21 @@
     },
     "dmrl": {
       "title": "Valider la DMRL ({{count}} Data Modules)",
-      "help": "Vérifie les DM attendus avant le découpage. « Localisé » = titre retrouvé à l'identique ; « à vérifier » = correspondance approchante, le DM peut être ancré au mauvais endroit ; « non localisé » = le DM sera créé vide.",
-      "counts": "{{missing}} non localisé(s), {{uncertain}} à vérifier.",
+      "help": "Vérifie les DM attendus avant le découpage. Les lignes « Titre PM » restent dans la PMC sans générer de DM.",
+      "counts": "{{missing}} non localisé(s), {{uncertain}} à vérifier, {{pmTitles}} titre(s) PM (PMC uniquement).",
+      "missingAlert_one": "{{count}} DM de la DMRL n'a pas été retrouvé dans le document.",
+      "missingAlert_other": "{{count}} DM de la DMRL n'ont pas été retrouvés dans le document.",
+      "missingAlertHelp_one": "Utilisez « Exclure » ci-dessous si vous ne souhaitez pas conserver ce DM.",
+      "missingAlertHelp_other": "Utilisez « Exclure » ci-dessous sur les DM que vous ne souhaitez pas conserver.",
+      "pmTitle": "Titre PM",
+      "titleInput": "Titre de la ligne DMRL {{title}}",
+      "typeLabel": "Type du DM {{title}}",
       "pmc": "Télécharger la PMC",
       "validate": "Valider la DMRL →",
       "icn": "ICN",
       "rename": "Renommer",
-      "exclude": "Exclure"
+      "exclude": "Exclure",
+      "confirmExclude": "Cliquer encore pour confirmer"
     },
     "split": {
       "title": "Découpage proposé ({{count}} Data Modules)",

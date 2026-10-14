@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
@@ -10,30 +9,23 @@ import pymupdf as fitz
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.dmrl import normalize
 from app.core.errors import AppError
+from app.core.pdf_cut_scoring import dmrl_data_module_titles
+from app.core.pdf_cut_scoring import score_page as _score_page
 from app.db.models import Document
 
-_TOC_LINE = re.compile(r"(?:\.{2,}|·{2,}|-{2,})\s*\d+\s*$")
-_CHAPTER = re.compile(r"^(?:chapter|chapitre)\s+1(?:\b|\s*[-:.])", re.IGNORECASE)
 _LIST_OF_TABLES = re.compile(r"\blist\s+of\s+tables\b", re.IGNORECASE)
 _INTENTIONALLY_BLANK = re.compile(
     r"\bpage\s+intentionally\s+left\s+blank\b", re.IGNORECASE
 )
 
 
-def _first_dm_title(doc: Document) -> str:
-    if not doc.dmrl_json:
-        return ""
-    try:
-        entries = json.loads(doc.dmrl_json)
-    except (TypeError, ValueError):
-        return ""
-    return str(entries[0].get("title") or "") if entries else ""
-
-
 def _page_text(page: fitz.Page) -> str:
     return (page.get_text("text") or "").strip()
+
+
+def _is_blank_page(text: str) -> bool:
+    return not text.strip() or bool(_INTENTIONALLY_BLANK.search(text))
 
 
 def _start_page_after_tables_list(page_texts: list[str]) -> int | None:
@@ -44,68 +36,26 @@ def _start_page_after_tables_list(page_texts: list[str]) -> int | None:
         return None
 
     boundary_index = list_pages[-1] + 1
-    skipped_blank_page = False
     while boundary_index < len(page_texts):
         text = page_texts[boundary_index]
-        if text.strip() and not _INTENTIONALLY_BLANK.search(text):
+        if not _is_blank_page(text):
             break
-        skipped_blank_page = True
         boundary_index += 1
 
-    start_index = boundary_index if skipped_blank_page else boundary_index + 1
-    return start_index + 1 if start_index < len(page_texts) else None
+    return boundary_index + 1 if boundary_index < len(page_texts) else None
 
 
-def _score_page(text: str, title: str) -> tuple[float, list[str]]:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    normalized_title = normalize(title)
-    normalized_lines = [normalize(line) for line in lines]
-    reasons: list[str] = []
-    score = 0.0
-
-    if normalized_title:
-        if normalized_title in normalized_lines:
-            score += 100
-            reasons.append("dmrl_title_exact")
-        elif any(line.startswith(normalized_title) for line in normalized_lines):
-            score += 70
-            reasons.append("dmrl_title_prefix")
-        elif any(normalized_title in line for line in normalized_lines):
-            score += 45
-            reasons.append("dmrl_title_contains")
-
-    if any(_CHAPTER.search(line) for line in lines):
-        score += 45
-        reasons.append("chapter_1")
-
-    text_chars = len(" ".join(lines))
-    score += min(text_chars / 80.0, 20.0)
-    if text_chars >= 180:
-        score += 10
-        reasons.append("text_density")
-    elif text_chars < 40:
-        score -= 20
-        reasons.append("low_text_density")
-
-    toc_lines = sum(bool(_TOC_LINE.search(line)) for line in lines)
-    if toc_lines >= 2:
-        score -= min(45.0, 15.0 * toc_lines)
-        reasons.append("toc_like_lines")
-    if any(normalize(line) in {"sommaire", "table des matieres", "contents", "table of contents"} for line in lines[:5]):
-        score -= 30
-        reasons.append("toc_heading")
-
-    return round(score, 2), reasons
-
-
-def detect_start_pages(doc: Document) -> list[dict]:
+def detect_start_pages(doc: Document, title: str | None = None) -> list[dict]:
     """Retourne les pages candidates, classees par score decroissant."""
     if doc.source_format != "pdf":
         raise AppError("PDF_CUT_UNSUPPORTED", "La decoupe avant chapitre concerne uniquement les PDF.", 422)
     path = Path(doc.storage_path)
     if not path.exists():
         raise AppError("DOCUMENT_NOT_FOUND", "PDF source introuvable.", 404)
-    title = _first_dm_title(doc)
+    titles = dmrl_data_module_titles(doc.dmrl_json)
+    if title is not None and title not in titles:
+        raise AppError("PDF_DM_TITLE_INVALID", "Le titre selectionne ne figure pas dans la DMRL.", 422)
+    scoring_title = title or next(iter(titles), "")
     source = fitz.open(str(path))
     try:
         candidates = []
@@ -114,22 +64,61 @@ def detect_start_pages(doc: Document) -> list[dict]:
         for index, text in enumerate(page_texts, start=1):
             if _LIST_OF_TABLES.search(text):
                 continue
-            score, reasons = _score_page(text, title)
+            score, reasons = _score_page(text, scoring_title)
             if index == preferred_start_page:
                 reasons.append("after_list_of_tables")
+            candidate = {
+                "page": index,
+                "score": score,
+                "reasons": reasons,
+                "preview": text[:500],
+            }
             if score > 0 or index == 1 or index == preferred_start_page:
-                candidates.append({
-                    "page": index,
-                    "score": score,
-                    "reasons": reasons,
-                    "preview": text[:500],
-                })
+                candidates.append(candidate)
         candidates.sort(key=lambda item: (
-            item["page"] != preferred_start_page,
             -item["score"],
+            item["page"] != preferred_start_page,
             item["page"],
         ))
-        return candidates or [{"page": 1, "score": 0, "reasons": [], "preview": ""}]
+        if not candidates:
+            candidates = [{"page": 1, "score": 0, "reasons": [], "preview": ""}]
+
+        first_page = candidates[0]["page"]
+        selected_page = first_page
+        while selected_page <= len(page_texts) and _is_blank_page(page_texts[selected_page - 1]):
+            selected_page += 1
+        if selected_page > len(page_texts):
+            raise AppError(
+                "PDF_START_PAGE_NOT_FOUND",
+                "Aucune page non vide n'a ete trouvee apres la page candidate.",
+                422,
+            )
+        if selected_page != first_page:
+            text = page_texts[selected_page - 1]
+            score, reasons = _score_page(text, scoring_title)
+            if selected_page == preferred_start_page:
+                reasons.append("after_list_of_tables")
+            reasons.append("advanced_past_blank_page")
+            advanced_candidate = {
+                "page": selected_page,
+                "score": score,
+                "reasons": reasons,
+                "preview": text[:500],
+            }
+            return [
+                advanced_candidate,
+                *(
+                    candidate
+                    for candidate in candidates
+                    if candidate["page"] != selected_page
+                    and not _is_blank_page(page_texts[candidate["page"] - 1])
+                ),
+            ]
+        return [
+            candidate
+            for candidate in candidates
+            if not _is_blank_page(page_texts[candidate["page"] - 1])
+        ]
     finally:
         source.close()
 

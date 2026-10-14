@@ -31,10 +31,10 @@ from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.errors import AppError
 from app.core.s1000d_serializer import (
+    SerializationDiagnostics,
     build_reference_index,
     content_node_count,
     missing_data_fields,
-    SerializationDiagnostics,
     serialize,
 )
 from app.core.validator import validate_document, xsd_is_valid
@@ -247,7 +247,7 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     progress_cb("split", 60)
     split_started = perf_counter()
     root = ir_mod.from_dict(json.loads(doc.ir_json))
-    entries = wres.dmrl_entries(doc)
+    entries = wres.dmrl_data_module_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     if entries:
         _apply_dmrl_icns(units, entries, images_dir(doc.id))
@@ -555,6 +555,7 @@ def state(doc: Document) -> dict:
     out = {
         "step": step,
         "split_level": doc.split_level or _DEFAULT_LEVEL,
+        "dmrl_dm_count": len(wres.dmrl_data_module_entries(doc)),
         "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
         "resources": _resources_state(doc),

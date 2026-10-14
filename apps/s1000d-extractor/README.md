@@ -13,6 +13,8 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Parse PDF and DOCX into a common intermediate representation.
 - Classify, segment, map, and resolve S1000D element candidates.
 - Accept optional DMRL, CIR, BREX, and client-rule resources.
+- Keep title-only DMRL rows in the PMC without generating Data Modules from them.
+- Flag expected Data Modules that are missing from the source before the split, with a row-level exclusion action.
 - Generate data-module and publication-module skeletons.
 - Build issue/type-specific content models from the local XSDs and constrain generated elements, order, cardinality, attributes, and values.
 - Collect XSD/mapping errors separately from provisional business fields that need confirmation.
@@ -64,6 +66,10 @@ Mistral supports context classification. Behavior with LLM disabled is not suffi
 ## Tests
 
 Use synthetic fixtures with the backend pytest suite and the frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:s1000d-extractor`.
+
+## Validation Note (2026-10-14)
+
+`bash scripts/check_standard.sh` could not run in the available Windows Bash environment: CRLF line endings caused shell parsing errors before the checks started. Standard compliance remains unverified for this change.
 
 ## Limitations
 

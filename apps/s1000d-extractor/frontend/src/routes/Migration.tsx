@@ -6,6 +6,8 @@ import { useNavigate } from "react-router-dom";
 import { useDemoMode } from "@internal/ui";
 
 import { DmPreview } from "../components/DmPreview";
+import { DM_TYPES, DmrlReview } from "../components/DmrlReview";
+import { PdfCutStartSelector } from "../components/PdfCutStartSelector";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
   documentsApi,
@@ -15,7 +17,6 @@ import {
   startWizardStream,
   wizardApi,
   type ContextHint,
-  type DmrlRow,
   type MigrationInputKind,
   type PdfCutDetection,
   type ResourceKind,
@@ -42,6 +43,13 @@ export function getCommonMissingFields(
   if (dms.length < 2) return [];
   const firstFields = [...new Set(dms[0].missing_fields ?? [])];
   return firstFields.filter((field) => dms.every((dm) => dm.missing_fields?.includes(field)));
+}
+
+export function hasUnmatchedDmrlDms(state: WizardState): boolean {
+  return (
+    state.step === "dmrl" &&
+    (state.dmrl ?? []).some((row) => !row.is_pm_title && !row.matched)
+  );
 }
 
 function ConfirmButton({
@@ -81,21 +89,6 @@ function DmTypeBadge({ type }: { type: string }) {
   return (
     <span className="badge info">
       {t(`dmType.${type}`, { defaultValue: type })}
-    </span>
-  );
-}
-
-// Un appariement `contains` peut ancrer un DM au mauvais endroit : il ne doit
-// jamais s'afficher comme une certitude.
-function MatchBadge({ row }: { row: DmrlRow }) {
-  const { t } = useTranslation();
-  if (!row.matched) return <span className="badge warn">{t("migration.match.notFound")}</span>;
-  const page = row.page ?? "?";
-  if (row.match_rank === "exact")
-    return <span className="badge ok">{t("migration.match.exact", { page })}</span>;
-  return (
-    <span className="badge warn" title={row.matched_text}>
-      {t(`migration.match.${row.match_rank || "contains"}`, { page })}
     </span>
   );
 }
@@ -201,6 +194,7 @@ export function Migration() {
   const [pdfCut, setPdfCut] = useState<{
     docId: string;
     detection: PdfCutDetection;
+    selectedTitle: string;
     startPage: number | null;
     endPage: number | null;
   } | null>(null);
@@ -367,7 +361,9 @@ export function Migration() {
     includeSplit = false,
   ): Promise<WizardState> => {
     let state = initial;
-    if (state.step === "dmrl") state = await wizardApi.action(id, "advance", {});
+    if (state.step === "dmrl" && !hasUnmatchedDmrlDms(state)) {
+      state = await wizardApi.action(id, "advance", {});
+    }
     if (state.step === "split") {
       if (!includeSplit) return state;
       state = await wizardApi.action(id, "advance", {});
@@ -390,12 +386,14 @@ export function Migration() {
     if (sourceFormat === "pdf") {
       const detection = await pdfCutApi.detect(id);
       if (
-        detection.validation_required &&
-        (detection.selected_page == null || detection.selected_end_page == null)
+        detection.dmrl_titles.length > 0 ||
+        (detection.validation_required &&
+          (detection.selected_page == null || detection.selected_end_page == null))
       ) {
         setPdfCut({
           docId: id,
           detection,
+          selectedTitle: detection.dmrl_titles[0] ?? "",
           startPage: detection.selected_page ?? detection.default_start_page,
           endPage: detection.selected_end_page ?? detection.total_pages,
         });
@@ -513,6 +511,27 @@ export function Migration() {
       await startAnalysis(pending.docId);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfCutBusy(false);
+    }
+  };
+
+  const redetectPdfCut = async (title: string) => {
+    if (!pdfCut) return;
+    const pending = pdfCut;
+    setPdfCutBusy(true);
+    setLoadError(null);
+    try {
+      const detection = await pdfCutApi.detect(pending.docId, title);
+      setPdfCut({
+        ...pending,
+        detection,
+        selectedTitle: title,
+        startPage: detection.default_start_page,
+        endPage: pending.endPage ?? detection.total_pages,
+      });
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error));
     } finally {
       setPdfCutBusy(false);
     }
@@ -790,71 +809,25 @@ export function Migration() {
       </div>
 
       {pdfCut ? (
-        <div className="card">
-          <h2 className="card-title">{t("migration.upload.pdfCut.title")}</h2>
-          <p className="label">{t("migration.upload.pdfCut.help")}</p>
-          <div className="row" style={{ alignItems: "end" }}>
-            <label>
-              <div className="label">{t("migration.upload.pdfCut.startPage")}</div>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={pdfCut.detection.total_pages}
-                value={pdfCut.startPage ?? ""}
-                disabled={pdfCutBusy}
-                onChange={(e) =>
-                  setPdfCut((current) =>
-                    current ? { ...current, startPage: Number(e.target.value) || null } : current,
-                  )
-                }
-              />
-            </label>
-            <label>
-              <div className="label">{t("migration.upload.pdfCut.endPage")}</div>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={pdfCut.detection.total_pages}
-                value={pdfCut.endPage ?? ""}
-                disabled={pdfCutBusy}
-                onChange={(e) =>
-                  setPdfCut((current) =>
-                    current ? { ...current, endPage: Number(e.target.value) || null } : current,
-                  )
-                }
-              />
-            </label>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={
-                pdfCutBusy ||
-                pdfCut.startPage == null ||
-                pdfCut.endPage == null ||
-                pdfCut.startPage > pdfCut.endPage
-              }
-              onClick={() => void confirmPdfCut()}
-            >
-              {t("migration.upload.pdfCut.validate")}
-            </button>
-          </div>
-          {pdfCut.startPage != null ? (
-            <img
-              src={pdfCutApi.previewUrl(pdfCut.docId, pdfCut.startPage)}
-              alt={t("migration.upload.pdfCut.previewAlt", { page: pdfCut.startPage })}
-              style={{
-                display: "block",
-                maxWidth: "100%",
-                maxHeight: 560,
-                marginTop: 16,
-                objectFit: "contain",
-                border: "1px solid var(--border)",
-              }}
-            />
-          ) : null}
-        </div>
+        <PdfCutStartSelector
+          docId={pdfCut.docId}
+          detection={pdfCut.detection}
+          selectedTitle={pdfCut.selectedTitle}
+          startPage={pdfCut.startPage}
+          endPage={pdfCut.endPage}
+          busy={pdfCutBusy}
+          onTitleChange={(title) =>
+            setPdfCut((current) => current ? { ...current, selectedTitle: title } : current)
+          }
+          onDetect={(title) => void redetectPdfCut(title)}
+          onStartPageChange={(page) =>
+            setPdfCut((current) => current ? { ...current, startPage: page } : current)
+          }
+          onEndPageChange={(page) =>
+            setPdfCut((current) => current ? { ...current, endPage: page } : current)
+          }
+          onConfirm={() => void confirmPdfCut()}
+        />
       ) : null}
 
       <div className="card">
@@ -916,112 +889,20 @@ export function Migration() {
         {wiz ? (
           <>
             {wiz.step === "dmrl" ? (
-              <div className="card">
-                <h2 className="card-title">
-                  {t("migration.dmrl.title", { count: wiz.dmrl?.length ?? 0 })}
-                </h2>
-                <p className="label">
-                  {t("migration.dmrl.help")}{" "}
-                  {t("migration.dmrl.counts", {
-                    missing: (wiz.dmrl ?? []).filter((r) => !r.matched).length,
-                    uncertain: (wiz.dmrl ?? []).filter(
-                      (r) => r.matched && r.match_rank !== "exact",
-                    ).length,
-                  })}
-                </p>
-                <div className="row" style={{ marginBottom: 10 }}>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    style={{ marginLeft: "auto" }}
-                    disabled={busy}
-                    onClick={() => void wizAction("advance", {})}
-                  >
-                    {t("migration.dmrl.validate")}
-                  </button>
-                </div>
-                <div>
-                  {(wiz.dmrl ?? []).map((row) => (
-                    <div
-                      key={row.index}
-                      className="row"
-                      style={{ borderBottom: "1px solid var(--border)", padding: "6px 0" }}
-                    >
-                      <span className="badge info">{row.arbo || t("common.none")}</span>
-                      <input
-                        className="input grow"
-                        value={dmrlEdits[row.index] ?? row.title}
-                        onChange={(e) =>
-                          setDmrlEdits((p) => ({ ...p, [row.index]: e.target.value }))
-                        }
-                      />
-                      <select
-                        value={row.dm_type || "descriptive"}
-                        onChange={(e) =>
-                          void wizAction("update", {
-                            op: "set_type",
-                            index: row.index,
-                            dm_type: e.target.value,
-                          })
-                        }
-                      >
-                        {DM_TYPES.map((tp) => (
-                          <option key={tp} value={tp}>
-                            {t(`dmType.${tp}`)}
-                          </option>
-                        ))}
-                      </select>
-                      <MatchBadge row={row} />
-                      <span className="label" title={row.dmc}>
-                        {row.dmc || t("common.none")}
-                      </span>
-                      <span
-                        className="label"
-                        title={row.icn || undefined}
-                        style={{ maxWidth: 280, whiteSpace: "pre-line", overflowWrap: "anywhere" }}
-                      >
-                        <strong>{t("migration.dmrl.icn")}:</strong>{" "}
-                        {row.icn || t("common.none")}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn ghost small"
-                        disabled={busy}
-                        onClick={() =>
-                          void wizAction("update", {
-                            op: "rename",
-                            index: row.index,
-                            title: dmrlEdits[row.index] ?? row.title,
-                          })
-                        }
-                      >
-                        {t("migration.dmrl.rename")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn danger small"
-                        disabled={busy}
-                        onClick={() =>
-                          void wizAction("update", { op: "exclude", index: row.index })
-                        }
-                      >
-                        {t("migration.dmrl.exclude")}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="row" style={{ marginTop: 12 }}>
-                  <button
-                    type="button"
-                    className="btn primary"
-                    style={{ marginLeft: "auto" }}
-                    disabled={busy}
-                    onClick={() => void wizAction("advance", {})}
-                  >
-                    {t("migration.dmrl.validate")}
-                  </button>
-                </div>
-              </div>
+              <DmrlReview
+                rows={wiz.dmrl ?? []}
+                dmCount={
+                  wiz.dmrl_dm_count ??
+                  (wiz.dmrl ?? []).filter((row) => !row.is_pm_title).length
+                }
+                busy={busy}
+                edits={dmrlEdits}
+                onTitleChange={(index, title) =>
+                  setDmrlEdits((current) => ({ ...current, [index]: title }))
+                }
+                onUpdate={(params) => void wizAction("update", params)}
+                onAdvance={() => void wizAction("advance", {})}
+              />
             ) : null}
 
             {wiz.step === "split" ? (
@@ -1030,9 +911,9 @@ export function Migration() {
                   {t("migration.split.title", { count: wiz.dms.length })}
                 </h2>
                 <p className="label">{t("migration.analysis.help")}</p>
-                {wiz.resources?.dmrl_count ? (
+                {wiz.dmrl_dm_count ? (
                   <p className="label">
-                    {t("migration.split.dmrlDriven", { count: wiz.resources.dmrl_count })}
+                    {t("migration.split.dmrlDriven", { count: wiz.dmrl_dm_count })}
                   </p>
                 ) : null}
                 <details className="migration-split-review">

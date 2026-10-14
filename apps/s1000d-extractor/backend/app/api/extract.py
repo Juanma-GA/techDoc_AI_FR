@@ -18,8 +18,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
 from app.core import ir as ir_mod
-from app.core import migration_inputs
-from app.core import pipeline
+from app.core import migration_inputs, pipeline
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
 from app.core.s1000d_schema import SELECTABLE_ISSUES
@@ -200,7 +199,7 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if doc.ir_json:
         root = ir_mod.from_dict(json.loads(doc.ir_json))
         resources = wres.load_resources(doc)
-        entries = wres.dmrl_entries(doc)
+        entries = wres.dmrl_data_module_entries(doc)
         metadata = entries[0].to_dict() if entries else None
         xml = serialize(
             root,
@@ -253,7 +252,7 @@ def override_node(
     node.confidence = 1.0
 
     resources = wres.load_resources(doc)
-    entries = wres.dmrl_entries(doc)
+    entries = wres.dmrl_data_module_entries(doc)
     metadata = entries[0].to_dict() if entries else None
     serialization = SerializationDiagnostics()
     xml = serialize(
@@ -316,11 +315,12 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         if doc is None:
             raise AppError("DOC_NOT_FOUND", "Document inconnu.", 404)
         brex_xml = _brex_xml(db, doc.brex_id)
+        dmrl_entries = wres.dmrl_data_module_entries(doc)
         try:
             result = pipeline.run(
                 doc.storage_path, fmt=doc.source_format, issue=doc.s1000d_issue,
                 hint=doc.context_hint, db=db, brex_xml=brex_xml,
-                dm_metadata=(wres.dmrl_entries(doc)[0].to_dict() if wres.dmrl_entries(doc) else None),
+                dm_metadata=(dmrl_entries[0].to_dict() if dmrl_entries else None),
                 header_template=wres.load_resources(doc).header_template,
                 progress_cb=cb,
             )
