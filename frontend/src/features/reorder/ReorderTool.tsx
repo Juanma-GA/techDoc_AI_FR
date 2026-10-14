@@ -17,14 +17,17 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { FileText, Grip, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-import { processPDF } from "../../shared/api";
+import { formatOperationError, processPDF } from "../../shared/api";
 import { Button } from "../../shared/components/Button";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { renderPdfThumbnails, type PageThumbnail } from "./pdfPreview";
 
 export function ReorderTool() {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
   const [file, setFile] = useState<File | null>(null);
   const [thumbnails, setThumbnails] = useState<PageThumbnail[]>([]);
   const [order, setOrder] = useState<number[]>([]);
@@ -60,6 +63,10 @@ export function ReorderTool() {
       file,
       (completed, total) => setProgress({ completed, total }),
       controller.signal,
+      {
+        emptyDocument: t("reorder.emptyDocument"),
+        canvasUnavailable: t("reorder.canvasUnavailable"),
+      },
     )
       .then((pages) => {
         if (!controller.signal.aborted) {
@@ -69,11 +76,7 @@ export function ReorderTool() {
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setPreviewError(
-            reason instanceof Error
-              ? reason.message
-              : "Impossible de créer les miniatures de ce PDF.",
-          );
+          setPreviewError(reason instanceof Error ? reason.message : t("reorder.previewFailed"));
         }
       })
       .finally(() => {
@@ -99,7 +102,7 @@ export function ReorderTool() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!file || order.length === 0) {
-      setError("Sélectionnez un PDF et attendez la création des miniatures.");
+      setError(t("reorder.selectAndWait"));
       return;
     }
 
@@ -110,10 +113,10 @@ export function ReorderTool() {
     data.append("file", file, file.name);
     data.append("order", JSON.stringify(order));
     try {
-      await processPDF("reorder", data, "reordered.pdf");
+      await processPDF("reorder", data, "reordered.pdf", t);
       setSuccess(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "La réorganisation a échoué.");
+      setError(formatOperationError(reason, t, "errors.reorderFailed"));
     } finally {
       setWorking(false);
     }
@@ -122,13 +125,13 @@ export function ReorderTool() {
   const thumbnailByPage = new Map(thumbnails.map((thumbnail) => [thumbnail.pageNumber, thumbnail]));
 
   return (
-    <form className="reorder-workflow" onSubmit={submit}>
+    <form className="workflow-grid reorder-workflow" onSubmit={submit}>
       <section className="panel">
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
-            <h2>Charger le PDF</h2>
-            <p>Les miniatures sont générées dans votre navigateur.</p>
+            <h2>{t("reorder.stepFile")}</h2>
+            <p>{t("reorder.stepFileDescription")}</p>
           </div>
         </div>
         <FileDropzone
@@ -139,8 +142,8 @@ export function ReorderTool() {
             setSuccess(false);
           }}
           onError={setError}
-          label="Déposez votre PDF ici"
-          description="Le fichier n'est envoyé au serveur qu'après validation de l'ordre"
+          label={t("files.dropLabel")}
+          description={t("reorder.dropDescription")}
         />
         {file ? (
           <div className="selected-file">
@@ -149,7 +152,7 @@ export function ReorderTool() {
             </span>
             <span className="file-details">
               <span className="file-name">{file.name}</span>
-              <span className="file-size">{formatFileSize(file.size)}</span>
+              <span className="file-size">{formatFileSize(file.size, language)}</span>
             </span>
             <Button
               variant="ghost"
@@ -160,7 +163,7 @@ export function ReorderTool() {
                 setPreviewError("");
                 setError("");
               }}
-              aria-label="Retirer le fichier"
+              aria-label={t("files.remove")}
             >
               <X size={16} aria-hidden="true" />
             </Button>
@@ -172,16 +175,17 @@ export function ReorderTool() {
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
-            <h2>Organiser les pages</h2>
-            <p>Faites glisser les pages ou utilisez le clavier pour les déplacer.</p>
+            <h2>{t("reorder.stepPages")}</h2>
+            <p>{t("reorder.stepPagesDescription")}</p>
           </div>
         </div>
 
         {previewLoading ? (
           <p className="preview-status" role="status">
             <span className="spinner" aria-hidden="true" />
-            Création des miniatures : {progress.completed}
-            {progress.total > 0 ? ` / ${progress.total}` : ""}
+            {progress.total > 0
+              ? t("reorder.previewProgress", progress)
+              : t("reorder.previewProgressPending", progress)}
           </p>
         ) : null}
         {previewError ? (
@@ -196,7 +200,7 @@ export function ReorderTool() {
             onDragEnd={handleDragEnd}
           >
             <SortableContext items={order} strategy={rectSortingStrategy}>
-              <div className="thumbnail-grid" aria-label="Pages du document, dans l'ordre de sortie">
+              <div className="thumbnail-grid" aria-label={t("reorder.pagesAriaLabel")}>
                 {order.map((pageNumber, index) => {
                   const thumbnail = thumbnailByPage.get(pageNumber);
                   return thumbnail ? (
@@ -213,7 +217,7 @@ export function ReorderTool() {
         ) : (
           <div className="thumbnail-empty">
             <Grip size={22} aria-hidden="true" />
-            <span>Les miniatures des pages apparaîtront ici.</span>
+            <span>{t("reorder.emptyThumbnails")}</span>
           </div>
         )}
 
@@ -224,7 +228,7 @@ export function ReorderTool() {
             </span>
             <span>
               <strong>reordered.pdf</strong>
-              <small>Document réorganisé</small>
+              <small>{t("reorder.outputDescription")}</small>
             </span>
           </div>
           <Button
@@ -233,7 +237,7 @@ export function ReorderTool() {
             className="action-button"
           >
             {working ? <span className="spinner" aria-hidden="true" /> : <Grip size={18} />}
-            {working ? "Réorganisation…" : "Réorganiser"}
+            {working ? t("reorder.working") : t("reorder.action")}
           </Button>
         </div>
         <div className="feedback-slot">
@@ -244,7 +248,7 @@ export function ReorderTool() {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              Le fichier reordered.pdf a été téléchargé.
+              {t("reorder.success", { fileName: "reordered.pdf" })}
             </p>
           ) : null}
         </div>
@@ -259,6 +263,7 @@ type SortablePageProps = {
 };
 
 function SortablePage({ thumbnail, position }: SortablePageProps) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: thumbnail.pageNumber,
   });
@@ -273,16 +278,17 @@ function SortablePage({ thumbnail, position }: SortablePageProps) {
       }}
       {...attributes}
       {...listeners}
+      aria-label={t("reorder.thumbnailAlt", { page: thumbnail.pageNumber })}
     >
       <img
         className="page-thumbnail"
         src={thumbnail.dataUrl}
-        alt={`Miniature de la page ${thumbnail.pageNumber}`}
+        alt={t("reorder.thumbnailAlt", { page: thumbnail.pageNumber })}
         draggable={false}
       />
       <div className="page-card-caption">
-        <span>Position {position}</span>
-        <span>Page {thumbnail.pageNumber}</span>
+        <span>{t("reorder.position", { position })}</span>
+        <span>{t("reorder.page", { page: thumbnail.pageNumber })}</span>
       </div>
     </article>
   );

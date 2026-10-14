@@ -8,10 +8,16 @@ export type PageThumbnail = {
   dataUrl: string;
 };
 
+export type PdfPreviewMessages = {
+  emptyDocument: string;
+  canvasUnavailable: string;
+};
+
 export async function renderPdfThumbnails(
   file: File,
   onProgress: (completed: number, total: number) => void,
   signal: AbortSignal,
+  messages: PdfPreviewMessages,
 ): Promise<PageThumbnail[]> {
   const data = new Uint8Array(await file.arrayBuffer());
   if (signal.aborted) {
@@ -28,7 +34,7 @@ export async function renderPdfThumbnails(
   try {
     documentProxy = await loadingTask.promise;
     if (documentProxy.numPages < 1) {
-      throw new Error("Le PDF ne contient aucune page.");
+      throw new Error(messages.emptyDocument);
     }
 
     const thumbnails: PageThumbnail[] = [];
@@ -45,7 +51,7 @@ export async function renderPdfThumbnails(
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
       if (!context) {
-        throw new Error("Impossible de générer les miniatures dans ce navigateur.");
+        throw new Error(messages.canvasUnavailable);
       }
 
       canvas.width = Math.max(1, Math.ceil(viewport.width));

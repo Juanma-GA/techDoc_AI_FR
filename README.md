@@ -9,14 +9,16 @@ Application web locale, légère et open source pour les opérations PDF courant
 - Supprimer des pages selon la même syntaxe vers `trimmed.pdf` (au moins une page doit rester).
 - Réorganiser toutes les pages par glisser-déposer de miniatures vers `reordered.pdf`.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
+- Shell et thème visuel repris de `apps/_template` et `packages/ui` : quatre onglets, modes clair/sombre et interface française/anglaise.
 
 ## Architecture
 
 ```text
 frontend/
-  src/pages
+  src/App.tsx
   src/features/{merge,extract,delete,reorder}
   src/shared
+  src/locales/{fr,en}.json
 backend/
   cmd/pdf-toolkit
   handlers
@@ -37,7 +39,7 @@ Prérequis :
 - Node.js 20 ou plus récent
 - pnpm 9 ou plus récent
 
-Double-cliquez sur [`start.bat`](./start.bat). Le script ouvre une console persistante, construit le frontend si nécessaire, choisit un port libre à partir de `8085`, puis démarre l'application sur `127.0.0.1`. Au premier démarrage, Go et pnpm téléchargent les dépendances de build.
+Double-cliquez sur [`start.bat`](./start.bat). Le script ouvre une console persistante, construit le frontend si nécessaire, choisit un port libre à partir de `8085`, puis démarre l'application sur `127.0.0.1`. Au premier démarrage, Go et pnpm téléchargent les dépendances de build et la compilation Go peut prendre un moment; la console affiche les paquets compilés et les logs HTTP. Le navigateur s'ouvre automatiquement une fois le serveur démarré, plutôt qu'avant la fin de la compilation.
 
 Le traitement en cours d'exécution n'utilise aucun service cloud. Le serveur ne se lie qu'à l'interface locale par défaut.
 
@@ -104,7 +106,7 @@ Il n'y a ni authentification ni CORS permissif. Ne publiez pas directement le se
 
 ## Rebranding
 
-- Remplacez le titre et les libellés dans `frontend/src/App.tsx` et `frontend/src/pages/HomePage.tsx`.
+- Remplacez le titre et les libellés dans `frontend/src/App.tsx` et `frontend/src/locales/{fr,en}.json`.
 - Ajustez la couleur de marque via `--brand` et `--brand-dark` dans `frontend/src/index.css`.
 - Modifiez le nom du produit dans `frontend/index.html`, `start.bat` et ce README.
 

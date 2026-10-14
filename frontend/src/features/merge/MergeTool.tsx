@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Combine, FileText, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-import { processPDF } from "../../shared/api";
+import { formatOperationError, processPDF } from "../../shared/api";
 import { Button } from "../../shared/components/Button";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 
 export function MergeTool() {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -27,7 +30,7 @@ export function MergeTool() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (files.length < 2) {
-      setError("Ajoutez au moins deux fichiers PDF à fusionner.");
+      setError(t("merge.minimumFiles"));
       return;
     }
 
@@ -39,10 +42,10 @@ export function MergeTool() {
       data.append("files", file, file.name);
     }
     try {
-      await processPDF("merge", data, "merged.pdf");
+      await processPDF("merge", data, "merged.pdf", t);
       setSuccess(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "La fusion a échoué.");
+      setError(formatOperationError(reason, t, "errors.mergeFailed"));
     } finally {
       setWorking(false);
     }
@@ -54,8 +57,8 @@ export function MergeTool() {
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
-            <h2>Ajouter les PDF</h2>
-            <p>Les documents seront assemblés dans l'ordre affiché.</p>
+            <h2>{t("merge.stepFiles")}</h2>
+            <p>{t("merge.stepFilesDescription")}</p>
           </div>
         </div>
         <FileDropzone
@@ -63,11 +66,11 @@ export function MergeTool() {
           disabled={working}
           onFiles={(incoming) => setFiles((current) => [...current, ...incoming])}
           onError={setError}
-          label="Déposez plusieurs PDF ici"
-          description="Vous pouvez aussi cliquer pour parcourir les fichiers"
+          label={t("files.dropMultipleLabel")}
+          description={t("files.dropMultipleDescription")}
         />
         {files.length > 0 ? (
-          <ol className="file-list" aria-label="Ordre des fichiers à fusionner">
+          <ol className="file-list" aria-label={t("merge.orderLabel")}>
             {files.map((file, index) => (
               <li className="file-row" key={`${file.name}-${file.lastModified}-${index}`}>
                 <span className="file-order">{index + 1}</span>
@@ -76,7 +79,7 @@ export function MergeTool() {
                 </span>
                 <span className="file-details">
                   <span className="file-name">{file.name}</span>
-                  <span className="file-size">{formatFileSize(file.size)}</span>
+                  <span className="file-size">{formatFileSize(file.size, language)}</span>
                 </span>
                 <div className="file-actions">
                   <Button
@@ -84,7 +87,7 @@ export function MergeTool() {
                     className="icon-button"
                     disabled={index === 0 || working}
                     onClick={() => moveFile(index, -1)}
-                    aria-label={`Déplacer ${file.name} vers le haut`}
+                    aria-label={t("merge.moveUp", { name: file.name })}
                   >
                     <ArrowUp size={16} aria-hidden="true" />
                   </Button>
@@ -93,7 +96,7 @@ export function MergeTool() {
                     className="icon-button"
                     disabled={index === files.length - 1 || working}
                     onClick={() => moveFile(index, 1)}
-                    aria-label={`Déplacer ${file.name} vers le bas`}
+                    aria-label={t("merge.moveDown", { name: file.name })}
                   >
                     <ArrowDown size={16} aria-hidden="true" />
                   </Button>
@@ -102,7 +105,7 @@ export function MergeTool() {
                     className="icon-button remove-button"
                     disabled={working}
                     onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}
-                    aria-label={`Retirer ${file.name}`}
+                    aria-label={t("merge.remove", { name: file.name })}
                   >
                     <X size={16} aria-hidden="true" />
                   </Button>
@@ -111,17 +114,15 @@ export function MergeTool() {
             ))}
           </ol>
         ) : null}
-        <p className="privacy-hint">
-          Les fichiers sont envoyés au serveur local uniquement lors de la fusion.
-        </p>
+        <p className="privacy-hint">{t("merge.privacy")}</p>
       </section>
 
       <section className="panel action-panel">
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
-            <h2>Créer le document</h2>
-            <p>Un PDF unique sera téléchargé automatiquement.</p>
+            <h2>{t("merge.stepOutput")}</h2>
+            <p>{t("merge.stepOutputDescription")}</p>
           </div>
         </div>
         <div className="output-preview">
@@ -130,12 +131,12 @@ export function MergeTool() {
           </span>
           <span>
             <strong>merged.pdf</strong>
-            <small>Document fusionné</small>
+            <small>{t("merge.outputDescription")}</small>
           </span>
         </div>
         <Button type="submit" disabled={working || files.length < 2} className="action-button">
           {working ? <span className="spinner" aria-hidden="true" /> : <Combine size={18} />}
-          {working ? "Fusion en cours…" : "Fusionner"}
+          {working ? t("merge.working") : t("merge.action")}
         </Button>
         <div className="feedback-slot">
           {error ? (
@@ -145,7 +146,7 @@ export function MergeTool() {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              Le fichier merged.pdf a été téléchargé.
+              {t("merge.success", { fileName: "merged.pdf" })}
             </p>
           ) : null}
         </div>

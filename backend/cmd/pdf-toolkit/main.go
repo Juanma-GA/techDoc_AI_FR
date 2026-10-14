@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -59,10 +60,15 @@ func main() {
 	go func() {
 		serverErrors <- server.Serve(listener)
 	}()
-	log.Printf("PDF Toolkit listening on http://%s", addr)
-
 	stop, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+
+	log.Printf("PDF Toolkit listening on http://%s", addr)
+	if os.Getenv("PDF_TOOLKIT_OPEN_BROWSER") == "1" {
+		if err := exec.Command("cmd", "/c", "start", "", "http://"+addr+"/").Run(); err != nil {
+			log.Printf("open browser: %v", err)
+		}
+	}
 
 	select {
 	case err := <-serverErrors:

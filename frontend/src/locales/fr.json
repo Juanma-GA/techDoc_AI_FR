@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "PDF TOOLS",
+    "version": "1.0.0",
+    "description": "Outils PDF pour traiter vos documents localement.",
+    "documentTitle": "PDF Toolkit — outils PDF locaux",
+    "metaDescription": "Fusionnez, extrayez, supprimez et réorganisez des PDF localement.",
+    "local": "Traitement local",
+    "privacy": "Vos fichiers temporaires sont supprimés après chaque opération."
+  },
+  "nav": {
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "tools": "Outils PDF"
+  },
+  "tools": {
+    "merge": {
+      "tab": "Fusionner",
+      "title": "Fusionner des PDF",
+      "description": "Assemblez plusieurs documents PDF dans l'ordre souhaité."
+    },
+    "extract": {
+      "tab": "Extraire",
+      "title": "Extraire des pages",
+      "description": "Conservez uniquement les pages dont vous avez besoin."
+    },
+    "delete": {
+      "tab": "Supprimer",
+      "title": "Supprimer des pages",
+      "description": "Retirez les pages inutiles d'un document PDF."
+    },
+    "reorder": {
+      "tab": "Réorganiser",
+      "title": "Réorganiser les pages",
+      "description": "Faites glisser les miniatures pour modifier l'ordre des pages."
+    }
+  },
+  "common": {
+    "loading": "Chargement…",
+    "page": "Page {{page}}",
+    "position": "Position {{position}}"
+  },
+  "files": {
+    "dropLabel": "Déposez votre PDF ici",
+    "dropDescription": "ou parcourez les fichiers de votre ordinateur",
+    "dropMultipleLabel": "Déposez plusieurs PDF ici",
+    "dropMultipleDescription": "Cliquez pour parcourir et ajouter plusieurs fichiers",
+    "limit": "PDF · 250 Mo maximum par fichier",
+    "singleOnly": "Sélectionnez un seul fichier PDF pour cette opération.",
+    "select": "Sélectionnez un fichier PDF.",
+    "tooLarge": "« {{name}} » dépasse la limite de 250 Mo.",
+    "notPdf": "« {{name}} » n'est pas un fichier PDF.",
+    "remove": "Retirer le fichier",
+    "removeNamed": "Retirer {{name}}"
+  },
+  "merge": {
+    "stepFiles": "Ajouter les PDF",
+    "stepFilesDescription": "Les documents seront assemblés dans l'ordre affiché.",
+    "stepOutput": "Créer le document",
+    "stepOutputDescription": "Un PDF unique sera téléchargé automatiquement.",
+    "orderLabel": "Ordre des fichiers à fusionner",
+    "moveUp": "Déplacer {{name}} vers le haut",
+    "moveDown": "Déplacer {{name}} vers le bas",
+    "remove": "Retirer {{name}}",
+    "privacy": "Les fichiers sont envoyés au serveur local uniquement lors de la fusion.",
+    "outputDescription": "Document fusionné",
+    "action": "Fusionner",
+    "working": "Fusion en cours…",
+    "minimumFiles": "Ajoutez au moins deux fichiers PDF à fusionner.",
+    "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "pages": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Un seul document par opération.",
+    "extractHeading": "Choisir les pages à conserver",
+    "extractDescription": "Le nouveau PDF ne contiendra que les pages indiquées.",
+    "deleteHeading": "Choisir les pages à retirer",
+    "deleteDescription": "Le PDF doit conserver au moins une page.",
+    "fieldLabel": "Pages",
+    "placeholder": "Ex. 1-5, 8, 10-12",
+    "help": "Numéros séparés par des virgules ou plages avec un tiret, par exemple 1,3,7 ou 2-4,8.",
+    "deleteWarning": "Toutes les pages ne peuvent pas être supprimées.",
+    "extractOutput": "Pages extraites",
+    "deleteOutput": "Pages supprimées",
+    "privacy": "Les fichiers sont transmis au serveur local pour être traités, puis les temporaires sont supprimés.",
+    "extractAction": "Extraire les pages",
+    "deleteAction": "Supprimer les pages",
+    "working": "Traitement en cours…",
+    "selectPages": "Indiquez les pages à traiter.",
+    "operationFailed": "Le traitement des pages a échoué.",
+    "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "reorder": {
+    "stepFile": "Charger le PDF",
+    "stepFileDescription": "Les miniatures sont générées dans votre navigateur.",
+    "dropDescription": "Le fichier n'est envoyé au serveur qu'après validation de l'ordre",
+    "stepPages": "Organiser les pages",
+    "stepPagesDescription": "Faites glisser les pages ou utilisez le clavier pour les déplacer.",
+    "previewProgress": "Création des miniatures : {{completed}} / {{total}}",
+    "previewProgressPending": "Création des miniatures : {{completed}}",
+    "previewFailed": "Impossible de créer les miniatures de ce PDF.",
+    "emptyDocument": "Le PDF ne contient aucune page.",
+    "canvasUnavailable": "Impossible de générer les miniatures dans ce navigateur.",
+    "emptyThumbnails": "Les miniatures des pages apparaîtront ici.",
+    "pagesAriaLabel": "Pages du document, dans l'ordre de sortie",
+    "thumbnailAlt": "Miniature de la page {{page}}",
+    "position": "Position {{position}}",
+    "page": "Page {{page}}",
+    "outputDescription": "Document réorganisé",
+    "action": "Réorganiser",
+    "working": "Réorganisation…",
+    "success": "Le fichier {{fileName}} a été téléchargé.",
+    "selectAndWait": "Sélectionnez un PDF et attendez la création des miniatures.",
+    "operationFailed": "La réorganisation a échoué."
+  },
+  "errors": {
+    "mergeFailed": "La fusion a échoué.",
+    "pageOperationFailed": "Le traitement des pages a échoué.",
+    "reorderFailed": "La réorganisation a échoué.",
+    "unknown": "Une erreur inattendue est survenue."
+  },
+  "apiErrors": {
+    "requestFailed": "Le traitement a échoué ({{status}}).",
+    "invalidResponse": "Le serveur n'a pas renvoyé de fichier PDF.",
+    "emptyPdf": "Le fichier PDF généré est vide.",
+    "networkError": "Impossible de joindre le serveur local.",
+    "multipartRequired": "La requête doit être un formulaire multipart.",
+    "invalidMultipart": "Le formulaire envoyé est incomplet ou invalide.",
+    "invalidField": "Un champ du formulaire est invalide.",
+    "unexpectedField": "Le formulaire contient un champ inattendu.",
+    "fieldTooLarge": "Un champ du formulaire est trop volumineux.",
+    "unexpectedFile": "Le formulaire contient un fichier inattendu.",
+    "singleFileOnly": "Un seul fichier PDF est accepté pour cette opération.",
+    "fileTooLarge": "Chaque fichier PDF doit faire au maximum 250 Mo.",
+    "mergeMinimumFiles": "Sélectionnez au moins deux fichiers PDF.",
+    "selectFile": "Sélectionnez un fichier PDF.",
+    "invalidOrder": "L'ordre des pages est invalide.",
+    "workspaceFailed": "Impossible de créer l'espace temporaire de traitement.",
+    "readFailed": "Impossible de lire le PDF traité.",
+    "invalidSelection": "Vérifiez les pages et les fichiers sélectionnés.",
+    "invalidPdf": "Le PDF est invalide, chiffré ou ne peut pas être traité.",
+    "processingFailed": "Le traitement du PDF a échoué.",
+    "prepareFailed": "Impossible de préparer les fichiers PDF.",
+    "fieldRequired": "Le champ « {{field}} » est requis.",
+    "invalidPdfFile": "« {{name}} » n'est pas un fichier PDF valide."
+  }
+}

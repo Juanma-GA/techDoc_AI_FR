@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import { FileUp } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { validatePDFFile } from "../files";
 
@@ -22,9 +23,10 @@ export function FileDropzone({
   onError,
   multiple = false,
   disabled = false,
-  label = "Déposez votre PDF ici",
-  description = "ou parcourez les fichiers de votre ordinateur",
+  label,
+  description,
 }: FileDropzoneProps) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -34,11 +36,14 @@ export function FileDropzone({
       return;
     }
     if (!multiple && selected.length > 1) {
-      onError("Sélectionnez un seul fichier PDF pour cette opération.");
+      onError(t("files.singleOnly"));
       return;
     }
     for (const file of selected) {
-      const error = validatePDFFile(file);
+      const error = validatePDFFile(file, {
+        tooLarge: (name) => t("files.tooLarge", { name }),
+        notPdf: (name) => t("files.notPdf", { name }),
+      });
       if (error) {
         onError(error);
         return;
@@ -95,9 +100,9 @@ export function FileDropzone({
       <span className="dropzone-icon">
         <FileUp size={22} aria-hidden="true" />
       </span>
-      <span className="dropzone-label">{label}</span>
-      <span className="dropzone-description">{description}</span>
-      <span className="dropzone-limit">PDF · 250 Mo maximum par fichier</span>
+      <span className="dropzone-label">{label ?? t("files.dropLabel")}</span>
+      <span className="dropzone-description">{description ?? t("files.dropDescription")}</span>
+      <span className="dropzone-limit">{t("files.limit")}</span>
       <input
         ref={inputRef}
         className="visually-hidden"
@@ -107,6 +112,8 @@ export function FileDropzone({
         disabled={disabled}
         onChange={handleChange}
         tabIndex={-1}
+        hidden
+        aria-hidden="true"
       />
     </div>
   );

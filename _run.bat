@@ -85,13 +85,14 @@ exit /b 1
 :port_ok
 if not "%PORT_TRY%"=="%PORT%" echo [info] Port 8085 occupe ; utilisation du port %PORT_TRY%.
 set "PDF_TOOLKIT_ADDR=127.0.0.1:%PORT_TRY%"
+set "PDF_TOOLKIT_OPEN_BROWSER=1"
 echo.
-echo [run] PDF Toolkit sera disponible sur http://127.0.0.1:%PORT_TRY%/
-echo       Ctrl+C dans cette console pour arreter le serveur.
+echo [run] Demarrage du serveur sur http://127.0.0.1:%PORT_TRY%/
+echo [wait] Le navigateur s'ouvrira quand le serveur sera pret.
+echo [info] La compilation Go peut prendre un moment au premier lancement.
 echo.
-start "" "http://127.0.0.1:%PORT_TRY%/"
 pushd "%BACKEND_DIR%"
-go run .\cmd\pdf-toolkit
+go run -v .\cmd\pdf-toolkit
 set "RUN_STATUS=%ERRORLEVEL%"
 popd
 

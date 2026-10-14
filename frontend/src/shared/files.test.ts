@@ -37,4 +37,8 @@ describe("validatePDFFile", () => {
     expect(formatFileSize(128)).toBe("128 o");
     expect(formatFileSize(1024)).toBe("1.0 Ko");
   });
+
+  it("formats byte sizes for the English locale", () => {
+    expect(formatFileSize(1024, "en")).toBe("1.0 KB");
+  });
 });

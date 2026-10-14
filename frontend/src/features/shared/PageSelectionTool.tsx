@@ -1,7 +1,8 @@
 import { useId, useState, type FormEvent } from "react";
 import { FileText, Scissors, Trash2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-import { processPDF } from "../../shared/api";
+import { formatOperationError, processPDF } from "../../shared/api";
 import { Button } from "../../shared/components/Button";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
@@ -12,17 +13,19 @@ const modeConfiguration = {
   extract: {
     endpoint: "extract",
     outputName: "extract.pdf",
-    action: "Extraire les pages",
-    heading: "Choisir les pages à conserver",
-    description: "Le nouveau PDF ne contiendra que les pages indiquées.",
+    actionKey: "pages.extractAction",
+    headingKey: "pages.extractHeading",
+    descriptionKey: "pages.extractDescription",
+    outputKey: "pages.extractOutput",
     icon: Scissors,
   },
   delete: {
     endpoint: "delete",
     outputName: "trimmed.pdf",
-    action: "Supprimer les pages",
-    heading: "Choisir les pages à retirer",
-    description: "Le PDF doit conserver au moins une page.",
+    actionKey: "pages.deleteAction",
+    headingKey: "pages.deleteHeading",
+    descriptionKey: "pages.deleteDescription",
+    outputKey: "pages.deleteOutput",
     icon: Trash2,
   },
 } as const;
@@ -32,6 +35,8 @@ type PageSelectionToolProps = {
 };
 
 export function PageSelectionTool({ mode }: PageSelectionToolProps) {
+  const { t, i18n } = useTranslation();
+  const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
   const config = modeConfiguration[mode];
   const Icon = config.icon;
   const pageInputId = useId();
@@ -44,11 +49,11 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!file) {
-      setError("Sélectionnez un fichier PDF.");
+      setError(t("files.select"));
       return;
     }
     if (!selection.trim()) {
-      setError("Indiquez les pages à traiter.");
+      setError(t("pages.selectPages"));
       return;
     }
 
@@ -59,10 +64,10 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
     data.append("file", file, file.name);
     data.append("pages", selection);
     try {
-      await processPDF(config.endpoint, data, config.outputName);
+      await processPDF(config.endpoint, data, config.outputName, t);
       setSuccess(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Le traitement des pages a échoué.");
+      setError(formatOperationError(reason, t, "errors.pageOperationFailed"));
     } finally {
       setWorking(false);
     }
@@ -74,8 +79,8 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
-            <h2>Choisir le PDF</h2>
-            <p>Un seul document par opération.</p>
+            <h2>{t("pages.stepFile")}</h2>
+            <p>{t("pages.stepFileDescription")}</p>
           </div>
         </div>
         <FileDropzone
@@ -93,7 +98,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             </span>
             <span className="file-details">
               <span className="file-name">{file.name}</span>
-              <span className="file-size">{formatFileSize(file.size)}</span>
+              <span className="file-size">{formatFileSize(file.size, language)}</span>
             </span>
             <Button
               variant="ghost"
@@ -103,36 +108,31 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
                 setFile(null);
                 setSelection("");
               }}
-              aria-label="Retirer le fichier"
+              aria-label={t("files.remove")}
             >
               <X size={16} aria-hidden="true" />
             </Button>
           </div>
         ) : null}
-        <p className="privacy-hint">
-          Les fichiers sont transmis au serveur local pour être traités, puis les temporaires sont
-          supprimés.
-        </p>
+        <p className="privacy-hint">{t("pages.privacy")}</p>
       </section>
 
       <section className="panel action-panel">
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
-            <h2>{config.heading}</h2>
-            <p>{config.description}</p>
+            <h2>{t(config.headingKey)}</h2>
+            <p>{t(config.descriptionKey)}</p>
           </div>
         </div>
-        <label className="field-label" htmlFor={pageInputId}>
-          Pages
-        </label>
+        <label className="field-label" htmlFor={pageInputId}>{t("pages.fieldLabel")}</label>
         <input
           id={pageInputId}
           className="text-input page-range-input"
           type="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder="Ex. 1-5, 8, 10-12"
+          placeholder={t("pages.placeholder")}
           value={selection}
           disabled={working}
           onChange={(event) => {
@@ -142,10 +142,10 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           aria-describedby={`${pageInputId}-help`}
         />
         <p className="input-help" id={`${pageInputId}-help`}>
-          Numéros séparés par des virgules ou plages avec un tiret, par exemple 1,3,7 ou 2-4,8.
+          {t("pages.help")}
         </p>
         {mode === "delete" ? (
-          <p className="warning-note">Toutes les pages ne peuvent pas être supprimées.</p>
+          <p className="warning-note">{t("pages.deleteWarning")}</p>
         ) : null}
         <div className="output-preview">
           <span className="output-icon">
@@ -153,7 +153,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           </span>
           <span>
             <strong>{config.outputName}</strong>
-            <small>{mode === "extract" ? "Pages extraites" : "Pages supprimées"}</small>
+            <small>{t(config.outputKey)}</small>
           </span>
         </div>
         <Button
@@ -162,7 +162,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           className="action-button"
         >
           {working ? <span className="spinner" aria-hidden="true" /> : <Icon size={18} />}
-          {working ? "Traitement en cours…" : config.action}
+          {working ? t("pages.working") : t(config.actionKey)}
         </Button>
         <div className="feedback-slot">
           {error ? (
@@ -172,7 +172,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              Le fichier {config.outputName} a été téléchargé.
+              {t("pages.success", { fileName: config.outputName })}
             </p>
           ) : null}
         </div>

@@ -1,0 +1,148 @@
+{
+  "app": {
+    "title": "PDF TOOLS",
+    "version": "1.0.0",
+    "description": "PDF tools for processing documents locally.",
+    "documentTitle": "PDF Toolkit — local PDF tools",
+    "metaDescription": "Merge, extract, delete, and reorder PDF pages locally.",
+    "local": "Local processing",
+    "privacy": "Temporary files are deleted after each operation."
+  },
+  "nav": {
+    "ariaLabel": "Main navigation",
+    "themeToggle": "Switch theme",
+    "languageSwitcher": "Language",
+    "tools": "PDF tools"
+  },
+  "tools": {
+    "merge": {
+      "tab": "Merge",
+      "title": "Merge PDFs",
+      "description": "Combine multiple PDF documents in the order you choose."
+    },
+    "extract": {
+      "tab": "Extract",
+      "title": "Extract pages",
+      "description": "Keep only the pages you need."
+    },
+    "delete": {
+      "tab": "Delete",
+      "title": "Delete pages",
+      "description": "Remove unwanted pages from a PDF document."
+    },
+    "reorder": {
+      "tab": "Reorder",
+      "title": "Reorder pages",
+      "description": "Drag the thumbnails to change the order of the pages."
+    }
+  },
+  "common": {
+    "loading": "Loading…",
+    "page": "Page {{page}}",
+    "position": "Position {{position}}"
+  },
+  "files": {
+    "dropLabel": "Drop your PDF here",
+    "dropDescription": "or browse files on your computer",
+    "dropMultipleLabel": "Drop multiple PDFs here",
+    "dropMultipleDescription": "Click to browse and add multiple files",
+    "limit": "PDF · 250 MB maximum per file",
+    "singleOnly": "Select one PDF file for this operation.",
+    "select": "Select a PDF file.",
+    "tooLarge": "“{{name}}” exceeds the 250 MB limit.",
+    "notPdf": "“{{name}}” is not a PDF file.",
+    "remove": "Remove file",
+    "removeNamed": "Remove {{name}}"
+  },
+  "merge": {
+    "stepFiles": "Add PDFs",
+    "stepFilesDescription": "Documents will be combined in the order shown.",
+    "stepOutput": "Create document",
+    "stepOutputDescription": "A single PDF will be downloaded automatically.",
+    "orderLabel": "Order of files to merge",
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "remove": "Remove {{name}}",
+    "privacy": "Files are sent to the local server only when you merge them.",
+    "outputDescription": "Merged document",
+    "action": "Merge",
+    "working": "Merging…",
+    "minimumFiles": "Add at least two PDF files to merge.",
+    "success": "{{fileName}} has been downloaded."
+  },
+  "pages": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "One document per operation.",
+    "extractHeading": "Choose pages to keep",
+    "extractDescription": "The new PDF will contain only the pages you specify.",
+    "deleteHeading": "Choose pages to remove",
+    "deleteDescription": "The PDF must keep at least one page.",
+    "fieldLabel": "Pages",
+    "placeholder": "e.g. 1-5, 8, 10-12",
+    "help": "Separate page numbers with commas or use ranges, for example 1,3,7 or 2-4,8.",
+    "deleteWarning": "You cannot delete every page.",
+    "extractOutput": "Extracted pages",
+    "deleteOutput": "Deleted pages",
+    "privacy": "Files are sent to the local server for processing, then temporary files are deleted.",
+    "extractAction": "Extract pages",
+    "deleteAction": "Delete pages",
+    "working": "Processing…",
+    "selectPages": "Enter the pages to process.",
+    "operationFailed": "Page processing failed.",
+    "success": "{{fileName}} has been downloaded."
+  },
+  "reorder": {
+    "stepFile": "Load PDF",
+    "stepFileDescription": "Thumbnails are generated in your browser.",
+    "dropDescription": "The file is sent to the server only after you confirm the order.",
+    "stepPages": "Organize pages",
+    "stepPagesDescription": "Drag pages or use the keyboard to move them.",
+    "previewProgress": "Creating thumbnails: {{completed}} / {{total}}",
+    "previewProgressPending": "Creating thumbnails: {{completed}}",
+    "previewFailed": "Could not create thumbnails for this PDF.",
+    "emptyDocument": "The PDF contains no pages.",
+    "canvasUnavailable": "This browser cannot generate page thumbnails.",
+    "emptyThumbnails": "Page thumbnails will appear here.",
+    "pagesAriaLabel": "Document pages in output order",
+    "thumbnailAlt": "Thumbnail of page {{page}}",
+    "position": "Position {{position}}",
+    "page": "Page {{page}}",
+    "outputDescription": "Reordered document",
+    "action": "Reorder",
+    "working": "Reordering…",
+    "success": "{{fileName}} has been downloaded.",
+    "selectAndWait": "Select a PDF and wait for thumbnails to finish loading.",
+    "operationFailed": "Reordering failed."
+  },
+  "errors": {
+    "mergeFailed": "Merging failed.",
+    "pageOperationFailed": "Page processing failed.",
+    "reorderFailed": "Reordering failed.",
+    "unknown": "An unexpected error occurred."
+  },
+  "apiErrors": {
+    "requestFailed": "Processing failed ({{status}}).",
+    "invalidResponse": "The server did not return a PDF file.",
+    "emptyPdf": "The generated PDF file is empty.",
+    "networkError": "Could not reach the local server.",
+    "multipartRequired": "The request must use a multipart form.",
+    "invalidMultipart": "The submitted form is incomplete or invalid.",
+    "invalidField": "A form field is invalid.",
+    "unexpectedField": "The form contains an unexpected field.",
+    "fieldTooLarge": "A form field is too large.",
+    "unexpectedFile": "The form contains an unexpected file.",
+    "singleFileOnly": "Only one PDF file is accepted for this operation.",
+    "fileTooLarge": "Each PDF file must be no larger than 250 MB.",
+    "mergeMinimumFiles": "Select at least two PDF files.",
+    "selectFile": "Select a PDF file.",
+    "invalidOrder": "The page order is invalid.",
+    "workspaceFailed": "Could not create a temporary processing workspace.",
+    "readFailed": "Could not read the processed PDF.",
+    "invalidSelection": "Check the selected pages and files.",
+    "invalidPdf": "The PDF is invalid, encrypted, or cannot be processed.",
+    "processingFailed": "PDF processing failed.",
+    "prepareFailed": "Could not prepare the PDF files.",
+    "fieldRequired": "The “{{field}}” field is required.",
+    "invalidPdfFile": "“{{name}}” is not a valid PDF file."
+  }
+}
