@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,9 +31,12 @@ func NewPDFHandler(service *services.PDFService) *PDFHandler {
 func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.GET("/health", h.Health)
 	router.POST("/merge", h.Merge)
+	router.POST("/images-to-pdf", h.ImagesToPDF)
+	router.POST("/compress", h.Compress)
 	router.POST("/extract", h.Extract)
 	router.POST("/delete", h.Delete)
 	router.POST("/reorder", h.Reorder)
+	router.POST("/rotate", h.Rotate)
 }
 
 func (h *PDFHandler) Health(c *gin.Context) {
@@ -66,6 +70,60 @@ func (h *PDFHandler) Merge(c *gin.Context) {
 		return
 	}
 	h.sendPDF(c, output, "merged.pdf")
+}
+
+func (h *PDFHandler) ImagesToPDF(c *gin.Context) {
+	tempDir, ok := createWorkspace(c)
+	if !ok {
+		return
+	}
+	defer removeWorkspace(tempDir)
+
+	upload, err := parseImageMultipart(c.Request, tempDir, "images", 0)
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	if len(upload.files) == 0 {
+		writeError(c, http.StatusBadRequest, "Sélectionnez au moins une image PNG ou JPEG.")
+		return
+	}
+
+	inputs := make([]string, len(upload.files))
+	for index, file := range upload.files {
+		inputs[index] = file.path
+	}
+	output := filepath.Join(tempDir, "images.pdf")
+	if err := h.service.ImagesToPDF(c.Request.Context(), inputs, output); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	h.sendPDF(c, output, "images.pdf")
+}
+
+func (h *PDFHandler) Compress(c *gin.Context) {
+	tempDir, ok := createWorkspace(c)
+	if !ok {
+		return
+	}
+	defer removeWorkspace(tempDir)
+
+	upload, err := parseMultipart(c.Request, tempDir, "file", 1)
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	if len(upload.files) != 1 {
+		writeError(c, http.StatusBadRequest, "Sélectionnez un fichier PDF.")
+		return
+	}
+
+	output := filepath.Join(tempDir, "compressed.pdf")
+	if err := h.service.Compress(c.Request.Context(), upload.files[0].path, output); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	h.sendPDF(c, output, "compressed.pdf")
 }
 
 func (h *PDFHandler) Extract(c *gin.Context) {
@@ -131,6 +189,46 @@ func (h *PDFHandler) Reorder(c *gin.Context) {
 		return
 	}
 	h.sendPDF(c, output, "reordered.pdf")
+}
+
+func (h *PDFHandler) Rotate(c *gin.Context) {
+	tempDir, ok := createWorkspace(c)
+	if !ok {
+		return
+	}
+	defer removeWorkspace(tempDir)
+
+	upload, err := parseMultipart(c.Request, tempDir, "file", 1, "pages", "rotation")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	if len(upload.files) != 1 {
+		writeError(c, http.StatusBadRequest, "Sélectionnez un fichier PDF.")
+		return
+	}
+	selection, err := optionalSingleField(upload.fields, "pages")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	rawRotation, err := singleField(upload.fields, "rotation")
+	if err != nil {
+		writeUploadError(c, err)
+		return
+	}
+	rotation, err := strconv.Atoi(rawRotation)
+	if err != nil {
+		writeError(c, http.StatusBadRequest, "L'angle de rotation est invalide.")
+		return
+	}
+
+	output := filepath.Join(tempDir, "rotated.pdf")
+	if err := h.service.Rotate(c.Request.Context(), upload.files[0].path, output, selection, rotation); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	h.sendPDF(c, output, "rotated.pdf")
 }
 
 func (h *PDFHandler) readSinglePDFForm(c *gin.Context, textField string) (string, uploadedPDF, string, bool) {
@@ -202,11 +300,11 @@ func (h *PDFHandler) writeServiceError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, services.ErrInvalidInput) {
-		writeError(c, http.StatusBadRequest, "Vérifiez les pages et les fichiers sélectionnés.")
+		writeError(c, http.StatusBadRequest, "Vérifiez les options et le PDF sélectionnés.")
 		return
 	}
 	if errors.Is(err, services.ErrInvalidPDF) {
-		writeError(c, http.StatusUnprocessableEntity, "Le PDF est invalide, chiffré ou ne peut pas être traité.")
+		writeError(c, http.StatusUnprocessableEntity, "Le fichier fourni est invalide ou ne peut pas être traité.")
 		return
 	}
 	log.Printf("pdf-toolkit: process PDF: %v", err)

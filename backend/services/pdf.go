@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -13,10 +14,13 @@ var (
 
 type PDFProcessor interface {
 	Merge(ctx context.Context, inputFiles []string, output string) error
+	ImagesToPDF(ctx context.Context, inputFiles []string, output string) error
+	Compress(ctx context.Context, input, output string) error
 	PageCount(ctx context.Context, input string) (int, error)
 	Extract(ctx context.Context, input, output string, pages []int) error
 	Delete(ctx context.Context, input, output string, pages []int) error
 	Reorder(ctx context.Context, input, output string, pages []int) error
+	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
 }
 
 type PDFService struct {
@@ -39,6 +43,43 @@ func (s *PDFService) Merge(ctx context.Context, inputFiles []string, output stri
 			return err
 		}
 		return fmt.Errorf("%w: merge: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) Compress(ctx context.Context, input, output string) error {
+	if input == "" || output == "" {
+		return fmt.Errorf("%w: input and output paths are required", ErrInvalidInput)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.Compress(ctx, input, output); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: compress PDF: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
+func (s *PDFService) ImagesToPDF(ctx context.Context, inputFiles []string, output string) error {
+	if len(inputFiles) == 0 || output == "" {
+		return fmt.Errorf("%w: images and output path are required", ErrInvalidInput)
+	}
+	for _, input := range inputFiles {
+		if input == "" {
+			return fmt.Errorf("%w: image paths must not be empty", ErrInvalidInput)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.processor.ImagesToPDF(ctx, inputFiles, output); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: convert images to PDF: %w", ErrInvalidPDF, err)
 	}
 	return nil
 }
@@ -97,6 +138,32 @@ func (s *PDFService) Reorder(ctx context.Context, input, output string, order []
 	return nil
 }
 
+func (s *PDFService) Rotate(ctx context.Context, input, output, selection string, rotation int) error {
+	if output == "" || !isSupportedRotation(rotation) {
+		return fmt.Errorf("%w: output path or rotation is invalid", ErrInvalidInput)
+	}
+	pageCount, err := s.pageCount(ctx, input)
+	if err != nil {
+		return err
+	}
+
+	var pages []int
+	if strings.TrimSpace(selection) != "" {
+		pages, err = ParsePageSelection(selection, pageCount)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := s.processor.Rotate(ctx, input, output, pages, rotation); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
+		return fmt.Errorf("%w: rotate pages: %w", ErrInvalidPDF, err)
+	}
+	return nil
+}
+
 func (s *PDFService) selectedPages(ctx context.Context, input, selection string) ([]int, int, error) {
 	if input == "" {
 		return nil, 0, fmt.Errorf("%w: input PDF is required", ErrInvalidInput)
@@ -127,6 +194,10 @@ func (s *PDFService) pageCount(ctx context.Context, input string) (int, error) {
 		return 0, fmt.Errorf("%w: PDF does not contain pages", ErrInvalidPDF)
 	}
 	return pageCount, nil
+}
+
+func isSupportedRotation(rotation int) bool {
+	return rotation == 90 || rotation == 180 || rotation == 270
 }
 
 func isPagePermutation(order []int, pageCount int) bool {

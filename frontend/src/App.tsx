@@ -1,13 +1,27 @@
 import { lazy, Suspense, useEffect, useState, type KeyboardEvent } from "react";
-import { Combine, Grip, Scissors, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Combine,
+  Grip,
+  Image,
+  ImagePlus,
+  Minimize2,
+  RotateCw,
+  Scissors,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { CompressTool } from "./features/compress/CompressTool";
 import { AppShell, sidebarNavItemClass } from "./shared/components/AppShell";
 import { LanguageSwitcher } from "./shared/components/LanguageSwitcher";
 import { useMediaQuery } from "./shared/hooks/useMediaQuery";
 import { DeleteTool } from "./features/delete/DeleteTool";
 import { ExtractTool } from "./features/extract/ExtractTool";
 import { MergeTool } from "./features/merge/MergeTool";
+import { ImagesToPdfTool } from "./features/images-to-pdf/ImagesToPdfTool";
+import { PdfToImagesTool } from "./features/pdf-to-images/PdfToImagesTool";
+import { RotateTool } from "./features/rotate/RotateTool";
 
 const ReorderTool = lazy(() =>
   import("./features/reorder/ReorderTool").then((module) => ({ default: module.ReorderTool })),
@@ -18,6 +32,10 @@ const tools = [
   { id: "extract", icon: Scissors },
   { id: "delete", icon: Trash2 },
   { id: "reorder", icon: Grip },
+  { id: "compress", icon: Minimize2 },
+  { id: "rotate", icon: RotateCw },
+  { id: "imagesToPdf", icon: ImagePlus },
+  { id: "pdfToImages", icon: Image },
 ] as const;
 
 type ToolId = (typeof tools)[number]["id"];
@@ -123,6 +141,10 @@ export function App() {
           {activeTool === "merge" ? <MergeTool /> : null}
           {activeTool === "extract" ? <ExtractTool /> : null}
           {activeTool === "delete" ? <DeleteTool /> : null}
+          {activeTool === "compress" ? <CompressTool /> : null}
+          {activeTool === "rotate" ? <RotateTool /> : null}
+          {activeTool === "imagesToPdf" ? <ImagesToPdfTool /> : null}
+          {activeTool === "pdfToImages" ? <PdfToImagesTool /> : null}
           {activeTool === "reorder" ? (
             <Suspense
               fallback={

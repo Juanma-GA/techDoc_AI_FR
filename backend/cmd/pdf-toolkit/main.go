@@ -48,9 +48,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen on %s: %v", addr, err)
 	}
+	actualAddr := listener.Addr().String()
 
 	server := &http.Server{
-		Addr:              addr,
+		Addr:              actualAddr,
 		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
@@ -63,7 +64,24 @@ func main() {
 	stop, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 
-	log.Printf("PDF Toolkit listening on http://%s", addr)
+	log.Printf("PDF Toolkit listening on http://%s", actualAddr)
+	if readyFile := strings.TrimSpace(os.Getenv("PDF_TOOLKIT_READY_FILE")); readyFile != "" {
+		tempFile := readyFile + ".tmp"
+		if err := os.WriteFile(tempFile, []byte(actualAddr), 0o600); err != nil {
+			log.Fatalf("write backend readiness file: %v", err)
+		}
+		if err := os.Rename(tempFile, readyFile); err != nil {
+			log.Fatalf("write backend readiness file: %v", err)
+		}
+		defer func() {
+			if err := os.Remove(readyFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+				log.Printf("remove backend readiness file: %v", err)
+			}
+			if err := os.Remove(tempFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+				log.Printf("remove temporary backend readiness file: %v", err)
+			}
+		}()
+	}
 	if os.Getenv("PDF_TOOLKIT_OPEN_BROWSER") == "1" {
 		if err := exec.Command("cmd", "/c", "start", "", "http://"+addr+"/").Run(); err != nil {
 			log.Printf("open browser: %v", err)

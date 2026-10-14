@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
+	"image/png"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -18,9 +20,38 @@ import (
 type routeProcessor struct {
 	pageCount int
 	inputPath string
+	rotated   []int
+	rotation  int
+}
+
+func TestImagesToPDFRouteAcceptsPNGAndStreamsPDF(t *testing.T) {
+	handler := NewPDFHandler(services.NewPDFService(&routeProcessor{}))
+	router := testRouter(handler)
+	request := multipartRequest(t, "/api/v1/images-to-pdf", "images", "pixel.png", testPNGContent(t), nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=images.pdf" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if response.Body.String() != "%PDF-1.7\nprocessed" {
+		t.Fatalf("response body = %q", response.Body.String())
+	}
 }
 
 func (p *routeProcessor) Merge(_ context.Context, _ []string, output string) error {
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) ImagesToPDF(_ context.Context, _ []string, output string) error {
+	return writeRoutePDF(output)
+}
+
+func (p *routeProcessor) Compress(_ context.Context, input, output string) error {
+	p.inputPath = input
 	return writeRoutePDF(output)
 }
 
@@ -44,8 +75,24 @@ func (p *routeProcessor) Reorder(_ context.Context, input, output string, _ []in
 	return writeRoutePDF(output)
 }
 
+func (p *routeProcessor) Rotate(_ context.Context, input, output string, pages []int, rotation int) error {
+	p.inputPath = input
+	p.rotated = append([]int(nil), pages...)
+	p.rotation = rotation
+	return writeRoutePDF(output)
+}
+
 func writeRoutePDF(filePath string) error {
 	return os.WriteFile(filePath, []byte("%PDF-1.7\nprocessed"), 0o600)
+}
+
+func testPNGContent(t *testing.T) string {
+	t.Helper()
+	var content bytes.Buffer
+	if err := png.Encode(&content, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		t.Fatal(err)
+	}
+	return content.String()
 }
 
 func TestExtractRouteStreamsOutputAndCleansTemporaryFiles(t *testing.T) {
@@ -89,6 +136,28 @@ func TestUploadRejectsNonPDFContent(t *testing.T) {
 	}
 }
 
+func TestCompressRouteStreamsOutputAndCleansTemporaryFiles(t *testing.T) {
+	processor := &routeProcessor{}
+	handler := NewPDFHandler(services.NewPDFService(processor))
+	router := testRouter(handler)
+	request := multipartRequest(t, "/api/v1/compress", "file", "source.pdf", "%PDF-1.7\ninput", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=compressed.pdf" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if response.Body.String() != "%PDF-1.7\nprocessed" {
+		t.Fatalf("response body = %q", response.Body.String())
+	}
+	if _, err := os.Stat(processor.inputPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("temporary input still exists after response: %v", err)
+	}
+}
+
 func TestReorderRejectsAnIncompletePagePermutation(t *testing.T) {
 	handler := NewPDFHandler(services.NewPDFService(&routeProcessor{pageCount: 3}))
 	router := testRouter(handler)
@@ -100,6 +169,31 @@ func TestReorderRejectsAnIncompletePagePermutation(t *testing.T) {
 
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body = %s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+}
+
+func TestRotateRouteDefaultsToAllPages(t *testing.T) {
+	processor := &routeProcessor{pageCount: 3}
+	handler := NewPDFHandler(services.NewPDFService(processor))
+	router := testRouter(handler)
+	request := multipartRequest(t, "/api/v1/rotate", "file", "source.pdf", "%PDF-1.7\ninput", map[string]string{
+		"pages":    "",
+		"rotation": "90",
+	})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Disposition"); got != "attachment; filename=rotated.pdf" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+	if processor.rotation != 90 {
+		t.Fatalf("rotation = %d, want 90", processor.rotation)
+	}
+	if len(processor.rotated) != 0 {
+		t.Fatalf("selected pages = %v, want all pages", processor.rotated)
 	}
 }
 

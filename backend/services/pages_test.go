@@ -40,12 +40,20 @@ func TestParsePageSelection(t *testing.T) {
 }
 
 type fakeProcessor struct {
-	pageCount int
-	deleted   []int
-	reordered []int
+	pageCount    int
+	deleted      []int
+	reordered    []int
+	rotated      []int
+	rotation     int
+	compressCall bool
 }
 
-func (p *fakeProcessor) Merge(context.Context, []string, string) error { return nil }
+func (p *fakeProcessor) Merge(context.Context, []string, string) error       { return nil }
+func (p *fakeProcessor) ImagesToPDF(context.Context, []string, string) error { return nil }
+func (p *fakeProcessor) Compress(context.Context, string, string) error {
+	p.compressCall = true
+	return nil
+}
 func (p *fakeProcessor) PageCount(context.Context, string) (int, error) {
 	return p.pageCount, nil
 }
@@ -56,6 +64,11 @@ func (p *fakeProcessor) Delete(_ context.Context, _, _ string, pages []int) erro
 }
 func (p *fakeProcessor) Reorder(_ context.Context, _, _ string, pages []int) error {
 	p.reordered = append([]int(nil), pages...)
+	return nil
+}
+func (p *fakeProcessor) Rotate(_ context.Context, _, _ string, pages []int, rotation int) error {
+	p.rotated = append([]int(nil), pages...)
+	p.rotation = rotation
 	return nil
 }
 
@@ -81,5 +94,38 @@ func TestReorderRequiresEveryPageExactlyOnce(t *testing.T) {
 	err := service.Reorder(context.Background(), "input.pdf", "output.pdf", []int{1, 1, 3})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("Reorder() error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestRotateUsesSelectedPagesAndRotatesAllWhenSelectionIsEmpty(t *testing.T) {
+	processor := &fakeProcessor{pageCount: 4}
+	service := NewPDFService(processor)
+
+	if err := service.Rotate(context.Background(), "input.pdf", "output.pdf", "1,3-4", 270); err != nil {
+		t.Fatalf("Rotate() error = %v", err)
+	}
+	if !reflect.DeepEqual(processor.rotated, []int{1, 3, 4}) {
+		t.Fatalf("Rotate() pages = %v, want [1 3 4]", processor.rotated)
+	}
+	if processor.rotation != 270 {
+		t.Fatalf("Rotate() rotation = %d, want 270", processor.rotation)
+	}
+
+	if err := service.Rotate(context.Background(), "input.pdf", "output.pdf", " ", 90); err != nil {
+		t.Fatalf("Rotate() with empty selection error = %v", err)
+	}
+	if len(processor.rotated) != 0 {
+		t.Fatalf("Rotate() with empty selection pages = %v, want all pages", processor.rotated)
+	}
+}
+
+func TestRotateRejectsInvalidRotationAndPageSelection(t *testing.T) {
+	service := NewPDFService(&fakeProcessor{pageCount: 4})
+
+	if err := service.Rotate(context.Background(), "input.pdf", "output.pdf", "", 45); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("Rotate() with invalid angle error = %v, want ErrInvalidInput", err)
+	}
+	if err := service.Rotate(context.Background(), "input.pdf", "output.pdf", "4-2", 90); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("Rotate() with invalid pages error = %v, want ErrInvalidInput", err)
 	}
 }

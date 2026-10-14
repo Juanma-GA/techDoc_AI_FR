@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "PDF tools for processing documents locally.",
     "documentTitle": "PDF Toolkit — local PDF tools",
-    "metaDescription": "Merge, extract, delete, and reorder PDF pages locally.",
+    "metaDescription": "Merge, convert, extract, delete, reorder, compress, and rotate PDFs locally.",
     "local": "Local processing",
     "privacy": "Temporary files are deleted after each operation."
   },
@@ -34,6 +34,26 @@
       "tab": "Reorder",
       "title": "Reorder pages",
       "description": "Drag the thumbnails to change the order of the pages."
+    },
+    "compress": {
+      "tab": "Compress",
+      "title": "Compress a PDF",
+      "description": "Optimize your PDF structure without reducing the quality of its content."
+    },
+    "rotate": {
+      "tab": "Rotate",
+      "title": "Rotate pages",
+      "description": "Rotate every page or only the pages you select."
+    },
+    "imagesToPdf": {
+      "tab": "Images → PDF",
+      "title": "Convert images to PDF",
+      "description": "Combine your PNG or JPEG images into a PDF in the order you choose."
+    },
+    "pdfToImages": {
+      "tab": "PDF → Images",
+      "title": "Convert a PDF to images",
+      "description": "Export every page as PNG or JPEG in a ZIP archive."
     }
   },
   "common": {
@@ -47,10 +67,16 @@
     "dropMultipleLabel": "Drop multiple PDFs here",
     "dropMultipleDescription": "Click to browse and add multiple files",
     "limit": "PDF · 250 MB maximum per file",
+    "imageDropLabel": "Drop your images here",
+    "imageDropDescription": "Add PNG or JPEG images in the order you want",
+    "imageLimit": "PNG or JPEG · 250 MB maximum per file",
     "singleOnly": "Select one PDF file for this operation.",
+    "imageSingleOnly": "Select one image for this operation.",
     "select": "Select a PDF file.",
+    "selectImagePdf": "Select at least one PNG or JPEG image.",
     "tooLarge": "“{{name}}” exceeds the 250 MB limit.",
     "notPdf": "“{{name}}” is not a PDF file.",
+    "notImage": "“{{name}}” is not a PNG or JPEG image.",
     "remove": "Remove file",
     "removeNamed": "Remove {{name}}"
   },
@@ -68,6 +94,50 @@
     "action": "Merge",
     "working": "Merging…",
     "minimumFiles": "Add at least two PDF files to merge.",
+    "success": "{{fileName}} has been downloaded."
+  },
+  "compress": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "One document per operation.",
+    "stepOutput": "Create compressed PDF",
+    "stepOutputDescription": "Lossless optimization may reduce the document size depending on its contents.",
+    "privacy": "Files are sent to the local server for processing, then temporary files are deleted.",
+    "outputDescription": "PDF optimized without quality loss",
+    "action": "Compress",
+    "working": "Compressing…",
+    "success": "{{fileName}} has been downloaded."
+  },
+  "imagesToPdf": {
+    "stepFiles": "Add images",
+    "stepFilesDescription": "Each image becomes a page in the PDF.",
+    "stepOutput": "Create PDF",
+    "stepOutputDescription": "Images will be combined in the order shown.",
+    "orderLabel": "Image order in the PDF",
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "remove": "Remove {{name}}",
+    "privacy": "Images are sent to the local server only when you convert them.",
+    "outputDescription": "PDF created from images",
+    "action": "Create PDF",
+    "working": "Creating PDF…",
+    "success": "{{fileName}} has been downloaded."
+  },
+  "pdfToImages": {
+    "stepFile": "Choose PDF",
+    "stepFileDescription": "Every page will be converted.",
+    "stepOutput": "Choose format",
+    "stepOutputDescription": "Each page will be exported into a ZIP archive.",
+    "formatLabel": "Image format",
+    "png": "PNG",
+    "jpeg": "JPEG",
+    "privacy": "The PDF is processed in your browser and is not uploaded to the server.",
+    "action": "Convert to images",
+    "working": "Converting…",
+    "progress": "Converting pages: {{completed}} / {{total}}",
+    "emptyDocument": "The PDF contains no pages.",
+    "canvasUnavailable": "This browser cannot create the page images.",
+    "failed": "Converting the PDF to images failed.",
+    "archiveFailed": "Could not create the ZIP archive.",
     "success": "{{fileName}} has been downloaded."
   },
   "pages": {
@@ -114,10 +184,28 @@
     "selectAndWait": "Select a PDF and wait for thumbnails to finish loading.",
     "operationFailed": "Reordering failed."
   },
+  "rotate": {
+    "heading": "Choose pages and angle",
+    "description": "Leave the page field empty to rotate the entire document.",
+    "pagesFieldLabel": "Pages to rotate",
+    "pagesPlaceholder": "e.g. 1-5, 8, 10-12",
+    "pagesHelp": "Leave empty for every page, or enter page numbers/ranges (e.g. 1,3,7 or 2-4,8).",
+    "angleLabel": "Clockwise rotation",
+    "clockwise90": "90° clockwise",
+    "clockwise180": "180°",
+    "clockwise270": "270° clockwise",
+    "outputDescription": "Rotated pages",
+    "action": "Rotate",
+    "working": "Rotating…",
+    "success": "{{fileName}} has been downloaded."
+  },
   "errors": {
     "mergeFailed": "Merging failed.",
+    "compressionFailed": "Compression failed.",
     "pageOperationFailed": "Page processing failed.",
     "reorderFailed": "Reordering failed.",
+    "rotationFailed": "Rotation failed.",
+    "imagesToPdfFailed": "Converting images to PDF failed.",
     "unknown": "An unexpected error occurred."
   },
   "apiErrors": {
@@ -132,17 +220,21 @@
     "fieldTooLarge": "A form field is too large.",
     "unexpectedFile": "The form contains an unexpected file.",
     "singleFileOnly": "Only one PDF file is accepted for this operation.",
-    "fileTooLarge": "Each PDF file must be no larger than 250 MB.",
+    "fileTooLarge": "Each file must be no larger than 250 MB.",
     "mergeMinimumFiles": "Select at least two PDF files.",
+    "selectImages": "Select at least one PNG or JPEG image.",
     "selectFile": "Select a PDF file.",
     "invalidOrder": "The page order is invalid.",
+    "invalidRotation": "The rotation angle is invalid.",
     "workspaceFailed": "Could not create a temporary processing workspace.",
     "readFailed": "Could not read the processed PDF.",
-    "invalidSelection": "Check the selected pages and files.",
+    "invalidSelection": "Check the selected options and PDF.",
     "invalidPdf": "The PDF is invalid, encrypted, or cannot be processed.",
+    "invalidDocument": "The provided file is invalid or cannot be processed.",
     "processingFailed": "PDF processing failed.",
     "prepareFailed": "Could not prepare the PDF files.",
     "fieldRequired": "The “{{field}}” field is required.",
-    "invalidPdfFile": "“{{name}}” is not a valid PDF file."
+    "invalidPdfFile": "“{{name}}” is not a valid PDF file.",
+    "invalidImage": "“{{name}}” is not a valid PNG or JPEG image."
   }
 }

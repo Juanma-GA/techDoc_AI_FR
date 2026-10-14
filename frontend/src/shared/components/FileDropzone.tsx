@@ -7,13 +7,15 @@ import {
 import { FileUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { validatePDFFile } from "../files";
+import { validateImageFile, validatePDFFile } from "../files";
 
+type FileType = "pdf" | "image";
 type FileDropzoneProps = {
   onFiles: (files: File[]) => void;
   onError: (message: string) => void;
   multiple?: boolean;
   disabled?: boolean;
+  fileType?: FileType;
   label?: string;
   description?: string;
 };
@@ -23,12 +25,14 @@ export function FileDropzone({
   onError,
   multiple = false,
   disabled = false,
+  fileType = "pdf",
   label,
   description,
 }: FileDropzoneProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const imageFiles = fileType === "image";
 
   const acceptFiles = (list: FileList | File[]) => {
     const selected = Array.from(list);
@@ -36,14 +40,19 @@ export function FileDropzone({
       return;
     }
     if (!multiple && selected.length > 1) {
-      onError(t("files.singleOnly"));
+      onError(t(imageFiles ? "files.imageSingleOnly" : "files.singleOnly"));
       return;
     }
     for (const file of selected) {
-      const error = validatePDFFile(file, {
-        tooLarge: (name) => t("files.tooLarge", { name }),
-        notPdf: (name) => t("files.notPdf", { name }),
-      });
+      const error = imageFiles
+        ? validateImageFile(file, {
+            tooLarge: (name) => t("files.tooLarge", { name }),
+            notImage: (name) => t("files.notImage", { name }),
+          })
+        : validatePDFFile(file, {
+            tooLarge: (name) => t("files.tooLarge", { name }),
+            notPdf: (name) => t("files.notPdf", { name }),
+          });
       if (error) {
         onError(error);
         return;
@@ -102,12 +111,12 @@ export function FileDropzone({
       </span>
       <span className="dropzone-label">{label ?? t("files.dropLabel")}</span>
       <span className="dropzone-description">{description ?? t("files.dropDescription")}</span>
-      <span className="dropzone-limit">{t("files.limit")}</span>
+      <span className="dropzone-limit">{t(imageFiles ? "files.imageLimit" : "files.limit")}</span>
       <input
         ref={inputRef}
         className="visually-hidden"
         type="file"
-        accept="application/pdf,.pdf"
+        accept={imageFiles ? "image/png,image/jpeg,.png,.jpg,.jpeg" : "application/pdf,.pdf"}
         multiple={multiple}
         disabled={disabled}
         onChange={handleChange}

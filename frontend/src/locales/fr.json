@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "description": "Outils PDF pour traiter vos documents localement.",
     "documentTitle": "PDF Toolkit — outils PDF locaux",
-    "metaDescription": "Fusionnez, extrayez, supprimez et réorganisez des PDF localement.",
+    "metaDescription": "Fusionnez, convertissez, extrayez, supprimez, réorganisez, compressez et faites pivoter des PDF localement.",
     "local": "Traitement local",
     "privacy": "Vos fichiers temporaires sont supprimés après chaque opération."
   },
@@ -34,6 +34,26 @@
       "tab": "Réorganiser",
       "title": "Réorganiser les pages",
       "description": "Faites glisser les miniatures pour modifier l'ordre des pages."
+    },
+    "compress": {
+      "tab": "Compresser",
+      "title": "Compresser un PDF",
+      "description": "Optimisez la structure de votre PDF sans dégrader la qualité de son contenu."
+    },
+    "rotate": {
+      "tab": "Rotation",
+      "title": "Faire pivoter des pages",
+      "description": "Faites pivoter toutes les pages ou uniquement celles que vous sélectionnez."
+    },
+    "imagesToPdf": {
+      "tab": "Images → PDF",
+      "title": "Convertir des images en PDF",
+      "description": "Assemblez vos images PNG ou JPEG en un PDF, dans l'ordre choisi."
+    },
+    "pdfToImages": {
+      "tab": "PDF → Images",
+      "title": "Convertir un PDF en images",
+      "description": "Exportez chaque page en PNG ou JPEG dans une archive ZIP."
     }
   },
   "common": {
@@ -47,10 +67,16 @@
     "dropMultipleLabel": "Déposez plusieurs PDF ici",
     "dropMultipleDescription": "Cliquez pour parcourir et ajouter plusieurs fichiers",
     "limit": "PDF · 250 Mo maximum par fichier",
+    "imageDropLabel": "Déposez vos images ici",
+    "imageDropDescription": "Ajoutez des images PNG ou JPEG, dans l'ordre souhaité",
+    "imageLimit": "PNG ou JPEG · 250 Mo maximum par fichier",
     "singleOnly": "Sélectionnez un seul fichier PDF pour cette opération.",
+    "imageSingleOnly": "Sélectionnez une seule image pour cette opération.",
     "select": "Sélectionnez un fichier PDF.",
+    "selectImagePdf": "Sélectionnez au moins une image PNG ou JPEG.",
     "tooLarge": "« {{name}} » dépasse la limite de 250 Mo.",
     "notPdf": "« {{name}} » n'est pas un fichier PDF.",
+    "notImage": "« {{name}} » n'est pas une image PNG ou JPEG.",
     "remove": "Retirer le fichier",
     "removeNamed": "Retirer {{name}}"
   },
@@ -69,6 +95,50 @@
     "working": "Fusion en cours…",
     "minimumFiles": "Ajoutez au moins deux fichiers PDF à fusionner.",
     "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "compress": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Un seul document par opération.",
+    "stepOutput": "Créer le PDF compressé",
+    "stepOutputDescription": "L'optimisation sans perte peut réduire le poids du document selon son contenu.",
+    "privacy": "Les fichiers sont transmis au serveur local pour être traités, puis les temporaires sont supprimés.",
+    "outputDescription": "PDF optimisé sans perte de qualité",
+    "action": "Compresser",
+    "working": "Compression en cours…",
+    "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "imagesToPdf": {
+    "stepFiles": "Ajouter les images",
+    "stepFilesDescription": "Chaque image devient une page du PDF.",
+    "stepOutput": "Créer le PDF",
+    "stepOutputDescription": "Les images seront assemblées dans l'ordre affiché.",
+    "orderLabel": "Ordre des images dans le PDF",
+    "moveUp": "Déplacer {{name}} vers le haut",
+    "moveDown": "Déplacer {{name}} vers le bas",
+    "remove": "Retirer {{name}}",
+    "privacy": "Les images sont envoyées au serveur local uniquement lors de la conversion.",
+    "outputDescription": "PDF créé à partir des images",
+    "action": "Créer le PDF",
+    "working": "Création du PDF…",
+    "success": "Le fichier {{fileName}} a été téléchargé."
+  },
+  "pdfToImages": {
+    "stepFile": "Choisir le PDF",
+    "stepFileDescription": "Toutes les pages seront converties.",
+    "stepOutput": "Choisir le format",
+    "stepOutputDescription": "Chaque page sera exportée dans une archive ZIP.",
+    "formatLabel": "Format des images",
+    "png": "PNG",
+    "jpeg": "JPEG",
+    "privacy": "Le PDF est traité dans votre navigateur et n'est pas envoyé au serveur.",
+    "action": "Convertir en images",
+    "working": "Conversion en cours…",
+    "progress": "Conversion des pages : {{completed}} / {{total}}",
+    "emptyDocument": "Le PDF ne contient aucune page.",
+    "canvasUnavailable": "Impossible de créer les images dans ce navigateur.",
+    "failed": "La conversion du PDF en images a échoué.",
+    "archiveFailed": "Impossible de créer l'archive ZIP.",
+    "success": "L'archive {{fileName}} a été téléchargée."
   },
   "pages": {
     "stepFile": "Choisir le PDF",
@@ -114,10 +184,28 @@
     "selectAndWait": "Sélectionnez un PDF et attendez la création des miniatures.",
     "operationFailed": "La réorganisation a échoué."
   },
+  "rotate": {
+    "heading": "Choisir les pages et l'angle",
+    "description": "Laissez les pages vides pour faire pivoter tout le document.",
+    "pagesFieldLabel": "Pages à faire pivoter",
+    "pagesPlaceholder": "Ex. 1-5, 8, 10-12",
+    "pagesHelp": "Laissez vide pour toutes les pages, ou indiquez des numéros/plages (ex. 1,3,7 ou 2-4,8).",
+    "angleLabel": "Rotation horaire",
+    "clockwise90": "90° vers la droite",
+    "clockwise180": "180°",
+    "clockwise270": "270° vers la droite",
+    "outputDescription": "Pages pivotées",
+    "action": "Faire pivoter",
+    "working": "Rotation en cours…",
+    "success": "Le fichier {{fileName}} a été téléchargé."
+  },
   "errors": {
     "mergeFailed": "La fusion a échoué.",
+    "compressionFailed": "La compression a échoué.",
     "pageOperationFailed": "Le traitement des pages a échoué.",
     "reorderFailed": "La réorganisation a échoué.",
+    "rotationFailed": "La rotation a échoué.",
+    "imagesToPdfFailed": "La conversion des images en PDF a échoué.",
     "unknown": "Une erreur inattendue est survenue."
   },
   "apiErrors": {
@@ -132,17 +220,21 @@
     "fieldTooLarge": "Un champ du formulaire est trop volumineux.",
     "unexpectedFile": "Le formulaire contient un fichier inattendu.",
     "singleFileOnly": "Un seul fichier PDF est accepté pour cette opération.",
-    "fileTooLarge": "Chaque fichier PDF doit faire au maximum 250 Mo.",
+    "fileTooLarge": "Chaque fichier doit faire au maximum 250 Mo.",
     "mergeMinimumFiles": "Sélectionnez au moins deux fichiers PDF.",
+    "selectImages": "Sélectionnez au moins une image PNG ou JPEG.",
     "selectFile": "Sélectionnez un fichier PDF.",
     "invalidOrder": "L'ordre des pages est invalide.",
+    "invalidRotation": "L'angle de rotation est invalide.",
     "workspaceFailed": "Impossible de créer l'espace temporaire de traitement.",
     "readFailed": "Impossible de lire le PDF traité.",
-    "invalidSelection": "Vérifiez les pages et les fichiers sélectionnés.",
+    "invalidSelection": "Vérifiez les options et le PDF sélectionnés.",
     "invalidPdf": "Le PDF est invalide, chiffré ou ne peut pas être traité.",
+    "invalidDocument": "Le fichier fourni est invalide ou ne peut pas être traité.",
     "processingFailed": "Le traitement du PDF a échoué.",
     "prepareFailed": "Impossible de préparer les fichiers PDF.",
     "fieldRequired": "Le champ « {{field}} » est requis.",
-    "invalidPdfFile": "« {{name}} » n'est pas un fichier PDF valide."
+    "invalidPdfFile": "« {{name}} » n'est pas un fichier PDF valide.",
+    "invalidImage": "« {{name}} » n'est pas une image PNG ou JPEG valide."
   }
 }

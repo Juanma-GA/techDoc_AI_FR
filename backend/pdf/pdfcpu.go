@@ -25,6 +25,26 @@ func (p *PDFCPU) Merge(ctx context.Context, inputFiles []string, output string) 
 	return ctx.Err()
 }
 
+func (p *PDFCPU) ImagesToPDF(ctx context.Context, inputFiles []string, output string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := api.ImportImagesFile(inputFiles, output, nil, model.NewDefaultConfiguration()); err != nil {
+		return fmt.Errorf("pdfcpu import images: %w", err)
+	}
+	return ctx.Err()
+}
+
+func (p *PDFCPU) Compress(ctx context.Context, input, output string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := api.OptimizeFile(input, output, model.NewDefaultConfiguration()); err != nil {
+		return fmt.Errorf("pdfcpu optimize: %w", err)
+	}
+	return ctx.Err()
+}
+
 func (p *PDFCPU) PageCount(ctx context.Context, input string) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -69,7 +89,20 @@ func (p *PDFCPU) Reorder(ctx context.Context, input, output string, pages []int)
 	return ctx.Err()
 }
 
+func (p *PDFCPU) Rotate(ctx context.Context, input, output string, pages []int, rotation int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := api.RotateFile(input, output, rotation, pageSpecs(pages), model.NewDefaultConfiguration()); err != nil {
+		return fmt.Errorf("pdfcpu rotate: %w", err)
+	}
+	return ctx.Err()
+}
+
 func pageSpecs(pages []int) []string {
+	if len(pages) == 0 {
+		return nil
+	}
 	specs := make([]string, len(pages))
 	for index, page := range pages {
 		specs[index] = strconv.Itoa(page)

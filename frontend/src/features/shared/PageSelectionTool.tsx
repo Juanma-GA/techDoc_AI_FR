@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import { FileText, Scissors, Trash2, X } from "lucide-react";
+import { FileText, RotateCw, Scissors, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { formatOperationError, processPDF } from "../../shared/api";
@@ -7,7 +7,7 @@ import { Button } from "../../shared/components/Button";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 
-type PageSelectionMode = "extract" | "delete";
+type PageSelectionMode = "extract" | "delete" | "rotate";
 
 const modeConfiguration = {
   extract: {
@@ -28,6 +28,15 @@ const modeConfiguration = {
     outputKey: "pages.deleteOutput",
     icon: Trash2,
   },
+  rotate: {
+    endpoint: "rotate",
+    outputName: "rotated.pdf",
+    actionKey: "rotate.action",
+    headingKey: "rotate.heading",
+    descriptionKey: "rotate.description",
+    outputKey: "rotate.outputDescription",
+    icon: RotateCw,
+  },
 } as const;
 
 type PageSelectionToolProps = {
@@ -40,8 +49,10 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
   const config = modeConfiguration[mode];
   const Icon = config.icon;
   const pageInputId = useId();
+  const rotationInputId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [selection, setSelection] = useState("");
+  const [rotation, setRotation] = useState("90");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
@@ -52,7 +63,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
       setError(t("files.select"));
       return;
     }
-    if (!selection.trim()) {
+    if (mode !== "rotate" && !selection.trim()) {
       setError(t("pages.selectPages"));
       return;
     }
@@ -63,11 +74,20 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
     const data = new FormData();
     data.append("file", file, file.name);
     data.append("pages", selection);
+    if (mode === "rotate") {
+      data.append("rotation", rotation);
+    }
     try {
       await processPDF(config.endpoint, data, config.outputName, t);
       setSuccess(true);
     } catch (reason) {
-      setError(formatOperationError(reason, t, "errors.pageOperationFailed"));
+      setError(
+        formatOperationError(
+          reason,
+          t,
+          mode === "rotate" ? "errors.rotationFailed" : "errors.pageOperationFailed",
+        ),
+      );
     } finally {
       setWorking(false);
     }
@@ -125,14 +145,16 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             <p>{t(config.descriptionKey)}</p>
           </div>
         </div>
-        <label className="field-label" htmlFor={pageInputId}>{t("pages.fieldLabel")}</label>
+        <label className="field-label" htmlFor={pageInputId}>
+          {t(mode === "rotate" ? "rotate.pagesFieldLabel" : "pages.fieldLabel")}
+        </label>
         <input
           id={pageInputId}
           className="text-input page-range-input"
           type="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder={t("pages.placeholder")}
+          placeholder={t(mode === "rotate" ? "rotate.pagesPlaceholder" : "pages.placeholder")}
           value={selection}
           disabled={working}
           onChange={(event) => {
@@ -142,8 +164,29 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           aria-describedby={`${pageInputId}-help`}
         />
         <p className="input-help" id={`${pageInputId}-help`}>
-          {t("pages.help")}
+          {t(mode === "rotate" ? "rotate.pagesHelp" : "pages.help")}
         </p>
+        {mode === "rotate" ? (
+          <>
+            <label className="field-label" htmlFor={rotationInputId}>
+              {t("rotate.angleLabel")}
+            </label>
+            <select
+              id={rotationInputId}
+              className="text-input"
+              value={rotation}
+              disabled={working}
+              onChange={(event) => {
+                setRotation(event.currentTarget.value);
+                setSuccess(false);
+              }}
+            >
+              <option value="90">{t("rotate.clockwise90")}</option>
+              <option value="180">{t("rotate.clockwise180")}</option>
+              <option value="270">{t("rotate.clockwise270")}</option>
+            </select>
+          </>
+        ) : null}
         {mode === "delete" ? (
           <p className="warning-note">{t("pages.deleteWarning")}</p>
         ) : null}
@@ -158,7 +201,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
         </div>
         <Button
           type="submit"
-          disabled={working || !file || !selection.trim()}
+          disabled={working || !file || (mode !== "rotate" && !selection.trim())}
           className="action-button"
         >
           {working ? <span className="spinner" aria-hidden="true" /> : <Icon size={18} />}
@@ -172,7 +215,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              {t("pages.success", { fileName: config.outputName })}
+              {t(mode === "rotate" ? "rotate.success" : "pages.success", { fileName: config.outputName })}
             </p>
           ) : null}
         </div>

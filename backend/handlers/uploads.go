@@ -18,6 +18,7 @@ const (
 )
 
 var errNotPDF = errors.New("uploaded file is not a PDF")
+var errNotImage = errors.New("uploaded file is not a supported image")
 
 type requestError struct {
 	status  int
@@ -39,6 +40,20 @@ type multipartUpload struct {
 }
 
 func parseMultipart(request *http.Request, tempDir, fileField string, maxFiles int, textFields ...string) (multipartUpload, error) {
+	return parseMultipartWithKind(request, tempDir, fileField, maxFiles, false, textFields...)
+}
+
+func parseImageMultipart(request *http.Request, tempDir, fileField string, maxFiles int, textFields ...string) (multipartUpload, error) {
+	return parseMultipartWithKind(request, tempDir, fileField, maxFiles, true, textFields...)
+}
+
+func parseMultipartWithKind(
+	request *http.Request,
+	tempDir, fileField string,
+	maxFiles int,
+	imageFiles bool,
+	textFields ...string,
+) (multipartUpload, error) {
 	reader, err := request.MultipartReader()
 	if err != nil {
 		return multipartUpload{}, &requestError{
@@ -116,7 +131,18 @@ func parseMultipart(request *http.Request, tempDir, fileField string, maxFiles i
 		}
 
 		fileName := sanitizeFilename(part.FileName())
-		filePath := filepath.Join(tempDir, fmt.Sprintf("input-%04d.pdf", len(result.files)+1))
+		fileExtension := ".pdf"
+		if imageFiles {
+			fileExtension = strings.ToLower(filepath.Ext(fileName))
+			if fileExtension != ".png" && fileExtension != ".jpg" && fileExtension != ".jpeg" {
+				_ = part.Close()
+				return multipartUpload{}, &requestError{
+					status:  http.StatusUnsupportedMediaType,
+					message: fmt.Sprintf("« %s » n'est pas une image PNG ou JPEG valide.", fileName),
+				}
+			}
+		}
+		filePath := filepath.Join(tempDir, fmt.Sprintf("input-%04d%s", len(result.files)+1, fileExtension))
 		if err := saveUpload(part, filePath, maxFileSize); err != nil {
 			_ = part.Close()
 			var uploadErr *requestError
@@ -128,14 +154,24 @@ func parseMultipart(request *http.Request, tempDir, fileField string, maxFiles i
 		if err := part.Close(); err != nil {
 			return multipartUpload{}, fmt.Errorf("close uploaded PDF: %w", err)
 		}
-		if err := validatePDF(filePath); err != nil {
-			if errors.Is(err, errNotPDF) {
+		var validationErr error
+		if imageFiles {
+			validationErr = validateImage(filePath, fileExtension)
+		} else {
+			validationErr = validatePDF(filePath)
+		}
+		if validationErr != nil {
+			if errors.Is(validationErr, errNotPDF) || errors.Is(validationErr, errNotImage) {
+				message := fmt.Sprintf("« %s » n'est pas un fichier PDF valide.", fileName)
+				if errors.Is(validationErr, errNotImage) {
+					message = fmt.Sprintf("« %s » n'est pas une image PNG ou JPEG valide.", fileName)
+				}
 				return multipartUpload{}, &requestError{
 					status:  http.StatusUnsupportedMediaType,
-					message: fmt.Sprintf("« %s » n'est pas un fichier PDF valide.", fileName),
+					message: message,
 				}
 			}
-			return multipartUpload{}, fmt.Errorf("inspect uploaded PDF: %w", err)
+			return multipartUpload{}, fmt.Errorf("inspect uploaded file: %w", validationErr)
 		}
 
 		result.files = append(result.files, uploadedPDF{path: filePath, name: fileName})
@@ -161,7 +197,7 @@ func saveUpload(source io.Reader, destination string, maxSize int64) error {
 	if size > maxSize {
 		return &requestError{
 			status:  http.StatusRequestEntityTooLarge,
-			message: "Chaque fichier PDF doit faire au maximum 250 Mo.",
+			message: "Chaque fichier doit faire au maximum 250 Mo.",
 		}
 	}
 	return nil
@@ -184,6 +220,29 @@ func validatePDF(filePath string) error {
 		return errNotPDF
 	}
 	return nil
+}
+
+func validateImage(filePath, fileExtension string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open temporary image: %w", err)
+	}
+	defer file.Close()
+
+	header := make([]byte, 512)
+	size, readErr := io.ReadFull(file, header)
+	if readErr != nil && !errors.Is(readErr, io.EOF) && !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		return fmt.Errorf("read image header: %w", readErr)
+	}
+	contentType := http.DetectContentType(header[:size])
+	switch {
+	case contentType == "image/png" && fileExtension == ".png":
+		return nil
+	case contentType == "image/jpeg" && (fileExtension == ".jpg" || fileExtension == ".jpeg"):
+		return nil
+	default:
+		return errNotImage
+	}
 }
 
 func sanitizeFilename(fileName string) string {
@@ -222,6 +281,20 @@ func singleField(fields map[string][]string, name string) (string, error) {
 		return "", &requestError{
 			status:  http.StatusBadRequest,
 			message: "Le champ « " + name + " » est requis.",
+		}
+	}
+	return strings.TrimSpace(values[0]), nil
+}
+
+func optionalSingleField(fields map[string][]string, name string) (string, error) {
+	values := fields[name]
+	if len(values) == 0 {
+		return "", nil
+	}
+	if len(values) != 1 {
+		return "", &requestError{
+			status:  http.StatusBadRequest,
+			message: "Un champ du formulaire est invalide.",
 		}
 	}
 	return strings.TrimSpace(values[0]), nil

@@ -7,7 +7,14 @@ type ErrorPayload = {
 };
 
 export async function processPDF(
-  endpoint: "merge" | "extract" | "delete" | "reorder",
+  endpoint:
+    | "merge"
+    | "images-to-pdf"
+    | "compress"
+    | "extract"
+    | "delete"
+    | "reorder"
+    | "rotate",
   data: FormData,
   downloadName: string,
   t: TFunction,
@@ -66,13 +73,17 @@ function translateApiError(message: string, t: TFunction): string {
     "Le formulaire contient un fichier inattendu.": "apiErrors.unexpectedFile",
     "Un seul fichier PDF est accepté pour cette opération.": "apiErrors.singleFileOnly",
     "Chaque fichier PDF doit faire au maximum 250 Mo.": "apiErrors.fileTooLarge",
+    "Chaque fichier doit faire au maximum 250 Mo.": "apiErrors.fileTooLarge",
     "Sélectionnez au moins deux fichiers PDF.": "apiErrors.mergeMinimumFiles",
+    "Sélectionnez au moins une image PNG ou JPEG.": "apiErrors.selectImages",
     "Sélectionnez un fichier PDF.": "apiErrors.selectFile",
     "L'ordre des pages est invalide.": "apiErrors.invalidOrder",
     "Impossible de créer l'espace temporaire de traitement.": "apiErrors.workspaceFailed",
     "Impossible de lire le PDF traité.": "apiErrors.readFailed",
     "Vérifiez les pages et les fichiers sélectionnés.": "apiErrors.invalidSelection",
-    "Le PDF est invalide, chiffré ou ne peut pas être traité.": "apiErrors.invalidPdf",
+    "Vérifiez les options et le PDF sélectionnés.": "apiErrors.invalidSelection",
+    "L'angle de rotation est invalide.": "apiErrors.invalidRotation",
+    "Le fichier fourni est invalide ou ne peut pas être traité.": "apiErrors.invalidDocument",
     "Le traitement du PDF a échoué.": "apiErrors.processingFailed",
     "Impossible de préparer les fichiers PDF.": "apiErrors.prepareFailed",
   };
@@ -89,6 +100,11 @@ function translateApiError(message: string, t: TFunction): string {
   const invalidFile = /^« (.+) » n'est pas un fichier PDF valide\.$/.exec(message);
   if (invalidFile) {
     return t("apiErrors.invalidPdfFile", { name: invalidFile[1] });
+  }
+
+  const invalidImage = /^« (.+) » n'est pas une image PNG ou JPEG valide\.$/.exec(message);
+  if (invalidImage) {
+    return t("apiErrors.invalidImage", { name: invalidImage[1] });
   }
 
   return message;
