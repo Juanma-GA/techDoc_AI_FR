@@ -46,7 +46,7 @@ _ALIASES: dict[str, tuple[str, ...]] = {
         "icn", "illustration code number", "illustration code no", "illustration code num",
         "icn illustration code number", "illustration code number icn",
     ),
-    "model_ident_code": ("mic", "model ident code", "modelidentcode"),
+    "model_ident_code": ("mic", "model ident code", "modelidentcode", "modelic"),
     "system_diff_code": ("sdc", "system diff code", "systemdiffcode"),
     "system_code": ("sc", "system", "system code", "systemcode"),
     "sub_system_code": ("sub system code", "subsystemcode", "ssystem"),
@@ -58,8 +58,8 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "disassy_code_variant": (
         "dcv", "discodev", "disassy code variant", "disassycodevariant",
     ),
-    "info_code_variant": ("icv", "info code variant", "infocodevariant"),
-    "item_location_code": ("ilc", "item location code", "itemlocationcode"),
+    "info_code_variant": ("icv", "info code variant", "infocodevariant", "infocodev"),
+    "item_location_code": ("ilc", "item location code", "itemlocationcode", "itemloc"),
 }
 
 _ICN_RE = re.compile(
