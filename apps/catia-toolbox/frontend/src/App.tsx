@@ -1,4 +1,10 @@
-import { AppShell, ErrorBoundary, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
+import {
+  Ai4TechDocLogo,
+  AppShell,
+  ErrorBoundary,
+  LanguageSwitcher,
+  sidebarNavItemClass,
+} from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -143,6 +149,7 @@ export function App() {
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      headerStart={<Ai4TechDocLogo alt="" />}
       llmStatus={<LlmBadge />}
       navigation={NAV.map((entry) =>
         isGroup(entry) ? (
