@@ -21,6 +21,11 @@
     "untested": "UNTESTED",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "DEMO MODE",
+    "filesLoading": "Loading demo files…",
+    "filesError": "Could not load demo files: {{message}}"
+  },
   "dmType": {
     "descriptive": "Descriptive",
     "procedural": "Procedural",
@@ -59,6 +64,11 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Mistral API key and models in use.",
+    "demoTitle": "Operating mode",
+    "demoHint": "Demo mode preloads the sample files. Processing starts only when you start the migration.",
+    "normalMode": "Normal mode",
+    "demoMode": "Demo mode",
+    "demoSaveError": "Could not save the mode.",
     "aiTitle": "Artificial intelligence",
     "llmEnabled": "LLM enabled",
     "llmHelp": "Disabling stops tasks delegated to AI (scan OCR, classification, splitting). The Mistral key is kept.",

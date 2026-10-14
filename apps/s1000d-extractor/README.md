@@ -46,6 +46,13 @@ From the repository root, run `pnpm dev:s1000d-extractor` after confirming its c
 
 FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
+## Demo Mode
+
+Select Demo mode in Settings to preload `WEG-WMO.pdf`, `DMRL_v2.xlsx`, and
+`dm_header_template.example.json` from `frontend/public/demo/` into the Migration
+form. This only selects the files; upload and processing begin when you start
+the migration.
+
 ## Persistence
 
 SQLite stores projects, source metadata, intermediate structures, mappings, outputs, findings, and runtime configuration under `backend/data/`.

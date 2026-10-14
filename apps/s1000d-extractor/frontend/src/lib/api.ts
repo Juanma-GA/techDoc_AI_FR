@@ -66,6 +66,7 @@ export type SettingsDto = {
   chat_model: string;
   embed_model: string;
   llm_enabled: boolean;
+  demo_enabled: boolean;
 };
 export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
 
@@ -88,6 +89,7 @@ export const settingsApi = {
     chat_model?: string;
     embed_model?: string;
     llm_enabled?: boolean;
+    demo_enabled?: boolean;
   }) => api<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(body) }),
   test: () => api<TestConnectionDto>("/settings/test", { method: "POST" }),
 };

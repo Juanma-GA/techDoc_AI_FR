@@ -1,6 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import {
   Ai4TechDocLogo,
   AppShell,
+  DemoModeBadge,
+  DemoModeProvider,
   LanguageSwitcher,
   sidebarNavItemClass,
 } from "@internal/ui";
@@ -8,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
+import { settingsApi, type SettingsDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Migration } from "./routes/Migration";
 import { Settings } from "./routes/Settings";
@@ -29,6 +33,11 @@ export function App() {
   const location = useLocation();
   const currentLang = (i18n.language || "fr").slice(0, 2);
   const showMigration = location.pathname === "/migration";
+  const settingsQuery = useQuery<SettingsDto>({
+    queryKey: ["settings"],
+    queryFn: settingsApi.read,
+  });
+  const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
   return (
     <AppShell
@@ -37,6 +46,13 @@ export function App() {
       brandTitle={t("app.description")}
       version={t("app.version")}
       headerStart={<Ai4TechDocLogo alt="" />}
+      sidebarTop={
+        demoEnabled ? (
+          <div className="border-b border-md px-4 py-2">
+            <DemoModeBadge label={t("demo.badge")} />
+          </div>
+        ) : null
+      }
       llmStatus={<LlmBadge />}
       navigation={navItems.map(({ to, labelKey }) => (
         <NavLink
@@ -55,16 +71,21 @@ export function App() {
         />
       }
     >
-      <div hidden={!showMigration}>
-        <Migration />
-      </div>
-      <Routes>
-        <Route path="/" element={<Navigate to="/migration" replace />} />
-        <Route path="/data" element={<Data />} />
-        <Route path="/validation" element={<Validation />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/versioning" element={<Versioning />} />
-      </Routes>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <div hidden={!showMigration}>
+          <Migration />
+        </div>
+        <Routes>
+          <Route path="/" element={<Navigate to="/migration" replace />} />
+          <Route path="/data" element={<Data />} />
+          <Route path="/validation" element={<Validation />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/versioning" element={<Versioning />} />
+        </Routes>
+      </DemoModeProvider>
     </AppShell>
   );
 }

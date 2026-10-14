@@ -3,6 +3,7 @@ import { CircleHelp, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { useDemoMode } from "@internal/ui";
 
 import { DmPreview } from "../components/DmPreview";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
@@ -23,10 +24,11 @@ import {
   type WizardDm,
   type WizardState,
 } from "../lib/api";
+import { loadDemoMigrationFiles } from "../lib/demoMigrationFiles";
 
 export function isRestorableMigrationInput(
   kind: MigrationInputKind,
-): kind is "dmrl" | "dm_header" {
+): kind is "document" | "dmrl" | "dm_header" {
   return kind === "document" || kind === "dmrl" || kind === "dm_header";
 }
 
@@ -172,6 +174,7 @@ export function Migration() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { mode: demoMode, isReady: demoModeReady } = useDemoMode();
   const docsQuery = useQuery({ queryKey: ["s1000d-docs"], queryFn: documentsApi.list });
 
   // Formulaire de chargement.
@@ -180,6 +183,8 @@ export function Migration() {
   const [issue, setIssue] = useState<S1000dIssue>("4.2");
   const hint: ContextHint = "mixed";
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [demoFilesLoading, setDemoFilesLoading] = useState(false);
+  const [demoFilesError, setDemoFilesError] = useState<string | null>(null);
   // Ressources client optionnelles, attachees au document avant le decoupage.
   const [resourceFiles, setResourceFiles] = useState<Partial<Record<ResourceKind, File>>>({});
 
@@ -212,6 +217,7 @@ export function Migration() {
   const wizRef = useRef<HTMLDivElement>(null);
   const inputRefs = useRef<Partial<Record<MigrationInputKind, HTMLInputElement | null>>>({});
   const mappingTouched = useRef(false);
+  const demoSeededInputs = useRef<Set<MigrationInputKind>>(new Set());
 
   const restoreFileInput = (kind: MigrationInputKind, fileToRestore: File) => {
     const input = inputRefs.current[kind];
@@ -220,6 +226,68 @@ export function Migration() {
     transfer.items.add(fileToRestore);
     input.files = transfer.files;
   };
+
+  const clearDemoInputs = () => {
+    const seeded = new Set(demoSeededInputs.current);
+    for (const kind of seeded) {
+      const input = inputRefs.current[kind];
+      if (input) input.value = "";
+    }
+    if (seeded.has("document")) {
+      setFile(null);
+      setLastDocumentName(null);
+    }
+    setResourceFiles((current) => {
+      const next = { ...current };
+      if (seeded.has("dmrl")) delete next.dmrl;
+      if (seeded.has("dm_header")) delete next.dm_header;
+      return next;
+    });
+    demoSeededInputs.current.clear();
+  };
+
+  useEffect(() => {
+    if (!demoModeReady) return;
+    let cancelled = false;
+    if (demoMode !== "demo") {
+      setDemoFilesLoading(false);
+      setDemoFilesError(null);
+      clearDemoInputs();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    mappingTouched.current = true;
+    setDemoFilesLoading(true);
+    setDemoFilesError(null);
+    setLoadError(null);
+    void loadDemoMigrationFiles()
+      .then((demoFiles) => {
+        if (cancelled) return;
+        demoSeededInputs.current = new Set(["document", "dmrl", "dm_header"]);
+        restoreFileInput("document", demoFiles.document);
+        restoreFileInput("dmrl", demoFiles.dmrl);
+        restoreFileInput("dm_header", demoFiles.dm_header);
+        setFile(demoFiles.document);
+        setLastDocumentName(null);
+        setResourceFiles({ dmrl: demoFiles.dmrl, dm_header: demoFiles.dm_header });
+        setDocId(null);
+        setWiz(null);
+        setPdfCut(null);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setDemoFilesError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDemoFilesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode, demoModeReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -540,9 +608,10 @@ export function Migration() {
                 ref={(element) => {
                   inputRefs.current.document = element;
                 }}
-                disabled={busy || starting !== null || pdfCutBusy}
+                disabled={demoFilesLoading || busy || starting !== null || pdfCutBusy}
                 onChange={(e) => {
                   mappingTouched.current = true;
+                  demoSeededInputs.current.delete("document");
                   setFile(e.target.files?.[0] ?? null);
                   setLastDocumentName(null);
                   setDocId(null);
@@ -605,11 +674,18 @@ export function Migration() {
                 ref={(element) => {
                   inputRefs.current.dmrl = element;
                 }}
+                disabled={demoFilesLoading}
                 onChange={(e) => {
                   mappingTouched.current = true;
+                  demoSeededInputs.current.delete("dmrl");
                   setResourceFiles((p) => ({ ...p, dmrl: e.target.files?.[0] }));
                 }}
               />
+              {resourceFiles.dmrl && !inputRefs.current.dmrl?.files?.length ? (
+                <div className="label" role="status">
+                  {t("migration.upload.selectedFile", { filename: resourceFiles.dmrl.name })}
+                </div>
+              ) : null}
             </label>
             <label className="grow">
               <div className="migration-upload-label">
@@ -648,18 +724,29 @@ export function Migration() {
                 ref={(element) => {
                   inputRefs.current.dm_header = element;
                 }}
+                disabled={demoFilesLoading}
                 onChange={(e) => {
                   mappingTouched.current = true;
+                  demoSeededInputs.current.delete("dm_header");
                   setResourceFiles((p) => ({ ...p, dm_header: e.target.files?.[0] }));
                 }}
               />
+              {resourceFiles.dm_header && !inputRefs.current.dm_header?.files?.length ? (
+                <div className="label" role="status">
+                  {t("migration.upload.selectedFile", {
+                    filename: resourceFiles.dm_header.name,
+                  })}
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="row">
             <button
               type="button"
               className="btn primary"
-              disabled={busy || starting !== null || pdfCut !== null || pdfCutBusy}
+              disabled={
+                demoFilesLoading || busy || starting !== null || pdfCut !== null || pdfCutBusy
+              }
               onClick={() => void doStart()}
             >
               {t("migration.upload.start")}
@@ -686,6 +773,16 @@ export function Migration() {
                   />
                 </div>
               </div>
+            ) : null}
+            {demoFilesLoading ? (
+              <span className="label grow" role="status">
+                {t("demo.filesLoading")}
+              </span>
+            ) : null}
+            {demoFilesError ? (
+              <span className="error grow" role="alert">
+                {t("demo.filesError", { message: demoFilesError })}
+              </span>
             ) : null}
             {loadError ? <span className="error grow">{loadError}</span> : null}
           </div>

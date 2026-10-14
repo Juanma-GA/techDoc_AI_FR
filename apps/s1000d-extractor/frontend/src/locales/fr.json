@@ -21,6 +21,11 @@
     "untested": "À TESTER",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "MODE DÉMO",
+    "filesLoading": "Chargement des fichiers de démonstration…",
+    "filesError": "Impossible de charger les fichiers de démonstration : {{message}}"
+  },
   "dmType": {
     "descriptive": "Descriptif",
     "procedural": "Procédure",
@@ -59,6 +64,11 @@
   "settings": {
     "title": "Paramètres",
     "subtitle": "Clé API Mistral et modèles utilisés.",
+    "demoTitle": "Mode de fonctionnement",
+    "demoHint": "Le mode démo précharge les fichiers d’exemple. Le traitement démarre uniquement lorsque vous lancez la migration.",
+    "normalMode": "Mode normal",
+    "demoMode": "Mode démo",
+    "demoSaveError": "Impossible d’enregistrer le mode.",
     "aiTitle": "Intelligence artificielle",
     "llmEnabled": "LLM activé",
     "llmHelp": "Désactiver coupe les tâches confiées à l'IA (OCR scans, classification, découpage). La clé Mistral est conservée.",

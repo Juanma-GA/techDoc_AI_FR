@@ -21,6 +21,7 @@ class SettingsIn(BaseModel):
     chat_model: str | None = None
     embed_model: str | None = None
     llm_enabled: bool | None = None
+    demo_enabled: bool | None = None
 
 
 class SettingsOut(BaseModel):
@@ -30,6 +31,7 @@ class SettingsOut(BaseModel):
     embed_model: str
     llm_enabled: bool
     llm_tested: bool = False
+    demo_enabled: bool = False
 
 
 class TestConnectionOut(BaseModel):
