@@ -1,0 +1,5 @@
+frontend/node_modules/
+frontend/coverage/
+backend/web/static/generated/
+backend/web/static/assets/
+backend/*.exe
