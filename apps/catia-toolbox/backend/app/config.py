@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'catia-toolbox.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")
+    cadmpeg_path: str = ""
 
     # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
     # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les

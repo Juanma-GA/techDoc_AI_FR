@@ -14,6 +14,7 @@ Identify and compare CATIA delivery data, validate imported structures, and run 
 - Filter optimized parts using the `X000` marker in the nomenclature.
 - Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
+- Compare old and new CATPart folders without filename matching. SHA-256 finds byte-identical files; CADMPEG geometry signatures only suggest candidate pairs for manual review.
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
 - Optimize a Composer parts folder by copying only `.smgXml` and `.smgGeom` files
   to a new `<folder>_optimized` subfolder; unrelated source entries are ignored
@@ -35,7 +36,7 @@ The target default port is `8004`, followed by the next free port when needed. T
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
+Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. Optional CATPart folder comparison requires the CADMPEG CLI v0.6.1 or newer, installed separately and available on `PATH` or configured with `CADMPEG_PATH`; CATIA V5 itself is not required. Geometry extraction is partial, so suggested pairs must be checked manually and different hashes only mean different file bytes. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
 
 ## Start On Windows
 

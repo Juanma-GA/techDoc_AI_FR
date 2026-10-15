@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     admin,
     browse,
+    catpart_diff,
     checks,
     colorization,
     conversion,
@@ -29,7 +30,6 @@ from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
-
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
@@ -107,6 +107,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(browse.router)
     api_v1.include_router(imports.router)
     api_v1.include_router(diff.router)
+    api_v1.include_router(catpart_diff.router)
     api_v1.include_router(checks.router)
     api_v1.include_router(colorization.router)
     api_v1.include_router(conversion.router)

@@ -12,6 +12,7 @@ import {
   type ImportDto,
 } from "../lib/api";
 import { NomenclatureDiff } from "../components/business/NomenclatureDiff";
+import { CatPartDiff } from "./CatPartDiff";
 
 const CHANGE_VARIANT: Record<string, "ok" | "danger" | "warn"> = {
   added: "ok",
@@ -137,7 +138,7 @@ function FoldersDiff() {
 export function Diff() {
   const { t } = useTranslation();
   // Focus sur la comparaison de nomenclatures (SIN / PN) par defaut.
-  const [tab, setTab] = useState<"folders" | "nomenclatures">("nomenclatures");
+  const [tab, setTab] = useState<"folders" | "nomenclatures" | "catparts">("nomenclatures");
 
   return (
     <div className="flex flex-col gap-4">
@@ -156,8 +157,21 @@ export function Diff() {
         >
           {t("diff.tabNomenclatures")}
         </button>
+        <button
+          type="button"
+          className={`btn small ${tab === "catparts" ? "secondary" : "ghost"}`}
+          onClick={() => setTab("catparts")}
+        >
+          {t("catpartDiff.tab")}
+        </button>
       </div>
-      {tab === "folders" ? <FoldersDiff /> : <NomenclatureDiff />}
+      {tab === "folders" ? (
+        <FoldersDiff />
+      ) : tab === "nomenclatures" ? (
+        <NomenclatureDiff />
+      ) : (
+        <CatPartDiff />
+      )}
     </div>
   );
 }
