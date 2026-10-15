@@ -10,6 +10,7 @@ export type SourceKind =
   | "composerRoot"
   | "convertedRoot"
   | "smgxmlFolder"
+  | "optimizedPiecesRoot"
   | "profilesRoot";
 
 /** Etat de travail partage entre onglets : import courant, run courant, et les
@@ -39,6 +40,7 @@ const EMPTY_SOURCES: Record<SourceKind, string> = {
   composerRoot: "",
   convertedRoot: "",
   smgxmlFolder: "",
+  optimizedPiecesRoot: "",
   profilesRoot: "",
 };
 

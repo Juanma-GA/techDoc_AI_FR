@@ -15,9 +15,13 @@ Identify and compare CATIA delivery data, validate imported structures, and run 
 - Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
-- Clean top-level Composer `.smgXml` part files in place, keeping `.bak` backups in a `sauvegarde/` subfolder.
+- Optimize a Composer parts folder by copying only `.smgXml` and `.smgGeom` files
+  to a new `<folder>_optimized` subfolder; unrelated source entries are ignored
+  and the selected source files remain unchanged.
 - Rename SMGXML references and prepare part replacement plans.
-- Colorize mono-body SMGXML pieces from the profile reference in the nomenclature's Materials slots, matching every file with the same OLD P/N. Dry-run is the default; confirmed writes keep `.bak` backups.
+- Colorize mono-body SMGXML pieces in the work folder created by optimization,
+  matching profile references from the nomenclature's Materials slots by OLD P/N.
+  Dry-run is the default; confirmed writes update that folder without backups.
 - Use the native file/folder picker when no Source root is configured; selected
 	files are copied into the local application storage before processing.
 

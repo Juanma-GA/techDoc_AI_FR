@@ -393,7 +393,6 @@ export type MonoBodyColorizationItemDto = {
   status: string;
   actors_total: number;
   actors_changed: number;
-  backup_path: string;
   message: string;
   applied: boolean;
 };

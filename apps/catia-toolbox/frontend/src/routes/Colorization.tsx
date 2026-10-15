@@ -24,7 +24,7 @@ function fileName(ref: string): string {
 export function Colorization() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const piecesRoot = useWorkspace((state) => state.sources.smgxmlFolder);
+  const piecesRoot = useWorkspace((state) => state.sources.optimizedPiecesRoot);
   const profilesRoot = useWorkspace((state) => state.sources.profilesRoot);
   const preferredRunId = useWorkspace((state) => state.nomenclatureRunId);
   const setSource = useWorkspace((state) => state.setSource);
@@ -47,6 +47,12 @@ export function Colorization() {
   const monoParts = monoPartsQuery.data ?? [];
   const distinctOldPns = new Set(monoParts.map((item) => item.old_pn.trim()).filter(Boolean));
   const missingProfiles = monoParts.filter((item) => !item.mono_texture.trim()).length;
+  const displayError = (reason: unknown) =>
+    reason instanceof ApiClientError && reason.code === "PIECES_FOLDER_CONTENT_INVALID"
+      ? t("colorization.invalidFolderContents")
+      : reason instanceof Error
+        ? reason.message
+        : String(reason);
 
   useEffect(() => {
     if (preferredRunId) setRunId(preferredRunId);
@@ -77,7 +83,7 @@ export function Colorization() {
     },
     onError: (cause) => {
       setArmed(false);
-      setError(cause instanceof ApiClientError ? cause.message : String(cause));
+      setError(displayError(cause));
     },
   });
 
@@ -145,13 +151,16 @@ export function Colorization() {
 
         <div className="grid-2">
           <div className="field">
-            <span className="field-label">{t("colorization.piecesRoot")}</span>
-            <FilePicker
-              mode="folder"
-              exts={[]}
+            <label htmlFor="colorization-pieces-root" className="field-label">
+              {t("colorization.piecesRoot")}
+            </label>
+            <input
+              id="colorization-pieces-root"
+              className="input"
               value={piecesRoot}
-              onChange={(path) => setSource("smgxmlFolder", path)}
+              readOnly
             />
+            {!piecesRoot ? <p className="hint" role="status">{t("colorization.required")}</p> : null}
           </div>
           <div className="field">
             <span className="field-label">{t("colorization.profilesRoot")}</span>

@@ -383,7 +383,6 @@ class MonoBodyColorizationItemOut(BaseModel):
     status: str = ""
     actors_total: int = 0
     actors_changed: int = 0
-    backup_path: str = ""
     message: str = ""
     applied: bool = False
 

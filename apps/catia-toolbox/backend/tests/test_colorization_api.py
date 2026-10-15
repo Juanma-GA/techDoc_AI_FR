@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+import pytest
 from openpyxl import Workbook
 
 
@@ -118,8 +119,9 @@ def test_colorization_dry_run_and_apply_all_files_for_duplicate_old_pn(client, t
     applied = client.post("/api/v1/colorization/mono-body", json={**payload, "apply": True})
     assert applied.status_code == 200, applied.text
     assert applied.json()["summary"]["applied"] is True
+    assert all("backup_path" not in item for item in applied.json()["items"])
     for path in (first_piece, second_piece):
-        assert path.with_name(path.name + ".bak").read_bytes() == original[path]
+        assert not path.with_name(path.name + ".bak").exists()
         root = ET.parse(path).getroot()
         actors = [
             actor
@@ -151,3 +153,32 @@ def test_colorization_rejects_paths_outside_scope(client, tmp_path):
     )
     assert response.status_code == 400
     assert response.json()["code"] == "PATH_OUTSIDE_ROOT"
+
+
+@pytest.mark.parametrize("invalid_entry", ["file", "subfolder"])
+def test_colorization_rejects_non_piece_entries(client, tmp_path, invalid_entry):
+    assert client.post(
+        "/api/v1/settings", json={"onedrive_input_root": str(tmp_path)}
+    ).status_code == 200
+    pieces_root = tmp_path / "COMP PART"
+    profiles_root = tmp_path / "Profiles"
+    pieces_root.mkdir()
+    profiles_root.mkdir()
+    if invalid_entry == "file":
+        (pieces_root / "unexpected.txt").write_text("not a Composer piece", encoding="utf-8")
+    else:
+        (pieces_root / "nested").mkdir()
+    run_id = _make_run(client, tmp_path)
+
+    response = client.post(
+        "/api/v1/colorization/mono-body",
+        json={
+            "scope": "input",
+            "pieces_root": str(pieces_root),
+            "profiles_root": str(profiles_root),
+            "nomenclature_run_id": run_id,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "PIECES_FOLDER_CONTENT_INVALID"

@@ -9,7 +9,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core import onedrive
+from app.core.composer_pieces import resolve_piece_folder_path
 from app.core.errors import AppError
 from app.core.security import safe_under_root
 from app.core.smgxml_colorization import colorize_mono_body_folder
@@ -36,7 +38,16 @@ def colorize_mono_body(
         raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
 
     root = onedrive.root_for_scope(db, payload.scope)
-    pieces_root = safe_under_root(root, payload.pieces_root)
+    if payload.scope == "input":
+        pieces_root = resolve_piece_folder_path(
+            onedrive.get_onedrive_roots(db)["input"],
+            payload.pieces_root,
+            settings.bind_host,
+            invalid_path_code="PIECES_ROOT_PATH_INVALID",
+            invalid_path_message="Sans racine Input, fournissez un chemin absolu pour les pièces.",
+        )
+    else:
+        pieces_root = safe_under_root(root, payload.pieces_root)
     profiles_root = safe_under_root(root, payload.profiles_root)
     if not pieces_root.is_dir():
         raise AppError(
@@ -63,12 +74,20 @@ def colorize_mono_body(
         {"old_pn": item.old_pn, "mono_texture": item.mono_texture}
         for item in rows
     ]
-    result = colorize_mono_body_folder(
-        pieces_root,
-        profiles_root,
-        mono_parts,
-        apply=payload.apply,
-    )
+    try:
+        result = colorize_mono_body_folder(
+            pieces_root,
+            profiles_root,
+            mono_parts,
+            apply=payload.apply,
+        )
+    except OSError as exc:
+        raise AppError(
+            "PIECES_ROOT_READ_FAILED",
+            "Lecture du dossier des pièces impossible.",
+            status_code=400,
+            detail={"path": str(pieces_root)},
+        ) from exc
     log.info(
         "colorisation mono-corps run %s : %d fichiers changes, applique=%s",
         payload.nomenclature_run_id,

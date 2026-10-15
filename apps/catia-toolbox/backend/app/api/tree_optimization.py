@@ -14,8 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core import onedrive
+from app.core.composer_pieces import (
+    copy_composer_pieces_to_workspace,
+    resolve_piece_folder_path,
+)
 from app.core.errors import AppError
-from app.core.security import safe_under_root
 from app.core.tree_optimization import (
     FolderResult,
     count_smgxml_files,
@@ -141,23 +144,13 @@ async def pick_local_folder(
 
 def _resolve_input_folder(db: Session, path: str) -> Path:
     input_root = onedrive.get_onedrive_roots(db)["input"]
-    if input_root:
-        folder = safe_under_root(input_root, path)
-    else:
-        if settings.bind_host.strip().lower() not in {"127.0.0.1", "localhost", "::1"}:
-            raise AppError(
-                "ROOT_NOT_CONFIGURED",
-                "Configurez une racine Input avant d'utiliser ce traitement sur un serveur distant.",
-                status_code=400,
-            )
-        candidate = Path(path).expanduser()
-        if not candidate.is_absolute():
-            raise AppError(
-                "TREE_OPTIMIZATION_PATH_INVALID",
-                "Sans racine Input, fournissez un chemin absolu.",
-                status_code=400,
-            )
-        folder = candidate.resolve()
+    folder = resolve_piece_folder_path(
+        input_root,
+        path,
+        settings.bind_host,
+        invalid_path_code="TREE_OPTIMIZATION_PATH_INVALID",
+        invalid_path_message="Sans racine Input, fournissez un chemin absolu.",
+    )
 
     if not folder.is_dir():
         raise AppError(
@@ -167,6 +160,18 @@ def _resolve_input_folder(db: Session, path: str) -> Path:
             detail={"path": str(folder)},
         )
     return folder
+
+
+def _copy_input_pieces(folder: Path) -> Path:
+    try:
+        return copy_composer_pieces_to_workspace(folder)
+    except OSError as exc:
+        raise AppError(
+            "TREE_OPTIMIZATION_COPY_FAILED",
+            "Copie des fichiers Composer impossible.",
+            status_code=500,
+            detail={"path": str(folder)},
+        ) from exc
 
 
 def _tree_optimization_out(result: FolderResult) -> TreeOptimizationOut:
@@ -203,7 +208,8 @@ def run_tree_optimization(
     payload: TreeOptimizationIn,
     db: Session = Depends(get_db),
 ) -> TreeOptimizationOut:
-    folder = _resolve_input_folder(db, payload.path)
+    source_folder = _resolve_input_folder(db, payload.path)
+    folder = _copy_input_pieces(source_folder)
     try:
         result = optimize_folder(folder, apply=payload.apply)
     except OSError as exc:
@@ -221,7 +227,8 @@ def stream_tree_optimization(
     payload: TreeOptimizationIn,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    folder = _resolve_input_folder(db, payload.path)
+    source_folder = _resolve_input_folder(db, payload.path)
+    folder = _copy_input_pieces(source_folder)
 
     def generate_events():
         try:

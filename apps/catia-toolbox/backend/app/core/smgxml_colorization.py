@@ -5,11 +5,12 @@ from __future__ import annotations
 import copy
 import os
 import re
-import shutil
 import tempfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict
 from pathlib import Path
+
+from app.core.composer_pieces import list_composer_piece_files
 
 
 STYLE_PROPERTY_NAMES = frozenset(
@@ -108,30 +109,15 @@ def _copy_style(actor: ET.Element, properties: list[ET.Element], profile_name: s
     return changed
 
 
-def _next_backup_path(source: Path) -> Path:
-    first = Path(f"{source}.bak")
-    if not first.exists():
-        return first
-    index = 1
-    while True:
-        candidate = Path(f"{source}.bak.{index}")
-        if not candidate.exists():
-            return candidate
-        index += 1
-
-
-def _write_with_backup(tree: ET.ElementTree, source: Path) -> str:
+def _atomic_write(tree: ET.ElementTree, source: Path) -> None:
     temporary_path: Path | None = None
-    backup_path = _next_backup_path(source)
     try:
         with tempfile.NamedTemporaryFile(
             prefix=f"{source.name}.", suffix=".tmp", dir=source.parent, delete=False
         ) as temporary_file:
             temporary_path = Path(temporary_file.name)
         tree.write(temporary_path, encoding="utf-8", xml_declaration=True)
-        shutil.copy2(source, backup_path)
         os.replace(temporary_path, source)
-        return str(backup_path)
     finally:
         if temporary_path is not None and temporary_path.exists():
             temporary_path.unlink()
@@ -145,6 +131,8 @@ def colorize_mono_body_folder(
     apply: bool = False,
 ) -> dict:
     """Plan or apply profile styles to every matching Old P/N and geometry actor."""
+    list_composer_piece_files(pieces_root)
+
     groups: dict[str, dict] = {}
     results: list[dict] = []
     for part in mono_parts:
@@ -160,7 +148,6 @@ def colorize_mono_body_folder(
                     "status": "old_pn_missing",
                     "actors_total": 0,
                     "actors_changed": 0,
-                    "backup_path": "",
                     "message": "L'OLD P/N est vide.",
                     "applied": False,
                 }
@@ -264,7 +251,6 @@ def colorize_mono_body_folder(
                 "status": "old_pn_ambiguous",
                 "actors_total": 0,
                 "actors_changed": 0,
-                "backup_path": "",
                 "message": "Le nom du fichier correspond à plusieurs OLD P/N.",
                 "applied": False,
             }
@@ -284,7 +270,6 @@ def colorize_mono_body_folder(
                     "status": "piece_not_found" if status == "ready" else status,
                     "actors_total": 0,
                     "actors_changed": 0,
-                    "backup_path": "",
                     "message": "Aucun fichier SMGXML ne correspond à cet OLD P/N."
                     if status == "ready"
                     else message,
@@ -304,7 +289,6 @@ def colorize_mono_body_folder(
                         "status": status,
                         "actors_total": 0,
                         "actors_changed": 0,
-                        "backup_path": "",
                         "message": message,
                         "applied": False,
                     }
@@ -325,7 +309,6 @@ def colorize_mono_body_folder(
                         "status": "smgxml_invalid",
                         "actors_total": 0,
                         "actors_changed": 0,
-                        "backup_path": "",
                         "message": f"SMGXML illisible ({type(exc).__name__}).",
                         "applied": False,
                     }
@@ -349,7 +332,6 @@ def colorize_mono_body_folder(
                         "status": "no_geometry_actor",
                         "actors_total": 0,
                         "actors_changed": 0,
-                        "backup_path": "",
                         "message": "Aucun acteur géométrique (GeometryType=1).",
                         "applied": False,
                     }
@@ -359,10 +341,9 @@ def colorize_mono_body_folder(
             actors_changed = sum(
                 1 for actor in actors if _copy_style(actor, properties, profile_path.name)
             )
-            backup_path = ""
             if apply and actors_changed:
                 try:
-                    backup_path = _write_with_backup(tree, piece_path)
+                    _atomic_write(tree, piece_path)
                 except OSError as exc:
                     results.append(
                         {
@@ -373,7 +354,6 @@ def colorize_mono_body_folder(
                             "status": "write_error",
                             "actors_total": len(actors),
                             "actors_changed": actors_changed,
-                            "backup_path": "",
                             "message": f"Écriture impossible ({type(exc).__name__}).",
                             "applied": False,
                         }
@@ -391,7 +371,6 @@ def colorize_mono_body_folder(
                     ),
                     "actors_total": len(actors),
                     "actors_changed": actors_changed,
-                    "backup_path": backup_path,
                     "message": "",
                     "applied": bool(apply and actors_changed),
                 }

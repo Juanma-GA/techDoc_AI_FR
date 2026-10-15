@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import os
 import re
-import shutil
 import stat
 import tempfile
 import xml.etree.ElementTree as ET
@@ -13,6 +12,8 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Literal, TypedDict
+
+from app.core.composer_pieces import find_composer_piece_files, list_composer_piece_files
 
 _ALLOWED_CHILDREN = {"CLitAssyRoot", "Neutral", "Tracks", "CLitActorMesh"}
 _XML_ENCODING = re.compile(rb"\bencoding\s*=\s*(['\"])([^'\"]+)\1", re.IGNORECASE)
@@ -25,7 +26,6 @@ class FileResult(TypedDict):
     status: FileStatus
     removed_elements: int
     removed_by_tag: dict[str, int]
-    backup_path: str | None
     message: str
 
 
@@ -118,17 +118,6 @@ def _serialize(tree: ET.ElementTree, source: bytes) -> bytes:
     return output.getvalue()
 
 
-def _next_backup_path(path: Path) -> Path:
-    backup_directory = path.parent / "sauvegarde"
-    backup_directory.mkdir(exist_ok=True)
-    candidate = backup_directory / f"{path.name}.bak"
-    counter = 1
-    while candidate.exists():
-        candidate = backup_directory / f"{path.name}.bak.{counter}"
-        counter += 1
-    return candidate
-
-
 def _atomic_write(path: Path, content: bytes) -> None:
     temporary: Path | None = None
     try:
@@ -158,7 +147,6 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
             "status": "invalid_xml",
             "removed_elements": 0,
             "removed_by_tag": {},
-            "backup_path": None,
             "message": str(exc),
         }
     except OSError as exc:
@@ -167,7 +155,6 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
             "status": "error",
             "removed_elements": 0,
             "removed_by_tag": {},
-            "backup_path": None,
             "message": str(exc),
         }
 
@@ -182,7 +169,6 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
             "status": "no_section",
             "removed_elements": 0,
             "removed_by_tag": {},
-            "backup_path": None,
             "message": "",
         }
 
@@ -197,7 +183,6 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
             "status": "unchanged",
             "removed_elements": 0,
             "removed_by_tag": {},
-            "backup_path": None,
             "message": "",
         }
 
@@ -207,15 +192,11 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
             "status": "ready",
             "removed_elements": removed_elements,
             "removed_by_tag": dict(removed),
-            "backup_path": None,
             "message": "",
         }
 
-    backup_path: Path | None = None
     try:
         output = _serialize(tree, source)
-        backup_path = _next_backup_path(path)
-        shutil.copy2(path, backup_path)
         _atomic_write(path, output)
     except (OSError, LookupError, UnicodeError) as exc:
         return {
@@ -223,7 +204,6 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
             "status": "error",
             "removed_elements": removed_elements,
             "removed_by_tag": dict(removed),
-            "backup_path": str(backup_path) if backup_path and backup_path.exists() else None,
             "message": str(exc),
         }
 
@@ -232,34 +212,24 @@ def _process_file(path: Path, *, apply: bool) -> FileResult:
         "status": "optimized",
         "removed_elements": removed_elements,
         "removed_by_tag": dict(removed),
-        "backup_path": str(backup_path),
         "message": "",
     }
 
 
 def _list_smgxml_files(directory: Path) -> list[Path]:
-    if not directory.is_dir():
-        raise NotADirectoryError(str(directory))
-
-    files: list[Path] = []
-    with os.scandir(directory) as entries:
-        for entry in entries:
-            try:
-                if (
-                    not entry.is_symlink()
-                    and entry.is_file(follow_symlinks=False)
-                    and entry.name.casefold().endswith(".smgxml")
-                ):
-                    files.append(Path(entry.path))
-            except OSError:
-                continue
-
-    return sorted(files, key=lambda item: item.name.casefold())
+    return [
+        path
+        for path in list_composer_piece_files(directory)
+        if path.suffix.casefold() == ".smgxml"
+    ]
 
 
 def count_smgxml_files(folder: str | Path) -> int:
-    """Count top-level SMGXML filenames without opening their contents."""
-    return len(_list_smgxml_files(Path(folder)))
+    """Count top-level SMGXML files, ignoring unrelated source entries."""
+    return sum(
+        path.suffix.casefold() == ".smgxml"
+        for path in find_composer_piece_files(Path(folder))
+    )
 
 
 def iter_optimize_folder_events(

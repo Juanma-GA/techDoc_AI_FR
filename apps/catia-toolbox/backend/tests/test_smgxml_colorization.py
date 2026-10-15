@@ -79,7 +79,7 @@ def test_colorization_dry_run_includes_all_files_and_repeated_actors(tmp_path):
         assert not path.with_name(path.name + ".bak").exists()
 
 
-def test_colorization_apply_preserves_non_style_properties_and_backs_up(tmp_path):
+def test_colorization_apply_preserves_non_style_properties_without_backup(tmp_path):
     pieces_root, profiles_root, mono_parts, original_bytes = _create_fixture(tmp_path)
 
     result = colorize_mono_body_folder(pieces_root, profiles_root, mono_parts, apply=True)
@@ -87,11 +87,12 @@ def test_colorization_apply_preserves_non_style_properties_and_backs_up(tmp_path
     assert result["summary"]["files_changed"] == 2
     assert result["summary"]["actors_changed"] == 3
     assert result["summary"]["applied"] is True
+    assert all("backup_path" not in item for item in result["items"])
     for path, original in original_bytes.items():
         if "PN-002" in path.name:
             assert path.read_bytes() == original
             continue
-        assert path.with_name(path.name + ".bak").read_bytes() == original
+        assert not path.with_name(path.name + ".bak").exists()
         root = ET.parse(path).getroot()
         geometry_actors = [
             neutral

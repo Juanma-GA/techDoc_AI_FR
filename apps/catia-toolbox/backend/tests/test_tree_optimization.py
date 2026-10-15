@@ -45,30 +45,26 @@ def _tag(element: ET.Element) -> str:
     return element.tag.rsplit("}", 1)[-1]
 
 
-def test_count_smgxml_files_only_checks_top_level_names(tmp_path):
+def test_count_smgxml_files_ignores_unrelated_source_entries(tmp_path):
     source = tmp_path / "composer"
     nested = source / "nested"
-    backups = source / "sauvegarde"
     nested.mkdir(parents=True)
-    backups.mkdir()
     (source / "piece.smgXml").write_text("not parsed", encoding="utf-8")
     (source / "another.SMGXML").write_text("also not parsed", encoding="utf-8")
-    (source / "other.xml").write_text("not counted", encoding="utf-8")
-    (nested / "nested.smgXml").write_text("not counted", encoding="utf-8")
-    (backups / "piece.smgXml.bak").write_text("not counted", encoding="utf-8")
+    (source / "piece.smgGeom").write_text("geometry", encoding="utf-8")
+    (source / "notes.txt").write_text("unrelated", encoding="utf-8")
+    (nested / "nested.smgXml").write_text("ignored", encoding="utf-8")
 
     assert count_smgxml_files(source) == 2
 
 
 def test_analyze_only_top_level_smgxml_without_writing(tmp_path):
     source = tmp_path / "composer"
-    nested = source / "nested"
-    nested.mkdir(parents=True)
+    source.mkdir()
     xml_path = source / "piece.smgXml"
     original = _composer_xml()
     xml_path.write_text(original, encoding="utf-8")
-    (source / "not-a-piece.xml").write_text(original, encoding="utf-8")
-    (nested / "nested.smgXml").write_text(original, encoding="utf-8")
+    (source / "piece.smgGeom").write_text("geometry", encoding="utf-8")
 
     result = optimize_folder(source)
 
@@ -85,7 +81,7 @@ def test_analyze_only_top_level_smgxml_without_writing(tmp_path):
     assert not (source / "sauvegarde").exists()
 
 
-def test_apply_keeps_allowed_trees_and_outside_content_with_backup(tmp_path):
+def test_apply_keeps_allowed_trees_and_outside_content_without_backup(tmp_path):
     source = tmp_path / "composer"
     source.mkdir()
     xml_path = source / "piece.smgXml"
@@ -95,13 +91,10 @@ def test_apply_keeps_allowed_trees_and_outside_content_with_backup(tmp_path):
 
     item = result["files"][0]
     assert item["status"] == "optimized"
-    assert item["backup_path"] == str(source / "sauvegarde" / "piece.smgXml.bak")
+    assert "backup_path" not in item
     assert result["files_modified"] == 1
-    backup_path = item["backup_path"]
-    assert backup_path is not None
-    original_root = ET.parse(backup_path).getroot()
+    assert not (source / "sauvegarde").exists()
     root = ET.parse(xml_path).getroot()
-    assert original_root.find(".//CLitTargetObject") is not None
     assert root.find(".//CLitTargetObject") is None
     assert root.find(".//Outside/CLitActorGround") is not None
     assert root.find(".//Server[@Type='CLitServerBase']/CLitVectorImageBOM") is not None
@@ -170,7 +163,7 @@ def test_unmatched_and_invalid_xml_are_reported_without_backups(tmp_path):
     assert not (source / "sauvegarde").exists()
 
 
-def test_api_analyzes_then_applies_with_backup(client, tmp_path):
+def test_api_analyzes_then_applies_to_copy_without_backup(client, tmp_path):
     assert (
         client.post(
             "/api/v1/settings",
@@ -202,8 +195,11 @@ def test_api_analyzes_then_applies_with_backup(client, tmp_path):
     assert body["files_modified"] == 1
     assert body["removed_elements"] > 0
     assert "files" not in body
-    assert (folder / "sauvegarde" / "piece.smgXml.bak").read_text(encoding="utf-8") == original
-    assert ET.parse(xml_path).find(".//CLitTargetObject") is None
+    output = folder / "composer_optimized"
+    assert body["path"] == str(output)
+    assert xml_path.read_text(encoding="utf-8") == original
+    assert ET.parse(output / xml_path.name).find(".//CLitTargetObject") is None
+    assert not (output / "sauvegarde").exists()
 
 
 def test_api_streams_tree_optimization_progress(client, tmp_path):
@@ -383,20 +379,25 @@ def test_api_accepts_absolute_local_path_without_upload(client, tmp_path):
     assert response.json()["files_with_changes"] == 1
     assert "files" not in response.json()
     assert xml_path.read_text(encoding="utf-8") == _composer_xml()
+    output = folder / "composer_optimized"
+    assert response.json()["path"] == str(output)
+    assert (output / xml_path.name).read_text(encoding="utf-8") == _composer_xml()
 
 
-def test_api_count_uses_names_only_without_parsing_or_recursion(client, tmp_path):
+def test_api_count_ignores_unrelated_source_entries_without_parsing(client, tmp_path):
     root = tmp_path / "input"
     folder = root / "composer"
     nested = folder / "nested"
-    nested.mkdir(parents=True)
+    folder.mkdir(parents=True)
+    nested.mkdir()
     assert client.post(
         "/api/v1/settings",
         json={"onedrive_input_root": str(root)},
     ).status_code == 200
     (folder / "broken.smgXml").write_text("<invalid", encoding="utf-8")
-    (folder / "other.xml").write_text("<root />", encoding="utf-8")
-    (nested / "nested.smgXml").write_text("<root />", encoding="utf-8")
+    (folder / "piece.smgGeom").write_text("geometry", encoding="utf-8")
+    (folder / "notes.txt").write_text("unrelated", encoding="utf-8")
+    (nested / "nested.smgXml").write_text("ignored", encoding="utf-8")
 
     response = client.post(
         "/api/v1/tree-optimization/count",
@@ -420,16 +421,14 @@ def test_api_requires_input_root_for_nonlocal_bind(client, tmp_path, monkeypatch
     assert response.json()["code"] == "ROOT_NOT_CONFIGURED"
 
 
-def test_existing_backup_is_not_overwritten(tmp_path):
+def test_apply_does_not_create_a_backup(tmp_path):
     source = tmp_path / "composer"
-    backup_directory = source / "sauvegarde"
-    backup_directory.mkdir(parents=True)
+    source.mkdir()
     xml_path = source / "piece.smgXml"
     xml_path.write_text(_composer_xml(), encoding="utf-8")
-    existing_backup = backup_directory / "piece.smgXml.bak"
-    existing_backup.write_text("previous backup", encoding="utf-8")
 
     result = optimize_folder(source, apply=True)
 
-    assert result["files"][0]["backup_path"] == str(backup_directory / "piece.smgXml.bak.1")
-    assert existing_backup.read_text(encoding="utf-8") == "previous backup"
+    assert result["files"][0]["status"] == "optimized"
+    assert not (source / "sauvegarde").exists()
+    assert not list(source.glob("*.bak*"))

@@ -9,9 +9,11 @@ import {
   treeOptimizationApi,
   type TreeOptimizationRunDto,
 } from "../lib/api";
+import { useWorkspace } from "../stores/workspace";
 
 export function TreeOptimization() {
   const { t } = useTranslation();
+  const setSource = useWorkspace((state) => state.setSource);
   const [path, setPath] = useState("");
   const selectedPathRef = useRef("");
   const [filesToAnalyze, setFilesToAnalyze] = useState<number | null>(null);
@@ -20,6 +22,12 @@ export function TreeOptimization() {
   const [error, setError] = useState<string | null>(null);
   const rootsQuery = useQuery({ queryKey: ["browse", "roots"], queryFn: browseApi.roots });
   const hasInputRoot = Boolean(rootsQuery.data?.input);
+  const displayError = (reason: unknown) =>
+    reason instanceof ApiClientError && reason.code === "PIECES_FOLDER_CONTENT_INVALID"
+      ? t("treeOptimization.invalidFolderContents")
+      : reason instanceof Error
+        ? reason.message
+        : String(reason);
 
   const countMutation = useMutation({
     mutationFn: async (folderPath: string) => ({
@@ -34,13 +42,14 @@ export function TreeOptimization() {
       setError(null);
     },
     onError: (reason: unknown) =>
-      setError(reason instanceof ApiClientError ? reason.message : String(reason)),
+      setError(displayError(reason)),
   });
 
   const pickFolderMutation = useMutation({
     mutationFn: () => treeOptimizationApi.pickFolder(path.trim() || undefined, t("treeOptimization.folderLabel")),
     onSuccess: ({ path: selectedPath }) => {
       if (!selectedPath) return;
+      setSource("optimizedPiecesRoot", "");
       selectedPathRef.current = selectedPath;
       setPath(selectedPath);
       setFilesToAnalyze(null);
@@ -49,7 +58,7 @@ export function TreeOptimization() {
       countMutation.mutate(selectedPath);
     },
     onError: (reason: unknown) =>
-      setError(reason instanceof ApiClientError ? reason.message : String(reason)),
+      setError(displayError(reason)),
   });
 
   const optimizeMutation = useMutation({
@@ -63,12 +72,16 @@ export function TreeOptimization() {
       }),
     onMutate: (folderPath) => {
       if (folderPath === selectedPathRef.current) {
+        setSource("optimizedPiecesRoot", "");
         setProgress({ filesScanned: 0, filesTotal: filesToAnalyze ?? 0 });
       }
     },
     onSuccess: (data, folderPath) => {
       if (folderPath !== selectedPathRef.current) return;
       setResult(data);
+      selectedPathRef.current = data.path;
+      setPath(data.path);
+      setSource("optimizedPiecesRoot", data.path);
       setFilesToAnalyze(null);
       setProgress(null);
       setError(null);
@@ -76,7 +89,7 @@ export function TreeOptimization() {
     onError: (reason: unknown, folderPath) => {
       if (folderPath !== selectedPathRef.current) return;
       setProgress(null);
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(displayError(reason));
     },
   });
 
@@ -100,6 +113,7 @@ export function TreeOptimization() {
               exts={[]}
               value={path}
               onChange={(nextPath) => {
+                setSource("optimizedPiecesRoot", "");
                 selectedPathRef.current = nextPath;
                 setPath(nextPath);
                 setFilesToAnalyze(null);
@@ -118,6 +132,7 @@ export function TreeOptimization() {
                   placeholder={t("treeOptimization.absolutePathPlaceholder")}
                   value={path}
                   onChange={(event) => {
+                    setSource("optimizedPiecesRoot", "");
                     selectedPathRef.current = event.target.value;
                     setPath(event.target.value);
                     setFilesToAnalyze(null);
@@ -201,6 +216,7 @@ export function TreeOptimization() {
       {result ? (
         <article className="card">
           <h2 className="card-title">{t("treeOptimization.resultTitle")}</h2>
+          <code className="hint" style={{ overflowWrap: "anywhere" }}>{result.path}</code>
           <div className="row" style={{ flexWrap: "wrap", marginBottom: "0.75rem" }}>
             <span className="badge info">
               {t("treeOptimization.filesScanned", { count: result.files_scanned })}
