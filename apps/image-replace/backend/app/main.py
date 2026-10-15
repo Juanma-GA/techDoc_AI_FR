@@ -9,13 +9,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, health
+from app.api import admin, excel, health, inpaint, ocr
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
-
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
@@ -84,6 +83,9 @@ def create_app() -> FastAPI:
     api_v1.include_router(health.router)
     api_v1.include_router(settings_route.router)
     api_v1.include_router(admin.router)
+    api_v1.include_router(excel.router)
+    api_v1.include_router(ocr.router)
+    api_v1.include_router(inpaint.router)
     app.include_router(api_v1)
 
     _mount_frontend(app)

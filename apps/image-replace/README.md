@@ -6,51 +6,57 @@
 
 ## Profiles
 
-- `local-first`: the application runs locally and stores its current settings in SQLite.
-- No `llm` profile: the planned image workflow uses local OCR and inpainting models, with no remote LLM or AI API.
+- `local-first`: image processing and persistence are local.
+- No `llm` profile: PaddleOCR and LaMa run locally; no remote LLM or AI API is used.
 
 ## Purpose
 
-Provide a local tool to find a supplied word or phrase in an image and replace it with supplied replacement text. The intended workflow uses PaddleOCR to locate text and LaMa to clean/inpaint the original image region.
+Find text references in technical images and replace selected references with supplied values. Users can enter pairs manually or load them from an Excel workbook.
 
 ## Maturity
 
-**Status:** Scaffold only. The image upload, OCR, text replacement, and inpainting workflow has not yet been integrated or validated.
+**Status:** Local POC workflow integrated. API and UI behavior are covered by synthetic tests; actual PaddleOCR and LaMa model inference has not been run as part of this integration.
 
 ## Features
 
-- Standard Home, Data, and Settings pages from the canonical template.
-- Local normal/demo mode setting.
-- Planned, not implemented: local OCR and replacement of user-selected text in an image using PaddleOCR and LaMa.
+- Upload PNG, JPEG, WEBP, BMP, or TIFF images up to 15 MB.
+- Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section.
+- Add manual replacement pairs; these are combined with the selected Excel part pairs.
+- Run PaddleOCR on CPU, inspect recognized text and matches, and download the replacement image as a 2480 × 3508 px A4 JPEG at 300 dpi.
+- Zoom and pan the result, then paint a mask to remove an area with local LaMa inpainting or local median-color fill.
+- No image, workbook, or generated result is persisted by the application.
 
 ## Port
 
-The target default port is `8010`. Launchers try this port first and select the next free port if needed. See the [application inventory](../../docs/apps/README.md).
+The main API and React UI use default port `8010`; the internal LaMa service uses `8011`. Launchers select another free port if a default is busy and pass the selected local LaMa port to the API. See the [application inventory](../../docs/apps/README.md).
 
 ## Prerequisites
 
-- Python 3.11 or later.
+- Python 3.13 for the PaddleOCR API and Python 3.11 for the LaMa service.
 - Node 20 and pnpm 9 for frontend development and builds.
-- PaddleOCR and LaMa are not installed by this scaffold; their runtime requirements will be defined when the image workflow is integrated.
+- Windows: `py` launcher and `curl.exe`. The launcher can install Python 3.11 from the repository installer; Python 3.13 must already be installed unless using a package with embedded runtimes.
+- Unix: `python3.13`, `python3.11`, `lsof`, and `curl`.
+- Package users do not need a system Python; the Windows package includes separate Python 3.13 and 3.11 runtimes.
+
+Dependencies install on first launch. PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
 
 ## Start On Windows
 
-Double-click `start.bat`. The app opens at `http://127.0.0.1:8010/` unless the launcher selects another free port.
+Double-click `start.bat`. It starts the API and LaMa service in local console windows, builds the React UI if absent or stale, and opens `http://127.0.0.1:8010/` (or the selected API port).
 
 ## Start On Unix
 
-Run `bash start.sh`. The app opens at `http://127.0.0.1:8010/` unless the launcher selects another free port.
+Run `bash start.sh`. The launcher starts the LaMa service alongside the API and stops its child process when the launcher exits. The app opens at `http://127.0.0.1:8010/` unless another free port is selected.
 
 ## Frontend Development
 
-From the repository root:
+Run `start.bat` once to create and install the two Python environments. Stop its API window; the already-running LaMa service may be reused. From the repository root, run:
 
 ```bash
-pnpm install
 pnpm dev:image-replace
 ```
 
-Vite proxies `/api` requests to the backend on the app's assigned default port.
+The command starts the API, LaMa (or reuses its local health endpoint), and Vite. Vite proxies `/api` to the API on port `8010`.
 
 ## Served Interface
 
@@ -58,36 +64,56 @@ FastAPI serves the built React application from `frontend/dist/` at `/`. If the 
 
 ## Persistence
 
-The app uses the gitignored SQLite database `backend/data/image-replace.db`. `AppConfig` currently stores the normal/demo mode preference. Image inputs and outputs are not yet handled or persisted.
+The app uses the gitignored SQLite database `backend/data/image-replace.db` for the standard application configuration. Uploaded images, workbooks, OCR output, and retouched images are processed in memory or temporary files and are not persisted by the application.
 
 ## LLM Configuration
 
-Not applicable. The scaffold does not call an LLM or any remote AI service. PaddleOCR recognition and LaMa inpainting are planned to run locally and have not yet been integrated.
+Not applicable. No remote LLM is used. PaddleOCR and LaMa are local model workflows.
+
+## API
+
+- `GET /api/v1/health`
+- `POST /api/v1/image-replace/excel/sheets`
+- `POST /api/v1/image-replace/excel/columns`
+- `POST /api/v1/image-replace/excel/pieces`
+- `POST /api/v1/image-replace/ocr`
+- `POST /api/v1/image-replace/inpaint`
+
+The LaMa service is internal to the local application and listens on `127.0.0.1:8011` by default.
 
 ## Tests
 
-### Executed during bootstrap
+### Executed during integration
 
-- Backend: focused pytest suite, 3 tests passed.
-- Frontend: TypeScript check, ESLint, Vitest (3 tests), and production build passed.
-- Browser smoke: 1 Playwright test passed against the isolated Vite app; the backend was not running, so API integration was not exercised.
-- Repository standard: all 16 checks passed using a temporary LF-normalized copy of `scripts/check_standard.sh`.
-- Packaging CLI: `python -X utf8 scripts/package_image-replace.py --help` passed; no archive was produced.
+- Backend: 19 pytest tests passed, including synthetic image/Excel cases, OCR API tests with a mocked engine, and LaMa proxy/service validation.
+- Backend and helper scripts: Ruff passed for the changed feature modules and packaging/dev helpers.
+- Frontend: TypeScript check, ESLint, 5 Vitest tests, and production build passed.
+- Browser smoke: 2 Playwright tests passed with synthetic files and mocked API responses on an isolated Vite port.
+- Repository: all 16 `check_standard.sh` checks passed using a temporary LF-normalized copy because the checked-in shell script has CRLF line endings.
+- Packaging: Python compilation and `python -X utf8 scripts/package_image-replace.py --help` passed. No ZIP was created.
 
-### Recommended
+### Recommended for real-model validation
 
-- Add backend, frontend, and browser tests for image upload, local OCR, text replacement, and LaMa output when that workflow is integrated.
-- Run the full packaging workflow after model runtime dependencies and distribution requirements are decided.
+- Run OCR with a synthetic image after the first model download.
+- Run LaMa inpainting with a synthetic image and mask after the first model download.
+- Inspect image/Excel workflows in both themes and at desktop and narrow-screen widths.
 
 ## Limitations
 
-- The business workflow is not implemented.
-- PaddleOCR and LaMa dependencies, model management, image handling, and output persistence remain to be designed during integration.
-- No application-specific image-processing tests exist yet.
+- The launcher requires compatible Python runtimes on developer machines; package users receive embedded runtimes.
+- The first dependency/model setup requires network access. Subsequent inference is local.
+- Model accuracy, latency, and packaging size have not been benchmarked with representative production images.
+- The backend preserves the source OCR and Excel behavior; frontend labels and error messages are localized, while some backend validation details remain French.
 
 ## Standard Deviations
 
-None known. The app does not declare the `llm` profile.
+### Single workflow tab
+
+- **Rule:** `STANDARD_POC.md` §4 describes Home, Data, and Settings tabs.
+- **Deviation:** The app exposes one workflow tab, Detection, plus Settings; the Data UI route is not registered.
+- **Reason:** Image detection and replacement is the sole business workflow for this POC.
+- **Approval:** Explicitly approved by the product owner for this app.
+- **Review condition:** Revisit if the product adds a separate data-management workflow or the standard changes.
 
 ## Technical References
 

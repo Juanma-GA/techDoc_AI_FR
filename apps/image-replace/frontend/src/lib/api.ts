@@ -26,6 +26,26 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function apiForm<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    body: formData,
+  });
+  const payload = (await response.json().catch(() => null)) as
+    | (ApiError & { detail?: unknown })
+    | null;
+  if (!response.ok) {
+    const message =
+      (typeof payload?.message === "string" && payload.message) ||
+      (typeof payload?.detail === "string" && payload.detail) ||
+      response.statusText ||
+      "Request failed.";
+    throw new Error(message);
+  }
+  if (payload === null) throw new Error("The server returned an unreadable response.");
+  return payload as T;
+}
+
 // ----- Standard DTOs (STANDARD_POC.md - health/settings/admin) -------------
 
 export type HealthDto = { status: string; version: string; db: string };
@@ -45,6 +65,42 @@ export type AdminStatsDto = {
 
 export type AdminResetDto = { scope: string; deleted: Record<string, number> };
 
+export type ExcelColumnDto = {
+  index: number;
+  letter: string;
+  header: string;
+  label: string;
+};
+
+export type ExcelPieceDto = { row: number; name: string };
+
+export type OcrLineDto = {
+  text: string;
+  confidence: number;
+  box: number[][];
+  matched_references: string[];
+};
+
+export type OcrReferenceDto = {
+  reference: string;
+  found: boolean;
+  line_indices: number[];
+  replacement?: string;
+  replacement_count?: number;
+};
+
+export type OcrResultDto = {
+  width: number;
+  height: number;
+  source_width: number;
+  source_height: number;
+  full_text: string;
+  lines: OcrLineDto[];
+  references: OcrReferenceDto[];
+  edited_image: string;
+  filename: string;
+};
+
 export const healthApi = { read: () => api<HealthDto>("/health") };
 
 export const adminApi = {
@@ -56,4 +112,17 @@ export const settingsApi = {
   read: () => api<SettingsDto>("/settings"),
   write: (body: SettingsInput) =>
     api<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(body) }),
+};
+
+export const imageReplaceApi = {
+  excelSheets: (formData: FormData) =>
+    apiForm<{ sheets: string[] }>("/image-replace/excel/sheets", formData),
+  excelColumns: (formData: FormData) =>
+    apiForm<{ columns: ExcelColumnDto[] }>("/image-replace/excel/columns", formData),
+  excelPieces: (formData: FormData) =>
+    apiForm<{ pieces: ExcelPieceDto[] }>("/image-replace/excel/pieces", formData),
+  runOcr: (formData: FormData) =>
+    apiForm<OcrResultDto>("/image-replace/ocr", formData),
+  inpaint: (formData: FormData) =>
+    apiForm<{ edited_image: string }>("/image-replace/inpaint", formData),
 };

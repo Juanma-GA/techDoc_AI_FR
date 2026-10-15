@@ -1,11 +1,7 @@
-"""Package the image-replace app into a standalone zip ready to share.
+"""Package the Image Replace app into a standalone Windows zip.
 
-This is the canonical packaging script for new POCs. To instantiate :
-
-    cp scripts/package_image-replace.py scripts/package_<poc>.py
-
-Then replace `image-replace`/`template` with the new POC name throughout
-(name, default --out, sources list, embed prefix, LISEZ-MOI/PACKAGE_README).
+The archive contains separate Python runtimes for PaddleOCR and LaMa. Dependency
+installation and model downloads occur on first use; inference remains local.
 
 Layout of the produced archive (with `--embed-python`, default ON):
 
@@ -16,7 +12,8 @@ Layout of the produced archive (with `--embed-python`, default ON):
     ├── apps/<poc>/             # full app (backend + frontend sources, no node_modules / .venv / data)
     │   └── frontend/dist/      # built React UI (only if pnpm + node are available distributor-side)
     ├── design-tokens/          # design-token assets used by the React build
-    └── python-embed/           # bundled Python 3.11 (Windows embeddable + bootstrapped pip)
+    ├── python-embed/           # bundled Python 3.13 for PaddleOCR
+    └── python-embed-lama/      # bundled Python 3.11 for LaMa
 
 Usage:
     python scripts/package_image-replace.py
@@ -31,17 +28,18 @@ import datetime as dt
 import shutil
 import subprocess
 import sys
-import tempfile
-import urllib.request
 import zipfile
 from pathlib import Path
 
+from image_replace_package_runtime import prepare_embedded_python
 
 # =====================================================================
 # Variables a adapter par POC :
 APP_NAME = "Image Replace"
 APP_SLUG = "image-replace"      # nom du dossier sous apps/
-EMBED_PREFIX = "image_replace"   # prefixe du dossier temp pour l'embed Python
+EMBED_PREFIX = "image_replace"
+_OCR_PYTHON_VERSION = "3.13.15"
+_LAMA_PYTHON_VERSION = "3.11.9"
 # =====================================================================
 
 
@@ -108,58 +106,6 @@ def _build_frontend(frontend_dir: Path) -> bool:
     return True
 
 
-_EMBED_PYTHON_VERSION = "3.11.9"
-_EMBED_PYTHON_ARCH = "amd64"
-_EMBED_PYTHON_URL = (
-    f"https://www.python.org/ftp/python/{_EMBED_PYTHON_VERSION}/"
-    f"python-{_EMBED_PYTHON_VERSION}-embed-{_EMBED_PYTHON_ARCH}.zip"
-)
-_GET_PIP_URL = "https://bootstrap.pypa.io/get-pip.py"
-_DOWNLOAD_TIMEOUT_S = 60
-
-
-def _download(url: str, dst: Path) -> None:
-    print(f"[fetch] {url}")
-    with urllib.request.urlopen(url, timeout=_DOWNLOAD_TIMEOUT_S) as resp, open(dst, "wb") as f:
-        shutil.copyfileobj(resp, f)
-
-
-def _prepare_embedded_python(cache_dir: Path) -> Path:
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    archive = cache_dir / Path(_EMBED_PYTHON_URL).name
-    get_pip = cache_dir / "get-pip.py"
-
-    if not archive.exists():
-        _download(_EMBED_PYTHON_URL, archive)
-    if not get_pip.exists():
-        _download(_GET_PIP_URL, get_pip)
-
-    work = Path(tempfile.mkdtemp(prefix=f"{EMBED_PREFIX}-embed-"))
-    print(f"[embed] extracting Python to {work}")
-    with zipfile.ZipFile(archive) as zf:
-        zf.extractall(work)
-
-    pth_files = list(work.glob("python*._pth"))
-    if not pth_files:
-        raise RuntimeError("python*._pth not found in embed")
-    pth = pth_files[0]
-    content = pth.read_text(encoding="utf-8")
-    if "#import site" in content:
-        content = content.replace("#import site", "import site")
-    elif "import site" not in content:
-        content += "\nimport site\n"
-    pth.write_text(content, encoding="utf-8")
-
-    print("[embed] bootstrapping pip...")
-    subprocess.run(
-        [str(work / "python.exe"), str(get_pip), "--no-warn-script-location"],
-        check=True,
-        cwd=work,
-    )
-    print("[embed] pip OK")
-    return work
-
-
 _LISEZ_MOI = f"""\
 {APP_NAME} — Démarrage rapide
 ==============================
@@ -167,8 +113,8 @@ _LISEZ_MOI = f"""\
 1. Décompresser ce ZIP dans le dossier de votre choix.
 2. Double-cliquer sur start.bat à la racine.
 
-Au premier lancement (1 à 3 minutes) : Python détecté ou auto-installé,
-dépendances installées, navigateur ouvert automatiquement.
+Au premier lancement : dépendances installées, modèles téléchargés au besoin,
+navigateur ouvert automatiquement. L'inférence OCR et LaMa reste locale.
 
 Lancements suivants : ~5 secondes.
 
@@ -181,8 +127,11 @@ Documentation détaillée : voir PACKAGE_README.md.
 _PACKAGE_README = f"""\
 # {APP_NAME} — Package partageable
 
-POC local-first. À compléter par POC : objectif, prérequis, workflow,
-configuration. Voir scripts/package_{APP_SLUG}.py pour un exemple.
+L'application lance deux services locaux : PaddleOCR sous Python {_OCR_PYTHON_VERSION}
+et LaMa sous Python {_LAMA_PYTHON_VERSION}. Les modèles peuvent être téléchargés
+au premier usage ; l'inférence d'image reste locale.
+
+Consultez `apps/{APP_SLUG}/README.md` pour le workflow, les prérequis et les limites.
 """
 
 
@@ -244,31 +193,46 @@ def main(argv: list[str] | None = None) -> int:
     sources = [f"apps/{APP_SLUG}", "design-tokens"]
     files = _walk_sources(repo, sources)
 
-    embed_dir: Path | None = None
+    embed_dirs: list[tuple[str, Path]] = []
     if args.embed_python:
         try:
-            embed_dir = _prepare_embedded_python(out_dir / ".cache")
-        except Exception as exc:  # noqa: BLE001
+            cache_dir = out_dir / ".cache"
+            embed_dirs.append(
+                (
+                    "python-embed",
+                    prepare_embedded_python(cache_dir, _OCR_PYTHON_VERSION, EMBED_PREFIX),
+                )
+            )
+            embed_dirs.append(
+                (
+                    "python-embed-lama",
+                    prepare_embedded_python(cache_dir, _LAMA_PYTHON_VERSION, f"{EMBED_PREFIX}_lama"),
+                )
+            )
+        except Exception as exc:
+            for _, runtime_dir in embed_dirs:
+                shutil.rmtree(runtime_dir, ignore_errors=True)
             print(f"[error] embedded Python preparation failed: {exc}", file=sys.stderr)
             return 2
 
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-        zf.writestr(f"{pkg_name}/start.bat", _ROOT_LAUNCHER)
-        zf.writestr(f"{pkg_name}/LISEZ-MOI.txt", _LISEZ_MOI)
-        zf.writestr(f"{pkg_name}/PACKAGE_README.md", _PACKAGE_README)
-        for path, rel in files:
-            zf.write(path, f"{pkg_name}/{rel.as_posix()}")
-        if embed_dir is not None:
-            for path in sorted(embed_dir.rglob("*")):
-                if not path.is_file():
-                    continue
-                rel = path.relative_to(embed_dir)
-                if any(part in {"__pycache__"} for part in rel.parts):
-                    continue
-                zf.write(path, f"{pkg_name}/python-embed/{rel.as_posix()}")
-
-    if embed_dir is not None:
-        shutil.rmtree(embed_dir, ignore_errors=True)
+    try:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            zf.writestr(f"{pkg_name}/start.bat", _ROOT_LAUNCHER)
+            zf.writestr(f"{pkg_name}/LISEZ-MOI.txt", _LISEZ_MOI)
+            zf.writestr(f"{pkg_name}/PACKAGE_README.md", _PACKAGE_README)
+            for path, rel in files:
+                zf.write(path, f"{pkg_name}/{rel.as_posix()}")
+            for runtime_name, runtime_dir in embed_dirs:
+                for path in sorted(runtime_dir.rglob("*")):
+                    if not path.is_file():
+                        continue
+                    rel = path.relative_to(runtime_dir)
+                    if any(part in {"__pycache__"} for part in rel.parts):
+                        continue
+                    zf.write(path, f"{pkg_name}/{runtime_name}/{rel.as_posix()}")
+    finally:
+        for _, runtime_dir in embed_dirs:
+            shutil.rmtree(runtime_dir, ignore_errors=True)
 
     size_mb = zip_path.stat().st_size / (1024 * 1024)
     print(f"[package] OK -> {zip_path} ({size_mb:.1f} MB)")

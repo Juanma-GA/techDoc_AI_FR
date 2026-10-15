@@ -7,7 +7,6 @@ from pathlib import Path
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -38,6 +37,7 @@ class Settings(BaseSettings):
         "http://localhost:8010",
     ]
     max_upload_size_mb: int = 50
+    lama_service_port: int = 8011
 
     @field_validator("cors_origins", mode="before")
     @classmethod

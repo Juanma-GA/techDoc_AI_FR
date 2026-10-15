@@ -19,7 +19,7 @@ Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
 | [`apps/s1000d-extractor/`](apps/s1000d-extractor/) | Extraction et transformation S1000D | 8006 |
 | [`apps/brdp-manager/`](apps/brdp-manager/) | Gestion de BRDP | 8007 |
 | [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
-| [`apps/image-replace/`](apps/image-replace/) | Détection et remplacement local de texte dans les images (PaddleOCR + LaMa, à intégrer) | 8010 |
+| [`apps/image-replace/`](apps/image-replace/) | Détection OCR locale et remplacement de texte dans les images (PaddleOCR + LaMa) | 8010 |
 | [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
 
 Le launcher tente le port par défaut puis utilise le premier port libre

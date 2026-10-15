@@ -12,7 +12,6 @@ import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { settingsApi, type SettingsDto } from "./lib/api";
-import { Data } from "./routes/Data";
 import { Home } from "./routes/Home";
 import { Settings } from "./routes/Settings";
 
@@ -47,9 +46,6 @@ export function App() {
           <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
             {t("nav.home")}
           </NavLink>
-          <NavLink to="/data" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.data")}
-          </NavLink>
           <NavLink to="/settings" className={({ isActive }) => sidebarNavItemClass(isActive)}>
             {t("nav.settings")}
           </NavLink>
@@ -71,7 +67,6 @@ export function App() {
         <ErrorBoundary>
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </ErrorBoundary>

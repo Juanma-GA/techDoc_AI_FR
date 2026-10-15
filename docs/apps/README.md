@@ -20,7 +20,7 @@ The assignments below are the target defaults. Current launcher differences are 
 | `brdp-manager` | Active POC | 8007 | To normalize |
 | `xml-proofreader` | Active POC | 8008 | To normalize |
 | `ecm-automation` | Active POC | 8009 | Local ECM tracker workflow |
-| `image-replace` | Active POC scaffold | 8010 | Local PaddleOCR + LaMa workflow planned; not implemented |
+| `image-replace` | Active POC | 8010 | PaddleOCR API 8010; internal LaMa service defaults to 8011 |
 
 ## Known Baseline Deviations
 

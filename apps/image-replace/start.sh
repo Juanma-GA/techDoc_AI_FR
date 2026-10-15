@@ -1,58 +1,144 @@
 #!/usr/bin/env bash
-# image-replace — Lancement local Unix.
-# Détection Python 3.11+, venv, deps, migrations, rebuild front auto, uvicorn.
-# Le front React est reconstruit automatiquement quand frontend/dist est absent
-# OU qu'une source front est plus récente (comparaison find -newer) : une modif
-# du code front est prise en compte au prochain start.sh, sans supprimer dist.
+# image-replace local launcher: PaddleOCR on Python 3.13 and LaMa on 3.11.
 
 set -euo pipefail
 
-# Port unique (à ajuster par POC : 8001, 8002, ...)
 PORT="${PORT:-8010}"
-
+LAMA_PORT="${LAMA_PORT:-8011}"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="${APP_DIR}/backend"
+LAMA_DIR="${BACKEND_DIR}/lama_service"
+FRONTEND_DIR="${APP_DIR}/frontend"
 
 echo "============================================================"
-echo " image-replace - Lancement local"
+echo " image-replace - Local launch"
 echo "============================================================"
 
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "[erreur] Python 3.11+ introuvable. Installe-le et relance."
+if command -v python3.13 >/dev/null 2>&1; then
+    MAIN_BASE_PYTHON="$(command -v python3.13)"
+elif command -v python3 >/dev/null 2>&1 && \
+    python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
+    MAIN_BASE_PYTHON="$(command -v python3)"
+else
+    echo "[error] Python 3.13 is required for PaddleOCR."
+    exit 1
+fi
+
+if ! command -v python3.11 >/dev/null 2>&1; then
+    echo "[error] Python 3.11 is required for the local LaMa service."
+    exit 1
+fi
+if ! command -v lsof >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+    echo "[error] lsof and curl are required by the local launcher."
     exit 1
 fi
 
 cd "${BACKEND_DIR}"
 mkdir -p data/storage
-
-if [[ ! -d .venv ]]; then
-    echo "[setup] Création du venv..."
-    python3 -m venv .venv
+if [[ ! -x .venv/bin/python ]]; then
+    echo "[setup] Creating Python 3.13 OCR environment..."
+    "${MAIN_BASE_PYTHON}" -m venv .venv
 fi
-# shellcheck source=/dev/null
-source .venv/bin/activate
-
-if [[ ! -f .venv/.installed ]]; then
-    echo "[setup] Installation des deps Python..."
-    pip install --upgrade pip >/dev/null
-    pip install -e .
-    touch .venv/.installed
+MAIN_PYTHON="${BACKEND_DIR}/.venv/bin/python"
+if [[ ! -f .venv/.image-replace-installed ]]; then
+    echo "[setup] Installing PaddleOCR backend dependencies..."
+    "${MAIN_PYTHON}" -m pip install --upgrade pip
+    "${MAIN_PYTHON}" -m pip install -e .
+    touch .venv/.image-replace-installed
 fi
 
-echo "[setup] Migrations Alembic..."
-alembic upgrade head
-
-# Vérifier que le port est libre
-if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
-    echo "[erreur] Le port $PORT est deja utilise :"
-    lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n
-    exit 1
+if [[ ! -x "${LAMA_DIR}/.venv/bin/python" ]]; then
+    echo "[setup] Creating Python 3.11 LaMa environment..."
+    python3.11 -m venv "${LAMA_DIR}/.venv"
+fi
+LAMA_PYTHON="${LAMA_DIR}/.venv/bin/python"
+if [[ ! -f "${LAMA_DIR}/.venv/.image-replace-lama-installed" ]]; then
+    echo "[setup] Installing local LaMa dependencies..."
+    "${LAMA_PYTHON}" -m pip install --upgrade pip
+    "${LAMA_PYTHON}" -m pip install -e "${LAMA_DIR}"
+    touch "${LAMA_DIR}/.venv/.image-replace-lama-installed"
 fi
 
-# Front React : rebuild auto si dist absent OU sources front plus recentes que
-# le dernier build. Restart instantane si rien n'a change. Si pnpm est absent,
-# on sert le dist existant tel quel (pas de rebuild).
-FRONTEND_DIR="${APP_DIR}/frontend"
+port_is_listening() {
+    lsof -iTCP:"$1" -sTCP:LISTEN -P -n >/dev/null 2>&1
+}
+
+PORT_START="$PORT"
+PORT_MAX=$((PORT_START + 20))
+while port_is_listening "$PORT"; do
+    PORT=$((PORT + 1))
+    if (( PORT > PORT_MAX )); then
+        echo "[error] No free API port in the configured range."
+        exit 1
+    fi
+done
+if [[ "$PORT" != "$PORT_START" ]]; then
+    echo "[info] API port ${PORT_START} is busy; using ${PORT}."
+fi
+
+LAMA_REUSE=0
+LAMA_START="$LAMA_PORT"
+LAMA_MAX=$((LAMA_START + 20))
+while true; do
+    if [[ "$LAMA_PORT" != "$PORT" ]]; then
+        if [[ "$LAMA_PORT" == "8011" ]] && \
+            curl -fsS --max-time 2 "http://127.0.0.1:${LAMA_PORT}/health" >/dev/null 2>&1; then
+            LAMA_REUSE=1
+            break
+        fi
+        if ! port_is_listening "$LAMA_PORT"; then
+            break
+        fi
+    fi
+    LAMA_PORT=$((LAMA_PORT + 1))
+    if (( LAMA_PORT > LAMA_MAX )); then
+        echo "[error] No free local port for the LaMa service."
+        exit 1
+    fi
+done
+
+LAMA_PID=""
+cleanup() {
+    if [[ -n "$LAMA_PID" ]]; then
+        kill "$LAMA_PID" 2>/dev/null || true
+        wait "$LAMA_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ "$LAMA_REUSE" == "0" ]]; then
+    echo "[run] Starting local LaMa service on port ${LAMA_PORT}..."
+    (
+        cd "${LAMA_DIR}"
+        exec "${LAMA_PYTHON}" -m uvicorn app:app --host 127.0.0.1 --port "${LAMA_PORT}"
+    ) &
+    LAMA_PID=$!
+
+    lama_ready=0
+    for _ in $(seq 1 180); do
+        if curl -fsS --max-time 2 "http://127.0.0.1:${LAMA_PORT}/health" >/dev/null 2>&1; then
+            lama_ready=1
+            break
+        fi
+        if ! kill -0 "$LAMA_PID" 2>/dev/null; then
+            echo "[error] LaMa service exited before becoming ready."
+            exit 1
+        fi
+        sleep 1
+    done
+    if [[ "$lama_ready" != "1" ]]; then
+        echo "[error] LaMa service did not become ready within 180 seconds."
+        exit 1
+    fi
+fi
+
+export LAMA_SERVICE_PORT="${LAMA_PORT}"
+echo "[setup] Applying database migrations..."
+"${MAIN_PYTHON}" -m alembic upgrade head
+
+# Rebuild only when the bundle is absent or a frontend source is newer.
 if command -v pnpm >/dev/null 2>&1; then
     need_build=0
     dist_index="${FRONTEND_DIR}/dist/index.html"
@@ -66,22 +152,33 @@ if command -v pnpm >/dev/null 2>&1; then
         [[ -n "$newer" ]] && need_build=1
     fi
     if [[ "$need_build" == "1" ]]; then
-        echo "[setup] Build du front React - dist absent ou sources modifiees..."
-        ( cd "${FRONTEND_DIR}" && { [ -d node_modules ] || pnpm install; } && pnpm build ) \
-            || echo "[warn] Build front echoue : on sert le dist existant."
+        echo "[setup] Building React frontend..."
+        if [[ ! -d "${FRONTEND_DIR}/node_modules" ]] && \
+            ! (cd "${FRONTEND_DIR}" && { [ -d node_modules ] || pnpm install; }); then
+            echo "[error] Frontend dependencies could not be installed."
+            exit 1
+        fi
+        if ! (cd "${FRONTEND_DIR}" && pnpm build); then
+            if [[ ! -f "$dist_index" ]]; then
+                echo "[error] Frontend build failed and no valid dist bundle is available."
+                exit 1
+            fi
+            echo "[warn] Build failed; serving the existing frontend bundle."
+        fi
     fi
 fi
 
 echo
-echo "[run] Backend sur http://127.0.0.1:${PORT}/"
-echo "      OpenAPI docs : http://127.0.0.1:${PORT}/api/v1/docs"
-echo "      Ctrl+C ici pour arrêter."
+echo "[run] App: http://127.0.0.1:${PORT}/"
+echo "      LaMa: http://127.0.0.1:${LAMA_PORT}/health"
+echo "      API docs: http://127.0.0.1:${PORT}/api/v1/docs"
+echo "      Ctrl+C here to stop the services."
 echo
 
 if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "http://127.0.0.1:${PORT}/api/v1/docs" >/dev/null 2>&1 &
+    xdg-open "http://127.0.0.1:${PORT}/" >/dev/null 2>&1 &
 elif command -v open >/dev/null 2>&1; then
-    open "http://127.0.0.1:${PORT}/api/v1/docs" >/dev/null 2>&1 &
+    open "http://127.0.0.1:${PORT}/" >/dev/null 2>&1 &
 fi
 
-exec python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+"${MAIN_PYTHON}" -m uvicorn app.main:app --host 127.0.0.1 --port "${PORT}"

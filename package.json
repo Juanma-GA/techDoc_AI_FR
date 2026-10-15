@@ -19,7 +19,7 @@
     "dev:doc-reviewer": "concurrently -n back,front -c blue,green \"cd apps/doc-reviewer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8008\" \"pnpm --filter @apps/doc-reviewer-frontend dev\"",
     "dev:doc-writer": "concurrently -n back,front -c blue,green \"cd apps/doc-writer/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8002\" \"pnpm --filter @apps/doc-writer-frontend dev\"",
     "dev:ecm-automation": "concurrently -n back,front -c blue,green \"cd apps/ecm-automation/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8009\" \"pnpm --filter @apps/ecm-automation-frontend dev\"",
-    "dev:image-replace": "concurrently -n back,front -c blue,green \"cd apps/image-replace/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8010\" \"pnpm --filter @apps/image-replace-frontend dev\"",
+    "dev:image-replace": "python scripts/dev_image_replace.py",
     "dev:ocr-vision": "concurrently -n back,front -c blue,green \"cd apps/ocr-vision/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8003\" \"pnpm --filter @apps/ocr-vision-frontend dev\"",
     "dev:s1000d-extractor": "concurrently -n back,front -c blue,green \"cd apps/s1000d-extractor/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8004\" \"pnpm --filter @apps/s1000d-extractor-frontend dev\"",
     "dev:xml-proofreader": "concurrently -n back,front -c blue,green \"cd apps/xml-proofreader/backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8007\" \"pnpm --filter @apps/xml-proofreader-frontend dev\"",

@@ -2,7 +2,7 @@
 name = "image-replace-backend"
 version = "0.1.0"
 description = "Image Replace — backend FastAPI + Pydantic v2 + SQLAlchemy 2."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 readme = "README.md"
 license = { text = "Proprietary" }
 
@@ -16,6 +16,12 @@ dependencies = [
     "sse-starlette>=2.2",
     "structlog>=24.1",
     "python-multipart>=0.0.9",
+    "openpyxl>=3.1",
+    "paddleocr[all]>=3.0",
+    "paddlepaddle>=3.0",
+    "pillow>=11",
+    "requests>=2.32",
+    "truststore>=0.10",
 ]
 
 [project.optional-dependencies]

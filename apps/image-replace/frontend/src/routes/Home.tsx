@@ -1,80 +1,43 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  DemoScenarioPanel,
-  useDemoMode,
-  type DemoScenario,
-} from "@internal/ui";
+
+import { ImageInputPanel } from "../components/ImageInputPanel";
+import { ImagePreview } from "../components/ImagePreview";
+import { OcrResults } from "../components/OcrResults";
+import { useImageReplace } from "../hooks/useImageReplace";
 
 export function Home() {
   const { t } = useTranslation();
-
-  const { mode, isReady } = useDemoMode();
-  if (isReady && mode === "demo") {
-    const scenario: DemoScenario = {
-      id: "text-summary",
-      title: t("demo.scenarioTitle"),
-      description: t("demo.scenarioDescription"),
-      inputs: [
-        {
-          id: "text",
-          label: t("demo.textLabel"),
-          initialValue: t("demo.sampleText"),
-          multiline: true,
-        },
-      ],
-      files: [
-        {
-          id: "sample-text",
-          name: t("demo.sampleFileName"),
-          mediaType: "text/plain",
-          content: t("demo.sampleFileContent"),
-        },
-      ],
-      run: ({ inputs, files }) => {
-        const text = (inputs.text ?? "").trim();
-        const wordCount = text ? text.split(/\s+/).length : 0;
-        const fileCharacters = files.reduce(
-          (count, file) => count + (typeof file.content === "string" ? file.content.length : 0),
-          0,
-        );
-        return [
-          `${t("demo.outputWords")}: ${wordCount}`,
-          `${t("demo.outputCharacters")}: ${text.length}`,
-          `${t("demo.outputFileCharacters")}: ${fileCharacters}`,
-        ].join("\n");
-      },
-    };
-
-    return (
-      <DemoScenarioPanel
-        scenarios={[scenario]}
-        labels={{
-          title: t("demo.panelTitle"),
-          description: t("demo.panelDescription"),
-          scenario: t("demo.scenarioLabel"),
-          sampleFiles: t("demo.sampleFiles"),
-          run: t("demo.run"),
-          reset: t("demo.reset"),
-          result: t("demo.result"),
-          empty: t("demo.empty"),
-          error: t("demo.error"),
-        }}
-      />
-    );
-  }
+  const workflow = useImageReplace(t);
+  const [retouching, setRetouching] = useState(false);
+  const busy = workflow.loading || workflow.excelLoading || retouching;
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
-        <CardTitle>{t("home.title")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-fg-dim">{t("home.subtitle")}</p>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <header className="page-header">
+        <div>
+          <h1>{t("home.title")}</h1>
+          <p>{t("home.subtitle")}</p>
+        </div>
+      </header>
+
+      <form
+        onSubmit={workflow.submit}
+        className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]"
+      >
+        <ImageInputPanel workflow={workflow} disabled={busy} t={t} />
+        <div className="min-w-0 space-y-4">
+          <ImagePreview
+            imageFile={workflow.imageFile}
+            imageUrl={workflow.imageUrl}
+            result={workflow.result}
+            disabled={busy}
+            onInpaintingChange={setRetouching}
+            t={t}
+          />
+          <OcrResults result={workflow.result} t={t} />
+        </div>
+      </form>
+    </div>
   );
 }
