@@ -3,60 +3,8 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from functools import lru_cache
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from time import perf_counter
-from typing import TYPE_CHECKING
 
-import requests
-import truststore
 from fastapi import HTTPException
-
-from app.config import settings
-from app.services.constants import OCR_DETECTION_MAX_SIDE
-
-truststore.inject_into_ssl()
-
-if TYPE_CHECKING:
-    from paddleocr import PaddleOCR
-
-
-_OCR_MODEL_NAMES = {
-    "medium": ("PP-OCRv6_medium_det", "PP-OCRv6_medium_rec"),
-    "small": ("PP-OCRv6_small_det", "PP-OCRv6_small_rec"),
-    "tiny": ("PP-OCRv6_tiny_det", "PP-OCRv6_tiny_rec"),
-}
-
-
-@lru_cache(maxsize=1)
-def get_ocr_engine() -> PaddleOCR:
-    from paddleocr import PaddleOCR
-
-    detection_model, recognition_model = _OCR_MODEL_NAMES[settings.ocr_model_variant]
-    original_get = requests.get
-
-    def get_with_model_download_timeout(url: str, *args: object, **kwargs: object):
-        if kwargs.get("stream") is True and kwargs.get("timeout") == 15:
-            kwargs["timeout"] = (15, 120)
-        return original_get(url, *args, **kwargs)
-
-    requests.get = get_with_model_download_timeout
-    try:
-        return PaddleOCR(
-            text_detection_model_name=detection_model,
-            text_recognition_model_name=recognition_model,
-            device="cpu",
-            cpu_threads=settings.ocr_cpu_threads,
-            enable_mkldnn=False,
-            text_det_limit_side_len=OCR_DETECTION_MAX_SIDE,
-            text_det_limit_type="max",
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
-        )
-    finally:
-        requests.get = original_get
 
 
 def normalize_reference(value: str) -> str:
@@ -128,20 +76,54 @@ def _match_references(
         normalized_text += normalized_line
         character_lines.extend([index] * len(normalized_line))
 
-    matches: list[dict[str, object]] = []
+    reference_indices: dict[str, list[int]] = {}
+    matches: list[dict[str, object]] = [
+        {"reference": reference, "found": False, "line_indices": []}
+        for reference in references
+    ]
     line_matches: list[list[str]] = [[] for _ in lines]
-    for reference in references:
+    for reference_index, reference in enumerate(references):
         normalized = normalize_reference(reference)
-        found_lines: set[int] = set()
+        if normalized:
+            reference_indices.setdefault(normalized, []).append(reference_index)
+
+    for normalized, pair_indices in reference_indices.items():
+        occurrences: list[list[int]] = []
         start = normalized_text.find(normalized)
         while start >= 0:
-            found_lines.update(character_lines[start : start + len(normalized)])
+            occurrences.append(
+                sorted(set(character_lines[start : start + len(normalized)]))
+            )
             start = normalized_text.find(normalized, start + len(normalized))
 
-        indices = sorted(found_lines)
-        for index in indices:
-            line_matches[index].append(reference)
-        matches.append({"reference": reference, "found": bool(indices), "line_indices": indices})
+        for line_indices in occurrences:
+            for line_index in line_indices:
+                for pair_index in pair_indices:
+                    reference = references[pair_index]
+                    if reference not in line_matches[line_index]:
+                        line_matches[line_index].append(reference)
+
+        if len(pair_indices) == 1:
+            pair_index = pair_indices[0]
+            line_indices = sorted({index for occurrence in occurrences for index in occurrence})
+            matches[pair_index] = {
+                "reference": references[pair_index],
+                "found": bool(occurrences),
+                "line_indices": line_indices,
+            }
+            continue
+
+        for occurrence_index, pair_index in enumerate(pair_indices):
+            line_indices = (
+                occurrences[occurrence_index]
+                if occurrence_index < len(occurrences)
+                else []
+            )
+            matches[pair_index] = {
+                "reference": references[pair_index],
+                "found": bool(line_indices),
+                "line_indices": line_indices,
+            }
 
     for index, values in enumerate(line_matches):
         lines[index]["matched_references"] = values
@@ -158,7 +140,6 @@ def _parse_replacement_pairs(raw_pairs: str) -> list[dict[str, str]]:
         raise HTTPException(status_code=422, detail="Les couples de remplacement sont invalides.")
 
     pairs: list[dict[str, str]] = []
-    seen_references: set[str] = set()
     for pair in payload:
         if not isinstance(pair, dict):
             raise HTTPException(
@@ -182,35 +163,6 @@ def _parse_replacement_pairs(raw_pairs: str) -> list[dict[str, str]]:
                 status_code=422,
                 detail="Chaque couple doit contenir une référence et un nouveau repère.",
             )
-        if normalized_reference in seen_references:
-            raise HTTPException(
-                status_code=422,
-                detail="Une même référence ne peut pas apparaître plusieurs fois.",
-            )
 
-        seen_references.add(normalized_reference)
         pairs.append({"reference": reference, "replacement": replacement})
     return pairs
-
-
-def run_ocr_on_image(image_bytes: bytes, timings: dict[str, float] | None = None) -> object:
-    with TemporaryDirectory() as temporary_directory:
-        image_path = Path(temporary_directory) / "image.png"
-        stage_started = perf_counter()
-        image_path.write_bytes(image_bytes)
-        if timings is not None:
-            timings["ocr_temp_write_ms"] = round((perf_counter() - stage_started) * 1000, 3)
-
-        stage_started = perf_counter()
-        engine = get_ocr_engine()
-        if timings is not None:
-            timings["ocr_engine_access_ms"] = round((perf_counter() - stage_started) * 1000, 3)
-
-        stage_started = perf_counter()
-        predictions = iter(engine.predict(input=str(image_path)))
-        prediction = next(predictions, None)
-        if timings is not None:
-            timings["ocr_predict_ms"] = round((perf_counter() - stage_started) * 1000, 3)
-        if prediction is None:
-            raise RuntimeError("PaddleOCR n'a renvoyé aucun résultat pour cette image.")
-        return prediction

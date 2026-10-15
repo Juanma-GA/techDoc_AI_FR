@@ -24,13 +24,21 @@ def _workbook_bytes() -> bytes:
 
 
 def test_ocr_engine_selects_requested_v6_model_pair(monkeypatch) -> None:
-    from app.services import ocr_engine
+    from app.services import ocr_inference
 
     captured: dict[str, object] = {}
+
+    class FakePaddleModel:
+        def __call__(self, *args: object, **kwargs: object) -> object:
+            return iter(())
 
     class FakePaddleOCR:
         def __init__(self, **options: object) -> None:
             captured.update(options)
+            self.paddlex_pipeline = SimpleNamespace(
+                text_det_model=FakePaddleModel(),
+                text_rec_model=FakePaddleModel(),
+            )
 
     model_pairs = {
         "medium": ("PP-OCRv6_medium_det", "PP-OCRv6_medium_rec"),
@@ -41,14 +49,14 @@ def test_ocr_engine_selects_requested_v6_model_pair(monkeypatch) -> None:
     try:
         for variant, (detection_model, recognition_model) in model_pairs.items():
             captured.clear()
-            ocr_engine.get_ocr_engine.cache_clear()
+            ocr_inference.get_ocr_engine.cache_clear()
             monkeypatch.setattr(
-                ocr_engine,
+                ocr_inference,
                 "settings",
                 SimpleNamespace(ocr_model_variant=variant, ocr_cpu_threads=6),
             )
 
-            ocr_engine.get_ocr_engine()
+            ocr_inference.get_ocr_engine()
 
             assert captured["text_detection_model_name"] == detection_model
             assert captured["text_recognition_model_name"] == recognition_model
@@ -57,7 +65,40 @@ def test_ocr_engine_selects_requested_v6_model_pair(monkeypatch) -> None:
             assert captured["enable_mkldnn"] is False
             assert captured["text_det_limit_side_len"] == OCR_DETECTION_MAX_SIDE
     finally:
-        ocr_engine.get_ocr_engine.cache_clear()
+        ocr_inference.get_ocr_engine.cache_clear()
+
+
+def test_run_ocr_records_detection_and_recognition_timings(monkeypatch) -> None:
+    from app.services import ocr_inference
+
+    class FakePaddleModel:
+        def __call__(self, *args: object, **kwargs: object) -> object:
+            return iter((object(),))
+
+    prediction = object()
+
+    class FakePaddleOCR:
+        def __init__(self, **options: object) -> None:
+            self.paddlex_pipeline = SimpleNamespace(
+                text_det_model=FakePaddleModel(),
+                text_rec_model=FakePaddleModel(),
+            )
+
+        def predict(self, input: str) -> list[object]:
+            list(self.paddlex_pipeline.text_det_model(input))
+            list(self.paddlex_pipeline.text_rec_model(input))
+            return [prediction]
+
+    monkeypatch.setattr("paddleocr.PaddleOCR", FakePaddleOCR)
+    ocr_inference.get_ocr_engine.cache_clear()
+    timings: dict[str, float] = {}
+    try:
+        assert ocr_inference.run_ocr_on_image(b"synthetic image", timings) is prediction
+    finally:
+        ocr_inference.get_ocr_engine.cache_clear()
+
+    assert timings["ocr_detection_ms"] >= 0
+    assert timings["ocr_recognition_ms"] >= 0
 
 
 def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypatch, capsys) -> None:
@@ -79,6 +120,8 @@ def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypat
             timings.update(
                 ocr_temp_write_ms=0.1,
                 ocr_engine_access_ms=0.2,
+                ocr_detection_ms=0.1,
+                ocr_recognition_ms=0.2,
                 ocr_predict_ms=0.3,
             )
         return prediction
@@ -116,6 +159,8 @@ def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypat
     logged_output = capsys.readouterr().out
     assert "image_ocr_timing" in logged_output
     assert "ocr_engine_access_ms" in logged_output
+    assert "ocr_detection_ms" in logged_output
+    assert "ocr_recognition_ms" in logged_output
     assert "ocr_model_variant" in logged_output
     assert "ocr_cpu_threads" in logged_output
 

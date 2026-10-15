@@ -23,8 +23,8 @@ from app.services.ocr_engine import (
     _match_references,
     _parse_replacement_pairs,
     normalize_reference,
-    run_ocr_on_image,
 )
+from app.services.ocr_inference import run_ocr_on_image
 
 router = APIRouter(prefix="/image-replace", tags=["image-replace"])
 log = structlog.get_logger(__name__)
@@ -97,15 +97,7 @@ async def run_ocr(
             if excel_replacement_pairs is not None:
                 excel_replacements = _parse_replacement_pairs(excel_replacement_pairs)
 
-        seen_references = {normalize_reference(pair["reference"]) for pair in replacement_list}
         for pair in excel_replacements:
-            normalized_reference = normalize_reference(pair["reference"])
-            if normalized_reference in seen_references:
-                raise HTTPException(
-                    status_code=422,
-                    detail="Une même référence ne peut pas apparaître plusieurs fois dans les remplacements.",
-                )
-            seen_references.add(normalized_reference)
             replacement_list.append(pair)
             reference_list.append(pair["reference"])
 
