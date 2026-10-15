@@ -62,7 +62,7 @@ Pour créer les installateurs Windows :
 pnpm tauri:build
 ```
 
-La préparation Tauri compile le même frontend puis l'embarque dans le serveur Go. L'application native démarre ce serveur sur un port local libre, ouvre son interface dans une fenêtre Tauri et arrête le serveur à la fermeture. Le traitement PDF et les routes API restent communs aux modes web et bureau. Les installateurs sont générés sous `frontend/src-tauri/target/release/bundle/`.
+La préparation Tauri compile le même frontend puis l'embarque dans le serveur Go. L'application native affiche immédiatement un écran animé pendant le démarrage du serveur, puis ouvre l'interface dans la même fenêtre Tauri, maximisée avec sa barre de titre habituelle. En cas d'erreur, l'écran affiche le problème au lieu de rester bloqué. Le serveur utilise un port local libre et s'arrête à la fermeture de l'application. Le traitement PDF et les routes API restent communs aux modes web et bureau. Les installateurs sont générés sous `frontend/src-tauri/target/release/bundle/`.
 
 ## Développement
 

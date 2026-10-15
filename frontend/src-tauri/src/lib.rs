@@ -5,32 +5,45 @@ use std::{
     net::{SocketAddr, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 const BACKEND_START_TIMEOUT: Duration = Duration::from_secs(20);
 
-struct BackendProcess(Mutex<Child>);
+struct BackendProcess {
+    child: Mutex<Option<Child>>,
+    stopping: Arc<AtomicBool>,
+}
 
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let (child, address) = start_backend(app.handle())?;
-            app.manage(BackendProcess(Mutex::new(child)));
+            let stopping = Arc::new(AtomicBool::new(false));
+            app.manage(BackendProcess {
+                child: Mutex::new(None),
+                stopping: Arc::clone(&stopping),
+            });
 
-            WebviewWindowBuilder::new(
-                app,
-                "main",
-                WebviewUrl::External(format!("http://{address}/").parse()?),
-            )
-            .title("PDF Toolkit")
-            .inner_size(1180.0, 800.0)
-            .min_inner_size(800.0, 600.0)
-            .build()?;
+            let window =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::App("splash.html".into()))
+                    .title("PDF Toolkit")
+                    .inner_size(520.0, 380.0)
+                    .decorations(true)
+                    .resizable(false)
+                    .center()
+                    .build()?;
+
+            let app_handle = app.handle().clone();
+            thread::Builder::new()
+                .name("pdf-toolkit-startup".into())
+                .spawn(move || start_application(app_handle, window, stopping))?;
 
             Ok(())
         })
@@ -43,7 +56,119 @@ pub fn run() {
         });
 }
 
-fn start_backend(app: &tauri::AppHandle) -> Result<(Child, SocketAddr), Box<dyn Error>> {
+fn start_application(app: tauri::AppHandle, window: WebviewWindow, stopping: Arc<AtomicBool>) {
+    match start_backend(&app, &stopping) {
+        Ok((child, address)) => {
+            if !register_backend(&app, child) {
+                return;
+            }
+
+            if stopping.load(Ordering::SeqCst) {
+                return;
+            }
+
+            if let Err(error) = window.set_decorations(true) {
+                log::error!("could not enable PDF Toolkit window decorations: {error}");
+                show_startup_error(&window, &error.to_string());
+                return;
+            }
+            if let Err(error) = window.set_resizable(true) {
+                log::error!("could not make PDF Toolkit window resizable: {error}");
+                show_startup_error(&window, &error.to_string());
+                return;
+            }
+            if let Err(error) = window.set_min_size(Some(LogicalSize::new(800.0, 600.0))) {
+                log::error!("could not set PDF Toolkit window minimum size: {error}");
+                show_startup_error(&window, &error.to_string());
+                return;
+            }
+            if let Err(error) = window.maximize() {
+                log::error!("could not maximize PDF Toolkit window: {error}");
+                show_startup_error(&window, &error.to_string());
+                return;
+            }
+
+            match format!("http://{address}/").parse() {
+                Ok(url) => {
+                    if let Err(error) = window.navigate(url) {
+                        log::error!("could not open PDF Toolkit interface: {error}");
+                        show_startup_error(&window, &error.to_string());
+                    }
+                }
+                Err(error) => {
+                    log::error!("could not create PDF Toolkit URL: {error}");
+                    show_startup_error(&window, &error.to_string());
+                }
+            }
+        }
+        Err(error) => {
+            log::error!("could not start PDF Toolkit backend: {error}");
+            show_startup_error(&window, &error.to_string());
+        }
+    }
+}
+
+fn register_backend(app: &tauri::AppHandle, mut child: Child) -> bool {
+    let Some(backend) = app.try_state::<BackendProcess>() else {
+        stop_child(&mut child);
+        return false;
+    };
+    let mut child_slot = match backend.child.lock() {
+        Ok(child_slot) => child_slot,
+        Err(error) => {
+            log::error!("could not store PDF Toolkit backend process: {error}");
+            stop_child(&mut child);
+            return false;
+        }
+    };
+
+    if backend.stopping.load(Ordering::SeqCst) {
+        stop_child(&mut child);
+        return false;
+    }
+    *child_slot = Some(child);
+    true
+}
+
+fn show_startup_error(window: &WebviewWindow, error: &str) {
+    let script = format!(
+        "(() => {{ const show = () => window.showStartupError({}); \
+         if (document.readyState === 'loading') {{ \
+           document.addEventListener('DOMContentLoaded', show, {{ once: true }}); \
+         }} else {{ show(); }} }})();",
+        javascript_string_literal(error)
+    );
+    if let Err(eval_error) = window.eval(script) {
+        log::error!("could not display PDF Toolkit startup error: {eval_error}");
+    }
+}
+
+fn javascript_string_literal(value: &str) -> String {
+    let mut literal = String::from("\"");
+    for character in value.chars() {
+        match character {
+            '\\' => literal.push_str("\\\\"),
+            '"' => literal.push_str("\\\""),
+            '\n' => literal.push_str("\\n"),
+            '\r' => literal.push_str("\\r"),
+            '\t' => literal.push_str("\\t"),
+            '\u{2028}' => literal.push_str("\\u2028"),
+            '\u{2029}' => literal.push_str("\\u2029"),
+            character if character.is_control() => {
+                use std::fmt::Write as _;
+                let _ = write!(literal, "\\u{:04x}", character as u32);
+            }
+            character => literal.push(character),
+        }
+    }
+    literal.push('"');
+    literal
+}
+
+fn start_backend(
+    app: &tauri::AppHandle,
+    stopping: &AtomicBool,
+) -> Result<(Child, SocketAddr), Box<dyn Error>> {
     let executable_name = if cfg!(windows) {
         "pdf-toolkit-backend.exe"
     } else {
@@ -87,7 +212,7 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(Child, SocketAddr), Box<dyn 
     }
     let mut child = command.spawn()?;
 
-    match wait_for_backend(&mut child, &ready_file) {
+    match wait_for_backend(&mut child, &ready_file, stopping) {
         Ok(address) => {
             remove_ready_file(&ready_file);
             Ok((child, address))
@@ -105,9 +230,16 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(Child, SocketAddr), Box<dyn 
     }
 }
 
-fn wait_for_backend(child: &mut Child, ready_file: &Path) -> Result<SocketAddr, Box<dyn Error>> {
+fn wait_for_backend(
+    child: &mut Child,
+    ready_file: &Path,
+    stopping: &AtomicBool,
+) -> Result<SocketAddr, Box<dyn Error>> {
     let deadline = Instant::now() + BACKEND_START_TIMEOUT;
     loop {
+        if stopping.load(Ordering::SeqCst) {
+            return Err("PDF Toolkit startup was cancelled".into());
+        }
         if let Some(status) = child.try_wait()? {
             return Err(format!("PDF Toolkit backend exited during startup: {status}").into());
         }
@@ -145,10 +277,8 @@ fn backend_is_healthy(address: SocketAddr) -> bool {
     }
     if stream
         .write_all(
-            format!(
-                "GET /api/v1/health HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
-            )
-            .as_bytes(),
+            format!("GET /api/v1/health HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n")
+                .as_bytes(),
         )
         .is_err()
     {
@@ -156,10 +286,7 @@ fn backend_is_healthy(address: SocketAddr) -> bool {
     }
 
     let mut status = String::new();
-    BufReader::new(stream)
-        .read_line(&mut status)
-        .is_ok()
-        && status.starts_with("HTTP/1.1 200 ")
+    BufReader::new(stream).read_line(&mut status).is_ok() && status.starts_with("HTTP/1.1 200 ")
 }
 
 fn remove_ready_file(path: &Path) {
@@ -174,13 +301,21 @@ fn stop_backend(app: &tauri::AppHandle) {
     let Some(backend) = app.try_state::<BackendProcess>() else {
         return;
     };
-    let mut child = match backend.0.lock() {
+    backend.stopping.store(true, Ordering::SeqCst);
+    let mut child_slot = match backend.child.lock() {
         Ok(child) => child,
         Err(error) => {
             log::error!("could not access PDF Toolkit backend process: {error}");
             return;
         }
     };
+    let Some(mut child) = child_slot.take() else {
+        return;
+    };
+    stop_child(&mut child);
+}
+
+fn stop_child(child: &mut Child) {
     match child.try_wait() {
         Ok(Some(_)) => return,
         Ok(None) => {}

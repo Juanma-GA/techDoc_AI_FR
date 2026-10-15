@@ -13,8 +13,7 @@
     <script>
       (function () {
         var stored = localStorage.getItem("theme");
-        var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        var useDark = stored === "dark" || (!stored && prefersDark);
+        var useDark = stored !== "light";
         if (useDark) {
           document.documentElement.classList.add("dark");
           document
