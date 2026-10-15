@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from PIL import Image
 
-from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH
+from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH, OCR_DETECTION_MAX_SIDE
 
 
 def _workbook_bytes() -> bytes:
@@ -23,7 +23,44 @@ def _workbook_bytes() -> bytes:
     return output.getvalue()
 
 
-def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypatch) -> None:
+def test_ocr_engine_selects_requested_v6_model_pair(monkeypatch) -> None:
+    from app.services import ocr_engine
+
+    captured: dict[str, object] = {}
+
+    class FakePaddleOCR:
+        def __init__(self, **options: object) -> None:
+            captured.update(options)
+
+    model_pairs = {
+        "medium": ("PP-OCRv6_medium_det", "PP-OCRv6_medium_rec"),
+        "small": ("PP-OCRv6_small_det", "PP-OCRv6_small_rec"),
+        "tiny": ("PP-OCRv6_tiny_det", "PP-OCRv6_tiny_rec"),
+    }
+    monkeypatch.setattr("paddleocr.PaddleOCR", FakePaddleOCR)
+    try:
+        for variant, (detection_model, recognition_model) in model_pairs.items():
+            captured.clear()
+            ocr_engine.get_ocr_engine.cache_clear()
+            monkeypatch.setattr(
+                ocr_engine,
+                "settings",
+                SimpleNamespace(ocr_model_variant=variant, ocr_cpu_threads=6),
+            )
+
+            ocr_engine.get_ocr_engine()
+
+            assert captured["text_detection_model_name"] == detection_model
+            assert captured["text_recognition_model_name"] == recognition_model
+            assert captured["device"] == "cpu"
+            assert captured["cpu_threads"] == 6
+            assert captured["enable_mkldnn"] is False
+            assert captured["text_det_limit_side_len"] == OCR_DETECTION_MAX_SIDE
+    finally:
+        ocr_engine.get_ocr_engine.cache_clear()
+
+
+def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypatch, capsys) -> None:
     image = BytesIO()
     Image.new("RGB", (120, 60), "white").save(image, format="PNG")
     prediction = SimpleNamespace(
@@ -35,7 +72,18 @@ def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypat
             }
         }
     )
-    monkeypatch.setattr("app.api.ocr.run_ocr_on_image", lambda image_bytes: prediction)
+
+    def fake_ocr(image_bytes: bytes, timings: dict[str, float] | None = None) -> object:
+        assert image_bytes
+        if timings is not None:
+            timings.update(
+                ocr_temp_write_ms=0.1,
+                ocr_engine_access_ms=0.2,
+                ocr_predict_ms=0.3,
+            )
+        return prediction
+
+    monkeypatch.setattr("app.api.ocr.run_ocr_on_image", fake_ocr)
 
     response = client.post(
         "/api/v1/image-replace/ocr",
@@ -65,12 +113,72 @@ def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypat
     assert [item["replacement"] for item in payload["references"]] == ["M-002", "N-001"]
     assert all(item["replacement_count"] == 1 for item in payload["references"])
     assert payload["edited_image"].startswith("data:image/jpeg;base64,")
+    logged_output = capsys.readouterr().out
+    assert "image_ocr_timing" in logged_output
+    assert "ocr_engine_access_ms" in logged_output
+    assert "ocr_model_variant" in logged_output
+    assert "ocr_cpu_threads" in logged_output
 
     jpeg_bytes = base64.b64decode(payload["edited_image"].split(",", 1)[1])
     with Image.open(BytesIO(jpeg_bytes)) as output_image:
         assert output_image.format == "JPEG"
         assert output_image.size == (A4_WIDTH, A4_HEIGHT)
         assert output_image.info["dpi"] == (A4_DPI, A4_DPI)
+
+
+def test_ocr_route_uses_edited_and_removed_excel_pairs(
+    client: TestClient, monkeypatch
+) -> None:
+    image = BytesIO()
+    Image.new("RGB", (120, 60), "white").save(image, format="PNG")
+    prediction = SimpleNamespace(
+        json={
+            "res": {
+                "rec_texts": ["R-001"],
+                "rec_scores": [0.99],
+                "rec_polys": [[[10, 10], [110, 10], [110, 25], [10, 25]]],
+            }
+        }
+    )
+    monkeypatch.setattr(
+        "app.api.ocr.run_ocr_on_image",
+        lambda image_bytes, timings=None: prediction,
+    )
+    files = {
+        "image": ("source.png", image.getvalue(), "image/png"),
+        "workbook": (
+            "mapping.xlsx",
+            _workbook_bytes(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    }
+    excel_selection = {
+        "excel_sheet": "Repères",
+        "excel_reference_column": "1",
+        "excel_replacement_column": "3",
+        "excel_icn_column": "4",
+        "excel_piece_column": "5",
+        "excel_piece_row": "2",
+    }
+
+    edited_response = client.post(
+        "/api/v1/image-replace/ocr",
+        files=files,
+        data={
+            **excel_selection,
+            "excel_replacement_pairs": '[{"reference":"R-001","replacement":"N-999"}]',
+        },
+    )
+    removed_response = client.post(
+        "/api/v1/image-replace/ocr",
+        files=files,
+        data={**excel_selection, "excel_replacement_pairs": "[]"},
+    )
+
+    assert edited_response.status_code == 200, edited_response.text
+    assert [item["replacement"] for item in edited_response.json()["references"]] == ["N-999"]
+    assert removed_response.status_code == 200, removed_response.text
+    assert removed_response.json()["references"] == []
 
 
 def test_ocr_route_rejects_non_image_upload(client: TestClient) -> None:

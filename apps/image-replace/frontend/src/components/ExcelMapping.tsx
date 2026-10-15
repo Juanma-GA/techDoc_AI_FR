@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { Button, Select } from "@internal/ui";
+import { Select } from "@internal/ui";
 
 import type { useExcelMapping } from "../hooks/useExcelMapping";
 
@@ -28,14 +28,6 @@ export function ExcelMapping({ mapping, disabled, t }: ExcelMappingProps) {
     <div className="space-y-3 rounded-md border border-md bg-bg-2 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-fg-dim">{t("image.excelMergeHint")}</p>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          onClick={mapping.removeExcel}
-        >
-          {t("image.removeExcel")}
-        </Button>
       </div>
 
       <label className="block space-y-1">
@@ -115,7 +107,10 @@ export function ExcelMapping({ mapping, disabled, t }: ExcelMappingProps) {
           {t("image.readingWorkbook")}
         </p>
       ) : null}
-      {mapping.excelPieceColumn && !mapping.excelLoading && mapping.excelPieces.length === 0 ? (
+      {mapping.excelReferenceColumn &&
+      mapping.excelPieceColumn &&
+      !mapping.excelLoading &&
+      mapping.excelPieces.length === 0 ? (
         <p className="text-sm text-fg-dim">{t("image.noPieces")}</p>
       ) : null}
       <p className="text-xs leading-relaxed text-fg-dim">{t("image.pieceRule")}</p>

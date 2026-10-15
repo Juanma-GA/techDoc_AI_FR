@@ -20,8 +20,8 @@ Find text references in technical images and replace selected references with su
 ## Features
 
 - Upload PNG, JPEG, WEBP, BMP, or TIFF images up to 15 MB.
-- Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section.
-- Add manual replacement pairs; these are combined with the selected Excel part pairs.
+- Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed and can be edited or removed before OCR.
+- Add manual replacement pairs; these are combined with the edited Excel pairs.
 - Run PaddleOCR on CPU, inspect recognized text and matches, and download the replacement image as a 2480 × 3508 px A4 JPEG at 300 dpi.
 - Zoom and pan the result, then paint a mask to remove an area with local LaMa inpainting or local median-color fill.
 - No image, workbook, or generated result is persisted by the application.
@@ -76,6 +76,7 @@ Not applicable. No remote LLM is used. PaddleOCR and LaMa are local model workfl
 - `POST /api/v1/image-replace/excel/sheets`
 - `POST /api/v1/image-replace/excel/columns`
 - `POST /api/v1/image-replace/excel/pieces`
+- `POST /api/v1/image-replace/excel/pairs`
 - `POST /api/v1/image-replace/ocr`
 - `POST /api/v1/image-replace/inpaint`
 
@@ -91,6 +92,14 @@ The LaMa service is internal to the local application and listens on `127.0.0.1:
 - Browser smoke: 2 Playwright tests passed with synthetic files and mocked API responses on an isolated Vite port.
 - Repository: all 16 `check_standard.sh` checks passed using a temporary LF-normalized copy because the checked-in shell script has CRLF line endings.
 - Packaging: Python compilation and `python -X utf8 scripts/package_image-replace.py --help` passed. No ZIP was created.
+
+## Performance diagnostics
+
+The API console emits structured `image_ocr_timing` and `image_inpaint_timing` events with stage durations and image/crop dimensions only; they do not include image contents, filenames, or detected text. Run one OCR and one LaMa operation, then share those log lines. LaMa inference uses a 256 px context margin around the painted mask and merges the result only into masked pixels.
+
+To compare PP-OCRv6 sizes, set `OCR_MODEL_VARIANT=small` or `OCR_MODEL_VARIANT=tiny` in `backend/.env` and restart the API; the default is `medium`. Each selection changes only the detection/recognition model pair.
+
+To benchmark CPU thread counts, set `OCR_CPU_THREADS` in `backend/.env` and restart the API; the default is 10. The OCR timing event includes the active model variant and thread count.
 
 ### Recommended for real-model validation
 

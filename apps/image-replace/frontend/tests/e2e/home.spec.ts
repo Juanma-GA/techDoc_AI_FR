@@ -107,8 +107,20 @@ test("Excel upload exposes sheet, columns, and part selection", async ({ page })
       },
     }),
   );
-  await page.route("**/api/v1/image-replace/excel/pieces", (route) =>
-    route.fulfill({ json: { pieces: [{ row: 2, name: "Pompe A" }] } }),
+  const pieceRequestBodies: string[] = [];
+  await page.route("**/api/v1/image-replace/excel/pieces", (route) => {
+    pieceRequestBodies.push(route.request().postData() ?? "");
+    return route.fulfill({ json: { pieces: [{ row: 2, name: "Pompe A" }] } });
+  });
+  await page.route("**/api/v1/image-replace/excel/pairs", (route) =>
+    route.fulfill({
+      json: {
+        pairs: [
+          { reference: "R-001", replacement: "N-001" },
+          { reference: "R-002", replacement: "N-002" },
+        ],
+      },
+    }),
   );
 
   await page.goto("/");
@@ -125,10 +137,33 @@ test("Excel upload exposes sheet, columns, and part selection", async ({ page })
 
   await page.getByLabel("Onglet").selectOption("Repères");
   await page.getByLabel("Noms des pièces").selectOption("5");
-  await expect(page.getByLabel("Pièce à traiter")).toContainText("Pompe A");
+  await expect(page.getByLabel("Pièce à traiter")).toBeDisabled();
+  expect(pieceRequestBodies).toHaveLength(0);
   await page.getByLabel("Références à remplacer").selectOption("1");
+  await expect(page.getByLabel("Pièce à traiter")).toContainText("Pompe A");
+  expect(pieceRequestBodies).toHaveLength(1);
+  expect(pieceRequestBodies[0] ?? "").toContain('name="reference_column"');
+  expect(pieceRequestBodies[0] ?? "").toContain("\r\n\r\n1\r\n");
   await page.getByLabel("Nouveaux repères").selectOption("3");
   await page.getByLabel("ICN (nom du JPG)").selectOption("4");
   await page.getByLabel("Pièce à traiter").selectOption("2");
+  await expect(
+    page.getByRole("heading", { name: "Couples trouvés dans le classeur" }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Référence Excel 1" })).toHaveValue("R-001");
+  await expect(page.getByRole("textbox", { name: "Nouveau repère Excel 1" })).toHaveValue("N-001");
   await expect(page.getByRole("button", { name: "Lancer l’OCR sur CPU" })).toBeEnabled();
+
+  const workbookRow = page.getByText("mapping.xlsx").locator("xpath=..");
+  const removeWorkbookButton = workbookRow.getByRole("button", { name: "Retirer le classeur" });
+  await expect(removeWorkbookButton).toBeVisible();
+  await removeWorkbookButton.click();
+  await expect(page.getByText("Choisir un fichier Excel")).toBeVisible();
+
+  await page.locator('input[type="file"]').nth(1).setInputFiles({
+    name: "replacement.xlsx",
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from("synthetic replacement workbook"),
+  });
+  await expect(page.getByText("replacement.xlsx")).toBeVisible();
 });

@@ -97,6 +97,14 @@ export function useImageReplace(t: TFunction) {
       setError(t("image.errorPairIncomplete"));
       return;
     }
+    const excelReplacements = excel.excelPairs.map(({ reference, replacement }) => ({
+      reference: reference.trim(),
+      replacement: replacement.trim(),
+    }));
+    if (excelReplacements.some(({ reference, replacement }) => !reference || !replacement)) {
+      setError(t("image.errorPairIncomplete"));
+      return;
+    }
     if (excel.excelFile && !excel.excelSelectionReady) {
       setError(t("image.errorExcelSelection"));
       return;
@@ -116,6 +124,7 @@ export function useImageReplace(t: TFunction) {
       formData.append("excel_icn_column", excel.excelIcnColumn);
       formData.append("excel_piece_column", excel.excelPieceColumn);
       formData.append("excel_piece_row", excel.excelPieceRow);
+      formData.append("excel_replacement_pairs", JSON.stringify(excelReplacements));
     }
 
     try {

@@ -10,7 +10,8 @@ export function Home() {
   const { t } = useTranslation();
   const workflow = useImageReplace(t);
   const [retouching, setRetouching] = useState(false);
-  const busy = workflow.loading || workflow.excelLoading || retouching;
+  const busy =
+    workflow.loading || workflow.excelLoading || workflow.excelPairsLoading || retouching;
 
   return (
     <div className="space-y-4">

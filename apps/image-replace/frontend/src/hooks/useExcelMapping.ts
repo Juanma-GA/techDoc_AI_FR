@@ -7,13 +7,14 @@ import {
   type ExcelPieceDto,
 } from "../lib/api";
 import { MAX_UPLOAD_BYTES } from "../lib/image-processing";
+import { useExcelPairs } from "./useExcelPairs";
 
 export function useExcelMapping(t: TFunction) {
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [excelSheets, setExcelSheets] = useState<string[]>([]);
   const [excelSheet, setExcelSheet] = useState("");
   const [excelColumns, setExcelColumns] = useState<ExcelColumnDto[]>([]);
-  const [excelReferenceColumn, setExcelReferenceColumn] = useState("");
+  const [excelReferenceColumn, setExcelReferenceColumnState] = useState("");
   const [excelReplacementColumn, setExcelReplacementColumn] = useState("");
   const [excelIcnColumn, setExcelIcnColumn] = useState("");
   const [excelPieceColumn, setExcelPieceColumn] = useState("");
@@ -22,6 +23,19 @@ export function useExcelMapping(t: TFunction) {
   const [excelError, setExcelError] = useState("");
   const [excelLoading, setExcelLoading] = useState(false);
   const excelRequestId = useRef(0);
+  const excelPairPreview = useExcelPairs(
+    {
+      workbook: excelFile,
+      sheet: excelSheet,
+      referenceColumn: excelReferenceColumn,
+      replacementColumn: excelReplacementColumn,
+      icnColumn: excelIcnColumn,
+      pieceColumn: excelPieceColumn,
+      pieceRow: excelPieceRow,
+    },
+    t,
+    setExcelError,
+  );
 
   async function chooseExcel(files: File[]) {
     const nextFile = files[0];
@@ -42,7 +56,7 @@ export function useExcelMapping(t: TFunction) {
     setExcelSheets([]);
     setExcelSheet("");
     setExcelColumns([]);
-    setExcelReferenceColumn("");
+    setExcelReferenceColumnState("");
     setExcelReplacementColumn("");
     setExcelIcnColumn("");
     setExcelPieceColumn("");
@@ -71,7 +85,7 @@ export function useExcelMapping(t: TFunction) {
     const requestId = ++excelRequestId.current;
     setExcelSheet(sheetName);
     setExcelColumns([]);
-    setExcelReferenceColumn("");
+    setExcelReferenceColumnState("");
     setExcelReplacementColumn("");
     setExcelIcnColumn("");
     setExcelPieceColumn("");
@@ -99,13 +113,16 @@ export function useExcelMapping(t: TFunction) {
     }
   }
 
-  async function chooseExcelPieceColumn(column: string) {
+  async function chooseExcelPieceColumn(
+    column: string,
+    referenceColumn = excelReferenceColumn,
+  ) {
     const requestId = ++excelRequestId.current;
     setExcelPieceColumn(column);
     setExcelPieces([]);
     setExcelPieceRow("");
     setExcelError("");
-    if (!column || !excelFile || !excelSheet) {
+    if (!column || !referenceColumn || !excelFile || !excelSheet) {
       setExcelLoading(false);
       return;
     }
@@ -114,6 +131,7 @@ export function useExcelMapping(t: TFunction) {
     const formData = new FormData();
     formData.append("workbook", excelFile);
     formData.append("sheet_name", excelSheet);
+    formData.append("reference_column", referenceColumn);
     formData.append("piece_column", column);
     try {
       const payload = await imageReplaceApi.excelPieces(formData);
@@ -127,13 +145,20 @@ export function useExcelMapping(t: TFunction) {
     }
   }
 
+  function setExcelReferenceColumn(column: string) {
+    setExcelReferenceColumnState(column);
+    setExcelPieceRow("");
+    setExcelError("");
+    if (excelPieceColumn) void chooseExcelPieceColumn(excelPieceColumn, column);
+  }
+
   function removeExcel() {
     excelRequestId.current += 1;
     setExcelFile(null);
     setExcelSheets([]);
     setExcelSheet("");
     setExcelColumns([]);
-    setExcelReferenceColumn("");
+    setExcelReferenceColumnState("");
     setExcelReplacementColumn("");
     setExcelIcnColumn("");
     setExcelPieceColumn("");
@@ -143,16 +168,17 @@ export function useExcelMapping(t: TFunction) {
     setExcelError("");
   }
 
-  const excelSelectionReady =
-    !excelFile ||
-    Boolean(
+  const excelSelectionConfigured = Boolean(
+    excelFile &&
       excelSheet &&
-        excelReferenceColumn &&
-        excelReplacementColumn &&
-        excelIcnColumn &&
-        excelPieceColumn &&
-        excelPieceRow,
-    );
+      excelReferenceColumn &&
+      excelReplacementColumn &&
+      excelIcnColumn &&
+      excelPieceColumn &&
+      excelPieceRow,
+  );
+  const excelSelectionReady =
+    !excelFile || (excelSelectionConfigured && excelPairPreview.ready);
 
   return {
     excelFile,
@@ -167,6 +193,10 @@ export function useExcelMapping(t: TFunction) {
     excelPieceRow,
     excelError,
     excelLoading,
+    excelPairs: excelPairPreview.pairs,
+    excelPairsLoading: excelPairPreview.loading,
+    excelPairsReady: excelPairPreview.ready,
+    excelSelectionConfigured,
     excelSelectionReady,
     chooseExcel,
     chooseExcelSheet,
@@ -176,5 +206,7 @@ export function useExcelMapping(t: TFunction) {
     setExcelReplacementColumn,
     setExcelIcnColumn,
     setExcelPieceRow,
+    updateExcelPair: excelPairPreview.updatePair,
+    removeExcelPair: excelPairPreview.removePair,
   };
 }

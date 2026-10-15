@@ -13,10 +13,10 @@ def _workbook_bytes() -> bytes:
     sheet = workbook.active
     sheet.title = "Repères"
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, None, None, "ICN-A", "Pompe A"])
+    sheet.append([None, "section", None, "ICN-A", "Pompe A"])
     sheet.append(["R-001", "ligne de couple", "N-001", None, None])
     sheet.append(["R-002", "ligne de couple", "N-002", None, None])
-    sheet.append([None, None, None, "ICN-B", "Pompe B"])
+    sheet.append([None, "section", None, "ICN-B", "Pompe B"])
     sheet.append(["R-101", "ligne de couple", "N-101", None, None])
     output = BytesIO()
     workbook.save(output)
@@ -63,7 +63,7 @@ def test_excel_pieces_route_lists_only_section_headers(client: TestClient) -> No
     response = client.post(
         "/api/v1/image-replace/excel/pieces",
         files=_excel_upload(_workbook_bytes()),
-        data={"sheet_name": "Repères", "piece_column": "5"},
+        data={"sheet_name": "Repères", "reference_column": "1", "piece_column": "5"},
     )
 
     assert response.status_code == 200
@@ -75,14 +75,37 @@ def test_excel_pieces_route_lists_only_section_headers(client: TestClient) -> No
     }
 
 
+def test_excel_pairs_route_extracts_selected_piece_pairs(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/image-replace/excel/pairs",
+        files=_excel_upload(_workbook_bytes()),
+        data={
+            "excel_sheet": "Repères",
+            "excel_reference_column": "1",
+            "excel_replacement_column": "3",
+            "excel_icn_column": "4",
+            "excel_piece_column": "5",
+            "excel_piece_row": "2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "pairs": [
+            {"reference": "R-001", "replacement": "N-001"},
+            {"reference": "R-002", "replacement": "N-002"},
+        ]
+    }
+
+
 def test_selected_piece_extracts_pairs_until_next_section() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, None, None, "ICN-A", "Pompe A"])
+    sheet.append([None, "section", None, "ICN-A", "Pompe A"])
     sheet.append(["R-001", "ligne de couple", "N-001", None, None])
     sheet.append(["R-002", "ligne de couple", "N-002", None, None])
-    sheet.append([None, None, None, "ICN-B", "Pompe B"])
+    sheet.append([None, "section", None, "ICN-B", "Pompe B"])
 
     replacements, icn = extract_excel_replacements(
         sheet,
@@ -100,12 +123,14 @@ def test_selected_piece_extracts_pairs_until_next_section() -> None:
     ]
 
 
-def test_excel_piece_options_use_blank_column_b_headers() -> None:
+def test_excel_piece_options_use_selected_reference_column() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, None, None, "ICN-A", "Pompe A"])
+    sheet.append([None, "section", None, "ICN-A", "Pompe A"])
     sheet.append(["R-001", "contenu", "N-001", None, None])
-    sheet.append([None, "non vide", None, None, "Pas une pièce"])
+    sheet.append(["R-002", "non vide", None, None, "Pas une pièce"])
 
-    assert excel_piece_options(sheet, piece_column=5) == [{"row": 2, "name": "Pompe A"}]
+    assert excel_piece_options(sheet, reference_column=1, piece_column=5) == [
+        {"row": 2, "name": "Pompe A"}
+    ]

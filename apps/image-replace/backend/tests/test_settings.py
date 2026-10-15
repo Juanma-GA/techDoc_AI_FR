@@ -10,8 +10,42 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import Settings
 from app.db.session import Base, get_db
 from app.main import create_app
+
+
+@pytest.mark.parametrize(
+    ("cors_origins", "expected"),
+    [
+        (
+            "http://localhost:5173,http://127.0.0.1:5173",
+            ["http://localhost:5173", "http://127.0.0.1:5173"],
+        ),
+        (
+            '["http://localhost:5173", "http://127.0.0.1:5173"]',
+            ["http://localhost:5173", "http://127.0.0.1:5173"],
+        ),
+        ("", []),
+    ],
+)
+def test_cors_origins_accept_csv_and_json_dotenv(tmp_path, cors_origins, expected) -> None:
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text(f"CORS_ORIGINS={cors_origins}\n", encoding="utf-8")
+
+    settings = Settings(_env_file=dotenv_path)
+
+    assert settings.cors_origins == expected
+
+
+@pytest.mark.parametrize("cpu_threads", [8, 16])
+def test_ocr_cpu_threads_can_be_set_in_dotenv(tmp_path, cpu_threads) -> None:
+    dotenv_path = tmp_path / ".env"
+    dotenv_path.write_text(f"OCR_CPU_THREADS={cpu_threads}\n", encoding="utf-8")
+
+    settings = Settings(_env_file=dotenv_path)
+
+    assert settings.ocr_cpu_threads == cpu_threads
 
 
 @pytest.fixture

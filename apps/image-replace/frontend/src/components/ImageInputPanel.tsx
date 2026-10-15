@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { Cpu, ImagePlus } from "lucide-react";
+import { Cpu, ImagePlus, Trash2 } from "lucide-react";
 import { Button, Card, CardContent, CardHeader, CardTitle, FileDropzone } from "@internal/ui";
 
 import type { useImageReplace } from "../hooks/useImageReplace";
@@ -69,6 +69,16 @@ export function ImageInputPanel({ workflow, disabled, t }: ImageInputPanelProps)
                 {workflow.excelFile.name}
               </span>
               <span className="shrink-0 font-mono text-xs text-fg-dim">{excelDescription}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                disabled={disabled}
+                aria-label={t("image.removeExcel")}
+                title={t("image.removeExcel")}
+                onClick={workflow.removeExcel}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+              </Button>
             </div>
           )}
           <ExcelMapping mapping={workflow} disabled={disabled} t={t} />
@@ -76,10 +86,16 @@ export function ImageInputPanel({ workflow, disabled, t }: ImageInputPanelProps)
 
         <ReplacementPairs
           pairs={workflow.replacementPairs}
+          excelPairs={workflow.excelPairs}
+          showExcelPairs={workflow.excelSelectionConfigured}
+          excelPairsLoading={workflow.excelPairsLoading}
+          excelPairsReady={workflow.excelPairsReady}
           disabled={disabled}
           onAdd={workflow.addPair}
           onUpdate={workflow.updatePair}
           onRemove={workflow.removePair}
+          onUpdateExcel={workflow.updateExcelPair}
+          onRemoveExcel={workflow.removeExcelPair}
           t={t}
         />
 

@@ -73,6 +73,7 @@ export type ExcelColumnDto = {
 };
 
 export type ExcelPieceDto = { row: number; name: string };
+export type ExcelReplacementPairDto = { reference: string; replacement: string };
 
 export type OcrLineDto = {
   text: string;
@@ -121,6 +122,8 @@ export const imageReplaceApi = {
     apiForm<{ columns: ExcelColumnDto[] }>("/image-replace/excel/columns", formData),
   excelPieces: (formData: FormData) =>
     apiForm<{ pieces: ExcelPieceDto[] }>("/image-replace/excel/pieces", formData),
+  excelPairs: (formData: FormData) =>
+    apiForm<{ pairs: ExcelReplacementPairDto[] }>("/image-replace/excel/pairs", formData),
   runOcr: (formData: FormData) =>
     apiForm<OcrResultDto>("/image-replace/ocr", formData),
   inpaint: (formData: FormData) =>

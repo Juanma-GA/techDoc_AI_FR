@@ -6,12 +6,14 @@ import unicodedata
 from functools import lru_cache
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 import requests
 import truststore
 from fastapi import HTTPException
 
+from app.config import settings
 from app.services.constants import OCR_DETECTION_MAX_SIDE
 
 truststore.inject_into_ssl()
@@ -20,10 +22,18 @@ if TYPE_CHECKING:
     from paddleocr import PaddleOCR
 
 
+_OCR_MODEL_NAMES = {
+    "medium": ("PP-OCRv6_medium_det", "PP-OCRv6_medium_rec"),
+    "small": ("PP-OCRv6_small_det", "PP-OCRv6_small_rec"),
+    "tiny": ("PP-OCRv6_tiny_det", "PP-OCRv6_tiny_rec"),
+}
+
+
 @lru_cache(maxsize=1)
 def get_ocr_engine() -> PaddleOCR:
     from paddleocr import PaddleOCR
 
+    detection_model, recognition_model = _OCR_MODEL_NAMES[settings.ocr_model_variant]
     original_get = requests.get
 
     def get_with_model_download_timeout(url: str, *args: object, **kwargs: object):
@@ -34,8 +44,10 @@ def get_ocr_engine() -> PaddleOCR:
     requests.get = get_with_model_download_timeout
     try:
         return PaddleOCR(
-            lang="en",
+            text_detection_model_name=detection_model,
+            text_recognition_model_name=recognition_model,
             device="cpu",
+            cpu_threads=settings.ocr_cpu_threads,
             enable_mkldnn=False,
             text_det_limit_side_len=OCR_DETECTION_MAX_SIDE,
             text_det_limit_type="max",
@@ -181,12 +193,24 @@ def _parse_replacement_pairs(raw_pairs: str) -> list[dict[str, str]]:
     return pairs
 
 
-def run_ocr_on_image(image_bytes: bytes) -> object:
+def run_ocr_on_image(image_bytes: bytes, timings: dict[str, float] | None = None) -> object:
     with TemporaryDirectory() as temporary_directory:
         image_path = Path(temporary_directory) / "image.png"
+        stage_started = perf_counter()
         image_path.write_bytes(image_bytes)
-        predictions = iter(get_ocr_engine().predict(input=str(image_path)))
+        if timings is not None:
+            timings["ocr_temp_write_ms"] = round((perf_counter() - stage_started) * 1000, 3)
+
+        stage_started = perf_counter()
+        engine = get_ocr_engine()
+        if timings is not None:
+            timings["ocr_engine_access_ms"] = round((perf_counter() - stage_started) * 1000, 3)
+
+        stage_started = perf_counter()
+        predictions = iter(engine.predict(input=str(image_path)))
         prediction = next(predictions, None)
+        if timings is not None:
+            timings["ocr_predict_ms"] = round((perf_counter() - stage_started) * 1000, 3)
         if prediction is None:
             raise RuntimeError("PaddleOCR n'a renvoyé aucun résultat pour cette image.")
         return prediction

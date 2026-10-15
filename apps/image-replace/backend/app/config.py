@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,6 +24,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"
+    ocr_model_variant: Literal["medium", "small", "tiny"] = "medium"
+    ocr_cpu_threads: int = Field(default=10, ge=1)
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'image-replace.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")
@@ -31,20 +35,29 @@ class Settings(BaseSettings):
     # protections sensibles OBLIGATOIRES (cf. main._validate_security_posture).
     bind_host: str = "127.0.0.1"
 
-    cors_origins: list[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8010",
-    ]
+    cors_origins_raw: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173,http://localhost:8010",
+        validation_alias="CORS_ORIGINS",
+    )
     max_upload_size_mb: int = 50
     lama_service_port: int = 8011
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _parse_cors_origins(cls, v: object) -> object:
-        if isinstance(v, str):
-            return [s.strip() for s in v.split(",") if s.strip()]
-        return v
+    @property
+    def cors_origins(self) -> list[str]:
+        value = self.cors_origins_raw.strip()
+        if not value:
+            return []
+        if value.startswith("["):
+            parsed = json.loads(value)
+            if not isinstance(parsed, list):
+                raise ValueError("CORS_ORIGINS must be a comma-separated or JSON list.")
+            origins: list[str] = []
+            for origin in parsed:
+                if not isinstance(origin, str):
+                    raise ValueError("CORS_ORIGINS must contain only strings.")
+                origins.append(origin)
+            return origins
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
 
     @property
     def max_upload_size_bytes(self) -> int:

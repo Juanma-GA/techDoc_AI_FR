@@ -91,12 +91,22 @@ def excel_column_options(worksheet: Worksheet) -> list[dict[str, object]]:
     return columns
 
 
-def _is_piece_header(row: tuple[object, ...], piece_column: int) -> bool:
-    return not excel_row_value(row, 2) and bool(excel_row_value(row, piece_column))
+def _is_piece_header(
+    row: tuple[object, ...],
+    reference_column: int,
+    piece_column: int,
+) -> bool:
+    return not excel_row_value(row, reference_column) and bool(excel_row_value(row, piece_column))
 
 
-def excel_piece_options(worksheet: Worksheet, piece_column: int) -> list[dict[str, object]]:
+def excel_piece_options(
+    worksheet: Worksheet,
+    reference_column: int,
+    piece_column: int,
+) -> list[dict[str, object]]:
     column_count = int(worksheet.max_column or 0)
+    if reference_column < 1 or reference_column > column_count:
+        raise HTTPException(status_code=422, detail="La colonne des références est invalide.")
     if piece_column < 1 or piece_column > column_count:
         raise HTTPException(status_code=422, detail="La colonne des noms de pièces est invalide.")
 
@@ -114,7 +124,7 @@ def excel_piece_options(worksheet: Worksheet, piece_column: int) -> list[dict[st
         ),
         start=2,
     ):
-        if _is_piece_header(row, piece_column):
+        if _is_piece_header(row, reference_column, piece_column):
             options.append({"row": row_number, "name": excel_row_value(row, piece_column)})
     return options
 
@@ -148,7 +158,7 @@ def extract_excel_replacements(
         ),
         start=2,
     ):
-        is_header = _is_piece_header(row, piece_column)
+        is_header = _is_piece_header(row, reference_column, piece_column)
         if row_number == piece_row:
             if not is_header:
                 raise HTTPException(
