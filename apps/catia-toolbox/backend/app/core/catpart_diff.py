@@ -18,19 +18,26 @@ from app.core.catpart_geometry import (
 )
 from app.core.errors import AppError
 
-MAX_CATPART_FILES_PER_FOLDER = 100
+MAX_CATPART_FILES_PER_FOLDER = 20_000
+MAX_GEOMETRY_FILES_PER_FOLDER = 100
 _MIN_CANDIDATE_SIMILARITY = 25.0
 _MAX_CANDIDATES_PER_FILE = 3
 
 
-@dataclass(frozen=True)
+@dataclass
 class CatPartFile:
     absolute_path: Path
     relative_path: str
-    sha256: str
+    size: int
+    sha256: str | None = None
 
 
-def compare_folders(old_root: Path, new_root: Path) -> dict[str, object]:
+def compare_folders(
+    old_root: Path,
+    new_root: Path,
+    *,
+    include_geometry: bool = False,
+) -> dict[str, object]:
     old_folder = _validate_folder(old_root, "old")
     new_folder = _validate_folder(new_root, "new")
     if old_folder == new_folder:
@@ -38,43 +45,60 @@ def compare_folders(old_root: Path, new_root: Path) -> dict[str, object]:
 
     old_files = _scan_folder(old_folder, "old")
     new_files = _scan_folder(new_folder, "new")
+    _hash_same_size_files(old_files, new_files)
     old_by_hash = _group_by_hash(old_files)
     new_by_hash = _group_by_hash(new_files)
     shared_hashes = old_by_hash.keys() & new_by_hash.keys()
-    exact_matches = [
-        {
-            "sha256": digest,
-            "old_files": [item.relative_path for item in old_by_hash[digest]],
-            "new_files": [item.relative_path for item in new_by_hash[digest]],
-            "old_count": len(old_by_hash[digest]),
-            "new_count": len(new_by_hash[digest]),
-        }
-        for digest in sorted(shared_hashes)
-    ]
+    exact_summary = {
+        "groups": len(shared_hashes),
+        "old_files": sum(len(old_by_hash[digest]) for digest in shared_hashes),
+        "new_files": sum(len(new_by_hash[digest]) for digest in shared_hashes),
+    }
     unmatched_old = [item for item in old_files if item.sha256 not in shared_hashes]
     unmatched_new = [item for item in new_files if item.sha256 not in shared_hashes]
     issues: list[dict[str, str | None]] = []
 
-    needs_geometry = bool(unmatched_old and unmatched_new)
-    executable, reader_issue = resolve_cadmpeg() if needs_geometry else (None, None)
     signatures: dict[Path, GeometrySignature] = {}
-    if needs_geometry and executable is None and reader_issue is not None:
-        issues.append(_issue_dict(None, reader_issue))
-    elif executable is not None:
-        with tempfile.TemporaryDirectory(prefix="catpart-diff-") as temporary:
-            output_dir = Path(temporary)
-            pending = [*unmatched_old, *unmatched_new]
-            for index, item in enumerate(pending):
-                signature, issue = extract_geometry_signature(
-                    item.absolute_path,
-                    executable,
-                    output_dir,
-                    f"part-{index:03d}",
-                )
-                if signature is not None:
-                    signatures[item.absolute_path] = signature
-                if issue is not None:
-                    issues.append(_issue_dict(item.relative_path, issue))
+    needs_geometry = include_geometry and bool(unmatched_old and unmatched_new)
+    if needs_geometry and (
+        len(unmatched_old) > MAX_GEOMETRY_FILES_PER_FOLDER
+        or len(unmatched_new) > MAX_GEOMETRY_FILES_PER_FOLDER
+    ):
+        geometry_status = "limit_exceeded"
+        issues.append(
+            {
+                "file": None,
+                "code": "CADMPEG_GEOMETRY_LIMIT",
+                "message": (
+                    "Les suggestions CADMPEG sont limitees a "
+                    f"{MAX_GEOMETRY_FILES_PER_FOLDER} fichiers non apparies par dossier; "
+                    "la comparaison exacte a bien couvert tous les fichiers."
+                ),
+            }
+        )
+    elif needs_geometry:
+        executable, reader_issue = resolve_cadmpeg()
+        if executable is None and reader_issue is not None:
+            geometry_status = "missing"
+            issues.append(_issue_dict(None, reader_issue))
+        elif executable is not None:
+            geometry_status = "available"
+            with tempfile.TemporaryDirectory(prefix="catpart-diff-") as temporary:
+                output_dir = Path(temporary)
+                pending = [*unmatched_old, *unmatched_new]
+                for index, item in enumerate(pending):
+                    signature, issue = extract_geometry_signature(
+                        item.absolute_path,
+                        executable,
+                        output_dir,
+                        f"part-{index:03d}",
+                    )
+                    if signature is not None:
+                        signatures[item.absolute_path] = signature
+                    if issue is not None:
+                        issues.append(_issue_dict(item.relative_path, issue))
+    else:
+        geometry_status = "not_requested" if not include_geometry else "not_needed"
 
     candidates = _build_candidates(unmatched_old, unmatched_new, signatures)
     candidate_old = {item["old_file"] for item in candidates}
@@ -86,24 +110,22 @@ def compare_folders(old_root: Path, new_root: Path) -> dict[str, object]:
         item.relative_path for item in unmatched_new if item.relative_path not in candidate_new
     ]
 
-    reader_available = executable is not None
-
     partial = bool(issues) or any(not signature.topology_complete for signature in signatures.values())
     status = (
         "empty"
         if not old_files or not new_files
-        else ("partial" if partial or not reader_available else "complete")
+        else ("partial" if partial else "complete")
     )
     return {
         "status": status,
         "old_count": len(old_files),
         "new_count": len(new_files),
-        "exact_matches": exact_matches,
+        "exact": exact_summary,
         "candidates": candidates,
         "unmatched_old": unmatched_old_paths,
         "unmatched_new": unmatched_new_paths,
         "issues": issues,
-        "reader": {"available": reader_available, "required": needs_geometry},
+        "geometry_status": geometry_status,
     }
 
 
@@ -155,15 +177,15 @@ def _scan_folder(root: Path, side: str) -> list[CatPartFile]:
                 )
             relative_path = path.relative_to(root).as_posix()
             try:
-                digest = _sha256_file(path)
+                size = path.stat(follow_symlinks=False).st_size
             except OSError as exc:
                 raise AppError(
                     "CATPART_READ_FAILED",
                     "Lecture d'un fichier CATPart impossible.",
                     status_code=400,
-                    detail={"file": relative_path},
+                    detail={"side": side, "file": relative_path},
                 ) from exc
-            files.append(CatPartFile(path, relative_path, digest))
+            files.append(CatPartFile(path, relative_path, size))
     return sorted(files, key=lambda item: item.relative_path.casefold())
 
 
@@ -175,10 +197,30 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _hash_same_size_files(old_files: list[CatPartFile], new_files: list[CatPartFile]) -> None:
+    old_sizes = {item.size for item in old_files}
+    new_sizes = {item.size for item in new_files}
+    shared_sizes = old_sizes & new_sizes
+    for side, files in (("old", old_files), ("new", new_files)):
+        for item in files:
+            if item.size not in shared_sizes:
+                continue
+            try:
+                item.sha256 = _sha256_file(item.absolute_path)
+            except OSError as exc:
+                raise AppError(
+                    "CATPART_READ_FAILED",
+                    "Lecture d'un fichier CATPart impossible.",
+                    status_code=400,
+                    detail={"side": side, "file": item.relative_path},
+                ) from exc
+
+
 def _group_by_hash(files: list[CatPartFile]) -> dict[str, list[CatPartFile]]:
     groups: dict[str, list[CatPartFile]] = defaultdict(list)
     for item in files:
-        groups[item.sha256].append(item)
+        if item.sha256 is not None:
+            groups[item.sha256].append(item)
     return groups
 
 
@@ -210,7 +252,11 @@ def _build_candidates(
                     "confidence": "low",
                     "old_geometry_quality": old_signature.quality,
                     "new_geometry_quality": signatures[new_file.absolute_path].quality,
-                    "binary_equal": old_file.sha256 == new_file.sha256,
+                    "binary_equal": (
+                        old_file.sha256 is not None
+                        and new_file.sha256 is not None
+                        and old_file.sha256 == new_file.sha256
+                    ),
                 }
             )
     return candidates

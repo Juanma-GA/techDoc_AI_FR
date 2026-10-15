@@ -17,7 +17,7 @@ test("CATPart folder comparison proposes a candidate for manual review", async (
         status: "partial",
         old_count: 1,
         new_count: 1,
-        exact_matches: [],
+        exact: { groups: 0, old_files: 0, new_files: 0 },
         candidates: [
           {
             old_file: "old.CATPart",
@@ -32,7 +32,7 @@ test("CATPart folder comparison proposes a candidate for manual review", async (
         unmatched_old: [],
         unmatched_new: [],
         issues: [],
-        reader: { available: true, required: true },
+        geometry_status: "available",
       },
     };
     const body = responses[pathname];
@@ -55,6 +55,7 @@ test("CATPart folder comparison proposes a candidate for manual review", async (
   await expect(folderPaths).toHaveCount(2);
   await folderPaths.nth(0).fill("older");
   await folderPaths.nth(1).fill("newer");
+  await page.getByRole("checkbox", { name: /CADMPEG/ }).check();
   await page.getByRole("button", { name: /Analyze folders|Analyser les dossiers/ }).click();
 
   await expect(page.getByText(/Possible pairs to verify|Paires candidates à vérifier/)).toBeVisible();

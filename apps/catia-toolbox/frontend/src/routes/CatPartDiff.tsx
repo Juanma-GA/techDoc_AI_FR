@@ -1,23 +1,33 @@
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Checkbox } from "@internal/ui";
 
 import { FilePicker } from "../components/FilePicker";
 import { ApiClientError } from "../lib/api";
 import { catpartDiffApi, type CatpartCandidateDto } from "../lib/catpartApi";
 
+const UNMATCHED_PAGE_SIZE = 100;
+
 export function CatPartDiff() {
   const { t } = useTranslation();
   const [oldPath, setOldPath] = useState("");
   const [newPath, setNewPath] = useState("");
+  const [includeGeometry, setIncludeGeometry] = useState(false);
   const [confirmedPairs, setConfirmedPairs] = useState<CatpartCandidateDto[]>([]);
+  const [visibleOldCount, setVisibleOldCount] = useState(UNMATCHED_PAGE_SIZE);
+  const [visibleNewCount, setVisibleNewCount] = useState(UNMATCHED_PAGE_SIZE);
   const mutation = useMutation({
-    mutationFn: () => catpartDiffApi.compare(oldPath, newPath),
-    onSuccess: () => setConfirmedPairs([]),
+    mutationFn: () => catpartDiffApi.compare(oldPath, newPath, includeGeometry),
+    onSuccess: () => {
+      setConfirmedPairs([]);
+      setVisibleOldCount(UNMATCHED_PAGE_SIZE);
+      setVisibleNewCount(UNMATCHED_PAGE_SIZE);
+    },
   });
   const result = mutation.data;
-  const exactOldCount = (result?.exact_matches ?? []).reduce((count, group) => count + group.old_count, 0);
-  const exactNewCount = (result?.exact_matches ?? []).reduce((count, group) => count + group.new_count, 0);
+  const exactOldCount = result?.exact.old_files ?? 0;
+  const exactNewCount = result?.exact.new_files ?? 0;
   const fileIssues = (result?.issues ?? []).filter((issue) => issue.file !== null);
 
   const toggleConfirmation = (candidate: CatpartCandidateDto, confirmed: boolean) => {
@@ -34,6 +44,7 @@ export function CatPartDiff() {
         <h2 className="card-title">{t("catpartDiff.title")}</h2>
         <p className="hint">{t("catpartDiff.description")}</p>
         <p className="hint">{t("catpartDiff.limit")}</p>
+        <p className="hint">{t("catpartDiff.geometryToggleHint")}</p>
         <div className="row">
           <div className="field grow">
             <span className="field-label">{t("catpartDiff.oldFolder")}</span>
@@ -67,6 +78,14 @@ export function CatPartDiff() {
             {mutation.isPending ? t("catpartDiff.analyzing") : t("catpartDiff.compare")}
           </button>
         </div>
+        <label className="row">
+          <Checkbox
+            checked={includeGeometry}
+            onCheckedChange={(checked) => setIncludeGeometry(checked === true)}
+            aria-label={t("catpartDiff.geometryToggle")}
+          />
+          <span>{t("catpartDiff.geometryToggle")}</span>
+        </label>
         {mutation.isError ? (
           <p className="error" role="alert">
             {mutation.error instanceof ApiClientError ? mutation.error.message : t("catpartDiff.errorFallback")}
@@ -79,11 +98,7 @@ export function CatPartDiff() {
           <article className="card">
             <h2 className="card-title">{t("catpartDiff.title")}</h2>
             <p className="hint" role="status">
-              {result.reader.required
-                ? result.reader.available
-                  ? t("catpartDiff.readerAvailable")
-                  : t("catpartDiff.readerMissing")
-                : t("catpartDiff.readerNotRequired")}
+              {t(`catpartDiff.geometryStatus.${result.geometry_status}`)}
             </p>
             <div className="row">
               <span className="badge default">{t("catpartDiff.oldCount", { count: result.old_count })}</span>
@@ -91,7 +106,11 @@ export function CatPartDiff() {
             </div>
             <p className="hint">
               {exactOldCount || exactNewCount
-                ? t("catpartDiff.exactSkipped", { oldCount: exactOldCount, newCount: exactNewCount })
+                ? t("catpartDiff.exactSkipped", {
+                    groups: result.exact.groups,
+                    oldCount: exactOldCount,
+                    newCount: exactNewCount,
+                  })
                 : t("catpartDiff.exactNone")}
             </p>
             {result.status === "empty" ? <p className="hint">{t("catpartDiff.noCatparts")}</p> : null}
@@ -151,17 +170,35 @@ export function CatPartDiff() {
               <h3 className="card-title">{t("catpartDiff.unmatchedTitle")}</h3>
               <p className="hint">{t("catpartDiff.unmatchedDescription")}</p>
               <ul className="item-list">
-                {result.unmatched_old.map((file) => (
+                {result.unmatched_old.slice(0, visibleOldCount).map((file) => (
                   <li key={`old-${file}`} className="item-row">
                     <span className="item-name">{`${t("catpartDiff.oldFiles")}: ${file}`}</span>
                   </li>
                 ))}
-                {result.unmatched_new.map((file) => (
+                {result.unmatched_new.slice(0, visibleNewCount).map((file) => (
                   <li key={`new-${file}`} className="item-row">
                     <span className="item-name">{`${t("catpartDiff.newFiles")}: ${file}`}</span>
                   </li>
                 ))}
               </ul>
+              {result.unmatched_old.length > visibleOldCount ? (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => setVisibleOldCount((count) => count + UNMATCHED_PAGE_SIZE)}
+                >
+                  {t("catpartDiff.showMore", { remaining: result.unmatched_old.length - visibleOldCount })}
+                </button>
+              ) : null}
+              {result.unmatched_new.length > visibleNewCount ? (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => setVisibleNewCount((count) => count + UNMATCHED_PAGE_SIZE)}
+                >
+                  {t("catpartDiff.showMore", { remaining: result.unmatched_new.length - visibleNewCount })}
+                </button>
+              ) : null}
             </article>
           ) : null}
 

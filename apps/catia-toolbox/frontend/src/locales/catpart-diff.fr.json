@@ -9,10 +9,16 @@
   "analyzing": "Analyse en cours…",
   "runPrompt": "Sélectionnez les deux dossiers CATPart puis lancez l’analyse.",
   "noCatparts": "Aucun fichier CATPart trouvé dans au moins un des dossiers.",
-  "readerAvailable": "CADMPEG a produit des signatures géométriques partielles; les candidats ne sont pas des correspondances certaines.",
-  "readerMissing": "CADMPEG n’est pas installé ou configuré. Les copies identiques sont masquées; les fichiers restants n’ont pas de contenu identique dans l’autre dossier. Il peut s’agir d’une modification, d’un ajout ou d’une suppression.",
-  "readerNotRequired": "Les fichiers identiques ont été comparés; aucune analyse géométrique n’était nécessaire.",
-  "exactSkipped": "Copies identiques masquées : {{oldCount}} ancien(s), {{newCount}} nouveau(x).",
+  "geometryToggle": "Proposer aussi des paires géométriques avec CADMPEG",
+  "geometryToggleHint": "Optionnel; au maximum 100 fichiers non appariés par dossier. Pour un sous-ensemble plus petit, choisissez un sous-dossier.",
+  "geometryStatus": {
+    "not_requested": "Mode exact SHA-256 : CADMPEG n’est pas utilisé.",
+    "not_needed": "Aucune paire restante ne nécessite d’analyse géométrique.",
+    "available": "CADMPEG produit des signatures partielles; les candidats restent à vérifier.",
+    "missing": "CADMPEG est absent ou mal configuré; la comparaison exacte reste disponible.",
+    "limit_exceeded": "La comparaison exacte couvre tous les fichiers; les suggestions CADMPEG nécessitent au plus 100 fichiers non appariés par dossier."
+  },
+  "exactSkipped": "Copies identiques masquées : {{oldCount}} ancien(s), {{newCount}} nouveau(x) ({{groups}} groupe(s)).",
   "exactNone": "Aucune copie identique masquée.",
   "oldFiles": "Ancien(s)",
   "newFiles": "Nouveau(x)",
@@ -33,7 +39,8 @@
   "unmatchedDescription": "Un fichier restant peut être modifié, ajouté ou supprimé; l’absence de hash identique ne détermine pas laquelle de ces situations s’applique.",
   "oldCount": "Fichiers anciens : {{count}}",
   "newCount": "Fichiers nouveaux : {{count}}",
-  "limit": "Le prototype accepte au maximum 100 fichiers CATPart par dossier.",
+  "limit": "La comparaison SHA-256 accepte jusqu’à 20 000 fichiers CATPart par dossier.",
+  "showMore": "Afficher {{remaining}} fichier(s) supplémentaire(s)",
   "issuesTitle": "Éléments non analysés",
   "errorFallback": "L’analyse a échoué."
 }

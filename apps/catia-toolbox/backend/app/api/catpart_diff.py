@@ -20,14 +20,13 @@ router = APIRouter(prefix="/diff", tags=["diff"])
 class CatpartCompareIn(BaseModel):
     old_path: str = Field(min_length=1, max_length=4096)
     new_path: str = Field(min_length=1, max_length=4096)
+    include_geometry: bool = False
 
 
-class CatpartExactMatchOut(BaseModel):
-    sha256: str
-    old_files: list[str]
-    new_files: list[str]
-    old_count: int
-    new_count: int
+class CatpartExactSummaryOut(BaseModel):
+    groups: int
+    old_files: int
+    new_files: int
 
 
 class CatpartCandidateOut(BaseModel):
@@ -46,21 +45,16 @@ class CatpartIssueOut(BaseModel):
     message: str
 
 
-class CatpartReaderOut(BaseModel):
-    available: bool
-    required: bool
-
-
 class CatpartCompareOut(BaseModel):
     status: Literal["complete", "partial", "empty"]
     old_count: int
     new_count: int
-    exact_matches: list[CatpartExactMatchOut]
+    exact: CatpartExactSummaryOut
     candidates: list[CatpartCandidateOut]
     unmatched_old: list[str]
     unmatched_new: list[str]
     issues: list[CatpartIssueOut]
-    reader: CatpartReaderOut
+    geometry_status: Literal["not_requested", "not_needed", "available", "missing", "limit_exceeded"]
 
 
 @router.post("/catparts", response_model=CatpartCompareOut)
@@ -70,4 +64,4 @@ def compare_catpart_folders(body: CatpartCompareIn, db: Session = Depends(get_db
     new_path = safe_under_root(root, body.new_path)
     if old_path == new_path:
         raise AppError("CATPART_SAME_FOLDER", "Selectionnez deux dossiers differents.", status_code=400)
-    return compare_folders(old_path, new_path)
+    return compare_folders(old_path, new_path, include_geometry=body.include_geometry)

@@ -9,10 +9,16 @@
   "analyzing": "Analysis in progress…",
   "runPrompt": "Select both CATPart folders, then start the analysis.",
   "noCatparts": "No CATPart files were found in at least one folder.",
-  "readerAvailable": "CADMPEG produced partial geometry signatures; candidates are not certain matches.",
-  "readerMissing": "CADMPEG is not installed or configured. Identical copies are hidden; remaining files have no byte-identical counterpart in the other folder. They may be modified, added, or removed.",
-  "readerNotRequired": "Identical files were compared; no geometry analysis was needed.",
-  "exactSkipped": "Identical copies hidden: {{oldCount}} older and {{newCount}} newer.",
+  "geometryToggle": "Also suggest geometric pairs with CADMPEG",
+  "geometryToggleHint": "Optional; at most 100 unmatched files per folder. Choose a smaller subfolder for geometry suggestions on a subset.",
+  "geometryStatus": {
+    "not_requested": "Exact SHA-256 mode: CADMPEG was not used.",
+    "not_needed": "No remaining pair needs geometry analysis.",
+    "available": "CADMPEG produced partial signatures; candidates still require review.",
+    "missing": "CADMPEG is missing or misconfigured; exact comparison is still available.",
+    "limit_exceeded": "Exact comparison covered every file; CADMPEG suggestions require at most 100 unmatched files per folder."
+  },
+  "exactSkipped": "Identical copies hidden: {{oldCount}} older and {{newCount}} newer ({{groups}} group(s)).",
   "exactNone": "No identical copies were hidden.",
   "oldFiles": "Older",
   "newFiles": "Newer",
@@ -33,7 +39,8 @@
   "unmatchedDescription": "A remaining file may be modified, added, or removed; the absence of an identical hash does not distinguish these cases.",
   "oldCount": "Older files: {{count}}",
   "newCount": "Newer files: {{count}}",
-  "limit": "The prototype accepts at most 100 CATPart files per folder.",
+  "limit": "SHA-256 comparison supports up to 20,000 CATPart files per folder.",
+  "showMore": "Show {{remaining}} more file(s)",
   "issuesTitle": "Files not analyzed",
   "errorFallback": "The analysis failed."
 }

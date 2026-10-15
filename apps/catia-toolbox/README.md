@@ -36,7 +36,7 @@ The target default port is `8004`, followed by the next free port when needed. T
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. Optional CATPart folder comparison requires the CADMPEG CLI v0.6.1 or newer, installed separately and available on `PATH` or configured with `CADMPEG_PATH`; CATIA V5 itself is not required. Geometry extraction is partial, so suggested pairs must be checked manually and different hashes only mean different file bytes. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
+Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. Exact SHA-256 CATPart comparison supports up to 20,000 files per folder and does not require CADMPEG or CATIA V5. Optional geometry suggestions require the CADMPEG CLI v0.6.1 or newer, installed separately and available on `PATH` or configured with `CADMPEG_PATH`; it analyzes at most 100 unmatched files per folder, and suggested pairs require manual review. Different hashes mean different file bytes, not necessarily changed geometry. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
 
 ## Start On Windows
 

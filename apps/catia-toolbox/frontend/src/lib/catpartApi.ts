@@ -2,12 +2,10 @@ import { request } from "./apiClient";
 
 export type CatpartGeometryQuality = "partial" | "complete";
 
-export type CatpartExactMatchDto = {
-  sha256: string;
-  old_files: string[];
-  new_files: string[];
-  old_count: number;
-  new_count: number;
+export type CatpartExactSummaryDto = {
+  groups: number;
+  old_files: number;
+  new_files: number;
 };
 
 export type CatpartCandidateDto = {
@@ -24,18 +22,22 @@ export type CatpartCompareDto = {
   status: "complete" | "partial" | "empty";
   old_count: number;
   new_count: number;
-  exact_matches: CatpartExactMatchDto[];
+  exact: CatpartExactSummaryDto;
   candidates: CatpartCandidateDto[];
   unmatched_old: string[];
   unmatched_new: string[];
   issues: { file: string | null; code: string; message: string }[];
-  reader: { available: boolean; required: boolean };
+  geometry_status: "not_requested" | "not_needed" | "available" | "missing" | "limit_exceeded";
 };
 
 export const catpartDiffApi = {
-  compare: (oldPath: string, newPath: string) =>
+  compare: (oldPath: string, newPath: string, includeGeometry = false) =>
     request<CatpartCompareDto>("/diff/catparts", {
       method: "POST",
-      body: JSON.stringify({ old_path: oldPath, new_path: newPath }),
+      body: JSON.stringify({
+        old_path: oldPath,
+        new_path: newPath,
+        include_geometry: includeGeometry,
+      }),
     }),
 };
