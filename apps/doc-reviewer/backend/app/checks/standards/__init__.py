@@ -13,27 +13,25 @@ from app.checks.standards import ata100, mat10000, ste100
 from app.checks.standards._catalog import serialize_compiled_rule
 from app.core.compiled_rules import CompiledRule
 
-
 # Le Doc Reviewer analyse le **rendu PDF** publié, jamais la source. Les
 # normes purement XML/gestion de données (S1000D, ATA iSpec 2200, S2000M)
 # ont été retirées du catalogue : leurs règles vérifiaient des champs/codes
 # (DMC, NSN, CAGE, Information Code, SMR, QPA…) qui n'existent que dans le
 # XML/SGML source et n'ont pas de sens sur un PDF. Seules restent les normes
 # dont les règles portent sur le texte/rendu : ASD-STE100 (style), MAT10000
-# (description de tâche) et ATA 100 (chapitrage). Les règles de style
-# rédactionnel STE (voix passive, gérondif, longueur de phrase…) vivent dans
-# le catalogue ASD-STE100 et sont exécutées par `catalog_runner`
-# (+ `style_checks` pour la longueur de phrase).
+# (description de tâche) et ATA 100 (chapitrage). Les règles STE sont limitées
+# aux documents déclarés en anglais; les phrases longues passent par
+# `catalog_runner` et `style_checks`, les autres contrôles par le moteur compilé.
 BUILTIN_STANDARDS: list[dict[str, object]] = [
     {
         "code": "ASD-STE100",
         "label": "ASD-STE100 — Simplified Technical English",
         "description": (
-            "Norme de style d'écriture maintenue par ASD (AeroSpace and "
-            "Defence Industries Association of Europe). Vocabulaire "
-            "approuvé, voix active, phrases courtes, première personne "
-            "interdite, gérondif proscrit. Référencée par S1000D mais "
-            "indépendante."
+            "Norme de style d'écriture en anglais maintenue par ASD "
+            "(AeroSpace and Defence Industries Association of Europe). "
+            "Vocabulaire approuvé, voix active, phrases courtes, première "
+            "personne interdite, gérondif proscrit. Référencée par S1000D "
+            "mais indépendante."
         ),
         "versions": ste100.CATALOG,
         "metadata": ste100.RULE_METADATA,

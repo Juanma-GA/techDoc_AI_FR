@@ -41,7 +41,7 @@ STANDARD_SPEC: dict[str, object] = {
     "code": "ASD-STE100",
     "label": "ASD-STE100 — Simplified Technical English",
     "description": (
-        "ASD-STE100 issue 7 writing-style checks for technical documentation."
+        "ASD-STE100 issue 7 English writing-style checks for technical documentation."
     ),
     "versions": ste100.CATALOG,
     "metadata": ste100.RULE_METADATA,
