@@ -21,6 +21,7 @@ from app.checks.mode_registry import (
 )
 from app.config import settings
 from app.core.compiled_rules import RuleResult
+from app.core.demo_scope import get_document_in_current_mode
 from app.core.document_context import missing_document_context
 from app.core.errors import AppError
 from app.core.logging import get_logger
@@ -84,6 +85,8 @@ def latest_rule_results(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
 ) -> list[RuleResult]:
+    if get_document_in_current_mode(db, document_id) is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     run = db.scalar(
         select(AnalysisRun)
         .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
@@ -122,7 +125,7 @@ def clear_pending_page_suggestions(
     page_number: int,
     db: Session = Depends(get_db),
 ) -> None:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     resolve_page_range(page_number, page_number, doc.page_count)
@@ -180,7 +183,7 @@ def analyze_stream(
     ),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     previous_revision_bytes: bytes | None = None

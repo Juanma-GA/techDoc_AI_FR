@@ -66,15 +66,20 @@ export function App() {
   const isReviewer = location.pathname.startsWith("/documents/");
   if (isReviewer) {
     return (
-      <div className="pr">
-        <ErrorBoundary>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/documents/:id" element={<DocumentReviewer />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
-      </div>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <div className="pr">
+          <ErrorBoundary>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/documents/:id" element={<DocumentReviewer />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      </DemoModeProvider>
     );
   }
 

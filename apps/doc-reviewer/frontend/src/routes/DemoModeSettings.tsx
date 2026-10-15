@@ -41,6 +41,10 @@ export function DemoModeSettings() {
                   void queryClient.invalidateQueries({ queryKey: ["client-config"] });
                   void queryClient.invalidateQueries({ queryKey: ["client-rules"] });
                   void queryClient.invalidateQueries({ queryKey: ["standards"] });
+                  void queryClient.invalidateQueries({ queryKey: ["documents"] });
+                  void queryClient.invalidateQueries({ queryKey: ["document"] });
+                  void queryClient.invalidateQueries({ queryKey: ["suggestions"] });
+                  void queryClient.invalidateQueries({ queryKey: ["rule-results"] });
                 },
               },
             )

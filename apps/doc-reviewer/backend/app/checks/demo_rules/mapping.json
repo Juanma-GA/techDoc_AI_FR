@@ -47,16 +47,6 @@
       "max_items": 50,
       "format_hint": {"fr": "Un numéro PNR par ligne, au format exact indiqué dans le CMM.", "en": "Enter one PNR number per line, matching the format shown in the CMM."}
     },
-    "meta_manufacturer": {
-      "type": "enum",
-      "required": true,
-      "default": "Airbus",
-      "labels": {"fr": "Constructeur", "en": "Manufacturer"},
-      "allowed_values": [
-        "Airbus",
-        "Boeing"
-      ]
-    },
     "document_language": {
       "type": "enum",
       "required": true,

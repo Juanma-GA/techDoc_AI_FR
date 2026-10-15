@@ -26,6 +26,8 @@ from app.db.session import SessionLocal
 
 
 def test_rule_results_include_human_readable_titles_from_synthetic_snapshot() -> None:
+    from app.db.models import Document
+
     snapshot = {
         "rules": [{"id": "CHECKLIST_REVISION_DATE", "topic": "Revision date"}],
         "results": [
@@ -42,10 +44,20 @@ def test_rule_results_include_human_readable_titles_from_synthetic_snapshot() ->
             }
         ],
     }
+    document_id = uuid.uuid4()
     run = SimpleNamespace(compiled_rules_snapshot_json=json.dumps(snapshot))
-    db = SimpleNamespace(scalar=lambda _statement: run)
+    document = SimpleNamespace(id=document_id)
 
-    results = latest_rule_results(uuid.uuid4(), db)  # type: ignore[arg-type]
+    class FakeDb:
+        def get(self, _model, _key):
+            return None
+
+        def scalar(self, statement):
+            if statement.column_descriptions[0]["entity"] is Document:
+                return document
+            return run
+
+    results = latest_rule_results(document_id, FakeDb())  # type: ignore[arg-type]
 
     assert len(results) == 1
     assert results[0].status == "INCONCLUSIVE"

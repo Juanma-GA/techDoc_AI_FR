@@ -174,30 +174,18 @@ def test_demo_upload_uses_demo_catalog_even_with_normal_catalog_ids(
     assert response.json()["standard_version_ids"] == [demo_version_id]
 
 
-def test_existing_document_analysis_uses_demo_bundle_and_catalog(
+def test_demo_document_analysis_uses_demo_bundle_and_preset(
     client: TestClient,
     sample_pdf_bytes: bytes,
 ) -> None:
+    client.post("/api/v1/settings/mistral", json={"demo_enabled": True})
     upload = client.post(
         "/api/v1/documents",
         files={"file": ("synthetic.pdf", sample_pdf_bytes, "application/pdf")},
     )
     assert upload.status_code == 201, upload.text
     document_id = upload.json()["id"]
-    metadata = client.patch(
-        f"/api/v1/documents/{document_id}",
-        json={
-            "meta_revision_date": "JUL 27/26",
-            "meta_cmm_number": "79-30-02",
-            "meta_first_issue_date": "JUL 1966",
-            "meta_revision_number": "Rev. 01",
-            "meta_pnr_number": "123-456-AA",
-            "document_language": "en",
-        },
-    )
-    assert metadata.status_code == 200, metadata.text
-
-    client.post("/api/v1/settings/mistral", json={"demo_enabled": True})
+    assert upload.json()["client_metadata"]["meta_cmm_number"] == "80-80-01"
     demo_config = client.get("/api/v1/client-config").json()
     demo_version_id = demo_config["catalogs"][0]["standard_version_id"]
 
@@ -216,6 +204,9 @@ def test_existing_document_analysis_uses_demo_bundle_and_catalog(
     snapshot = json.loads(run.context_snapshot_json)
     assert snapshot["client_bundle"]["bundle"] == "demo_rules"
     assert snapshot["client_bundle"]["client_code"] == "DEMO"
+    assert snapshot["metadata"]["client_metadata"]["meta_pnr_number"] == [
+        "1-900-SB"
+    ]
     assert run.standard_version_ids == json.dumps([demo_version_id])
 
 

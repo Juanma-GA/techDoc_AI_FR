@@ -87,7 +87,9 @@ _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
     r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+"
     r"{{meta_revision_date}}(?!\w)"
 )
-_EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_ATA_PATTERN = (
+    r"(?i)(?<!\w)ATA\s+No\.?\s+{{meta_cmm_number}}(?!\w)"
+)
 _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
@@ -950,15 +952,19 @@ CUSTOM_NI_PART_NUMBER_ORDER = rule(
 
 CUSTOM_HIGHLIGHTS_ATA_NUMBER = rule(
     code="CUSTOM_HIGHLIGHTS_ATA_NUMBER",
-    name="Numero ATA present sur la premiere page Highlights",
+    name="Numero CMM attendu apres ATA No sur la premiere page Highlights",
     description=(
-        "La premiere page Highlights doit contenir le numero ATA correspondant "
-        "au numero CMM du mapping du document."
+        "Sur la premiere page Highlights, un marqueur ATA No doit etre suivi "
+        "du numero CMM du mapping."
     ),
-    message="Le numero ATA de la premiere page Highlights est absent ou incorrect.",
+    message="Le numero apres ATA No est absent ou ne correspond pas au CMM attendu.",
     kind="field_required",
     severity="error",
-    target=_HIGHLIGHTS_FIRST_PAGE_TARGET,
+    target=RuleTarget(
+        page="all",
+        region="page_without_footer",
+        page_type="HIGHLIGHTS_PAGE_1",
+    ),
     checks=[
         Check(
             field="text",
@@ -971,15 +977,15 @@ CUSTOM_HIGHLIGHTS_ATA_NUMBER = rule(
             missing_anchor_position="same",
         ),
     ],
-    failure_message="numero ATA Highlights absent ou non conforme.",
+    failure_message="numero CMM apres ATA No absent ou non conforme dans les Highlights.",
     only_if=Condition(field="meta_cmm_number", state="present"),
     translations={
         "en": {
             "description": (
-                "The first Highlights page must contain the ATA number matching "
-                "the document CMM number in the mapping."
+                "On the first Highlights page, an ATA No marker must be followed "
+                "by the CMM number from the document mapping."
             ),
-            "message": "The ATA number on the first Highlights page is missing or incorrect.",
+            "message": "The number after ATA No is missing or does not match the expected CMM.",
         }
     },
 )

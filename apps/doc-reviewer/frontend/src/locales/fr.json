@@ -57,7 +57,7 @@
     "f3": "Vue Rédacteur : suggestions triées (page, span_index, id). Diff original → proposed sauf si détection-only (règles structurelles, vision) où Accept est masqué.",
     "f4": "Cycle : open → accepted → applied. À l'apply : invalidation automatique des suggestions « stale » (texte modifié englobant).",
     "f5": "Tableau de bord : KPIs PDFs / suggestions open-applied-rejected / top docs / répartition severity-kind.",
-    "f6": "Export PDF édité ou rollback. Admin → /admin/wipe-suggestions (toutes statuts) ou /admin/reset (DB + dossiers disque + orphelins) pour reset complet à zéro."
+    "f6": "Export PDF édité ou rollback. Les actions Admin effacent les données du mode courant."
   },
   "data": {
     "title": "Données",
@@ -65,10 +65,10 @@
     "overview": "Vue d'ensemble",
     "reset": "Réinitialiser",
     "resetWarn": "Toutes ces opérations sont irréversibles. Les normes intégrées et la config Mistral sont préservées.",
-    "resetSugs": "Effacer toutes les suggestions",
-    "resetAll": "Tout supprimer (documents + règles + fichiers disque)",
-    "confirmSugs": "Effacer TOUTES les suggestions (ouvertes, rejetées, appliquées, éditées) ? Irréversible.",
-    "confirmAll": "Supprimer TOUS les documents, suggestions, règles custom, checklists et fichiers sur disque ? Irréversible.",
+    "resetSugs": "Effacer les suggestions du mode courant",
+    "resetAll": "Tout supprimer (données du mode courant)",
+    "confirmSugs": "Effacer TOUTES les suggestions du mode courant (ouvertes, rejetées, appliquées, éditées) ? Irréversible.",
+    "confirmAll": "Supprimer les documents, suggestions et fichiers du mode courant ? Les règles custom et checklists sont aussi supprimées uniquement en mode normal. Irréversible.",
     "wipedSugs": "{{count}} suggestion(s) supprimée(s).",
     "resetDone": "Reset effectué : {{docs}} document(s), {{rules}} règle(s) et {{folders}} dossier(s) supprimé(s).",
     "kpi.pdfs": "Documents",
@@ -114,6 +114,7 @@
     "listTitle": "Documents importés",
     "empty": "Aucun document importé",
     "uploading": "Import en cours…",
+    "upload.importDemo": "Importer le PDF de démo",
     "upload.dropTitle": "Glisse un PDF, Word ou .zip ici",
     "upload.dropHint": "ou clique pour parcourir",
     "upload.dropLimit": "PDF, .docx, .doc ou .zip · max 100 Mo",

@@ -19,6 +19,7 @@ from app.core import ingest
 from app.core.checklist_compiler import compile_checklist_rule
 from app.core.compiled_rule_store import persist_compiled_rule
 from app.core.compiled_rules import describe_compiled_rule, validate_compiled_rule_json
+from app.core.demo_scope import documents_in_current_mode
 from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.llm_suggester import suggest_rules_from_corpus
@@ -362,7 +363,7 @@ def suggest_rules(
             "catalog": catalog if isinstance(catalog, list) else [],
         }
 
-    stmt = select(Document)
+    stmt = documents_in_current_mode(db)
     if body.document_ids:
         stmt = stmt.where(Document.id.in_(body.document_ids))
     documents = list(db.scalars(stmt.order_by(Document.created_at.desc())))

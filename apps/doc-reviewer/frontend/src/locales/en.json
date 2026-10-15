@@ -57,7 +57,7 @@
     "f3": "Reviewer view: suggestions ordered by (page, span_index, id). original → proposed diff unless detection-only (structural rules, vision) where Accept is hidden.",
     "f4": "Lifecycle: open → accepted → applied. On apply: stale siblings (overlapping text) are auto-rejected.",
     "f5": "Dashboard: KPIs PDFs / suggestions open-applied-rejected / top docs / severity-kind breakdown.",
-    "f6": "Export edited PDF or rollback. Admin → /admin/wipe-suggestions (every status) or /admin/reset (DB + disk folders + orphans) for a full zero reset."
+    "f6": "Export edited PDF or rollback. Admin actions clear data from the current mode."
   },
   "data": {
     "title": "Data",
@@ -65,10 +65,10 @@
     "overview": "Overview",
     "reset": "Reset",
     "resetWarn": "All these operations are irreversible. Built-in standards and Mistral config are preserved.",
-    "resetSugs": "Wipe all suggestions",
-    "resetAll": "Delete everything (documents + rules + disk files)",
-    "confirmSugs": "Wipe EVERY suggestion (open, rejected, applied, edited)? Irreversible.",
-    "confirmAll": "Delete EVERY document, suggestion, custom rule, checklist and disk file? Irreversible.",
+    "resetSugs": "Wipe suggestions in the current mode",
+    "resetAll": "Delete everything in the current mode",
+    "confirmSugs": "Wipe EVERY suggestion in the current mode (open, rejected, applied, edited)? Irreversible.",
+    "confirmAll": "Delete documents, suggestions and files in the current mode? Custom rules and checklists are deleted only in normal mode. Irreversible.",
     "wipedSugs": "{{count}} suggestion(s) deleted.",
     "resetDone": "Reset done: {{docs}} document(s), {{rules}} rule(s), and {{folders}} folder(s) deleted.",
     "kpi.pdfs": "Documents",
@@ -114,6 +114,7 @@
     "listTitle": "Imported documents",
     "empty": "No document imported",
     "uploading": "Uploading…",
+    "upload.importDemo": "Import demo PDF",
     "upload.dropTitle": "Drop a PDF, Word or .zip here",
     "upload.dropHint": "or click to browse",
     "upload.dropLimit": "PDF, .docx, .doc or .zip · max 100 MB",

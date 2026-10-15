@@ -19,6 +19,8 @@ from app.checks.client_registry import (
 from app.checks.mode_registry import get_request_client_configuration
 from app.config import settings
 from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
+from app.core.demo_mode import get_demo_enabled
+from app.core.demo_scope import documents_in_current_mode, get_document_in_current_mode
 from app.core.document_context import (
     DOCUMENT_CONTEXT_FIELDS,
     get_document_context_defaults,
@@ -180,6 +182,7 @@ def _persist_pdf(
     source_format: str = "pdf",
     original_data: Optional[bytes] = None,
     client_mapping: ClientMapping | None = None,
+    is_demo: bool = False,
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
@@ -193,7 +196,8 @@ def _persist_pdf(
 
     sha = sha256_of_bytes(pdf_bytes)
     doc_id = uuid.uuid4()
-    storage_dir_value = f"document_{doc_id.hex}"
+    storage_prefix = "demo_document" if is_demo else "document"
+    storage_dir_value = f"{storage_prefix}_{doc_id.hex}"
     init_storage(storage_dir_value, pdf_bytes)
 
     try:
@@ -237,6 +241,7 @@ def _persist_pdf(
         text_coverage=report.coverage,
         quality=report.state,
         client_metadata=dict(context_defaults),
+        is_demo=is_demo,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
@@ -292,6 +297,7 @@ def _persist_docx(
     source_format: Optional[str] = None,
     engine_override: Optional[str] = None,
     client_mapping: ClientMapping | None = None,
+    is_demo: bool = False,
 ) -> Document:
     """Persist a DOCX working document while retaining the detected source.
 
@@ -337,7 +343,8 @@ def _persist_docx(
 
     sha = sha256_of_bytes(working_data)
     doc_id = uuid.uuid4()
-    storage_dir_value = f"document_{doc_id.hex}"
+    storage_prefix = "demo_document" if is_demo else "document"
+    storage_dir_value = f"{storage_prefix}_{doc_id.hex}"
     docx_versioning.write_version(storage_dir_value, 0, working_data)
     source_data = original_data if original_data is not None else data
     original_path = docx_versioning.write_original(storage_dir_value, source_data, safe)
@@ -370,6 +377,7 @@ def _persist_docx(
         text_coverage=100,
         quality="analyzable",
         client_metadata=dict(context_defaults),
+        is_demo=is_demo,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
@@ -398,7 +406,7 @@ def upload_document(
     db: Session = Depends(get_db),
 ) -> Document:
     client_configuration = get_request_client_configuration(request, db)
-    demo_mode = client_configuration.manifest.client_code == "DEMO"
+    demo_mode = get_demo_enabled(db)
     primary, all_ids = _resolve_standard_versions(
         None if demo_mode else standard_version_id,
         None if demo_mode else standard_version_ids,
@@ -423,6 +431,7 @@ def upload_document(
             source_format=prepared.source_format,
             engine_override=prepared.convert_engine,
             client_mapping=client_configuration.mapping,
+            is_demo=demo_mode,
         )
     return _persist_pdf(
         prepared.working_bytes, prepared.filename, target, db,
@@ -432,6 +441,7 @@ def upload_document(
         source_format=prepared.source_format,
         original_data=prepared.original_bytes,
         client_mapping=client_configuration.mapping,
+        is_demo=demo_mode,
     )
 
 
@@ -458,7 +468,7 @@ def upload_documents_batch(
         )
 
     client_configuration = get_request_client_configuration(request, db)
-    demo_mode = client_configuration.manifest.client_code == "DEMO"
+    demo_mode = get_demo_enabled(db)
     primary, all_ids = _resolve_standard_versions(
         None if demo_mode else standard_version_id,
         None if demo_mode else standard_version_ids,
@@ -502,6 +512,7 @@ def upload_documents_batch(
                         source_format=prepared.source_format,
                         engine_override=prepared.convert_engine,
                         client_mapping=client_configuration.mapping,
+                        is_demo=demo_mode,
                     )
                 else:
                     doc = _persist_pdf(
@@ -512,6 +523,7 @@ def upload_documents_batch(
                         source_format=prepared.source_format,
                         original_data=prepared.original_bytes,
                         client_mapping=client_configuration.mapping,
+                        is_demo=demo_mode,
                     )
                 created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
             except AppError as exc:
@@ -550,12 +562,16 @@ def _has_signature(doc: fitz.Document) -> bool:
 
 @router.get("/documents", response_model=list[DocumentOut])
 def list_documents(db: Session = Depends(get_db)) -> list[Document]:
-    return list(db.scalars(select(Document).order_by(Document.created_at.desc())))
+    return list(
+        db.scalars(
+            documents_in_current_mode(db).order_by(Document.created_at.desc())
+        )
+    )
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)
 def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Document:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     return doc
@@ -569,7 +585,7 @@ def patch_document_meta(
     db: Session = Depends(get_db),
 ) -> Document:
     """Enregistre le mapping manuel et la langue du document."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     patch = body.model_dump(exclude_unset=True)
@@ -616,7 +632,7 @@ def patch_document_meta(
 
 @router.delete("/documents/{document_id}", status_code=204)
 def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     storage_dir = doc.storage_dir
@@ -637,7 +653,7 @@ def get_pdf(
     version: str = Query(default="current"),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if doc.working_format != "pdf":
@@ -680,7 +696,7 @@ def render_page_png(
     Used by the preview HTML viewer to overlay suggestion bboxes over a
     bitmap rendering of the page (no PDF.js dependency).
     """
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if doc.working_format != "pdf":
@@ -745,7 +761,7 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
 @router.get("/documents/{document_id}/exports")
 def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """Return exports supported by the current state and their conversion warnings."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     available: list[dict[str, str]] = []
@@ -782,7 +798,7 @@ def export_pdf(
     format: Optional[Literal["original", "corrected", "commented", "pdf", "docx", "doc"]] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> FileResponse | Response:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if format == "commented":
@@ -870,7 +886,7 @@ def export_pdf(
 def get_docx_blocks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """Vue blocs d'un document Word natif (reviewer Phase 1). 400 si le document
     n'est pas en pipeline docx."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if doc.working_format != "docx":
@@ -891,7 +907,7 @@ def export_commented_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) 
     """PDF **commente** : le PDF fidele + les anomalies retenues (non rejetees)
     estampillees en annotations, plus une page-sommaire. C'est le livrable sur
     lequel le relecteur s'appuie pour corriger son document Word."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     return _commented_pdf_response(doc, db)
@@ -903,7 +919,7 @@ def rollback_document(
     body: RollbackIn,
     db: Session = Depends(get_db),
 ) -> Document:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
@@ -939,7 +955,7 @@ def rollback_document(
 
 @router.get("/documents/{document_id}/history", response_model=list[EditHistoryOut])
 def get_history(document_id: uuid.UUID, db: Session = Depends(get_db)) -> list[EditHistory]:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     stmt = (
@@ -965,7 +981,7 @@ def list_document_suggestions(
     from app.db.models import Suggestion as SuggestionModel
     from app.schemas import SuggestionOut
 
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 

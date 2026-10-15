@@ -138,10 +138,13 @@ Le runner n'envoie aucune clé API et n'utilise aucun mock.
 `bundle` and may add rule-only bundles with `rule_bundles`. The primary bundle
 continues to supply the client mapping and operations; each additional bundle
 adds catalogs and rules without replacing that mapping. For example, the
-repository selects `thales_rules` as its primary bundle and `ste100_rules` as
-an additional rule bundle. Supplemental bundle rules start disabled by default;
-the primary Thales rules remain enabled. Rule bundles declare their catalog and
-`rules.py` module in their own `manifest.json`.
+normal mode selects `thales_rules` as its primary bundle and `ste100_rules` as
+an additional rule bundle. Demo mode selects the dedicated `demo_rules` bundle.
+Documents and saved context defaults are scoped to the active mode; normal
+records remain hidden and unchanged while demo mode is active. Supplemental
+bundle rules start disabled by default; the primary normal rules remain
+enabled. Rule bundles declare their catalog and `rules.py` module in their own
+`manifest.json`.
 
 ## Layout
 

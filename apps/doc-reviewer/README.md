@@ -36,10 +36,17 @@ documents imported locally while using the app.
 
 The Settings page can enable a persistent demo mode. It loads
 `frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf` through the existing upload,
-analysis, and review workflow; no results are simulated. Demo mode uses only
-the isolated `demo_rules` catalog and its demo address; normal rule activation
-states remain unchanged. The PDF is a local asset and is not included in the repository; tracked PDFs
-are rejected by the content-policy check. Place it locally at that path.
+analysis, and review workflow; no results are simulated. The Documents tab also
+offers a direct demo-PDF import action. Demo uploads and their default mapping
+are stored in a separate demo scope in the same SQLite database; switching to
+normal mode shows normal documents and mapping defaults unchanged.
+
+The demo preset is `JUL 27/26`, CMM `80-80-01`, First Issue `JUL 25/95`,
+revision `01`, PNR `1-900-SB`, and language `en`. Manufacturer is omitted from
+the demo mapping. Demo mode uses only the isolated `demo_rules` catalog and its
+demo address; normal rule activation states remain unchanged. The PDF is a
+local asset and is not included in the repository; tracked PDFs are rejected by
+the content-policy check. Place it locally at that path.
 
 ## Port
 
