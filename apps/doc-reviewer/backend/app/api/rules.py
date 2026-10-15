@@ -12,27 +12,31 @@ from fastapi.responses import FileResponse
 from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.checks.client_registry import active_standard_versions
+from app.checks.mode_registry import get_request_client_configuration
 from app.config import settings
 from app.core import ingest
 from app.core.checklist_compiler import compile_checklist_rule
 from app.core.compiled_rule_store import persist_compiled_rule
 from app.core.compiled_rules import describe_compiled_rule, validate_compiled_rule_json
-from app.core.standard_rule_compiler import compile_standard_rule
 from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.llm_suggester import suggest_rules_from_corpus
 from app.core.pdf_versioning import current_path
 from app.core.rules_engine import validate_rule_pattern
 from app.core.security import read_upload_limited
+from app.core.standard_rule_compiler import compile_standard_rule
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion
 from app.db.session import get_db
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import (
-    RuleImportResult,
-    CompiledRuleSummary,
+    ClientCatalogOut,
+    ClientConfigOut,
+    ClientRuleOut,
+    ClientRulePatchIn,
     CompiledRulePatchIn,
+    CompiledRuleSummary,
+    RuleImportResult,
     RuleIn,
     RuleOut,
     RulePatchIn,
@@ -41,10 +45,6 @@ from app.schemas import (
     RuleSuggestOut,
     SheetInfo,
     SheetInspectOut,
-    ClientCatalogOut,
-    ClientConfigOut,
-    ClientRuleOut,
-    ClientRulePatchIn,
 )
 
 # Kinds produits par l'import checklist (langage naturel juge par le LLM +
@@ -91,7 +91,7 @@ def _client_rule_catalog(
 
 
 def _client_rule_statuses(request: Request, db: Session) -> dict[tuple[str, str], set[str]]:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     versions = active_standard_versions(db, configuration)
     disabled_by_catalog: dict[tuple[str, str], set[str]] = {}
     for version in versions:
@@ -110,7 +110,7 @@ def get_client_config(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ClientConfigOut:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     versions = active_standard_versions(db, configuration)
     version_ids = {
         (version.standard.code, version.label): version.id
@@ -143,7 +143,7 @@ def list_client_rules(
     request: Request,
     db: Session = Depends(get_db),
 ) -> list[ClientRuleOut]:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     disabled_by_catalog = _client_rule_statuses(request, db)
     results: list[ClientRuleOut] = []
     for definition in configuration.bundle.rules:
@@ -180,7 +180,7 @@ def patch_client_rule(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ClientRuleOut:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     definition = next(
         (item for item in configuration.bundle.rules if item.code == rule_code),
         None,
@@ -637,7 +637,7 @@ def import_checklist(
             db,
             pr,
             file.filename or "checklist.xlsx",
-            client_bundle=request.app.state.client_configuration.bundle,
+            client_bundle=get_request_client_configuration(request, db).bundle,
         )
         if compiled.id in seen:
             continue

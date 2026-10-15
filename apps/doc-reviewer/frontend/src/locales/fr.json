@@ -12,6 +12,11 @@
     "untested": "À TESTER",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "MODE DÉMO",
+    "pdfLoading": "Chargement du PDF de démonstration…",
+    "pdfLoadError": "Le PDF de démonstration n'a pas pu être chargé ({{message}}). Place-le dans frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf puis reconstruis le frontend."
+  },
   "nav": {
     "section": "Navigation",
     "ariaLabel": "Navigation principale",
@@ -575,6 +580,11 @@
   "settings": {
     "title": "Paramètres",
     "subtitle": "Configuration de l'application",
+    "demo.title": "Mode de fonctionnement",
+    "demo.hint": "Le mode normal est sélectionné par défaut. En mode démo, le bouton « Analyser un document » charge le PDF local dans le flux d'import habituel.",
+    "demo.normal": "Mode normal",
+    "demo.demo": "Mode démo",
+    "demo.saveError": "Impossible d'enregistrer le mode de fonctionnement.",
     "llmSection": "Configuration LLM (Mistral)",
     "standardsAdmin": "Administration des normes",
     "activeStandards.title": "Normes cibles actives",

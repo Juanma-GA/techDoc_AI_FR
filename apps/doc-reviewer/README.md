@@ -32,6 +32,15 @@ local-first standard's CI scope. Its content-policy job rejects tracked `.pdf`,
 and does not read document contents. This applies to committed files, not
 documents imported locally while using the app.
 
+## Demo Mode
+
+The Settings page can enable a persistent demo mode. It loads
+`frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf` through the existing upload,
+analysis, and review workflow; no results are simulated. Demo mode uses only
+the isolated `demo_rules` catalog and its demo address; normal rule activation
+states remain unchanged. The PDF is a local asset and is not included in the repository; tracked PDFs
+are rejected by the content-policy check. Place it locally at that path.
+
 ## Port
 
 The target default port is `8003`, followed by the next free port when needed.

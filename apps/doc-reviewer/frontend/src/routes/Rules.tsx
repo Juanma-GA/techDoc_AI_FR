@@ -1,4 +1,5 @@
 import { Check, CheckCheck, Trash2 } from "lucide-react";
+import { useDemoMode } from "@internal/ui";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -20,10 +21,11 @@ import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
 
 export function Rules() {
-  return import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
-    <LegacyRules />
-  ) : (
+  const { mode } = useDemoMode();
+  return mode === "demo" || import.meta.env.VITE_LEGACY_RULES_UI !== "true" ? (
     <ClientRules />
+  ) : (
+    <LegacyRules />
   );
 }
 

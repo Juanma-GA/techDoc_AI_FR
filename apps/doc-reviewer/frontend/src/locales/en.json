@@ -12,6 +12,11 @@
     "untested": "UNTESTED",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "DEMO MODE",
+    "pdfLoading": "Loading the demo PDF…",
+    "pdfLoadError": "The demo PDF could not be loaded ({{message}}). Place it at frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf and rebuild the frontend."
+  },
   "nav": {
     "section": "Navigation",
     "ariaLabel": "Main navigation",
@@ -575,6 +580,11 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Application configuration",
+    "demo.title": "Operating mode",
+    "demo.hint": "Normal mode is selected by default. In demo mode, the dashboard's Analyze a document action loads the local PDF through the regular upload flow.",
+    "demo.normal": "Normal mode",
+    "demo.demo": "Demo mode",
+    "demo.saveError": "Could not save the operating mode.",
     "llmSection": "LLM configuration (Mistral)",
     "standardsAdmin": "Standards administration",
     "activeStandards.title": "Active target standards",

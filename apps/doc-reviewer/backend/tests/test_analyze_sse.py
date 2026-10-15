@@ -6,20 +6,20 @@ returns text/event-stream content and that suggestions are persisted.
 
 from __future__ import annotations
 
-import io
 import hashlib
+import io
 import json
 import uuid
 from types import SimpleNamespace
 
-from openpyxl import Workbook
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from sqlalchemy import select
 
-from app.checks.client_registry import load_active_client_configuration
 from app.api import analyze as analyze_api
 from app.api import rules as rules_api
 from app.api.analyze import latest_rule_results
+from app.checks.client_registry import load_active_client_configuration
 from app.core.compiled_rules import Check, CompiledRule, RuleTarget
 from app.db.models import AnalysisRun, Document
 from app.db.session import SessionLocal
@@ -409,6 +409,10 @@ def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) ->
     assert upload.status_code == 201
     doc_id = upload.json()["id"]
     client_configuration = load_active_client_configuration()
+    expected_version_ids = [
+        catalog["standard_version_id"]
+        for catalog in client.get("/api/v1/client-config").json()["catalogs"]
+    ]
     with SessionLocal() as session:
         historical_document = session.get(Document, uuid.UUID(doc_id))
         assert historical_document is not None
@@ -438,14 +442,14 @@ def test_analyze_stores_tp1_page_type_in_context_snapshot(client: TestClient) ->
         assert bundle_snapshot["contract_version"] == client_configuration.manifest.contract_version
         assert bundle_snapshot["catalogs"] == [
             catalog.model_dump(mode="json")
-            for catalog in client_configuration.manifest.catalogs
+            for catalog in client_configuration.bundle.catalogs
         ]
         assert bundle_snapshot["manifest_hash"] == client_configuration.manifest_hash
         assert bundle_snapshot["mapping_hash"] == client_configuration.mapping_hash
         assert bundle_snapshot["bundle_hash"] == client_configuration.bundle_hash
         assert snapshot["metadata"]["client_metadata"]["meta_cmm_number"] == "79-30-02"
         assert run.standard_version_id == uuid.UUID(version_id)
-        assert json.loads(run.standard_version_ids) == [version_id]
+        assert json.loads(run.standard_version_ids) == expected_version_ids
         assert run.snapshot_sha256 == hashlib.sha256(
             f"{run.context_snapshot_json}\n{run.compiled_rules_snapshot_json}".encode("utf-8")
         ).hexdigest()

@@ -214,4 +214,68 @@ describe("ClientRuleBundles", () => {
     });
     expect(container.textContent).toContain("THALES");
   });
+
+  it("renders the demo bundle label without exposing the normal client name", async () => {
+    const demoRule: ClientRule = {
+      code: "CUSTOM_TP1_DEMO_ADDRESS",
+      bundle_code: "demo_rules",
+      bundle_label: "DEMO",
+      name: "Adresse DEMO exacte sur les pages TP1",
+      description: "Adresse DEMO de reference.",
+      message: "Adresse DEMO absente.",
+      rule_number: 1,
+      kind: "field_required",
+      severity: "warning",
+      execution: "deterministic",
+      active: true,
+      catalog_code: "DEMO-CUSTOM",
+      catalog_version: "v1",
+      translations: {},
+    };
+    mockClientHooks.useClientConfig.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        client_code: "DEMO",
+        label: "DEMO",
+        bundle: "demo_rules",
+        bundle_version: "1.0.0",
+        contract_version: "1",
+        manifest_hash: "demo-manifest",
+        mapping_hash: "demo-mapping",
+        bundle_hash: "demo-bundle",
+        catalogs: [{ code: "DEMO-CUSTOM", version: "v1", standard_version_id: "demo-v1" }],
+        mapping: { fields: {}, entities: {}, tokens: {} },
+        ui_options: {},
+      },
+      refetch: vi.fn(),
+    });
+    mockClientHooks.useClientRules.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: [demoRule],
+      refetch: vi.fn(),
+    });
+    mockClientHooks.usePatchClientRule.mockReturnValue({
+      isError: false,
+      isPending: false,
+      mutate: vi.fn(),
+    });
+    mockClientHooks.usePatchClientRuleBundle.mockReturnValue({
+      isError: false,
+      isPending: false,
+      mutate: vi.fn(),
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <ClientRules />
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("DEMO");
+    expect(container.textContent).not.toMatch(/thales/i);
+  });
 });

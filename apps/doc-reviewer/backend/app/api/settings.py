@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 
+from app.core.demo_mode import get_demo_enabled, set_demo_enabled
 from app.core.mistral_settings import (
     get_ai_custom_prompt,
     get_checklist_ai_scan,
@@ -77,6 +78,7 @@ def _build_out(db: Session) -> MistralSettingsOut:
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
         checklist_ai_scan=get_checklist_ai_scan(db),
+        demo_enabled=get_demo_enabled(db),
     )
 
 
@@ -107,6 +109,7 @@ def update_mistral_settings(
     vision_enabled = payload.pop("vision_enabled", None)
     llm_enabled = payload.pop("llm_enabled", None)
     checklist_ai_scan = payload.pop("checklist_ai_scan", None)
+    demo_enabled = payload.pop("demo_enabled", None)
     try:
         save(db, payload)
     except EncryptionError as exc:
@@ -122,6 +125,8 @@ def update_mistral_settings(
         set_llm_enabled(db, bool(llm_enabled))
     if checklist_ai_scan is not None:
         set_checklist_ai_scan(db, bool(checklist_ai_scan))
+    if demo_enabled is not None:
+        set_demo_enabled(db, demo_enabled)
     return _build_out(db)
 
 

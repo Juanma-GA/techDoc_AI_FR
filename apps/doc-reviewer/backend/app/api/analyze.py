@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from queue import Empty, SimpleQueue
-
 from typing import Optional
 
 import fitz
@@ -16,11 +15,14 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.checks.client_registry import active_standard_versions
+from app.checks.mode_registry import (
+    analysis_standard_version_ids,
+    get_request_client_configuration,
+)
 from app.config import settings
-from app.core.errors import AppError
-from app.core.document_context import missing_document_context
 from app.core.compiled_rules import RuleResult
+from app.core.document_context import missing_document_context
+from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.core.page_range import (
     filter_docx,
@@ -29,13 +31,12 @@ from app.core.page_range import (
     select_pdf_page_numbers,
 )
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
-from app.core.security import read_upload_bounded
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
+from app.core.security import read_upload_bounded
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
 from app.db.session import SessionLocal, get_db
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import SuggestionOut
-
 
 router = APIRouter(tags=["analyze"])
 _logger = get_logger(__name__)
@@ -221,7 +222,7 @@ def analyze_stream(
         if previous_revision_bytes is not None
         else None
     )
-    client_configuration = request.app.state.client_configuration
+    client_configuration = get_request_client_configuration(request, db)
     client_bundle = client_configuration.bundle
     previous_run = db.scalar(
         select(AnalysisRun)
@@ -332,7 +333,8 @@ def analyze_stream(
     # false positive is not re-surfaced on re-analysis. Signature = (rule_code,
     # original_text) — the verbatim span text is exact enough on a PDF. Empty
     # original_text (absence-type findings) can't be matched reliably → skipped.
-    from sqlalchemy import delete, select as _select
+    from sqlalchemy import delete
+    from sqlalchemy import select as _select
 
     rejected_rows = db.execute(
         _select(Suggestion.rule_code, Suggestion.original_text).where(
@@ -361,17 +363,13 @@ def analyze_stream(
             sv_ids_list = []
     except (ValueError, TypeError):
         sv_ids_list = []
-    if not sv_ids_list and sv_id is not None:
-        sv_ids_list = [str(sv_id)]
-    if not sv_ids_list:
-        sv_ids_list = [
-            str(version.id)
-            for version in active_standard_versions(
-                db,
-                client_configuration,
-            )
-        ]
-    if sv_id is None and sv_ids_list:
+    sv_ids_list = analysis_standard_version_ids(
+        request,
+        db,
+        sv_ids_list,
+        sv_id,
+    )
+    if sv_ids_list and (sv_id is None or str(sv_id) not in sv_ids_list):
         try:
             sv_id = uuid.UUID(str(sv_ids_list[0]))
         except (ValueError, TypeError):

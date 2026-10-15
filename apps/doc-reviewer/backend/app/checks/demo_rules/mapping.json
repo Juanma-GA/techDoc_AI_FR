@@ -1,0 +1,79 @@
+{
+  "fields": {
+    "meta_revision_date": {
+      "type": "string",
+      "required": true,
+      "labels": {"fr": "Date de revision", "en": "Revision date"},
+      "max_length": 60,
+      "pattern": "^(?:[jJ][aA][nN]|[fF][eE][bB]|[mM][aA][rR]|[aA][pP][rR]|[mM][aA][yY]|[jJ][uU][nN]|[jJ][uU][lL]|[aA][uU][gG]|[sS][eE][pP]|[oO][cC][tT]|[nN][oO][vV]|[dD][eE][cC])\\s+(?:(?:\\d{1,2}\\s*/\\s*)?(?:\\d{2}|\\d{4}))$",
+      "format_hint": {"fr": "Mois en 3 lettres et année, avec jour optionnel : JUL 27/26 ou JUL 2026.", "en": "3-letter month and year, with an optional day: JUL 27/26 or JUL 2026."}
+    },
+    "meta_cmm_number": {
+      "type": "string",
+      "required": true,
+      "labels": {"fr": "Numéro CMM", "en": "CMM number"},
+      "max_length": 120,
+      "pattern": "^\\d{2}-\\d{2}-\\d{2}[A-Za-z]?$",
+      "format_hint": {"fr": "Format NN-NN-NN ou NN-NN-NNA, par exemple 79-30-02 ou 79-30-02A.", "en": "NN-NN-NN or NN-NN-NNA format, for example 79-30-02 or 79-30-02A."}
+    },
+    "meta_first_issue_date": {
+      "type": "string",
+      "required": true,
+      "labels": {"fr": "Date de premiere issue", "en": "First issue date"},
+      "max_length": 60,
+      "pattern": "^(?:[jJ][aA][nN]|[fF][eE][bB]|[mM][aA][rR]|[aA][pP][rR]|[mM][aA][yY]|[jJ][uU][nN]|[jJ][uU][lL]|[aA][uU][gG]|[sS][eE][pP]|[oO][cC][tT]|[nN][oO][vV]|[dD][eE][cC])\\s+(?:(?:\\d{1,2}\\s*/\\s*)?(?:\\d{2}|\\d{4}))$",
+      "format_hint": {"fr": "Mois en 3 lettres et année, avec jour optionnel : JUL 1966 ou JUL 30/73.", "en": "3-letter month and year, with an optional day: JUL 1966 or JUL 30/73."}
+    },
+    "meta_last_issue_date": {
+      "type": "string",
+      "required": false,
+      "labels": {"fr": "Date de la revision precedente", "en": "Previous revision date"},
+      "max_length": 60,
+      "pattern": "^(?:[jJ][aA][nN]|[fF][eE][bB]|[mM][aA][rR]|[aA][pP][rR]|[mM][aA][yY]|[jJ][uU][nN]|[jJ][uU][lL]|[aA][uU][gG]|[sS][eE][pP]|[oO][cC][tT]|[nN][oO][vV]|[dD][eE][cC])\\s+(?:(?:\\d{1,2}\\s*/\\s*)?(?:\\d{2}|\\d{4}))$",
+      "format_hint": {"fr": "Mois en 3 lettres et année, avec jour optionnel : MAR 77 ou MAR 18/26.", "en": "3-letter month and year, with an optional day: MAR 77 or MAR 18/26."}
+    },
+    "meta_revision_number": {
+      "type": "string",
+      "required": true,
+      "labels": {"fr": "Numéro de révision", "en": "Revision number"},
+      "max_length": 60,
+      "pattern": "^(?:(?:[rR][eE][vV])\\.?\\s*)?\\d{1,3}$",
+      "format_hint": {"fr": "1 à 3 chiffres, par exemple 01 (l'ancien format Rev. 01 reste accepté).", "en": "1 to 3 digits, for example 01 (the legacy Rev. 01 format is also accepted)."}
+    },
+    "meta_pnr_number": {
+      "type": "string_list",
+      "required": false,
+      "labels": {"fr": "Numéros PNR", "en": "PNR numbers"},
+      "max_items": 50,
+      "format_hint": {"fr": "Un numéro PNR par ligne, au format exact indiqué dans le CMM.", "en": "Enter one PNR number per line, matching the format shown in the CMM."}
+    },
+    "meta_manufacturer": {
+      "type": "enum",
+      "required": true,
+      "default": "Airbus",
+      "labels": {"fr": "Constructeur", "en": "Manufacturer"},
+      "allowed_values": [
+        "Airbus",
+        "Boeing"
+      ]
+    },
+    "document_language": {
+      "type": "enum",
+      "required": true,
+      "labels": {"fr": "Langue du document", "en": "Document language"},
+      "allowed_values": [
+        "fr",
+        "en"
+      ]
+    }
+  },
+  "entities": {
+    "cmm_number": "(?<!\\w)(\\d{2}-\\d{2}-\\d{2}[A-Za-z]?)(?!\\w)",
+    "revision_number": "(?i)\\b(?:rev(?:ision)?\\s*(?:no\\.?|number)?\\s*[:#-]?\\s*)([^\\n|]+)",
+    "revision_date": "(?i)\\brevision\\s+date\\s*[:#-]?\\s*([^\\n|]+)",
+    "first_issue_date": "(?i)\\bfirst\\s+issue\\s+date\\s*[:#-]?\\s*([^\\n|]+)",
+    "copyright_start_year": "(?i)(?:\\u00a9|copyright)\\s*(\\d{4})",
+    "copyright_end_year": "(?i)(?:\\u00a9|copyright)\\s*\\d{4}\\s*[-\\u2013]\\s*(\\d{4})"
+  },
+  "tokens": {}
+}

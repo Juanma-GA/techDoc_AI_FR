@@ -1,7 +1,7 @@
 """Documents API — upload / list / get / pdf / export / rollback / history."""
 
-import uuid
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -11,11 +11,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.checks.client_bundle import ClientMapping, ClientMappingField
 from app.checks.client_registry import (
     LoadedClientConfiguration,
     active_standard_versions,
 )
-from app.checks.client_bundle import ClientMapping, ClientMappingField
+from app.checks.mode_registry import get_request_client_configuration
 from app.config import settings
 from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
 from app.core.document_context import (
@@ -33,7 +34,6 @@ from app.db.session import get_db
 from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import DocumentMetaPatchIn, DocumentOut, EditHistoryOut, RollbackIn
-
 
 router = APIRouter(tags=["documents"])
 
@@ -397,11 +397,13 @@ def upload_document(
     ),
     db: Session = Depends(get_db),
 ) -> Document:
+    client_configuration = get_request_client_configuration(request, db)
+    demo_mode = client_configuration.manifest.client_code == "DEMO"
     primary, all_ids = _resolve_standard_versions(
-        standard_version_id,
-        standard_version_ids,
+        None if demo_mode else standard_version_id,
+        None if demo_mode else standard_version_ids,
         db,
-        request.app.state.client_configuration,
+        client_configuration,
     )
     name = file.filename or "upload"
     if name.lower().endswith(".zip"):
@@ -420,7 +422,7 @@ def upload_document(
             original_data=prepared.original_bytes,
             source_format=prepared.source_format,
             engine_override=prepared.convert_engine,
-            client_mapping=request.app.state.client_configuration.mapping,
+            client_mapping=client_configuration.mapping,
         )
     return _persist_pdf(
         prepared.working_bytes, prepared.filename, target, db,
@@ -429,7 +431,7 @@ def upload_document(
         convert_engine=prepared.convert_engine,
         source_format=prepared.source_format,
         original_data=prepared.original_bytes,
-        client_mapping=request.app.state.client_configuration.mapping,
+        client_mapping=client_configuration.mapping,
     )
 
 
@@ -455,11 +457,13 @@ def upload_documents_batch(
             status_code=400,
         )
 
+    client_configuration = get_request_client_configuration(request, db)
+    demo_mode = client_configuration.manifest.client_code == "DEMO"
     primary, all_ids = _resolve_standard_versions(
-        standard_version_id,
-        standard_version_ids,
+        None if demo_mode else standard_version_id,
+        None if demo_mode else standard_version_ids,
         db,
-        request.app.state.client_configuration,
+        client_configuration,
     )
     created: list[dict] = []
     failed: list[dict] = []
@@ -497,7 +501,7 @@ def upload_documents_batch(
                         original_data=prepared.original_bytes,
                         source_format=prepared.source_format,
                         engine_override=prepared.convert_engine,
-                        client_mapping=request.app.state.client_configuration.mapping,
+                        client_mapping=client_configuration.mapping,
                     )
                 else:
                     doc = _persist_pdf(
@@ -507,7 +511,7 @@ def upload_documents_batch(
                         convert_engine=prepared.convert_engine,
                         source_format=prepared.source_format,
                         original_data=prepared.original_bytes,
-                        client_mapping=request.app.state.client_configuration.mapping,
+                        client_mapping=client_configuration.mapping,
                     )
                 created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
             except AppError as exc:
@@ -570,7 +574,7 @@ def patch_document_meta(
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     patch = body.model_dump(exclude_unset=True)
     client_metadata_patch = patch.pop("client_metadata", {})
-    client_mapping = request.app.state.client_configuration.mapping
+    client_mapping = get_request_client_configuration(request, db).mapping
     _validate_client_metadata_patch(
         client_metadata_patch,
         client_mapping.fields,
