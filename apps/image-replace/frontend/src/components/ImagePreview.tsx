@@ -93,10 +93,11 @@ export function ImagePreview({
                       points={line.box.map(([x, y]) => `${x},${y}`).join(" ")}
                       className={
                         matchedLines.has(index)
-                          ? "fill-danger/15 stroke-danger"
+                          ? "fill-danger stroke-danger"
                           : "fill-transparent stroke-brand-blue-light"
                       }
-                      strokeWidth="2"
+                      fillOpacity={matchedLines.has(index) ? 0.15 : undefined}
+                      strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
                     />
                   ) : null,

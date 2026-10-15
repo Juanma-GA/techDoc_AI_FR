@@ -59,6 +59,31 @@ test("detection workflow uploads an image and displays OCR replacements", async 
   await expect(page.getByText("Références", { exact: true })).toBeVisible();
   await expect(page.getByText("ICN-01.jpg")).toBeVisible();
   await expect(page.getByText("M-002", { exact: true })).toBeVisible();
+
+  const replacementBox = page.locator('svg[viewBox="0 0 2480 3508"] polygon').first();
+  for (const darkMode of [false, true]) {
+    await page.locator("html").evaluate((html, enabled) => {
+      html.classList.toggle("dark", enabled);
+    }, darkMode);
+    const boxStyles = await replacementBox.evaluate((polygon) => {
+      const tokenProbe = document.createElement("span");
+      tokenProbe.style.color = "var(--color-semantic-danger)";
+      document.body.append(tokenProbe);
+      const tokenDanger = getComputedStyle(tokenProbe).color;
+      tokenProbe.remove();
+
+      const styles = getComputedStyle(polygon);
+      return {
+        fill: styles.fill,
+        fillOpacity: styles.fillOpacity,
+        strokeWidth: styles.strokeWidth,
+        tokenDanger,
+      };
+    });
+    expect(boxStyles.fill).toBe(boxStyles.tokenDanger);
+    expect(boxStyles.fillOpacity).toBe("0.15");
+    expect(boxStyles.strokeWidth).toBe("1px");
+  }
 });
 
 test("Excel upload exposes sheet, columns, and part selection", async ({ page }) => {
