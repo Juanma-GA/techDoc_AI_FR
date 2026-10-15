@@ -6,7 +6,7 @@ import json
 import re
 
 from app.core.dmrl import entry_from_dict, normalize
-from app.core.dmrl_rules import data_module_entries
+from app.core.dmrl_rules import data_module_entries, is_pm_title
 
 _TOC_LINE = re.compile(r"(?:\.{2,}|·{2,}|-{2,})\s*\d+\s*$")
 _CHAPTER = re.compile(r"^(?:chapter|chapitre)\s+1(?:\b|\s*[-:.])", re.IGNORECASE)
@@ -28,11 +28,32 @@ def dmrl_data_module_titles(dmrl_json: str | None) -> list[str]:
         for entry in raw_entries
         if isinstance(entry, dict)
     ]
-    return list(dict.fromkeys(
+    dm_entries = data_module_entries(entries)
+    titles = list(dict.fromkeys(
         entry.title.strip()
-        for entry in data_module_entries(entries)
+        for entry in dm_entries
         if entry.title.strip()
     ))
+    first_pm_title_index = next(
+        (index for index, entry in enumerate(entries) if is_pm_title(entry)),
+        None,
+    )
+    default_title = ""
+    if first_pm_title_index is not None:
+        default_title = next(
+            (
+                entry.title.strip()
+                for entry in entries[first_pm_title_index + 1:]
+                if entry.dmc.strip() and entry.title.strip()
+            ),
+            "",
+        )
+    if not default_title:
+        default_title = next(
+            (entry.title.strip() for entry in dm_entries if entry.dmc.strip() and entry.title.strip()),
+            next(iter(titles), ""),
+        )
+    return [default_title, *(title for title in titles if title != default_title)]
 
 
 def dmrl_scoring_title(dmrl_json: str | None) -> str:

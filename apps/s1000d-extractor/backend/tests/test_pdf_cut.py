@@ -62,17 +62,27 @@ def test_score_weights_dmrl_title_and_section_number_on_same_line() -> None:
 
 def test_first_dm_title_skips_publication_only_rows_for_scoring() -> None:
     dmrl_json = json.dumps([
-        {"arbo": "1", "title": "Title 1"},
-        {"arbo": "1.1", "title": "TITRE XXXXXXXX"},
         {
-            "arbo": "1.2",
+            "arbo": "1",
+            "dmc": "DMC-PUMP-A-00-00-00-00A-039A-D",
+            "title": "Earlier DM",
+        },
+        {"arbo": "2", "title": "Title 1"},
+        {"arbo": "2.1", "title": "TITRE XXXXXXXX"},
+        {"arbo": "2.2", "title": "Partial DM metadata", "info_code": "040"},
+        {
+            "arbo": "2.3",
             "dmc": "DMC-PUMP-A-00-00-00-00A-040A-D",
             "title": "Hydraulic system",
         },
     ])
 
     assert dmrl_scoring_title(dmrl_json) == "Hydraulic system"
-    assert dmrl_data_module_titles(dmrl_json) == ["Hydraulic system"]
+    assert dmrl_data_module_titles(dmrl_json) == [
+        "Hydraulic system",
+        "Earlier DM",
+        "Partial DM metadata",
+    ]
 
 
 def test_start_page_advances_past_empty_and_blank_pages(tmp_path) -> None:
