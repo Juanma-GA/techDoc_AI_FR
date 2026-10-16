@@ -132,13 +132,10 @@ def apply_replacements(
     for reference, reference_occurrences in accepted_by_reference.items():
         pair_indices = pair_indices_by_reference[reference]
         for occurrence_index, occurrence in enumerate(reference_occurrences):
-            if len(pair_indices) == 1:
-                pair_index = pair_indices[0]
-            elif occurrence_index < len(pair_indices):
-                pair_index = pair_indices[occurrence_index]
-            else:
+            if occurrence_index >= len(pair_indices):
                 continue
 
+            pair_index = pair_indices[occurrence_index]
             occurrence["pair_index"] = pair_index
             accepted.append(occurrence)
             applied_counts[pair_index] += 1

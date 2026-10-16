@@ -34,12 +34,14 @@ def test_duplicate_reference_pairs_replace_separate_occurrences_in_order(monkeyp
     assert drawn_replacements[0][1] < drawn_replacements[1][1]
 
 
-def test_single_reference_pair_still_replaces_all_occurrences(monkeypatch) -> None:
-    drawn_replacements: list[str] = []
+def test_single_reference_pair_replaces_only_first_occurrence(monkeypatch) -> None:
+    drawn_replacements: list[tuple[str, float]] = []
     monkeypatch.setattr(
         image_replacement,
         "_draw_replacement_text",
-        lambda draw, polygon, text, fill, **kwargs: drawn_replacements.append(text),
+        lambda draw, polygon, text, fill, **kwargs: drawn_replacements.append(
+            (text, polygon[0][0])
+        ),
     )
 
     _, applied_counts, _ = apply_replacements(
@@ -49,8 +51,9 @@ def test_single_reference_pair_still_replaces_all_occurrences(monkeypatch) -> No
         replacement_font_size=14,
     )
 
-    assert applied_counts == [2]
-    assert drawn_replacements == ["101", "101"]
+    assert applied_counts == [1]
+    assert [text for text, _ in drawn_replacements] == ["101"]
+    assert drawn_replacements[0][1] < 60
 
 
 def test_replacement_uses_local_background_instead_of_white_rectangle() -> None:
