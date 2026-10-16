@@ -56,7 +56,7 @@ _PNR_HEADER_TOKEN_RE = re.compile(
     r"(?:\s*[-\u2010-\u2015\u2212]\s*[A-Z0-9]+)+)(?![A-Z0-9])"
 )
 _PNR_HEADER_SEPARATOR_RE = re.compile(r"[\s,;&]*(?:and[\s,;&]*)?", re.IGNORECASE)
-_PNR_VALUE_LIST_SEPARATOR_RE = re.compile(r"(?i)\s*(?:,|;|\band\b)\s*")
+_PNR_VALUE_LIST_SEPARATOR_RE = re.compile(r"(?i)\s*(?:,|;|[\r\n]+|\band\b)\s*")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
 _HIGHLIGHTS_LEGEND_RE = re.compile(r"(?i)\bN\s*:\s*New\b.*\bD\s*:\s*Deleted\b")
@@ -116,7 +116,6 @@ _CHAPTER_TITLE_CONNECTORS = frozenset(
     }
 )
 _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
-_ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
 _FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
@@ -987,9 +986,11 @@ def _document_pnr_values(document: Any | None) -> list[str]:
         return []
     return list(
         dict.fromkeys(
-            str(value).strip()
+            pnr.strip()
             for value in raw_values
-            if value is not None and str(value).strip()
+            if value is not None
+            for pnr in _PNR_VALUE_LIST_SEPARATOR_RE.split(str(value))
+            if pnr.strip()
         )
     )
 
@@ -1138,8 +1139,20 @@ def _highlights_pnr_header_findings(
     expected_patterns = [
         (value, _pnr_value_pattern(value)) for value in pnr_values
     ]
+    prefixes = {
+        _normalize_pnr_separators(value).partition("-")[0] if "-" in value else ""
+        for value in pnr_values
+    }
+    series_pattern = None
+    if len(pnr_values) > 1 and len(prefixes) == 1 and "" not in prefixes:
+        prefix = next(iter(prefixes))
+        series_pattern = re.compile(
+            rf"(?<![\w-]){re.escape(prefix)}\s+series\b", re.IGNORECASE
+        )
     findings: list[OperationResult] = []
     for target in targets:
+        if series_pattern is not None and series_pattern.search(target.text):
+            continue
         missing = [
             value
             for value, pattern in expected_patterns
@@ -1239,8 +1252,8 @@ def _highlights_description_findings(
         elif control == "highlights_revised_description":
             if entry.status != "R":
                 continue
-            illustrated_parts_list = bool(
-                _ILLUSTRATED_PARTS_LIST_RE.search(entry.subject)
+            illustrated_parts_list = (
+                revision.match_highlights_chapter(entry.subject) == "Illustrated Parts List"
             )
             description = (
                 entry.description

@@ -1601,6 +1601,28 @@ def test_highlights_pnr_header_requires_all_mapping_values() -> None:
     ]
 
 
+def test_highlights_pnr_header_accepts_shared_series_for_multiple_mapping_values() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    for mapping, header, expected_status in (
+        ("64809-505-1\n64809-509-1\n64809-525-1\n64809-526-1", "64809 Series", "PASS"),
+        ("123-1, 123-2", "123 series", "PASS"),
+        ("1234567-1, 1234567-2", "1234567 SERIES", "PASS"),
+        ("64809-505-1, 64809-509-1", "64808 Series", "FAIL"),
+        ("64809-505-1, 64809-509-1", "164809 Series", "FAIL"),
+        ("64809-505-1, 64810-509-1", "64809 Series", "FAIL"),
+        ("64809-505-1", "64809 Series", "FAIL"),
+    ):
+        page = _document_type_header_page(header, page_type=HIGHLIGHTS_PAGE_TYPE)
+        parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+        results, suggestions = execute_pdf_rules(
+            parsed, [rule], document=SimpleNamespace(meta_pnr_number=mapping)
+        )
+
+        assert results[0].status == expected_status, (mapping, header)
+        assert bool(suggestions) is (expected_status == "FAIL"), (mapping, header)
+
+
 def _document_type_header_page(
     header: str,
     *,
@@ -2483,7 +2505,19 @@ def test_deleted_highlights_require_chapter_or_page_deleted_description() -> Non
     assert suggestions[0].bbox[0] >= 300.0
 
 
-def test_revised_highlights_require_description_with_illustrated_parts_list_exception() -> None:
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Illustrated Parts List",
+        "Illustrated Part Lis",
+        "illustrated part list",
+        "Illustarted Parts List",
+        "IllustratedPartsList",
+    ],
+)
+def test_revised_highlights_require_description_with_illustrated_parts_list_exception(
+    chapter: str,
+) -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION")
     ordinary_missing, missing_suggestions = execute_pdf_rules(
         _highlights_structure_pdf(
@@ -2500,7 +2534,7 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     illustrated_list, illustrated_suggestions = execute_pdf_rules(
         _highlights_structure_pdf(
             [
-                ("Illustrated Parts List", "", "Revised to reflect this revision."),
+                (chapter, "", "Revised to reflect this revision."),
                 ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
                 ("NI/NUM 1101 Page 1", "R", ""),
             ]
@@ -2510,7 +2544,7 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     illustrated_missing, illustrated_missing_suggestions = execute_pdf_rules(
         _highlights_structure_pdf(
             [
-                ("Illustrated Parts List", "", ""),
+                (chapter, "", ""),
                 ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
                 ("NI/NUM 1101 Page 1", "R", ""),
             ]
