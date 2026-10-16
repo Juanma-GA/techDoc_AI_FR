@@ -1,10 +1,8 @@
-"""Extraction des illustrations hors tableaux d'un PDF -> fichiers JPG nommes.
+"""Extraction des figures et pictogrammes hors tableaux d'un PDF.
 
-On enregistre les images du PDF situees hors des tableaux, en les nommant
-d'apres la legende voisine ("Figure 3 ..." ->
-`figure-3-....jpg`) quand elle existe, sinon `illustration_<doc>_<n>.jpg`. Chaque
-figure de l'IR recoit alors son ICN (nom de fichier) que le serialiseur
-reference dans `<graphic infoEntityIdent=...>` au lieu du placeholder TODO.
+Les images associees a une legende de figure recoivent un nom derive de cette
+legende (`figure-3-....jpg`) et un ICN dans l'IR. Les autres images sont rangees
+a part comme pictogrammes (`picto_chapitre_....jpg`).
 
 PDF uniquement (via PyMuPDF). DOCX / OCR : no-op gracieux (aucune image extraite,
 les figures gardent leur placeholder ICN).
@@ -312,6 +310,34 @@ def _set_figure_icn(figure: IRNode, name: str) -> None:
         figure.icn = name
 
 
+def _attach_pictogram(
+    root: IRNode,
+    dm_section: IRNode | None,
+    page_number: int,
+    xref: int,
+    chapter: str,
+    name: str,
+    figure: IRNode | None = None,
+) -> None:
+    if figure is not None and not figure.icn:
+        figure.text = f"Picto chapitre {chapter}"
+        figure.icn = name
+        figure.icns = [name]
+        figure.is_pictogram = True
+        return
+    pictogram = IRNode(
+        id=f"picto-{page_number}-{xref}",
+        kind="figure",
+        form="caption",
+        text=f"Picto chapitre {chapter}",
+        page=page_number,
+        icn=name,
+        icns=[name],
+        is_pictogram=True,
+    )
+    (dm_section or root).children.append(pictogram)
+
+
 def _vector_rects(
     page,
     caption_rect,
@@ -574,11 +600,12 @@ def attach_illustrations(
     doc_id: str,
     dm_level: int | None = None,
 ) -> int:
-    """Extrait les images hors tableaux, les enregistre en JPG et pose l'ICN
-    sur les figures de l'IR (appariement par page + ordre de lecture). Les figures
-    qui contiennent plusieurs bitmaps sont rasterisees en une seule image afin de
-    conserver aussi les annotations vectorielles superposees. Renvoie le nombre
-    de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
+    """Extrait les figures hors tableaux et range les images non associees comme pictogrammes.
+
+    Les figures contenant plusieurs bitmaps sont rasterisees en une seule image
+    afin de conserver aussi les annotations vectorielles superposees. Renvoie le
+    nombre de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image.
+    """
     try:
         import pymupdf as fitz
     except Exception:
@@ -689,23 +716,7 @@ def attach_illustrations(
                         saved += 1
                         if pictogram_callouts_by_page.get(pidx):
                             continue
-                        if figure is not None and not figure.icn:
-                            figure.text = f"Picto chapitre {chapter}"
-                            figure.icn = name
-                            figure.icns = [name]
-                            figure.is_pictogram = True
-                        else:
-                            pictogram = IRNode(
-                                id=f"picto-{pidx}-{xref}",
-                                kind="figure",
-                                form="caption",
-                                text=f"Picto chapitre {chapter}",
-                                page=pidx,
-                                icn=name,
-                                icns=[name],
-                                is_pictogram=True,
-                            )
-                            (dm_section or root).children.append(pictogram)
+                        _attach_pictogram(root, dm_section, pidx, xref, chapter, name, figure)
                     continue
                 fig = _match_figure(
                     image_rect,
@@ -717,12 +728,13 @@ def attach_illustrations(
                     record = composite_records.setdefault(id(fig), (fig, []))
                     record[1].append((xref, image_rect))
                     continue
-                base = slugify(fig.text) if fig and fig.text else f"illustration-{doc_id[:8]}-p{pidx}-{xref}"
-                name = _unique_name(out_dir, base)
+                dm_section = _dm_for_page(dm_sections, pidx)
+                chapter = _chapter_key(dm_section, pidx)
+                name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
                 if _save_pixmap(doc, xref, out_dir / name):
                     saved += 1
-                    if fig is not None:
-                        _set_figure_icn(fig, name)
+                    if not pictogram_callouts_by_page.get(pidx):
+                        _attach_pictogram(root, dm_section, pidx, xref, chapter, name)
             for fig, records in composite_records.values():
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
