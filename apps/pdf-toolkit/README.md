@@ -110,21 +110,21 @@ pnpm install
 pnpm tauri:dev
 ```
 
-Pour créer les installateurs Windows :
+Pour obtenir directement le setup Windows x64 dans un ZIP, double-cliquez sur
+[`package-desktop.bat`](./package-desktop.bat), ou lancez depuis la racine :
 
 ```powershell
-pnpm tauri:build
+node scripts\package_pdf_toolkit_desktop.mjs --out apps\pdf-toolkit\dist
 ```
 
-La préparation Tauri compile le même frontend puis l'embarque dans le serveur Go. L'application native affiche immédiatement un écran animé pendant le démarrage du serveur, puis ouvre l'interface dans la même fenêtre Tauri, maximisée avec sa barre de titre habituelle. En cas d'erreur, l'écran affiche le problème au lieu de rester bloqué. Le serveur utilise un port local libre et s'arrête à la fermeture de l'application. Le traitement PDF et les routes API restent communs aux modes web et bureau. Les installateurs sont générés sous `frontend/src-tauri/target/release/bundle/`.
+Le résultat `dist/pdf-toolkit-desktop-v1.0.0-YYYYMMDD.zip` contient uniquement le setup `.exe` NSIS, à extraire puis exécuter. Aucun ancien ZIP n'est écrasé. Les fichiers intermédiaires restent sous `dist/tauri/x86_64-pc-windows-msvc/release/bundle/nsis/`. Le poste de build nécessite Go, Node/pnpm, Rust et Visual Studio C++ ; le destinataire n'a pas besoin de ces outils. WebView2 est requis ; le setup peut le télécharger s'il est absent. Le setup et le backend embarqué restent soumis aux protections Windows, sans signature ni acceptation garanties.
+
+Tauri embarque le même frontend et serveur Go. Un écran de démarrage affiche les erreurs éventuelles, puis l'interface s'ouvre dans la fenêtre native. Le serveur utilise un port local libre et s'arrête à sa fermeture. Le mode web et les routes API restent inchangés.
 
 ## Développement
 
-Depuis la racine du monorepo : `pnpm dev:pdf-toolkit` pour Go + Vite,
-`pnpm build:pdf-toolkit` pour le frontend et le binaire embarqué,
-`pnpm desktop:dev:pdf-toolkit` pour Tauri.
-`package.bat desktop` génère les installateurs dans `dist/tauri/release/bundle/`.
-Le packaging desktop existant cible Windows et nécessite aussi Rust, Visual Studio C++ et WebView2.
+Depuis la racine du monorepo : `pnpm dev:pdf-toolkit` pour Go + Vite, `pnpm build:pdf-toolkit` pour le frontend et le binaire embarqué, `pnpm desktop:dev:pdf-toolkit` pour Tauri.
+`package.bat desktop` est un alias du packaging ZIP desktop ; `package.bat` seul conserve le ZIP web Go embarqué. `pnpm tauri:build` depuis `frontend` reste disponible pour les bundles Tauri directs sous `frontend/src-tauri/target/release/bundle/`.
 
 Ou depuis `apps/pdf-toolkit`, dans deux consoles :
 
