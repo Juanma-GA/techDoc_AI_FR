@@ -134,6 +134,66 @@ def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes:
     assert any(r["rule_kind"] == "units" for r in rows)
 
 
+def test_undecided_revision_pages_are_reviewed_before_analysis(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    for page_number in range(1, 3):
+        page = pdf.new_page(width=400, height=300)
+        text = "HIGHLIGHTS" if page_number == 1 else f"Synthetic page content {page_number}."
+        page.insert_text((40, 100), text)
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    standards = client.get("/api/v1/standards")
+    custom = next(item for item in standards.json() if item["code"] == "THALES-CUSTOM")
+    version_id = custom["versions"][0]["id"]
+    upload = client.post(
+        f"/api/v1/documents?target=imperial&standard_version_ids={version_id}",
+        files={"file": ("synthetic.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201, upload.text
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+
+    analyzed_pages: list[int] = []
+
+    def capture_rule_pages(parsed, *_args, **_kwargs):
+        analyzed_pages.extend(page.page for page in parsed.pages)
+        return []
+
+    monkeypatch.setattr(analyze_api, "run_all", capture_rule_pages)
+
+    with client.stream("POST", f"/api/v1/documents/{document_id}/analyze") as stream:
+        assert stream.status_code == 200
+        body = b"".join(stream.iter_bytes()).decode("utf-8").replace("\r\n", "\n")
+
+    page_status_event = next(
+        block for block in body.split("\n\n") if block.startswith("event: page_statuses")
+    )
+    status_payload = json.loads(
+        next(line[5:].strip() for line in page_status_event.splitlines() if line.startswith("data:"))
+    )
+    assert status_payload["pages"] == [
+        {
+            "page": 1,
+            "is_modified": True,
+            "source": "detected",
+            "requires_review": False,
+        },
+        {
+            "page": 2,
+            "is_modified": None,
+            "source": "detected",
+            "requires_review": True,
+        },
+    ]
+    assert analyzed_pages == [1]
+
+
 def test_analyze_accepts_previous_revision_pdf(
     client: TestClient,
     sample_pdf_bytes: bytes,

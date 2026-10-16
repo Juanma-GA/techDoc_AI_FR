@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
+from difflib import SequenceMatcher
 from typing import Literal
 
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfWord, Span
@@ -1338,11 +1339,22 @@ def _is_highlights_page(page: ParsedPage) -> bool:
 
 
 def _is_lep_page(page: ParsedPage) -> bool:
-    if not _LEP_TITLE_RE.search(page.text or ""):
+    if _is_highlights_page(page):
         return False
-    return (
-        _lep_header(visual_rows(page.spans)) is not None
-        or _LEP_TITLE_LINE_RE.search(page.text or "") is not None
+    rows = visual_rows(page.spans)
+    header = _lep_header(rows)
+    if header is None:
+        return _LEP_TITLE_LINE_RE.search(page.text or "") is not None
+    header_index, _anchors = header
+    for row in rows[:header_index]:
+        title = re.sub(r"[^a-z]", "", _join_cell(row).casefold())
+        if SequenceMatcher(None, "listofeffectivepages", title).ratio() >= 0.82:
+            return True
+    footer = extract_footer(page)
+    return bool(
+        footer is not None
+        and footer.page_key is not None
+        and page_key_prefix(footer.page_key) == "LEP"
     )
 
 

@@ -640,8 +640,9 @@ def analyze_stream(
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
                     revision_state = getattr(parsed, "_thales_revision_state", None)
-                    revision_classification_available = bool(
-                        getattr(revision_state, "available", False)
+                    has_revision_evidence = revision_state is not None and bool(
+                        getattr(revision_state, "highlights_pages", ())
+                        or getattr(revision_state, "lep_pages", ())
                     )
                     for page in parsed.pages:
                         if page.page in page_overrides_value:
@@ -651,7 +652,9 @@ def analyze_stream(
                             "page": page.page,
                             "is_modified": page.is_modified,
                             "source": "manual" if page.page in page_overrides_value else "detected",
-                            "requires_review": revision_classification_available and page.is_modified is None,
+                            "requires_review": (
+                                has_revision_evidence and page.is_modified is None
+                            ),
                         }
                         for page in parsed.pages
                     ]
@@ -666,7 +669,7 @@ def analyze_stream(
                         modified_only=modified_only_value,
                         page_number=page_number_value,
                         additional_pages=additional_pages_value,
-                        include_undecided=not revision_classification_available,
+                        include_undecided=not has_revision_evidence,
                     )
                     cached_revision_state = getattr(parsed, "_thales_revision_state", None)
                     parsed = filter_pdf_pages(parsed, selected_page_numbers)

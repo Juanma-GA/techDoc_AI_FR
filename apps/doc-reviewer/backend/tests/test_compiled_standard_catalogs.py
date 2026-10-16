@@ -670,6 +670,11 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
         [rule],
         document=SimpleNamespace(meta_cmm_number="79-30-02"),
     )
+    valid_with_a_suffix_in_mapping, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02A"),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02A"),
+    )
     invalid_with_other_suffix, _ = execute_pdf_rules(
         _cmm_footer_pdf("79-30-02B"),
         [rule],
@@ -688,6 +693,7 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
 
     assert valid[0].status == "PASS"
     assert valid_with_a_suffix[0].status == "PASS"
+    assert valid_with_a_suffix_in_mapping[0].status == "PASS"
     assert invalid_with_other_suffix[0].status == "FAIL"
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [

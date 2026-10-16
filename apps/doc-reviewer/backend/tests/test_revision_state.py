@@ -436,6 +436,69 @@ def test_footer_reassembles_page_number_split_across_spans() -> None:
     assert footer.label_text == "Page 502"
 
 
+@pytest.mark.parametrize(
+    "title",
+    [
+        "LIST OF EFFECTIVES PAGES",
+        "LIST OF EFECTIVE PAGES",
+        "LSIT OF EFFECTIVE PAGES",
+        "LIST OF EFFETCIVE PAGES",
+        "LIST OF EFFECTIVE PAGS",
+        "LIST OF EFECTIVES PAGS",
+        "List of effective pages:",
+        "LIST OF EFFECTIVE\nPAGES",
+        "LISTOFEFFECTIVEPAGES",
+    ],
+)
+def test_lep_detection_tolerates_title_typos_with_table_structure(title: str) -> None:
+    parsed = _consistent_document()
+    page = parsed.pages[1]
+    page.spans[0].text = title
+    for span in page.spans:
+        span.text = span.text.replace("LEP Page 1", "Page 401")
+    page.text = "\n".join(span.text for span in page.spans)
+
+    state = _state(parsed)
+
+    assert state.lep_pages == (2,)
+    assert state.available
+    assert parsed.pages[2].is_modified is True
+    assert parsed.pages[4].is_modified is False
+
+
+def test_lep_detection_uses_table_and_footer_when_title_is_unreadable() -> None:
+    page = _lep_with(("Repair", "401", f"{_REVISION_DATE} *"))
+    page.spans[0].text = "Unreadable heading"
+    page.text = "\n".join(span.text for span in page.spans)
+
+    assert revision._is_lep_page(page)
+
+
+@pytest.mark.parametrize("title", ["LIST OF MATERIALS", "RECORD OF REVISIONS"])
+def test_lep_detection_rejects_other_tables(title: str) -> None:
+    page = _lep_with(("Repair", "401", f"{_REVISION_DATE} *"))
+    page.spans[0].text = title
+    for span in page.spans:
+        span.text = span.text.replace("LEP Page 1", "Page 401")
+    page.text = "\n".join(span.text for span in page.spans)
+
+    assert not revision._is_lep_page(page)
+
+
+def test_lep_detection_rejects_fuzzy_title_without_table() -> None:
+    page = _page(1, [_span("LIST OF EFFECTIVES PAGES", 100.0, 100.0, 1)])
+
+    assert not revision._is_lep_page(page)
+
+
+def test_lep_detection_rejects_highlights_mention() -> None:
+    page = _highlights_page(
+        [("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N")]
+    )
+
+    assert not revision._is_lep_page(page)
+
+
 def test_ror_detection_requires_the_full_record_of_revisions_title() -> None:
     shorthand_page = _page(1, [_span("ROR", 100.0, 100.0, 1)])
     highlights_subject_page = _page(
