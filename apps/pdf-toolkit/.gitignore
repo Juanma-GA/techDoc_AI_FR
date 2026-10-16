@@ -1,0 +1,8 @@
+/node_modules/
+frontend/node_modules/
+frontend/coverage/
+backend/web/static/generated/
+backend/web/static/assets/
+backend/*.exe
+backend/bin/
+frontend/src-tauri/target/

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <base href="%BASE_URL%" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Fusionnez, extrayez, supprimez et réorganisez des PDF localement."
+    />
+    <meta name="theme-color" content="#ffffff" />
+    <title>PDF Toolkit</title>
+    <script>
+      (function () {
+        var stored = localStorage.getItem("theme");
+        var useDark = stored !== "light";
+        if (useDark) {
+          document.documentElement.classList.add("dark");
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute("content", "#0e1117");
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

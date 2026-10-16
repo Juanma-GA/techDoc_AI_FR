@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10131c" />
+    <title>PDF Toolkit — Démarrage</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, "Segoe UI", sans-serif;
+        background: #10131c;
+        color: #f5f7fb;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-width: 320px;
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        background:
+          radial-gradient(ellipse at 50% 5%, rgb(79 107 255 / 17%), transparent 54%),
+          #10131c;
+      }
+
+      main {
+        width: min(100%, 440px);
+        padding: 40px 32px 36px;
+        text-align: center;
+      }
+
+      .brand {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 22px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgb(127 147 255 / 35%);
+        border-radius: 20px;
+        background: linear-gradient(145deg, rgb(91 113 255 / 26%), rgb(59 71 133 / 15%));
+        box-shadow: 0 12px 38px rgb(56 77 200 / 18%);
+        color: #b9c4ff;
+        font-size: 19px;
+        font-weight: 750;
+        letter-spacing: -1px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 23px;
+        font-weight: 650;
+        letter-spacing: -0.45px;
+      }
+
+      .subtitle {
+        margin: 9px 0 26px;
+        color: #a3a9ba;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .spinner {
+        width: 34px;
+        height: 34px;
+        margin: 0 auto 14px;
+        border: 3px solid rgb(160 171 255 / 20%);
+        border-top-color: #9baaff;
+        border-right-color: #7489ff;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+
+      .status {
+        margin: 0;
+        color: #c2c8d8;
+        font-size: 13px;
+      }
+
+      .progress {
+        height: 3px;
+        margin: 25px auto 0;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgb(255 255 255 / 8%);
+      }
+
+      .progress::after {
+        width: 42%;
+        height: 100%;
+        display: block;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #758aff, #b2bbff);
+        content: "";
+        animation: progress 1.7s ease-in-out infinite;
+      }
+
+      .error {
+        display: none;
+        margin-top: 22px;
+        padding: 13px 15px;
+        border: 1px solid rgb(255 120 120 / 25%);
+        border-radius: 12px;
+        background: rgb(125 42 52 / 18%);
+        color: #ffc1c1;
+        font-size: 13px;
+        line-height: 1.55;
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+
+      .error.visible {
+        display: block;
+      }
+
+      .error strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #ffdddd;
+      }
+
+      .error-detail {
+        color: #e1aeb4;
+        font-size: 12px;
+      }
+
+      main.failed .spinner,
+      main.failed .progress {
+        display: none;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes progress {
+        0% {
+          transform: translateX(-110%);
+        }
+        100% {
+          transform: translateX(250%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand" aria-hidden="true">PDF</div>
+      <h1>PDF Toolkit</h1>
+      <p class="subtitle">Vos outils PDF, prêts en un instant.</p>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="status" role="status" aria-live="polite">Démarrage de l’application…</p>
+      <div class="progress" aria-hidden="true"></div>
+      <div class="error" id="startup-error" role="alert">
+        <strong>Le démarrage a échoué.</strong>
+        <span>Fermez cette fenêtre et réessayez. Si le problème persiste, réinstallez PDF Toolkit.</span>
+        <div class="error-detail" id="startup-error-detail"></div>
+      </div>
+    </main>
+    <script>
+      window.showStartupError = (detail) => {
+        document.querySelector("main").classList.add("failed");
+        document.querySelector(".status").textContent = "PDF Toolkit n’a pas pu démarrer.";
+        document.querySelector("#startup-error").classList.add("visible");
+        document.querySelector("#startup-error-detail").textContent = detail;
+      };
+    </script>
+  </body>
+</html>
