@@ -758,10 +758,12 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
     code="CUSTOM_REVISION_BAR_MODIFIED_PAGE",
     name="Barre de revision presente sur les pages modifiees",
     description=(
-        "Chaque page declaree R dans les Highlights, hors pages LEP et HIGHLIGHTS, "
-        "doit porter au moins une barre de revision noire."
+        "Chaque page declaree R dans les Highlights, hors pages LEP, HIGHLIGHTS, "
+        "Equipment Designator Index, Numerical Index et Parts List, doit porter "
+        "au moins une barre de revision noire. Les pages EDI/NI/PL sont reconnues "
+        "par leur titre dans le contenu de la page."
     ),
-    message="Une page modifiee hors LEP/HIGHLIGHTS ne comporte pas de barre de revision.",
+    message="Une page modifiee hors LEP/HIGHLIGHTS/EDI/NI/PL ne comporte pas de barre de revision.",
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -774,16 +776,18 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
         )
     ],
     failure_message=(
-        "Chaque page R hors LEP/HIGHLIGHTS doit comporter au moins une barre de "
+        "Chaque page R hors LEP/HIGHLIGHTS/EDI/NI/PL doit comporter au moins une barre de "
         "revision noire."
     ),
     translations={
         "en": {
             "description": (
-                "Every page declared R in Highlights, except LEP and HIGHLIGHTS "
-                "pages, must have at least one black revision bar."
+                "Every page declared R in Highlights, except LEP, HIGHLIGHTS, "
+                "Equipment Designator Index, Numerical Index and Parts List "
+                "pages, must have at least one black revision bar. EDI/NI/PL "
+                "pages are identified by their title in the page content."
             ),
-            "message": "A modified page outside LEP/HIGHLIGHTS is missing a revision bar.",
+            "message": "A modified page outside LEP/HIGHLIGHTS/EDI/NI/PL is missing a revision bar.",
         }
     },
 )

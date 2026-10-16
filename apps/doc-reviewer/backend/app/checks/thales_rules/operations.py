@@ -82,6 +82,9 @@ _REVISION_BAR_MIN_LENGTH = 8.0
 _REVISION_BAR_MIN_THICKNESS = 1.0
 _REVISION_BAR_MAX_THICKNESS = 4.5
 _REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
+_REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE = re.compile(
+    r"(?im)^\s*(?:EQUIPMENT\s+DESIGNATOR\s+INDEX|NUMERICAL\s+INDEX|PARTS\s+LIST)\s*$"
+)
 _TP1_REVISION_LABEL_RE = re.compile(r"(?i)\bRevision\s+No\b")
 _TP1_FIRST_ISSUE_RE = re.compile(r"(?i)\bFirst\s+issue\b")
 _TP1_COPYRIGHT_FOOTER_RE = re.compile(
@@ -2110,7 +2113,7 @@ def _revision_bar_findings(
             "Barre noire presque pleine hauteur pour chaque page N hors LEP/HIGHLIGHTS"
         ),
         "revision_bar_modified": (
-            "Au moins une barre noire sur chaque page R hors LEP/HIGHLIGHTS"
+            "Au moins une barre noire sur chaque page R hors LEP/HIGHLIGHTS/EDI/NI/PL"
         ),
         "revision_bar_margin": (
             "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm), hors LEP/HIGHLIGHTS"
@@ -2148,6 +2151,11 @@ def _revision_bar_findings(
         if control == "revision_bar_new" and status != "N":
             continue
         if control == "revision_bar_modified" and status != "R":
+            continue
+        if (
+            control == "revision_bar_modified"
+            and _REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE.search(page.text)
+        ):
             continue
         if control == "revision_bar_margin" and status not in {"N", "R"}:
             continue
