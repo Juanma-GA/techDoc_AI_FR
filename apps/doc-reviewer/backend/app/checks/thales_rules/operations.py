@@ -2093,9 +2093,15 @@ def _revision_bar_findings(
     control: str,
 ) -> tuple[list[OperationResult], int, str]:
     expected_by_control = {
-        "revision_bar_new": "Barre noire presque pleine hauteur pour chaque page N",
-        "revision_bar_modified": "Au moins une barre noire sur chaque page R",
-        "revision_bar_margin": "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm)",
+        "revision_bar_new": (
+            "Barre noire presque pleine hauteur pour chaque page N hors LEP/HIGHLIGHTS"
+        ),
+        "revision_bar_modified": (
+            "Au moins une barre noire sur chaque page R hors LEP/HIGHLIGHTS"
+        ),
+        "revision_bar_margin": (
+            "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm), hors LEP/HIGHLIGHTS"
+        ),
         "revision_bar_tp1_footer": "Barre TP1/R de Revision jusqu'en dessous du copyright",
         "revision_bar_tp2_body": "Barre TP2/R uniquement en regard du corps de texte",
     }
@@ -2116,6 +2122,12 @@ def _revision_bar_findings(
 
     for page in parsed_pdf.pages:
         if target_pages and page.page not in target_pages:
+            continue
+        if (
+            page.page_type in {"LEP", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"}
+            or revision._is_highlights_page(page)
+            or revision._is_lep_page(page)
+        ):
             continue
         status, page_key = _revision_page_status(page, state)
         if control == "revision_bar_new" and status != "N":

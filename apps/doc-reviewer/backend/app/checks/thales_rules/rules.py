@@ -713,11 +713,14 @@ CUSTOM_REVISION_BAR_NEW_PAGE = rule(
     code="CUSTOM_REVISION_BAR_NEW_PAGE",
     name="Barre de revision pleine hauteur sur les pages nouvelles",
     description=(
-        "Chaque page declaree N dans les Highlights doit porter une barre de "
-        "revision noire presque pleine hauteur, du haut du contenu jusqu'au "
-        "pied de page."
+        "Chaque page declaree N dans les Highlights, hors pages LEP et HIGHLIGHTS, "
+        "doit porter une barre de revision noire presque pleine hauteur, du haut "
+        "du contenu jusqu'au pied de page."
     ),
-    message="Une page nouvelle ne comporte pas de barre de revision pleine hauteur.",
+    message=(
+        "Une page nouvelle hors LEP/HIGHLIGHTS ne comporte pas de barre de revision "
+        "pleine hauteur."
+    ),
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -730,15 +733,20 @@ CUSTOM_REVISION_BAR_NEW_PAGE = rule(
         )
     ],
     failure_message=(
-        "Chaque page N doit porter une barre de revision noire du logo au pied de page."
+        "Chaque page N hors LEP/HIGHLIGHTS doit porter une barre de revision noire "
+        "du logo au pied de page."
     ),
     translations={
         "en": {
             "description": (
-                "Every page declared N in Highlights must have a nearly full-height "
-                "black revision bar from the top of the content to the footer."
+                "Every page declared N in Highlights, except LEP and HIGHLIGHTS "
+                "pages, must have a nearly full-height black revision bar from the "
+                "top of the content to the footer."
             ),
-            "message": "A new page is missing its full-height revision bar.",
+            "message": (
+                "A new page outside LEP/HIGHLIGHTS is missing its full-height "
+                "revision bar."
+            ),
         }
     },
 )
@@ -747,10 +755,10 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
     code="CUSTOM_REVISION_BAR_MODIFIED_PAGE",
     name="Barre de revision presente sur les pages modifiees",
     description=(
-        "Chaque page declaree R dans les Highlights doit porter au moins une "
-        "barre de revision noire."
+        "Chaque page declaree R dans les Highlights, hors pages LEP et HIGHLIGHTS, "
+        "doit porter au moins une barre de revision noire."
     ),
-    message="Une page modifiee ne comporte pas de barre de revision.",
+    message="Une page modifiee hors LEP/HIGHLIGHTS ne comporte pas de barre de revision.",
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -762,14 +770,17 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
             operation_params={"control": "revision_bar_modified"},
         )
     ],
-    failure_message="Chaque page R doit comporter au moins une barre de revision noire.",
+    failure_message=(
+        "Chaque page R hors LEP/HIGHLIGHTS doit comporter au moins une barre de "
+        "revision noire."
+    ),
     translations={
         "en": {
             "description": (
-                "Every page declared R in Highlights must have at least one black "
-                "revision bar."
+                "Every page declared R in Highlights, except LEP and HIGHLIGHTS "
+                "pages, must have at least one black revision bar."
             ),
-            "message": "A modified page is missing a revision bar.",
+            "message": "A modified page outside LEP/HIGHLIGHTS is missing a revision bar.",
         }
     },
 )
@@ -778,10 +789,14 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
     code="CUSTOM_REVISION_BAR_MARGIN_POSITION",
     name="Position de la barre de revision par rapport a la marge",
     description=(
-        "Sur les pages N et R portant une barre, son ecart horizontal par rapport "
-        "a la marge gauche doit etre l=-0,38 cm (tolerance +/- 0,10 cm)."
+        "Sur les pages N et R hors LEP/HIGHLIGHTS portant une barre, son ecart "
+        "horizontal par rapport a la marge gauche doit etre l=-0,38 cm "
+        "(tolerance +/- 0,10 cm)."
     ),
-    message="Une barre de revision est mal positionnee par rapport a la marge.",
+    message=(
+        "Une barre de revision hors LEP/HIGHLIGHTS est mal positionnee par rapport "
+        "a la marge."
+    ),
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -793,14 +808,21 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
             operation_params={"control": "revision_bar_margin"},
         )
     ],
-    failure_message="La barre de revision doit etre a l=-0,38 cm de la marge gauche.",
+    failure_message=(
+        "Hors LEP/HIGHLIGHTS, la barre de revision doit etre a l=-0,38 cm de la "
+        "marge gauche."
+    ),
     translations={
         "en": {
             "description": (
-                "On N and R pages with a revision bar, its horizontal offset from "
-                "the left margin must be l=-0.38 cm (tolerance +/- 0.10 cm)."
+                "On N and R pages outside LEP/HIGHLIGHTS with a revision bar, its "
+                "horizontal offset from the left margin must be l=-0.38 cm "
+                "(tolerance +/- 0.10 cm)."
             ),
-            "message": "A revision bar is incorrectly positioned relative to the margin.",
+            "message": (
+                "A revision bar outside LEP/HIGHLIGHTS is incorrectly positioned "
+                "relative to the margin."
+            ),
         }
     },
 )

@@ -147,6 +147,31 @@ def test_revision_bar_offset_matches_margin_on_odd_and_even_pages() -> None:
     assert misplaced.status == "FAIL"
 
 
+def test_revision_bar_checks_exclude_lep_and_highlights_pages() -> None:
+    page_cases = (
+        (None, "HIGHLIGHTS"),
+        (None, "LIST OF EFFECTIVE PAGES"),
+        ("HIGHLIGHTS", "CONTINUATION"),
+        ("HIGHLIGHTS_PAGE_1", "CONTINUATION"),
+        ("LEP", "CONTINUATION"),
+    )
+    control_cases = (
+        ("revision_bar_new", "N", [_bar(75.6, 180.0, 500.0)]),
+        ("revision_bar_modified", "R", []),
+        ("revision_bar_margin", "R", [_bar(90.0, 180.0, 300.0)]),
+    )
+
+    for page_type, marker in page_cases:
+        spans = [Span(marker, (100.0, 100.0, 300.0, 120.0), 1, "Arial", 10.0)]
+        for control, status, bars in control_cases:
+            result = _execute(
+                control,
+                _context(status, bars, page_type=page_type, spans=spans),
+            )
+
+            assert result.status == "INCONCLUSIVE"
+
+
 def test_tp2_modified_bar_must_overlap_body_text_outside_header_and_footer() -> None:
     spans = [
         Span("T", (50.0, 14.0, 70.0, 45.0), 1, "Arial-Bold", 30.0),
