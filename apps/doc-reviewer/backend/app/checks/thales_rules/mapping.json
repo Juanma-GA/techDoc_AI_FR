@@ -60,6 +60,7 @@
     "document_language": {
       "type": "enum",
       "required": true,
+      "default": "en",
       "labels": {"fr": "Langue du document", "en": "Document language"},
       "allowed_values": [
         "fr",

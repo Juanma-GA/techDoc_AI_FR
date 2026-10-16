@@ -13,6 +13,11 @@ validation remain environment-dependent.
 ## Features
 
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
+- Use Airbus and English as initial mapping defaults for new imports; saved
+  mapping values continue to be reused.
+- Offer a no-OCR mapping suggestion from the first four pages of a PDF CMM.
+  The action clears the whole draft, leaves uncertain values blank, and
+  requires the user to verify and save explicitly.
 - Apply deterministic technical-writing catalogs, unit checks, editable rules, and optional LLM checklist analysis.
 - Accept, edit, reject, and remember review decisions.
 - Review native DOCX blocks as well as PDF pages.

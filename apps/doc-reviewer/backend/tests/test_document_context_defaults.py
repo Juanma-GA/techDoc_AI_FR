@@ -15,7 +15,7 @@ def test_document_context_is_reused_for_next_upload(
     )
     assert first.status_code == 201, first.text
     assert first.json()["meta_revision_date"] is None
-    assert first.json()["document_language"] is None
+    assert first.json()["document_language"] == "en"
     assert first.json()["meta_manufacturer"] == "Airbus"
 
     context = {

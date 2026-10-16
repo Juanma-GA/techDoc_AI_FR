@@ -76,8 +76,7 @@ export function SuggestionPanel({
     });
   }, [suggestions, showUnits, hideAccepted, ruleCodeFilter]);
 
-  // Bucket the *visible* list by rule, preserving first-seen order, so the
-  // panel shows one collapsible row per rule instead of every occurrence.
+  // Bucket visible suggestions by rule and sort the groups by numeric rule number.
   const buckets = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, Suggestion[]>();
@@ -90,8 +89,19 @@ export function SuggestionPanel({
         order.push(key);
       }
     }
-    return order.map((key) => ({ key, items: map.get(key)! }));
-  }, [visible]);
+    return order
+      .map((key, index) => ({ key, items: map.get(key)!, index }))
+      .sort((left, right) => {
+        const leftNumber = ruleNumberByCode.get(left.items[0]!.rule_code);
+        const rightNumber = ruleNumberByCode.get(right.items[0]!.rule_code);
+        if (leftNumber == null) {
+          return rightNumber == null ? left.index - right.index : 1;
+        }
+        if (rightNumber == null) return -1;
+        return leftNumber - rightNumber || left.index - right.index;
+      })
+      .map(({ key, items }) => ({ key, items }));
+  }, [visible, ruleNumberByCode]);
 
   function toggleExpanded(key: string): void {
     setExpanded((prev) => {

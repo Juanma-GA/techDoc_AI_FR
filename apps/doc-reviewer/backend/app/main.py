@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 
-from app.api import admin, analyze, documents, health, rules, standards, suggestions
+from app.api import admin, analyze, documents, health, metadata_suggestions, rules, standards, suggestions
 from app.api import settings as settings_api
 from app.checks.client_registry import (
     LoadedClientConfiguration,
@@ -151,6 +151,7 @@ def create_app() -> FastAPI:
     api_v1 = APIRouter(prefix="/api/v1")
     api_v1.include_router(health.router)
     api_v1.include_router(documents.router)
+    api_v1.include_router(metadata_suggestions.router)
     api_v1.include_router(analyze.router)
     api_v1.include_router(suggestions.router)
     api_v1.include_router(rules.router)

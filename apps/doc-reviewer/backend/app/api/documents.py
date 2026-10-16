@@ -22,6 +22,7 @@ from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
 from app.core.demo_mode import get_demo_enabled
 from app.core.demo_scope import documents_in_current_mode, get_document_in_current_mode
 from app.core.document_context import (
+    DEFAULT_DOCUMENT_MANUFACTURER,
     DOCUMENT_CONTEXT_FIELDS,
     get_document_context_defaults,
     save_document_context_defaults,
@@ -248,7 +249,10 @@ def _persist_pdf(
         meta_last_issue_date=context_defaults.get("meta_last_issue_date"),
         meta_revision_number=context_defaults.get("meta_revision_number"),
         meta_pnr_number=_legacy_metadata_value(context_defaults.get("meta_pnr_number")),
-        meta_manufacturer=context_defaults.get("meta_manufacturer", "Airbus"),
+        meta_manufacturer=(
+            context_defaults.get("meta_manufacturer")
+            or DEFAULT_DOCUMENT_MANUFACTURER
+        ),
         document_language=context_defaults.get("document_language"),
     )
     db.add(document)
@@ -384,7 +388,10 @@ def _persist_docx(
         meta_last_issue_date=context_defaults.get("meta_last_issue_date"),
         meta_revision_number=context_defaults.get("meta_revision_number"),
         meta_pnr_number=_legacy_metadata_value(context_defaults.get("meta_pnr_number")),
-        meta_manufacturer=context_defaults.get("meta_manufacturer", "Airbus"),
+        meta_manufacturer=(
+            context_defaults.get("meta_manufacturer")
+            or DEFAULT_DOCUMENT_MANUFACTURER
+        ),
         document_language=context_defaults.get("document_language"),
     )
     db.add(document)
@@ -616,6 +623,8 @@ def patch_document_meta(
     doc.client_metadata = client_metadata
     for key, value in metadata_updates.items():
         if key in DOCUMENT_CONTEXT_FIELDS:
+            if key == "meta_manufacturer" and value is None:
+                continue
             setattr(doc, key, _legacy_metadata_value(value))
 
     db.commit()
