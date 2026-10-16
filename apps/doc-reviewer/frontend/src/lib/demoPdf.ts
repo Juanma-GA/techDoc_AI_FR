@@ -17,10 +17,10 @@ export async function loadDemoPdf(): Promise<File> {
     throw new Error(`Expected application/pdf, received ${contentType ?? "no content type"}`);
   }
 
-  const blob = await response.blob();
-  if (blob.size === 0) {
+  const content = new Uint8Array(await response.arrayBuffer());
+  if (content.byteLength === 0) {
     throw new Error("The PDF is empty");
   }
 
-  return new File([blob], DEMO_PDF_FILENAME, { type: "application/pdf" });
+  return new File([content], DEMO_PDF_FILENAME, { type: "application/pdf" });
 }
