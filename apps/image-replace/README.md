@@ -24,6 +24,11 @@ Find text references in technical images and replace selected references with su
 - Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed and can be edited or removed before OCR.
 - Add manual replacement pairs; these are combined with the edited Excel pairs.
 - Check or uncheck individual manual/Excel pairs to apply only selected references.
+- Standardize replacement font size from visible character heights and the mean
+  of the most common group among selected references; only shrink over-wide replacements.
+- Preserve detected reading orientation, snapping angles within 5 degrees of an axis.
+  The common A4 font size survives reruns, brushes, undo, and history restoration.
+  See [replacement typography](./backend/README.md#replacement-typography).
 - Run PaddleOCR on CPU, inspect recognized text and matches, and download the replacement image as a 2480 × 3508 px A4 JPEG at 300 dpi.
 - Zoom and pan the result, then paint a mask to remove an area with local LaMa inpainting or local median-color fill.
 - Every successful replacement or brush edit becomes the source for the next operation. Undo restores the previous image and analysis, one operation at a time.
@@ -47,6 +52,11 @@ The main API and React UI use default port `8010`; the internal LaMa service use
 - Package users do not need a system Python; the Windows package includes separate Python 3.13 and 3.11 runtimes.
 
 Dependencies install on first launch. PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
+
+Text-line orientation uses `PP-LCNet_x1_0_textline_ori` (approximately 6.5 MB of
+model weights). After updating, the next OCR may download this additional model.
+No images are sent to a remote service; the classifier runs locally. Its actual
+CPU cost depends on all detected text lines, not just the selected replacements.
 
 ## Start On Windows
 
@@ -130,18 +140,19 @@ The LaMa service is internal to the local application and listens on `127.0.0.1:
 
 ## Tests
 
-### Executed for resumable editing, history, and ICN downloads
+### Executed for resumable editing, history, ICN downloads, and typography
 
-- Backend: 70 pytest tests passed, including real JPEG/ICN exports, old-history naming,
+- Backend: 133 pytest tests passed, including measured glyph heights, dominant font sizes,
+  rendered rotations/centering, width exceptions, real JPEG/ICN exports, old-history naming,
   unchanged print-ready JPEG bytes, isolated Excel/history round trips,
   file integrity checks, disk/commit failure rollback, admin resets, and an Alembic
   upgrade/check/downgrade cycle against a temporary synthetic SQLite database.
 - Backend feature modules and tests: Ruff passed. The changed validation-error
   handler passed E/F/I/W checks; its unrelated pre-existing RUF034 remains unchanged.
-- Frontend: TypeScript, ESLint, 25 Vitest tests, and the production build passed.
+- Frontend: TypeScript, ESLint, 27 Vitest tests, and the production build passed.
 - Browser: 7 Playwright tests passed with synthetic files and all API calls intercepted
   on isolated port `5187`, including selective OCR, both brush modes, undo, full-history
-  restoration, exact ICN download names and real JPEG signatures, failed exports,
+  restoration, common font-size reuse, exact ICN download names and JPEG signatures, failed exports,
   startup exclusions, keyboard use, FR/EN, dark/light, and 390 px width.
 - User databases and uploaded documents were not used. Repository-wide standard
   checks, packaging, PostgreSQL migration checks, and real-model inference were not
@@ -154,6 +165,10 @@ The API console emits structured `image_ocr_timing` and `image_inpaint_timing` e
 To compare PP-OCRv6 sizes, set `OCR_MODEL_VARIANT=small` or `OCR_MODEL_VARIANT=tiny` in `backend/.env` and restart the API; the default is `medium`. Each selection changes only the detection/recognition model pair.
 
 To benchmark CPU thread counts, set `OCR_CPU_THREADS` in `backend/.env` and restart the API; the default is 10. The OCR timing event includes the active model variant and thread count.
+
+The `ocr_orientation_ms` field measures the local text-line classifier separately.
+Model loading/download is included in `ocr_engine_access_ms`, not in this field.
+No real-model orientation benchmark was run for the typography change.
 
 ### Recommended for real-model validation
 

@@ -18,7 +18,7 @@ describe("authoritative image and per-operation undo", () => {
   it("chains replacement and both brush modes, then undoes each operation exactly", async () => {
     const { result } = renderHook(() => useImageDocument(i18n.t));
     const original = new File(["synthetic source"], "source.png", { type: "image/png" });
-    const icnResult = { ...ocrResult, filename: "ICN-TEST.jpg" };
+    const icnResult = { ...ocrResult, filename: "ICN-TEST.jpg", replacement_font_size: 24 };
     act(() => { result.current.chooseImage([original]); });
     expect(result.current.currentFile).toBe(original);
     act(() => result.current.applyOcr(icnResult));
@@ -29,6 +29,7 @@ describe("authoritative image and per-operation undo", () => {
     act(() => result.current.applyBrush(brushImage, "lama"));
     expect((await storeFile(result.current.currentFile!)).data_url).toBe(brushImage);
     expect(result.current.result?.full_text).toBe("R-1");
+    expect(result.current.result?.replacement_font_size).toBe(24);
     expect(result.current.currentFile?.name).toBe("ICN-TEST.png");
     expect(result.current.result?.filename).toBe("ICN-TEST.jpg");
     act(() => result.current.applyBrush(imageData, "color"));
@@ -37,6 +38,7 @@ describe("authoritative image and per-operation undo", () => {
     expect(result.current.result?.filename).toBe("ICN-TEST.jpg");
 
     act(() => result.current.undo());
+    expect(result.current.result?.replacement_font_size).toBe(24);
     expect((await storeFile(result.current.currentFile!)).data_url).toBe(brushImage);
     act(() => result.current.undo());
     expect(result.current.result).toEqual(icnResult);

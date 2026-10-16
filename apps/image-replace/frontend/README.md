@@ -12,6 +12,12 @@ the selected part, pair edits/selections, OCR results, and the undo stack.
 Autosaves are serialized, pending edits are coalesced, and failed saves are visible
 and retryable. Browser storage is limited to theme/language preferences.
 
+OCR returns an optional `replacement_font_size` in A4 pixels. It stays with each
+analysis revision, including brush edits and saved histories, and is submitted on
+later OCR runs so selecting another reference cannot change the common size.
+Undoing back to the original clears it. Older histories without the field remain
+readable and estimate their font on the next replacement.
+
 Downloads POST the current image and Excel selection to `/image-replace/export`.
 The server supplies the authoritative ICN filename and real A4/300 dpi JPEG;
 the brush preview and undo revisions are not re-encoded. Preparation disables

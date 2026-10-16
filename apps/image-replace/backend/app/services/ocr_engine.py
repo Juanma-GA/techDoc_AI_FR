@@ -6,32 +6,12 @@ import unicodedata
 
 from fastapi import HTTPException
 
+from app.services.text_geometry import _to_list, reading_order_boxes
+
 
 def normalize_reference(value: str) -> str:
     ascii_text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
     return re.sub(r"[^A-Z0-9]", "", ascii_text.upper())
-
-
-def _to_list(value: object) -> list[object]:
-    tolist = getattr(value, "tolist", None)
-    if callable(tolist):
-        value = tolist()
-    return value if isinstance(value, list) else []
-
-
-def _box_points(value: object) -> list[list[float]]:
-    coordinates = _to_list(value)
-    if len(coordinates) == 4 and all(isinstance(item, (int, float)) for item in coordinates):
-        x1, y1, x2, y2 = (float(item) for item in coordinates)
-        return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-
-    points: list[list[float]] = []
-    for point in coordinates:
-        point_coordinates = _to_list(point)
-        if len(point_coordinates) < 2:
-            return []
-        points.append([float(point_coordinates[0]), float(point_coordinates[1])])
-    return points
 
 
 def _build_lines(prediction: object) -> list[dict[str, object]]:
@@ -50,6 +30,10 @@ def _build_lines(prediction: object) -> list[dict[str, object]]:
         boxes = _to_list(data.get("rec_boxes"))
     if len(texts) != len(scores):
         raise RuntimeError("PaddleOCR a renvoyé des textes et scores incompatibles.")
+    oriented_boxes = reading_order_boxes(
+        [boxes[index] if index < len(boxes) else [] for index in range(len(texts))],
+        data.get("dt_polys"), data.get("textline_orientation_angles"), texts,
+    )
 
     lines: list[dict[str, object]] = []
     for index, text in enumerate(texts):
@@ -59,7 +43,7 @@ def _build_lines(prediction: object) -> list[dict[str, object]]:
             {
                 "text": text,
                 "confidence": float(scores[index]),
-                "box": _box_points(boxes[index]) if index < len(boxes) else [],
+                "box": oriented_boxes[index],
                 "matched_references": [],
             }
         )

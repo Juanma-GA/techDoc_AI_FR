@@ -38,8 +38,12 @@ export function imageForm(
 export function analysisForm(
   image: File, sourceName: string, pairs: ReplacementPair[],
   excel: ReturnType<typeof useExcelMapping>, t: TFunction,
+  replacementFontSize?: number | null,
 ): FormData {
   const form = imageForm(image, sourceName, excel, t);
+  if (replacementFontSize != null) {
+    form.append("replacement_font_size", String(replacementFontSize));
+  }
   form.append("replacement_pairs", JSON.stringify(selectedPairs(pairs, t)));
   if (excel.excelFile) {
     form.append("excel_replacement_pairs", JSON.stringify(selectedPairs(excel.excelPairs, t)));

@@ -9,7 +9,14 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from app.config import settings
-from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH, MAX_IMAGE_BYTES, SUPPORTED_FORMATS
+from app.services.constants import (
+    A4_DPI,
+    A4_HEIGHT,
+    A4_WIDTH,
+    MAX_IMAGE_BYTES,
+    MAX_REPLACEMENT_FONT_SIZE,
+    SUPPORTED_FORMATS,
+)
 from app.services.excel import (
     extract_excel_replacements,
     get_excel_sheet,
@@ -47,6 +54,7 @@ async def run_ocr(
     excel_icn_column: int | None = Form(default=None),
     excel_piece_column: int | None = Form(default=None),
     excel_piece_row: int | None = Form(default=None),
+    replacement_font_size: int | None = Form(default=None, ge=1, le=MAX_REPLACEMENT_FONT_SIZE),
 ) -> dict[str, object]:
     total_started = perf_counter()
     timings: dict[str, float] = {}
@@ -139,16 +147,17 @@ async def run_ocr(
 
     stage_started = perf_counter()
     lines, matches = _match_references(_build_lines(prediction), reference_list)
-    edited_canvas, applied_counts = apply_replacements(source_canvas, lines, replacement_list)
-    for match, pair, applied_count in zip(matches, replacement_list, applied_counts, strict=False):
-        match["replacement"] = pair["replacement"]
-        match["replacement_count"] = applied_count
-
-    output_image, scale_x, scale_y, offset_x, offset_y = create_a4_page(edited_canvas)
+    output_image, scale_x, scale_y, offset_x, offset_y = create_a4_page(source_canvas)
     for line in lines:
         line["box"] = [
             [point[0] * scale_x + offset_x, point[1] * scale_y + offset_y] for point in line["box"]
         ]
+    output_image, applied_counts, font_size = apply_replacements(
+        output_image, lines, replacement_list, replacement_font_size,
+    )
+    for match, pair, applied_count in zip(matches, replacement_list, applied_counts, strict=False):
+        match["replacement"] = pair["replacement"]
+        match["replacement_count"] = applied_count
     timings["replacement_layout_ms"] = _elapsed_ms(stage_started)
 
     stage_started = perf_counter()
@@ -170,6 +179,7 @@ async def run_ocr(
         "references": matches,
         "edited_image": f"data:image/jpeg;base64,{encoded_image}",
         "filename": output_filename(image.filename, output_icn),
+        "replacement_font_size": font_size,
     }
     log.info(
         "image_ocr_timing",

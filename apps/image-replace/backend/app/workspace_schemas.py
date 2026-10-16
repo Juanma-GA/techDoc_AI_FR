@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import UUID4, BaseModel, ConfigDict, Field
 
+from app.services.constants import MAX_REPLACEMENT_FONT_SIZE
 from app.services.saved_files import SavedImage, SavedWorkbook
 
 
@@ -74,6 +75,7 @@ class OcrAnalysis(StateModel):
     lines: list[OcrLine]
     references: list[OcrReference]
     filename: str
+    replacement_font_size: int | None = Field(default=None, ge=1, le=MAX_REPLACEMENT_FONT_SIZE)
 
 
 EditKind = Literal["ocr", "brush-lama", "brush-color"]

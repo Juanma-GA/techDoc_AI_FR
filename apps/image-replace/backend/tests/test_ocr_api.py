@@ -37,6 +37,7 @@ def test_ocr_engine_selects_requested_v6_model_pair(monkeypatch) -> None:
             captured.update(options)
             self.paddlex_pipeline = SimpleNamespace(
                 text_det_model=FakePaddleModel(),
+                textline_orientation_model=FakePaddleModel(),
                 text_rec_model=FakePaddleModel(),
             )
 
@@ -81,6 +82,7 @@ def test_run_ocr_records_detection_and_recognition_timings(monkeypatch) -> None:
         def __init__(self, **options: object) -> None:
             self.paddlex_pipeline = SimpleNamespace(
                 text_det_model=FakePaddleModel(),
+                textline_orientation_model=FakePaddleModel(),
                 text_rec_model=FakePaddleModel(),
             )
 
@@ -101,9 +103,11 @@ def test_run_ocr_records_detection_and_recognition_timings(monkeypatch) -> None:
     assert timings["ocr_recognition_ms"] >= 0
 
 
-def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypatch, capsys) -> None:
+def test_ocr_route_combines_manual_and_excel_pairs(
+    client: TestClient, monkeypatch, capsys, synthetic_ocr_image,
+) -> None:
     image = BytesIO()
-    Image.new("RGB", (120, 60), "white").save(image, format="PNG")
+    synthetic_ocr_image.save(image, format="PNG")
     prediction = SimpleNamespace(
         json={
             "res": {
@@ -172,10 +176,10 @@ def test_ocr_route_combines_manual_and_excel_pairs(client: TestClient, monkeypat
 
 
 def test_ocr_route_uses_edited_and_removed_excel_pairs(
-    client: TestClient, monkeypatch
+    client: TestClient, monkeypatch, synthetic_ocr_image,
 ) -> None:
     image = BytesIO()
-    Image.new("RGB", (120, 60), "white").save(image, format="PNG")
+    synthetic_ocr_image.save(image, format="PNG")
     prediction = SimpleNamespace(
         json={
             "res": {

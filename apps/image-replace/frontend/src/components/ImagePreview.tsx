@@ -75,7 +75,6 @@ export function ImagePreview({
           className={`relative flex max-h-[70vh] min-h-72 items-center justify-center overflow-hidden rounded-md border border-md bg-bg-2 p-3 ${
             editor.zoom > 1 && !editor.brushEnabled ? "cursor-grab" : ""
           } ${editor.dragging ? "cursor-grabbing" : ""}`}
-          onWheel={editor.handleWheel}
           onPointerDown={editor.startPan}
           onPointerMove={editor.movePan}
           onPointerUp={editor.stopPan}

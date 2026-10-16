@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -16,6 +17,10 @@ from app.config import settings
 from app.services.constants import OCR_DETECTION_MAX_SIDE
 
 truststore.inject_into_ssl()
+
+# Paddle's one-second host probes can reject reachable servers behind a proxy.
+os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+os.environ.setdefault("PADDLE_PDX_MODEL_SOURCE", "bos")
 
 if TYPE_CHECKING:
     from paddleocr import PaddleOCR
@@ -72,6 +77,7 @@ def _instrument_ocr_stages(engine: PaddleOCR) -> None:
 
     for attribute, timing_key in (
         ("text_det_model", "ocr_detection_ms"),
+        ("textline_orientation_model", "ocr_orientation_ms"),
         ("text_rec_model", "ocr_recognition_ms"),
     ):
         model = getattr(pipeline, attribute, None)
@@ -115,7 +121,10 @@ def get_ocr_engine() -> PaddleOCR:
             text_det_limit_type="max",
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
-            use_textline_orientation=False,
+            use_textline_orientation=True,
+            textline_orientation_model_name="PP-LCNet_x1_0_textline_ori",
+            # PaddleX can expose batch-wide class IDs for each individual result.
+            textline_orientation_batch_size=1,
         )
     finally:
         requests.get = original_get

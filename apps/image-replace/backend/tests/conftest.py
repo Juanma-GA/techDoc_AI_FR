@@ -20,6 +20,49 @@ def app():
 
 
 @pytest.fixture
+def synthetic_ocr_image():
+    from PIL import Image, ImageDraw, ImageFont
+
+    image = Image.new("RGB", (120, 60), "white")
+    ImageDraw.Draw(image).text(
+        (10, 10), "R-001 R-002", fill="black", font=ImageFont.load_default(size=14), anchor="lt",
+    )
+    return image
+
+
+@pytest.fixture
+def typography_sample():
+    from math import cos, radians, sin
+
+    from PIL import Image, ImageDraw
+
+    from app.services.replacement_typography import load_replacement_font
+
+    def create(text="R123", size=24, angle=0, padding=12, background=(255, 255, 255)):
+        font = load_replacement_font(size)
+        box = font.getbbox(text)
+        width, height = box[2] - box[0], box[3] - box[1]
+        layer = Image.new("RGBA", (width + padding * 2, height + padding * 2))
+        ImageDraw.Draw(layer).text(
+            (padding - box[0], padding - box[1]), text, font=font, fill=(0, 0, 0, 255),
+        )
+        rotated = layer.rotate(-angle, expand=True, resample=Image.Resampling.BICUBIC)
+        image = Image.new("RGB", (400, 300), background)
+        image.paste(rotated, (round(200 - rotated.width / 2), round(150 - rotated.height / 2)), rotated)
+        cosine, sine = cos(radians(angle)), sin(radians(angle))
+        polygon = [
+            [200 + x * cosine - y * sine, 150 + x * sine + y * cosine]
+            for x, y in (
+                (-layer.width / 2, -layer.height / 2), (layer.width / 2, -layer.height / 2),
+                (layer.width / 2, layer.height / 2), (-layer.width / 2, layer.height / 2),
+            )
+        ]
+        return image, polygon, height
+
+    return create
+
+
+@pytest.fixture
 def client(app):
     from fastapi.testclient import TestClient
 

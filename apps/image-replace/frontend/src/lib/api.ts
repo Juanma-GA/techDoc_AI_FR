@@ -123,6 +123,7 @@ export type OcrResultDto = {
   references: OcrReferenceDto[];
   edited_image: string;
   filename: string;
+  replacement_font_size?: number | null;
 };
 
 export const healthApi = { read: () => api<HealthDto>("/health") };

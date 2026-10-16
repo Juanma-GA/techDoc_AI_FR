@@ -88,7 +88,10 @@ export function useImageReplace(t: TFunction) {
     setLoading(true);
     setError("");
     try {
-      const form = analysisForm(image.currentFile, image.imageFile.name, replacementPairs, excel, t);
+      const form = analysisForm(
+        image.currentFile, image.imageFile.name, replacementPairs, excel, t,
+        image.result?.replacement_font_size,
+      );
       image.applyOcr(await imageReplaceApi.runOcr(form));
     } catch (requestFailure) {
       setError(requestError(requestFailure, t("image.errorGeneric")));

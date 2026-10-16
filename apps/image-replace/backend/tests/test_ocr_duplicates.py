@@ -6,12 +6,14 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 def _image_bytes() -> bytes:
     image = BytesIO()
-    Image.new("RGB", (180, 60), "white").save(image, format="PNG")
+    canvas = Image.new("RGB", (180, 60), "white")
+    ImageDraw.Draw(canvas).text((10, 12), "R-001 R-001 R-001", fill="black")
+    canvas.save(image, format="PNG")
     return image.getvalue()
 
 

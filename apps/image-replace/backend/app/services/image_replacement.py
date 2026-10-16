@@ -1,15 +1,21 @@
 from __future__ import annotations
 
-import os
-from math import ceil, floor
-from pathlib import Path
-from statistics import median
 from typing import TypedDict
 
-from PIL import Image, ImageDraw, ImageFont
+import structlog
+from PIL import Image, ImageDraw
 
 from app.services.image_layout import image_on_white
-from app.services.ocr_engine import _box_points, normalize_reference
+from app.services.ocr_engine import normalize_reference
+from app.services.replacement_rendering import _draw_replacement_text, _sample_background_color
+from app.services.replacement_typography import (
+    dominant_height,
+    font_size_for_height,
+    measure_character_height,
+)
+from app.services.text_geometry import _box_points
+
+log = structlog.get_logger(__name__)
 
 
 class _ReplacementOccurrence(TypedDict):
@@ -54,109 +60,12 @@ def _replacement_segment(
     return [top_start, top_end, bottom_end, bottom_start]
 
 
-def _pixel_rgb(pixel: object) -> tuple[int, int, int]:
-    if isinstance(pixel, tuple):
-        if len(pixel) < 3:
-            raise ValueError("Impossible de lire la couleur du fond de l'image.")
-        return int(pixel[0]), int(pixel[1]), int(pixel[2])
-    if isinstance(pixel, (int, float)):
-        channel = int(pixel)
-        return channel, channel, channel
-    raise ValueError("Impossible de lire la couleur du fond de l'image.")
-
-
-def _sample_background_color(
-    image: Image.Image,
-    polygon: list[list[float]],
-) -> tuple[int, int, int]:
-    left = floor(min(point[0] for point in polygon))
-    top = floor(min(point[1] for point in polygon))
-    right = ceil(max(point[0] for point in polygon))
-    bottom = ceil(max(point[1] for point in polygon))
-    padding = max(2, ceil((bottom - top + 1) * 0.2))
-    crop_left = max(0, left - padding)
-    crop_top = max(0, top - padding)
-    crop_right = min(image.width, right + padding + 1)
-    crop_bottom = min(image.height, bottom + padding + 1)
-    crop = image.crop((crop_left, crop_top, crop_right, crop_bottom))
-    if crop.width == 0 or crop.height == 0:
-        raise ValueError("Impossible d'estimer le fond autour du repère à remplacer.")
-
-    mask = Image.new("1", crop.size)
-    local_polygon = [
-        [point[0] - crop_left, point[1] - crop_top]
-        for point in polygon
-    ]
-    ImageDraw.Draw(mask).polygon(local_polygon, fill=1)
-
-    samples: list[tuple[int, int, int]] = []
-    for y in range(crop.height):
-        for x in range(crop.width):
-            if mask.getpixel((x, y)):
-                continue
-            samples.append(_pixel_rgb(crop.getpixel((x, y))))
-
-    if not samples:
-        for y in range(crop.height):
-            for x in range(crop.width):
-                if x not in {0, crop.width - 1} and y not in {0, crop.height - 1}:
-                    continue
-                samples.append(_pixel_rgb(crop.getpixel((x, y))))
-
-    return (
-        int(median(pixel[0] for pixel in samples)),
-        int(median(pixel[1] for pixel in samples)),
-        int(median(pixel[2] for pixel in samples)),
-    )
-
-
-def _load_replacement_font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
-    windows_directory = os.environ.get("WINDIR")
-    if windows_directory:
-        font_path = Path(windows_directory) / "Fonts" / "arial.ttf"
-        if font_path.is_file():
-            return ImageFont.truetype(str(font_path), size=size)
-    return ImageFont.load_default(size=size)
-
-
-def _draw_replacement_text(
-    draw: ImageDraw.ImageDraw,
-    polygon: list[list[float]],
-    text: str,
-    fill: tuple[int, ...],
-) -> None:
-    left = min(point[0] for point in polygon)
-    top = min(point[1] for point in polygon)
-    right = max(point[0] for point in polygon)
-    bottom = max(point[1] for point in polygon)
-    width = right - left
-    height = bottom - top
-    if width < 1 or height < 1:
-        return
-
-    font_size = max(1, int(height * 0.8))
-    font = _load_replacement_font(font_size)
-    text_box = draw.textbbox((0, 0), text, font=font)
-    text_width = max(1, text_box[2] - text_box[0])
-    text_height = max(1, text_box[3] - text_box[1])
-    scale = min(1, width * 0.92 / text_width, height * 0.82 / text_height)
-    if scale < 1:
-        font = _load_replacement_font(max(1, int(font_size * scale)))
-
-    draw.text(
-        ((left + right) / 2, (top + bottom) / 2),
-        text,
-        fill=fill,
-        font=font,
-        anchor="mm",
-    )
-
-
 def apply_replacements(
     source_image: Image.Image,
     lines: list[dict[str, object]],
     replacement_pairs: list[dict[str, str]],
-) -> tuple[Image.Image, list[int]]:
+    replacement_font_size: int | None = None,
+) -> tuple[Image.Image, list[int], int | None]:
     applied_counts = [0] * len(replacement_pairs)
     pair_indices_by_reference: dict[str, list[int]] = {}
     for pair_index, pair in enumerate(replacement_pairs):
@@ -249,13 +158,29 @@ def apply_replacements(
             )
         )
 
-    for polygon, pair_index, background_color in replacement_draws:
+    if replacement_draws and replacement_font_size is None:
+        heights = [
+            height for polygon, _, background in replacement_draws
+            if (height := measure_character_height(canvas, polygon, background)) is not None
+        ]
+        if len(heights) < len(replacement_draws):
+            log.warning(
+                "replacement_glyph_measurements_missing",
+                measured=len(heights), total=len(replacement_draws),
+            )
+        replacement_font_size = font_size_for_height(dominant_height(heights))
+
+    for polygon, _, background_color in replacement_draws:
         draw.polygon(polygon, fill=background_color)
+    for polygon, pair_index, _ in replacement_draws:
+        if replacement_font_size is None:
+            raise RuntimeError("Missing replacement typography.")
         _draw_replacement_text(
-            draw,
+            canvas,
             polygon,
             replacement_pairs[pair_index]["replacement"],
             (0, 0, 0),
+            font_size=replacement_font_size,
         )
 
-    return canvas, applied_counts
+    return canvas, applied_counts, replacement_font_size

@@ -19,7 +19,7 @@ test("resumes selective OCR and brush edits, undo and full history, but starts h
     return route.fulfill({ json: {
       width: 100, height: 80, source_width: 100, source_height: 80,
       full_text: "R-1 R-2", lines: [], references: [],
-      edited_image: replaced, filename: "ICN-TEST.jpg",
+      edited_image: replaced, filename: "ICN-TEST.jpg", replacement_font_size: 36,
     } });
   });
   const brushInputs: Buffer[] = [];
@@ -38,6 +38,7 @@ test("resumes selective OCR and brush edits, undo and full history, but starts h
   await expect(preview).toHaveAttribute("src", replaced);
   expect(ocrPairs[0]).toContain(JSON.stringify([{ reference: "R-1", replacement: "N-1" }]));
   expect(ocrPairs[0]).not.toContain('"reference":"R-2"');
+  expect(ocrPairs[0]).not.toContain('name="replacement_font_size"');
 
   await page.getByRole("button", { name: "Activer le pinceau" }).click();
   await page.getByLabel("Masque des zones à effacer").click({ position: { x: 45, y: 40 } });
@@ -50,6 +51,7 @@ test("resumes selective OCR and brush edits, undo and full history, but starts h
   await expect(preview).toHaveAttribute("src", replaced);
   expect(ocrImages[1]?.includes(Buffer.from(brushed.split(",")[1]!, "base64"))).toBe(true);
   expect(ocrPairs[1]).toContain(JSON.stringify([{ reference: "R-2", replacement: "N-2" }]));
+  expect(ocrPairs[1]).toContain('name="replacement_font_size"\r\n\r\n36');
   await page.getByRole("button", { name: "Annuler la dernière modification" }).click();
   await expect(preview).toHaveAttribute("src", brushed);
   await expect(page.getByText("Sauvegarde locale à jour.")).toBeVisible();
@@ -76,6 +78,9 @@ test("resumes selective OCR and brush edits, undo and full history, but starts h
   await page.screenshot({ path: info.outputPath("resumed-history.png"), fullPage: true });
   await page.getByRole("button", { name: "Annuler la dernière modification" }).click();
   await expect(preview).toHaveAttribute("src", replaced);
+  await page.getByRole("button", { name: "Lancer l’OCR sur CPU" }).click();
+  await expect.poll(() => ocrPairs.length).toBe(3);
+  expect(ocrPairs[2]).toContain('name="replacement_font_size"\r\n\r\n36');
 });
 
 test("local-color brush becomes the next OCR source, in a narrow English light-theme view", async ({ page }, info) => {

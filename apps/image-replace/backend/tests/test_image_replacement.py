@@ -9,12 +9,12 @@ from app.services.image_replacement import apply_replacements
 def test_duplicate_reference_pairs_replace_separate_occurrences_in_order(monkeypatch) -> None:
     drawn_replacements: list[tuple[str, float]] = []
 
-    def record_replacement(draw, polygon, text: str, fill) -> None:
+    def record_replacement(draw, polygon, text: str, fill, *, font_size: int) -> None:
         drawn_replacements.append((text, polygon[0][0]))
 
     monkeypatch.setattr(image_replacement, "_draw_replacement_text", record_replacement)
 
-    _, applied_counts = apply_replacements(
+    _, applied_counts, _ = apply_replacements(
         Image.new("RGB", (180, 60), (215, 220, 225)),
         [
             {
@@ -26,6 +26,7 @@ def test_duplicate_reference_pairs_replace_separate_occurrences_in_order(monkeyp
             {"reference": "R-001", "replacement": "101"},
             {"reference": "R-001", "replacement": "202"},
         ],
+        replacement_font_size=14,
     )
 
     assert applied_counts == [1, 1]
@@ -38,13 +39,14 @@ def test_single_reference_pair_still_replaces_all_occurrences(monkeypatch) -> No
     monkeypatch.setattr(
         image_replacement,
         "_draw_replacement_text",
-        lambda draw, polygon, text, fill: drawn_replacements.append(text),
+        lambda draw, polygon, text, fill, **kwargs: drawn_replacements.append(text),
     )
 
-    _, applied_counts = apply_replacements(
+    _, applied_counts, _ = apply_replacements(
         Image.new("RGB", (120, 60), "white"),
         [{"text": "R-001 R-001", "box": [[10, 10], [110, 10], [110, 30], [10, 30]]}],
         [{"reference": "R-001", "replacement": "101"}],
+        replacement_font_size=14,
     )
 
     assert applied_counts == [2]
@@ -55,10 +57,11 @@ def test_replacement_uses_local_background_instead_of_white_rectangle() -> None:
     background = (215, 220, 225)
     source = Image.new("RGB", (80, 40), background)
 
-    result, applied_counts = apply_replacements(
+    result, applied_counts, _ = apply_replacements(
         source,
         [{"text": "R1", "box": [[10, 10], [50, 10], [50, 30], [10, 30]]}],
         [{"reference": "R1", "replacement": "7"}],
+        replacement_font_size=14,
     )
 
     assert applied_counts == [1]
