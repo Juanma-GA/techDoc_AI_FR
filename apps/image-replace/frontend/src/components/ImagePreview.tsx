@@ -1,6 +1,5 @@
 import type { TFunction } from "i18next";
 import { Image as ImageIcon } from "lucide-react";
-import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, EmptyState } from "@internal/ui";
 
 import type { OcrResultDto } from "../lib/api";
@@ -13,6 +12,12 @@ type ImagePreviewProps = {
   imageUrl: string;
   result: OcrResultDto | null;
   disabled: boolean;
+  manuallyEdited: boolean;
+  canUndo: boolean;
+  onUndo: () => void;
+  onDownload: () => void;
+  downloading: boolean;
+  onImageEdited: (image: string, mode: "lama" | "color") => void;
   onInpaintingChange: (busy: boolean) => void;
   t: TFunction;
 };
@@ -22,15 +27,19 @@ export function ImagePreview({
   imageUrl,
   result,
   disabled,
+  manuallyEdited,
+  canUndo,
+  onUndo,
+  onDownload,
+  downloading,
+  onImageEdited,
   onInpaintingChange,
   t,
 }: ImagePreviewProps) {
-  const editor = useImageEditor({ imageFile, imageUrl, result, t });
+  const editor = useImageEditor({
+    imageFile, imageUrl, manuallyEdited, onImageEdited, onInpaintingChange, t,
+  });
   const matchedLines = new Set((result?.references ?? []).flatMap((item) => item.line_indices));
-
-  useEffect(() => {
-    onInpaintingChange(editor.inpainting);
-  }, [editor.inpainting, onInpaintingChange]);
 
   if (!editor.previewImage) {
     return (
@@ -57,7 +66,10 @@ export function ImagePreview({
         <p className="text-sm text-fg-dim">{t("image.resultDescription")}</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <ImageToolbar editor={editor} result={result} t={t} />
+        <ImageToolbar
+          editor={editor} result={result} canUndo={canUndo} onUndo={onUndo}
+          onDownload={onDownload} downloading={downloading} disabled={disabled} t={t}
+        />
         <div
           ref={editor.previewRef}
           className={`relative flex max-h-[70vh] min-h-72 items-center justify-center overflow-hidden rounded-md border border-md bg-bg-2 p-3 ${

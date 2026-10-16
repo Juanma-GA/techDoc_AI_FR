@@ -62,14 +62,14 @@ export function BrushControls({ editor, disabled, t }: BrushControlsProps) {
       <div className="flex flex-wrap gap-2">
         <Button
           variant="secondary"
-          disabled={!editor.hasBrushMask || editor.inpainting}
+          disabled={disabled || !editor.hasBrushMask || editor.inpainting}
           onClick={editor.clearBrushMask}
         >
           <Trash2 size={15} aria-hidden="true" />
           {t("image.clearMask")}
         </Button>
         <Button
-          disabled={!editor.hasBrushMask || editor.inpainting}
+          disabled={disabled || !editor.hasBrushMask || editor.inpainting}
           onClick={() => void editor.applyBrush()}
         >
           {editor.inpainting

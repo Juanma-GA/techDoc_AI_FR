@@ -5,16 +5,16 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: "http://127.0.0.1:5187",
     trace: "on-first-retry",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
-    command: "pnpm dev",
-    url: "http://127.0.0.1:5173",
-    reuseExistingServer: !process.env.CI,
+    command: "pnpm dev --port 5187 --strictPort",
+    url: "http://127.0.0.1:5187",
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });

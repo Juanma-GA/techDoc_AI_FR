@@ -94,8 +94,10 @@ export function ImageInputPanel({ workflow, disabled, t }: ImageInputPanelProps)
           onAdd={workflow.addPair}
           onUpdate={workflow.updatePair}
           onRemove={workflow.removePair}
+          onToggle={workflow.togglePair}
           onUpdateExcel={workflow.updateExcelPair}
           onRemoveExcel={workflow.removeExcelPair}
+          onToggleExcel={workflow.toggleExcelPair}
           t={t}
         />
 

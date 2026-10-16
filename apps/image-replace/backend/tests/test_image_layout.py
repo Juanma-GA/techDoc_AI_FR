@@ -5,7 +5,7 @@ from io import BytesIO
 from PIL import Image
 
 from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH
-from app.services.image_layout import create_a4_page, output_filename, prepare_source_image
+from app.services.image_layout import create_a4_page, export_jpeg, output_filename, prepare_source_image
 
 
 def test_landscape_image_is_centered_on_a4_portrait_page() -> None:
@@ -46,6 +46,9 @@ def test_exif_orientation_is_normalized_before_ocr() -> None:
 
 def test_output_filename_uses_icn_or_image_stem() -> None:
     assert output_filename("source.png", "ICN-01") == "ICN-01.jpg"
+    assert output_filename("source.png", "ICN-01.jpg") == "ICN-01.jpg"
+    assert output_filename("source.png", "ICN-01.JPEG") == "ICN-01.jpg"
+    assert output_filename("source.png", "ICN:01") == "ICN_01.jpg"
     assert output_filename("source.png", None) == "source-modifiee.jpg"
 
 
@@ -58,3 +61,11 @@ def test_a4_output_is_jpeg_with_300_dpi_metadata() -> None:
         assert result.format == "JPEG"
         assert result.size == (A4_WIDTH, A4_HEIGHT)
         assert result.info["dpi"] == (A4_DPI, A4_DPI)
+
+
+def test_download_does_not_reencode_an_existing_print_ready_jpeg() -> None:
+    source = Image.new("RGB", (A4_WIDTH, A4_HEIGHT), (12, 34, 56))
+    encoded = BytesIO()
+    source.save(encoded, format="JPEG", quality=95, dpi=(A4_DPI, A4_DPI))
+    contents = encoded.getvalue()
+    assert export_jpeg(contents) == contents

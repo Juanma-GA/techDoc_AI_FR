@@ -28,12 +28,7 @@ class SettingsOut(BaseModel):
 
 
 class AdminStatsOut(BaseModel):
-    """Compteurs sommaires affiches dans l'onglet Donnees du preview.
-
-    Les champs sont volontairement generiques : chaque POC peut surcharger
-    `admin.stats()` pour compter ses propres tables. Pour ce scaffold,
-    tout est a 0.
-    """
+    """Documents count startup workbooks; sessions/messages count image workspaces/operations."""
 
     documents: int = 0
     chunks: int = 0

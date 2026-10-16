@@ -5,9 +5,9 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import HTTPException
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, UnidentifiedImageError
 
-from app.services.constants import A4_HEIGHT, A4_WIDTH
+from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH, SUPPORTED_FORMATS
 
 
 def _safe_filename_component(value: str) -> str:
@@ -30,7 +30,8 @@ def _safe_filename_component(value: str) -> str:
 
 def output_filename(image_filename: str | None, icn: str | None) -> str:
     if icn is not None:
-        return f"{_safe_filename_component(icn)}.jpg"
+        stem = re.sub(r"\.jpe?g$", "", icn.strip(), flags=re.I)
+        return f"{_safe_filename_component(stem)}.jpg"
     image_stem = Path(image_filename or "image").stem or "image"
     return f"{_safe_filename_component(image_stem)}-modifiee.jpg"
 
@@ -64,3 +65,28 @@ def create_a4_page(image: Image.Image) -> tuple[Image.Image, float, float, int, 
     page = Image.new("RGB", (A4_WIDTH, A4_HEIGHT), "white")
     page.paste(resized, (left, top))
     return page, resized_width / source.width, resized_height / source.height, left, top
+
+
+def export_jpeg(image_bytes: bytes) -> bytes:
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            if image.format not in SUPPORTED_FORMATS:
+                raise HTTPException(status_code=415, detail="Format d'image non pris en charge.")
+            print_ready = (
+                image.format == "JPEG" and image.mode == "RGB"
+                and image.size == (A4_WIDTH, A4_HEIGHT)
+                and image.info.get("dpi") == (A4_DPI, A4_DPI) and not image.getexif()
+            )
+            if print_ready:
+                image.load()
+            else:
+                image.verify()
+        if print_ready:
+            return image_bytes
+        source, _ = prepare_source_image(image_bytes)
+        page, *_ = create_a4_page(source)
+    except (UnidentifiedImageError, OSError, SyntaxError, Image.DecompressionBombError) as error:
+        raise HTTPException(status_code=400, detail="Le fichier image est invalide.") from error
+    encoded = BytesIO()
+    page.save(encoded, format="JPEG", quality=95, dpi=(A4_DPI, A4_DPI))
+    return encoded.getvalue()

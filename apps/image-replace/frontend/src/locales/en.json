@@ -10,7 +10,8 @@
     "languageSwitcher": "Language",
     "home": "Detection",
     "data": "Data",
-    "settings": "Settings"
+    "settings": "Settings",
+    "history": "History"
   },
   "demo": {
     "badge": "DEMO MODE",
@@ -43,6 +44,13 @@
     "subtitle": "Analyze an image locally, find references, and replace them when needed."
   },
   "image": {
+    "newImage": "New image",
+    "undo": "Undo last change",
+    "selectedPairs": "{{count}} / {{total}} selected",
+    "selectPair": "Apply pair {{number}}",
+    "selectExcelPair": "Apply Excel pair {{number}}",
+    "selectionHint": "Only checked pairs will be applied. Each run uses the latest image, including brush edits. Uncheck completed pairs to continue with other references.",
+    "errorExcelSheets": "The workbook contains no sheets.",
     "inputTitle": "Image and replacements",
     "inputDescription": "Prepare the items to analyze",
     "resultTitle": "Analysis result",
@@ -93,6 +101,7 @@
     "resultImageAlt": "A4 portrait result image",
     "brushMask": "Mask of areas to erase",
     "download": "Download",
+    "downloading": "Preparing JPG...",
     "wheelZoom": "Scroll to zoom · drag to pan",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
@@ -137,6 +146,32 @@
     "errorEmptySelection": "The selection is empty.",
     "errorDetectColor": "Unable to detect the color around the selection.",
     "errorMask": "Unable to prepare the brush mask."
+  },
+  "history": {
+    "title": "History",
+    "subtitle": "Find each image and resume its complete latest state. Files stay in local storage.",
+    "empty": "No images have been saved yet.",
+    "open": "Resume",
+    "delete": "Delete",
+    "confirmDelete": "Click again to confirm",
+    "deleteError": "Could not delete this image from history.",
+    "more": "Load more",
+    "operations": "Operations on this image",
+    "operationCount_one": "{{count}} operation",
+    "operationCount_other": "{{count}} operations",
+    "loadError": "Could not restore this history entry.",
+    "startupError": "Could not restore the last Excel workbook.",
+    "saveError": "Local saving failed. Changes remain in memory; retry before leaving.",
+    "retry": "Retry",
+    "restoringExcel": "Restoring the last Excel workbook…",
+    "saving": "Saving locally…",
+    "saved": "Local save is up to date.",
+    "actions": {
+      "ocr": "OCR analysis and replacement",
+      "brush-lama": "LaMa brush erasing",
+      "brush-color": "Local-color brush erasing",
+      "undo": "Undo last change"
+    }
   },
   "data": {
     "title": "Data",

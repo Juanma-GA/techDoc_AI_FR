@@ -1,155 +1,156 @@
 import type { TFunction } from "i18next";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
-import { imageReplaceApi, type OcrResultDto } from "../lib/api";
-import { MAX_UPLOAD_BYTES } from "../lib/image-processing";
+import { imageReplaceApi } from "../lib/api";
+import { analysisForm, imageForm } from "../lib/analysis-form";
+import { requestError, workspaceApi, type ReplacementPair } from "../lib/workspace-api";
 import { useExcelMapping } from "./useExcelMapping";
+import { useImageDocument } from "./useImageDocument";
+import { useWorkspaceStorage } from "./useWorkspaceStorage";
 
-const SUPPORTED_IMAGE_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/bmp",
-  "image/tiff",
-  "image/x-tiff",
-]);
-
-export type ReplacementPair = {
-  id: number;
-  reference: string;
-  replacement: string;
-};
+export type { ReplacementPair } from "../lib/workspace-api";
 
 export function useImageReplace(t: TFunction) {
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState("");
   const [replacementPairs, setReplacementPairs] = useState<ReplacementPair[]>([]);
-  const [result, setResult] = useState<OcrResultDto | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const nextPairId = useRef(0);
+  const [downloading, setDownloading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [retouching, setRetouching] = useState(false);
   const excel = useExcelMapping(t);
+  const image = useImageDocument(t);
+  const storage = useWorkspaceStorage({
+    excel: excel.persistenceState, restoreExcel: excel.restoreExcel,
+    excelPending: excel.excelLoading || (excel.excelSelectionConfigured && !excel.excelPairsReady),
+    document: image.document, manualPairs: replacementPairs,
+  });
 
-  useEffect(() => {
-    if (!imageFile) {
-      setImageUrl("");
-      return undefined;
-    }
-    const url = URL.createObjectURL(imageFile);
-    setImageUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
-
-  useEffect(() => {
-    setResult(null);
-  }, [
-    excel.excelFile,
-    excel.excelSheet,
-    excel.excelReferenceColumn,
-    excel.excelReplacementColumn,
-    excel.excelIcnColumn,
-    excel.excelPieceColumn,
-    excel.excelPieceRow,
-  ]);
-
-  function chooseImage(files: File[]) {
-    const nextFile = files[0];
-    if (!nextFile) return;
-    if (!SUPPORTED_IMAGE_TYPES.has(nextFile.type)) {
-      setError(t("image.errorImageType"));
-      return;
-    }
-    if (nextFile.size > MAX_UPLOAD_BYTES) {
-      setError(t("image.errorImageSize"));
-      return;
-    }
-    setImageFile(nextFile);
-    setResult(null);
+  async function chooseImage(files: File[]) {
+    setRestoring(true);
     setError("");
+    try {
+      await storage.flush();
+      if (image.chooseImage(files)) {
+        setReplacementPairs([]);
+        excel.resetPiece();
+        return true;
+      }
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("image.errorGeneric")));
+      return false;
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  async function newImage() {
+    setRestoring(true);
+    setError("");
+    try {
+      await storage.flush();
+      image.clear();
+      setReplacementPairs([]);
+      excel.resetPiece();
+      return true;
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("image.errorGeneric")));
+      return false;
+    } finally {
+      setRestoring(false);
+    }
   }
 
   function updatePair(id: number, field: "reference" | "replacement", value: string) {
     setReplacementPairs((current) =>
-      current.map((pair) => (pair.id === id ? { ...pair, [field]: value } : pair)),
+      current.map((pair) => pair.id === id ? { ...pair, [field]: value } : pair),
     );
   }
-
-  function addPair() {
-    const id = nextPairId.current++;
-    setReplacementPairs((current) => [...current, { id, reference: "", replacement: "" }]);
+  function togglePair(id: number) {
+    setReplacementPairs((current) =>
+      current.map((pair) => pair.id === id ? { ...pair, enabled: !pair.enabled } : pair),
+    );
   }
-
+  function addPair() {
+    setReplacementPairs((current) => [
+      ...current, {
+        id: Math.max(-1, ...current.map((pair) => pair.id)) + 1,
+        reference: "", replacement: "", enabled: true,
+      },
+    ]);
+  }
   function removePair(id: number) {
     setReplacementPairs((current) => current.filter((pair) => pair.id !== id));
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!imageFile) return;
-
-    const replacements = replacementPairs
-      .map(({ reference, replacement }) => ({
-        reference: reference.trim(),
-        replacement: replacement.trim(),
-      }))
-      .filter(({ reference, replacement }) => reference || replacement);
-    if (replacements.some(({ reference, replacement }) => !reference || !replacement)) {
-      setError(t("image.errorPairIncomplete"));
-      return;
-    }
-    const excelReplacements = excel.excelPairs.map(({ reference, replacement }) => ({
-      reference: reference.trim(),
-      replacement: replacement.trim(),
-    }));
-    if (excelReplacements.some(({ reference, replacement }) => !reference || !replacement)) {
-      setError(t("image.errorPairIncomplete"));
-      return;
-    }
-    if (excel.excelFile && !excel.excelSelectionReady) {
-      setError(t("image.errorExcelSelection"));
-      return;
-    }
-
+    if (!image.currentFile || !image.imageFile || loading || restoring) return;
     setLoading(true);
     setError("");
-    setResult(null);
-    const formData = new FormData();
-    formData.append("image", imageFile);
-    formData.append("replacement_pairs", JSON.stringify(replacements));
-    if (excel.excelFile) {
-      formData.append("workbook", excel.excelFile);
-      formData.append("excel_sheet", excel.excelSheet);
-      formData.append("excel_reference_column", excel.excelReferenceColumn);
-      formData.append("excel_replacement_column", excel.excelReplacementColumn);
-      formData.append("excel_icn_column", excel.excelIcnColumn);
-      formData.append("excel_piece_column", excel.excelPieceColumn);
-      formData.append("excel_piece_row", excel.excelPieceRow);
-      formData.append("excel_replacement_pairs", JSON.stringify(excelReplacements));
-    }
-
     try {
-      setResult(await imageReplaceApi.runOcr(formData));
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : t("image.errorGeneric"));
+      const form = analysisForm(image.currentFile, image.imageFile.name, replacementPairs, excel, t);
+      image.applyOcr(await imageReplaceApi.runOcr(form));
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("image.errorGeneric")));
     } finally {
       setLoading(false);
     }
   }
 
+  async function openHistory(id: string) {
+    setRestoring(true);
+    setError("");
+    try {
+      await storage.flush();
+      const entry = await workspaceApi.read(id);
+      excel.restoreExcel(entry.state.excel);
+      setReplacementPairs(entry.state.manualPairs);
+      image.restore(id, entry.state);
+      return true;
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("history.loadError")));
+      return false;
+    } finally {
+      setRestoring(false);
+    }
+  }
+
+  async function downloadImage() {
+    if (!image.currentFile || !image.imageFile || downloading) return;
+    setDownloading(true);
+    setError("");
+    try {
+      const form = imageForm(image.currentFile, image.imageFile.name, excel, t);
+      if (image.result) form.append("filename", image.result.filename);
+      const exported = await imageReplaceApi.exportImage(form);
+      const url = URL.createObjectURL(exported.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = exported.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("image.errorGeneric")));
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function retrySave() {
+    setError("");
+    try {
+      await storage.flush();
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("history.saveError")));
+    }
+  }
+
   return {
-    ...excel,
-    imageFile,
-    imageUrl,
-    replacementPairs,
-    result,
-    error,
-    loading,
-    chooseImage,
-    updatePair,
-    addPair,
-    removePair,
-    submit,
-    setError,
-    setResult,
+    ...excel, ...image, storage, replacementPairs, error, loading, downloading, restoring, retouching,
+    setRetouching,
+    chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit, openHistory,
+    downloadImage, retrySave,
   };
 }

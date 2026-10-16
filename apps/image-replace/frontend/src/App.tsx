@@ -13,6 +13,8 @@ import { NavLink, Route, Routes } from "react-router-dom";
 
 import { settingsApi, type SettingsDto } from "./lib/api";
 import { Home } from "./routes/Home";
+import { History } from "./routes/History";
+import { WorkflowProvider } from "./hooks/WorkflowProvider";
 import { Settings } from "./routes/Settings";
 
 const LANGUAGES = ["fr", "en"] as const;
@@ -28,6 +30,7 @@ export function App() {
 
   return (
     <AppShell
+      className="[&>.ui-sidebar]:shrink-0"
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
@@ -45,6 +48,9 @@ export function App() {
         <>
           <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
             {t("nav.home")}
+          </NavLink>
+          <NavLink to="/history" className={({ isActive }) => sidebarNavItemClass(isActive)}>
+            {t("nav.history")}
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => sidebarNavItemClass(isActive)}>
             {t("nav.settings")}
@@ -65,10 +71,13 @@ export function App() {
         isReady={settingsQuery.isSuccess}
       >
         <ErrorBoundary>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <WorkflowProvider>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </WorkflowProvider>
         </ErrorBoundary>
       </DemoModeProvider>
     </AppShell>

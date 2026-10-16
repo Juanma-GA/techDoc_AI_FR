@@ -7,6 +7,7 @@
 ## Profiles
 
 - `local-first`: image processing and persistence are local.
+- `files`: uploaded workbooks and image versions are validated, SHA-256 checked, and stored locally.
 - No `llm` profile: PaddleOCR and LaMa run locally; no remote LLM or AI API is used.
 
 ## Purpose
@@ -22,9 +23,16 @@ Find text references in technical images and replace selected references with su
 - Upload PNG, JPEG, WEBP, BMP, or TIFF images up to 15 MB.
 - Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed and can be edited or removed before OCR.
 - Add manual replacement pairs; these are combined with the edited Excel pairs.
+- Check or uncheck individual manual/Excel pairs to apply only selected references.
 - Run PaddleOCR on CPU, inspect recognized text and matches, and download the replacement image as a 2480 × 3508 px A4 JPEG at 300 dpi.
 - Zoom and pan the result, then paint a mask to remove an area with local LaMa inpainting or local median-color fill.
-- No image, workbook, or generated result is persisted by the application.
+- Every successful replacement or brush edit becomes the source for the next operation. Undo restores the previous image and analysis, one operation at a time.
+- On startup, restore the last Excel workbook, sheet, and column mapping, but leave the image and selected part empty.
+- History lists each image and restores its complete last workspace: source/current images, undo stack, Excel workbook, selected part, edited/selected pairs, OCR output, and operation log.
+- The selected Excel ICN names the image in History and its download: `<ICN>.jpg`,
+  without retouch/replacement suffixes. Downloads are real A4/300 dpi JPEGs after
+  either brush mode, including before the first OCR. Downloads never alter working
+  or undo revisions; print-ready JPEGs are not re-encoded.
 
 ## Port
 
@@ -64,7 +72,35 @@ FastAPI serves the built React application from `frontend/dist/` at `/`. If the 
 
 ## Persistence
 
-The app uses the gitignored SQLite database `backend/data/image-replace.db` for the standard application configuration. Uploaded images, workbooks, OCR output, and retouched images are processed in memory or temporary files and are not persisted by the application.
+SQLite (`backend/data/image-replace.db`) stores configuration, startup Excel selections,
+history snapshots, and file metadata. File bytes are stored separately under
+`backend/data/storage/{workspace_uuid}/{file_version_uuid}_{name}` with SHA-256
+integrity checks. Identical versions within a workspace are reused. All this data is
+local and gitignored; business state is never stored in browser storage.
+
+Two independent persistence scopes are used:
+
+- **Fresh home on startup:** last workbook, sheet, reference/replacement/ICN/part columns,
+  and their available options. No image, selected part, or part-specific pairs are restored.
+  Choose an image and then a part. **New image** also clears the selected part.
+- **History:** one workspace per uploaded image, autosaved with all completed image
+  operations, the full analysis, selections, and edited pairs. **Resume** does not rerun
+  OCR. **Undo** also works after reopening a saved workspace. A failed OCR or brush
+  operation leaves the previous image intact.
+
+Wait for the local-save status before closing or reloading. A save failure is displayed
+with a retry action; the unsaved workspace remains in memory. Missing or altered saved
+files produce explicit errors rather than an empty replacement workspace.
+
+History is retained until deleted with a two-click confirmation. Removing a workbook
+from home removes the startup preset only; histories keep their own workbook versions.
+Deleting a history removes its associated files without removing the startup preset.
+Admin reset-all removes histories, the startup preset, and their files, but preserves
+application settings. Back up the database and storage directory together; neither
+is included in distributable packages.
+
+Migration `0002_workspaces` adds the three persistence tables. Normal launchers apply it
+with Alembic; do not delete or recreate the existing database to upgrade.
 
 ## LLM Configuration
 
@@ -79,19 +115,37 @@ Not applicable. No remote LLM is used. PaddleOCR and LaMa are local model workfl
 - `POST /api/v1/image-replace/excel/pairs`
 - `POST /api/v1/image-replace/ocr`
 - `POST /api/v1/image-replace/inpaint`
+- `POST /api/v1/image-replace/export` (ICN-named A4/300 dpi JPEG)
+- `GET /api/v1/image-replace/workspace/excel`
+- `PUT /api/v1/image-replace/workspace/excel`
+- `GET /api/v1/image-replace/history` (cursor-paginated, without image payloads)
+- `GET /api/v1/image-replace/history/{uuid}`
+- `PUT /api/v1/image-replace/history/{uuid}`
+- `DELETE /api/v1/image-replace/history/{uuid}`
+- `GET /api/v1/admin/stats`
+- `POST /api/v1/admin/reset/history`
+- `POST /api/v1/admin/reset/all`
 
 The LaMa service is internal to the local application and listens on `127.0.0.1:8011` by default.
 
 ## Tests
 
-### Executed during integration
+### Executed for resumable editing, history, and ICN downloads
 
-- Backend: 19 pytest tests passed, including synthetic image/Excel cases, OCR API tests with a mocked engine, and LaMa proxy/service validation.
-- Backend and helper scripts: Ruff passed for the changed feature modules and packaging/dev helpers.
-- Frontend: TypeScript check, ESLint, 5 Vitest tests, and production build passed.
-- Browser smoke: 2 Playwright tests passed with synthetic files and mocked API responses on an isolated Vite port.
-- Repository: all 16 `check_standard.sh` checks passed using a temporary LF-normalized copy because the checked-in shell script has CRLF line endings.
-- Packaging: Python compilation and `python -X utf8 scripts/package_image-replace.py --help` passed. No ZIP was created.
+- Backend: 70 pytest tests passed, including real JPEG/ICN exports, old-history naming,
+  unchanged print-ready JPEG bytes, isolated Excel/history round trips,
+  file integrity checks, disk/commit failure rollback, admin resets, and an Alembic
+  upgrade/check/downgrade cycle against a temporary synthetic SQLite database.
+- Backend feature modules and tests: Ruff passed. The changed validation-error
+  handler passed E/F/I/W checks; its unrelated pre-existing RUF034 remains unchanged.
+- Frontend: TypeScript, ESLint, 25 Vitest tests, and the production build passed.
+- Browser: 7 Playwright tests passed with synthetic files and all API calls intercepted
+  on isolated port `5187`, including selective OCR, both brush modes, undo, full-history
+  restoration, exact ICN download names and real JPEG signatures, failed exports,
+  startup exclusions, keyboard use, FR/EN, dark/light, and 390 px width.
+- User databases and uploaded documents were not used. Repository-wide standard
+  checks, packaging, PostgreSQL migration checks, and real-model inference were not
+  rerun for this change. No ZIP was created.
 
 ## Performance diagnostics
 
@@ -116,12 +170,12 @@ To benchmark CPU thread counts, set `OCR_CPU_THREADS` in `backend/.env` and rest
 
 ## Standard Deviations
 
-### Single workflow tab
+### Business-workflow navigation
 
 - **Rule:** `STANDARD_POC.md` §4 describes Home, Data, and Settings tabs.
-- **Deviation:** The app exposes one workflow tab, Detection, plus Settings; the Data UI route is not registered.
-- **Reason:** Image detection and replacement is the sole business workflow for this POC.
-- **Approval:** Explicitly approved by the product owner for this app.
+- **Deviation:** The app exposes Detection, History, and Settings; the generic Data UI route is not registered.
+- **Reason:** History provides the business-specific restoration and deletion workflow instead of the generic Data screen.
+- **Approval:** The original navigation exception and the addition of History were explicitly approved by the product owner.
 - **Review condition:** Revisit if the product adds a separate data-management workflow or the standard changes.
 
 ## Technical References

@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
-import { Download, Maximize2, Minus, Plus } from "lucide-react";
-import { Button, buttonVariants } from "@internal/ui";
+import { Download, Maximize2, Minus, Plus, Undo2 } from "lucide-react";
+import { Button } from "@internal/ui";
 
 import type { OcrResultDto } from "../lib/api";
 import type { useImageEditor } from "../hooks/useImageEditor";
@@ -8,10 +8,17 @@ import type { useImageEditor } from "../hooks/useImageEditor";
 type ImageToolbarProps = {
   editor: ReturnType<typeof useImageEditor>;
   result: OcrResultDto | null;
+  canUndo: boolean;
+  onUndo: () => void;
+  onDownload: () => void;
+  downloading: boolean;
+  disabled: boolean;
   t: TFunction;
 };
 
-export function ImageToolbar({ editor, result, t }: ImageToolbarProps) {
+export function ImageToolbar({
+  editor, result, canUndo, onUndo, onDownload, downloading, disabled, t,
+}: ImageToolbarProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-xs text-fg-dim">
@@ -21,7 +28,11 @@ export function ImageToolbar({ editor, result, t }: ImageToolbarProps) {
             ? t("image.resultStatus")
             : t("image.wheelZoom")}
       </p>
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
+        <Button variant="secondary" size="sm" disabled={disabled || !canUndo} onClick={onUndo}>
+          <Undo2 size={15} aria-hidden="true" />
+          {t("image.undo")}
+        </Button>
         <Button
           variant="secondary"
           size="icon"
@@ -53,14 +64,13 @@ export function ImageToolbar({ editor, result, t }: ImageToolbarProps) {
           <Maximize2 size={15} aria-hidden="true" />
         </Button>
         {result || editor.manualEditedImage ? (
-          <a
-            className={buttonVariants({ variant: "secondary", size: "sm" })}
-            href={editor.previewImage}
-            download={editor.downloadName}
+          <Button
+            variant="secondary" size="sm" disabled={disabled || downloading}
+            onClick={onDownload} aria-busy={downloading}
           >
             <Download size={15} aria-hidden="true" />
-            {t("image.download")}
-          </a>
+            {t(downloading ? "image.downloading" : "image.download")}
+          </Button>
         ) : null}
       </div>
     </div>

@@ -14,7 +14,7 @@ export type ApiError = {
   request_id: string;
 };
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+async function apiResponse(path: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     ...init,
@@ -23,18 +23,24 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const error = (await response.json().catch(() => null)) as ApiError | null;
     throw error ?? { code: "UNKNOWN", message: response.statusText, detail: null, request_id: "" };
   }
-  return (await response.json()) as T;
+  return response;
 }
 
-export async function apiForm<T>(path: string, formData: FormData): Promise<T> {
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  return (await (await apiResponse(path, init)).json()) as T;
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  await apiResponse(path, { method: "DELETE" });
+}
+
+async function formResponse(path: string, formData: FormData): Promise<Response> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     body: formData,
   });
-  const payload = (await response.json().catch(() => null)) as
-    | (ApiError & { detail?: unknown })
-    | null;
   if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ApiError | null;
     const message =
       (typeof payload?.message === "string" && payload.message) ||
       (typeof payload?.detail === "string" && payload.detail) ||
@@ -42,8 +48,25 @@ export async function apiForm<T>(path: string, formData: FormData): Promise<T> {
       "Request failed.";
     throw new Error(message);
   }
+  return response;
+}
+
+export async function apiForm<T>(path: string, formData: FormData): Promise<T> {
+  const response = await formResponse(path, formData);
+  const payload: unknown = await response.json().catch(() => null);
   if (payload === null) throw new Error("The server returned an unreadable response.");
   return payload as T;
+}
+
+async function exportImage(formData: FormData): Promise<{ blob: Blob; filename: string }> {
+  const response = await formResponse("/image-replace/export", formData);
+  const encodedName = response.headers.get("Content-Disposition")?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (!encodedName || response.headers.get("Content-Type")?.split(";")[0] !== "image/jpeg") {
+    throw new Error("The server returned an invalid JPEG download.");
+  }
+  const filename = decodeURIComponent(encodedName);
+  if (!filename.endsWith(".jpg")) throw new Error("The server returned an invalid JPEG filename.");
+  return { blob: await response.blob(), filename };
 }
 
 // ----- Standard DTOs (STANDARD_POC.md - health/settings/admin) -------------
@@ -116,6 +139,7 @@ export const settingsApi = {
 };
 
 export const imageReplaceApi = {
+  exportImage,
   excelSheets: (formData: FormData) =>
     apiForm<{ sheets: string[] }>("/image-replace/excel/sheets", formData),
   excelColumns: (formData: FormData) =>

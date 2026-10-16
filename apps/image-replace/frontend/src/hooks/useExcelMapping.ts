@@ -1,212 +1,160 @@
 import type { TFunction } from "i18next";
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-import {
-  imageReplaceApi,
-  type ExcelColumnDto,
-  type ExcelPieceDto,
-} from "../lib/api";
+import { imageReplaceApi } from "../lib/api";
 import { MAX_UPLOAD_BYTES } from "../lib/image-processing";
-import { useExcelPairs } from "./useExcelPairs";
+import { restoreFile, type ExcelSnapshot } from "../lib/workspace-api";
+import { useExcelPairs, type RestoredExcelPairs } from "./useExcelPairs";
+
+export type ExcelMemorySnapshot = Omit<ExcelSnapshot, "workbook"> & { workbook: File | null };
+type MappingState = Omit<ExcelMemorySnapshot, "pairs">;
+const EMPTY: MappingState = {
+  workbook: null, sheets: [], sheet: "", columns: [], referenceColumn: "",
+  replacementColumn: "", icnColumn: "", pieceColumn: "", pieces: [], pieceRow: "",
+};
 
 export function useExcelMapping(t: TFunction) {
-  const [excelFile, setExcelFile] = useState<File | null>(null);
-  const [excelSheets, setExcelSheets] = useState<string[]>([]);
-  const [excelSheet, setExcelSheet] = useState("");
-  const [excelColumns, setExcelColumns] = useState<ExcelColumnDto[]>([]);
-  const [excelReferenceColumn, setExcelReferenceColumnState] = useState("");
-  const [excelReplacementColumn, setExcelReplacementColumn] = useState("");
-  const [excelIcnColumn, setExcelIcnColumn] = useState("");
-  const [excelPieceColumn, setExcelPieceColumn] = useState("");
-  const [excelPieces, setExcelPieces] = useState<ExcelPieceDto[]>([]);
-  const [excelPieceRow, setExcelPieceRow] = useState("");
+  const [state, setState] = useState<MappingState>(EMPTY);
   const [excelError, setExcelError] = useState("");
   const [excelLoading, setExcelLoading] = useState(false);
-  const excelRequestId = useRef(0);
-  const excelPairPreview = useExcelPairs(
-    {
-      workbook: excelFile,
-      sheet: excelSheet,
-      referenceColumn: excelReferenceColumn,
-      replacementColumn: excelReplacementColumn,
-      icnColumn: excelIcnColumn,
-      pieceColumn: excelPieceColumn,
-      pieceRow: excelPieceRow,
-    },
-    t,
-    setExcelError,
+  const [restored, setRestored] = useState<RestoredExcelPairs | null>(null);
+  const requestId = useRef(0);
+  const selection = {
+    workbook: state.workbook, sheet: state.sheet,
+    referenceColumn: state.referenceColumn, replacementColumn: state.replacementColumn,
+    icnColumn: state.icnColumn, pieceColumn: state.pieceColumn, pieceRow: state.pieceRow,
+  };
+  const preview = useExcelPairs(selection, t, setExcelError, restored);
+  const persistenceState = useMemo(
+    () => ({ ...state, pairs: preview.pairs }), [state, preview.pairs],
   );
+
+  async function load(run: (currentRequest: number) => Promise<void>) {
+    const currentRequest = ++requestId.current;
+    setExcelError("");
+    setExcelLoading(true);
+    try {
+      await run(currentRequest);
+    } catch (error) {
+      if (currentRequest === requestId.current) {
+        setExcelError(error instanceof Error ? error.message : t("image.errorGeneric"));
+      }
+    } finally {
+      if (currentRequest === requestId.current) setExcelLoading(false);
+    }
+  }
 
   async function chooseExcel(files: File[]) {
-    const nextFile = files[0];
-    if (!nextFile) return;
-    const requestId = ++excelRequestId.current;
-    if (!/\.(xlsx|xlsm)$/i.test(nextFile.name)) {
-      setExcelLoading(false);
-      setExcelError(t("image.errorExcelType"));
+    const file = files[0];
+    if (!file) return;
+    if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size > MAX_UPLOAD_BYTES) {
+      setExcelError(t(file.size > MAX_UPLOAD_BYTES ? "image.errorExcelSize" : "image.errorExcelType"));
       return;
     }
-    if (nextFile.size > MAX_UPLOAD_BYTES) {
-      setExcelLoading(false);
-      setExcelError(t("image.errorExcelSize"));
-      return;
-    }
-
-    setExcelFile(nextFile);
-    setExcelSheets([]);
-    setExcelSheet("");
-    setExcelColumns([]);
-    setExcelReferenceColumnState("");
-    setExcelReplacementColumn("");
-    setExcelIcnColumn("");
-    setExcelPieceColumn("");
-    setExcelPieces([]);
-    setExcelPieceRow("");
-    setExcelError("");
-    setExcelLoading(true);
-
-    const formData = new FormData();
-    formData.append("workbook", nextFile);
-    try {
-      const payload = await imageReplaceApi.excelSheets(formData);
-      if (requestId !== excelRequestId.current) return;
-      if (payload.sheets.length === 0) throw new Error("The workbook contains no sheets.");
-      setExcelSheets(payload.sheets);
-    } catch (requestError) {
-      if (requestId === excelRequestId.current) {
-        setExcelError(requestError instanceof Error ? requestError.message : t("image.errorGeneric"));
+    setRestored(null);
+    setState({ ...EMPTY, workbook: file });
+    await load(async (currentRequest) => {
+      const form = new FormData();
+      form.append("workbook", file);
+      const payload = await imageReplaceApi.excelSheets(form);
+      if (payload.sheets.length === 0) throw new Error(t("image.errorExcelSheets"));
+      if (currentRequest === requestId.current) {
+        setState((current) => ({ ...current, sheets: payload.sheets }));
       }
-    } finally {
-      if (requestId === excelRequestId.current) setExcelLoading(false);
-    }
+    });
   }
 
-  async function chooseExcelSheet(sheetName: string) {
-    const requestId = ++excelRequestId.current;
-    setExcelSheet(sheetName);
-    setExcelColumns([]);
-    setExcelReferenceColumnState("");
-    setExcelReplacementColumn("");
-    setExcelIcnColumn("");
-    setExcelPieceColumn("");
-    setExcelPieces([]);
-    setExcelPieceRow("");
-    setExcelError("");
-    if (!sheetName || !excelFile) {
+  async function chooseExcelSheet(sheet: string) {
+    setRestored(null);
+    setState((current) => ({ ...EMPTY, workbook: current.workbook, sheets: current.sheets, sheet }));
+    if (!sheet || !state.workbook) {
+      requestId.current += 1;
       setExcelLoading(false);
       return;
     }
-
-    setExcelLoading(true);
-    const formData = new FormData();
-    formData.append("workbook", excelFile);
-    formData.append("sheet_name", sheetName);
-    try {
-      const payload = await imageReplaceApi.excelColumns(formData);
-      if (requestId === excelRequestId.current) setExcelColumns(payload.columns);
-    } catch (requestError) {
-      if (requestId === excelRequestId.current) {
-        setExcelError(requestError instanceof Error ? requestError.message : t("image.errorGeneric"));
+    await load(async (currentRequest) => {
+      const form = new FormData();
+      form.append("workbook", state.workbook!);
+      form.append("sheet_name", sheet);
+      const payload = await imageReplaceApi.excelColumns(form);
+      if (currentRequest === requestId.current) {
+        setState((current) => ({ ...current, columns: payload.columns }));
       }
-    } finally {
-      if (requestId === excelRequestId.current) setExcelLoading(false);
-    }
+    });
   }
 
-  async function chooseExcelPieceColumn(
-    column: string,
-    referenceColumn = excelReferenceColumn,
-  ) {
-    const requestId = ++excelRequestId.current;
-    setExcelPieceColumn(column);
-    setExcelPieces([]);
-    setExcelPieceRow("");
-    setExcelError("");
-    if (!column || !referenceColumn || !excelFile || !excelSheet) {
+  async function chooseExcelPieceColumn(column: string, referenceColumn = state.referenceColumn) {
+    setRestored(null);
+    setState((current) => ({ ...current, pieceColumn: column, pieces: [], pieceRow: "" }));
+    if (!column || !referenceColumn || !state.workbook || !state.sheet) {
+      requestId.current += 1;
       setExcelLoading(false);
       return;
     }
-
-    setExcelLoading(true);
-    const formData = new FormData();
-    formData.append("workbook", excelFile);
-    formData.append("sheet_name", excelSheet);
-    formData.append("reference_column", referenceColumn);
-    formData.append("piece_column", column);
-    try {
-      const payload = await imageReplaceApi.excelPieces(formData);
-      if (requestId === excelRequestId.current) setExcelPieces(payload.pieces);
-    } catch (requestError) {
-      if (requestId === excelRequestId.current) {
-        setExcelError(requestError instanceof Error ? requestError.message : t("image.errorGeneric"));
+    await load(async (currentRequest) => {
+      const form = new FormData();
+      form.append("workbook", state.workbook!);
+      form.append("sheet_name", state.sheet);
+      form.append("reference_column", referenceColumn);
+      form.append("piece_column", column);
+      const payload = await imageReplaceApi.excelPieces(form);
+      if (currentRequest === requestId.current) {
+        setState((current) => ({ ...current, pieces: payload.pieces }));
       }
-    } finally {
-      if (requestId === excelRequestId.current) setExcelLoading(false);
-    }
+    });
   }
 
-  function setExcelReferenceColumn(column: string) {
-    setExcelReferenceColumnState(column);
-    setExcelPieceRow("");
+  function setExcelReferenceColumn(referenceColumn: string) {
+    setState((current) => ({ ...current, referenceColumn, pieceRow: "" }));
     setExcelError("");
-    if (excelPieceColumn) void chooseExcelPieceColumn(excelPieceColumn, column);
+    if (state.pieceColumn) void chooseExcelPieceColumn(state.pieceColumn, referenceColumn);
   }
+
+  const restoreExcel = useCallback((snapshot: ExcelSnapshot) => {
+    requestId.current += 1;
+    const { workbook: stored, pairs, ...mapping } = snapshot;
+    const workbook = stored ? restoreFile(stored) : null;
+    setRestored({ selection: { ...mapping, workbook }, pairs });
+    setState({ ...mapping, workbook });
+    setExcelError("");
+    setExcelLoading(false);
+  }, []);
 
   function removeExcel() {
-    excelRequestId.current += 1;
-    setExcelFile(null);
-    setExcelSheets([]);
-    setExcelSheet("");
-    setExcelColumns([]);
-    setExcelReferenceColumnState("");
-    setExcelReplacementColumn("");
-    setExcelIcnColumn("");
-    setExcelPieceColumn("");
-    setExcelPieces([]);
-    setExcelPieceRow("");
-    setExcelLoading(false);
+    requestId.current += 1;
+    setRestored(null);
+    setState(EMPTY);
     setExcelError("");
+    setExcelLoading(false);
   }
 
-  const excelSelectionConfigured = Boolean(
-    excelFile &&
-      excelSheet &&
-      excelReferenceColumn &&
-      excelReplacementColumn &&
-      excelIcnColumn &&
-      excelPieceColumn &&
-      excelPieceRow,
-  );
-  const excelSelectionReady =
-    !excelFile || (excelSelectionConfigured && excelPairPreview.ready);
+  function resetPiece() {
+    setRestored(null);
+    setState((current) => ({ ...current, pieceRow: "" }));
+  }
 
+  const configured = Boolean(
+    state.workbook && state.sheet && state.referenceColumn && state.replacementColumn &&
+    state.icnColumn && state.pieceColumn && state.pieceRow,
+  );
   return {
-    excelFile,
-    excelSheets,
-    excelSheet,
-    excelColumns,
-    excelReferenceColumn,
-    excelReplacementColumn,
-    excelIcnColumn,
-    excelPieceColumn,
-    excelPieces,
-    excelPieceRow,
-    excelError,
-    excelLoading,
-    excelPairs: excelPairPreview.pairs,
-    excelPairsLoading: excelPairPreview.loading,
-    excelPairsReady: excelPairPreview.ready,
-    excelSelectionConfigured,
-    excelSelectionReady,
-    chooseExcel,
-    chooseExcelSheet,
-    chooseExcelPieceColumn,
-    removeExcel,
-    setExcelReferenceColumn,
-    setExcelReplacementColumn,
-    setExcelIcnColumn,
-    setExcelPieceRow,
-    updateExcelPair: excelPairPreview.updatePair,
-    removeExcelPair: excelPairPreview.removePair,
+    persistenceState, restoreExcel, resetPiece,
+    excelFile: state.workbook, excelSheets: state.sheets, excelSheet: state.sheet,
+    excelColumns: state.columns, excelReferenceColumn: state.referenceColumn,
+    excelReplacementColumn: state.replacementColumn, excelIcnColumn: state.icnColumn,
+    excelPieceColumn: state.pieceColumn, excelPieces: state.pieces, excelPieceRow: state.pieceRow,
+    excelError, excelLoading, excelPairs: preview.pairs, excelPairsLoading: preview.loading,
+    excelPairsReady: preview.ready, excelSelectionConfigured: configured,
+    excelSelectionReady: !state.workbook || (configured && preview.ready),
+    chooseExcel, chooseExcelSheet, chooseExcelPieceColumn, removeExcel, setExcelReferenceColumn,
+    setExcelReplacementColumn: (replacementColumn: string) =>
+      setState((current) => ({ ...current, replacementColumn })),
+    setExcelIcnColumn: (icnColumn: string) => setState((current) => ({ ...current, icnColumn })),
+    setExcelPieceRow: (pieceRow: string) => {
+      setRestored(null);
+      setState((current) => ({ ...current, pieceRow }));
+    },
+    updateExcelPair: preview.updatePair, removeExcelPair: preview.removePair,
+    toggleExcelPair: preview.togglePair,
   };
 }

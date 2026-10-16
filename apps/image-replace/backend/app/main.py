@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, excel, health, inpaint, ocr
+from app.api import admin, excel, health, history, image_export, inpaint, ocr, workspace
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
@@ -73,7 +73,7 @@ def create_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "X-Requested-With", REQUEST_ID_HEADER],
-        expose_headers=[REQUEST_ID_HEADER],
+        expose_headers=[REQUEST_ID_HEADER, "Content-Disposition"],
     )
     app.add_middleware(RequestIdMiddleware)
 
@@ -86,6 +86,9 @@ def create_app() -> FastAPI:
     api_v1.include_router(excel.router)
     api_v1.include_router(ocr.router)
     api_v1.include_router(inpaint.router)
+    api_v1.include_router(image_export.router)
+    api_v1.include_router(workspace.router)
+    api_v1.include_router(history.router)
     app.include_router(api_v1)
 
     _mount_frontend(app)

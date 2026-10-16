@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { mockWorkspace } from "./workspace-mock";
+
+test.beforeEach(async ({ page }) => { await mockWorkspace(page); });
 
 const imageData =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/GNcAAAAASUVORK5CYII=";
@@ -41,7 +44,9 @@ test("detection workflow uploads an image and displays OCR replacements", async 
 
   await page.goto("/");
   const navigation = page.getByRole("navigation");
-  await expect(navigation.getByRole("link")).toHaveCount(2);
+  await expect(navigation.getByRole("link")).toHaveCount(3);
+  await expect(navigation.getByRole("link")).toHaveText(["Détection", "Historique", "Paramètres"]);
+  await expect(navigation.getByRole("link", { name: "Historique" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Paramètres" })).toBeVisible();
   await expect(navigation.getByRole("link", { name: "Données" })).toHaveCount(0);
 

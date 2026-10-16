@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "../i18n";
 import { imageReplaceApi, type OcrResultDto } from "../lib/api";
 import { Home } from "./Home";
+import { mockWorkspaceApi, renderWorkflow as render, selectExcelPartInHome } from "../test/workflow";
 
 const originalUrlMethodDescriptors = new Map(
   ["createObjectURL", "revokeObjectURL"].map((method) => [
@@ -13,47 +14,10 @@ const originalUrlMethodDescriptors = new Map(
   ]),
 );
 
-async function selectExcelPartInHome(
-  user: ReturnType<typeof userEvent.setup>,
-  container: HTMLElement,
-) {
-  const excelInput = container.querySelector<HTMLInputElement>(
-    'input[type="file"][accept=".xlsx,.xlsm"]',
-  );
-  if (!excelInput) throw new Error("Expected an Excel input.");
-
-  vi.spyOn(imageReplaceApi, "excelSheets").mockResolvedValue({ sheets: ["Parts"] });
-  vi.spyOn(imageReplaceApi, "excelColumns").mockResolvedValue({
-    columns: [
-      { index: 1, letter: "A", header: "Reference", label: "A — Reference" },
-      { index: 2, letter: "B", header: "Description", label: "B — Description" },
-      { index: 3, letter: "C", header: "Replacement", label: "C — Replacement" },
-      { index: 4, letter: "D", header: "ICN", label: "D — ICN" },
-      { index: 5, letter: "E", header: "Part", label: "E — Part" },
-    ],
-  });
-  vi.spyOn(imageReplaceApi, "excelPieces").mockResolvedValue({
-    pieces: [{ row: 2, name: "Pump A" }],
-  });
-
-  await user.upload(
-    excelInput,
-    new File(["synthetic workbook"], "mapping.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
-  );
-  await user.selectOptions(await screen.findByLabelText("Onglet"), "Parts");
-  await user.selectOptions(await screen.findByLabelText("Références à remplacer"), "1");
-  await user.selectOptions(screen.getByLabelText("Nouveaux repères"), "3");
-  await user.selectOptions(screen.getByLabelText("ICN (nom du JPG)"), "4");
-  await user.selectOptions(screen.getByLabelText("Noms des pièces"), "5");
-  await screen.findByRole("option", { name: "Pump A" });
-  await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
-}
-
 describe("Image Replace home workflow", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("fr");
+    mockWorkspaceApi();
   });
 
   afterEach(() => {
@@ -68,8 +32,9 @@ describe("Image Replace home workflow", () => {
     }
   });
 
-  it("starts with OCR disabled until an image is selected", () => {
+  it("starts with OCR disabled until an image is selected", async () => {
     render(<Home />);
+    await screen.findByText("Sauvegarde locale à jour.");
 
     expect(screen.getByRole("heading", { name: "Détection et remplacement" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Lancer l’OCR sur CPU" })).toBeDisabled();
@@ -162,6 +127,7 @@ describe("Image Replace home workflow", () => {
     };
     const ocrSpy = vi.spyOn(imageReplaceApi, "runOcr").mockResolvedValue(ocrResult);
 
+    await screen.findByText("Sauvegarde locale à jour.");
     await user.upload(imageInput, new File(["synthetic image"], "source.png", { type: "image/png" }));
     await user.upload(
       excelInput,

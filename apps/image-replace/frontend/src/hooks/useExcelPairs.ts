@@ -1,9 +1,10 @@
 import type { TFunction } from "i18next";
 import { useEffect, useRef, useState } from "react";
 
-import { imageReplaceApi, type ExcelReplacementPairDto } from "../lib/api";
+import { imageReplaceApi } from "../lib/api";
+import type { ReplacementPair } from "../lib/workspace-api";
 
-export type EditableExcelPair = ExcelReplacementPairDto & { id: number };
+export type EditableExcelPair = ReplacementPair;
 
 export type ExcelPairSelection = {
   workbook: File | null;
@@ -14,6 +15,8 @@ export type ExcelPairSelection = {
   pieceColumn: string;
   pieceRow: string;
 };
+export type RestoredExcelPairs = { selection: ExcelPairSelection; pairs: ReplacementPair[] };
+const EMPTY_PAIRS: ReplacementPair[] = [];
 
 function matchesSelection(
   loaded: ExcelPairSelection | null,
@@ -35,12 +38,15 @@ export function useExcelPairs(
   selection: ExcelPairSelection,
   t: TFunction,
   setError: (message: string) => void,
+  restored: RestoredExcelPairs | null = null,
 ) {
   const [pairs, setPairs] = useState<EditableExcelPair[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadedSelection, setLoadedSelection] = useState<ExcelPairSelection | null>(null);
   const requestId = useRef(0);
   const nextPairId = useRef(0);
+  const translate = useRef(t);
+  translate.current = t;
 
   const {
     workbook,
@@ -75,6 +81,13 @@ export function useExcelPairs(
       pieceColumn,
       pieceRow,
     };
+    if (restored && matchesSelection(restored.selection, currentSelection)) {
+      setPairs(restored.pairs);
+      setLoadedSelection(currentSelection);
+      nextPairId.current = Math.max(-1, ...restored.pairs.map((pair) => pair.id)) + 1;
+      setLoading(false);
+      return undefined;
+    }
     setPairs([]);
     setLoadedSelection(null);
     setLoading(true);
@@ -97,6 +110,7 @@ export function useExcelPairs(
           payload.pairs.map((pair) => ({
             ...pair,
             id: nextPairId.current++,
+            enabled: true,
           })),
         );
         setLoadedSelection(currentSelection);
@@ -104,7 +118,7 @@ export function useExcelPairs(
       .catch((requestError: unknown) => {
         if (currentRequestId === requestId.current) {
           setError(
-            requestError instanceof Error ? requestError.message : t("image.errorGeneric"),
+            requestError instanceof Error ? requestError.message : translate.current("image.errorGeneric"),
           );
         }
       })
@@ -125,7 +139,7 @@ export function useExcelPairs(
     pieceRow,
     selectionComplete,
     setError,
-    t,
+    restored,
   ]);
 
   function updatePair(id: number, field: "reference" | "replacement", value: string) {
@@ -137,12 +151,18 @@ export function useExcelPairs(
   function removePair(id: number) {
     setPairs((current) => current.filter((pair) => pair.id !== id));
   }
+  function togglePair(id: number) {
+    setPairs((current) =>
+      current.map((pair) => pair.id === id ? { ...pair, enabled: !pair.enabled } : pair),
+    );
+  }
 
   return {
-    pairs: loadedForCurrentSelection ? pairs : [],
+    pairs: loadedForCurrentSelection ? pairs : EMPTY_PAIRS,
     loading: selectionComplete && loading,
     ready: !workbook || loadedForCurrentSelection,
     updatePair,
     removePair,
+    togglePair,
   };
 }

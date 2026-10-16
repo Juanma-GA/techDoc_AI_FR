@@ -10,17 +10,15 @@ export const MAX_BRUSH_SIZE = 80;
 
 type ImageBrushOptions = {
   imageFile: File | null;
-  previewImage: string;
-  hasProcessedPreview: boolean;
-  onImageEdited: (image: string) => void;
+  onImageEdited: (image: string, mode: "lama" | "color") => void;
+  onBusyChange: (busy: boolean) => void;
   t: TFunction;
 };
 
 export function useImageBrush({
   imageFile,
-  previewImage,
-  hasProcessedPreview,
   onImageEdited,
+  onBusyChange,
   t,
 }: ImageBrushOptions) {
   const [eraseMode, setEraseMode] = useState<"lama" | "color">("lama");
@@ -121,6 +119,7 @@ export function useImageBrush({
     if (!imageFile || !canvas || !hasBrushMask || inpainting) return;
 
     setInpainting(true);
+    onBusyChange(true);
     setInpaintError("");
     try {
       const maskBlob = await new Promise<Blob | null>((resolve) =>
@@ -128,17 +127,15 @@ export function useImageBrush({
       );
       if (!maskBlob) throw new Error(t("image.errorMask"));
 
-      const imageBlob = hasProcessedPreview
-        ? await (await fetch(previewImage)).blob()
-        : imageFile;
+      const imageBlob = imageFile;
       if (eraseMode === "color") {
-        onImageEdited(await fillWithDetectedBackground(imageBlob, canvas, t));
+        onImageEdited(await fillWithDetectedBackground(imageBlob, canvas, t), eraseMode);
       } else {
         const formData = new FormData();
         formData.append("image", imageBlob, imageBlob.type === "image/jpeg" ? "image.jpg" : "image.png");
         formData.append("mask", maskBlob, "mask.png");
         const payload = await imageReplaceApi.inpaint(formData);
-        onImageEdited(payload.edited_image);
+        onImageEdited(payload.edited_image, eraseMode);
       }
       setBrushEnabled(false);
       clearBrushMask();
@@ -146,6 +143,7 @@ export function useImageBrush({
       setInpaintError(requestError instanceof Error ? requestError.message : t("image.errorGeneric"));
     } finally {
       setInpainting(false);
+      onBusyChange(false);
     }
   }
 

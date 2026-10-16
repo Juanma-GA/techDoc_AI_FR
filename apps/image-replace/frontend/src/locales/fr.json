@@ -10,7 +10,8 @@
     "languageSwitcher": "Langue",
     "home": "Détection",
     "data": "Données",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "history": "Historique"
   },
   "demo": {
     "badge": "MODE DÉMO",
@@ -43,6 +44,13 @@
     "subtitle": "Analyse une image localement, retrouve les références et remplace-les si besoin."
   },
   "image": {
+    "newImage": "Nouvelle image",
+    "undo": "Annuler la dernière modification",
+    "selectedPairs": "{{count}} / {{total}} sélectionnés",
+    "selectPair": "Appliquer le couple {{number}}",
+    "selectExcelPair": "Appliquer le couple Excel {{number}}",
+    "selectionHint": "Seuls les couples cochés seront appliqués. Chaque relance utilise la dernière image, y compris les retouches au pinceau. Décoche les couples déjà traités pour poursuivre sur d’autres références.",
+    "errorExcelSheets": "Le classeur ne contient aucun onglet.",
     "inputTitle": "Image et remplacements",
     "inputDescription": "Prépare les éléments à analyser",
     "resultTitle": "Résultat de l’analyse",
@@ -93,6 +101,7 @@
     "resultImageAlt": "Image résultante au format A4 portrait",
     "brushMask": "Masque des zones à effacer",
     "download": "Télécharger",
+    "downloading": "Préparation du JPG...",
     "wheelZoom": "Molette pour zoomer · glisser pour déplacer",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",
@@ -137,6 +146,32 @@
     "errorEmptySelection": "La sélection est vide.",
     "errorDetectColor": "Impossible de détecter la couleur autour de la sélection.",
     "errorMask": "Impossible de préparer le masque du pinceau."
+  },
+  "history": {
+    "title": "Historique",
+    "subtitle": "Retrouve chaque image et reprends son dernier état complet. Les fichiers restent dans le stockage local.",
+    "empty": "Aucune image enregistrée pour le moment.",
+    "open": "Reprendre",
+    "delete": "Supprimer",
+    "confirmDelete": "Cliquer encore pour confirmer",
+    "deleteError": "Impossible de supprimer cette image de l’historique.",
+    "more": "Charger la suite",
+    "operations": "Opérations sur cette image",
+    "operationCount_one": "{{count}} opération",
+    "operationCount_other": "{{count}} opérations",
+    "loadError": "Impossible de restaurer cet historique.",
+    "startupError": "Impossible de restaurer le dernier Excel.",
+    "saveError": "La sauvegarde locale a échoué. Les modifications restent en mémoire ; réessaie avant de quitter.",
+    "retry": "Réessayer",
+    "restoringExcel": "Restauration du dernier Excel…",
+    "saving": "Sauvegarde locale en cours…",
+    "saved": "Sauvegarde locale à jour.",
+    "actions": {
+      "ocr": "Analyse et remplacement OCR",
+      "brush-lama": "Effacement au pinceau avec LaMa",
+      "brush-color": "Effacement au pinceau avec couleur locale",
+      "undo": "Annulation de la dernière modification"
+    }
   },
   "data": {
     "title": "Données",

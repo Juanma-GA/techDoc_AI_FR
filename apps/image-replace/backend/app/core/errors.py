@@ -41,7 +41,10 @@ def register_error_handlers(app: FastAPI) -> None:
         rid = request.headers.get(REQUEST_ID_HEADER, "")
         return JSONResponse(
             status_code=422,
-            content=_payload("VALIDATION_ERROR", "Invalid request", exc.errors(), rid),
+            content=_payload("VALIDATION_ERROR", "Invalid request", [
+                {"type": error["type"], "loc": error["loc"], "msg": error["msg"]}
+                for error in exc.errors()
+            ], rid),
         )
 
     @app.exception_handler(StarletteHTTPException)

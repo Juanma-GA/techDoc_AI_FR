@@ -1,17 +1,20 @@
-import { useState } from "react";
+import { Button } from "@internal/ui";
+import { ImagePlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ImageInputPanel } from "../components/ImageInputPanel";
 import { ImagePreview } from "../components/ImagePreview";
 import { OcrResults } from "../components/OcrResults";
-import { useImageReplace } from "../hooks/useImageReplace";
+import { WorkspaceOperations } from "../components/WorkspaceOperations";
+import { WorkspaceStatus } from "../components/WorkspaceStatus";
+import { useWorkflow } from "../hooks/WorkflowProvider";
 
 export function Home() {
   const { t } = useTranslation();
-  const workflow = useImageReplace(t);
-  const [retouching, setRetouching] = useState(false);
+  const workflow = useWorkflow();
   const busy =
-    workflow.loading || workflow.excelLoading || workflow.excelPairsLoading || retouching;
+    !workflow.storage.ready || workflow.loading || workflow.excelLoading ||
+    workflow.excelPairsLoading || workflow.retouching || workflow.restoring || workflow.downloading;
 
   return (
     <div className="space-y-4">
@@ -20,8 +23,14 @@ export function Home() {
           <h1>{t("home.title")}</h1>
           <p>{t("home.subtitle")}</p>
         </div>
+        {workflow.imageFile ? (
+          <Button variant="secondary" disabled={busy} onClick={() => void workflow.newImage()}>
+            <ImagePlus size={16} aria-hidden="true" />{t("image.newImage")}
+          </Button>
+        ) : null}
       </header>
 
+      <WorkspaceStatus />
       <form
         onSubmit={workflow.submit}
         className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)]"
@@ -29,16 +38,23 @@ export function Home() {
         <ImageInputPanel workflow={workflow} disabled={busy} t={t} />
         <div className="min-w-0 space-y-4">
           <ImagePreview
-            imageFile={workflow.imageFile}
+            imageFile={workflow.currentFile}
             imageUrl={workflow.imageUrl}
             result={workflow.result}
             disabled={busy}
-            onInpaintingChange={setRetouching}
+            manuallyEdited={workflow.manuallyEdited}
+            canUndo={workflow.canUndo}
+            onUndo={workflow.undo}
+            onDownload={() => void workflow.downloadImage()}
+            downloading={workflow.downloading}
+            onImageEdited={workflow.applyBrush}
+            onInpaintingChange={workflow.setRetouching}
             t={t}
           />
           <OcrResults result={workflow.result} t={t} />
         </div>
       </form>
+      <WorkspaceOperations operations={workflow.document?.operations ?? []} />
     </div>
   );
 }

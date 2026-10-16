@@ -22,6 +22,22 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - `alembic.ini` : `sqlalchemy.url`
 - `.env.example` : valeurs par défaut
 
+## Workspace persistence
+
+- `app/workspace_schemas.py` validates startup preferences and complete history snapshots.
+- `api/workspace.py` persists the startup workbook and mapping without an image or selected part.
+- `api/history.py` saves/restores complete image workspaces and serves lightweight paginated summaries.
+- `services/workspace_storage.py` writes versioned files under `data/storage`, stores
+  UUID references and SHA-256 metadata in SQLite, and checks file integrity on restoration.
+- Migration `0002_workspaces` adds `excel_preset`, `image_history`, and `file_asset`.
+- Backend tests use isolated SQLite databases and temporary synthetic-file storage.
+  Never point test commands or migration checks at user data.
+- `POST /api/v1/image-replace/export` converts the current image to an A4/300 dpi
+  JPEG and returns the selected Excel ICN as the download filename, without suffixes.
+  It uses the same filename sanitization as OCR and history. History caches the
+  output name in snapshot metadata; older snapshots derive it from their analysis
+  or selected workbook without loading image payloads for listing. No new DB migration.
+
 ## Layout
 
 ```
