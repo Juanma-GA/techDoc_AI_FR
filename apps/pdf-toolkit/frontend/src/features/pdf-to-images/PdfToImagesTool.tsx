@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { FileText, Image } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "../../shared/components/Button";
+import { Button, Card, Select, Spinner } from "@internal/ui";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { renderPdfImages, type RasterFormat } from "./renderPdfImages";
 
@@ -71,7 +71,7 @@ export function PdfToImagesTool() {
 
   return (
     <form className="workflow-grid" onSubmit={submit}>
-      <section className="panel">
+      <Card className="panel">
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
@@ -99,9 +99,9 @@ export function PdfToImagesTool() {
           </div>
         ) : null}
         <p className="privacy-hint">{t("pdfToImages.privacy")}</p>
-      </section>
+      </Card>
 
-      <section className="panel action-panel">
+      <Card className="panel action-panel">
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
@@ -112,9 +112,12 @@ export function PdfToImagesTool() {
         <label className="field-label" htmlFor={formatSelectId}>
           {t("pdfToImages.formatLabel")}
         </label>
-        <select
+        <Select
           id={formatSelectId}
-          className="text-input"
+          options={[
+            { value: "png", label: t("pdfToImages.png") },
+            { value: "jpeg", label: t("pdfToImages.jpeg") },
+          ]}
           value={format}
           disabled={working}
           onChange={(event) => {
@@ -124,10 +127,7 @@ export function PdfToImagesTool() {
               setSuccess(false);
             }
           }}
-        >
-          <option value="png">{t("pdfToImages.png")}</option>
-          <option value="jpeg">{t("pdfToImages.jpeg")}</option>
-        </select>
+        />
         <div className="output-preview">
           <span className="output-icon">
             <Image size={21} aria-hidden="true" />
@@ -139,12 +139,12 @@ export function PdfToImagesTool() {
         </div>
         {working && progress.total > 0 ? (
           <p className="preview-status" role="status">
-            <span className="spinner" aria-hidden="true" />
+            <Spinner aria-label={t("common.loading")} />
             {t("pdfToImages.progress", progress)}
           </p>
         ) : null}
         <Button type="submit" disabled={working || !file} className="action-button">
-          {working ? <span className="spinner" aria-hidden="true" /> : <Image size={18} />}
+          {working ? <Spinner aria-label={t("common.loading")} /> : <Image size={18} />}
           {working ? t("pdfToImages.working") : t("pdfToImages.action")}
         </Button>
         <div className="feedback-slot">
@@ -159,7 +159,7 @@ export function PdfToImagesTool() {
             </p>
           ) : null}
         </div>
-      </section>
+      </Card>
     </form>
   );
 }

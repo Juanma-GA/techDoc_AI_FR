@@ -3,14 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#10131c" />
+    <link rel="stylesheet" href="./theme.css" />
+    <script>document.documentElement.classList.toggle("dark", localStorage.getItem("theme") !== "light");</script>
     <title>PDF Toolkit — Démarrage</title>
     <style>
       :root {
-        color-scheme: dark;
+        color-scheme: light dark;
         font-family: Inter, "Segoe UI", sans-serif;
-        background: #10131c;
-        color: #f5f7fb;
+        background: var(--color-bg-base);
+        color: var(--color-text-base);
         font-synthesis: none;
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
@@ -28,8 +29,8 @@
         place-items: center;
         overflow: hidden;
         background:
-          radial-gradient(ellipse at 50% 5%, rgb(79 107 255 / 17%), transparent 54%),
-          #10131c;
+          radial-gradient(ellipse at 50% 5%, color-mix(in srgb, var(--color-brand-blue) 17%, transparent), transparent 54%),
+          var(--color-bg-base);
       }
 
       main {
@@ -44,11 +45,10 @@
         margin: 0 auto 22px;
         display: grid;
         place-items: center;
-        border: 1px solid rgb(127 147 255 / 35%);
+        border: 1px solid var(--color-border-bright);
         border-radius: 20px;
-        background: linear-gradient(145deg, rgb(91 113 255 / 26%), rgb(59 71 133 / 15%));
-        box-shadow: 0 12px 38px rgb(56 77 200 / 18%);
-        color: #b9c4ff;
+        background: var(--color-card-base);
+        color: var(--color-brand-blue-light);
         font-size: 19px;
         font-weight: 750;
         letter-spacing: -1px;
@@ -63,7 +63,7 @@
 
       .subtitle {
         margin: 9px 0 26px;
-        color: #a3a9ba;
+        color: var(--color-text-dim);
         font-size: 14px;
         line-height: 1.55;
       }
@@ -72,16 +72,16 @@
         width: 34px;
         height: 34px;
         margin: 0 auto 14px;
-        border: 3px solid rgb(160 171 255 / 20%);
-        border-top-color: #9baaff;
-        border-right-color: #7489ff;
+        border: 3px solid var(--color-border-md);
+        border-top-color: var(--color-brand-blue-light);
+        border-right-color: var(--color-brand-blue);
         border-radius: 50%;
         animation: spin 0.9s linear infinite;
       }
 
       .status {
         margin: 0;
-        color: #c2c8d8;
+        color: var(--color-text-dim);
         font-size: 13px;
       }
 
@@ -90,7 +90,7 @@
         margin: 25px auto 0;
         overflow: hidden;
         border-radius: 999px;
-        background: rgb(255 255 255 / 8%);
+        background: var(--color-border-base);
       }
 
       .progress::after {
@@ -98,7 +98,7 @@
         height: 100%;
         display: block;
         border-radius: inherit;
-        background: linear-gradient(90deg, #758aff, #b2bbff);
+        background: var(--color-brand-blue-light);
         content: "";
         animation: progress 1.7s ease-in-out infinite;
       }
@@ -107,10 +107,10 @@
         display: none;
         margin-top: 22px;
         padding: 13px 15px;
-        border: 1px solid rgb(255 120 120 / 25%);
+        border: 1px solid var(--color-semantic-danger);
         border-radius: 12px;
-        background: rgb(125 42 52 / 18%);
-        color: #ffc1c1;
+        background: var(--color-card-base);
+        color: var(--color-semantic-danger);
         font-size: 13px;
         line-height: 1.55;
         text-align: left;
@@ -124,11 +124,11 @@
       .error strong {
         display: block;
         margin-bottom: 4px;
-        color: #ffdddd;
+        color: var(--color-semantic-danger);
       }
 
       .error-detail {
-        color: #e1aeb4;
+        color: var(--color-text-dim);
         font-size: 12px;
       }
 

@@ -1,0 +1,14 @@
+{
+  "adapter": "fastapi",
+  "slug": "TEMPLATE",
+  "dev": {
+    "executable": "../backend/.venv/Scripts/python.exe",
+    "cwd": "../backend"
+  },
+  "build": {
+    "executable": "runtime/python/python.exe",
+    "cwd": "runtime/backend"
+  },
+  "args": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "{port}"],
+  "bootstrap": [["-m", "alembic", "upgrade", "head"]]
+}

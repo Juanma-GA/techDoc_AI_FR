@@ -1,10 +1,4 @@
-import {
-  type ChangeEvent,
-  type DragEvent,
-  useRef,
-  useState,
-} from "react";
-import { FileUp } from "lucide-react";
+import { FileDropzone as SharedFileDropzone } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
 import { validateImageFile, validatePDFFile } from "../files";
@@ -30,12 +24,9 @@ export function FileDropzone({
   description,
 }: FileDropzoneProps) {
   const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
   const imageFiles = fileType === "image";
 
-  const acceptFiles = (list: FileList | File[]) => {
-    const selected = Array.from(list);
+  const acceptFiles = (selected: File[]) => {
     if (selected.length === 0) {
       return;
     }
@@ -62,68 +53,17 @@ export function FileDropzone({
     onFiles(selected);
   };
 
-  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    if (event.currentTarget.files) {
-      acceptFiles(event.currentTarget.files);
-    }
-    event.currentTarget.value = "";
-  };
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setDragging(false);
-    if (!disabled) {
-      acceptFiles(event.dataTransfer.files);
-    }
-  };
-
   return (
-    <div
-      className={`dropzone${dragging ? " dropzone-active" : ""}${disabled ? " dropzone-disabled" : ""}`}
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-disabled={disabled}
-      onClick={() => {
-        if (!disabled) {
-          inputRef.current?.click();
-        }
-      }}
-      onKeyDown={(event) => {
-        if (!disabled && (event.key === "Enter" || event.key === " ")) {
-          event.preventDefault();
-          inputRef.current?.click();
-        }
-      }}
-      onDragOver={(event) => {
-        event.preventDefault();
-        if (!disabled) {
-          setDragging(true);
-        }
-      }}
-      onDragLeave={(event) => {
-        event.preventDefault();
-        setDragging(false);
-      }}
-      onDrop={handleDrop}
-    >
-      <span className="dropzone-icon">
-        <FileUp size={22} aria-hidden="true" />
-      </span>
-      <span className="dropzone-label">{label ?? t("files.dropLabel")}</span>
-      <span className="dropzone-description">{description ?? t("files.dropDescription")}</span>
-      <span className="dropzone-limit">{t(imageFiles ? "files.imageLimit" : "files.limit")}</span>
-      <input
-        ref={inputRef}
-        className="visually-hidden"
-        type="file"
+    <div>
+      <SharedFileDropzone
+        onFiles={acceptFiles}
         accept={imageFiles ? "image/png,image/jpeg,.png,.jpg,.jpeg" : "application/pdf,.pdf"}
         multiple={multiple}
         disabled={disabled}
-        onChange={handleChange}
-        tabIndex={-1}
-        hidden
-        aria-hidden="true"
+        label={label ?? t("files.dropLabel")}
+        description={description ?? t("files.dropDescription")}
       />
+      <p className="dropzone-limit">{t(imageFiles ? "files.imageLimit" : "files.limit")}</p>
     </div>
   );
 }

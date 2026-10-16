@@ -3,9 +3,9 @@ import { ArrowDown, ArrowUp, FileText, Image, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { formatOperationError, processPDF } from "../../shared/api";
-import { Button } from "../../shared/components/Button";
+import { Button, Card, Spinner } from "@internal/ui";
 import { FileDropzone } from "../../shared/components/FileDropzone";
-import { formatFileSize } from "../../shared/files";
+import { formatFileSize, moveFileInList } from "../../shared/files";
 
 export function ImagesToPdfTool() {
   const { t, i18n } = useTranslation();
@@ -16,15 +16,7 @@ export function ImagesToPdfTool() {
   const [working, setWorking] = useState(false);
 
   const moveFile = (index: number, offset: -1 | 1) => {
-    setFiles((current) => {
-      const target = index + offset;
-      if (target < 0 || target >= current.length) {
-        return current;
-      }
-      const updated = [...current];
-      [updated[index], updated[target]] = [updated[target], updated[index]];
-      return updated;
-    });
+    setFiles((current) => moveFileInList(current, index, offset));
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -53,7 +45,7 @@ export function ImagesToPdfTool() {
 
   return (
     <form className="workflow-grid" onSubmit={submit}>
-      <section className="panel">
+      <Card className="panel">
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
@@ -123,9 +115,9 @@ export function ImagesToPdfTool() {
           </ol>
         ) : null}
         <p className="privacy-hint">{t("imagesToPdf.privacy")}</p>
-      </section>
+      </Card>
 
-      <section className="panel action-panel">
+      <Card className="panel action-panel">
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
@@ -143,7 +135,7 @@ export function ImagesToPdfTool() {
           </span>
         </div>
         <Button type="submit" disabled={working || files.length === 0} className="action-button">
-          {working ? <span className="spinner" aria-hidden="true" /> : <FileText size={18} />}
+          {working ? <Spinner aria-label={t("common.loading")} /> : <FileText size={18} />}
           {working ? t("imagesToPdf.working") : t("imagesToPdf.action")}
         </Button>
         <div className="feedback-slot">
@@ -158,7 +150,7 @@ export function ImagesToPdfTool() {
             </p>
           ) : null}
         </div>
-      </section>
+      </Card>
     </form>
   );
 }

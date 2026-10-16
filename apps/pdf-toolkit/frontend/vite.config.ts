@@ -3,13 +3,26 @@ import react from "@vitejs/plugin-react";
 import { loadEnv } from "vite";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, frontendRoot, "VITE_");
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "desktop-splash-theme",
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "theme.css",
+            source: readFileSync(path.resolve(frontendRoot, "../../../design-tokens/theme.css"), "utf8"),
+          });
+        },
+      },
+    ],
     base: env.VITE_BASE ?? "/",
     resolve: {
       alias: {
@@ -30,7 +43,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: "node",
-      include: ["src/**/*.test.ts"],
+      include: ["src/**/*.test.{ts,tsx}"],
     },
   };
 });

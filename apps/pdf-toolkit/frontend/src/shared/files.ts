@@ -1,5 +1,16 @@
 export const MAX_FILE_SIZE = 250 * 1024 * 1024;
 
+export function moveFileInList(files: File[], index: number, offset: -1 | 1): File[] {
+  const file = files[index];
+  if (!file) throw new RangeError("Invalid file index");
+  const target = index + offset;
+  if (target < 0 || target >= files.length) return files;
+  const updated = [...files];
+  updated.splice(index, 1);
+  updated.splice(target, 0, file);
+  return updated;
+}
+
 export type PDFFileMetadata = Pick<File, "name" | "type" | "size">;
 
 export type PDFValidationMessages = {

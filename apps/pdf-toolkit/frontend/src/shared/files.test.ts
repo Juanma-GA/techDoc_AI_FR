@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { formatFileSize, MAX_FILE_SIZE, validateImageFile, validatePDFFile } from "./files";
+import { formatFileSize, MAX_FILE_SIZE, moveFileInList, validateImageFile, validatePDFFile } from "./files";
+
+describe("moveFileInList", () => {
+  it("reorders files without mutating the input and preserves boundary behavior", () => {
+    const files = [new File(["synthetic"], "first.pdf"), new File(["synthetic"], "second.pdf")];
+    expect(moveFileInList(files, 0, 1)).toEqual([files[1], files[0]]);
+    expect(files.map((file) => file.name)).toEqual(["first.pdf", "second.pdf"]);
+    expect(moveFileInList(files, 0, -1)).toBe(files);
+    expect(() => moveFileInList(files, -1, 1)).toThrow(RangeError);
+  });
+});
 
 describe("validatePDFFile", () => {
   it("accepts a PDF at the size limit", () => {

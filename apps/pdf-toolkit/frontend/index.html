@@ -8,7 +8,6 @@
       name="description"
       content="Fusionnez, extrayez, supprimez et réorganisez des PDF localement."
     />
-    <meta name="theme-color" content="#ffffff" />
     <title>PDF Toolkit</title>
     <script>
       (function () {
@@ -16,9 +15,6 @@
         var useDark = stored !== "light";
         if (useDark) {
           document.documentElement.classList.add("dark");
-          document
-            .querySelector('meta[name="theme-color"]')
-            .setAttribute("content", "#0e1117");
         }
       })();
     </script>

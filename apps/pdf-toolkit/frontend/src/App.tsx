@@ -13,9 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { CompressTool } from "./features/compress/CompressTool";
-import { AppShell, sidebarNavItemClass } from "./shared/components/AppShell";
-import { LanguageSwitcher } from "./shared/components/LanguageSwitcher";
-import { useMediaQuery } from "./shared/hooks/useMediaQuery";
+import { AppShell, LanguageSwitcher, Spinner, sidebarNavItemClass, useMediaQuery } from "@internal/ui";
 import { DeleteTool } from "./features/delete/DeleteTool";
 import { ExtractTool } from "./features/extract/ExtractTool";
 import { MergeTool } from "./features/merge/MergeTool";
@@ -72,13 +70,15 @@ export function App() {
     }
 
     event.preventDefault();
-    const nextTool = tools[nextIndex].id;
+    const nextTool = tools[nextIndex]?.id;
+    if (!nextTool) throw new RangeError("Invalid tool navigation index");
     setActiveTool(nextTool);
     document.getElementById(`tool-tab-${nextTool}`)?.focus();
   };
 
   return (
     <AppShell
+      className="pdf-toolkit-shell"
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
@@ -149,7 +149,7 @@ export function App() {
             <Suspense
               fallback={
                 <p className="preview-status" role="status">
-                  <span className="spinner" aria-hidden="true" />
+                  <Spinner aria-label={t("common.loading")} />
                   {t("common.loading")}
                 </p>
               }

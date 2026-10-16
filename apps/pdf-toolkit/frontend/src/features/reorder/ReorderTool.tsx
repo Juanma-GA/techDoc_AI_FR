@@ -20,7 +20,7 @@ import { FileText, Grip, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { formatOperationError, processPDF } from "../../shared/api";
-import { Button } from "../../shared/components/Button";
+import { Button, Card, Spinner } from "@internal/ui";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { renderPdfThumbnails, type PageThumbnail } from "./pdfPreview";
@@ -126,7 +126,7 @@ export function ReorderTool() {
 
   return (
     <form className="workflow-grid reorder-workflow" onSubmit={submit}>
-      <section className="panel">
+      <Card className="panel">
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
@@ -169,9 +169,9 @@ export function ReorderTool() {
             </Button>
           </div>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="panel thumbnail-panel">
+      <Card className="panel thumbnail-panel">
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
@@ -182,7 +182,7 @@ export function ReorderTool() {
 
         {previewLoading ? (
           <p className="preview-status" role="status">
-            <span className="spinner" aria-hidden="true" />
+            <Spinner aria-label={t("common.loading")} />
             {progress.total > 0
               ? t("reorder.previewProgress", progress)
               : t("reorder.previewProgressPending", progress)}
@@ -236,7 +236,7 @@ export function ReorderTool() {
             disabled={working || previewLoading || order.length === 0}
             className="action-button"
           >
-            {working ? <span className="spinner" aria-hidden="true" /> : <Grip size={18} />}
+            {working ? <Spinner aria-label={t("common.loading")} /> : <Grip size={18} />}
             {working ? t("reorder.working") : t("reorder.action")}
           </Button>
         </div>
@@ -252,7 +252,7 @@ export function ReorderTool() {
             </p>
           ) : null}
         </div>
-      </section>
+      </Card>
     </form>
   );
 }

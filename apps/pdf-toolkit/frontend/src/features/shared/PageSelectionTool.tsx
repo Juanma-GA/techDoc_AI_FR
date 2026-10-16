@@ -3,7 +3,7 @@ import { FileText, RotateCw, Scissors, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { formatOperationError, processPDF } from "../../shared/api";
-import { Button } from "../../shared/components/Button";
+import { Button, Card, Input, Select, Spinner } from "@internal/ui";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 
@@ -95,7 +95,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
 
   return (
     <form className="workflow-grid" onSubmit={submit}>
-      <section className="panel">
+      <Card className="panel">
         <div className="panel-heading">
           <span className="step-number">01</span>
           <div>
@@ -135,9 +135,9 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           </div>
         ) : null}
         <p className="privacy-hint">{t("pages.privacy")}</p>
-      </section>
+      </Card>
 
-      <section className="panel action-panel">
+      <Card className="panel action-panel">
         <div className="panel-heading">
           <span className="step-number">02</span>
           <div>
@@ -148,9 +148,9 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
         <label className="field-label" htmlFor={pageInputId}>
           {t(mode === "rotate" ? "rotate.pagesFieldLabel" : "pages.fieldLabel")}
         </label>
-        <input
+        <Input
           id={pageInputId}
-          className="text-input page-range-input"
+          className="page-range-input"
           type="text"
           autoComplete="off"
           spellCheck={false}
@@ -171,20 +171,20 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             <label className="field-label" htmlFor={rotationInputId}>
               {t("rotate.angleLabel")}
             </label>
-            <select
+            <Select
               id={rotationInputId}
-              className="text-input"
+              options={[
+                { value: "90", label: t("rotate.clockwise90") },
+                { value: "180", label: t("rotate.clockwise180") },
+                { value: "270", label: t("rotate.clockwise270") },
+              ]}
               value={rotation}
               disabled={working}
               onChange={(event) => {
                 setRotation(event.currentTarget.value);
                 setSuccess(false);
               }}
-            >
-              <option value="90">{t("rotate.clockwise90")}</option>
-              <option value="180">{t("rotate.clockwise180")}</option>
-              <option value="270">{t("rotate.clockwise270")}</option>
-            </select>
+            />
           </>
         ) : null}
         {mode === "delete" ? (
@@ -204,7 +204,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           disabled={working || !file || (mode !== "rotate" && !selection.trim())}
           className="action-button"
         >
-          {working ? <span className="spinner" aria-hidden="true" /> : <Icon size={18} />}
+          {working ? <Spinner aria-label={t("common.loading")} /> : <Icon size={18} />}
           {working ? t("pages.working") : t(config.actionKey)}
         </Button>
         <div className="feedback-slot">
@@ -219,7 +219,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             </p>
           ) : null}
         </div>
-      </section>
+      </Card>
     </form>
   );
 }

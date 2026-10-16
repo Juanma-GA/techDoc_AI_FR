@@ -1,104 +1,56 @@
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions
-
-set "APP_DIR=%~dp0"
-set "BACKEND_DIR=%APP_DIR%backend"
-set "FRONTEND_DIR=%APP_DIR%frontend"
-set "STATIC_DIR=%BACKEND_DIR%\web\static\generated"
 set "PORT=8085"
+set "APP_DIR=%~dp0"
+set "REPO_ROOT=%APP_DIR%..\.."
+set "BINARY=%APP_DIR%backend\bin\pdf-toolkit-backend.exe"
 set /a PORT_MAX=PORT+20
 
-echo ============================================================
-echo  PDF Toolkit - lancement local
-echo ============================================================
-echo.
-
-where go >nul 2>nul
-if errorlevel 1 (
-    echo [erreur] Go 1.25 ou plus recent est requis.
-    echo          Installez Go depuis https://go.dev/dl/ puis relancez.
-    pause
-    exit /b 1
-)
-for /f "tokens=3" %%V in ('go version') do echo [info] %%V detecte.
-
-set "NEED_BUILD=0"
-if not exist "%STATIC_DIR%\index.html" set "NEED_BUILD=1"
-if "%NEED_BUILD%"=="0" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%APP_DIR%_needs_rebuild.ps1" "%FRONTEND_DIR%" "%STATIC_DIR%"
-    if errorlevel 1 set "NEED_BUILD=1"
-)
-
-if "%NEED_BUILD%"=="0" goto :front_ready
-
+if exist "%REPO_ROOT%\go-embed\bin\go.exe" goto :embedded_go
+if not exist "%REPO_ROOT%\scripts\build_pdf_toolkit.mjs" goto :runtime
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [erreur] Node.js 20+ est requis pour construire le frontend.
-    pause
+    echo [error] Node.js 20+ is required to build the app from source.
     exit /b 1
 )
-where pnpm >nul 2>nul
+where go >nul 2>nul
 if errorlevel 1 (
-    echo [erreur] pnpm 9+ est requis pour construire le frontend.
-    echo          Activez pnpm avec Corepack ou installez-le via npm.
-    pause
+    echo [error] Go 1.25+ is required to build the backend from source.
     exit /b 1
 )
+node "%REPO_ROOT%\scripts\build_pdf_toolkit.mjs" --allow-stale
+if errorlevel 1 exit /b 1
+goto :runtime
 
-pushd "%FRONTEND_DIR%"
-if not exist node_modules (
-    echo [setup] Installation des dependances frontend...
-    call pnpm install
-    if errorlevel 1 (
-        popd
-        echo [erreur] Installation frontend echouee.
-        pause
-        exit /b 1
-    )
-)
-echo [setup] Build du frontend...
-call pnpm build
-if errorlevel 1 (
-    popd
-    echo [erreur] Build frontend echoue.
-    pause
+:embedded_go
+powershell -NoProfile -File "%APP_DIR%_build_backend.ps1" -AppDir "%APP_DIR%."
+if errorlevel 1 exit /b 1
+
+:runtime
+if not exist "%BINARY%" (
+    echo [error] Missing PDF Toolkit backend binary.
     exit /b 1
 )
-popd
-
-:front_ready
 set /a PORT_TRY=PORT
-
 :find_port
-netstat -ano | findstr /R /C:":%PORT_TRY% .*LISTENING" >nul 2>nul
+netstat -ano | findstr /R /C:":%PORT_TRY% " | findstr "LISTENING" >nul 2>nul
 if errorlevel 1 goto :port_ok
 set /a PORT_TRY=PORT_TRY+1
-if %PORT_TRY% GTR %PORT_MAX% goto :no_port
+if %PORT_TRY% GTR %PORT_MAX% (
+    echo [error] No free port between %PORT% and %PORT_MAX%.
+    exit /b 1
+)
 goto :find_port
 
-:no_port
-echo [erreur] Aucun port libre entre 8085 et %PORT_MAX%.
-pause
-exit /b 1
-
 :port_ok
-if not "%PORT_TRY%"=="%PORT%" echo [info] Port 8085 occupe ; utilisation du port %PORT_TRY%.
 set "PDF_TOOLKIT_ADDR=127.0.0.1:%PORT_TRY%"
 set "PDF_TOOLKIT_OPEN_BROWSER=1"
-echo.
-echo [run] Demarrage du serveur sur http://127.0.0.1:%PORT_TRY%/
-echo [wait] Le navigateur s'ouvrira quand le serveur sera pret.
-echo [info] La compilation Go peut prendre un moment au premier lancement.
-echo.
-pushd "%BACKEND_DIR%"
-go run -v .\cmd\pdf-toolkit
-set "RUN_STATUS=%ERRORLEVEL%"
-popd
-
-if not "%RUN_STATUS%"=="0" (
-    echo.
-    echo [erreur] Le serveur PDF Toolkit s'est arrete avec le code %RUN_STATUS%.
+echo [run] PDF Toolkit: http://127.0.0.1:%PORT_TRY%/
+echo [info] Ctrl+C to stop the server.
+"%BINARY%"
+set "STATUS=%ERRORLEVEL%"
+if not "%STATUS%"=="0" (
+    echo [error] Backend stopped or Windows denied execution. Exit code: %STATUS%.
+    echo [info] Contact IT if Windows Security reports a block. No protection was changed.
 )
-pause
-exit /b %RUN_STATUS%
+exit /b %STATUS%
