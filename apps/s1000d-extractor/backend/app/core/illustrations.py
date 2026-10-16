@@ -1,7 +1,7 @@
-"""Extraction des illustrations d'un PDF -> fichiers JPG nommes.
+"""Extraction des illustrations hors tableaux d'un PDF -> fichiers JPG nommes.
 
-On enregistre TOUTES les images du PDF (l'utilisateur veut pouvoir les
-recuperer), en les nommant d'apres la legende voisine ("Figure 3 ..." ->
+On enregistre les images du PDF situees hors des tableaux, en les nommant
+d'apres la legende voisine ("Figure 3 ..." ->
 `figure-3-....jpg`) quand elle existe, sinon `illustration_<doc>_<n>.jpg`. Chaque
 figure de l'IR recoit alors son ICN (nom de fichier) que le serialiseur
 reference dans `<graphic infoEntityIdent=...>` au lieu du placeholder TODO.
@@ -16,6 +16,7 @@ import hashlib
 import logging
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -138,7 +139,45 @@ def _figure_caption_rect(
     return _caption_rect(page, caption, page_analysis)
 
 
-def _image_records(page, xref_digest_cache: dict[int, bytes] | None = None):
+def _table_bboxes(
+    page: Any,
+    page_number: int,
+) -> list[tuple[float, float, float, float]]:
+    try:
+        tables = getattr(page.find_tables(), "tables", []) or []
+    except Exception as exc:
+        log.warning(
+            "illustration_table_detection_failed page=%d error_type=%s",
+            page_number,
+            type(exc).__name__,
+        )
+        return []
+    bboxes = []
+    for table in tables:
+        x0, y0, x1, y1 = table.bbox
+        bboxes.append((float(x0), float(y0), float(x1), float(y1)))
+    return bboxes
+
+
+def _rect_center_in_table(
+    rect: Any | None,
+    table_bboxes: Sequence[tuple[float, float, float, float]],
+) -> bool:
+    if rect is None:
+        return False
+    center_x = (rect.x0 + rect.x1) / 2
+    center_y = (rect.y0 + rect.y1) / 2
+    return any(
+        x0 <= center_x <= x1 and y0 <= center_y <= y1
+        for x0, y0, x1, y1 in table_bboxes
+    )
+
+
+def _image_records(
+    page,
+    xref_digest_cache: dict[int, bytes] | None = None,
+    table_bboxes: Sequence[tuple[float, float, float, float]] = (),
+):
     """Return unique page image resources with their displayed rectangles."""
     import pymupdf as fitz
 
@@ -150,6 +189,10 @@ def _image_records(page, xref_digest_cache: dict[int, bytes] | None = None):
     except Exception:
         infos = []
         image_refs = []
+    table_only = bool(table_bboxes) and bool(infos) and all(
+        _rect_center_in_table(fitz.Rect(image["bbox"]), table_bboxes)
+        for image in infos
+    )
     if infos:
         xrefs_by_digest: dict[bytes, int] = {}
         lookup_failed = False
@@ -171,17 +214,20 @@ def _image_records(page, xref_digest_cache: dict[int, bytes] | None = None):
             xrefs_by_digest[digest] = xref
         if not lookup_failed:
             for info in infos:
+                image_rect = fitz.Rect(info["bbox"])
+                if _rect_center_in_table(image_rect, table_bboxes):
+                    continue
                 xref = xrefs_by_digest.get(info.get("digest"), 0)
                 if not xref or xref in seen:
                     continue
                 seen.add(xref)
                 records.append((
                     xref,
-                    fitz.Rect(info["bbox"]),
+                    image_rect,
                     int(info.get("width", 0)),
                     int(info.get("height", 0)),
                 ))
-    if records:
+    if records or table_only:
         return records
     return [
         (int(img[0]), None, int(img[2]), int(img[3]))
@@ -270,6 +316,7 @@ def _vector_rects(
     page,
     caption_rect,
     page_analysis: _PageAnalysis | None = None,
+    table_bboxes: Sequence[tuple[float, float, float, float]] = (),
 ):
     import pymupdf as fitz
 
@@ -301,7 +348,12 @@ def _vector_rects(
     drawings = page_analysis.drawings() if page_analysis else page.get_drawings()
     for drawing in drawings:
         rect = fitz.Rect(drawing.get("rect", ()))
-        if rect.is_empty or rect.y0 < previous_bottom or rect.y1 > caption_rect.y0:
+        if (
+            rect.is_empty
+            or _rect_center_in_table(rect, table_bboxes)
+            or rect.y0 < previous_bottom
+            or rect.y1 > caption_rect.y0
+        ):
             continue
         rects.append(rect)
     if not rects:
@@ -339,13 +391,14 @@ def _save_vector_figure(
     caption: str,
     dest: Path,
     page_analysis: _PageAnalysis | None = None,
+    table_bboxes: Sequence[tuple[float, float, float, float]] = (),
 ) -> bool:
     import pymupdf as fitz
 
     caption_rect = _caption_rect(page, caption, page_analysis)
-    if caption_rect is None:
+    if caption_rect is None or _rect_center_in_table(caption_rect, table_bboxes):
         return False
-    rects = _vector_rects(page, caption_rect, page_analysis)
+    rects = _vector_rects(page, caption_rect, page_analysis, table_bboxes)
     if not rects:
         return False
     bounds = rects[0]
@@ -521,9 +574,9 @@ def attach_illustrations(
     doc_id: str,
     dm_level: int | None = None,
 ) -> int:
-    """Extrait les images du PDF, les enregistre en JPG et pose l'ICN sur les
-    figures de l'IR (appariement par page + ordre de lecture). Les figures qui
-    contiennent plusieurs bitmaps sont rasterisees en une seule image afin de
+    """Extrait les images hors tableaux, les enregistre en JPG et pose l'ICN
+    sur les figures de l'IR (appariement par page + ordre de lecture). Les figures
+    qui contiennent plusieurs bitmaps sont rasterisees en une seule image afin de
     conserver aussi les annotations vectorielles superposees. Renvoie le nombre
     de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
     try:
@@ -571,15 +624,26 @@ def attach_illustrations(
     try:
         for pidx, page in enumerate(doc, start=1):
             page_analysis = _PageAnalysis(page)
+            table_bboxes = _table_bboxes(page, pidx)
             figs = list(figs_by_page.get(pidx, []))
             stage_started = perf_counter()
             figure_anchors = [
                 (figure, _figure_caption_rect(page, figure.text, page_analysis))
                 for figure in figs
             ]
+            figures_in_tables = {
+                id(figure)
+                for figure, caption_rect in figure_anchors
+                if _rect_center_in_table(caption_rect, table_bboxes)
+            }
+            figure_anchors = [
+                (figure, caption_rect)
+                for figure, caption_rect in figure_anchors
+                if id(figure) not in figures_in_tables
+            ]
             timings["caption_lookup_ms"] += (perf_counter() - stage_started) * 1000
             stage_started = perf_counter()
-            image_records = _image_records(page, xref_digest_cache)
+            image_records = _image_records(page, xref_digest_cache, table_bboxes)
             timings["image_info_ms"] += (perf_counter() - stage_started) * 1000
             image_occurrence_count += len(image_records)
             standard_matches = {
@@ -683,12 +747,18 @@ def attach_illustrations(
                             saved += 1
                             _set_figure_icn(fig, fallback_name)
             for fig in figs:
-                if fig.icn:
+                if fig.icn or id(fig) in figures_in_tables:
                     continue
                 vector_count += 1
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
-                if _save_vector_figure(page, fig.text, out_dir / name, page_analysis):
+                if _save_vector_figure(
+                    page,
+                    fig.text,
+                    out_dir / name,
+                    page_analysis,
+                    table_bboxes,
+                ):
                     saved += 1
                     _set_figure_icn(fig, name)
             timings["image_processing_ms"] += (perf_counter() - page_processing_started) * 1000
