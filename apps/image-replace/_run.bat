@@ -29,9 +29,9 @@ if not exist "%MAIN_PY%" (
 )
 if not exist "%MAIN_MARK%" (
     echo [setup] Installing PaddleOCR backend dependencies...
-    "%MAIN_PY%" -m pip install --upgrade pip
+    "%MAIN_PY%" -m pip install --upgrade pip setuptools wheel
     if errorlevel 1 goto :setup_error
-    "%MAIN_PY%" -m pip install -e "%BACKEND_DIR%"
+    "%MAIN_PY%" -m pip install --no-build-isolation -e "%BACKEND_DIR%"
     if errorlevel 1 goto :setup_error
     type nul > "%MAIN_MARK%"
 )
@@ -62,9 +62,9 @@ if not exist "%LAMA_PY%" (
 )
 if not exist "%LAMA_MARK%" (
     echo [setup] Installing local LaMa dependencies...
-    "%LAMA_PY%" -m pip install --upgrade pip
+    "%LAMA_PY%" -m pip install --upgrade pip setuptools wheel
     if errorlevel 1 goto :setup_error
-    "%LAMA_PY%" -m pip install -e "%LAMA_DIR%"
+    "%LAMA_PY%" -m pip install --no-build-isolation -e "%LAMA_DIR%"
     if errorlevel 1 goto :setup_error
     type nul > "%LAMA_MARK%"
 )

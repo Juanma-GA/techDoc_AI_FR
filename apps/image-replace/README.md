@@ -51,7 +51,7 @@ The main API and React UI use default port `8010`; the internal LaMa service use
 - Unix: `python3.13`, `python3.11`, `lsof`, and `curl`.
 - Package users do not need a system Python; the Windows package includes separate Python 3.13 and 3.11 runtimes.
 
-Dependencies install on first launch. PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
+Dependencies install on first launch. The Windows launcher installs build tools in its embedded Python runtimes before installing app dependencies. PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
 
 Text-line orientation uses `PP-LCNet_x1_0_textline_ori` (approximately 6.5 MB of
 model weights). After updating, the next OCR may download this additional model.

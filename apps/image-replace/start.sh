@@ -42,8 +42,8 @@ fi
 MAIN_PYTHON="${BACKEND_DIR}/.venv/bin/python"
 if [[ ! -f .venv/.image-replace-installed ]]; then
     echo "[setup] Installing PaddleOCR backend dependencies..."
-    "${MAIN_PYTHON}" -m pip install --upgrade pip
-    "${MAIN_PYTHON}" -m pip install -e .
+    "${MAIN_PYTHON}" -m pip install --upgrade pip setuptools wheel
+    "${MAIN_PYTHON}" -m pip install --no-build-isolation -e .
     touch .venv/.image-replace-installed
 fi
 
@@ -54,8 +54,8 @@ fi
 LAMA_PYTHON="${LAMA_DIR}/.venv/bin/python"
 if [[ ! -f "${LAMA_DIR}/.venv/.image-replace-lama-installed" ]]; then
     echo "[setup] Installing local LaMa dependencies..."
-    "${LAMA_PYTHON}" -m pip install --upgrade pip
-    "${LAMA_PYTHON}" -m pip install -e "${LAMA_DIR}"
+    "${LAMA_PYTHON}" -m pip install --upgrade pip setuptools wheel
+    "${LAMA_PYTHON}" -m pip install --no-build-isolation -e "${LAMA_DIR}"
     touch "${LAMA_DIR}/.venv/.image-replace-lama-installed"
 fi
 
