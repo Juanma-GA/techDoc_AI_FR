@@ -73,6 +73,7 @@ def _set_document_context(client: TestClient, document_id: str) -> None:
             "meta_cmm_number": "79-30-02",
             "meta_first_issue_date": "JUL 1966",
             "meta_revision_number": "Rev. 01",
+            "meta_pnr_number": "1-900-SB",
             "document_language": "en",
         },
     )
@@ -96,8 +97,31 @@ def test_analyze_requires_complete_document_context(client: TestClient, sample_p
         "meta_cmm_number",
         "meta_first_issue_date",
         "meta_revision_number",
-        "document_language",
+        "meta_pnr_number",
     }
+
+
+def test_analyze_requires_pnr_when_other_context_is_complete(
+    client: TestClient, sample_pdf_bytes: bytes,
+) -> None:
+    upload = client.post(
+        "/api/v1/documents",
+        files={"file": ("manual.pdf", sample_pdf_bytes, "application/pdf")},
+    )
+    assert upload.status_code == 201, upload.text
+    document_id = upload.json()["id"]
+    _set_document_context(client, document_id)
+    cleared = client.patch(
+        f"/api/v1/documents/{document_id}",
+        json={"client_metadata": {"meta_pnr_number": []}},
+    )
+    assert cleared.status_code == 200, cleared.text
+
+    blocked = client.post(f"/api/v1/documents/{document_id}/analyze")
+
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "DOCUMENT_CONTEXT_INCOMPLETE"
+    assert blocked.json()["detail"]["fields"] == ["meta_pnr_number"]
 
 
 def test_analyze_emits_events_and_persists(client: TestClient, sample_pdf_bytes: bytes) -> None:

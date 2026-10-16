@@ -1,16 +1,16 @@
-"""Extract labeled Part Number values from TP1 pages."""
+"""Extract labeled Part Number and PNR values from CMM pages."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Sequence
 
-_PART_NUMBER_LABEL_RE = re.compile(r"(?i)\bpart\s+number(?:s|\s*\(s\))?\b")
+_PART_NUMBER_LABEL_RE = re.compile(r"(?i)\b(?:part\s+number(?:s|\s*\(s\))?|PNR)\b")
 _FIELD_BOUNDARY_RE = re.compile(
     r"(?i)\b(?:"
     r"ATA\s+No\.?|CMM\s+(?:No\.?|Number)|"
     r"revision(?:\s+(?:no\.?|number|date))?|rev\.?\s*(?:no\.?|date)|"
-    r"first\s+issue|part\s+number(?:s|\s*\(s\))?"
+    r"first\s+issue|part\s+number(?:s|\s*\(s\))?|PNR"
     r")"
 )
 _PART_NUMBER_TOKEN_RE = re.compile(

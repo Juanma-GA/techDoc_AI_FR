@@ -88,9 +88,16 @@ def suggest_cmm_metadata_from_pages(
     tp1_pages = [
         _nonempty_lines(text)
         for text in pages
-        if _is_tp1_page(text)
+        if _is_tp1_page(text) and not _HIGHLIGHTS_RE.search(text)
     ]
     part_numbers = extract_part_numbers(tp1_pages)
+    if not part_numbers:
+        highlights_pages = [
+            _nonempty_lines(text)
+            for text in pages
+            if _HIGHLIGHTS_RE.search(text)
+        ]
+        part_numbers = extract_part_numbers(highlights_pages)
     first_issue_date = _unique_value(
         [
             value

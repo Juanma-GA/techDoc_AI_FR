@@ -64,6 +64,7 @@ def test_repository_active_client_configuration_loads() -> None:
     assert configuration.manifest.modules["page_classifier"] == "page_classifier.py"
     assert configuration.manifest.modules["revision_engine"] == "revision_engine.py"
     assert "meta_pnr_number" in configuration.mapping.fields
+    assert configuration.mapping.fields["meta_pnr_number"].required
     assert configuration.manifest_hash
     assert configuration.mapping_hash
     assert configuration.configuration_hash

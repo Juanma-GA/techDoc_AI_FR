@@ -86,6 +86,54 @@ def test_omits_ambiguous_values_and_requires_highlights_or_tp1_context() -> None
     assert suggestions["meta_pnr_number"] == ["1-900-SB"]
 
 
+def test_falls_back_to_highlights_pnr_when_tp1_has_no_labeled_numbers() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS PAGE 1\n"
+            "PNR: 5306-255-00-11, 5306-265-00-10, 5306-266-20-10, 5306-266-20-11 and\n"
+            "5306-261-00-11\n"
+            "COMPONENT MAINTENANCE MANUAL with Illustrated Parts List\n"
+            "Title Page\nTP 1 to TP 2\nR",
+            "",
+            "TP 1\nFirst issue: APR 30/82\n"
+            "5306-255-00-11\n5306-265-00-10\n5306-266-20-10\n"
+            "5306-266-20-11\n5306-261-00-11",
+        ]
+    )
+
+    assert suggestions["meta_pnr_number"] == [
+        "5306-255-00-11", "5306-265-00-10", "5306-266-20-10",
+        "5306-266-20-11", "5306-261-00-11",
+    ]
+    assert suggestions["meta_first_issue_date"] == "APR 30/82"
+
+
+def test_tp1_pnr_takes_precedence_over_highlights() -> None:
+    for label in ("Part Number:", "PNR:"):
+        suggestions = suggest_cmm_metadata_from_pages(
+            [
+                "HIGHLIGHTS\nPNR: 5306-255-00-11\nTP 1 to TP 2\nR",
+                f"TP 1\n{label} 1-900-SB\nFirst Issue: APR 30/82",
+            ]
+        )
+
+        assert suggestions["meta_pnr_number"] == ["1-900-SB"]
+
+
+def test_pnr_fallback_ignores_other_sections_and_pages_after_four() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS\nNo part numbers listed.",
+            "TP 1\nFirst Issue: APR 30/82",
+            "INTRODUCTION\nPNR: 1-900-SB",
+            "PARTS LIST\nPart Number: 1-901-SB",
+            "HIGHLIGHTS\nPNR: 1-902-SB",
+        ]
+    )
+
+    assert suggestions["meta_pnr_number"] == []
+
+
 def test_returns_no_suggestions_when_labels_are_missing() -> None:
     suggestions = suggest_cmm_metadata_from_pages(
         [

@@ -2,7 +2,32 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
+
+from app.checks.client_registry import load_active_client_configuration
+from app.core.document_context import missing_document_context
+
+
+def test_thales_document_context_requires_at_least_one_pnr() -> None:
+    mapping = load_active_client_configuration().mapping
+    metadata = {
+        "meta_revision_date": "SEP 29/26",
+        "meta_cmm_number": "77-09-04A",
+        "meta_first_issue_date": "APR 30/82",
+        "meta_revision_number": "08",
+        "meta_manufacturer": "Airbus",
+        "document_language": "en",
+        "meta_pnr_number": [],
+    }
+    document = SimpleNamespace(client_metadata=metadata)
+
+    assert missing_document_context(document, mapping) == ["meta_pnr_number"]
+
+    metadata["meta_pnr_number"] = ["5306-255-00-11"]
+
+    assert missing_document_context(document, mapping) == []
 
 
 def test_document_context_is_reused_for_next_upload(
