@@ -113,7 +113,7 @@
     "brushDisable": "Disable brush",
     "brushSize": "Brush size",
     "eraseMode": "Erase mode",
-    "lamaMode": "LaMa reconstruction",
+    "lamaMode": "AI reconstruction",
     "colorMode": "Local color",
     "clearMask": "Clear mask",
     "applyLama": "Erase with LaMa",

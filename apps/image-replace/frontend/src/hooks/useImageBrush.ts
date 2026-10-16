@@ -21,7 +21,7 @@ export function useImageBrush({
   onBusyChange,
   t,
 }: ImageBrushOptions) {
-  const [eraseMode, setEraseMode] = useState<"lama" | "color">("lama");
+  const [eraseMode, setEraseMode] = useState<"lama" | "color">("color");
   const [brushEnabled, setBrushEnabled] = useState(false);
   const [brushSize, setBrushSize] = useState(28);
   const [hasBrushMask, setHasBrushMask] = useState(false);

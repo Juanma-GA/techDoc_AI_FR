@@ -113,7 +113,7 @@
     "brushDisable": "Désactiver le pinceau",
     "brushSize": "Taille du pinceau",
     "eraseMode": "Mode d’effacement",
-    "lamaMode": "Reconstruction LaMa",
+    "lamaMode": "Reconstruction IA",
     "colorMode": "Couleur locale",
     "clearMask": "Effacer le masque",
     "applyLama": "Effacer avec LaMa",
