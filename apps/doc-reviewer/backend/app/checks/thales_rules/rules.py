@@ -88,7 +88,10 @@ _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
     r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+"
     r"{{meta_revision_date}}(?!\w)"
 )
-_EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_ATA_PATTERN = (
+    r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}"
+    r"(?:(?<![A-Za-z])A)?(?!\w)"
+)
 _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
@@ -383,7 +386,7 @@ CUSTOM_CMM_NUMBER = rule(
         Check(
             field="text",
             operator="regex_exists",
-            expected=r"(?<!\w){{meta_cmm_number}}(?!\w)",
+            expected=r"(?<!\w){{meta_cmm_number}}(?:(?<![A-Za-z])A)?(?!\w)",
             require_all=True,
             expected_display="{{meta_cmm_number}}",
             missing_anchor=r"(?i)\bFirst\s+Issue\b",

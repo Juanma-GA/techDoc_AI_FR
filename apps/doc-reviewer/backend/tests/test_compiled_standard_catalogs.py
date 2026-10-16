@@ -665,6 +665,16 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
         [rule],
         document=SimpleNamespace(meta_cmm_number="79-30-02"),
     )
+    valid_with_a_suffix, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02A"),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02"),
+    )
+    invalid_with_other_suffix, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02B"),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02"),
+    )
     invalid, invalid_suggestions = execute_pdf_rules(
         _cmm_footer_pdf("79-33-02"),
         [rule],
@@ -677,6 +687,8 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
     )
 
     assert valid[0].status == "PASS"
+    assert valid_with_a_suffix[0].status == "PASS"
+    assert invalid_with_other_suffix[0].status == "FAIL"
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
         ("3", "0")
@@ -895,6 +907,37 @@ def test_highlights_rule_still_runs_when_mapping_anchors_are_wrong() -> None:
     assert parsed.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
     assert results[0].status == "FAIL"
     assert suggestions[0].proposed == "ATA No 79-30-02"
+
+
+def test_highlights_ata_rule_accepts_added_a_suffix_when_mapping_has_base() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ATA_NUMBER")
+    document = SimpleNamespace(
+        meta_revision_date="AUG 27/26",
+        meta_cmm_number="79-30-02",
+    )
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(
+                1,
+                [
+                    "79-30-02A",
+                    "Highlights Page 1",
+                    "JUL 27/26",
+                    "ATA No 79-30-02A",
+                ],
+            )
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    classify_pages(parsed, document)
+    results, suggestions = execute_pdf_rules(parsed, [rule], document=document)
+
+    assert parsed.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_cmm_number_is_checked_on_each_page() -> None:

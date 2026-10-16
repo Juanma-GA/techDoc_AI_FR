@@ -104,6 +104,24 @@ def test_cmm_mapping_consistency_does_not_warn_when_mapping_is_dominant() -> Non
     assert result.status == "PASS"
 
 
+def test_cmm_mapping_consistency_accepts_added_a_suffix_for_a_base_mapping() -> None:
+    result = _OPERATION.execute(
+        _context("79-30-02", ["79-30-02A"] * 10),
+        {},
+    )
+
+    assert result.status == "PASS"
+
+
+def test_cmm_mapping_consistency_does_not_remove_a_mapped_a_suffix() -> None:
+    result = _OPERATION.execute(
+        _context("79-30-02A", ["79-30-02"] * 10),
+        {},
+    )
+
+    assert result.status == "FAIL"
+
+
 def test_cmm_mapping_consistency_ignores_ambiguous_pages() -> None:
     result = _OPERATION.execute(
         _context("79-30-02", ["79-30-01"] * 9 + ["79-30-02\n79-30-03"]),

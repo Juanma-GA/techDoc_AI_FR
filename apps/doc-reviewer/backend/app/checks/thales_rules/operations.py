@@ -2415,6 +2415,15 @@ def _evaluate_document_structure(
     )
 
 
+def _cmm_mapping_values_match(mapped_value: str, document_value: str) -> bool:
+    mapped = mapped_value.strip().upper()
+    observed = document_value.strip().upper()
+    return observed == mapped or (
+        re.fullmatch(r"\d{2}-\d{2}-\d{2}", mapped) is not None
+        and observed == f"{mapped}A"
+    )
+
+
 def _evaluate_cmm_mapping_consistency(
     context: Any,
     parameters: Mapping[str, Any],
@@ -2464,7 +2473,7 @@ def _evaluate_cmm_mapping_consistency(
     dominant_value, dominant_count = counts.most_common(1)[0]
     sample_size = len(values_by_page)
     is_mapping_suspect = (
-        dominant_value != mapped_value.upper()
+        not _cmm_mapping_values_match(mapped_value, dominant_value)
         and dominant_count * 100 >= sample_size * 90
     )
     first_dominant_page = next(
