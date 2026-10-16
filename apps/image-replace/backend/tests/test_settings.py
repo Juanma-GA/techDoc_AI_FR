@@ -48,6 +48,14 @@ def test_ocr_cpu_threads_can_be_set_in_dotenv(tmp_path, cpu_threads) -> None:
     assert settings.ocr_cpu_threads == cpu_threads
 
 
+def test_ocr_model_variant_defaults_to_tiny(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OCR_MODEL_VARIANT", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.ocr_model_variant == "tiny"
+
+
 @pytest.fixture
 def demo_client() -> Iterator[TestClient]:
     engine = create_engine(

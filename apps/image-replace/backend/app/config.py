@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"
-    ocr_model_variant: Literal["medium", "small", "tiny"] = "medium"
+    ocr_model_variant: Literal["medium", "small", "tiny"] = "tiny"
     ocr_cpu_threads: int = Field(default=10, ge=1)
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'image-replace.db'}"
