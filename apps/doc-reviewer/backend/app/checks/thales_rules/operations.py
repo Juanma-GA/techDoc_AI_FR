@@ -7,6 +7,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from statistics import median
 from typing import Any, cast
 
@@ -2536,6 +2537,20 @@ def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> boo
     return median(span.size for span in line_spans) < median(body_font_sizes) * 0.85
 
 
+def _pdf_bookmark_titles_match(title: str, candidate: str) -> bool:
+    normalized_title = re.sub(r"[\W_]+", "", title.casefold())
+    normalized_candidate = re.sub(r"[\W_]+", "", candidate.casefold())
+    if not normalized_title or not normalized_candidate:
+        return False
+    if normalized_title == normalized_candidate:
+        return True
+    if min(len(normalized_title), len(normalized_candidate)) < 8:
+        return False
+    if re.findall(r"\d+", title) != re.findall(r"\d+", candidate):
+        return False
+    return SequenceMatcher(None, normalized_title, normalized_candidate).ratio() >= 0.88
+
+
 def _pdf_bookmark_findings(
     context: Any,
 ) -> tuple[list[OperationResult], int, list[int]]:
@@ -2615,8 +2630,21 @@ def _pdf_bookmark_findings(
             ]
             page_text = " ".join(" ".join(page_body_lines).split()).casefold()
         else:
+            page_body_lines = (
+                [line.text for line in page.lines] if page.lines else page.text.splitlines()
+            )
             page_text = " ".join(page.text.split()).casefold()
         if title in page_text:
+            continue
+        title_lines = (
+            [
+                line.text for line in page.lines
+                if not _pdf_bookmark_line_is_running_header(page, line)
+            ]
+            if page.lines and page.page_height > 0
+            else page_body_lines
+        )
+        if any(_pdf_bookmark_titles_match(title, line) for line in title_lines):
             continue
         findings.append(
             OperationResult(

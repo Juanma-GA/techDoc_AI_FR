@@ -2683,6 +2683,36 @@ def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("bookmark_title", "page_title", "expected_status"),
+    [
+        ("LIST OF EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
+        ("LIST EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
+        ("LIST OF EFFECTIVE PAGES", "LIST OF EFECTIVE PAGES", "PASS"),
+        ("Illustrated Parts List", "ILLUSTRATED PART LIS", "PASS"),
+        ("REPAIR PROCEDURE", "REPAIR PROCEDURES", "PASS"),
+        ("REPAIR PROCEDURE", "INTRODUCTION", "FAIL"),
+        ("REPAIR PROCEDURE 101", "REPAIR PROCEDURE 102", "FAIL"),
+        ("CHECK", "CHEEK", "FAIL"),
+    ],
+)
+def test_pdf_bookmark_tolerates_small_title_typos_but_not_wrong_destinations(
+    bookmark_title: str, page_title: str, expected_status: str,
+) -> None:
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[ParsedPage(page=1, text=page_title)],
+        full_text=page_title,
+        is_signed=False,
+        bookmarks=[PdfBookmark(title=bookmark_title, page=1)],
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
+
+    assert results[0].status == expected_status
+    assert bool(suggestions) is (expected_status == "FAIL")
+
+
 def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
     header = "COMPONENT MAINTENANCE MANUAL"
     pages = [
@@ -2731,6 +2761,35 @@ def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
 
     assert results[0].status == "FAIL"
     assert [(item.original, item.page) for item in suggestions] == [(header, 1)]
+
+
+def test_pdf_bookmark_typo_does_not_match_running_header() -> None:
+    header = "COMPONENT MAINTENANCE MANUAL"
+    page = ParsedPage(
+        page=1,
+        text=f"{header}\nREPAIR PROCEDURE",
+        lines=[
+            PdfLine(header, (30.0, 18.0, 400.0, 30.0), 0, 0),
+            PdfLine("REPAIR PROCEDURE", (70.0, 180.0, 250.0, 200.0), 1, 0),
+        ],
+        spans=[
+            Span(header, (30.0, 18.0, 400.0, 30.0), 1, "Arial", 8.0),
+            Span("REPAIR PROCEDURE", (70.0, 180.0, 250.0, 200.0), 1, "Arial", 12.0),
+        ],
+        page_height=792.0,
+    )
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[page],
+        full_text=page.text,
+        is_signed=False,
+        bookmarks=[PdfBookmark(title="COMPONENT MAINTENACE MANUAL", page=1)],
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
 
 
 def test_pdf_bookmark_inconclusive_pages_survive_modified_only_filtering() -> None:
