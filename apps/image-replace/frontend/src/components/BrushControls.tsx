@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { Sparkles, Trash2 } from "lucide-react";
+import { Paintbrush, Sparkles, Trash2 } from "lucide-react";
 import { Badge, Button, Input, Select } from "@internal/ui";
 
 import type { useImageEditor } from "../hooks/useImageEditor";
@@ -24,11 +24,14 @@ export function BrushControls({ editor, disabled, t }: BrushControlsProps) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
         <Button
           variant={editor.brushEnabled ? "primary" : "secondary"}
+          size="icon"
+          aria-label={t(editor.brushEnabled ? "image.brushDisable" : "image.brushEnable")}
+          title={t(editor.brushEnabled ? "image.brushDisable" : "image.brushEnable")}
           aria-pressed={editor.brushEnabled}
           disabled={disabled}
           onClick={() => editor.setBrushEnabled((enabled) => !enabled)}
         >
-          {editor.brushEnabled ? t("image.brushDisable") : t("image.brushEnable")}
+          <Paintbrush size={16} aria-hidden="true" />
         </Button>
         <label className="space-y-1">
           <span className="flex justify-between text-xs text-fg-dim">
