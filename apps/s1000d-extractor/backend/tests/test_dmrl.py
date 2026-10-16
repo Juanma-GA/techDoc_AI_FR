@@ -133,7 +133,11 @@ def test_load_dmrl_maps_node_title_and_client_code_columns(tmp_path):
 
 def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
     path = tmp_path / "dmrl.json"
-    icn_cell = "ICN-WEG-AA0004-00001-A-02.jpg\r\nICN-WEG-AA0004-00002-A-02.png"
+    icn_cell = (
+        "ICN-WEG-AA0004-00001-A-02\r\n"
+        "ICN-WEG-AA0004-00002-A-02.png\r\n"
+        "ICN-WEG-AA0004-00003-A-02.jpeg"
+    )
     path.write_text(json.dumps([{"Titre": "Description", "ICN": icn_cell}]), encoding="utf-8")
 
     entry = load_dmrl(path)[0]
@@ -141,6 +145,7 @@ def test_load_dmrl_reads_multiple_icns_and_round_trips_them(tmp_path):
     assert extract_icn_filenames(entry.icn) == [
         "ICN-WEG-AA0004-00001-A-02.jpg",
         "ICN-WEG-AA0004-00002-A-02.png",
+        "ICN-WEG-AA0004-00003-A-02.jpeg",
     ]
     assert entry_from_dict(entry.to_dict()).icn == icn_cell
 

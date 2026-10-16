@@ -213,7 +213,7 @@ def test_dmrl_icn_replaces_generated_figure_name(tmp_path) -> None:
 
     _apply_dmrl_icns(
         [unit],
-        [DmrlEntry(icn="ICN-WEG-AA0007-00001-A-02.jpg")],
+        [DmrlEntry(icn="ICN-WEG-AA0007-00001-A-02")],
         tmp_path,
     )
 
