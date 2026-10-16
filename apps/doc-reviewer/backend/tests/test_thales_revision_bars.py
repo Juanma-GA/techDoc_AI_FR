@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import fitz
 from types import SimpleNamespace
 
+import fitz
+
+from app.checks.demo_rules import operations as demo_operations
 from app.checks.thales_rules import operations
 from app.checks.thales_rules.revision_engine import HighlightsEntry, RevisionState
 from app.checks.thales_rules.rules import (
@@ -172,7 +174,7 @@ def test_revision_bar_checks_exclude_lep_and_highlights_pages() -> None:
             assert result.status == "INCONCLUSIVE"
 
 
-def test_tp2_modified_bar_must_overlap_body_text_outside_header_and_footer() -> None:
+def test_tp2_modified_bar_must_stay_outside_header_and_footer() -> None:
     spans = [
         Span("T", (50.0, 14.0, 70.0, 45.0), 1, "Arial-Bold", 30.0),
         Span("Modified text", (100.0, 200.0, 300.0, 220.0), 1, "Arial", 10.0),
@@ -195,6 +197,29 @@ def test_tp2_modified_bar_must_overlap_body_text_outside_header_and_footer() -> 
     assert body_bar.status == "PASS"
     assert header_bar.status == "FAIL"
     assert footer_bar.status == "FAIL"
+
+
+def test_tp2_revision_bar_can_face_an_empty_body_paragraph_in_both_bundles() -> None:
+    spans = [
+        Span("T", (50.0, 14.0, 70.0, 45.0), 1, "Arial-Bold", 30.0),
+        Span("THALES AVS FRANCE SAS", (50.0, 750.0, 250.0, 763.0), 1, "Arial", 9.0),
+        Span("TP 2", (500.0, 750.0, 560.0, 763.0), 1, "Arial", 9.0),
+    ]
+    context = _context(
+        "R",
+        [_bar(39.65, 300.0, 340.0)],
+        page_type="TP2",
+        spans=spans,
+    )
+
+    thales_result = _execute("revision_bar_tp2_body", context)
+    demo_result = demo_operations.DOCUMENT_STRUCTURE.execute(
+        context,
+        {"control": "revision_bar_tp2_body"},
+    )
+
+    assert thales_result.status == "PASS"
+    assert demo_result.status == "PASS"
 
 
 def test_tp2_new_page_is_not_applicable_to_the_tp2_modified_bar_rule() -> None:

@@ -69,7 +69,7 @@
   "CUSTOM_TP1_THALES_ADDRESS": {"name":"Exact THALES address on TP1 pages","description":"Every page identified as TP1 must contain the exact reference THALES address."},
   "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": {"name":"THALES logo font size on TP1 pages","description":"The Thales T at the start of a TP1 page must use a 36 pt font."},
   "CUSTOM_TP2_IMPORTANT_NOTICE": {"name":"TP2 Important Notice matches the ATA100 template","description":"The IMPORTANT NOTICE block on TP2 must exactly match the ATA100 template, apart from line-break and space differences."},
-  "CUSTOM_TP2_REVISION_BAR_BODY_ONLY": {"name":"TP2 revision bar limited to body text","description":"On a TP2 page declared R, the revision bar must align with body text and must not run through the header or footer."},
+  "CUSTOM_TP2_REVISION_BAR_BODY_ONLY": {"name":"TP2 revision bar limited to the body area","description":"On a TP2 page declared R, the revision bar must stay in the body area, outside the header and footer. It may align with an empty paragraph."},
   "CUSTOM_VENDOR_CODE_LIST_REFERENCE": {"name":"THALES vendor code and address","description":"Only the THALES entry in vendor code tables is validated: code VF9111 must match the official THALES AVS FRANCE SAS address at 75-77 AV MARCEL DASSAULT, CAMPUS THALES BORDEAUX, 33700 MERIGNAC, FRANCE. Other vendors are ignored."},
   "STE_FIRST_PERSON": {"name":"First person forbidden","description":"ASD-STE100 §3.5 forbids the first person in maintenance manuals."},
   "STE_LONG_SENTENCE": {"name":"Sentence too long","description":"ASD-STE100 §6.4: maximum 20 words per procedural sentence and 25 words per descriptive sentence."},

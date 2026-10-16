@@ -2103,7 +2103,9 @@ def _revision_bar_findings(
             "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm), hors LEP/HIGHLIGHTS"
         ),
         "revision_bar_tp1_footer": "Barre TP1/R de Revision jusqu'en dessous du copyright",
-        "revision_bar_tp2_body": "Barre TP2/R uniquement en regard du corps de texte",
+        "revision_bar_tp2_body": (
+            "Barre TP2/R dans la zone du corps, hors en-tete et pied de page"
+        ),
     }
     expected = expected_by_control.get(control)
     if expected is None:
@@ -2311,24 +2313,8 @@ def _revision_bar_findings(
             )
             header_bottom = page_height * 0.10
             footer_top = page_height * 0.90
-            body_spans = [
-                span
-                for span in page.spans
-                if span.text.strip()
-                and span.bbox[1] >= header_bottom
-                and span.bbox[3] <= footer_top
-                and _HIGHLIGHTS_FOOTER_COPYRIGHT_RE.search(span.text) is None
-            ]
             for bar in bars:
-                overlaps_body = any(
-                    bar.bottom >= span.bbox[1] and bar.top <= span.bbox[3]
-                    for span in body_spans
-                )
-                if (
-                    bar.top >= header_bottom
-                    and bar.bottom <= footer_top
-                    and overlaps_body
-                ):
+                if bar.top >= header_bottom and bar.bottom <= footer_top:
                     continue
                 findings.append(
                     OperationResult(
@@ -2337,8 +2323,7 @@ def _revision_bar_findings(
                         expected=expected,
                         message=(
                             f"La barre TP2/R de « {page_label} » doit etre placee "
-                            "uniquement en regard du texte du corps, hors en-tete "
-                            "et pied de page."
+                            "dans la zone du corps, hors en-tete et pied de page."
                         ),
                         original="",
                         page=page.page,

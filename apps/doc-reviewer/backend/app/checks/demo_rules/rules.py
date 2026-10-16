@@ -844,10 +844,11 @@ CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
 
 CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
     code="CUSTOM_TP2_REVISION_BAR_BODY_ONLY",
-    name="Barre TP2/R limitee au texte du corps",
+    name="Barre TP2/R limitee a la zone du corps",
     description=(
-        "Sur une page TP2 declaree R, la barre de revision doit se trouver en "
-        "regard du texte du corps, sans traverser l'en-tete ni le pied de page."
+        "Sur une page TP2 declaree R, la barre de revision doit rester dans la "
+        "zone du corps, hors en-tete et pied de page. Elle peut se trouver en face "
+        "d'un paragraphe vide."
     ),
     message="La barre de revision d'une page TP2/R est dans l'en-tete ou le pied de page.",
     kind="field_required",
@@ -862,13 +863,15 @@ CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
         )
     ],
     failure_message=(
-        "Sur TP2/R, la barre ne doit apparaitre qu'en regard du texte modifie."
+        "Sur TP2/R, la barre doit rester dans la zone du corps, hors en-tete et "
+        "pied de page; elle peut etre en face d'un paragraphe vide."
     ),
     translations={
         "en": {
             "description": (
-                "On a TP2 page declared R, the revision bar must align with body "
-                "text and must not run through the header or footer."
+                "On a TP2 page declared R, the revision bar must stay in the body "
+                "area, outside the header and footer. It may align with an empty "
+                "paragraph."
             ),
             "message": "A TP2/R revision bar appears in the header or footer.",
         }
