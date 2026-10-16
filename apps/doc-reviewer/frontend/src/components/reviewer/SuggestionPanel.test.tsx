@@ -1,5 +1,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Suggestion } from "../../types/domain";
 
@@ -81,6 +82,46 @@ describe("SuggestionPanel rule order", () => {
     act(() => root.unmount());
     container.remove();
     vi.clearAllMocks();
+  });
+
+  it("renders compact borderless group metadata and keeps the group expandable", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <SuggestionPanel
+            suggestions={[
+              makeSuggestion("group-first", "RULE_2"),
+              makeSuggestion("group-second", "RULE_2"),
+              makeSuggestion("single", "RULE_10"),
+            ]}
+            selectedId={null}
+            onSelect={() => undefined}
+            onAccept={() => undefined}
+            onReject={() => undefined}
+            onRejectAll={() => undefined}
+            onSaveEdit={() => undefined}
+            onSaveFeedback={() => undefined}
+            onUnreject={() => undefined}
+            onUndo={() => undefined}
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const head = container.querySelector(".suggestion-bucket-head")!;
+    const toggle = head.querySelector<HTMLButtonElement>(".suggestion-bucket-toggle")!;
+    const reject = head.querySelector<HTMLButtonElement>(".suggestion-bucket-reject")!;
+    expect(head.querySelector(".badge")).toBeNull();
+    expect(head.querySelector(".suggestion-bucket-rule-number")?.textContent).toBe("#2");
+    expect(reject.getAttribute("aria-label")).toBe("reviewer.suggestion.rejectAll");
+    expect(reject.getAttribute("title")).toBe("reviewer.suggestion.rejectAll");
+    expect(reject.textContent).toBe("");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => toggle.click());
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelectorAll('[data-testid="suggestion-item"]')).toHaveLength(3);
   });
 
   it("orders numbered groups numerically and keeps unnumbered groups last in their original order", async () => {

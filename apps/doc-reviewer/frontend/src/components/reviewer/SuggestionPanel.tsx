@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { useClientRules } from "../../hooks/useClientConfig";
 import { useFiltersStore } from "../../stores/filtersStore";
-import { localizedRuleCode, localizedSuggestionMessage } from "../../lib/suggestionText";
+import { localizedRuleCode } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 import { SuggestionItem } from "./SuggestionItem";
 
@@ -185,7 +185,6 @@ export function SuggestionPanel({
               (item) => item.status !== "applied" && item.status !== "rejected",
             );
             const head = items[0]!;
-            const headMessage = localizedSuggestionMessage(head, t);
             return (
               <div
                 key={key}
@@ -201,16 +200,13 @@ export function SuggestionPanel({
                       aria-expanded={isExpanded}
                     >
                       {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <span className="suggestion-loc">
+                      <span className="suggestion-loc" title={localizedRuleCode(head.rule_code, t)}>
                         {localizedRuleCode(head.rule_code, t)}
-                      </span>
-                      <span className="suggestion-msg" style={{ flex: 1, textAlign: "left" }}>
-                        {headMessage}
                       </span>
                     </button>
                     {ruleNumber != null ? (
                       <Link
-                        className="badge default suggestion-rule-number"
+                        className="suggestion-bucket-rule-number"
                         to={ruleHref}
                         title={t("rules.client.openRule", { number: ruleNumber })}
                         aria-label={t("rules.client.openRule", { number: ruleNumber })}
@@ -219,13 +215,13 @@ export function SuggestionPanel({
                         #{ruleNumber}
                       </Link>
                     ) : null}
-                    <span className="badge default">
+                    <span className="suggestion-bucket-count">
                       {t("reviewer.panel.group.count", { count: items.length })}
                     </span>
                     {rejectableItems.length > 1 ? (
                       <button
                         type="button"
-                        className="btn danger small"
+                        className="suggestion-bucket-reject"
                         title={t("reviewer.suggestion.rejectAll")}
                         aria-label={t("reviewer.suggestion.rejectAll")}
                         onClick={() =>
@@ -235,8 +231,7 @@ export function SuggestionPanel({
                           })
                         }
                       >
-                        <X size={12} aria-hidden="true" />
-                        {t("reviewer.suggestion.rejectAllShort")}
+                        <X size={14} aria-hidden="true" />
                       </button>
                     ) : null}
                   </div>

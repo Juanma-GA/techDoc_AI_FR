@@ -314,7 +314,7 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .pdf-highlight.error.active { border-color: var(--brand); background: rgba(37, 99, 235, 0.2); }
 
 /* Item de suggestion dans le panneau */
-.suggestion { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-2); transition: border-color 0.12s, box-shadow 0.12s, background 0.12s; }
+.suggestion { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-2); transition: border-color 0.12s, box-shadow 0.12s, background 0.12s; }
 .suggestion:hover { border-color: var(--border-bright); }
 
 @media (max-width: 720px) {
@@ -409,27 +409,31 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .suggestion-actions { display: flex; gap: 6px; margin-top: 8px; }
 
 /* Groupe d'occurrences par regle, depliable. */
-.suggestion-bucket { display: flex; flex-direction: column; gap: 8px; }
-.suggestion-bucket.expanded {
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card-hover);
-}
+.suggestion-bucket { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 100%; min-width: 0; }
 .suggestion-bucket-head {
-  display: flex; align-items: stretch; gap: 8px; width: 100%;
-  border: 1px solid var(--border); border-radius: 8px; padding: 0 10px;
+  box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
   background: var(--bg-2); color: var(--fg); text-align: left;
   transition: border-color 0.12s, background 0.12s;
 }
 .suggestion-bucket-head:hover { border-color: var(--border-bright); background: var(--card-hover); }
 .suggestion-bucket-toggle {
   display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-  border: 0; padding: 8px 0; background: transparent; color: inherit;
+  border: 0; padding: 4px 0; background: transparent; color: inherit;
   cursor: pointer; text-align: left;
 }
-.suggestion-bucket-toggle .suggestion-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.suggestion-bucket .suggestion { margin-left: 18px; }
+.suggestion-bucket-toggle > svg { flex-shrink: 0; }
+.suggestion-bucket-toggle .suggestion-loc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-bucket-rule-number,
+.suggestion-bucket-count { flex-shrink: 0; font-family: "JetBrains Mono", monospace; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.suggestion-bucket-rule-number { text-decoration: none; }
+.suggestion-bucket-rule-number:hover { color: var(--brand-light); text-decoration: underline; }
+.suggestion-bucket-count { font-variant-numeric: tabular-nums; }
+.suggestion-bucket-reject { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--danger); cursor: pointer; }
+.suggestion-bucket-reject:hover { background: var(--danger); color: white; }
+.suggestion-bucket-toggle:focus-visible,
+.suggestion-bucket-rule-number:focus-visible,
+.suggestion-bucket-reject:focus-visible { outline: 2px solid var(--brand-light); outline-offset: 2px; }
 .input.small { padding: 3px 8px; font-size: 0.8rem; width: auto; }
 
 .export-menu { position: relative; display: inline-flex; }
