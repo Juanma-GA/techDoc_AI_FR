@@ -77,6 +77,7 @@ export function DocumentReviewer() {
   const reviewFlowActive = activeReviewPage !== null || Object.keys(pageReviewChoices).length > 0;
   const selectedId = useViewerStore((s) => s.selectedSuggestionId);
   const setSelected = useViewerStore((s) => s.setSelectedSuggestionId);
+  const [suggestionFocusRequest, setSuggestionFocusRequest] = useState(0);
   const zoom = useViewerStore((s) => s.zoom);
   const setZoom = useViewerStore((s) => s.setZoom);
 
@@ -375,7 +376,10 @@ export function DocumentReviewer() {
             zoom={zoom}
             suggestions={suggestions.data ?? []}
             selectedSuggestionId={selectedId}
-            onSuggestionClick={setSelected}
+            onSuggestionClick={(id) => {
+              setSelected(id);
+              setSuggestionFocusRequest((request) => request + 1);
+            }}
           />
         </main>
       </div>
@@ -383,6 +387,7 @@ export function DocumentReviewer() {
       <SuggestionPanel
         suggestions={suggestions.data ?? []}
         selectedId={selectedId}
+        focusRequest={suggestionFocusRequest}
         onSelect={(id) => {
           setSelected(id);
           const s = suggestions.data?.find((x) => x.id === id);

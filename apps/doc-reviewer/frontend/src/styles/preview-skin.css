@@ -266,6 +266,13 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .reviewer-toolbar-actions .analysis-page-range { flex: 1 1 0; flex-wrap: nowrap; }
 .reviewer-toolbar-actions .analysis-page-range-select { flex: 1 1 180px; width: 180px; }
 .reviewer-toolbar-actions .export-selector { flex: 0 0 auto; }
+.reviewer-toolbar-actions .analysis-page-range-select,
+.reviewer-toolbar-actions .analysis-page-range-input,
+.reviewer-toolbar-actions .analysis-page-range > .btn,
+.reviewer-toolbar-actions .export-menu > .btn {
+  box-sizing: border-box; height: 36px; min-height: 36px; padding: 0 10px;
+  border-radius: 6px; font-size: 0.8rem; font-weight: 500; line-height: 1.25;
+}
 .reviewer-canvas { flex: 1; overflow: auto; padding: 16px; display: flex; justify-content: center; }
 .reviewer-canvas-stack { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px; }
 .viewer-surface { width: 100%; min-width: 0; text-align: center; }
@@ -410,6 +417,7 @@ table.tbl tr:hover td { background: var(--bg-2); }
 
 /* Groupe d'occurrences par regle, depliable. */
 .suggestion-bucket { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 100%; min-width: 0; }
+.suggestion-bucket.expanded { border-radius: 8px; background: var(--card-hover); box-shadow: 0 0 0 4px var(--card-hover); }
 .suggestion-bucket-head {
   box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
   border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;

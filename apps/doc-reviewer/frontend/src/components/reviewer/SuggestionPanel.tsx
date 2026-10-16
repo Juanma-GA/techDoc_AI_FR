@@ -13,6 +13,7 @@ import { SuggestionItem } from "./SuggestionItem";
 type Props = {
   suggestions: Suggestion[];
   selectedId: string | null;
+  focusRequest?: number;
   onSelect: (id: string) => void;
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
@@ -31,6 +32,7 @@ function occurrenceKey(s: Suggestion): string {
 export function SuggestionPanel({
   suggestions,
   selectedId,
+  focusRequest = 0,
   onSelect,
   onAccept,
   onReject,
@@ -55,6 +57,7 @@ export function SuggestionPanel({
     count: number;
   } | null>(null);
   const lastSelectedId = useRef<string | null>(null);
+  const lastFocusRequest = useRef(focusRequest);
   const pendingScrollId = useRef<string | null>(null);
 
   const ruleCodes = useMemo(() => {
@@ -121,8 +124,9 @@ export function SuggestionPanel({
       pendingScrollId.current = null;
       return;
     }
-    if (lastSelectedId.current === selectedId) return;
+    if (lastSelectedId.current === selectedId && lastFocusRequest.current === focusRequest) return;
     lastSelectedId.current = selectedId;
+    lastFocusRequest.current = focusRequest;
     const bucket = buckets.find((b) => b.items.some((x) => x.id === selectedId));
     if (bucket && bucket.items.length > 1 && !expanded.has(bucket.key)) {
       pendingScrollId.current = selectedId;
@@ -130,7 +134,7 @@ export function SuggestionPanel({
       return;
     }
     pendingScrollId.current = selectedId;
-  }, [selectedId, buckets, expanded]);
+  }, [selectedId, focusRequest, buckets, expanded]);
 
   // Scroll only for a newly selected occurrence, never as a side effect of a
   // manual expand/collapse click.
@@ -145,7 +149,7 @@ export function SuggestionPanel({
     if (!el) return;
     pendingScrollId.current = null;
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [buckets, expanded]);
+  }, [selectedId, focusRequest, buckets, expanded]);
 
   return (
     <aside className="reviewer-panel">

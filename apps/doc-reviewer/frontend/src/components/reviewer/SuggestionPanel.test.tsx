@@ -124,6 +124,64 @@ describe("SuggestionPanel rule order", () => {
     expect(container.querySelectorAll('[data-testid="suggestion-item"]')).toHaveLength(3);
   });
 
+  it("scrolls to each new selection within an expanded group without scrolling on manual collapse", async () => {
+    const scrolledIds: string[] = [];
+    const previousScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = vi.fn(function (this: HTMLElement) {
+      scrolledIds.push(this.dataset.suggestionId ?? "");
+    });
+    const suggestions = [
+      makeSuggestion("group-first", "RULE_2"),
+      makeSuggestion("group-second", "RULE_2"),
+    ];
+    const renderSelection = async (selectedId: string, focusRequest = 0) => {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <SuggestionPanel
+              suggestions={suggestions}
+              selectedId={selectedId}
+              focusRequest={focusRequest}
+              onSelect={() => undefined}
+              onAccept={() => undefined}
+              onReject={() => undefined}
+              onRejectAll={() => undefined}
+              onSaveEdit={() => undefined}
+              onSaveFeedback={() => undefined}
+              onUnreject={() => undefined}
+              onUndo={() => undefined}
+            />
+          </MemoryRouter>,
+        );
+      });
+    };
+
+    try {
+      await renderSelection("group-first");
+      expect(scrolledIds).toEqual(["group-first"]);
+      expect(container.querySelector(".suggestion-bucket.expanded")).not.toBeNull();
+
+      await renderSelection("group-second");
+      expect(scrolledIds).toEqual(["group-first", "group-second"]);
+
+      const toggle = container.querySelector<HTMLButtonElement>(".suggestion-bucket-toggle")!;
+      act(() => toggle.click());
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(scrolledIds).toHaveLength(2);
+
+      await renderSelection("group-second", 1);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(scrolledIds).toEqual(["group-first", "group-second", "group-second"]);
+
+      await renderSelection("group-second", 2);
+      expect(scrolledIds).toEqual([
+        "group-first", "group-second", "group-second", "group-second",
+      ]);
+    } finally {
+      HTMLElement.prototype.scrollIntoView = previousScrollIntoView;
+    }
+  });
+
   it("orders numbered groups numerically and keeps unnumbered groups last in their original order", async () => {
     await act(async () => {
       root.render(
