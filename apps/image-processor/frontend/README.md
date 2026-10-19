@@ -26,6 +26,9 @@ Downloads POST the current image and Excel selection to `/image-processor/export
 The server supplies the authoritative ICN filename and real A4/300 dpi JPEG;
 the brush preview and undo revisions are not re-encoded. Preparation disables
 editing, and export errors are shown without starting a download.
+**Save** uses the browser's configured download behavior. **Save as** opens the
+browser's native JPEG picker; compatible browsers can remember its last folder.
+The app does not persist a filesystem path or file handle.
 
 Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, and `pnpm test:e2e`
 from this directory. Playwright uses a strict isolated local port, `5187`, and

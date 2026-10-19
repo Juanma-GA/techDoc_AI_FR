@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { Download, Maximize2, Minus, Plus, Undo2 } from "lucide-react";
+import { Download, FolderOpen, Maximize2, Minus, Plus, Undo2 } from "lucide-react";
 import { Button } from "@internal/ui";
 
 import type { OcrResultDto } from "../lib/api";
@@ -11,13 +11,15 @@ type ImageToolbarProps = {
   canUndo: boolean;
   onUndo: () => void;
   onDownload: () => void;
+  onDownloadAs: () => void;
   downloading: boolean;
+  savingAs: boolean;
   disabled: boolean;
   t: TFunction;
 };
 
 export function ImageToolbar({
-  editor, result, canUndo, onUndo, onDownload, downloading, disabled, t,
+  editor, result, canUndo, onUndo, onDownload, onDownloadAs, downloading, savingAs, disabled, t,
 }: ImageToolbarProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -66,10 +68,17 @@ export function ImageToolbar({
         {result || editor.manualEditedImage ? (
           <Button
             variant="secondary" size="sm" disabled={disabled || downloading}
-            onClick={onDownload} aria-busy={downloading}
+            onClick={onDownload} aria-busy={downloading && !savingAs}
           >
             <Download size={15} aria-hidden="true" />
-            {t(downloading ? "image.downloading" : "image.download")}
+            {t(downloading && !savingAs ? "image.downloading" : "image.save")}
+          </Button>
+          <Button
+            variant="secondary" size="sm" disabled={disabled || downloading}
+            onClick={onDownloadAs} aria-busy={savingAs}
+          >
+            <FolderOpen size={15} aria-hidden="true" />
+            {t(savingAs ? "image.savingAs" : "image.saveAs")}
           </Button>
         ) : null}
       </div>

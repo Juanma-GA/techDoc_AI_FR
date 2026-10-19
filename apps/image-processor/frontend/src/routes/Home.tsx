@@ -58,7 +58,9 @@ export function Home() {
             canUndo={workflow.canUndo}
             onUndo={workflow.undo}
             onDownload={() => void workflow.downloadImage()}
+            onDownloadAs={() => void workflow.downloadImageAs()}
             downloading={workflow.downloading}
+            savingAs={workflow.savingAs}
             onImageEdited={workflow.applyBrush}
             onInpaintingChange={workflow.setRetouching}
             onSelectLine={selectRecognizedLine}

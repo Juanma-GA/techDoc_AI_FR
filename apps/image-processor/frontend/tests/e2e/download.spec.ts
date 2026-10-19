@@ -4,9 +4,25 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { excelPreset, mockWorkspace, syntheticImages } from "./workspace-mock";
 
+type SavePickerOptionsForTest = {
+  id: string;
+  suggestedName: string;
+  types: { description: string; accept: Record<string, string[]> }[];
+};
+type SavePickerTestWindow = Window & {
+  __savePickerOptions?: SavePickerOptionsForTest;
+  __savedFile?: { type: string; size: number; closed: boolean };
+  showSaveFilePicker?: (options: SavePickerOptionsForTest) => Promise<{
+    createWritable: () => Promise<{
+      write: (blob: Blob) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  }>;
+};
+
 async function downloadJpeg(page: Page, expected: Buffer) {
   const downloading = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Télécharger", exact: true }).click();
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
   const download = await downloading;
   expect(download.suggestedFilename()).toBe("ICN-TEST.jpg");
   const path = await download.path();
@@ -14,7 +30,7 @@ async function downloadJpeg(page: Page, expected: Buffer) {
   const contents = await readFile(path);
   expect(contents.subarray(0, 3)).toEqual(Buffer.from([255, 216, 255]));
   expect(contents).toEqual(expected);
-  await expect(page.getByRole("button", { name: "Télécharger", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Enregistrer", exact: true })).toBeEnabled();
 }
 
 for (const mode of ["lama", "color"] as const) {
@@ -69,7 +85,7 @@ for (const mode of ["lama", "color"] as const) {
       await page.getByRole("button", {
         name: mode === "lama" ? "Effacer avec LaMa" : "Remplir avec la couleur locale", exact: true,
       }).click();
-      await expect(page.getByRole("button", { name: "Télécharger", exact: true })).toBeEnabled();
+      await expect(page.getByRole("button", { name: "Enregistrer", exact: true })).toBeEnabled();
     }
 
     await brush();
@@ -125,8 +141,59 @@ test("a failed JPEG export is visible and leaves the edited image unchanged", as
   await expect(preview).toHaveAttribute("src", original);
   const downloads: string[] = [];
   page.on("download", (download) => downloads.push(download.suggestedFilename()));
-  await page.getByRole("button", { name: "Télécharger", exact: true }).click();
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveText("Synthetic export failure.");
   await expect(preview).toHaveAttribute("src", original);
   expect(downloads).toEqual([]);
+});
+
+test("Save as opens the native picker and writes the exported JPEG", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
+  await page.addInitScript(() => {
+    const browserWindow = window as SavePickerTestWindow;
+    browserWindow.showSaveFilePicker = async (options) => {
+      browserWindow.__savePickerOptions = options;
+      return {
+        createWritable: async () => ({
+          write: async (blob) => {
+            browserWindow.__savedFile = { type: blob.type, size: blob.size, closed: false };
+          },
+          close: async () => {
+            if (browserWindow.__savedFile) browserWindow.__savedFile.closed = true;
+          },
+        }),
+      };
+    };
+  });
+  await mockWorkspace(page);
+  await page.goto("/");
+  const [original] = await syntheticImages(page);
+  const jpeg = Buffer.from([255, 216, 255, 217]);
+  await page.route("**/image-processor/ocr", (route) => route.fulfill({ json: {
+    width: 100, height: 80, source_width: 100, source_height: 80,
+    full_text: "", lines: [], references: [], edited_image: original, filename: "ICN-TEST.jpg",
+  } }));
+  await page.route("**/image-processor/export", (route) => route.fulfill({
+    body: jpeg,
+    headers: {
+      "Content-Type": "image/jpeg",
+      "Content-Disposition": "attachment; filename*=UTF-8''ICN-TEST.jpg",
+    },
+  }));
+  await page.locator('input[accept^="image/"]').setInputFiles({
+    name: "synthetic.png", mimeType: "image/png", buffer: Buffer.from(original.split(",")[1]!, "base64"),
+  });
+  await page.getByRole("button", { name: "Lancer l’OCR sur CPU" }).click();
+  await page.getByRole("button", { name: "Enregistrer sous", exact: true }).click();
+
+  const pickerOptions = await page.evaluate(() =>
+    (window as SavePickerTestWindow).__savePickerOptions,
+  );
+  const savedFile = await page.evaluate(() => (window as SavePickerTestWindow).__savedFile);
+  expect(pickerOptions).toMatchObject({
+    id: "image-processor-export",
+    suggestedName: "ICN-TEST.jpg",
+    types: [{ accept: { "image/jpeg": [".jpg"] } }],
+  });
+  expect(savedFile).toEqual({ type: "image/jpeg", size: jpeg.length, closed: true });
 });

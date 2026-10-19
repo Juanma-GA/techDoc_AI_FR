@@ -16,7 +16,9 @@ type ImagePreviewProps = {
   canUndo: boolean;
   onUndo: () => void;
   onDownload: () => void;
+  onDownloadAs: () => void;
   downloading: boolean;
+  savingAs: boolean;
   onImageEdited: (image: string, mode: "lama" | "color") => void;
   onInpaintingChange: (busy: boolean) => void;
   onSelectLine: (lineIndex: number) => void;
@@ -32,7 +34,9 @@ export function ImagePreview({
   canUndo,
   onUndo,
   onDownload,
+  onDownloadAs,
   downloading,
+  savingAs,
   onImageEdited,
   onInpaintingChange,
   onSelectLine,
@@ -70,7 +74,8 @@ export function ImagePreview({
       <CardContent className="space-y-4">
         <ImageToolbar
           editor={editor} result={result} canUndo={canUndo} onUndo={onUndo}
-          onDownload={onDownload} downloading={downloading} disabled={disabled} t={t}
+          onDownload={onDownload} onDownloadAs={onDownloadAs}
+          downloading={downloading} savingAs={savingAs} disabled={disabled} t={t}
         />
         <div
           ref={editor.previewRef}

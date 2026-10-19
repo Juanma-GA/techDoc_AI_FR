@@ -11,11 +11,31 @@ import { useWorkspaceStorage } from "./useWorkspaceStorage";
 
 export type { ReplacementPair } from "../lib/workspace-api";
 
+type SavePickerWindow = Window & {
+  showSaveFilePicker?: (options: {
+    id: string;
+    suggestedName: string;
+    types: { description: string; accept: Record<string, string[]> }[];
+  }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  }>;
+};
+
+function isSavePickerCancellation(error: unknown) {
+  return typeof error === "object" && error !== null &&
+    "name" in error && error.name === "AbortError";
+}
+
 export function useImageReplace(t: TFunction) {
   const [replacementPairs, setReplacementPairs] = useState<ReplacementPair[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [saveMode, setSaveMode] = useState<"download" | "saveAs" | null>(null);
+  const downloading = saveMode !== null;
+  const savingAs = saveMode === "saveAs";
   const [restoring, setRestoring] = useState(false);
   const [retouching, setRetouching] = useState(false);
   const excel = useExcelMapping(t);
@@ -125,7 +145,7 @@ export function useImageReplace(t: TFunction) {
 
   async function downloadImage() {
     if (!image.currentFile || !image.imageFile || downloading) return;
-    setDownloading(true);
+    setSaveMode("download");
     setError("");
     try {
       const form = imageForm(image.currentFile, image.imageFile.name, excel, t);
@@ -142,7 +162,40 @@ export function useImageReplace(t: TFunction) {
     } catch (requestFailure) {
       setError(requestError(requestFailure, t("image.errorGeneric")));
     } finally {
-      setDownloading(false);
+      setSaveMode(null);
+    }
+  }
+
+  async function downloadImageAs() {
+    if (!image.currentFile || !image.imageFile || downloading) return;
+    const pickerWindow = window as SavePickerWindow;
+    if (!pickerWindow.showSaveFilePicker) {
+      setError(t("image.errorSaveAsUnsupported"));
+      return;
+    }
+
+    setSaveMode("saveAs");
+    setError("");
+    try {
+      const form = imageForm(image.currentFile, image.imageFile.name, excel, t);
+      if (image.result) form.append("filename", image.result.filename);
+      const suggestedName = image.result?.filename ??
+        `${image.imageFile.name.replace(/\.[^.]+$/, "")}.jpg`;
+      const handle = await pickerWindow.showSaveFilePicker({
+        id: "image-processor-export",
+        suggestedName,
+        types: [{ description: t("image.jpegFileType"), accept: { "image/jpeg": [".jpg"] } }],
+      });
+      const exported = await imageReplaceApi.exportImage(form);
+      const writable = await handle.createWritable();
+      await writable.write(exported.blob);
+      await writable.close();
+    } catch (requestFailure) {
+      if (!isSavePickerCancellation(requestFailure)) {
+        setError(requestError(requestFailure, t("image.errorGeneric")));
+      }
+    } finally {
+      setSaveMode(null);
     }
   }
 
@@ -156,9 +209,9 @@ export function useImageReplace(t: TFunction) {
   }
 
   return {
-    ...excel, ...image, storage, replacementPairs, error, loading, downloading, restoring, retouching,
+    ...excel, ...image, storage, replacementPairs, error, loading, downloading, savingAs, restoring, retouching,
     setRetouching,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
-    replaceRecognizedLine, openHistory, downloadImage, retrySave,
+    replaceRecognizedLine, openHistory, downloadImage, downloadImageAs, retrySave,
   };
 }
