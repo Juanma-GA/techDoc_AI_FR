@@ -42,7 +42,7 @@
     },
     "meta_pnr_number": {
       "type": "string_list",
-      "required": false,
+      "required": true,
       "labels": {"fr": "Numéros PNR", "en": "PNR numbers"},
       "max_items": 50,
       "format_hint": {"fr": "Un numéro PNR par ligne, au format exact indiqué dans le CMM.", "en": "Enter one PNR number per line, matching the format shown in the CMM."}
@@ -60,6 +60,7 @@
     "document_language": {
       "type": "enum",
       "required": true,
+      "default": "en",
       "labels": {"fr": "Langue du document", "en": "Document language"},
       "allowed_values": [
         "fr",

@@ -7,6 +7,8 @@ execute par le backend) appelant l'utilitaire batch Composer.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from typing import Any, Iterable
 
 from app.core.parser import ParsedNode
@@ -38,6 +40,13 @@ def _basename_stem(rel_path: str, ext: str) -> str:
     return base
 
 
+def _collision_suffix(rel_path: str) -> str:
+    parent = rel_path.rsplit("/", 1)[0] if "/" in rel_path else "source"
+    readable = re.sub(r"[^A-Za-z0-9]+", "-", parent).strip("-")[:48]
+    digest = hashlib.sha1(rel_path.encode("utf-8")).hexdigest()[:8]
+    return f"{readable or 'source'}-{digest}"
+
+
 def plan(
     nodes: Iterable[ParsedNode],
     *,
@@ -52,20 +61,35 @@ def plan(
     l'arborescence relative (comportement historique).
     """
     items: list[dict] = []
-    for n in nodes:
-        if n.kind != "file":
-            continue
+    used_targets: set[str] = set()
+    file_nodes = sorted((node for node in nodes if node.kind == "file"), key=lambda node: node.rel_path)
+    for n in file_nodes:
         if flat:
             target = f"{target_dir}/{_basename_stem(n.rel_path, n.ext)}.{target_ext}"
         else:
             stem = n.rel_path[: -(len(n.ext) + 1)] if n.ext else n.rel_path
             target = f"{target_dir}/{stem}.{target_ext}"
+        collision = target.casefold() in used_targets
+        if collision:
+            stem = _basename_stem(n.rel_path, n.ext)
+            target = f"{target_dir}/{stem}__{_collision_suffix(n.rel_path)}.{target_ext}"
+            attempt = 2
+            while target.casefold() in used_targets:
+                target = f"{target_dir}/{stem}__{_collision_suffix(n.rel_path)}-{attempt}.{target_ext}"
+                attempt += 1
+        used_targets.add(target.casefold())
         # On liste TOUS les fichiers ; les formats CAO connus sont pre-selectionnes
         # (status "accepted"), les autres deselectionnes (status "rejected") mais
         # visibles et cochables -> ne rate pas un format inattendu (ex. 4A).
         status = "accepted" if n.ext in CONVERTIBLE_EXTS else "rejected"
         items.append(
-            {"source_path": n.rel_path, "target_path": target, "source_ext": n.ext, "status": status}
+            {
+                "source_path": n.rel_path,
+                "target_path": target,
+                "source_ext": n.ext,
+                "status": status,
+                "collision": collision,
+            }
         )
     items.sort(key=lambda i: i["source_path"])
     return items
@@ -87,6 +111,7 @@ def _accepted(items: Iterable[Any]) -> list[Any]:
 
 def summarize(items: list[dict]) -> dict[str, int]:
     out: dict[str, int] = {"total": len(items)}
+    out["collisions"] = sum(1 for item in items if item.get("collision"))
     for i in items:
         out[i["source_ext"]] = out.get(i["source_ext"], 0) + 1
     return out

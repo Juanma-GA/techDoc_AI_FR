@@ -22,14 +22,10 @@ Cela cree (ignores par git, cf. `.gitignore`) :
 ## Mode d'emploi rapide
 
 1. **Import** : scanner `assembly_v1` (puis `assembly_v2` pour avoir 2 imports).
-2. **Arborescence** : metriques de `assembly_v1`.
-3. **Suggestions** : lancer l'optimisation (baseline sans cle Mistral, ou IA avec).
-4. **Comparaison** : base = v1, candidat = v2.
-5. **Verifications** : sur v1 (profondeur max 6 par defaut).
-6. **Conversion** : sur v1.
-7. **Remplacement** : sur v1, importer `replacement_mapping.csv`.
-8. **Colorisation** : sur v1 (`by_type` / `by_depth`), ou `by_change` apres avoir
-   lance une Comparaison (colorie ajouts=vert / suppressions=rouge / modifs=orange).
+2. **Comparaison** : base = v1, candidat = v2.
+3. **Verifications** : sur v1 (profondeur max 6 par defaut).
+4. **Conversion** : sur v1.
+5. **Remplacement** : sur v1, importer `replacement_mapping.csv`.
 
 ## Resultats attendus (reference)
 
@@ -40,9 +36,7 @@ incoherent (espaces / MAJUSCULES / snake / kebab), extensions interdites
 
 | Module | Resultat attendu |
 |---|---|
-| **Arborescence** | profondeur_max=8, doublons=1, nommage incoherent ; baseline ~9 suggestions (regroupement par type + renommage kebab) |
 | **Comparaison** v1->v2 | 1 ajout (`Nouvelle_Piece.CATPart`), 1 suppression (`apercu.cgr`), 2 modifies (`Ensemble Principal.CATProduct`, `plan-detail.CATDrawing`) |
 | **Verifications** | ~14 violations : 2 `danger` (.bak/.tmp), 3 `warning` (profondeur + doublon), ~9 `info` (nommage) |
 | **Conversion** | 11 fichiers convertibles -> `composer/.../*.smg` |
 | **Remplacement** | 4 occurrences (2 pour `Bielle.CATPart`, 2 pour `Bras_Principal.CATPart`) |
-| **Colorisation** | `by_type` : 1 couleur / extension (~7 types) ; `by_change` (v1->v2) : 1 vert, 1 rouge, 2 orange |

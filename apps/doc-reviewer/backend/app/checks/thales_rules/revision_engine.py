@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
+from difflib import SequenceMatcher
 from typing import Literal
 
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfWord, Span
@@ -74,9 +75,10 @@ _HIGHLIGHTS_CHAPTERS = (
     "Title Page",
     "Vendor Code List",
 )
-_ALLOWED_HIGHLIGHTS_CHAPTERS = frozenset(
-    " ".join(chapter.split()).casefold() for chapter in _HIGHLIGHTS_CHAPTERS
-)
+_HIGHLIGHTS_CHAPTER_BY_KEY = {
+    re.sub(r"[^a-z0-9]", "", chapter.casefold()): chapter
+    for chapter in _HIGHLIGHTS_CHAPTERS
+}
 
 _MONTHS = (
     "JAN",
@@ -655,6 +657,22 @@ def page_key_prefix(page_key: str | None) -> str:
 # --------------------------------------------------------------------------
 
 
+def match_highlights_chapter(subject: str) -> str | None:
+    normalized = re.sub(r"[^a-z0-9]", "", subject.casefold())
+    if not normalized:
+        return None
+    if normalized in _HIGHLIGHTS_CHAPTER_BY_KEY:
+        return _HIGHLIGHTS_CHAPTER_BY_KEY[normalized]
+    closest = max(
+        _HIGHLIGHTS_CHAPTER_BY_KEY,
+        key=lambda candidate: SequenceMatcher(None, normalized, candidate).ratio(),
+    )
+    threshold = 0.85 if len(normalized) >= 10 else 0.8
+    if SequenceMatcher(None, normalized, closest).ratio() < threshold:
+        return None
+    return _HIGHLIGHTS_CHAPTER_BY_KEY[closest]
+
+
 def _highlights_header(rows: list[list[Span]]) -> tuple[int, float, float, float] | None:
     """Locate the Highlights header row and its two column boundaries."""
     for index, row in enumerate(rows):
@@ -738,18 +756,10 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
             else:
                 previous_was_subject = False
             continue
-        if not status_cells:
-            if designation_cells:
-                previous_was_subject = False
-                continue
-            if expand_page_range(_join_cell(pages_cells)):
-                pending = []
-                subject = ""
-                subject_bbox = None
-                subject_description = ""
-                subject_description_bbox = None
-                previous_was_subject = False
-                continue
+        if not status_cells and designation_cells:
+            previous_was_subject = False
+            continue
+        if not status_cells and not expand_page_range(_join_cell(pages_cells)):
             if not previous_was_subject:
                 pending = []
                 subject_bbox = None
@@ -790,10 +800,14 @@ def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
                 subject=subject,
                 pages_text=pages_text,
                 page_keys=expand_page_range(pages_text),
-                status=status_cells[0].text.strip().upper(),
+                status=status_cells[0].text.strip().upper() if status_cells else "",
                 page=page.page,
                 bbox=pages_bbox,
-                status_bbox=status_cells[0].bbox,
+                status_bbox=(
+                    status_cells[0].bbox
+                    if status_cells
+                    else (designation_x - _COLUMN_TOLERANCE, row_bbox[1], status_max, row_bbox[3])
+                ),
                 page_number_x=_highlights_page_number_x(page, pages_bbox),
                 description=description_text,
                 description_bbox=description_bbox,
@@ -1338,11 +1352,22 @@ def _is_highlights_page(page: ParsedPage) -> bool:
 
 
 def _is_lep_page(page: ParsedPage) -> bool:
-    if not _LEP_TITLE_RE.search(page.text or ""):
+    if _is_highlights_page(page):
         return False
-    return (
-        _lep_header(visual_rows(page.spans)) is not None
-        or _LEP_TITLE_LINE_RE.search(page.text or "") is not None
+    rows = visual_rows(page.spans)
+    header = _lep_header(rows)
+    if header is None:
+        return _LEP_TITLE_LINE_RE.search(page.text or "") is not None
+    header_index, _anchors = header
+    for row in rows[:header_index]:
+        title = re.sub(r"[^a-z]", "", _join_cell(row).casefold())
+        if SequenceMatcher(None, "listofeffectivepages", title).ratio() >= 0.82:
+            return True
+    footer = extract_footer(page)
+    return bool(
+        footer is not None
+        and footer.page_key is not None
+        and page_key_prefix(footer.page_key) == "LEP"
     )
 
 
@@ -1968,8 +1993,7 @@ def _highlights_chapter_findings(
 ) -> list[RevisionFinding]:
     findings: list[RevisionFinding] = []
     for entry in state.highlights:
-        normalized_subject = " ".join(entry.subject.split()).casefold()
-        if normalized_subject in _ALLOWED_HIGHLIGHTS_CHAPTERS:
+        if match_highlights_chapter(entry.subject) is not None:
             continue
         findings.append(
             RevisionFinding(

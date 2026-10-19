@@ -20,6 +20,7 @@ The assignments below are the target defaults. Current launcher differences are 
 | `brdp-manager` | Active POC | 8007 | To normalize |
 | `xml-proofreader` | Active POC | 8008 | To normalize |
 | `ecm-automation` | Active POC | 8009 | Local ECM tracker workflow |
+| `pdf-toolkit` | Go/Gin web app, optional Tauri | 8085 | Shared UI, no Python runtime |
 
 ## Known Baseline Deviations
 

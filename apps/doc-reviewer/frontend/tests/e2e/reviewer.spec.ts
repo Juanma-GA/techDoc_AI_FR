@@ -56,4 +56,68 @@ test.describe("Doc Reviewer smoke", () => {
       expect(overflow.body).toBeLessThanOrEqual(1);
     }
   });
+
+  test("uploads the configured demo PDF through the regular dashboard flow", async ({ page }) => {
+    const settings = {
+      api_key_set: false,
+      api_key_preview: "",
+      api_key_unreadable: false,
+      base_url: "https://api.mistral.ai",
+      chat_model: "mistral-small-latest",
+      vision_model: "mistral-medium-3-5",
+      vision_enabled: false,
+      llm_enabled: true,
+      llm_tested: false,
+      checklist_ai_scan: false,
+      demo_enabled: true,
+    };
+    let uploadBody = "";
+
+    await page.route("**/api/v1/settings/mistral", (route) =>
+      route.fulfill({ json: settings }),
+    );
+    await page.route("**/api/v1/health", (route) =>
+      route.fulfill({
+        json: { status: "ok", version: "test", db: "ok", llm: "disabled" },
+      }),
+    );
+    await page.route("**/api/v1/documents**", async (route) => {
+      if (route.request().method() === "POST") {
+        uploadBody = route.request().postData() ?? "";
+        await route.fulfill({ json: { id: "demo-document" } });
+        return;
+      }
+      await route.fulfill({ json: [] });
+    });
+    await page.route("**/api/v1/suggestions", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/client-rules", (route) => route.fulfill({ json: [] }));
+    await page.route("**/api/v1/client-config", (route) =>
+      route.fulfill({
+        json: {
+          client_code: "THALES",
+          label: "THALES",
+          bundle_version: "test",
+          catalogs: [],
+          manifest_hash: "test",
+          mapping_hash: "test",
+        },
+      }),
+    );
+    await page.route("**/demo/DEMO_CMM_PDF_anonyme.pdf", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+        body: "%PDF-1.7 synthetic fixture",
+      }),
+    );
+
+    await page.goto("/");
+
+    await expect(page.getByText("MODE DÉMO", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Indicateurs clés" })).toBeVisible();
+    await page.getByRole("button", { name: "Analyser un document" }).click();
+    await page.waitForURL("**/documents/demo-document");
+
+    expect(uploadBody).toContain('filename="DEMO_CMM_PDF_anonyme.pdf"');
+  });
 });

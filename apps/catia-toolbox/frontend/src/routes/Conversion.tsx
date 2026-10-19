@@ -12,6 +12,7 @@ import {
   type ConversionExecDto,
   type ConversionItemDto,
   type ConversionRunDto,
+  type ComposerConverterStatusDto,
   type SettingsDto,
 } from "../lib/api";
 import { FilePicker } from "../components/FilePicker";
@@ -19,41 +20,90 @@ import { useWorkspace } from "../stores/workspace";
 
 const ZIP_EXTS = [".zip"];
 
-/** Config licence flottante Composer (partagee avec l'onglet Parametres). */
-function ComposerLicenseCard() {
+/** Configuration locale requise par l'interface officielle ComposerConverter. */
+function ComposerConfigurationCard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const settingsQuery = useQuery<SettingsDto>({ queryKey: ["settings"], queryFn: settingsApi.read });
-  const [draft, setDraft] = useState<string | null>(null);
+  const statusQuery = useQuery<ComposerConverterStatusDto>({
+    queryKey: ["composer-status"],
+    queryFn: conversionApi.status,
+  });
+  const [licenseDraft, setLicenseDraft] = useState<string | null>(null);
+  const [executableDraft, setExecutableDraft] = useState<string | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const value = draft ?? settingsQuery.data?.composer_license_server ?? "";
+  const license = licenseDraft ?? settingsQuery.data?.composer_license_server ?? "";
+  const executable = executableDraft ?? settingsQuery.data?.composer_converter_path ?? "";
+  const settingsFile = settingsDraft ?? settingsQuery.data?.composer_settings_path ?? "";
 
   const saveMutation = useMutation({
-    mutationFn: () => settingsApi.write({ composer_license_server: value.trim() }),
+    mutationFn: () =>
+      settingsApi.write({
+        composer_license_server: license.trim(),
+        composer_converter_path: executable.trim(),
+        composer_settings_path: settingsFile.trim(),
+      }),
     onSuccess: () => {
       setNotice(t("settings.saved"));
       void qc.invalidateQueries({ queryKey: ["settings"] });
+      void qc.invalidateQueries({ queryKey: ["composer-status"] });
     },
   });
 
   return (
     <article className="card">
-      <h2 className="card-title">{t("settings.composerTitle")}</h2>
-      <p className="banner info">{t("settings.composerNotice")}</p>
-      <div className="row" style={{ alignItems: "flex-end" }}>
-        <div className="grow field">
-          <label htmlFor="conv-lic" className="field-label">
-            {t("settings.composerLicense")}
-          </label>
+      <h2 className="card-title">
+        <span className="row">
+          <span>{t("settings.composerTitle")}</span>
+          {statusQuery.data ? (
+            <span className={`badge ${statusQuery.data.available ? "ok" : "warn"}`}>
+              {statusQuery.data.available ? t("conversion.composerReady") : t("conversion.composerNotReady")}
+            </span>
+          ) : null}
+        </span>
+      </h2>
+      {statusQuery.data ? (
+        <p className={statusQuery.data.available ? "success" : "hint"}>
+          {statusQuery.data.message}
+          {statusQuery.data.version ? ` (${statusQuery.data.version})` : ""}
+        </p>
+      ) : null}
+      <div className="form">
+        <div className="field">
+          <label htmlFor="conv-exe" className="field-label">{t("conversion.composerExecutable")}</label>
+          <input
+            id="conv-exe"
+            className="input mono"
+            value={executable}
+            onChange={(e) => setExecutableDraft(e.target.value)}
+            placeholder={statusQuery.data?.executable || "C:\\Program Files\\...\\ComposerConverter.exe"}
+          />
+          <p className="hint">{t("conversion.composerExecutableHint")}</p>
+        </div>
+        <div className="field">
+          <label htmlFor="conv-settings" className="field-label">{t("conversion.composerSettings")}</label>
+          <input
+            id="conv-settings"
+            className="input mono"
+            value={settingsFile}
+            onChange={(e) => setSettingsDraft(e.target.value)}
+            placeholder="C:\\CATIA\\conversion-settings.xml"
+          />
+          <p className="hint">{t("conversion.composerSettingsHint")}</p>
+        </div>
+        <div className="field">
+          <label htmlFor="conv-lic" className="field-label">{t("settings.composerLicense")}</label>
           <input
             id="conv-lic"
             className="input mono"
-            value={value}
-            onChange={(e) => setDraft(e.target.value)}
+            value={license}
+            onChange={(e) => setLicenseDraft(e.target.value)}
             placeholder="4085@serveur-licence"
           />
           <p className="hint">{t("settings.composerHint")}</p>
         </div>
+        <div className="row">
         <button
           type="button"
           className="btn primary small"
@@ -67,6 +117,7 @@ function ComposerLicenseCard() {
           <span>{t("settings.save")}</span>
         </button>
         {notice ? <span className="success">{notice}</span> : null}
+        </div>
       </div>
     </article>
   );
@@ -145,6 +196,10 @@ export function Conversion() {
   const executeMutation = useMutation({
     mutationFn: ({ dryRun, confirm }: { dryRun: boolean; confirm: boolean }) =>
       conversionApi.execute(run!.id, dryRun, confirm),
+    onMutate: () => {
+      setError(null);
+      setExecOut(null);
+    },
     onSuccess: (out) => {
       disarm();
       setError(null);
@@ -156,12 +211,13 @@ export function Conversion() {
     },
   });
 
-  const onExecuteReal = () => {
-    if (!execArmed) {
-      setExecArmed(true);
-      armTimer.current = setTimeout(() => setExecArmed(false), 3000);
-      return;
-    }
+  const armExecuteReal = () => {
+    setExecArmed(true);
+    armTimer.current = setTimeout(disarm, 3000);
+  };
+
+  const confirmExecuteReal = () => {
+    disarm();
     executeMutation.mutate({ dryRun: false, confirm: true });
   };
 
@@ -188,32 +244,20 @@ export function Conversion() {
 
   const outputDir =
     run && typeof run.summary.output_dir === "string" ? (run.summary.output_dir as string) : "";
+  const outputPath =
+    run && typeof run.summary.output_path === "string"
+      ? (run.summary.output_path as string)
+      : outputDir;
   const selectedCount = items.filter((it) => it.status === "accepted").length;
 
   return (
     <div className="grow form" style={{ maxWidth: "56rem" }}>
-      {/* ---- 0. Workflow ---- */}
-      <article className="card">
-        <h2 className="card-title">{t("conversion.workflowTitle")}</h2>
-        <ol style={{ margin: 0, paddingLeft: "1.2rem", lineHeight: 1.7 }}>
-          <li>{t("conversion.workflow1")}</li>
-          <li>{t("conversion.workflow2")}</li>
-          <li>{t("conversion.workflow3")}</li>
-          <li>{t("conversion.workflow4")}</li>
-          <li>{t("conversion.workflow5")}</li>
-        </ol>
-        <p className="banner warn" style={{ marginTop: "0.75rem" }}>
-          {t("conversion.workflowScriptNote")}
-        </p>
-      </article>
-
       {/* ---- Licence Composer (injectee dans le script genere) ---- */}
-      <ComposerLicenseCard />
+      <ComposerConfigurationCard />
 
       {/* ---- 1. Source a convertir : dossier ou zip ---- */}
       <article className="card">
         <h2 className="card-title">{t("conversion.sourceTitle")}</h2>
-        <p className="banner info">{t("conversion.sourceBanner")}</p>
 
         <div className="field">
           <label className="field-label">{t("conversion.folderLabel")}</label>
@@ -270,7 +314,7 @@ export function Conversion() {
       <article className="card">
         <h2 className="card-title">{t("conversion.planTitle")}</h2>
         <p className="banner warn">
-          <strong>{t("export.dryRunTitle")}</strong> {t("conversion.dryRun")}
+          <strong>{t("common.dryRunTitle")}</strong> {t("conversion.dryRun")}
         </p>
 
         <div className="field">
@@ -302,7 +346,7 @@ export function Conversion() {
       {run ? (
         <article className="card">
           <h2 className="card-title">{t("conversion.resultTitle", { count: items.length })}</h2>
-          {outputDir ? <p className="banner info">{t("conversion.outputFolder", { name: outputDir })}</p> : null}
+          {outputPath ? <p className="hint">{t("conversion.outputFolder", { name: outputPath })}</p> : null}
 
           <div className="row" style={{ margin: "0.5rem 0" }}>
             <button type="button" className="btn ghost small" onClick={() => setAll(true)}>
@@ -372,14 +416,26 @@ export function Conversion() {
                 {executeMutation.isPending ? <span className="spinner" /> : null}
                 <span>{t("conversion.execDry")}</span>
               </button>
-              <button
-                type="button"
-                className="btn danger small"
-                onClick={onExecuteReal}
-                disabled={executeMutation.isPending || selectedCount === 0}
-              >
-                <span>{execArmed ? t("conversion.execConfirm") : t("conversion.execReal")}</span>
-              </button>
+              {execArmed ? (
+                <button
+                  type="button"
+                  className="btn danger small"
+                  onClick={confirmExecuteReal}
+                  disabled={executeMutation.isPending || selectedCount === 0}
+                >
+                  <span>{t("conversion.execConfirm")}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn danger small"
+                  onClick={armExecuteReal}
+                  disabled={executeMutation.isPending || selectedCount === 0}
+                >
+                  {executeMutation.isPending ? <span className="spinner" /> : null}
+                  <span>{t("conversion.execReal")}</span>
+                </button>
+              )}
             </div>
 
             {execOut ? (
@@ -390,6 +446,11 @@ export function Conversion() {
                     code: execOut.returncode,
                   })}
                 </p>
+                {!execOut.dry_run ? (
+                  <p className={execOut.failed === 0 ? "success" : "error"}>
+                    {t("conversion.execCounts", { converted: execOut.converted, failed: execOut.failed })}
+                  </p>
+                ) : null}
                 {execOut.base ? <p className="hint">{t("conversion.execBase", { base: execOut.base })}</p> : null}
                 <pre
                   style={{

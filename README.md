@@ -1,6 +1,6 @@
 # Internal POC Monorepo
 
-Monorepo interne hébergeant plusieurs POC IA full-stack (FastAPI + React),
+Monorepo interne hébergeant plusieurs POC full-stack (FastAPI ou Go + React),
 développés dans un **tronc commun partagé** (`packages/ui`, `design-tokens/`,
 scripts, standard) et conformes à [`STANDARD_POC.md`](STANDARD_POC.md).
 Chaque app est indépendante côté runtime mais s'aligne sur les mêmes
@@ -19,6 +19,7 @@ Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
 | [`apps/s1000d-extractor/`](apps/s1000d-extractor/) | Extraction et transformation S1000D | 8006 |
 | [`apps/brdp-manager/`](apps/brdp-manager/) | Gestion de BRDP | 8007 |
 | [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
+| [`apps/pdf-toolkit/`](apps/pdf-toolkit/) | Outils PDF Go, web et bureau Tauri optionnel | 8085 |
 | [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
 
 Le launcher tente le port par défaut puis utilise le premier port libre
@@ -37,10 +38,12 @@ Chaque app fournit un launcher Windows à sa racine :
 Double-clic sur :  apps\<poc>\start.bat
 ```
 
-**Python 3.11+ et Node 20 + pnpm sont requis pour construire l'UI React.**
+**Node 20 + pnpm sont requis pour construire l'UI React.** Le backend utilise
+les outils de sa stack : Python 3.11+ pour FastAPI, Go 1.25+ pour PDF Toolkit.
 Le package partageable contient le bundle React validé ; l'utilisateur final
 n'a pas besoin de Node pour l'exécuter. Au premier lancement, le script crée
-le venv, installe les deps Python et applique les migrations Alembic.
+le venv, installe les deps Python et applique les migrations Alembic pour FastAPI ;
+PDF Toolkit compile son binaire Go, sans Python.
 
 Le navigateur s'ouvre tout seul sur `http://127.0.0.1:<port>/` et sert
 l'UI React buildée depuis `frontend/dist/`. Si le bundle est absent, le
@@ -62,6 +65,11 @@ Double-clic sur :  apps\<poc>\package.bat
 Il produit `apps/<poc>/dist/<poc>-vX.Y.Z-YYYYMMDD.zip` : un ZIP
 autonome (sources de l'app + design-tokens + Python 3.11 embarqué) que
 le collègue décompresse et lance via `start.bat`, sans aucun prérequis.
+Pour PDF Toolkit, le ZIP contient plutôt Go Windows x64 embarqué, les sources,
+les dépendances vendoriées et l'UI buildée : compilation locale hors ligne au
+premier lancement, sans installation de Go/Node/Python. Les protections Windows
+restent applicables au programme compilé. `package.bat desktop` conserve
+le packaging Tauri optionnel.
 
 ## Structure
 
@@ -144,13 +152,17 @@ section `## Auth`, scripts racine wirés, bind `127.0.0.1`). Voir
 
 ```bash
 bash scripts/new_poc.sh <slug> [<port>]
+node scripts/new_poc.mjs <slug> [<port>] --desktop
 ```
 
 Le script copie `apps/_template/` → `apps/<slug>/`, substitue les ~15
 marqueurs `TEMPLATE` / `8000` dans tous les fichiers, génère
 `scripts/package_<slug>.py`, wire les scripts `dev:<slug>` /
 `test:e2e:<slug>` / `openapi:gen:<slug>` dans `package.json`, et
-exécute `check_standard.sh` pour valider. Voir
+propose `check_standard.sh` à exécuter ensuite pour valider. La génération utilise
+Node et ne requiert pas Python. L'option `--desktop` ajoute Tauri sans supprimer
+le mode web ; sans cette option, le scaffold FastAPI/React reste inchangé.
+Voir le [guide stacks et desktop](docs/standards/desktop-and-stacks.md) et
 [`STANDARD_POC.md` §11](STANDARD_POC.md#11-ajout-dun-nouveau-poc) pour
 la procédure manuelle de fallback.
 

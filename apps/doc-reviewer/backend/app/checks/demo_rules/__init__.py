@@ -1,0 +1,1 @@
+"""THALES client bundle assets and implementation."""

@@ -121,6 +121,24 @@ export type DocumentMetaPatch = {
   document_language?: "fr" | "en" | null;
 };
 
+export type DocumentMetadataSuggestions = {
+  pages_scanned: number;
+  meta_cmm_number: string | null;
+  meta_pnr_number: string[];
+  meta_revision_number: string | null;
+  meta_revision_date: string | null;
+  meta_first_issue_date: string | null;
+};
+
+export function useSuggestDocumentMetadata(id: string) {
+  return useMutation<DocumentMetadataSuggestions, Error, void>({
+    mutationFn: () =>
+      api.post<DocumentMetadataSuggestions>(
+        `/documents/${id}/metadata-suggestions`,
+      ),
+  });
+}
+
 /** Mapping manuel par document (repris par les consignes de checklist qui
  * y font reference lors du scan IA). */
 export function usePatchDocumentMeta(id: string | undefined) {

@@ -21,6 +21,7 @@ def _upload(client: TestClient, sample_pdf_bytes: bytes) -> str:
             "meta_cmm_number": "79-30-02",
             "meta_first_issue_date": "JUL 1966",
             "meta_revision_number": "Rev. 01",
+            "meta_pnr_number": "1-900-SB",
             "document_language": "en",
         },
     )

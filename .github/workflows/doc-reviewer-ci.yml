@@ -39,16 +39,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Reject tracked PDF and Word documents
+      - name: Reject tracked non-anonymous PDF and Word documents
         shell: bash
         run: |
-          forbidden_files="$(git ls-files -- 'apps/doc-reviewer' | grep -Ei '\.(pdf|docx?)$' || true)"
+          tracked_documents="$(git ls-files -- 'apps/doc-reviewer' | grep -Ei '\.(pdf|docx?)$' || true)"
+          forbidden_files="$(printf '%s\n' "$tracked_documents" | grep -Eiv '(^|/)[^/]*anonyme[^/]*\.pdf$' || true)"
           if [ -n "$forbidden_files" ]; then
-            printf '%s\n' "::error::PDF, DOC, and DOCX files must not be committed under apps/doc-reviewer."
+            printf '%s\n' "::error::PDF filenames must contain 'anonyme'; DOC and DOCX files must not be committed under apps/doc-reviewer."
             printf '%s\n' "$forbidden_files"
             exit 1
           fi
-          echo "No tracked PDF, DOC, or DOCX files found under apps/doc-reviewer."
+          echo "No disallowed PDF, DOC, or DOCX files found under apps/doc-reviewer."
 
   backend:
     name: Doc Reviewer backend
