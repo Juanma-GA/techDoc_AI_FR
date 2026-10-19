@@ -72,6 +72,7 @@ def test_brex_detail_exposes_dmc_and_parsed_rules(client, brex_xml) -> None:
     assert detail.status_code == 200
     assert detail.json()["dm_code"]["modelIdentCode"] == "TST"
     assert detail.json()["rules"][0]["allowed_flag"] == "0"
+    assert detail.json()["rules"][0]["support_status"] == "automatic"
     assert detail.json()["rules"][0]["object_path"] == "//emphasis"
 
 

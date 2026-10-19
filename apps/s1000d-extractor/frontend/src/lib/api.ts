@@ -125,6 +125,8 @@ export type BrexRule = {
   context_id: string | null;
   severity_level: string | null;
   supported: boolean;
+  support_status: "automatic" | "contextual" | "unsupported";
+  support_reason: string | null;
 };
 
 export type UnsupportedBrexRule = {

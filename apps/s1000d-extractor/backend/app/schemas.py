@@ -89,6 +89,8 @@ class BrexRuleOut(BaseModel):
     context_id: str | None = None
     severity_level: str | None = None
     supported: bool
+    support_status: str
+    support_reason: str | None = None
 
 
 class UnsupportedBrexRuleOut(BaseModel):

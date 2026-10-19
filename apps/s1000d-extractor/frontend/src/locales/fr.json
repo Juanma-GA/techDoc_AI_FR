@@ -157,8 +157,21 @@
       "rulesError": "Impossible de lire les règles du BREX : {{message}}",
       "rulesSummary": "Règles détectées ({{count}})",
       "noStructuredRules": "Aucune règle structurelle automatisable détectée.",
-      "supported": "Interprétable par le moteur",
-      "notSupported": "Non interprétable automatiquement",
+      "coverageAutomatic": "{{count}} directement interprétables",
+      "coverageContextual": "{{count}} conditionnées au schéma du DM",
+      "coverageUnsupported": "{{count}} non automatisées",
+      "supportStatus": {
+        "automatic": "Automatique",
+        "contextual": "Conditionnée au schéma",
+        "unsupported": "Non automatisée"
+      },
+      "supportReason": {
+        "unsupported_flag": "Flag allowedObjectFlag non pris en charge.",
+        "missing_object_path": "objectPath manquant.",
+        "unsupported_value_form": "Forme ou tailoring de valeur non pris en charge.",
+        "invalid_object_path": "XPath invalide ou non pris en charge.",
+        "other": "Cette règle n'est pas appliquée automatiquement."
+      },
       "flagForbidden": "Interdit (0)",
       "flagRequired": "Obligatoire (1)",
       "flagOptional": "Facultatif (2)",

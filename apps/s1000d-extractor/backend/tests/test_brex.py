@@ -72,6 +72,34 @@ def test_unsupported_object_value_form_is_reported() -> None:
     assert any(v["rule"] == "BREX_VALUE_UNSUPPORTED" for v in violations)
 
 
+def test_rule_support_status_distinguishes_context_and_unsupported_forms() -> None:
+    brex = (
+        "<dmodule><content><brex>"
+        "<contextRules><structureObjectRuleGroup>"
+        '<structureObjectRule><objectPath allowedObjectFlag="0">//emphasis</objectPath>'
+        "</structureObjectRule>"
+        '<structureObjectRule><objectPath allowedObjectFlag="0">//*['
+        "</objectPath></structureObjectRule>"
+        '<structureObjectRule><objectPath allowedObjectFlag="2">//item/@type</objectPath>'
+        '<objectValue valueForm="range" valueAllowed="1-3"/>'
+        "</structureObjectRule>"
+        "</structureObjectRuleGroup></contextRules>"
+        '<contextRules rulesContext="http://example.test/proced.xsd">'
+        "<structureObjectRuleGroup><structureObjectRule>"
+        '<objectPath allowedObjectFlag="0">//emphasis</objectPath>'
+        "</structureObjectRule></structureObjectRuleGroup></contextRules>"
+        "</brex></content></dmodule>"
+    )
+    rules = parse_brex(brex)
+
+    assert [rule.support_status for rule in rules] == [
+        "automatic", "unsupported", "unsupported", "contextual",
+    ]
+    assert [rule.support_reason for rule in rules] == [
+        None, "invalid_object_path", "unsupported_value_form", None,
+    ]
+
+
 def test_context_rules_match_the_target_dm_schema_uri() -> None:
     schema_uri = "http://www.s1000d.org/S1000D_4-2/xml_schema_flat/descript.xsd"
     brex = (

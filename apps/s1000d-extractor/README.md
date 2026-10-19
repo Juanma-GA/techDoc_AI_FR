@@ -83,7 +83,7 @@ The uploaded BREX is a user-supplied S1000D Data Module and is treated as the so
 
 BREX uploads are parsed according to the XML encoding declaration and normalized to UTF-8 for storage. Recognized HTML5 named character entities are converted to numeric XML character references; unknown names are rejected. Internal DTD subsets are accepted without entity resolution; external DTDs remain blocked.
 
-The current rule engine applies `structureObjectRule` paths, `allowedObjectFlag` values 0/1/2, closed single-value restrictions, and `contextRules` whose `rulesContext` schema URI exactly matches the generated DM's schema URI. Non-context, notation, and SNS rule families are shown as detected but not automatically evaluated. Unsupported value forms and unevaluable object paths are reported as unverifiable rather than treated as passing.
+The current rule engine applies `structureObjectRule` paths, `allowedObjectFlag` values 0/1/2, closed single-value restrictions, and `contextRules` whose `rulesContext` schema URI exactly matches the generated DM's schema URI. The BREX preview classifies parsed rules as directly interpretable, schema-contextual, or not automatically evaluated. Non-context, notation, and SNS rule families are shown as detected but not automatically evaluated. Unsupported value forms and unevaluable object paths are reported as unverifiable rather than treated as passing.
 
 ## Standard Deviations
 

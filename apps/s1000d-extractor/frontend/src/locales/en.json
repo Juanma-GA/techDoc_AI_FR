@@ -157,8 +157,21 @@
       "rulesError": "Could not read the BREX rules: {{message}}",
       "rulesSummary": "Detected rules ({{count}})",
       "noStructuredRules": "No automatable structure rules were detected.",
-      "supported": "Interpretable by the engine",
-      "notSupported": "Not automatically interpretable",
+      "coverageAutomatic": "{{count}} directly interpretable",
+      "coverageContextual": "{{count}} conditional on the DM schema",
+      "coverageUnsupported": "{{count}} not automated",
+      "supportStatus": {
+        "automatic": "Automatic",
+        "contextual": "Schema-dependent",
+        "unsupported": "Not automated"
+      },
+      "supportReason": {
+        "unsupported_flag": "Unsupported allowedObjectFlag.",
+        "missing_object_path": "Missing objectPath.",
+        "unsupported_value_form": "Unsupported objectValue form or tailoring.",
+        "invalid_object_path": "Invalid or unsupported XPath.",
+        "other": "This rule is not applied automatically."
+      },
       "flagForbidden": "Forbidden (0)",
       "flagRequired": "Required (1)",
       "flagOptional": "Optional (2)",

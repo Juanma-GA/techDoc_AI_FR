@@ -17,13 +17,24 @@ function unsupportedLabel(ruleType: string, t: TFunction) {
   return t("migration.brex.unsupportedOther");
 }
 
+function supportReasonLabel(reason: string, t: TFunction) {
+  return t(`migration.brex.supportReason.${reason}`, {
+    defaultValue: t("migration.brex.supportReason.other"),
+  });
+}
+
 function RuleItem({ rule }: { rule: BrexRule }) {
   const { t } = useTranslation();
+  const badgeClass = rule.support_status === "unsupported"
+    ? "warn"
+    : rule.support_status === "contextual"
+      ? "info"
+      : "ok";
   return (
     <li className="brex-rule-item">
       <div className="row">
-        <span className={`badge ${rule.supported ? "info" : "warn"}`}>
-          {t(rule.supported ? "migration.brex.supported" : "migration.brex.notSupported")}
+        <span className={`badge ${badgeClass}`}>
+          {t(`migration.brex.supportStatus.${rule.support_status}`)}
         </span>
         <span className="badge info">{flagLabel(rule.allowed_flag, t)}</span>
         {rule.rule_id ? <code>{rule.rule_id}</code> : null}
@@ -34,6 +45,9 @@ function RuleItem({ rule }: { rule: BrexRule }) {
       >
         {rule.object_path}
       </code>
+      {rule.support_reason ? (
+        <p className="label">{supportReasonLabel(rule.support_reason, t)}</p>
+      ) : null}
       {rule.object_use ? <p>{rule.object_use}</p> : null}
       {rule.rules_context ? (
         <p>
@@ -65,6 +79,15 @@ function RuleItem({ rule }: { rule: BrexRule }) {
 export function BrexRulesPreview({ profile }: { profile: BrexProfileDetail }) {
   const { t } = useTranslation();
   const ruleCount = profile.rules.length + profile.unsupported_rules.length;
+  const automaticCount = profile.rules.filter(
+    (rule) => rule.support_status === "automatic",
+  ).length;
+  const contextualCount = profile.rules.filter(
+    (rule) => rule.support_status === "contextual",
+  ).length;
+  const unsupportedCount = profile.rules.filter(
+    (rule) => rule.support_status === "unsupported",
+  ).length + profile.unsupported_rules.length;
   return (
     <div className="brex-rules-preview">
       <div className="label">
@@ -73,6 +96,17 @@ export function BrexRulesPreview({ profile }: { profile: BrexProfileDetail }) {
       <details>
         <summary>{t("migration.brex.rulesSummary", { count: ruleCount })}</summary>
         <div className="brex-rule-list">
+          <div className="row" role="status">
+            <span className="badge ok">
+              {t("migration.brex.coverageAutomatic", { count: automaticCount })}
+            </span>
+            <span className="badge info">
+              {t("migration.brex.coverageContextual", { count: contextualCount })}
+            </span>
+            <span className="badge warn">
+              {t("migration.brex.coverageUnsupported", { count: unsupportedCount })}
+            </span>
+          </div>
           {profile.rules.length ? (
             <ul>
               {profile.rules.map((rule, index) => (

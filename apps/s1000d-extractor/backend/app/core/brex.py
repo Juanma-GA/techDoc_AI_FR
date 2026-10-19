@@ -30,6 +30,25 @@ class BrexRule:
     namespaces: dict[str, str] = field(default_factory=dict)
 
     @property
+    def support_reason(self) -> str | None:
+        if self.allowed_flag not in {"0", "1", "2"}:
+            return "unsupported_flag"
+        if not self.object_path:
+            return "missing_object_path"
+        if self.allowed_flag != "0" and any(
+            not value.value_allowed
+            or value.value_tailoring != "closed"
+            or value.value_form not in {None, "single"}
+            for value in self.object_values
+        ):
+            return "unsupported_value_form"
+        try:
+            _compile_xpath(self.object_path, self.namespaces)
+        except etree.XPathError:
+            return "invalid_object_path"
+        return None
+
+    @property
     def values_allowed(self) -> list[str]:
         return [
             value.value_allowed
@@ -39,20 +58,13 @@ class BrexRule:
 
     @property
     def supported(self) -> bool:
-        if self.allowed_flag not in {"0", "1", "2"}:
-            return False
-        if any(
-            not value.value_allowed
-            or value.value_tailoring != "closed"
-            or value.value_form not in {None, "single"}
-            for value in self.object_values
-        ):
-            return False
-        try:
-            _compile_xpath(self.object_path, self.namespaces)
-        except etree.XPathError:
-            return False
-        return True
+        return self.support_reason is None
+
+    @property
+    def support_status(self) -> str:
+        if not self.supported:
+            return "unsupported"
+        return "contextual" if self.rules_context else "automatic"
 
 
 def _localname(tag: object) -> str:
@@ -82,8 +94,6 @@ def parse_brex_root(root: etree._Element) -> list[BrexRule]:
             continue
         path_element = _direct_child(rule_element, "objectPath")
         object_path = _text(path_element)
-        if not object_path:
-            continue
 
         context_element = next(
             (

@@ -83,6 +83,8 @@ def _to_detail(b: BrexProfile) -> BrexProfileDetailOut:
                 context_id=rule.context_id,
                 severity_level=rule.severity_level,
                 supported=rule.supported,
+                support_status=rule.support_status,
+                support_reason=rule.support_reason,
             )
             for rule in profile.rules
         ],
