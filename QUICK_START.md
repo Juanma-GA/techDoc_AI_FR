@@ -46,7 +46,7 @@ apps\corpus-agent\start.bat
 Une fois la page ouverte :
 - ✅ Theme toggle (sun/moon) dans le sidebar
 - ✅ Langue FR/EN dans le sidebar
-- ✅ Onglets : Home, Architecture, Données, Paramètres
+- ✅ Navigation propre à l'application ; l'onglet Données peut être absent
 - ✅ Pas de console error (F12)
 
 ### Étape 4 : Arrêter l'app
@@ -139,4 +139,3 @@ pnpm build
 
 **Status:** ✅ All POCs 100% AACF compliant, ready for testing  
 **Ready to launch? Let's go! 🚀**
-

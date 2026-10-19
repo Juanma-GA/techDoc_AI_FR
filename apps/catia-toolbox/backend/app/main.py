@@ -12,28 +12,24 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     admin,
     browse,
+    catpart_diff,
     checks,
     colorization,
-    colorref,
     conversion,
     diff,
-    export,
     health,
     identification,
     imports,
-    optimize,
     qc,
     replacement,
     smgxml,
-    suggestions,
-    tree,
+    tree_optimization,
 )
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
-
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
@@ -110,18 +106,15 @@ def create_app() -> FastAPI:
     api_v1.include_router(admin.router)
     api_v1.include_router(browse.router)
     api_v1.include_router(imports.router)
-    api_v1.include_router(tree.router)
-    api_v1.include_router(optimize.router)
-    api_v1.include_router(suggestions.router)
-    api_v1.include_router(export.router)
     api_v1.include_router(diff.router)
+    api_v1.include_router(catpart_diff.router)
     api_v1.include_router(checks.router)
+    api_v1.include_router(colorization.router)
     api_v1.include_router(conversion.router)
     api_v1.include_router(replacement.router)
-    api_v1.include_router(colorization.router)
-    api_v1.include_router(colorref.router)
     api_v1.include_router(identification.router)
     api_v1.include_router(smgxml.router)
+    api_v1.include_router(tree_optimization.router)
     api_v1.include_router(qc.router)
     app.include_router(api_v1)
 

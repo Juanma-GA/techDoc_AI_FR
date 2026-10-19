@@ -1,10 +1,8 @@
 """Heuristiques deterministes sur une arborescence.
 
 Fonctions pures (testables sans DB ni reseau) : prennent une liste de
-`ParsedNode` et renvoient un dict JSON-serialisable. Ces metriques servent a
-deux choses :
-1. Le baseline non-LLM (suggestions deterministes dans optimizer_engine).
-2. Les preuves injectees dans le prompt Mistral.
+`ParsedNode` et renvoient un dict JSON-serialisable. Elles sont conservees sur
+les imports et reutilisees par les verifications de structure.
 """
 
 from __future__ import annotations

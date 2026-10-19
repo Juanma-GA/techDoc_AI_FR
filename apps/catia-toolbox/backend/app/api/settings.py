@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core import composer_license, onedrive
+from app.core import composer_converter, composer_license, onedrive
 from app.core.mistral_client import (
     MistralClient,
     MistralError,
@@ -20,7 +20,6 @@ from app.core.mistral_client import (
 )
 from app.db.session import get_db
 from app.schemas import SettingsIn, SettingsOut, TestConnectionOut
-
 
 log = logging.getLogger("template.settings")
 
@@ -40,6 +39,8 @@ def _settings_out(db: Session) -> SettingsOut:
         onedrive_input_root=roots["input"],
         onedrive_output_root=roots["output"],
         composer_license_server=composer_license.get_license_server(db),
+        composer_converter_path=composer_converter.get_converter_path(db),
+        composer_settings_path=composer_converter.get_settings_path(db),
     )
 
 
@@ -61,6 +62,12 @@ def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> Settin
         )
     if payload.composer_license_server is not None:
         composer_license.set_license_server(db, payload.composer_license_server)
+    if payload.composer_converter_path is not None or payload.composer_settings_path is not None:
+        composer_converter.set_paths(
+            db,
+            executable=payload.composer_converter_path,
+            settings_file=payload.composer_settings_path,
+        )
     return _settings_out(db)
 
 

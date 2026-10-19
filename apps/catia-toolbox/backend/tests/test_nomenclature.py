@@ -176,6 +176,39 @@ def test_all_rows_and_to_treat_non_empty(client, tmp_path):
     to_treat = client.get(f"/api/v1/identification/{run_id}/items", params={"to_treat": True}).json()
     assert {i["sin"] for i in to_treat} == {"SIN-1", "SIN-2"}
 
+def test_x000_filters_optimized_parts(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["CATPart", "SIN", "X000"])
+    ws.append(["P1.CATPart", "SIN-1", "x"])
+    ws.append(["P2.CATPart", "SIN-2", ""])
+    ws.append(["P3.CATPart", "SIN-3", "oui"])
+    xlsx = tmp_path / "optimized.xlsx"
+    wb.save(xlsx)
+
+    response = client.post(
+        "/api/v1/identification/nomenclature",
+        json={"scope": "input", "path": str(xlsx)},
+    )
+    assert response.status_code == 200, response.text
+    run = response.json()
+    assert run["summary"]["optimized"] == 1
+    assert "optimized" in run["summary"]["detected_columns"]
+
+    items = client.get(
+        f"/api/v1/identification/{run['id']}/items",
+        params={"optimized": True},
+    ).json()
+    assert {item["sin"] for item in items} == {"SIN-1"}
+
+    exported = client.get(
+        f"/api/v1/identification/{run['id']}/export.csv",
+        params={"optimized": True},
+    )
+    assert "P1.CATPart" in exported.text
+    assert "P2.CATPart" not in exported.text
+
 
 def _make_xlsx_full(tmp_path, name="nomen_full.xlsx"):
     """Nomenclature avec les colonnes remplacement + ref couleur + materiaux."""
@@ -255,28 +288,89 @@ def test_compare_nomenclatures(client, tmp_path):
     body = r.json()
     assert {e["sin"] for e in body["added_sin"]} == {"SIN-003"}
     assert {e["sin"] for e in body["removed_sin"]} == {"SIN-002"}
+    assert body["added_sin"][0]["old_pn_v2"] == "P3.CATPart"
+    assert body["removed_sin"][0]["old_pn"] == "P2.CATPart"
+    assert body["removed_sin"][0]["old_pn_v2"] == ""
     changed = {e["sin"]: e for e in body["changed_pn"]}
     # Seul un changement de PN est reporte (SIN-001). SIN-004 garde le meme PN
     # (seule la revision change) -> non reporte par la comparaison.
     assert set(changed) == {"SIN-001"}
-    # Seul l'OLD PN (PN de V0) est expose ; pas de NEW PN / revisions.
+    # OLD P/N de V0 et V1 sont exposes ; les revisions restent exclues.
     assert changed["SIN-001"]["old_pn"] == "P1.CATPart"
-    assert "new_pn" not in changed["SIN-001"] and "old_rev" not in changed["SIN-001"]
+    assert changed["SIN-001"]["old_pn_v2"] == "P1B.CATPart"
+    assert "old_rev" not in changed["SIN-001"]
 
     csv = client.get(
         "/api/v1/identification/compare/export.csv",
         params={"base_run_id": run_a, "other_run_id": run_b},
     )
     assert csv.status_code == 200
-    assert csv.text.splitlines()[0] == "type;sin;old_pn;designation"
+    assert csv.text.splitlines()[0] == "type;sin;old_pn;old_pn_v2;designation"
+    assert "new_pn" not in csv.text
     assert "SIN-003" in csv.text and "SIN-002" in csv.text
     assert "modifie" in csv.text
 
 
-def test_compare_old_new_pn_columns(client, tmp_path):
-    """Comparaison via colonnes OLD/NEW P/N dediees : un SIN est modifie des que
-    l'OLD *ou* le NEW P/N change d'une version a l'autre (colonnes OLD comparees
-    entre elles, NEW entre elles). Le nom de fichier CATPart peut ne pas bouger."""
+def test_compare_multiple_nomenclatures_preserves_pairwise_results(client, tmp_path):
+    _set_input_root(client, str(tmp_path))
+
+    def _make(name, rows):
+        wb = Workbook()
+        ws = wb.active
+        ws.append(["CATPart", "SIN"])
+        for row in rows:
+            ws.append(row)
+        path = tmp_path / name
+        wb.save(path)
+        response = client.post(
+            "/api/v1/identification/nomenclature",
+            json={"scope": "input", "path": str(path)},
+        )
+        return response.json()["id"]
+
+    v0 = _make("multi-v0.xlsx", [["P1.CATPart", "SIN-001"]])
+    v1 = _make("multi-v1.xlsx", [["P1B.CATPart", "SIN-001"], ["P2.CATPart", "SIN-002"]])
+    v2 = _make("multi-v2.xlsx", [["P1B.CATPart", "SIN-001"], ["P3.CATPart", "SIN-003"]])
+
+    chronology = client.post(
+        "/api/v1/identification/compare/multi",
+        json={"run_ids": [v0, v1, v2], "mode": "chronology"},
+    )
+    assert chronology.status_code == 200, chronology.text
+    body = chronology.json()
+    assert [(row["base_run_id"], row["other_run_id"]) for row in body["comparisons"]] == [
+        (v0, v1),
+        (v1, v2),
+    ]
+    pair = client.post(
+        "/api/v1/identification/compare",
+        json={"base_run_id": v0, "other_run_id": v1},
+    ).json()
+    assert body["comparisons"][0] == pair
+    matrix = {row["sin"]: row for row in body["matrix"]}
+    assert len(matrix["SIN-001"]["cells"]) == 3
+    assert [cell["pn"] for cell in matrix["SIN-001"]["cells"]] == [
+        "P1.CATPart",
+        "P1B.CATPart",
+        "P1B.CATPart",
+    ]
+    assert matrix["SIN-002"]["cells"][1]["state"] == "added"
+    assert matrix["SIN-002"]["cells"][2]["state"] == "removed"
+    assert matrix["SIN-003"]["cells"][2]["state"] == "added"
+
+    reference = client.post(
+        "/api/v1/identification/compare/multi",
+        json={"run_ids": [v0, v1, v2], "mode": "reference", "reference_run_id": v1},
+    )
+    assert reference.status_code == 200, reference.text
+    assert [
+        (row["base_run_id"], row["other_run_id"])
+        for row in reference.json()["comparisons"]
+    ] == [(v1, v0), (v1, v2)]
+
+
+def test_compare_old_pn_columns_only(client, tmp_path):
+    """Seul un changement d'OLD P/N compte, et les deux versions sont exposees."""
     _set_input_root(client, str(tmp_path))
 
     def _make(name, rows):
@@ -291,19 +385,35 @@ def test_compare_old_new_pn_columns(client, tmp_path):
 
     # V0 -> V1 :
     #  SIN-001 : OLD A1->A2 (OLD change)         => modifie
-    #  SIN-002 : NEW B1->B2 (NEW change)         => modifie
+    #  SIN-002 : OLD B1 inchange, NEW B1->B2     => ignore
     #  SIN-003 : inchange                        => non
-    run_a = _make("v0.xlsx", [["SIN-001", "A1", "A1"], ["SIN-002", "B1", "B1"], ["SIN-003", "C1", "C1"]])
-    run_b = _make("v1.xlsx", [["SIN-001", "A2", "A2"], ["SIN-002", "B1", "B2"], ["SIN-003", "C1", "C1"]])
+    run_a = _make("v0.xlsx", [["SIN-001", "A1", "AN1"], ["SIN-002", "B1", "B1"], ["SIN-003", "C1", "C1"]])
+    run_b = _make("v1.xlsx", [["SIN-001", "A2", "AN2"], ["SIN-002", "B1", "B2"], ["SIN-003", "C1", "C1"]])
 
     body = client.post(
         "/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_b}
     ).json()
     changed = {e["sin"]: e for e in body["changed_pn"]}
-    assert set(changed) == {"SIN-001", "SIN-002"}
-    # OLD PN de V0 reporte (a rechercher / remplacer).
+    assert set(changed) == {"SIN-001"}
+    # OLD P/N de V0 et V1 reportes, sans utiliser NEW P/N.
     assert changed["SIN-001"]["old_pn"] == "A1"
-    assert changed["SIN-002"]["old_pn"] == "B1"
+    assert changed["SIN-001"]["old_pn_v2"] == "A2"
+    assert "new_pn" not in changed["SIN-001"]
+
+    multi = client.post(
+        "/api/v1/identification/compare/multi",
+        json={"run_ids": [run_a, run_b], "mode": "chronology"},
+    )
+    assert multi.status_code == 200, multi.text
+    matrix = {row["sin"]: row for row in multi.json()["matrix"]}
+    assert [cell["pn"] for cell in matrix["SIN-001"]["cells"]] == ["A1", "A2"]
+    assert matrix["SIN-002"]["cells"][1]["state"] == "unchanged"
+
+    same = client.post(
+        "/api/v1/identification/compare", json={"base_run_id": run_a, "other_run_id": run_a}
+    )
+    assert same.status_code == 400
+    assert same.json()["code"] == "COMPARE_SAME_RUN"
 
 
 def test_mono_body_from_materiaux_sheet(client, tmp_path):
@@ -314,10 +424,10 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     # Onglet 1 : nomenclature (identite CATPart / SIN).
     ws = wb.active
     ws.title = "Nomenclature"
-    ws.append(["CATPart", "SIN"])
+    ws.append(["CATPart", "SIN", "OLD P/N"])
     for cat, sin in [("P1.CATPart", "SIN-001"), ("P2.CATPart", "SIN-002"),
                      ("P3.CATPart", "SIN-003"), ("P4.CATPart", "SIN-004")]:
-        ws.append([cat, sin])
+        ws.append([cat, sin, f"OLD-{sin}"])
     # Onglet 2 : Materiaux (CATPart + 4 colonnes Slot).
     mat = wb.create_sheet("Materiaux")
     mat.append(["CATPart", "Slot 1", "Slot 2", "Slot 3", "Slot 4"])
@@ -362,6 +472,11 @@ def test_mono_body_from_materiaux_sheet(client, tmp_path):
     )
     assert r.status_code == 200, r.text
     assert r.json()["summary"]["applied"] is True and r.json()["summary"]["mono"] == 2
+    response_items = {item["identity"]: item for item in r.json()["items"]}
+    assert response_items["P1.CATPart"]["old_pn"] == "OLD-SIN-001"
+    assert response_items["P1.CATPart"]["mono_texture"] == "A"
+    assert response_items["P2.CATPart"]["mono_texture"] == "A"
+    assert response_items["P3.CATPart"]["mono_texture"] == ""
     assert client.get(f"/api/v1/identification/{run_id}").json()["summary"]["mono_body"] == 2
 
     mono = client.get(f"/api/v1/identification/{run_id}/items", params={"mono_body": True}).json()

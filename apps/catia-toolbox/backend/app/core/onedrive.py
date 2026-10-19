@@ -16,6 +16,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.models import AppConfig
 
 
@@ -99,6 +100,11 @@ def set_onedrive_roots(
 
 
 def root_for_scope(db: Session, scope: str) -> str:
-    """Racine configuree pour un scope ('input' | 'output')."""
+    """Racine configuree, ou stockage local si aucune racine n'est fournie."""
     roots = get_onedrive_roots(db)
-    return roots.get(scope, "")
+    configured = roots.get(scope, "")
+    if configured:
+        return configured
+    if scope in ("input", "output"):
+        return settings.storage_dir
+    return ""

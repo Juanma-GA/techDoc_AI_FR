@@ -1,9 +1,10 @@
-import { Check, CheckCheck, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Check, CheckCheck, Trash2 } from "lucide-react";
+import { useDemoMode } from "@internal/ui";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router-dom";
 
 import { ChecklistImportCard } from "./ChecklistImportCard";
+import { ClientRules } from "./ClientRules";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import {
   useDeleteRule,
@@ -14,23 +15,17 @@ import {
   useValidateAllRules,
   type RuleInput,
 } from "../hooks/useRules";
-import {
-  useClientConfig,
-  useClientRules,
-  usePatchClientRule,
-  type ClientRule,
-} from "../hooks/useClientConfig";
 import { useStandards, useToggleCatalogRule } from "../hooks/useStandards";
-import { localizedRuleCode } from "../lib/suggestionText";
 import { useFiltersStore } from "../stores/filtersStore";
 import type { Rule } from "../types/domain";
 import { RulesSuggestPanel } from "./RulesSuggestPanel";
 
 export function Rules() {
-  return import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
-    <LegacyRules />
-  ) : (
+  const { mode } = useDemoMode();
+  return mode === "demo" || import.meta.env.VITE_LEGACY_RULES_UI !== "true" ? (
     <ClientRules />
+  ) : (
+    <LegacyRules />
   );
 }
 
@@ -338,172 +333,5 @@ function RuleRow({
         </div>
       </td>
     </tr>
-  );
-}
-
-function ClientRules() {
-  const { t, i18n } = useTranslation();
-  const [searchParams] = useSearchParams();
-  const config = useClientConfig();
-  const clientRules = useClientRules();
-  const patchClientRule = usePatchClientRule();
-  const [search, setSearch] = useState("");
-  const [expandedRuleCodes, setExpandedRuleCodes] = useState<Set<string>>(() => new Set());
-  const targetRuleCode = searchParams.get("rule");
-
-  useEffect(() => {
-    if (!targetRuleCode || !clientRules.data?.some((rule) => rule.code === targetRuleCode)) return;
-    setExpandedRuleCodes((current) => new Set(current).add(targetRuleCode));
-    const row = document.getElementById(`client-rule-${targetRuleCode}`);
-    if (typeof row?.scrollIntoView === "function") {
-      row.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }, [clientRules.data, targetRuleCode]);
-
-  if (config.isLoading || clientRules.isLoading) {
-    return <p className="empty-state">{t("common.loading")}</p>;
-  }
-  if (config.isError || clientRules.isError || !config.data || !clientRules.data) {
-    return (
-      <section className="card">
-        <p className="banner warn">{t("rules.client.loadFailed")}</p>
-        <button
-          type="button"
-          className="btn secondary small"
-          onClick={() => {
-            void config.refetch();
-            void clientRules.refetch();
-          }}
-        >
-          {t("common.retry")}
-        </button>
-      </section>
-    );
-  }
-
-  const query = search.trim().toLocaleLowerCase();
-  const numberQuery = query.startsWith("#") ? query.slice(1) : query;
-  const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
-  const localized = (rule: ClientRule, field: "name" | "description" | "message") =>
-    rule.translations[locale]?.[field] ?? rule[field];
-  const filtered = clientRules.data.filter((rule) =>
-    [rule.code, rule.name, localized(rule, "name"), localized(rule, "description")].some(
-      (value) => value.toLocaleLowerCase().includes(query),
-    ) || String(rule.rule_number).includes(numberQuery),
-  );
-  const executionLabel = (execution: ClientRule["execution"]) =>
-    t(`rules.compiled.${execution}`);
-
-  const renderRules = (rows: ClientRule[]) => (
-    <div className="table-scroll">
-      <table className="rules-table client-rules-table">
-        <thead>
-          <tr>
-            <th>{t("rules.form.enabled")}</th>
-            <th>{t("rules.client.rule")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((rule) => (
-            <tr
-              id={`client-rule-${rule.code}`}
-              key={rule.code}
-              className={rule.code === targetRuleCode ? "row-selected" : undefined}
-              style={rule.active ? undefined : { opacity: 0.62 }}
-            >
-              <td>
-                <label
-                  className="switch"
-                  title={rule.active ? t("rules.disable") : t("rules.enable")}
-                >
-                  <input
-                    type="checkbox"
-                    aria-label={`${rule.active ? t("rules.disable") : t("rules.enable")} ${rule.name}`}
-                    checked={rule.active}
-                    onChange={(event) =>
-                      patchClientRule.mutate({ code: rule.code, active: event.target.checked })
-                    }
-                    disabled={patchClientRule.isPending}
-                  />
-                  <span className="track" />
-                </label>
-              </td>
-              <td className="rule-name-cell">
-                <details
-                  open={expandedRuleCodes.has(rule.code)}
-                  onToggle={(event) => {
-                    const isOpen = event.currentTarget.open;
-                    setExpandedRuleCodes((current) => {
-                      const next = new Set(current);
-                      if (isOpen) next.add(rule.code);
-                      else next.delete(rule.code);
-                      return next;
-                    });
-                  }}
-                >
-                  <summary className="client-rule-summary">
-                    <span className="badge default">#{rule.rule_number}</span>
-                    <strong>{localized(rule, "name")}</strong>
-                    <span className="label">{localizedRuleCode(rule.code, t)}</span>
-                  </summary>
-                  <p className="client-rule-description">{localized(rule, "description")}</p>
-                </details>
-                <div className="client-rule-meta">
-                  <span className={`badge ${rule.execution === "unsupported" ? "default" : "success"}`}>
-                    {executionLabel(rule.execution)}
-                  </span>
-                  <span className="badge default">
-                    {t(`reviewer.suggestion.severity.${rule.severity}`)}
-                  </span>
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  const catalogLabel = config.data.catalogs
-    .map((catalog) => `${catalog.code} ${catalog.version}`)
-    .join(" · ");
-
-  return (
-    <section className="card">
-      <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>
-          <h2 className="card-title">{config.data.label}</h2>
-          <p className="card-sub">
-            {config.data.client_code} · {t("rules.client.bundle", { version: config.data.bundle_version })}
-            {catalogLabel ? ` · ${catalogLabel}` : ""}
-          </p>
-        </div>
-        <label className="row" style={{ gap: 8, minWidth: 220, flexWrap: "nowrap" }}>
-          <Search size={16} aria-hidden="true" />
-          <input
-            type="search"
-            className="input"
-            style={{ width: "auto", flex: 1, minWidth: 0 }}
-            aria-label={t("rules.client.search")}
-            placeholder={t("rules.client.search")}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-      </div>
-
-      <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-        <span className="label">
-          {t("rules.client.manifestHash")}: {config.data.manifest_hash.slice(0, 12)}
-        </span>
-        <span className="label">
-          {t("rules.client.mappingHash")}: {config.data.mapping_hash.slice(0, 12)}
-        </span>
-        <span className="label">{filtered.length} {t("rules.client.ruleCount")}</span>
-      </div>
-
-      {patchClientRule.isError ? <p className="banner warn">{t("rules.client.saveFailed")}</p> : null}
-      {filtered.length ? renderRules(filtered) : null}
-    </section>
   );
 }

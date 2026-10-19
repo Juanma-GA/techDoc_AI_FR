@@ -13,6 +13,7 @@ export type MistralSettings = {
   llm_enabled: boolean;
   llm_tested: boolean;
   checklist_ai_scan: boolean;
+  demo_enabled: boolean;
 };
 
 export type MistralSettingsInput = {
@@ -23,6 +24,7 @@ export type MistralSettingsInput = {
   vision_enabled?: boolean;
   llm_enabled?: boolean;
   checklist_ai_scan?: boolean;
+  demo_enabled?: boolean;
 };
 
 export type TestConnectionResult = {

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "TEMPLATE",
+  "version": "0.1.0",
+  "identifier": "com.atexis.TEMPLATE",
+  "build": {
+    "frontendDist": "../dist",
+    "beforeDevCommand": "node scripts/prepare-desktop.mjs dev",
+    "beforeBuildCommand": "node scripts/prepare-desktop.mjs build"
+  },
+  "app": {
+    "windows": [],
+    "security": {}
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": { "runtime/": "runtime/" }
+  }
+}

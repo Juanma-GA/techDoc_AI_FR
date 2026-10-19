@@ -386,6 +386,7 @@ class NomenclatureItem(Base):
     to_treat: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     # Contenu brut de la cellule "A TRAITER" (pour affichage / controle du filtre).
     to_treat_value: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    optimized: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     # Piece remplacee : ancien / nouveau PN et indice sur la meme ligne.
     replaced: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
     old_pn: Mapped[str] = mapped_column(String(500), default="", server_default="")
@@ -400,6 +401,8 @@ class NomenclatureItem(Base):
     slot_1: Mapped[str] = mapped_column(String(200), default="", server_default="")
     slot_2: Mapped[str] = mapped_column(String(200), default="", server_default="")
     slot_3: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    # Reference de profil unique issue des slots pour les pieces mono-corps.
+    mono_texture: Mapped[str] = mapped_column(String(200), default="", server_default="")
     # Piece mono-corps : un seul slot renseigne OU tous les slots identiques
     # (cible des modifications XML specifiques). Calcule depuis slot_1/2/3.
     mono_body: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)

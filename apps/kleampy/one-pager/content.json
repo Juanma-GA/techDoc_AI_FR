@@ -1,0 +1,54 @@
+{
+  "fr": {
+    "main_title": "ASSISTANT DOCUMENTAIRE TECHNIQUE",
+    "section_title": "Questions contextualisées sur les contenus",
+    "application_name": "Kleampy",
+    "status": "CONCEPT",
+    "challenge": "Les informations utiles sont réparties entre des plans, feuilles Excel, CDS et autres documents techniques, ce qui ralentit la recherche et la compréhension.",
+    "solution": "Kleampy vise à fournir un assistant documentaire fondé sur des agents et MCP pour charger des documents techniques et répondre aux questions liées à leur contenu.",
+    "features": [
+      "Charger différents formats de documents techniques",
+      "Prendre en charge les plans, Excel et CDS",
+      "Interroger le contenu en langage naturel",
+      "Orchestrer l'assistance via des agents et MCP"
+    ],
+    "callouts": [
+      "Sources techniques multiples",
+      "Questions en langage naturel",
+      "Orchestration Agentic-MCP"
+    ],
+    "security": {
+      "local": "Posture locale à définir\nLe stockage, l'indexation et l'accès aux documents restent à valider.",
+      "shared": "Posture partagée à définir\nL'identité, les droits et l'intégration MCP doivent être cadrés avec l'IT."
+    },
+    "footnote": "Concept fondé sur la description catalogue fournie ; capacités non vérifiées."
+  },
+  "en": {
+    "main_title": "TECHNICAL DOCUMENT ASSISTANT",
+    "section_title": "Content-Grounded Questions and Answers",
+    "application_name": "Kleampy",
+    "status": "CONCEPT",
+    "challenge": "Useful information is distributed across drawings, Excel workbooks, CDS files and other technical documents, slowing search and understanding.",
+    "solution": "Kleampy aims to provide an Agentic-MCP document assistant for uploading technical documents and answering questions grounded in their content.",
+    "features": [
+      "Upload multiple technical document formats",
+      "Support drawings, Excel and CDS files",
+      "Ask content-related questions in natural language",
+      "Orchestrate assistance through agents and MCP"
+    ],
+    "callouts": [
+      "Multiple technical sources",
+      "Natural-language questions",
+      "Agentic-MCP orchestration"
+    ],
+    "security": {
+      "local": "Local posture to be defined\nDocument storage, indexing and access remain to be validated.",
+      "shared": "Shared posture to be defined\nIdentity, permissions and MCP integration must be agreed with IT."
+    },
+    "footnote": "Concept based on the supplied catalogue description; capabilities are unverified."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

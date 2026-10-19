@@ -27,10 +27,19 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
     assert config["catalogs"][0]["code"] == "THALES-CUSTOM"
-    assert len(rules) == 71
-    assert [rule["rule_number"] for rule in rules] == list(range(1, 72))
-    assert all(rule["active"] for rule in rules)
+    assert len(config["catalogs"]) == 2
+    assert config["catalogs"][1]["code"] == "ASD-STE100"
+    assert len(rules) == 79
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 80))
+    thales_rules = [rule for rule in rules if rule["bundle_code"] == "thales_rules"]
+    ste_rules = [rule for rule in rules if rule["bundle_code"] == "ste100_rules"]
+    assert all(rule["active"] for rule in thales_rules)
+    assert ste_rules and all(not rule["active"] for rule in ste_rules)
     assert all(rule["description"] and rule["message"] for rule in rules)
+    ste_rule = next(rule for rule in rules if rule["code"] == "STE_NO_MAYBE")
+    assert ste_rule["bundle_code"] == "ste100_rules"
+    assert ste_rule["bundle_label"] == "ASD-STE100"
+    assert ste_rule["catalog_code"] == "ASD-STE100"
 
 
 def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -> None:
@@ -81,3 +90,37 @@ def test_client_rule_toggle_rejects_unknown_codes(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()["code"] == "CLIENT_RULE_NOT_FOUND"
+
+
+def test_ste_rule_toggle_uses_the_ste100_catalog(client: TestClient) -> None:
+    config = client.get("/api/v1/client-config").json()
+    ste_version_id = uuid.UUID(config["catalogs"][1]["standard_version_id"])
+    rule_code = "STE_NO_MAYBE"
+
+    disabled = client.patch(
+        f"/api/v1/client-rules/{rule_code}",
+        json={"active": False},
+    )
+
+    assert disabled.status_code == 200, disabled.text
+    assert disabled.json()["catalog_code"] == "ASD-STE100"
+    assert disabled.json()["active"] is False
+
+    with SessionLocal() as session:
+        version = session.get(StandardVersion, ste_version_id)
+        assert version is not None
+        assert rule_code in json.loads(version.disabled_rule_codes)
+
+    enabled = client.patch(
+        f"/api/v1/client-rules/{rule_code}",
+        json={"active": True},
+    )
+
+    assert enabled.status_code == 200, enabled.text
+    assert enabled.json()["active"] is True
+
+    with SessionLocal() as session:
+        sync_user_standard(session)
+
+    refreshed = client.get("/api/v1/client-rules").json()
+    assert next(item for item in refreshed if item["code"] == rule_code)["active"] is True

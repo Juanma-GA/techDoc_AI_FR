@@ -42,3 +42,10 @@ def test_diff_import_404(client, synthetic_tree) -> None:
         json={"base_import_id": base_id, "other_import_id": "00000000-0000-0000-0000-000000000000"},
     )
     assert r.status_code == 404
+
+
+def test_diff_rejects_same_import(client, synthetic_tree) -> None:
+    import_id = _scan(client, str(synthetic_tree))
+    r = client.post("/api/v1/diff", json={"base_import_id": import_id, "other_import_id": import_id})
+    assert r.status_code == 400
+    assert r.json()["code"] == "COMPARE_SAME_IMPORT"

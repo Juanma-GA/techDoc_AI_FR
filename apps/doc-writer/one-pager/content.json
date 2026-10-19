@@ -1,0 +1,56 @@
+{
+  "fr": {
+    "main_title": "GÉNÉRATION DE CONTENU TECHNIQUE",
+    "section_title": "RAG cité, rédaction et modèles",
+    "application_name": "Doc Writer",
+    "status": "POC À VALIDER",
+    "challenge": "Produire un contenu technique réutilisable à partir de sources hétérogènes demande de retrouver les passages pertinents, de conserver les références et d'adapter le résultat aux formats attendus.",
+    "solution": "Doc Writer analyse des documents sélectionnés, génère du contenu avec un RAG cité, maintient des sessions de rédaction et exporte les résultats ou remplit des modèles réutilisables.",
+    "features": [
+      "Parser PDF, DOCX, PPTX, XLSX, TXT et Markdown",
+      "Générer du contenu RAG avec citations en streaming",
+      "Maintenir des sessions de rédaction multi-tours",
+      "Exporter en Markdown, DOCX et PDF",
+      "Remplir des modèles PPTX, DOCX et PDF"
+    ],
+    "callouts": [
+      "Sources documentaires multiples",
+      "Génération citée et contextualisée",
+      "Exports et modèles réutilisables"
+    ],
+    "security": {
+      "local": "Application locale\nLe profil par défaut est lié à 127.0.0.1 sans authentification. Sources, sessions et configuration sont stockées localement.",
+      "shared": "Pilote partagé à valider\nUn chemin MFA existe mais dépend d'une infrastructure et de prérequis qui ne sont pas validés de bout en bout."
+    },
+    "footnote": "OCR de documents scannés et conversion PDF vers DOCX en best effort ; résultats à valider."
+  },
+  "en": {
+    "main_title": "TECHNICAL CONTENT GENERATION",
+    "section_title": "Cited RAG, Writing and Templates",
+    "application_name": "Doc Writer",
+    "status": "POC TO VALIDATE",
+    "challenge": "Producing reusable technical content from heterogeneous sources requires finding relevant passages, retaining references and adapting results to expected formats.",
+    "solution": "Doc Writer analyses selected documents, generates content with cited RAG, maintains writing sessions and exports results or fills reusable templates.",
+    "features": [
+      "Parse PDF, DOCX, PPTX, XLSX, TXT and Markdown",
+      "Stream cited RAG content generation",
+      "Maintain multi-turn writing sessions",
+      "Export Markdown, DOCX and PDF",
+      "Fill PPTX, DOCX and PDF templates"
+    ],
+    "callouts": [
+      "Multiple document sources",
+      "Cited, grounded generation",
+      "Reusable exports and templates"
+    ],
+    "security": {
+      "local": "Local application\nThe default profile binds to 127.0.0.1 without authentication. Sources, sessions and configuration are stored locally.",
+      "shared": "Shared pilot to validate\nAn MFA path exists but depends on infrastructure and prerequisites that have not been validated end to end."
+    },
+    "footnote": "Scanned-document OCR and PDF-to-DOCX conversion are best effort; outputs require validation."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

@@ -175,7 +175,11 @@ PRIMITIVE_CATALOG: tuple[PrimitiveDefinition, ...] = (
         description="Selectionne les pages et regions a controler.",
         parameters=(
             PrimitiveParameter(name="page", kind="page", description="Page ou all."),
-            PrimitiveParameter(name="region", kind="region", description="full_page, header, body ou footer."),
+            PrimitiveParameter(
+                name="region",
+                kind="region",
+                description="full_page, page_without_footer, header, body ou footer.",
+            ),
         ),
     ),
     PrimitiveDefinition(

@@ -1,0 +1,29 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "PDF Toolkit",
+  "version": "1.0.0",
+  "identifier": "com.pdftoolkit.desktop",
+  "build": {
+    "frontendDist": "../../backend/web/static/generated",
+    "beforeDevCommand": "pnpm tauri:prepare",
+    "beforeBuildCommand": "pnpm tauri:prepare"
+  },
+  "app": {
+    "windows": [],
+    "security": {}
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../../backend/bin/pdf-toolkit-backend.exe": "pdf-toolkit-backend.exe"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

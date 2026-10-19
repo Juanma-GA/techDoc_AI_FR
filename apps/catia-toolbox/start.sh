@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # Port unique (à ajuster par POC : 8001, 8002, ...)
-PORT="${PORT:-8005}"
+PORT="${PORT:-8004}"
 
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKEND_DIR="${APP_DIR}/backend"
@@ -42,11 +42,16 @@ fi
 echo "[setup] Migrations Alembic..."
 alembic upgrade head
 
-# Vérifier que le port est libre
-if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then
-    echo "[erreur] Le port $PORT est deja utilise :"
-    lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n
-    exit 1
+# Chercher le premier port libre dans la plage autorisee.
+port_max=$((PORT + 20))
+if command -v lsof >/dev/null 2>&1; then
+    while lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; do
+        PORT=$((PORT + 1))
+        if [[ "$PORT" -gt "$port_max" ]]; then
+            echo "[erreur] Aucun port libre dans la plage autorisee."
+            exit 1
+        fi
+    done
 fi
 
 # Front React : rebuild auto si dist absent OU sources front plus recentes que
@@ -79,9 +84,9 @@ echo "      Ctrl+C ici pour arrêter."
 echo
 
 if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "http://127.0.0.1:${PORT}/api/v1/docs" >/dev/null 2>&1 &
+    xdg-open "http://127.0.0.1:${PORT}/" >/dev/null 2>&1 &
 elif command -v open >/dev/null 2>&1; then
-    open "http://127.0.0.1:${PORT}/api/v1/docs" >/dev/null 2>&1 &
+    open "http://127.0.0.1:${PORT}/" >/dev/null 2>&1 &
 fi
 
 exec python -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT"

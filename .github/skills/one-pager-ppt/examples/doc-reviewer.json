@@ -1,0 +1,56 @@
+{
+  "fr": {
+    "main_title": "QUALITÉ ET CONFORMITÉ DOCUMENTAIRE",
+    "section_title": "Revue et validation automatisées",
+    "application_name": "Doc Reviewer",
+    "status": "PROTOTYPE",
+    "challenge": "La revue de documents techniques volumineux selon des standards rédactionnels, des règles éditoriales et des conventions d'ingénierie mobilise beaucoup de temps. Les relecteurs doivent identifier les anomalies et garder le contrôle sur chaque modification.",
+    "solution": "Doc Reviewer analyse les documents PDF et Word à l'aide de règles déterministes, de catalogues de rédaction technique, de contrôles d'unités et de checklists optionnelles assistées par IA. Le relecteur reste maître des corrections avant l'export.",
+    "features": [
+      "Importer des documents PDF, DOCX, DOC et ZIP",
+      "Détecter les anomalies éditoriales, structurelles et liées aux unités",
+      "Examiner les suggestions dans le contexte du document",
+      "Accepter, modifier ou rejeter chaque correction proposée",
+      "Exporter un document corrigé, un PDF annoté ou une synthèse"
+    ],
+    "callouts": [
+      "Tableau de bord de la revue documentaire",
+      "Anomalies classées par sévérité et type de règle",
+      "Workflow contrôlé par le relecteur"
+    ],
+    "security": {
+      "local": "Application locale\nPour les cas d'usage individuels sensibles. L'application, les documents et les traitements restent sur le poste de travail.",
+      "shared": "Application partagée on-premise\nPour les usages collaboratifs intégrés à votre infrastructure. L'authentification et les droits peuvent être alignés sur vos exigences IT."
+    },
+    "footnote": "L'assistance IA peut être désactivée. Les capacités de revue déterministes restent disponibles."
+  },
+  "en": {
+    "main_title": "DOCUMENT QUALITY AND COMPLIANCE",
+    "section_title": "Automated Review and Validation",
+    "application_name": "Doc Reviewer",
+    "status": "PROTOTYPE",
+    "challenge": "Reviewing large technical documents against writing standards, editorial rules and engineering conventions is time-consuming. Reviewers must identify anomalies, assess proposed corrections and maintain full control over every change.",
+    "solution": "Doc Reviewer analyses PDF and Word documents using deterministic rules, technical-writing catalogues, unit checks and optional AI-assisted checklists. Reviewers remain in control before export.",
+    "features": [
+      "Import PDF, DOCX, DOC and ZIP documents",
+      "Detect editorial, structural and unit-related anomalies",
+      "Review suggestions directly in the document context",
+      "Accept, edit or reject each proposed correction",
+      "Export a corrected document, annotated PDF or review summary"
+    ],
+    "callouts": [
+      "Document review dashboard",
+      "Anomalies classified by severity and rule type",
+      "Reviewer-controlled accept, edit and reject workflow"
+    ],
+    "security": {
+      "local": "Local application\nFor sensitive individual use cases. Application, documents and processing remain on the workstation and can operate locally.",
+      "shared": "Shared on-premise application\nFor collaborative use cases, integrated with your internal infrastructure. Authentication and access rights can be aligned with your IT requirements."
+    },
+    "footnote": "Optional AI assistance can be disabled. Deterministic review capabilities remain available."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

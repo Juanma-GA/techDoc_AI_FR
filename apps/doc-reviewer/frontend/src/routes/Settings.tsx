@@ -18,14 +18,13 @@ import { useStandards } from "../hooks/useStandards";
 import { useFiltersStore } from "../stores/filtersStore";
 import type { ResetAllResult, WipeSuggestionsResult } from "../types/domain";
 
+import { DemoModeSettings } from "./DemoModeSettings";
 import { Rules } from "./Rules";
 import { Standards } from "./Standards";
 
 export function Settings() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const targetUnits = useFiltersStore((s) => s.targetUnits);
-  const toggleTargetUnit = useFiltersStore((s) => s.toggleTargetUnit);
   const activeStandardVersionIds = useFiltersStore((s) => s.activeStandardVersionIds);
   const toggleActiveStandardVersion = useFiltersStore((s) => s.toggleActiveStandardVersion);
   const clearActiveStandards = useFiltersStore((s) => s.clearActiveStandards);
@@ -94,6 +93,8 @@ export function Settings() {
       <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
 
       <section className="form">
+        <DemoModeSettings />
+
         {/* 0. Configuration LLM (Mistral) — EN TETE, pliee par defaut. */}
         <Collapsible title={t("settings.llmSection")}>
           <p id="mistral-settings-notice" className="banner warn" role="note">
@@ -326,7 +327,8 @@ export function Settings() {
           </Card>
         </Collapsible>
 
-        {import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
+        {import.meta.env.VITE_LEGACY_RULES_UI === "true" &&
+        mistral.data?.demo_enabled === false ? (
           <>
         {/* 1. Normes cibles actives (multi-select pills, parite preview) :
             chaque version selectionnee est fusionnee a l'analyse et appliquee
@@ -438,32 +440,10 @@ export function Settings() {
         ) : null}
 
         {/* 5. Regles custom (linter user-defined) — imbriquee dans Parametres */}
-        {import.meta.env.VITE_LEGACY_RULES_UI === "true" ? <Rules /> : null}
-
-        {/* 6. Systemes d'unites cibles (multi : metric et/ou imperial). */}
-        <Card title={t("settings.targetUnit.title")} description={t("settings.targetUnit.multiHint")}>
-          <div className="slicer">
-            {(["metric", "imperial"] as const).map((opt) => {
-              const on = targetUnits.includes(opt);
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => toggleTargetUnit(opt)}
-                  className={on ? "slicer-pill active" : "slicer-pill"}
-                >
-                  {t(`settings.targetUnit.${opt}`)}
-                </button>
-              );
-            })}
-            <span className="label" style={{ alignSelf: "center", marginLeft: 6 }}>
-              {targetUnits.length === 1
-                ? ""
-                : `${t("settings.targetUnit.auto")} (${t("settings.targetUnit.bothHint")})`}
-            </span>
-          </div>
-        </Card>
+        {import.meta.env.VITE_LEGACY_RULES_UI === "true" &&
+        mistral.data?.demo_enabled === false ? (
+          <Rules />
+        ) : null}
 
         <Card title={t("data.reset")}>
           <div className="banner warn">{t("data.resetWarn")}</div>

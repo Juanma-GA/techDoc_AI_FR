@@ -6,13 +6,14 @@ import { Link } from "react-router-dom";
 import { ConfirmDialog } from "../ConfirmDialog";
 import { useClientRules } from "../../hooks/useClientConfig";
 import { useFiltersStore } from "../../stores/filtersStore";
-import { localizedRuleCode, localizedSuggestionMessage } from "../../lib/suggestionText";
+import { localizedRuleCode } from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 import { SuggestionItem } from "./SuggestionItem";
 
 type Props = {
   suggestions: Suggestion[];
   selectedId: string | null;
+  focusRequest?: number;
   onSelect: (id: string) => void;
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
@@ -31,6 +32,7 @@ function occurrenceKey(s: Suggestion): string {
 export function SuggestionPanel({
   suggestions,
   selectedId,
+  focusRequest = 0,
   onSelect,
   onAccept,
   onReject,
@@ -55,6 +57,7 @@ export function SuggestionPanel({
     count: number;
   } | null>(null);
   const lastSelectedId = useRef<string | null>(null);
+  const lastFocusRequest = useRef(focusRequest);
   const pendingScrollId = useRef<string | null>(null);
 
   const ruleCodes = useMemo(() => {
@@ -76,8 +79,7 @@ export function SuggestionPanel({
     });
   }, [suggestions, showUnits, hideAccepted, ruleCodeFilter]);
 
-  // Bucket the *visible* list by rule, preserving first-seen order, so the
-  // panel shows one collapsible row per rule instead of every occurrence.
+  // Bucket visible suggestions by rule and sort the groups by numeric rule number.
   const buckets = useMemo(() => {
     const order: string[] = [];
     const map = new Map<string, Suggestion[]>();
@@ -90,8 +92,19 @@ export function SuggestionPanel({
         order.push(key);
       }
     }
-    return order.map((key) => ({ key, items: map.get(key)! }));
-  }, [visible]);
+    return order
+      .map((key, index) => ({ key, items: map.get(key)!, index }))
+      .sort((left, right) => {
+        const leftNumber = ruleNumberByCode.get(left.items[0]!.rule_code);
+        const rightNumber = ruleNumberByCode.get(right.items[0]!.rule_code);
+        if (leftNumber == null) {
+          return rightNumber == null ? left.index - right.index : 1;
+        }
+        if (rightNumber == null) return -1;
+        return leftNumber - rightNumber || left.index - right.index;
+      })
+      .map(({ key, items }) => ({ key, items }));
+  }, [visible, ruleNumberByCode]);
 
   function toggleExpanded(key: string): void {
     setExpanded((prev) => {
@@ -111,8 +124,9 @@ export function SuggestionPanel({
       pendingScrollId.current = null;
       return;
     }
-    if (lastSelectedId.current === selectedId) return;
+    if (lastSelectedId.current === selectedId && lastFocusRequest.current === focusRequest) return;
     lastSelectedId.current = selectedId;
+    lastFocusRequest.current = focusRequest;
     const bucket = buckets.find((b) => b.items.some((x) => x.id === selectedId));
     if (bucket && bucket.items.length > 1 && !expanded.has(bucket.key)) {
       pendingScrollId.current = selectedId;
@@ -120,7 +134,7 @@ export function SuggestionPanel({
       return;
     }
     pendingScrollId.current = selectedId;
-  }, [selectedId, buckets, expanded]);
+  }, [selectedId, focusRequest, buckets, expanded]);
 
   // Scroll only for a newly selected occurrence, never as a side effect of a
   // manual expand/collapse click.
@@ -135,7 +149,7 @@ export function SuggestionPanel({
     if (!el) return;
     pendingScrollId.current = null;
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [buckets, expanded]);
+  }, [selectedId, focusRequest, buckets, expanded]);
 
   return (
     <aside className="reviewer-panel">
@@ -175,7 +189,6 @@ export function SuggestionPanel({
               (item) => item.status !== "applied" && item.status !== "rejected",
             );
             const head = items[0]!;
-            const headMessage = localizedSuggestionMessage(head, t);
             return (
               <div
                 key={key}
@@ -191,16 +204,13 @@ export function SuggestionPanel({
                       aria-expanded={isExpanded}
                     >
                       {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <span className="suggestion-loc">
+                      <span className="suggestion-loc" title={localizedRuleCode(head.rule_code, t)}>
                         {localizedRuleCode(head.rule_code, t)}
-                      </span>
-                      <span className="suggestion-msg" style={{ flex: 1, textAlign: "left" }}>
-                        {headMessage}
                       </span>
                     </button>
                     {ruleNumber != null ? (
                       <Link
-                        className="badge default suggestion-rule-number"
+                        className="suggestion-bucket-rule-number"
                         to={ruleHref}
                         title={t("rules.client.openRule", { number: ruleNumber })}
                         aria-label={t("rules.client.openRule", { number: ruleNumber })}
@@ -209,13 +219,13 @@ export function SuggestionPanel({
                         #{ruleNumber}
                       </Link>
                     ) : null}
-                    <span className="badge default">
+                    <span className="suggestion-bucket-count">
                       {t("reviewer.panel.group.count", { count: items.length })}
                     </span>
                     {rejectableItems.length > 1 ? (
                       <button
                         type="button"
-                        className="btn danger small"
+                        className="suggestion-bucket-reject"
                         title={t("reviewer.suggestion.rejectAll")}
                         aria-label={t("reviewer.suggestion.rejectAll")}
                         onClick={() =>
@@ -225,8 +235,7 @@ export function SuggestionPanel({
                           })
                         }
                       >
-                        <X size={12} aria-hidden="true" />
-                        {t("reviewer.suggestion.rejectAllShort")}
+                        <X size={14} aria-hidden="true" />
                       </button>
                     ) : null}
                   </div>

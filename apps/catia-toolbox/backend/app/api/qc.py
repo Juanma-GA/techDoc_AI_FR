@@ -13,6 +13,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,8 +21,6 @@ from app.core.errors import AppError
 from app.db.models import QcChecklist, QcItem
 from app.db.session import get_db
 from app.schemas import QcChecklistCreateIn, QcChecklistOut, QcItemOut, QcItemUpdateIn
-from fastapi.responses import StreamingResponse
-
 
 log = logging.getLogger("catia_toolbox.qc")
 
@@ -133,10 +132,11 @@ def export_csv(checklist_id: uuid.UUID, db: Session = Depends(get_db)) -> Stream
     )
 
 
-@router.delete("/checklists/{checklist_id}", status_code=204)
-def delete_checklist(checklist_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/checklists/{checklist_id}", status_code=204, response_class=Response)
+def delete_checklist(checklist_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     checklist = db.get(QcChecklist, checklist_id)
     if checklist is None:
         raise AppError("CHECKLIST_NOT_FOUND", "Checklist introuvable.", status_code=404)
     db.delete(checklist)
     db.commit()
+    return Response(status_code=204)

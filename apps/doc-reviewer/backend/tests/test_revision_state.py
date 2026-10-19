@@ -291,6 +291,40 @@ def test_highlights_extracts_row_and_illustrated_parts_list_descriptions() -> No
     assert entries[2].description == "Chapter deleted"
 
 
+def test_highlights_keeps_chapter_and_page_pair_across_missing_designation() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation", 285.0, 100.0, 1),
+            _span("Description of Change", 366.0, 100.0, 1),
+            _span("Assembly", 90.7, 120.0, 1),
+            _span("Page 701", 90.7, 140.0, 1),
+            _span("R", 322.2, 140.0, 1),
+            _span("Consumables and Standard Practices", 366.0, 140.0, 1),
+            _span("Manual updated.", 366.0, 154.0, 1),
+            _span("Page 702", 90.7, 180.0, 1),
+            _span("Page 705", 90.7, 220.0, 1),
+            _span("U", 322.2, 220.0, 1),
+            _span("Page 706", 90.7, 240.0, 1),
+            _span("R", 322.2, 240.0, 1),
+            _span("Updated.", 366.0, 240.0, 1),
+        ],
+    )
+
+    entries = revision.extract_highlights(page)
+    state = revision.RevisionState(highlights=entries)
+
+    assert [entry.page_keys for entry in entries] == [("701",), ("702",), ("705",), ("706",)]
+    assert [entry.subject for entry in entries] == ["Assembly"] * 4
+    assert [entry.status for entry in entries] == ["R", "", "U", "R"]
+    assert entries[0].description == "Consumables and Standard Practices Manual updated."
+    assert revision._pairing_findings(state) == []
+    assert revision._highlights_chapter_findings(state) == []
+    missing = revision.extract_missing_highlights_designations(page)
+    assert [entry.page_keys for entry in missing] == [("702",)]
+
+
 def test_compound_highlights_lep_and_footer_names_match() -> None:
     highlights = _highlights_page(
         [
@@ -434,6 +468,69 @@ def test_footer_reassembles_page_number_split_across_spans() -> None:
     assert footer is not None
     assert footer.page_key == "502"
     assert footer.label_text == "Page 502"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "LIST OF EFFECTIVES PAGES",
+        "LIST OF EFECTIVE PAGES",
+        "LSIT OF EFFECTIVE PAGES",
+        "LIST OF EFFETCIVE PAGES",
+        "LIST OF EFFECTIVE PAGS",
+        "LIST OF EFECTIVES PAGS",
+        "List of effective pages:",
+        "LIST OF EFFECTIVE\nPAGES",
+        "LISTOFEFFECTIVEPAGES",
+    ],
+)
+def test_lep_detection_tolerates_title_typos_with_table_structure(title: str) -> None:
+    parsed = _consistent_document()
+    page = parsed.pages[1]
+    page.spans[0].text = title
+    for span in page.spans:
+        span.text = span.text.replace("LEP Page 1", "Page 401")
+    page.text = "\n".join(span.text for span in page.spans)
+
+    state = _state(parsed)
+
+    assert state.lep_pages == (2,)
+    assert state.available
+    assert parsed.pages[2].is_modified is True
+    assert parsed.pages[4].is_modified is False
+
+
+def test_lep_detection_uses_table_and_footer_when_title_is_unreadable() -> None:
+    page = _lep_with(("Repair", "401", f"{_REVISION_DATE} *"))
+    page.spans[0].text = "Unreadable heading"
+    page.text = "\n".join(span.text for span in page.spans)
+
+    assert revision._is_lep_page(page)
+
+
+@pytest.mark.parametrize("title", ["LIST OF MATERIALS", "RECORD OF REVISIONS"])
+def test_lep_detection_rejects_other_tables(title: str) -> None:
+    page = _lep_with(("Repair", "401", f"{_REVISION_DATE} *"))
+    page.spans[0].text = title
+    for span in page.spans:
+        span.text = span.text.replace("LEP Page 1", "Page 401")
+    page.text = "\n".join(span.text for span in page.spans)
+
+    assert not revision._is_lep_page(page)
+
+
+def test_lep_detection_rejects_fuzzy_title_without_table() -> None:
+    page = _page(1, [_span("LIST OF EFFECTIVES PAGES", 100.0, 100.0, 1)])
+
+    assert not revision._is_lep_page(page)
+
+
+def test_lep_detection_rejects_highlights_mention() -> None:
+    page = _highlights_page(
+        [("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N")]
+    )
+
+    assert not revision._is_lep_page(page)
 
 
 def test_ror_detection_requires_the_full_record_of_revisions_title() -> None:
@@ -1414,6 +1511,15 @@ def test_highlights_page_row_without_designation_is_reported() -> None:
         "Testing and Trouble Shooting",
         "Title Page",
         "Vendor Code List",
+        "Illustrated Part Lis",
+        "Illustrated part list",
+        "Illustarted Parts List",
+        "Assebmly",
+        "Testng and Fault Isolaton",
+        "Specal Tools, Fixtures and Equipmnt",
+        "Repa ir",
+        "Reapir",
+        "Chekc",
     ],
 )
 def test_highlights_chapter_rule_accepts_catalog_titles(chapter: str) -> None:
@@ -1439,12 +1545,13 @@ def test_highlights_chapter_rule_accepts_catalog_titles(chapter: str) -> None:
     assert suggestions == []
 
 
-def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell() -> None:
+@pytest.mark.parametrize("chapter", ["Avionics", "Warranty Conditions"])
+def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell(chapter: str) -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(
         [
             ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
-            ("Repa ir", "Pages 401 to 402", "R"),
+            (chapter, "Pages 401 to 402", "R"),
         ]
     )
     parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
@@ -1461,7 +1568,7 @@ def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell() -> None:
     subject_bbox = revision.extract_highlights(parsed.pages[0])[-1].subject_bbox
 
     assert results[0].status == "FAIL"
-    assert finding.original == "Repa ir"
+    assert finding.original == chapter
     assert finding.proposed == ""
     assert finding.bbox == subject_bbox
 
@@ -1514,7 +1621,10 @@ def test_highlights_extraction_does_not_merge_subject_across_page_row() -> None:
     assert [
         (entry.subject, entry.pages_text, entry.status)
         for entry in entries
-    ] == [("Storage Instructions", "Page  901", "R")]
+    ] == [
+        ("Testing", "Pages 701 to 702", ""),
+        ("Storage Instructions", "Page  901", "R"),
+    ]
 
 
 def test_deleted_highlights_status_conflicts_with_page_still_in_current_document() -> None:

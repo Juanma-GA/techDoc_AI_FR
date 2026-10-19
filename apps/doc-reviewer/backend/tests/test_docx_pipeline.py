@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import io
 
 import pytest
@@ -37,6 +38,7 @@ def _set_document_context(client: TestClient, document_id: str) -> None:
             "meta_cmm_number": "79-30-02",
             "meta_first_issue_date": "JUL 1966",
             "meta_revision_number": "Rev. 01",
+            "meta_pnr_number": "1-900-SB",
             "document_language": "en",
         },
     )
@@ -59,7 +61,33 @@ def test_parse_docx_reports_progress_by_block(tmp_path) -> None:
     assert progress == expected
 
 
-def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
+@pytest.fixture
+def ste100_vocab_rule_enabled(client: TestClient) -> Iterator[None]:
+    rules = client.get("/api/v1/client-rules").json()
+    vocabulary_rule = next(
+        rule for rule in rules if rule["code"] == "STE_VOCAB_NON_APPROVED"
+    )
+    was_active = vocabulary_rule["active"]
+    if not was_active:
+        enabled = client.patch(
+            "/api/v1/client-rules/STE_VOCAB_NON_APPROVED",
+            json={"active": True},
+        )
+        assert enabled.status_code == 200, enabled.text
+
+    yield
+
+    if not was_active:
+        restored = client.patch(
+            "/api/v1/client-rules/STE_VOCAB_NON_APPROVED",
+            json={"active": False},
+        )
+        assert restored.status_code == 200, restored.text
+
+
+def test_docx_upload_analyze_apply_export(
+    client: TestClient, ste100_vocab_rule_enabled: None
+) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool before the check.")
 
@@ -120,7 +148,9 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     assert "utilize" not in full
 
 
-def test_docx_undo_restores_original(client: TestClient) -> None:
+def test_docx_undo_restores_original(
+    client: TestClient, ste100_vocab_rule_enabled: None
+) -> None:
     """Phase 2 : l'undo (revert) d'une correction docx restaure le .docx precedent."""
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool.")

@@ -6,11 +6,14 @@ La cle Mistral (table app_config) est preservee par convention lors d'un reset.
 from __future__ import annotations
 
 import logging
+import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.errors import AppError
 from app.db.models import (
     CheckResult,
@@ -72,6 +75,29 @@ def _purge(db: Session, *models) -> dict[str, int]:
     return deleted
 
 
+def _purge_local_uploads() -> int:
+    storage_root = Path(settings.storage_dir).expanduser().resolve()
+    local_root = storage_root / "local"
+    if local_root.is_symlink():
+        raise AppError(
+            "RESET_STORAGE_INVALID",
+            "Le stockage local ne peut pas être supprimé en toute sécurité.",
+            status_code=500,
+        )
+    if not local_root.exists():
+        return 0
+    if not local_root.is_dir():
+        raise AppError(
+            "RESET_STORAGE_INVALID",
+            "Le stockage local ne peut pas être supprimé en toute sécurité.",
+            status_code=500,
+        )
+
+    file_count = sum(1 for path in local_root.rglob("*") if path.is_file() and not path.is_symlink())
+    shutil.rmtree(local_root)
+    return file_count
+
+
 # Tables filles (leaf-first) purgees avant StructureImport pour des compteurs exacts.
 _RUN_TABLES = (
     Suggestion,
@@ -101,8 +127,9 @@ _PIPELINE_TABLES = (
 
 @router.post("/reset/all", response_model=AdminResetOut)
 def reset_all(db: Session = Depends(get_db)) -> AdminResetOut:
-    """Reset complet sauf `app_config` (preserve la cle Mistral)."""
+    """Reset DB et copies locales sauf `app_config` et les sources OneDrive."""
     deleted = _purge(db, *_RUN_TABLES, *_PIPELINE_TABLES, TreeNode, StructureImport)
+    deleted["local_upload_files"] = _purge_local_uploads()
     log.info("admin reset all : %s", deleted)
     return AdminResetOut(scope="all", deleted=deleted)
 
