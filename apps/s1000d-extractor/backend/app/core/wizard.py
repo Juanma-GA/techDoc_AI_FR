@@ -274,7 +274,7 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
             "dm_id": u.dm_id,
             "dmc": u.dmc,
             "title": u.title,
-            # Le type declare dans la DMRL fait foi quand il existe.
+            # Les types InfoCode 4.1 (ou les choix manuels) priment la classification du contenu.
             "dm_type": dmrl_types.get(u.dmc) or types[u.dm_id],
             "is_orphan": u.is_orphan,
             "tree": ir_mod.to_dict(u.root),
@@ -318,6 +318,21 @@ def update(db: Session, doc: Document, params: dict) -> dict:
 def advance(db: Session, doc: Document, params: dict) -> dict:
     step = doc.wizard_step
     if step == "dmrl":
+        unresolved_types = wres.unresolved_dmrl_type_entries(doc)
+        if unresolved_types:
+            raise AppError(
+                "DMRL_TYPE_REVIEW_REQUIRED",
+                "Choisissez le type a utiliser pour chaque DM en conflit avant de continuer.",
+                409,
+                detail=[
+                    {
+                        "dmc": entry.dmc,
+                        "title": entry.title,
+                        "info_code": entry.info_code,
+                    }
+                    for entry in unresolved_types
+                ],
+            )
         # La DMRL validee (eventuellement editee) pilote le decoupage.
         _resplit(db, doc, doc.split_level or _DEFAULT_LEVEL)
         doc.wizard_step = "split"

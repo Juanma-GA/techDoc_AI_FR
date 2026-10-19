@@ -87,4 +87,84 @@ describe("DMRL review", () => {
     expect(markup).not.toContain('role="status"');
     expect(markup).not.toContain("migration.dmrl.exclude");
   });
+
+  it("shows the InfoCode/DMRL disagreement and requires a type choice", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DmrlReview, {
+        rows: [
+          makeRow({
+            index: 1,
+            dmc: "DMC-PUMP-A-00-00-00-00A-520A-D",
+            title: "Removal Procedure",
+            dm_type: "",
+            dmrl_type: "Descriptif",
+            info_code: "520",
+            info_code_schema: "proced",
+            info_code_dm_type: "procedural",
+            type_conflict: true,
+            matched: true,
+            match_rank: "exact",
+          }),
+        ],
+        dmCount: 1,
+        busy: false,
+        edits: {},
+        onTitleChange: vi.fn(),
+        onUpdate: vi.fn(),
+        onAdvance: vi.fn(),
+      }),
+    );
+
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain("migration.dmrl.typeConflict");
+    expect(markup).toContain("migration.dmrl.typeResolutionRequiredRow");
+    expect(markup).toContain("migration.dmrl.selectType");
+    expect(markup).toContain('disabled=""');
+    expect(markup).toContain('href="#dmrl-type-1"');
+    expect(markup).toContain('id="dmrl-type-1"');
+  });
+
+  it("disables type selectors while saving and enables validation after resolution", () => {
+    const row = makeRow({
+      index: 1,
+      dmc: "DMC-PUMP-A-00-00-00-00A-520A-D",
+      title: "Removal Procedure",
+      dmrl_type: "Descriptif",
+      info_code: "520",
+      info_code_schema: "proced",
+      info_code_dm_type: "procedural",
+      type_conflict: true,
+      matched: true,
+      match_rank: "exact",
+    });
+    const pendingMarkup = renderToStaticMarkup(
+      createElement(DmrlReview, {
+        rows: [row],
+        dmCount: 1,
+        busy: true,
+        edits: {},
+        onTitleChange: vi.fn(),
+        onUpdate: vi.fn(),
+        onAdvance: vi.fn(),
+      }),
+    );
+    const pendingSelect = pendingMarkup.match(/<select\b[^>]*>/)?.[0] ?? "";
+    expect(pendingSelect).toContain('disabled=""');
+
+    const resolvedMarkup = renderToStaticMarkup(
+      createElement(DmrlReview, {
+        rows: [{ ...row, dm_type: "procedural" }],
+        dmCount: 1,
+        busy: false,
+        edits: {},
+        onTitleChange: vi.fn(),
+        onUpdate: vi.fn(),
+        onAdvance: vi.fn(),
+      }),
+    );
+    const resolvedButton = resolvedMarkup.match(
+      /<button\b[^>]*>migration\.dmrl\.validate<\/button>/,
+    )?.[0] ?? "";
+    expect(resolvedButton).not.toContain("disabled");
+  });
 });

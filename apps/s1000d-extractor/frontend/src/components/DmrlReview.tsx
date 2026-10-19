@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DmrlRow } from "../lib/api";
+import { DmrlTypeConflictNotice } from "./DmrlTypeConflictNotice";
 
 export const DM_TYPES = ["descriptive", "procedural", "ipd"] as const;
 
@@ -26,6 +27,10 @@ function MatchBadge({ row }: { row: DmrlRow }) {
       {t(`migration.match.${row.match_rank || "contains"}`, { page })}
     </span>
   );
+}
+
+function needsExplicitTypeChoice(row: DmrlRow): boolean {
+  return Boolean((row.type_conflict || row.type_issue) && !row.dm_type);
 }
 
 function ConfirmExcludeButton({
@@ -91,6 +96,8 @@ export function DmrlReview({
     (row) => row.matched && row.match_rank !== "exact",
   ).length;
   const pmTitleCount = rows.length - dmRows.length;
+  const typeReviewRows = dmRows.filter((row) => row.type_conflict || row.type_issue);
+  const unresolvedTypeCount = typeReviewRows.filter((row) => !row.dm_type).length;
 
   return (
     <div className="card">
@@ -127,12 +134,13 @@ export function DmrlReview({
           ))}
         </div>
       ) : null}
+      <DmrlTypeConflictNotice rows={typeReviewRows} />
       <div className="row" style={{ marginBottom: 10 }}>
         <button
           type="button"
           className="btn primary"
           style={{ marginLeft: "auto" }}
-          disabled={busy}
+          disabled={busy || unresolvedTypeCount > 0}
           onClick={onAdvance}
         >
           {t("migration.dmrl.validate")}
@@ -157,8 +165,11 @@ export function DmrlReview({
             ) : (
               <>
                 <select
+                  id={`dmrl-type-${row.index}`}
                   aria-label={t("migration.dmrl.typeLabel", { title: row.title })}
-                  value={row.dm_type || "descriptive"}
+                  aria-invalid={needsExplicitTypeChoice(row)}
+                  disabled={busy}
+                  value={needsExplicitTypeChoice(row) ? "" : row.dm_type || "descriptive"}
                   onChange={(event) =>
                     onUpdate({
                       op: "set_type",
@@ -167,6 +178,9 @@ export function DmrlReview({
                     })
                   }
                 >
+                  {needsExplicitTypeChoice(row) ? (
+                    <option value="">{t("migration.dmrl.selectType")}</option>
+                  ) : null}
                   {DM_TYPES.map((type) => (
                     <option key={type} value={type}>
                       {t(`dmType.${type}`)}
@@ -190,7 +204,7 @@ export function DmrlReview({
             <button
               type="button"
               className="btn ghost small"
-              disabled={busy}
+              disabled={busy || unresolvedTypeCount > 0}
               onClick={() =>
                 onUpdate({
                   op: "rename",

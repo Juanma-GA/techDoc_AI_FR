@@ -3,6 +3,9 @@
  * once the backend OpenAPI is stable.
  */
 
+import type { DmrlRow } from "./wizardTypes";
+export type { DmrlMatchRank, DmrlRow, DmrlTypeIssue } from "./wizardTypes";
+
 // Surchargeable au build (VITE_API_BASE_URL) pour un deploiement en sous-chemin
 // IIS (ex. /app/s1000d-extractor/api/v1). Defaut relatif '/api/v1' en local.
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
@@ -231,22 +234,6 @@ export type WizardResources = {
   has_brex_rules: boolean;
   has_dm_header: boolean;
   errors?: string[];
-};
-
-export type DmrlMatchRank = "exact" | "prefix" | "contains" | "";
-
-export type DmrlRow = {
-  index: number;
-  arbo: string;
-  dmc: string;
-  title: string;
-  dm_type: string;
-  icn: string;
-  is_pm_title: boolean;
-  matched: boolean;
-  match_rank: DmrlMatchRank;
-  page: number | null;
-  matched_text: string;
 };
 
 export type WizardState = {

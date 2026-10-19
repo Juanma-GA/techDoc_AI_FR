@@ -26,6 +26,9 @@ import {
   type WizardState,
 } from "../lib/api";
 import { loadDemoMigrationFiles } from "../lib/demoMigrationFiles";
+import { needsDmrlReview } from "../lib/wizardReview";
+
+export { hasUnmatchedDmrlDms } from "../lib/wizardReview";
 
 export function isRestorableMigrationInput(
   kind: MigrationInputKind,
@@ -43,13 +46,6 @@ export function getCommonMissingFields(
   if (dms.length < 2) return [];
   const firstFields = [...new Set(dms[0].missing_fields ?? [])];
   return firstFields.filter((field) => dms.every((dm) => dm.missing_fields?.includes(field)));
-}
-
-export function hasUnmatchedDmrlDms(state: WizardState): boolean {
-  return (
-    state.step === "dmrl" &&
-    (state.dmrl ?? []).some((row) => !row.is_pm_title && !row.matched)
-  );
 }
 
 function ConfirmButton({
@@ -361,7 +357,7 @@ export function Migration() {
     includeSplit = false,
   ): Promise<WizardState> => {
     let state = initial;
-    if (state.step === "dmrl" && !hasUnmatchedDmrlDms(state)) {
+    if (state.step === "dmrl" && !needsDmrlReview(state)) {
       state = await wizardApi.action(id, "advance", {});
     }
     if (state.step === "split") {

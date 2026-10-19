@@ -15,6 +15,7 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Accept optional DMRL, CIR, BREX, and client-rule resources.
 - Keep title-only DMRL rows in the PMC without generating Data Modules from them.
 - Flag expected Data Modules that are missing from the source before the split, with a row-level exclusion action.
+- For Issue 4.1, use `S1000D_4.1_info_codes.xlsx` as the InfoCode-to-schema reference; DMRL type conflicts require an explicit user choice before splitting. If the InfoCode is missing or unmapped and the DMRL has no type, default to descriptive; unsupported schemas remain flagged for manual selection. Only descriptive, procedural, and IPD types are generated.
 - Generate data-module and publication-module skeletons.
 - Build issue/type-specific content models from the local XSDs and constrain generated elements, order, cardinality, attributes, and values.
 - Collect XSD/mapping errors separately from provisional business fields that need confirmation.

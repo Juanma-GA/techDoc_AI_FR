@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { DmrlRow, WizardState } from "../lib/api";
+import { hasUnmatchedDmrlDms, needsDmrlReview } from "../lib/wizardReview";
 import {
   generationFile,
   getCommonMissingFields,
-  hasUnmatchedDmrlDms,
   isRestorableMigrationInput,
 } from "./Migration";
 
@@ -68,5 +68,31 @@ describe("DMRL wizard review", () => {
 
     expect(hasUnmatchedDmrlDms(wizardWithDmrl([title, missingDm]))).toBe(true);
     expect(hasUnmatchedDmrlDms(wizardWithDmrl([title]))).toBe(false);
+  });
+
+  it("pauses for unresolved InfoCode type conflicts and resumes after a choice", () => {
+    const conflict: DmrlRow = {
+      index: 1,
+      arbo: "1",
+      dmc: "DMC-PUMP-A-00-00-00-00A-520A-D",
+      title: "Removal Procedure",
+      dm_type: "",
+      dmrl_type: "Descriptif",
+      info_code: "520",
+      info_code_schema: "proced",
+      info_code_dm_type: "procedural",
+      type_conflict: true,
+      icn: "",
+      is_pm_title: false,
+      matched: true,
+      match_rank: "exact",
+      page: 1,
+      matched_text: "Removal Procedure",
+    };
+
+    expect(needsDmrlReview(wizardWithDmrl([conflict]))).toBe(true);
+    expect(
+      needsDmrlReview(wizardWithDmrl([{ ...conflict, dm_type: "procedural" }])),
+    ).toBe(false);
   });
 });

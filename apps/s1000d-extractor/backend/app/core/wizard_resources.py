@@ -47,6 +47,14 @@ def dmrl_data_module_entries(doc: Document) -> list[DmrlEntry]:
     return data_module_entries(dmrl_entries(doc))
 
 
+def unresolved_dmrl_type_entries(doc: Document) -> list[DmrlEntry]:
+    return [
+        entry
+        for entry in dmrl_data_module_entries(doc)
+        if (entry.type_conflict or entry.type_issue) and not entry.dm_type
+    ]
+
+
 def save_dmrl(doc: Document, entries: list[DmrlEntry]) -> None:
     doc.dmrl_json = json.dumps([e.to_dict() for e in entries], ensure_ascii=False)
 

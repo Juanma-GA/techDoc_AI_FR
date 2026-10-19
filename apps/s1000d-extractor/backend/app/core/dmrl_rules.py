@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 _DM_FIELDS = (
     "dmc",
     "dm_type",
+    "dmrl_type",
     "info_code",
     "tech_name",
     "info_name",
