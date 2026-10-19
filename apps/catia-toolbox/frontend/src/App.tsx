@@ -1,23 +1,30 @@
-import { AppShell, ErrorBoundary, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
+import {
+  Ai4TechDocLogo,
+  AppShell,
+  ErrorBoundary,
+  LanguageSwitcher,
+  sidebarNavItemClass,
+} from "@internal/ui";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import i18n from "./i18n";
+import { healthApi, importsApi, identificationApi } from "./lib/api";
 import { Checks } from "./routes/Checks";
 import { Colorization } from "./routes/Colorization";
 import { Conversion } from "./routes/Conversion";
 import { Data } from "./routes/Data";
 import { Diff } from "./routes/Diff";
-import { Export } from "./routes/Export";
 import { Identification } from "./routes/Identification";
 import { Qc } from "./routes/Qc";
 import { Replacement } from "./routes/Replacement";
 import { Settings } from "./routes/Settings";
-import { SmgxmlRecolor } from "./routes/SmgxmlRecolor";
 import { SmgxmlRename } from "./routes/SmgxmlRename";
-import { Suggestions } from "./routes/Suggestions";
-import { Tree } from "./routes/Tree";
+import { TreeOptimization } from "./routes/TreeOptimization";
+import { useWorkspace } from "./stores/workspace";
 
 type NavLeaf = { to: string; labelKey: string; end?: boolean };
 type NavGroup = { groupKey: string; items: NavLeaf[] };
@@ -41,11 +48,8 @@ const NAV: NavEntry[] = [
   {
     groupKey: "nav.groups.traitement",
     items: [
-      { to: "/smgxml-recolor", labelKey: "nav.smgxmlRecolor" },
+      { to: "/tree", labelKey: "nav.optimizationTree" },
       { to: "/colorization", labelKey: "nav.colorization" },
-      { to: "/tree", labelKey: "nav.tree" },
-      { to: "/suggestions", labelKey: "nav.suggestions" },
-      { to: "/export", labelKey: "nav.export" },
     ],
   },
   {
@@ -64,10 +68,7 @@ const NAV: NavEntry[] = [
   },
   {
     groupKey: "nav.groups.outils",
-    items: [
-      { to: "/data", labelKey: "nav.data" },
-      { to: "/settings", labelKey: "nav.settings" },
-    ],
+    items: [{ to: "/settings", labelKey: "nav.settings" }],
   },
 ];
 
@@ -76,21 +77,65 @@ export const ROUTE_META: Record<string, { titleKey: string; subKey: string }> = 
   "/identification": { titleKey: "page.identification.title", subKey: "page.identification.sub" },
   "/diff": { titleKey: "page.diff.title", subKey: "page.diff.sub" },
   "/conversion": { titleKey: "page.conversion.title", subKey: "page.conversion.sub" },
-  "/smgxml-recolor": { titleKey: "page.smgxmlRecolor.title", subKey: "page.smgxmlRecolor.sub" },
   "/colorization": { titleKey: "page.colorization.title", subKey: "page.colorization.sub" },
-  "/tree": { titleKey: "page.tree.title", subKey: "page.tree.sub" },
-  "/suggestions": { titleKey: "page.suggestions.title", subKey: "page.suggestions.sub" },
-  "/export": { titleKey: "page.export.title", subKey: "page.export.sub" },
+  "/tree": { titleKey: "page.optimizationTree.title", subKey: "page.optimizationTree.sub" },
   "/smgxml-rename": { titleKey: "page.smgxmlRename.title", subKey: "page.smgxmlRename.sub" },
   "/replacement": { titleKey: "page.replacement.title", subKey: "page.replacement.sub" },
   "/qc": { titleKey: "page.qc.title", subKey: "page.qc.sub" },
   "/checks": { titleKey: "page.checks.title", subKey: "page.checks.sub" },
-  "/data": { titleKey: "page.data.title", subKey: "page.data.sub" },
   "/settings": { titleKey: "page.settings.title", subKey: "page.settings.sub" },
 };
 
 const navItemClass = ({ isActive }: { isActive: boolean }) =>
   sidebarNavItemClass(isActive);
+
+function WorkspaceBootstrap() {
+  const importId = useWorkspace((state) => state.importId);
+  const nomenclatureRunId = useWorkspace((state) => state.nomenclatureRunId);
+  const setImport = useWorkspace((state) => state.setImport);
+  const setNomenclatureRun = useWorkspace((state) => state.setNomenclatureRun);
+  const validated = useRef(false);
+
+  const healthQuery = useQuery({ queryKey: ["health"], queryFn: healthApi.get });
+  const importsQuery = useQuery({
+    queryKey: ["imports"],
+    queryFn: importsApi.list,
+    enabled: healthQuery.isSuccess,
+  });
+  const nomenclaturesQuery = useQuery({
+    queryKey: ["identification"],
+    queryFn: identificationApi.list,
+    enabled: healthQuery.isSuccess,
+  });
+  useEffect(() => {
+    if (
+      validated.current ||
+      !healthQuery.isSuccess ||
+      !importsQuery.isSuccess ||
+      !nomenclaturesQuery.isSuccess
+    ) return;
+
+    if (importId && !importsQuery.data.some((item) => item.id === importId)) {
+      setImport(null);
+    }
+    if (nomenclatureRunId && !nomenclaturesQuery.data.some((run) => run.id === nomenclatureRunId)) {
+      setNomenclatureRun(null);
+    }
+    validated.current = true;
+  }, [
+    importId,
+    healthQuery.isSuccess,
+    importsQuery.data,
+    importsQuery.isSuccess,
+    nomenclatureRunId,
+    nomenclaturesQuery.data,
+    nomenclaturesQuery.isSuccess,
+    setImport,
+    setNomenclatureRun,
+  ]);
+
+  return null;
+}
 
 export function App() {
   const { t } = useTranslation();
@@ -104,6 +149,7 @@ export function App() {
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      headerStart={<Ai4TechDocLogo alt="" />}
       llmStatus={<LlmBadge />}
       navigation={NAV.map((entry) =>
         isGroup(entry) ? (
@@ -129,9 +175,10 @@ export function App() {
         />
       }
     >
+      <WorkspaceBootstrap />
       <div className="page-header">
         <h1>{t(meta.titleKey)}</h1>
-        <p>{t(meta.subKey)}</p>
+        {meta.subKey ? <p>{t(meta.subKey)}</p> : null}
       </div>
       <ErrorBoundary>
         <Routes>
@@ -139,11 +186,11 @@ export function App() {
           <Route path="/identification" element={<Identification />} />
           <Route path="/diff" element={<Diff />} />
           <Route path="/conversion" element={<Conversion />} />
-          <Route path="/smgxml-recolor" element={<SmgxmlRecolor />} />
           <Route path="/colorization" element={<Colorization />} />
-          <Route path="/tree" element={<Tree />} />
-          <Route path="/suggestions" element={<Suggestions />} />
-          <Route path="/export" element={<Export />} />
+          <Route path="/tree" element={<TreeOptimization />} />
+          <Route path="/smgxml-recolor" element={<Navigate to="/colorization" replace />} />
+          <Route path="/suggestions" element={<Navigate to="/tree" replace />} />
+          <Route path="/export" element={<Navigate to="/identification" replace />} />
           <Route path="/smgxml-rename" element={<SmgxmlRename />} />
           <Route path="/replacement" element={<Replacement />} />
           <Route path="/qc" element={<Qc />} />

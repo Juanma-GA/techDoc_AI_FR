@@ -181,8 +181,32 @@ Documentation détaillée : voir PACKAGE_README.md.
 _PACKAGE_README = f"""\
 # {APP_NAME} — Package partageable
 
-POC local-first. À compléter par POC : objectif, prérequis, workflow,
-configuration. Voir scripts/package_{APP_SLUG}.py pour un exemple.
+## Demarrage
+
+Sous Windows, double-cliquez sur `start.bat` a la racine du package.
+L'application est servie localement sur `127.0.0.1`, a partir du port 8004
+ou du prochain port libre.
+
+## Fonctionnalites
+
+- analyser une nomenclature et identifier les pieces mono-corps ;
+- comparer deux nomenclatures avec OLD P/N et NEW P/N ;
+- preparer et tester des plans de conversion CATIA vers Composer ;
+- inspecter une arborescence SMGXML a partir du dernier ClitServer.
+
+## Configuration
+
+Renseignez dans Parametres la racine locale des fichiers et, si necessaire,
+le serveur de licence Composer au format `port@hote`.
+
+## Limite Composer
+
+La conversion reelle exige CATIA Composer installe localement, une licence
+valide et l'interface Automation/COM enregistree sur le poste. Sans Composer,
+le dry-run reste disponible.
+
+Les fichiers sources ne sont jamais supprimes. Les bases, donnees, fichiers
+utilisateur, secrets et caches locaux ne sont pas inclus dans ce package.
 """
 
 

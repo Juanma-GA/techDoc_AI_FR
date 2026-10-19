@@ -196,8 +196,8 @@ if [[ -z "$missing" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 12. Le package.json racine declare 'dev:<poc>' pour chaque dossier
-#    sous apps/ (sauf _template).
+# 12. Le package.json racine declare 'dev:<poc>' pour chaque app
+#    avec un dossier backend ou frontend (sauf _template).
 # ------------------------------------------------------------------
 step 12 "package.json racine wire"
 missing=""
@@ -205,13 +205,14 @@ if [[ -f package.json ]]; then
   for d in apps/*/; do
     poc="$(basename "$d")"
     [[ "$poc" == "_template" ]] && continue
+    [[ -d "${d}backend" || -d "${d}frontend" ]] || continue
     if ! grep -q "\"dev:${poc}\"" package.json; then
       missing+="apps/$poc/ -- manque 'dev:${poc}' dans package.json racine\n"
     fi
   done
 fi
 if [[ -z "$missing" ]]; then pass; else
-  fail "Chaque POC doit avoir un script 'dev:<poc>' au niveau racine :\n$missing"
+  fail "Chaque app avec backend ou frontend doit avoir un script 'dev:<poc>' au niveau racine :\n$missing"
 fi
 
 # ------------------------------------------------------------------

@@ -14,7 +14,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,12 +32,13 @@ from app.schemas import (
     NomenclatureCompareIn,
     NomenclatureCompareOut,
     NomenclatureItemOut,
+    NomenclatureMultiCompareIn,
+    NomenclatureMultiCompareOut,
     NomenclatureParseIn,
     NomenclaturePreviewIn,
     NomenclaturePreviewOut,
     NomenclatureRunOut,
 )
-
 
 log = logging.getLogger("catia_toolbox.identification")
 
@@ -119,7 +120,22 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
         "slot_cols": parsed["slot_cols"],
     }
 
+    # Conserve la reference de slot unique pour que l'etape Colorisation puisse
+    # retrouver le meme profil Composer sans relire ni remapper le classeur.
+    mono_texture_by_identity: dict[str, str] = {}
+    for material_item in parsed["items"]:
+        identity = str(material_item.get("identity") or "").strip()
+        if not identity:
+            continue
+        unique_slots = list(dict.fromkeys(str(slot or "").strip() for slot in material_item["slots"] if str(slot or "").strip()))
+        mono_texture_by_identity[identity] = (
+            unique_slots[0]
+            if material_item["mono_body"] and len(unique_slots) == 1
+            else ""
+        )
+
     # Optionnel : applique mono_body aux pieces du run par le champ d'identite.
+    old_pn_by_identity: dict[str, str] = {}
     if payload.run_id is not None:
         run = db.get(NomenclatureRun, payload.run_id)
         if run is None:
@@ -131,8 +147,10 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
             key = (getattr(it, payload.identity_field) or "").strip()
             is_mono = bool(key and ident_map.get(key, False))
             it.mono_body = is_mono
+            it.mono_texture = mono_texture_by_identity.get(key, "") if is_mono else ""
             if key and key in ident_map:
                 matched += 1
+                old_pn_by_identity[key] = it.old_pn or ""
             if is_mono:
                 mono += 1
         run_summary = json.loads(run.summary or "{}")
@@ -143,7 +161,14 @@ def mono_corps_route(payload: MonoCorpsIn, db: Session = Depends(get_db)) -> Mon
         summary.update({"matched": matched, "mono": mono, "applied": True})
         log.info("mono-corps run %s : %d apparies, %d mono-corps", payload.run_id, matched, mono)
 
-    items = [MonoCorpsItemOut(**it) for it in parsed["items"][:2000]]
+    items = [
+        MonoCorpsItemOut(
+            **it,
+            old_pn=old_pn_by_identity.get(str(it.get("identity") or "").strip(), ""),
+            mono_texture=mono_texture_by_identity.get(str(it.get("identity") or "").strip(), ""),
+        )
+        for it in parsed["items"][:2000]
+    ]
     return MonoCorpsResultOut(items=items, summary=summary)
 
 
@@ -172,28 +197,100 @@ def _item_dict(it: NomenclatureItem) -> dict:
         "sin": it.sin,
         "version": it.version,
         "old_pn": it.old_pn,
-        "new_pn": it.new_pn,
         "new_rev": it.new_rev,
     }
 
 
+def _load_run_items(db: Session, run_id: uuid.UUID) -> list[dict]:
+    if db.get(NomenclatureRun, run_id) is None:
+        raise AppError(
+            "RUN_NOT_FOUND",
+            "Run de nomenclature introuvable.",
+            status_code=404,
+            detail={"run_id": str(run_id)},
+        )
+    return [
+        _item_dict(item)
+        for item in db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == run_id))
+    ]
+
+
 def _load_compare(db: Session, base_run_id: uuid.UUID, other_run_id: uuid.UUID) -> dict:
-    for rid in (base_run_id, other_run_id):
-        if db.get(NomenclatureRun, rid) is None:
-            raise AppError("RUN_NOT_FOUND", "Run de nomenclature introuvable.", status_code=404, detail={"run_id": str(rid)})
-    a = [_item_dict(i) for i in db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == base_run_id))]
-    b = [_item_dict(i) for i in db.scalars(select(NomenclatureItem).where(NomenclatureItem.run_id == other_run_id))]
-    return nomdiff.compare_runs(a, b)
+    return nomdiff.compare_runs(
+        _load_run_items(db, base_run_id),
+        _load_run_items(db, other_run_id),
+    )
+
+
+def _compare_out(db: Session, base_run_id: uuid.UUID, other_run_id: uuid.UUID) -> NomenclatureCompareOut:
+    diff = _load_compare(db, base_run_id, other_run_id)
+    return NomenclatureCompareOut(
+        base_run_id=base_run_id,
+        other_run_id=other_run_id,
+        summary=nomdiff.summarize(diff),
+        **diff,
+    )
 
 
 @router.post("/compare", response_model=NomenclatureCompareOut)
 def compare_route(payload: NomenclatureCompareIn, db: Session = Depends(get_db)) -> NomenclatureCompareOut:
-    diff = _load_compare(db, payload.base_run_id, payload.other_run_id)
-    return NomenclatureCompareOut(
-        base_run_id=payload.base_run_id,
-        other_run_id=payload.other_run_id,
-        summary=nomdiff.summarize(diff),
-        **diff,
+    if payload.base_run_id == payload.other_run_id:
+        raise AppError(
+            "COMPARE_SAME_RUN",
+            "Selectionnez deux nomenclatures differentes.",
+            status_code=400,
+        )
+    return _compare_out(db, payload.base_run_id, payload.other_run_id)
+
+
+@router.post("/compare/multi", response_model=NomenclatureMultiCompareOut)
+def compare_multi_route(
+    payload: NomenclatureMultiCompareIn,
+    db: Session = Depends(get_db),
+) -> NomenclatureMultiCompareOut:
+    try:
+        pairs = nomdiff.comparison_pairs(
+            payload.run_ids,
+            mode=payload.mode,
+            reference_run_id=payload.reference_run_id,
+        )
+    except ValueError as exc:
+        raise AppError("COMPARE_SELECTION_INVALID", str(exc), status_code=400) from exc
+
+    items_by_run = {run_id: _load_run_items(db, run_id) for run_id in payload.run_ids}
+    comparison_data = []
+    comparisons = []
+    for base_id, other_id in pairs:
+        diff = nomdiff.compare_runs(items_by_run[base_id], items_by_run[other_id])
+        comparison_data.append({"base_run_id": base_id, "other_run_id": other_id, "diff": diff})
+        comparisons.append(
+            NomenclatureCompareOut(
+                base_run_id=base_id,
+                other_run_id=other_id,
+                summary=nomdiff.summarize(diff),
+                **diff,
+            )
+        )
+    summary = {
+        "comparisons": len(comparisons),
+        "added": sum(int(item.summary.get("added", 0)) for item in comparisons),
+        "removed": sum(int(item.summary.get("removed", 0)) for item in comparisons),
+        "changed": sum(int(item.summary.get("changed", 0)) for item in comparisons),
+    }
+    summary["total"] = summary["added"] + summary["removed"] + summary["changed"]
+    return NomenclatureMultiCompareOut(
+        mode=payload.mode,
+        run_ids=payload.run_ids,
+        reference_run_id=payload.reference_run_id if payload.mode == "reference" else None,
+        comparisons=comparisons,
+        matrix=nomdiff.build_matrix(
+            payload.run_ids,
+            items_by_run,
+            comparison_data,
+            mode=payload.mode,
+            reference_run_id=payload.reference_run_id,
+        ),
+        summary=summary,
     )
 
 
@@ -203,18 +300,22 @@ def compare_export_csv(
     other_run_id: uuid.UUID = Query(...),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    if base_run_id == other_run_id:
+        raise AppError(
+            "COMPARE_SAME_RUN",
+            "Selectionnez deux nomenclatures differentes.",
+            status_code=400,
+        )
     diff = _load_compare(db, base_run_id, other_run_id)
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    # Seul l'OLD PN est utile en comparaison (NEW PN / revisions restent dans
-    # l'analyse de nomenclature pour l'etape de remplacement).
-    w.writerow(["type", "sin", "old_pn", "designation"])
+    w.writerow(["type", "sin", "old_pn", "old_pn_v2", "designation"])
     for e in diff["added_sin"]:
-        w.writerow(["ajoute", e["sin"], e["pn"], e["designation"]])
+        w.writerow(["ajoute", e["sin"], e["old_pn"], e["old_pn_v2"], e["designation"]])
     for e in diff["removed_sin"]:
-        w.writerow(["supprime", e["sin"], e["pn"], e["designation"]])
+        w.writerow(["supprime", e["sin"], e["old_pn"], e["old_pn_v2"], e["designation"]])
     for e in diff["changed_pn"]:
-        w.writerow(["modifie", e["sin"], e["old_pn"], e["designation"]])
+        w.writerow(["modifie", e["sin"], e["old_pn"], e["old_pn_v2"], e["designation"]])
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="text/csv; charset=utf-8",
@@ -234,6 +335,7 @@ def get_run(run_id: uuid.UUID, db: Session = Depends(get_db)) -> NomenclatureRun
 def list_items(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
+    optimized: bool | None = Query(default=None),
     mono_color: bool | None = Query(default=None),
     mono_body: bool | None = Query(default=None),
     replaced: bool | None = Query(default=None),
@@ -245,6 +347,8 @@ def list_items(
     stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)
     if to_treat is not None:
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
+    if optimized is not None:
+        stmt = stmt.where(NomenclatureItem.optimized == optimized)
     if mono_color is not None:
         stmt = stmt.where(NomenclatureItem.mono_color == mono_color)
     if mono_body is not None:
@@ -266,6 +370,7 @@ def list_items(
 def export_csv(
     run_id: uuid.UUID,
     to_treat: bool | None = Query(default=None),
+    optimized: bool | None = Query(default=None),
     replaced: bool | None = Query(default=None),
     mono_body: bool | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -275,6 +380,8 @@ def export_csv(
     stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == run_id)
     if to_treat is not None:
         stmt = stmt.where(NomenclatureItem.to_treat == to_treat)
+    if optimized is not None:
+        stmt = stmt.where(NomenclatureItem.optimized == optimized)
     if replaced is not None:
         stmt = stmt.where(NomenclatureItem.replaced == replaced)
     if mono_body is not None:
@@ -305,10 +412,11 @@ def export_csv(
     )
 
 
-@router.delete("/{run_id}", status_code=204)
-def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/{run_id}", status_code=204, response_class=Response)
+def delete_run(run_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     run = db.get(NomenclatureRun, run_id)
     if run is None:
         raise AppError("RUN_NOT_FOUND", "Run introuvable.", status_code=404)
     db.delete(run)
     db.commit()
+    return Response(status_code=204)

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Prepare reviewable plans and scripts for CATIA and Composer document-structure workflows without performing destructive source operations automatically.
+Identify and compare CATIA delivery data, validate imported structures, and run confirmed conversions through the locally installed CATIA Composer Converter.
 
 ## Maturity
 
@@ -11,10 +11,20 @@ Prepare reviewable plans and scripts for CATIA and Composer document-structure w
 ## Features
 
 - Identify parts from nomenclature and delivery inputs.
+- Filter optimized parts using the `X000` marker in the nomenclature.
+- Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
-- Prepare CATPart-to-Composer conversion plans.
-- Plan SMGXML colorization, tree optimization, and part replacement.
-- Produce CSV, script, macro, and visual simulation artifacts for user review.
+- Compare old and new CATPart folders without filename matching. SHA-256 finds byte-identical files; CADMPEG geometry signatures only suggest candidate pairs for manual review.
+- Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
+- Optimize a Composer parts folder by copying only `.smgXml` and `.smgGeom` files
+  to a new `<folder>_optimized` subfolder; unrelated source entries are ignored
+  and the selected source files remain unchanged.
+- Rename SMGXML references and prepare part replacement plans.
+- Colorize mono-body SMGXML pieces in the work folder created by optimization,
+  matching profile references from the nomenclature's Materials slots by OLD P/N.
+  Dry-run is the default; confirmed writes update that folder without backups.
+- Use the native file/folder picker when no Source root is configured; selected
+	files are copied into the local application storage before processing.
 
 ## Auth
 
@@ -26,7 +36,7 @@ The target default port is `8004`, followed by the next free port when needed. T
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is optional for optimization suggestions. CATIA, Composer, OneDrive, UNC shares, or local folders apply only to relevant workflows.
+Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. Exact SHA-256 CATPart comparison supports up to 20,000 files per folder and does not require CADMPEG or CATIA V5. Optional geometry suggestions require the CADMPEG CLI v0.6.1 or newer, installed separately and available on `PATH` or configured with `CADMPEG_PATH`; it analyzes at most 100 unmatched files per folder, and suggested pairs require manual review. Different hashes mean different file bytes, not necessarily changed geometry. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
 
 ## Start On Windows
 
@@ -46,19 +56,23 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
 ## Persistence
 
-SQLite stores imports, plans, checks, and runtime configuration under `backend/data/`. Generated plans remain subject to user review.
+SQLite stores imports, nomenclature analyses, workflow results, and runtime configuration under `backend/data/`. Legacy colorization and plan history is retained; the new tree cleanup does not store run history.
+Native local selections are staged below `backend/data/storage/local/` and remain
+confined to that storage root for subsequent reads.
 
 ## LLM Configuration
 
-Mistral may suggest tree grouping. Deterministic type and naming heuristics remain available when LLM use is disabled.
+Mistral credentials can still be configured and tested in Settings; active workflows do not require an LLM.
 
 ## Tests
 
-Use the backend pytest suite and frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:catia-toolbox`. No tests were executed during this documentation change.
+Use the backend pytest suite and frontend scripts declared in `frontend/package.json`.
+The frontend `test` script excludes Playwright files; use `test:e2e` for browser
+scenarios.
 
 ## Limitations
 
-Generated scripts and macros are dry-run or review artifacts; execution in CATIA or Composer is outside the automatic POC workflow.
+CATIA Toolbox auto-detects `ComposerConverter.exe` under the standard Dassault Systemes installation folder. A custom executable path and the required XML conversion profile can be configured on the Conversion screen. Real conversion requires a two-click confirmation, never modifies source CAD files, and reports a failure unless Composer creates or updates an expected `.smgXml` or `.smg` output.
 
 ## Standard Deviations
 
