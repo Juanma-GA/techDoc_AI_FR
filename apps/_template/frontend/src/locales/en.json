@@ -81,9 +81,10 @@
     "mistral.baseUrlLabel": "Base URL",
     "mistral.chatModelLabel": "Chat model",
     "mistral.embedModelLabel": "Embeddings model",
+    "mistral.embedModelOptional": "Optional: leave empty for a chat-only POC.",
     "mistral.test": "Test connection",
     "mistral.saveSuccess": "Settings saved.",
-    "mistral.testSuccess": "Connection OK ({{count}} models available).",
+    "mistral.testSuccess": "Models checked: {{models}}.",
     "mistral.testError": "Failed: {{message}}"
   }
 }

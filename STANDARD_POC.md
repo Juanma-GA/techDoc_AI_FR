@@ -234,9 +234,9 @@ Au-delà de `/health`, tout POC déclarant le profil `llm` expose :
 | `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Peut alimenter un onglet Données optionnel ou un autre écran d'administration. |
 | `POST /api/v1/admin/reset/all` | Vide les tables métier ; **préserve `app_config`** (clé Mistral). |
 | `POST /api/v1/admin/reset/<scope>` | Reset par scope (ex. `documents`, `sessions`). |
-| `GET /api/v1/settings` | Lit la config Mistral runtime (`api_key_set: bool`, `base_url`, `chat_model`, `embed_model`, `llm_enabled: bool`, `llm_tested: bool`). |
-| `POST /api/v1/settings` | Met à jour les clés fournies (vide = inchangé). Accepte `llm_enabled: bool` (interrupteur LLM). Changer `api_key`/`base_url` invalide le flag `llm_tested`. |
-| `POST /api/v1/settings/test` | Liste les modèles Mistral pour vérifier la connexion ; persiste le résultat (`set_llm_tested`) ; renvoie `{ok:false, error:"LLM desactive"}` si `llm_enabled=false`. |
+| `GET /api/v1/settings` | Lit la config Mistral runtime (`api_key_set: bool`, `base_url`, `chat_model`, `embed_model`, `llm_enabled: bool`, `llm_tested: bool`). Le modèle chat par défaut est `mistral-medium-latest` ; `embed_model` peut être vide pour un POC chat-only. |
+| `POST /api/v1/settings` | Met à jour les clés fournies (vide = inchangé, sauf `embed_model: ""` qui désactive explicitement l'embedding). Accepte `llm_enabled: bool` (interrupteur LLM). Tout changement effectif de `api_key`, `base_url`, `chat_model` ou `embed_model` invalide le flag `llm_tested`. |
+| `POST /api/v1/settings/test` | Envoie une complétion chat minimale réelle avec `chat_model`, puis teste `embed_model` avec une entrée synthétique s'il est renseigné. `ok:true` signifie que tous les modèles configurés ont répondu ; `models` liste ceux vérifiés. Persiste le résultat (`set_llm_tested`) ; renvoie `{ok:false, error:"LLM desactive"}` si `llm_enabled=false`. |
 | `GET /api/v1/health` | `llm: "ok" | "untested" | "not_configured" | "disabled"` — `ok` = clé effective + test réussi + `llm_enabled` ; `untested` = clé sans test réussi ; `not_configured` = pas de clé effective ; `disabled` quand `llm_enabled=false`. **Détecter la clé via `get_effective_settings(db)`, pas `settings.llm_configured`** (ce dernier ne lit que le `.env`). |
 
 **Table `AppConfig`** (`app_config`) est obligatoire pour le profil `llm` :
@@ -674,6 +674,8 @@ L'UI de chaque POC est l'**app React buildée** (`frontend/dist/`), servie par l
 | **Paramètres** | Obligatoire pour le profil `llm` | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
 
 Le POC ajoute ses onglets métier. Les endpoints d'administration restent disponibles même si aucun onglet Données n'est exposé.
+
+Le titre HTML initial (`<title>`), le `document.title` React et le titre de fenêtre Tauri (`productName`) doivent reprendre le même `app.title` que l'application affiche dans le sidebar. Le générateur produit le titre lisible de l'application pour ces surfaces.
 
 ### Conventions visuelles
 

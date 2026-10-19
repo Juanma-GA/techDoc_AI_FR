@@ -58,16 +58,42 @@ def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> Settin
 def test_connection(db: Session = Depends(get_db)) -> TestConnectionOut:
     if not get_llm_enabled(db):
         return TestConnectionOut(ok=False, error="LLM desactive")
+
+    set_llm_tested(db, False)
     try:
         mistral = MistralClient.from_db(db)
     except MistralError as e:
-        set_llm_tested(db, False)
         return TestConnectionOut(ok=False, error=str(e))
+
+    models: list[str] = []
+    errors: list[str] = []
     try:
-        models = mistral.list_models()
-    except Exception as e:  # noqa: BLE001
-        log.warning("mistral_test_connection_failed", error=type(e).__name__)
-        set_llm_tested(db, False)
-        return TestConnectionOut(ok=False, error=f"{type(e).__name__}: {e}")
+        mistral.test_chat_model()
+        models.append(mistral.chat_model)
+    except MistralError as e:
+        log.warning(
+            "mistral_test_connection_failed",
+            model_type="chat",
+            model=mistral.chat_model,
+            error=type(e).__name__,
+        )
+        errors.append(str(e))
+
+    if mistral.embed_model.strip():
+        try:
+            mistral.test_embedding_model()
+            models.append(mistral.embed_model)
+        except MistralError as e:
+            log.warning(
+                "mistral_test_connection_failed",
+                model_type="embedding",
+                model=mistral.embed_model,
+                error=type(e).__name__,
+            )
+            errors.append(str(e))
+
+    if errors:
+        return TestConnectionOut(ok=False, models=models, error="; ".join(errors))
+
     set_llm_tested(db, True)
     return TestConnectionOut(ok=True, models=models)

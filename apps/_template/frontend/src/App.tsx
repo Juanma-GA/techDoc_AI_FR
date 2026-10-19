@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 import {
   Ai4TechDocLogo,
   AppShell,
@@ -21,6 +22,7 @@ const LANGUAGES = ["fr", "en"] as const;
 
 export function App() {
   const { t, i18n } = useTranslation();
+  const appTitle = t("app.title");
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
   const healthQuery = useQuery<HealthDto>({
     queryKey: ["health"],
@@ -33,9 +35,13 @@ export function App() {
   });
   const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
+  useEffect(() => {
+    document.title = appTitle;
+  }, [appTitle]);
+
   return (
     <AppShell
-      title={t("app.title")}
+      title={appTitle}
       brandTitle={t("app.description")}
       version={t("app.version")}
       headerStart={<Ai4TechDocLogo alt="" />}

@@ -52,7 +52,7 @@ export function Settings() {
     onSuccess: (r: TestConnectionDto) => {
       setFeedback(
         r.ok
-          ? { kind: "ok", text: t("settings.mistral.testSuccess", { count: r.models.length }) }
+          ? { kind: "ok", text: t("settings.mistral.testSuccess", { models: r.models.join(", ") }) }
           : { kind: "error", text: t("settings.mistral.testError", { message: r.error ?? "" }) },
       );
       void qc.invalidateQueries({ queryKey: ["health"] });
@@ -130,8 +130,11 @@ export function Settings() {
             <label className="flex flex-1 flex-col gap-1">
               <span className="label">{t("settings.mistral.embedModelLabel")}</span>
               <Input value={embedModel} onChange={(e) => setEmbedModel(e.target.value)} />
-            </label>
-          </div>
+                <span className="text-sm text-fg-dim">
+                  {t("settings.mistral.embedModelOptional")}
+                </span>
+              </label>
+            </div>
           <div className="flex gap-2">
             <Button
               variant="primary"

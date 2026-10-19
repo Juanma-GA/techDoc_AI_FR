@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     mistral_api_key: str = ""
     mistral_base_url: str = "https://api.mistral.ai"
-    mistral_chat_model: str = "mistral-small-latest"
+    mistral_chat_model: str = "mistral-medium-latest"
     mistral_embed_model: str = "mistral-embed"
 
     @field_validator("cors_origins", mode="before")

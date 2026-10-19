@@ -34,7 +34,9 @@ export function createPoc({ repo, slug, port: requested, desktop = false, dryRun
     }
     substituteTree(app, [
       ['"title": "TEMPLATE"', `"title": "${title}"`],
+      ['"productName": "TEMPLATE"', `"productName": "${title}"`],
       ["<title>TEMPLATE</title>", `<title>${title}</title>`],
+      ["<h1>TEMPLATE</h1>", `<h1>${title}</h1>`],
       ["TEMPLATE", slug], ["_template", slug], ["8000", String(port)],
     ]);
     const packaging = readFileSync(path.join(repo, "scripts", "package_TEMPLATE.py"), "utf8")

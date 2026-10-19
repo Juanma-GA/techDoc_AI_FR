@@ -98,13 +98,24 @@ for (const desktop of [false, true]) {
     assert.equal(readFileSync(path.join(app, "_run.bat"), "utf8").includes('set "PORT=8123"'), true);
     assert.equal(readFileSync(path.join(root, "scripts/package_synthetic-test.py"), "utf8")
       .includes('APP_SLUG = "synthetic-test"'), true);
+    assert.match(readFileSync(path.join(app, "backend/app/config.py"), "utf8"),
+      /mistral_chat_model: str = "mistral-medium-latest"/);
+    assert.match(readFileSync(path.join(app, "backend/.env.example"), "utf8"),
+      /MISTRAL_CHAT_MODEL=mistral-medium-latest/);
+    assert.match(readFileSync(path.join(app, "frontend/index.html"), "utf8"),
+      /<title>Synthetic Test<\/title>/);
+    assert.equal(JSON.parse(readFileSync(path.join(app, "frontend/src/locales/fr.json"), "utf8"))
+      .app.title, "Synthetic Test");
     const scripts = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).scripts;
     assert.equal(Boolean(scripts["desktop:dev:synthetic-test"]), desktop);
     if (desktop) {
       const config = JSON.parse(readFileSync(path.join(app, "frontend/desktop.json"), "utf8"));
       assert.equal(config.slug, "synthetic-test");
-      assert.match(readFileSync(path.join(app, "frontend/src-tauri/tauri.conf.json"), "utf8"),
-        /com\.atexis\.synthetic-test/);
+      const tauri = JSON.parse(readFileSync(path.join(app, "frontend/src-tauri/tauri.conf.json"), "utf8"));
+      assert.equal(tauri.productName, "Synthetic Test");
+      assert.match(tauri.identifier, /com\.atexis\.synthetic-test/);
+      assert.match(readFileSync(path.join(app, "frontend/public/desktop-startup.html"), "utf8"),
+        /<h1>Synthetic Test<\/h1>/);
     }
     assert.throws(() => createPoc({ repo: root, slug: "synthetic-test" }), /already exists/);
   });
