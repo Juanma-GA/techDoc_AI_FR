@@ -50,9 +50,8 @@ test("replaces a recognized line in place on a narrow viewport", async ({ page }
     buffer: Buffer.from(source.split(",")[1]!, "base64"),
   });
   await page.getByRole("button", { name: "Lancer l’OCR sur CPU" }).click();
-  const secondBox = page
-    .getByRole("group", { name: "Zones de texte reconnues" })
-    .getByRole("button", { name: "Remplacer la ligne A100" });
+  const textBoxes = page.getByRole("group", { name: "Zones de texte reconnues" });
+  const secondBox = textBoxes.getByRole("button", { name: "Remplacer la ligne A100" });
   await secondBox.click();
   const replacementInput = page.getByRole("textbox", { name: "Nouveau texte pour A100" });
   await expect(replacementInput).toBeFocused();
@@ -76,6 +75,7 @@ test("replaces a recognized line in place on a narrow viewport", async ({ page }
     () => storage.entries.values().next().value?.state.revisions.at(-1)?.kind,
   ).toBe("text-replacement");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await expect(page.locator("svg polygon").nth(1)).toHaveClass(/fill-danger/);
   await page.screenshot({
     path: testInfo.outputPath("recognized-text-edit-mobile.png"),
     fullPage: true,
@@ -86,7 +86,7 @@ test("replaces a recognized line in place on a narrow viewport", async ({ page }
     .getByRole("button", { name: "Modifier le remplacement de A100" })
     .click();
   await expect(replacementInput).toHaveValue("A200");
-  await page.getByRole("button", { name: "Annuler cette modification" }).click();
+  await page.getByRole("button", { name: "Annuler la modification de A100" }).click();
   await expect(preview).toHaveAttribute("src", initial);
   await expect.poll(
     () => storage.entries.values().next().value?.state.revisions.length,
@@ -94,9 +94,10 @@ test("replaces a recognized line in place on a narrow viewport", async ({ page }
   expect(ocrRequestCount).toBe(1);
   expect(lineReplacementRequests).toHaveLength(2);
   expect(lineReplacementRequests[1]).toContain('name="replacement"\r\n\r\nA100');
+  await expect(page.locator("svg polygon").nth(1)).toHaveClass(/fill-transparent/);
   await expect(page.getByRole("textbox", { name: "Référence à remplacer 1" })).not.toBeVisible();
 
-  await secondBox.focus();
+  await textBoxes.getByRole("button", { name: "Remplacer la ligne A100" }).focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("textbox", { name: "Nouveau texte pour A100" })).toBeFocused();
 });
@@ -140,8 +141,13 @@ test("undoes a box edit to its previous Excel/manual replacement", async ({ page
   await page.route("**/api/v1/image-processor/replace-line", (route) => {
     const body = route.request().postData() ?? "";
     lineReplacementRequests.push(body);
+    const output = body.includes('name="replacement"\r\n\r\nA200')
+      ? editedImage
+      : body.includes('name="replacement"\r\n\r\nA150')
+        ? previousImage
+        : source;
     return route.fulfill({ json: {
-      edited_image: body.includes('name="replacement"\r\n\r\nA200') ? editedImage : previousImage,
+      edited_image: output,
       replacement_count: 1,
       replacement_font_size: 12,
     } });
@@ -159,6 +165,8 @@ test("undoes a box edit to its previous Excel/manual replacement", async ({ page
   await page.getByRole("button", { name: "Lancer l’OCR sur CPU" }).click();
 
   const textBoxes = page.getByRole("group", { name: "Zones de texte reconnues" });
+  await expect(page.getByRole("button", { name: "Annuler la modification de A100" })).toBeVisible();
+  await expect(page.locator("svg polygon").nth(1)).toHaveClass(/fill-danger/);
   await textBoxes.getByRole("button", { name: "Modifier le remplacement de A100" }).click();
   const replacementInput = page.getByRole("textbox", { name: "Nouveau texte pour A100" });
   await expect(replacementInput).toHaveValue("A150");
@@ -167,12 +175,19 @@ test("undoes a box edit to its previous Excel/manual replacement", async ({ page
   const preview = page.getByRole("img", { name: "Image résultante au format A4 portrait" });
   await expect(preview).toHaveAttribute("src", editedImage);
   await expect(page.getByRole("textbox", { name: "Nouveau repère 1" })).toHaveValue("A200");
+  await expect(page.locator("svg polygon").nth(1)).toHaveClass(/fill-danger/);
 
   await textBoxes.getByRole("button", { name: "Modifier le remplacement de A100" }).click();
-  await page.getByRole("button", { name: "Annuler cette modification" }).click();
+  await page.getByRole("button", { name: "Annuler la modification de A100" }).click();
   await expect(preview).toHaveAttribute("src", previousImage);
   await expect(page.getByRole("textbox", { name: "Nouveau repère 1" })).toHaveValue("A150");
-  expect(lineReplacementRequests).toHaveLength(2);
+  await expect(page.locator("svg polygon").nth(1)).toHaveClass(/fill-danger/);
+  await page.getByRole("button", { name: "Annuler la modification de A100" }).click();
+  await expect(preview).toHaveAttribute("src", source);
+  await expect(page.getByRole("textbox", { name: "Nouveau repère 1" })).toHaveValue("A150");
+  await expect(page.locator("svg polygon").nth(1)).toHaveClass(/fill-transparent/);
+  expect(lineReplacementRequests).toHaveLength(3);
   expect(lineReplacementRequests[1]).toContain('name="replacement"\r\n\r\nA150');
+  expect(lineReplacementRequests[2]).toContain('name="replacement"\r\n\r\nA100');
   expect(ocrRequestCount).toBe(1);
 });

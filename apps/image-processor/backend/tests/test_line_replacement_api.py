@@ -43,20 +43,28 @@ def test_workspace_accepts_local_ocr_replacement_undo_metadata() -> None:
         "replacement": "A200",
         "replacement_count": 1,
         "undo": {
-            "previous_image_value": "A100",
-            "previous_reference_index": None,
-            "previous_reference": None,
-            "previous_matched_references": [],
-            "previous_pair_source": "created",
+            "previous_image_value": "A150",
+            "previous_reference_index": 0,
+            "previous_reference": {
+                "reference": "A100",
+                "found": True,
+                "line_indices": [1],
+                "replacement": "A150",
+                "replacement_count": 1,
+            },
+            "previous_matched_references": ["A100"],
+            "previous_pair_source": "manual",
             "previous_pair_id": 0,
-            "previous_pair_replacement": "",
-            "previous_pair_enabled": False,
+            "previous_pair_replacement": "A150",
+            "previous_pair_enabled": True,
         },
     })
 
     assert reference.undo is not None
-    assert reference.undo.previous_image_value == "A100"
-    assert reference.undo.previous_pair_source == "created"
+    assert reference.undo.previous_image_value == "A150"
+    assert reference.undo.previous_reference is not None
+    assert reference.undo.previous_reference.replacement == "A150"
+    assert reference.undo.previous_pair_source == "manual"
 
 
 def test_replace_line_renders_only_the_requested_ocr_line(

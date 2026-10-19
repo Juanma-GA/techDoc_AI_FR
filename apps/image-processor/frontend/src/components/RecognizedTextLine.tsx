@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { TFunction } from "i18next";
 import { Button } from "@internal/ui";
-import { Pencil } from "lucide-react";
+import { Pencil, Undo2 } from "lucide-react";
 
 import type { OcrResultDto } from "../lib/api";
 import { RecognizedTextEditor, type RecognizedTextEditTarget } from "./RecognizedTextEditor";
@@ -17,7 +17,7 @@ type RecognizedTextLineProps = {
     replacement: string,
     referenceIndex: number | null,
   ) => Promise<boolean>;
-  onUndoLine: (lineIndex: number, referenceIndex: number) => Promise<boolean>;
+  onUndoLine: (lineIndex: number) => Promise<boolean>;
   t: TFunction;
 };
 
@@ -45,15 +45,24 @@ export function RecognizedTextLine({
           replacement: reference.replacement ?? "",
           referenceIndex,
           undo: reference.undo ?? null,
+          undoAvailable: Boolean(reference.undo) ||
+            reference.line_indices.slice(0, reference.replacement_count ?? 0).includes(lineIndex),
         }]
       : [],
   );
   const targets = matchedTargets.length > 0
     ? matchedTargets
     : line.text.trim()
-      ? [{ reference: line.text, replacement: "", referenceIndex: null, undo: null }]
+      ? [{
+          reference: line.text,
+          replacement: "",
+          referenceIndex: null,
+          undo: null,
+          undoAvailable: false,
+        }]
       : [];
   const firstTarget = targets[0];
+  const undoTarget = targets.find((target) => target.undoAvailable);
 
   function openEditor(target: RecognizedTextEditTarget) {
     setEditing(target);
@@ -72,26 +81,41 @@ export function RecognizedTextLine({
     >
       <div className="flex items-start gap-3">
         {firstTarget ? (
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={disabled}
-            aria-label={t(
-              firstTarget.referenceIndex === null
-                ? "image.replaceRecognizedLine"
-                : "image.editRecognizedReplacement",
-              { reference: firstTarget.reference },
-            )}
-            className="h-auto min-w-0 flex-1 justify-start whitespace-normal px-1 py-0 text-left font-normal"
-            onClick={() => openEditor(firstTarget)}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="break-all text-sm underline decoration-dotted underline-offset-4">
-                {line.text}
+          <div className="flex min-w-0 flex-1 flex-wrap items-start gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={disabled}
+              aria-label={t(
+                firstTarget.referenceIndex === null
+                  ? "image.replaceRecognizedLine"
+                  : "image.editRecognizedReplacement",
+                { reference: firstTarget.reference },
+              )}
+              className="h-auto max-w-full min-w-0 justify-start whitespace-normal px-1 py-0 text-left font-normal"
+              onClick={() => openEditor(firstTarget)}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="break-all text-sm underline decoration-dotted underline-offset-4">
+                  {line.text}
+                </span>
+                <Pencil size={14} className="shrink-0" aria-hidden="true" />
               </span>
-              <Pencil size={14} className="shrink-0" aria-hidden="true" />
-            </span>
-          </Button>
+            </Button>
+            {undoTarget ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                disabled={disabled}
+                aria-label={t("image.undoLineReplacement", { reference: undoTarget.reference })}
+                title={t("image.undoLineReplacement", { reference: undoTarget.reference })}
+                onClick={() => void onUndoLine(lineIndex)}
+              >
+                <Undo2 size={15} aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
         ) : (
           <span className="min-w-0 flex-1 break-all text-sm">{line.text}</span>
         )}
@@ -125,7 +149,6 @@ export function RecognizedTextLine({
           lineIndex={lineIndex}
           disabled={disabled}
           onReplaceLine={onReplaceLine}
-          onUndoLine={onUndoLine}
           onClose={cancelEdit}
           t={t}
         />

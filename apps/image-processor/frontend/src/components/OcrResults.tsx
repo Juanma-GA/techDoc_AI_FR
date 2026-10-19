@@ -17,7 +17,7 @@ type OcrResultsProps = {
     replacement: string,
     referenceIndex: number | null,
   ) => Promise<boolean>;
-  onUndoLine: (lineIndex: number, referenceIndex: number) => Promise<boolean>;
+  onUndoLine: (lineIndex: number) => Promise<boolean>;
   t: TFunction;
 };
 

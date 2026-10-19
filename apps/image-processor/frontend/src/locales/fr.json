@@ -145,7 +145,7 @@
     "applyLineReplacement": "Appliquer le remplacement",
     "applyingLineReplacement": "Remplacement en cours…",
     "cancelLineReplacement": "Annuler",
-    "undoLineReplacement": "Annuler cette modification",
+    "undoLineReplacement": "Annuler la modification de {{reference}}",
     "errorLineReplacement": "Impossible de modifier cette ligne OCR.",
     "errorUndoLineReplacement": "Impossible d’annuler la modification de cette ligne.",
     "noText": "Aucun texte détecté.",

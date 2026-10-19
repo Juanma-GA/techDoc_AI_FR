@@ -145,7 +145,7 @@
     "applyLineReplacement": "Apply replacement",
     "applyingLineReplacement": "Applying replacement…",
     "cancelLineReplacement": "Cancel",
-    "undoLineReplacement": "Undo this change",
+    "undoLineReplacement": "Undo changes to {{reference}}",
     "errorLineReplacement": "This OCR line could not be updated.",
     "errorUndoLineReplacement": "This line change could not be undone.",
     "noText": "No text detected.",

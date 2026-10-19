@@ -45,7 +45,9 @@ export function ImagePreview({
   const editor = useImageEditor({
     imageFile, imageUrl, manuallyEdited, onImageEdited, onInpaintingChange, t,
   });
-  const matchedLines = new Set((result?.references ?? []).flatMap((item) => item.line_indices));
+  const replacedLines = new Set((result?.references ?? []).flatMap((item) =>
+    item.line_indices.slice(0, item.replacement_count ?? 0),
+  ));
 
   if (!editor.previewImage) {
     return (
@@ -107,17 +109,18 @@ export function ImagePreview({
               >
                 {result.lines.map((line, index) => {
                   const reference = result.references.find((item) => item.line_indices.includes(index));
+                  const replaced = replacedLines.has(index);
                   const canSelect = !disabled && !editor.brushEnabled;
                   return line.box.length >= 3 ? (
                     <polygon
                       key={index}
                       points={line.box.map(([x, y]) => `${x},${y}`).join(" ")}
                       className={`pointer-events-auto cursor-pointer focus-visible:stroke-brand focus-visible:stroke-2 ${
-                        matchedLines.has(index)
+                        replaced
                           ? "fill-danger stroke-danger"
                           : "fill-transparent stroke-brand-blue-light"
                       }`}
-                      fillOpacity={matchedLines.has(index) ? 0.15 : undefined}
+                      fillOpacity={replaced ? 0.15 : undefined}
                       strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
                       role="button"

@@ -20,7 +20,9 @@ readable and estimate their font on the next replacement.
 
 Recognized lines can be edited in place after OCR. The selected OCR box is rendered
 on the current image without running OCR again; each edit is saved as an undoable
-workspace revision.
+workspace revision. An undo arrow beside the edit icon restores the previous value
+for that box; undoing an initial OCR replacement returns it to the recognized text
+and marks its box as unmodified without affecting other boxes.
 
 Downloads POST the current image and Excel selection to `/image-processor/export`.
 The server supplies the authoritative ICN filename and real A4/300 dpi JPEG;

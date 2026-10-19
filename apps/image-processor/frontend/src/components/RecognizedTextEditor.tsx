@@ -1,15 +1,11 @@
 import { useState, type KeyboardEvent } from "react";
 import type { TFunction } from "i18next";
 import { Button, Input } from "@internal/ui";
-import { Undo2 } from "lucide-react";
-
-import type { OcrReferenceUndoDto } from "../lib/api";
 
 export type RecognizedTextEditTarget = {
   reference: string;
   replacement: string;
   referenceIndex: number | null;
-  undo: OcrReferenceUndoDto | null;
 };
 
 type RecognizedTextEditorProps = {
@@ -22,7 +18,6 @@ type RecognizedTextEditorProps = {
     replacement: string,
     referenceIndex: number | null,
   ) => Promise<boolean>;
-  onUndoLine: (lineIndex: number, referenceIndex: number) => Promise<boolean>;
   onClose: () => void;
   t: TFunction;
 };
@@ -32,7 +27,6 @@ export function RecognizedTextEditor({
   lineIndex,
   disabled,
   onReplaceLine,
-  onUndoLine,
   onClose,
   t,
 }: RecognizedTextEditorProps) {
@@ -44,11 +38,6 @@ export function RecognizedTextEditor({
     if (await onReplaceLine(lineIndex, target.reference, replacement, target.referenceIndex)) {
       onClose();
     }
-  }
-
-  async function undoEdit() {
-    if (disabled || target.referenceIndex === null || !target.undo) return;
-    if (await onUndoLine(lineIndex, target.referenceIndex)) onClose();
   }
 
   return (
@@ -97,18 +86,6 @@ export function RecognizedTextEditor({
         >
           {t("image.cancelLineReplacement")}
         </Button>
-        {target.undo ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={disabled}
-            onClick={() => void undoEdit()}
-          >
-            <Undo2 size={15} aria-hidden="true" />
-            {t("image.undoLineReplacement")}
-          </Button>
-        ) : null}
       </div>
     </div>
   );

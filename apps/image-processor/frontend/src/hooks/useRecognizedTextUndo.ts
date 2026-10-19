@@ -7,6 +7,7 @@ import {
   type OcrResultDto,
 } from "../lib/api";
 import { requestError } from "../lib/workspace-api";
+import { restoreOcrReferenceResults } from "./useImageDocument";
 import type { RecognizedTextOperationOptions } from "./useRecognizedTextReplacement";
 
 export function referenceKey(value: string) {
@@ -65,38 +66,21 @@ export function updateReferenceResults(
   });
 }
 
-function sameIndices(left: number[], right: number[]) {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
+function replacementAppliedAtLine(reference: OcrReferenceDto, lineIndex: number) {
+  return reference.line_indices
+    .slice(0, reference.replacement_count ?? 0)
+    .includes(lineIndex);
 }
 
-function restoreReferenceResults(
-  result: OcrResultDto,
-  referenceIndex: number,
-  lineIndex: number,
-  current: OcrReferenceDto,
-): OcrReferenceDto[] {
-  const undo = current.undo;
-  if (!undo) return result.references;
-  if (!undo.previous_reference) {
-    return result.references.filter((_, index) => index !== referenceIndex);
-  }
-
-  const previous = undo.previous_reference;
-  const remainingLines = previous.line_indices.filter((index) => index !== lineIndex);
-  const remainderIndex = remainingLines.length > 0
-    ? result.references.findIndex((item, index) =>
-        index !== referenceIndex &&
-        item.reference === previous.reference &&
-        sameIndices(item.line_indices, remainingLines) &&
-        (item.replacement ?? "") === (previous.replacement ?? ""),
-      )
-    : -1;
-  const restored = result.references.filter(
-    (_, index) => index !== referenceIndex && index !== remainderIndex,
-  );
-  const insertionIndex = Math.min(undo.previous_reference_index ?? restored.length, restored.length);
-  restored.splice(insertionIndex, 0, previous);
-  return restored;
+function undoAutomaticLineReplacements(result: OcrResultDto, lineIndex: number): OcrReferenceDto[] {
+  return result.references.map((reference) => {
+    if (!replacementAppliedAtLine(reference, lineIndex)) return reference;
+    return {
+      ...reference,
+      line_indices: reference.line_indices.filter((index) => index !== lineIndex),
+      replacement_count: Math.max(0, (reference.replacement_count ?? 0) - 1),
+    };
+  });
 }
 
 export function useRecognizedTextUndo({
@@ -113,14 +97,24 @@ export function useRecognizedTextUndo({
 }: RecognizedTextOperationOptions) {
   return useCallback(async (
     lineIndex: number,
-    referenceIndex: number,
   ): Promise<boolean> => {
     const result = image.result;
     const line = result?.lines[lineIndex];
-    const current = result?.references[referenceIndex];
+    let referenceIndex = -1;
+    if (result) {
+      for (let index = result.references.length - 1; index >= 0; index -= 1) {
+        const reference = result.references[index];
+        if (reference?.undo && reference.line_indices.includes(lineIndex)) {
+          referenceIndex = index;
+          break;
+        }
+      }
+    }
+    const current = referenceIndex >= 0 ? result?.references[referenceIndex] : undefined;
     const undo = current?.undo;
     if (
-      !image.currentFile || !result || !line || !current || !undo ||
+      !image.currentFile || !result || !line || !referenceKey(line.text) ||
+      (!undo && !result.references.some((reference) => replacementAppliedAtLine(reference, lineIndex))) ||
       loading || restoring || downloading || retouching
     ) {
       setError(t("image.errorUndoLineReplacement"));
@@ -133,48 +127,52 @@ export function useRecognizedTextUndo({
       const form = new FormData();
       form.append("image", image.currentFile, image.currentFile.name);
       form.append("line_json", JSON.stringify({ text: line.text, box: line.box }));
-      form.append("reference", current.reference);
-      form.append("replacement", undo.previous_image_value);
+      form.append("reference", undo ? current.reference : line.text);
+      form.append("replacement", undo ? undo.previous_image_value : line.text);
       if (result.replacement_font_size != null) {
         form.append("replacement_font_size", String(result.replacement_font_size));
       }
       const rendered = await imageReplaceApi.replaceLine(form);
       const restoredLine = {
         ...line,
-        matched_references: undo.previous_matched_references,
+        ...(undo ? { matched_references: undo.previous_matched_references } : {}),
       };
       const restoredResult: OcrResultDto = {
         ...result,
         edited_image: rendered.edited_image,
         lines: result.lines.map((item, index) => index === lineIndex ? restoredLine : item),
-        references: restoreReferenceResults(result, referenceIndex, lineIndex, current),
+        references: undo && current
+          ? restoreOcrReferenceResults(result, referenceIndex, lineIndex, current)
+          : undoAutomaticLineReplacements(result, lineIndex),
         replacement_font_size: rendered.replacement_font_size,
       };
       image.applyTextReplacement(restoredResult);
 
-      const reference = referenceKey(current.reference);
-      if (undo.previous_pair_source === "created") {
-        setManualPairs((pairs) => pairs.filter((pair) =>
-          pair.id !== undo.previous_pair_id ||
-          referenceKey(pair.reference) !== reference ||
-          pair.replacement.trim() !== (current.replacement ?? "").trim(),
-        ));
-      } else if (undo.previous_pair_source === "manual") {
-        setManualPairs((pairs) => pairs.map((pair) =>
-          pair.id === undo.previous_pair_id &&
-          pair.replacement.trim() === (current.replacement ?? "").trim()
-            ? {
-                ...pair,
-                replacement: undo.previous_pair_replacement,
-                enabled: undo.previous_pair_enabled,
-              }
-            : pair,
-        ));
-      } else {
-        const pair = excel.excelPairs.find((item) => item.id === undo.previous_pair_id);
-        if (pair && pair.replacement.trim() === (current.replacement ?? "").trim()) {
-          excel.updateExcelPair(pair.id, "replacement", undo.previous_pair_replacement);
-          if (pair.enabled !== undo.previous_pair_enabled) excel.toggleExcelPair(pair.id);
+      if (undo && current) {
+        const reference = referenceKey(current.reference);
+        if (undo.previous_pair_source === "created") {
+          setManualPairs((pairs) => pairs.filter((pair) =>
+            pair.id !== undo.previous_pair_id ||
+            referenceKey(pair.reference) !== reference ||
+            pair.replacement.trim() !== (current.replacement ?? "").trim(),
+          ));
+        } else if (undo.previous_pair_source === "manual") {
+          setManualPairs((pairs) => pairs.map((pair) =>
+            pair.id === undo.previous_pair_id &&
+            pair.replacement.trim() === (current.replacement ?? "").trim()
+              ? {
+                  ...pair,
+                  replacement: undo.previous_pair_replacement,
+                  enabled: undo.previous_pair_enabled,
+                }
+              : pair,
+          ));
+        } else {
+          const pair = excel.excelPairs.find((item) => item.id === undo.previous_pair_id);
+          if (pair && pair.replacement.trim() === (current.replacement ?? "").trim()) {
+            excel.updateExcelPair(pair.id, "replacement", undo.previous_pair_replacement);
+            if (pair.enabled !== undo.previous_pair_enabled) excel.toggleExcelPair(pair.id);
+          }
         }
       }
       return true;

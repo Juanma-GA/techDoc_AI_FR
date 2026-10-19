@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 
-import type { OcrResultDto } from "../lib/api";
+import type { OcrReferenceDto, OcrResultDto } from "../lib/api";
 import { MAX_UPLOAD_BYTES } from "../lib/image-processing";
 import { restoreFile, type ImageRevision, type Operation, type WorkspaceSnapshot } from "../lib/workspace-api";
 
@@ -14,6 +14,37 @@ type DocumentState = {
   revisions: ImageRevision[];
   operations: Operation[];
 };
+
+export function restoreOcrReferenceResults(
+  result: OcrResultDto,
+  referenceIndex: number,
+  lineIndex: number,
+  current: OcrReferenceDto,
+): OcrReferenceDto[] {
+  const undo = current.undo;
+  if (!undo) return result.references;
+  if (!undo.previous_reference) {
+    return result.references.filter((_, index) => index !== referenceIndex);
+  }
+
+  const previous = undo.previous_reference;
+  const remainingLines = previous.line_indices.filter((index) => index !== lineIndex);
+  const remainderIndex = remainingLines.length > 0
+    ? result.references.findIndex((item, index) =>
+        index !== referenceIndex &&
+        item.reference === previous.reference &&
+        item.line_indices.length === remainingLines.length &&
+        item.line_indices.every((line, position) => line === remainingLines[position]) &&
+        (item.replacement ?? "") === (previous.replacement ?? ""),
+      )
+    : -1;
+  const restored = result.references.filter(
+    (_, index) => index !== referenceIndex && index !== remainderIndex,
+  );
+  const insertionIndex = Math.min(undo.previous_reference_index ?? restored.length, restored.length);
+  restored.splice(insertionIndex, 0, previous);
+  return restored;
+}
 
 export function useImageDocument(t: TFunction) {
   const [document, setDocument] = useState<DocumentState | null>(null);
