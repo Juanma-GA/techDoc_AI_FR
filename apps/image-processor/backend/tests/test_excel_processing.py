@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from io import BytesIO
 
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 
@@ -13,10 +15,10 @@ def _workbook_bytes() -> bytes:
     sheet = workbook.active
     sheet.title = "Repères"
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, "section", None, "ICN-A", "Pompe A"])
+    sheet.append([None, "section", "00", "ICN-A", "Pompe A"])
     sheet.append(["R-001", "ligne de couple", "N-001", None, None])
     sheet.append(["R-002", "ligne de couple", "N-002", None, None])
-    sheet.append([None, "section", None, "ICN-B", "Pompe B"])
+    sheet.append([None, "section", "00", "ICN-B", "Pompe B"])
     sheet.append(["R-101", "ligne de couple", "N-101", None, None])
     output = BytesIO()
     workbook.save(output)
@@ -63,7 +65,12 @@ def test_excel_pieces_route_lists_only_section_headers(client: TestClient) -> No
     response = client.post(
         "/api/v1/image-processor/excel/pieces",
         files=_excel_upload(_workbook_bytes()),
-        data={"sheet_name": "Repères", "reference_column": "1", "piece_column": "5"},
+        data={
+            "sheet_name": "Repères",
+            "reference_column": "1",
+            "replacement_column": "3",
+            "piece_column": "5",
+        },
     )
 
     assert response.status_code == 200
@@ -73,6 +80,31 @@ def test_excel_pieces_route_lists_only_section_headers(client: TestClient) -> No
             {"row": 5, "name": "Pompe B"},
         ]
     }
+
+
+def test_excel_pieces_route_accepts_numeric_zero_formatted_as_00(client: TestClient) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Repères"
+    sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
+    sheet.append([None, "section", 0, "ICN-A", "Pompe A"])
+    sheet["C2"].number_format = "0;-0;00;@"
+    output = BytesIO()
+    workbook.save(output)
+
+    response = client.post(
+        "/api/v1/image-processor/excel/pieces",
+        files=_excel_upload(output.getvalue()),
+        data={
+            "sheet_name": "Repères",
+            "reference_column": "1",
+            "replacement_column": "3",
+            "piece_column": "5",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"pieces": [{"row": 2, "name": "Pompe A"}]}
 
 
 def test_excel_pairs_route_extracts_selected_piece_pairs(client: TestClient) -> None:
@@ -98,14 +130,47 @@ def test_excel_pairs_route_extracts_selected_piece_pairs(client: TestClient) -> 
     }
 
 
+def test_excel_pairs_route_returns_pair_with_empty_reference(client: TestClient) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Repères"
+    sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
+    sheet.append([None, "section", "00", "ICN-A", "Pompe A"])
+    sheet.append(["R-001", "ligne de couple", "N-001", None, None])
+    sheet.append([None, "référence manquante", "N-002", None, None])
+    output = BytesIO()
+    workbook.save(output)
+
+    response = client.post(
+        "/api/v1/image-processor/excel/pairs",
+        files=_excel_upload(output.getvalue()),
+        data={
+            "excel_sheet": "Repères",
+            "excel_reference_column": "1",
+            "excel_replacement_column": "3",
+            "excel_icn_column": "4",
+            "excel_piece_column": "5",
+            "excel_piece_row": "2",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "pairs": [
+            {"reference": "R-001", "replacement": "N-001"},
+            {"reference": "", "replacement": "N-002"},
+        ]
+    }
+
+
 def test_selected_piece_extracts_pairs_until_next_section() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, "section", None, "ICN-A", "Pompe A"])
+    sheet.append([None, "section", "00", "ICN-A", "Pompe A"])
     sheet.append(["R-001", "ligne de couple", "N-001", None, None])
     sheet.append(["R-002", "ligne de couple", "N-002", None, None])
-    sheet.append([None, "section", None, "ICN-B", "Pompe B"])
+    sheet.append([None, "section", "00", "ICN-B", "Pompe B"])
 
     replacements, icn = extract_excel_replacements(
         sheet,
@@ -123,14 +188,49 @@ def test_selected_piece_extracts_pairs_until_next_section() -> None:
     ]
 
 
-def test_excel_piece_options_use_selected_reference_column() -> None:
+def test_excel_piece_options_require_empty_reference_and_00_marker() -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
+    sheet.append([None, "section", "00", "ICN-A", "Pompe A"])
+    sheet.append(["R-001", "contenu", "N-001", None, None])
+    sheet.append(["R-002", "non vide", None, None, "Pas une pièce"])
+    sheet.append([None, "section", None, "ICN-B", "Sans marqueur"])
+    sheet.append(["R-003", "section", "00", "ICN-C", "Référence non vide"])
+
+    assert excel_piece_options(sheet, reference_column=1, replacement_column=3, piece_column=5) == [
+        {"row": 2, "name": "Pompe A"}
+    ]
+
+
+def test_excel_piece_options_accepts_numeric_zero_formatted_as_00() -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
+    sheet.append([None, "section", 0, "ICN-A", "Pompe A"])
+    sheet["C2"].number_format = "00"
+    sheet.append([None, "section", 0, "ICN-B", "Sans format 00"])
+
+    assert excel_piece_options(sheet, reference_column=1, replacement_column=3, piece_column=5) == [
+        {"row": 2, "name": "Pompe A"}
+    ]
+
+
+def test_selected_piece_requires_00_marker() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
     sheet.append([None, "section", None, "ICN-A", "Pompe A"])
-    sheet.append(["R-001", "contenu", "N-001", None, None])
-    sheet.append(["R-002", "non vide", None, None, "Pas une pièce"])
 
-    assert excel_piece_options(sheet, reference_column=1, piece_column=5) == [
-        {"row": 2, "name": "Pompe A"}
-    ]
+    with pytest.raises(HTTPException) as error:
+        extract_excel_replacements(
+            sheet,
+            reference_column=1,
+            replacement_column=3,
+            icn_column=4,
+            piece_column=5,
+            piece_row=2,
+        )
+
+    assert error.value.status_code == 422
+    assert error.value.detail == "La ligne sélectionnée n'est pas un titre de pièce valide."

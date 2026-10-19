@@ -20,6 +20,9 @@
       "webviewInstallMode": {
         "type": "offlineInstaller",
         "silent": true
+      },
+      "nsis": {
+        "installerHooks": "installer-hooks.nsh"
       }
     },
     "icon": ["icons/icon.ico", "icons/icon.png"],

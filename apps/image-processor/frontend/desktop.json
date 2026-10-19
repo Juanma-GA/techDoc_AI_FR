@@ -49,9 +49,13 @@
     "upgrade",
     "head"
   ],
+  "python_versions": {
+    "api": "3.13.15",
+    "lama": "3.11.9"
+  },
   "model_cache": {
-    "paddlex": "runtime/models/paddlex",
-    "torch_home": "runtime/models/torch",
+    "paddlex": "models/paddlex",
+    "torch_home": "models/torch",
     "ocr_model_variant": "tiny",
     "ocr_models": [
       "PP-OCRv6_tiny_det",

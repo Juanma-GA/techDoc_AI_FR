@@ -107,7 +107,7 @@ def excel_preset() -> dict:
     sheet = workbook.active
     sheet.title = "Parts"
     sheet.append(["Reference", "Replacement", "ICN", "Part"])
-    sheet.append(["", "", "ICN-TEST", "Synthetic pump"])
+    sheet.append(["", "00", "ICN-TEST", "Synthetic pump"])
     sheet.append(["R-1", "N-1", "", ""])
     contents = BytesIO()
     workbook.save(contents)

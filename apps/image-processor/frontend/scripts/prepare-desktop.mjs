@@ -55,10 +55,15 @@ if (mode === "dev") {
 
 const tauri = path.join(frontend, "src-tauri");
 const runtime = path.join(tauri, "runtime");
+const buildRuntime = path.join(path.resolve(frontend, ".."), "dist", ".cache", "desktop", "build-runtime");
 const spec = createRuntimeSpec(frontend, config, mode);
 for (const service of [spec.api, spec.lama]) {
-  const commandRoot = mode === "dev" ? frontend : tauri;
-  if (!existsSync(path.resolve(commandRoot, service.executable))) {
+  const executable = mode === "dev"
+    ? path.resolve(frontend, service.executable)
+    : mode === "build"
+      ? path.join(buildRuntime, service.executable.replace(/^runtime[\\/]/, ""))
+      : path.resolve(tauri, service.executable);
+  if (!existsSync(executable)) {
     throw new Error(`Missing desktop executable: ${service.executable}`);
   }
 }

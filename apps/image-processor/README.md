@@ -91,15 +91,17 @@ The first run creates the Python 3.13 and 3.11 development environments and
 installs their dependencies. On a fresh checkout, run `pnpm install` at the
 repository root first to install the Tauri CLI and frontend dependencies.
 
-The self-contained NSIS installer is built with
-`pnpm desktop:build:image-processor` or `package.bat desktop`. It bundles the
-React UI, both embedded Python runtimes and their dependencies, PaddleOCR tiny
+The NSIS installer is built with `pnpm desktop:build:image-processor` or
+`package.bat desktop`. It bundles the React UI, backend sources, PaddleOCR tiny
 detection/recognition and text-line orientation models, and the LaMa checkpoint.
-The installed app needs no system Python or Node. NSIS silently installs
-WebView2 from its embedded offline installer, so the user needs neither a
-separate setup nor a network connection. The installer can be large; building
-it requires a trusted network connection to fetch runtimes, dependencies, model
-weights, and WebView2, plus Rust and Visual Studio C++ build tools.
+During setup, it visibly downloads the embedded Python runtimes and installs
+their locked dependencies from PyPI. The installer needs an Internet connection
+for this step; after setup, the app runs locally and offline without system
+Python or Node. NSIS silently installs WebView2 from its embedded offline
+installer. The first build, or a dependency/model cache refresh, needs a trusted
+network connection to prepare runtimes and models. Later builds reuse the local
+cache under `dist/.cache/desktop`. Building also requires Rust and Visual Studio
+C++ build tools.
 
 ## Served Interface
 
@@ -208,8 +210,8 @@ No real-model orientation benchmark was run for the typography change.
 
 - The launcher requires compatible Python runtimes on developer machines; package users receive embedded runtimes.
 - The web launcher and ZIP package need network access for first-time dependency
-  setup and uncached models. The Tauri installer includes its dependencies and
-  models; its build step requires network access, but the installed app runs offline.
+  setup and uncached models. The Tauri setup downloads dependencies and bundles
+  its models; setup needs Internet, but the installed app runs offline.
 - Model accuracy, latency, and packaging size have not been benchmarked with representative production images.
 - The backend preserves the source OCR and Excel behavior; frontend labels and error messages are localized, while some backend validation details remain French.
 

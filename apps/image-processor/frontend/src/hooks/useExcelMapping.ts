@@ -83,10 +83,14 @@ export function useExcelMapping(t: TFunction) {
     });
   }
 
-  async function chooseExcelPieceColumn(column: string, referenceColumn = state.referenceColumn) {
+  async function chooseExcelPieceColumn(
+    column: string,
+    referenceColumn = state.referenceColumn,
+    replacementColumn = state.replacementColumn,
+  ) {
     setRestored(null);
     setState((current) => ({ ...current, pieceColumn: column, pieces: [], pieceRow: "" }));
-    if (!column || !referenceColumn || !state.workbook || !state.sheet) {
+    if (!column || !referenceColumn || !replacementColumn || !state.workbook || !state.sheet) {
       requestId.current += 1;
       setExcelLoading(false);
       return;
@@ -96,6 +100,7 @@ export function useExcelMapping(t: TFunction) {
       form.append("workbook", state.workbook!);
       form.append("sheet_name", state.sheet);
       form.append("reference_column", referenceColumn);
+      form.append("replacement_column", replacementColumn);
       form.append("piece_column", column);
       const payload = await imageReplaceApi.excelPieces(form);
       if (currentRequest === requestId.current) {
@@ -108,6 +113,14 @@ export function useExcelMapping(t: TFunction) {
     setState((current) => ({ ...current, referenceColumn, pieceRow: "" }));
     setExcelError("");
     if (state.pieceColumn) void chooseExcelPieceColumn(state.pieceColumn, referenceColumn);
+  }
+
+  function setExcelReplacementColumn(replacementColumn: string) {
+    setState((current) => ({ ...current, replacementColumn, pieces: [], pieceRow: "" }));
+    setExcelError("");
+    if (state.pieceColumn) {
+      void chooseExcelPieceColumn(state.pieceColumn, state.referenceColumn, replacementColumn);
+    }
   }
 
   const restoreExcel = useCallback((snapshot: ExcelSnapshot) => {
@@ -147,8 +160,7 @@ export function useExcelMapping(t: TFunction) {
     excelPairsReady: preview.ready, excelSelectionConfigured: configured,
     excelSelectionReady: !state.workbook || (configured && preview.ready),
     chooseExcel, chooseExcelSheet, chooseExcelPieceColumn, removeExcel, setExcelReferenceColumn,
-    setExcelReplacementColumn: (replacementColumn: string) =>
-      setState((current) => ({ ...current, replacementColumn })),
+    setExcelReplacementColumn,
     setExcelIcnColumn: (icnColumn: string) => setState((current) => ({ ...current, icnColumn })),
     setExcelPieceRow: (pieceRow: string) => {
       setRestored(null);

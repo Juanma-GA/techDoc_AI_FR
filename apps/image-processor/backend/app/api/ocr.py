@@ -103,9 +103,14 @@ async def run_ocr(
                 excel_piece_row or 0,
             )
             if excel_replacement_pairs is not None:
-                excel_replacements = _parse_replacement_pairs(excel_replacement_pairs)
+                excel_replacements = _parse_replacement_pairs(
+                    excel_replacement_pairs,
+                    skip_empty_references=True,
+                )
 
         for pair in excel_replacements:
+            if not pair["reference"]:
+                continue
             replacement_list.append(pair)
             reference_list.append(pair["reference"])
 

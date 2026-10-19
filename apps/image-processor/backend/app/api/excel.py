@@ -37,12 +37,17 @@ async def get_excel_pieces(
     workbook: UploadFile = File(...),
     sheet_name: str = Form(...),
     reference_column: int = Form(...),
+    replacement_column: int = Form(...),
     piece_column: int = Form(...),
 ) -> dict[str, list[dict[str, object]]]:
     contents = await read_excel_upload(workbook)
     with open_excel_workbook(contents, workbook.filename) as excel_workbook:
         worksheet = get_excel_sheet(excel_workbook, sheet_name)
-        return {"pieces": excel_piece_options(worksheet, reference_column, piece_column)}
+        return {
+            "pieces": excel_piece_options(
+                worksheet, reference_column, replacement_column, piece_column
+            )
+        }
 
 
 @router.post("/pairs")

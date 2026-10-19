@@ -37,7 +37,7 @@ def _workbook_bytes(
     sheet = workbook.active
     sheet.title = "Repères"
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, None, None, "ICN-A", "Pompe A"])
+    sheet.append([None, None, "00", "ICN-A", "Pompe A"])
     sheet.append([reference, None, replacements[0], None, None])
     sheet.append([reference, None, replacements[1], None, None])
     output = BytesIO()

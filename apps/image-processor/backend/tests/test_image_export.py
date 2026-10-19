@@ -39,7 +39,7 @@ def test_export_uses_selected_icn_and_real_a4_jpeg(client, workspace_state, icn)
     sheet = workbook.active
     sheet.title = "Parts"
     sheet.append(["Reference", "Replacement", "ICN", "Part"])
-    sheet.append(["", "", icn, "Synthetic pump"])
+    sheet.append(["", "00", icn, "Synthetic pump"])
     sheet.append(["R-1", "N-1", "", ""])
     contents = BytesIO()
     workbook.save(contents)

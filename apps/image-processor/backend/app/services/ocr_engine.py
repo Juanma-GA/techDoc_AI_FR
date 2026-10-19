@@ -114,7 +114,11 @@ def _match_references(
     return lines, matches
 
 
-def _parse_replacement_pairs(raw_pairs: str) -> list[dict[str, str]]:
+def _parse_replacement_pairs(
+    raw_pairs: str,
+    *,
+    skip_empty_references: bool = False,
+) -> list[dict[str, str]]:
     try:
         payload = json.loads(raw_pairs)
     except json.JSONDecodeError as error:
@@ -141,6 +145,8 @@ def _parse_replacement_pairs(raw_pairs: str) -> list[dict[str, str]]:
 
         reference = reference.strip()
         replacement = replacement.strip()
+        if skip_empty_references and not reference:
+            continue
         normalized_reference = normalize_reference(reference)
         if not normalized_reference or not replacement:
             raise HTTPException(

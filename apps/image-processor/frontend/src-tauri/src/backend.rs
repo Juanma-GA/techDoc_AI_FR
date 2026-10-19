@@ -148,7 +148,10 @@ fn api_command(
     if let Some(cache) = model_cache {
         command
             .env("OCR_MODEL_VARIANT", &cache.ocr_model_variant)
-            .env("PADDLE_PDX_CACHE_HOME", root.join(&cache.paddlex));
+            .env(
+                "PADDLE_PDX_CACHE_HOME",
+                root.join("runtime").join(&cache.paddlex),
+            );
     }
     command
 }
@@ -163,7 +166,7 @@ fn lama_command(
     command.env("DESKTOP_PRELOAD_MODELS", "true");
     if let Some(cache) = model_cache {
         command
-            .env("TORCH_HOME", root.join(&cache.torch_home))
+            .env("TORCH_HOME", root.join("runtime").join(&cache.torch_home))
             .env("LAMA_MODEL_URL", &cache.lama_model_url);
     }
     command

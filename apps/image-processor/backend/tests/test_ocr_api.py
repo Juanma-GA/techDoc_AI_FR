@@ -16,8 +16,9 @@ def _workbook_bytes() -> bytes:
     sheet = workbook.active
     sheet.title = "Repères"
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
-    sheet.append([None, None, None, "ICN-A", "Pompe A"])
+    sheet.append([None, None, "00", "ICN-A", "Pompe A"])
     sheet.append(["R-001", "ligne de couple", "N-001", None, None])
+    sheet.append([None, "référence manquante", "N-002", None, None])
     output = BytesIO()
     workbook.save(output)
     return output.getvalue()
@@ -223,11 +224,28 @@ def test_ocr_route_uses_edited_and_removed_excel_pairs(
         files=files,
         data={**excel_selection, "excel_replacement_pairs": "[]"},
     )
+    extracted_response = client.post(
+        "/api/v1/image-processor/ocr",
+        files=files,
+        data=excel_selection,
+    )
+    empty_reference_response = client.post(
+        "/api/v1/image-processor/ocr",
+        files=files,
+        data={
+            **excel_selection,
+            "excel_replacement_pairs": '[{"reference":"","replacement":"N-999"}]',
+        },
+    )
 
     assert edited_response.status_code == 200, edited_response.text
     assert [item["replacement"] for item in edited_response.json()["references"]] == ["N-999"]
     assert removed_response.status_code == 200, removed_response.text
     assert removed_response.json()["references"] == []
+    assert extracted_response.status_code == 200, extracted_response.text
+    assert [item["replacement"] for item in extracted_response.json()["references"]] == ["N-001"]
+    assert empty_reference_response.status_code == 200, empty_reference_response.text
+    assert empty_reference_response.json()["references"] == []
 
 
 def test_ocr_route_rejects_non_image_upload(client: TestClient) -> None:

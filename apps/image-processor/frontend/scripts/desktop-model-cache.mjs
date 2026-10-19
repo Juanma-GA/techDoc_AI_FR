@@ -18,6 +18,17 @@ function containsDirectory(directory, name) {
   });
 }
 
+export function isModelCacheValid(runtime, modelCache) {
+  const paddleCache = path.resolve(runtime, modelCache.paddlex);
+  const torchHome = path.resolve(runtime, modelCache.torch_home);
+  const modelsExist = modelCache.ocr_models.every((model) => containsDirectory(paddleCache, model));
+  const checkpoint = path.join(torchHome, "hub", "checkpoints", "big-lama.pt");
+  return modelsExist
+    && containsFile(paddleCache)
+    && existsSync(checkpoint)
+    && statSync(checkpoint).size > 0;
+}
+
 export function validateModelCache(runtime, modelCache) {
   const paddleCache = path.resolve(runtime, modelCache.paddlex);
   const torchHome = path.resolve(runtime, modelCache.torch_home);

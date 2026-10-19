@@ -112,6 +112,7 @@ describe("Image Processor home workflow", () => {
       pairs: [
         { reference: "R-001", replacement: "N-001" },
         { reference: "R-002", replacement: "N-002" },
+        { reference: "", replacement: "N-003" },
       ],
     });
     const ocrResult: OcrResultDto = {
@@ -144,6 +145,17 @@ describe("Image Processor home workflow", () => {
     await user.selectOptions(screen.getByLabelText("Noms des pièces"), "5");
     await screen.findByRole("option", { name: "Pump A" });
     await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
+
+    const missingReference = await screen.findByRole("textbox", {
+      name: "Référence Excel 3",
+    });
+    expect(missingReference).toHaveAttribute("aria-invalid", "true");
+    expect(missingReference).toHaveClass("border-danger");
+    expect(
+      screen.getByText(
+        "Référence manquante : ce couple sera ignoré par l’OCR tant qu’elle n’est pas renseignée.",
+      ),
+    ).toBeInTheDocument();
 
     const excelReplacement = await screen.findByRole("textbox", {
       name: "Nouveau repère Excel 1",

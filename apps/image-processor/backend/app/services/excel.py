@@ -91,22 +91,42 @@ def excel_column_options(worksheet: Worksheet) -> list[dict[str, object]]:
     return columns
 
 
+def _is_piece_marker_00(value: object, number_format: str) -> bool:
+    if isinstance(value, str):
+        return value.strip() == "00"
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != 0:
+        return False
+
+    number_formats = number_format.split(";")
+    zero_format = number_formats[2] if len(number_formats) >= 3 else number_formats[0]
+    return zero_format.strip() == "00"
+
+
 def _is_piece_header(
     row: tuple[object, ...],
     reference_column: int,
     piece_column: int,
+    marker_value: object,
+    marker_format: str,
 ) -> bool:
-    return not excel_row_value(row, reference_column) and bool(excel_row_value(row, piece_column))
+    return (
+        not excel_row_value(row, reference_column)
+        and _is_piece_marker_00(marker_value, marker_format)
+        and bool(excel_row_value(row, piece_column))
+    )
 
 
 def excel_piece_options(
     worksheet: Worksheet,
     reference_column: int,
+    replacement_column: int,
     piece_column: int,
 ) -> list[dict[str, object]]:
     column_count = int(worksheet.max_column or 0)
     if reference_column < 1 or reference_column > column_count:
         raise HTTPException(status_code=422, detail="La colonne des références est invalide.")
+    if replacement_column < 1 or replacement_column > column_count:
+        raise HTTPException(status_code=422, detail="La colonne des nouveaux repères est invalide.")
     if piece_column < 1 or piece_column > column_count:
         raise HTTPException(status_code=422, detail="La colonne des noms de pièces est invalide.")
 
@@ -115,16 +135,19 @@ def excel_piece_options(
         return []
 
     options: list[dict[str, object]] = []
-    for row_number, row in enumerate(
+    for row_number, cells in enumerate(
         worksheet.iter_rows(
             min_row=2,
             max_row=row_count,
             max_col=max(column_count, 2),
-            values_only=True,
         ),
         start=2,
     ):
-        if _is_piece_header(row, reference_column, piece_column):
+        row = tuple(cell.value for cell in cells)
+        marker_cell = cells[replacement_column - 1]
+        if _is_piece_header(
+            row, reference_column, piece_column, marker_cell.value, marker_cell.number_format
+        ):
             options.append({"row": row_number, "name": excel_row_value(row, piece_column)})
     return options
 
@@ -149,16 +172,19 @@ def extract_excel_replacements(
     replacements: list[dict[str, str]] = []
     icn = ""
     found_piece = False
-    for row_number, row in enumerate(
+    for row_number, cells in enumerate(
         worksheet.iter_rows(
             min_row=2,
             max_row=row_count,
             max_col=max(column_count, 2),
-            values_only=True,
         ),
         start=2,
     ):
-        is_header = _is_piece_header(row, reference_column, piece_column)
+        row = tuple(cell.value for cell in cells)
+        marker_cell = cells[replacement_column - 1]
+        is_header = _is_piece_header(
+            row, reference_column, piece_column, marker_cell.value, marker_cell.number_format
+        )
         if row_number == piece_row:
             if not is_header:
                 raise HTTPException(
@@ -179,7 +205,10 @@ def extract_excel_replacements(
         replacement = excel_row_value(row, replacement_column)
         if not reference and not replacement:
             continue
-        if not reference or not replacement:
+        if not reference:
+            replacements.append({"reference": "", "replacement": replacement})
+            continue
+        if not replacement:
             raise HTTPException(
                 status_code=422,
                 detail=f"Le couple de remplacement sur la ligne {row_number} est incomplet.",

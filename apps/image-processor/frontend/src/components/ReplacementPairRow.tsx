@@ -19,8 +19,14 @@ export function ReplacementPairRow({
   pair, index, excel = false, disabled, onToggle, onUpdate, onRemove, t,
 }: PairRowProps) {
   const number = index + 1;
+  const missingExcelReference = excel && !pair.reference.trim();
+  const missingReferenceMessageId = `excel-pair-reference-missing-${pair.id}`;
   return (
-    <div className="flex items-center gap-2 rounded-md border border-md bg-bg-2 p-3">
+    <div
+      className={`flex items-center gap-2 rounded-md border p-3 ${
+        missingExcelReference ? "border-danger/40 bg-danger/10" : "border-md bg-bg-2"
+      }`}
+    >
       <Checkbox
         checked={pair.enabled} disabled={disabled}
         aria-label={t(excel ? "image.selectExcelPair" : "image.selectPair", { number })}
@@ -31,7 +37,10 @@ export function ReplacementPairRow({
           <span className="text-xs text-fg-dim">{t("image.reference")}</span>
           <Input
             value={pair.reference} placeholder={t("image.referencePlaceholder")} disabled={disabled}
+            state={missingExcelReference ? "error" : "default"}
             aria-label={excel ? t("image.excelPairReference", { number }) : `${t("image.reference")} ${number}`}
+            aria-invalid={missingExcelReference || undefined}
+            aria-describedby={missingExcelReference ? missingReferenceMessageId : undefined}
             onChange={(event) => onUpdate(pair.id, "reference", event.target.value)}
           />
         </label>
@@ -43,6 +52,11 @@ export function ReplacementPairRow({
             onChange={(event) => onUpdate(pair.id, "replacement", event.target.value)}
           />
         </label>
+        {missingExcelReference ? (
+          <p id={missingReferenceMessageId} className="col-span-full text-xs text-danger">
+            {t("image.excelPairMissingReference")}
+          </p>
+        ) : null}
       </div>
       <Button
         variant="ghost" size="icon" disabled={disabled}

@@ -108,6 +108,7 @@ export function ExcelMapping({ mapping, disabled, t }: ExcelMappingProps) {
         </p>
       ) : null}
       {mapping.excelReferenceColumn &&
+      mapping.excelReplacementColumn &&
       mapping.excelPieceColumn &&
       !mapping.excelLoading &&
       mapping.excelPieces.length === 0 ? (

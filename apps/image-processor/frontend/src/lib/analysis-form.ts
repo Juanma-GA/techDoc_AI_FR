@@ -3,15 +3,22 @@ import type { TFunction } from "i18next";
 import type { useExcelMapping } from "../hooks/useExcelMapping";
 import type { ReplacementPair } from "./workspace-api";
 
-function selectedPairs(pairs: ReplacementPair[], t: TFunction) {
+function selectedPairs(
+  pairs: ReplacementPair[],
+  t: TFunction,
+  skipEmptyReferences = false,
+) {
   const selected = pairs.filter((pair) => pair.enabled)
     .map(({ reference, replacement }) => ({
       reference: reference.trim(), replacement: replacement.trim(),
     })).filter(({ reference, replacement }) => reference || replacement);
-  if (selected.some(({ reference, replacement }) => !reference || !replacement)) {
+  const applicable = skipEmptyReferences
+    ? selected.filter(({ reference }) => reference)
+    : selected;
+  if (applicable.some(({ reference, replacement }) => !reference || !replacement)) {
     throw new Error(t("image.errorPairIncomplete"));
   }
-  return selected;
+  return applicable;
 }
 
 export function imageForm(
@@ -46,7 +53,7 @@ export function analysisForm(
   }
   form.append("replacement_pairs", JSON.stringify(selectedPairs(pairs, t)));
   if (excel.excelFile) {
-    form.append("excel_replacement_pairs", JSON.stringify(selectedPairs(excel.excelPairs, t)));
+    form.append("excel_replacement_pairs", JSON.stringify(selectedPairs(excel.excelPairs, t, true)));
   }
   return form;
 }

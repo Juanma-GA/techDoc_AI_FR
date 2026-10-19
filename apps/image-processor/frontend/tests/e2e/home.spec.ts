@@ -42,7 +42,7 @@ test("detection workflow uploads an image and displays OCR replacements", async 
     route.fulfill({ json: ocrResult }),
   );
 
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   const navigation = page.getByRole("navigation");
   await expect(navigation.getByRole("link")).toHaveCount(3);
   await expect(navigation.getByRole("link")).toHaveText(["Détection", "Historique", "Paramètres"]);
@@ -92,6 +92,7 @@ test("detection workflow uploads an image and displays OCR replacements", async 
 });
 
 test("Excel upload exposes sheet, columns, and part selection", async ({ page }) => {
+  test.setTimeout(60_000);
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
   await page.route("**/api/v1/settings", (route) =>
     route.fulfill({ json: { demo_enabled: false } }),
@@ -128,7 +129,7 @@ test("Excel upload exposes sheet, columns, and part selection", async ({ page })
     }),
   );
 
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.locator('input[type="file"]').first().setInputFiles({
     name: "synthetic.png",
     mimeType: "image/png",
@@ -145,11 +146,15 @@ test("Excel upload exposes sheet, columns, and part selection", async ({ page })
   await expect(page.getByLabel("Pièce à traiter")).toBeDisabled();
   expect(pieceRequestBodies).toHaveLength(0);
   await page.getByLabel("Références à remplacer").selectOption("1");
+  await expect(page.getByLabel("Pièce à traiter")).toBeDisabled();
+  expect(pieceRequestBodies).toHaveLength(0);
+  await page.getByLabel("Nouveaux repères").selectOption("3");
   await expect(page.getByLabel("Pièce à traiter")).toContainText("Pompe A");
   expect(pieceRequestBodies).toHaveLength(1);
   expect(pieceRequestBodies[0] ?? "").toContain('name="reference_column"');
   expect(pieceRequestBodies[0] ?? "").toContain("\r\n\r\n1\r\n");
-  await page.getByLabel("Nouveaux repères").selectOption("3");
+  expect(pieceRequestBodies[0] ?? "").toContain('name="replacement_column"');
+  expect(pieceRequestBodies[0] ?? "").toContain("\r\n\r\n3\r\n");
   await page.getByLabel("ICN (nom du JPG)").selectOption("4");
   await page.getByLabel("Pièce à traiter").selectOption("2");
   await expect(
