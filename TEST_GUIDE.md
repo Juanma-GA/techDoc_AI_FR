@@ -56,7 +56,7 @@ LLM Mode    : LLM-first (needs Mistral API key)
 
 **Checklist:**
 - [ ] Page charge (http://127.0.0.1:8001)
-- [ ] Sidebar visible avec onglets (Home, Architecture, Données, Paramètres)
+- [ ] Sidebar visible avec les onglets prévus par l'application
 - [ ] Thème dark/light toggle (sun/moon icon)
 - [ ] Switch langue FR/EN fonctionne
 - [ ] Badge LLM affiche un état (`ok`, `untested`, `not_configured`, `disabled`)
@@ -320,7 +320,7 @@ WHERE poc_name = 'corpus-agent';
 - [ ] Frontend + Backend communiquent (`/api/v1/health` → 200 OK)
 - [ ] Theme toggle (dark/light) fonctionne
 - [ ] i18n toggle (FR/EN) fonctionne
-- [ ] Onglets (Home, Architecture, Données, Paramètres) visibles
+- [ ] Navigation conforme au profil et aux parcours métier de chaque application
 - [ ] LLM badge affiche un état
 - [ ] Pas de console error (F12)
 - [ ] localStorage contient uniquement `theme` + `language`
@@ -339,4 +339,3 @@ WHERE poc_name = 'corpus-agent';
 ---
 
 **Ready to test? Let's go! 🚀**
-

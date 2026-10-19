@@ -82,7 +82,7 @@ export function Replacement() {
       <article className="card">
         <h2 className="card-title">{t("replacement.mappingTitle")}</h2>
         <p className="banner warn">
-          <strong>{t("export.dryRunTitle")}</strong> {t("replacement.dryRun")}
+          <strong>{t("common.dryRunTitle")}</strong> {t("replacement.dryRun")}
         </p>
 
         <p className="label">{t("replacement.sourceLabel")}</p>

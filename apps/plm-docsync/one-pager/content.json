@@ -1,0 +1,52 @@
+{
+  "fr": {
+    "main_title": "SYNCHRONISATION PLM ET DOCUMENTATION",
+    "section_title": "Comparer les versions documentaires",
+    "application_name": "PLM·DocSync",
+    "status": "CONCEPT",
+    "challenge": "Identifier les écarts entre différentes versions de documents issus du PLM peut demander des comparaisons longues et manuelles.",
+    "solution": "PLM·DocSync vise à se connecter au PLM, extraire les versions documentaires pertinentes et présenter leurs différences.",
+    "features": [
+      "Se connecter à une source PLM",
+      "Extraire plusieurs versions de documents",
+      "Identifier et restituer les différences"
+    ],
+    "callouts": [
+      "Connexion PLM",
+      "Sélection des versions",
+      "Différences documentaires"
+    ],
+    "security": {
+      "local": "Posture locale à définir\nLes connecteurs, identifiants et données extraites restent à concevoir et à valider.",
+      "shared": "Posture partagée à définir\nLes droits PLM, la traçabilité et l'accès aux résultats doivent être cadrés avec l'IT."
+    },
+    "footnote": "Concept fondé sur la description catalogue fournie ; connecteurs et capacités non vérifiés."
+  },
+  "en": {
+    "main_title": "PLM AND DOCUMENT SYNCHRONIZATION",
+    "section_title": "Compare Document Versions",
+    "application_name": "PLM·DocSync",
+    "status": "CONCEPT",
+    "challenge": "Identifying changes between document versions stored in PLM can require lengthy manual comparison.",
+    "solution": "PLM·DocSync aims to connect to PLM, extract the relevant document versions and present their differences.",
+    "features": [
+      "Connect to a PLM source",
+      "Extract multiple document versions",
+      "Identify and present differences"
+    ],
+    "callouts": [
+      "PLM connection",
+      "Version selection",
+      "Document differences"
+    ],
+    "security": {
+      "local": "Local posture to be defined\nConnectors, credentials and extracted data remain to be designed and validated.",
+      "shared": "Shared posture to be defined\nPLM permissions, traceability and result access must be agreed with IT."
+    },
+    "footnote": "Concept based on the supplied catalogue description; connectors and capabilities are unverified."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

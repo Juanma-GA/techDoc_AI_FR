@@ -7,6 +7,8 @@ import { usePatchDocumentMeta } from "../../hooks/useDocuments";
 import { missingDocumentContext } from "../../types/domain";
 import type { Document } from "../../types/domain";
 import type { ClientMappingField } from "../../hooks/useClientConfig";
+import { MetadataSuggestionsControl } from "./MetadataSuggestionsControl";
+import { resetMappingWithSuggestions } from "./metadataSuggestions";
 
 type Props = {
   document: Document;
@@ -195,6 +197,16 @@ export function ClientMetadataPanel({ document }: Props) {
       </div>
       {missingFields.length > 0 ? (
         <p className="banner warn">{t("reviewer.meta.required")}</p>
+      ) : null}
+
+      {document.working_format === "pdf" ? (
+        <MetadataSuggestionsControl
+          documentId={document.id}
+          onApply={(suggestions) => {
+            setDraft(resetMappingWithSuggestions(fields, suggestions));
+            setSaveState("idle");
+          }}
+        />
       ) : null}
 
       <div className="document-meta-fields">

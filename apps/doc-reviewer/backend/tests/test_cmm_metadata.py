@@ -1,0 +1,149 @@
+from app.parsers.cmm_metadata import suggest_cmm_metadata_from_pages
+
+
+def test_suggests_cmm_revision_and_tp1_metadata() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS PAGE 1\n"
+            "ATA No. 80-80-01\n"
+            "Revision No. 01\n"
+            "Revision Date: JUL 27/26",
+            "TP1\n"
+            "Part Number: 1-900-SB, 1-901-SB\n"
+            "Revision No. 01\n"
+            "First Issue: JUL 25/95",
+        ]
+    )
+
+    assert suggestions == {
+        "pages_scanned": 2,
+        "meta_cmm_number": "80-80-01",
+        "meta_pnr_number": ["1-900-SB", "1-901-SB"],
+        "meta_revision_number": "01",
+        "meta_revision_date": "JUL 27/26",
+        "meta_first_issue_date": "JUL 25/95",
+    }
+
+
+def test_extracts_revision_date_after_dated_revision_number() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS PAGE 1\n"
+            "ATA No. 80-80-01\n"
+            "REVISION No. 07 DATED MAR 14/27",
+        ]
+    )
+
+    assert suggestions["meta_revision_number"] == "07"
+    assert suggestions["meta_revision_date"] == "MAR 14/27"
+
+
+def test_extracts_all_part_numbers_from_continuation_lines() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS PAGE 1",
+            "TP1\n"
+            "Part Number:\n"
+            "1-900-SB\n"
+            "1-901-SB\n"
+            "1-902-SB\n"
+            "1-903-SB\n"
+            "Revision No. 01\n"
+            "First Issue: JUL 25/95",
+        ]
+    )
+
+    assert suggestions["meta_pnr_number"] == [
+        "1-900-SB",
+        "1-901-SB",
+        "1-902-SB",
+        "1-903-SB",
+    ]
+
+
+def test_omits_ambiguous_values_and_requires_highlights_or_tp1_context() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS PAGE 1\n"
+            "ATA No. 80-80-01\n"
+            "ATA No. 80-80-02\n"
+            "Revision No. 01\n"
+            "Revision No. 02\n"
+            "Revision Date: JUL 27/26\n"
+            "Revision Date: AUG 27/26",
+            "TP1\n"
+            "Part Number: 1-900-SB\n"
+            "First Issue: JUL 25/95\n"
+            "First Issue: AUG 25/95",
+            "Title page\nATA No. 70-70-70\nRevision No. 03",
+        ]
+    )
+
+    assert suggestions["meta_cmm_number"] is None
+    assert suggestions["meta_revision_number"] is None
+    assert suggestions["meta_revision_date"] is None
+    assert suggestions["meta_first_issue_date"] is None
+    assert suggestions["meta_pnr_number"] == ["1-900-SB"]
+
+
+def test_falls_back_to_highlights_pnr_when_tp1_has_no_labeled_numbers() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS PAGE 1\n"
+            "PNR: 5306-255-00-11, 5306-265-00-10, 5306-266-20-10, 5306-266-20-11 and\n"
+            "5306-261-00-11\n"
+            "COMPONENT MAINTENANCE MANUAL with Illustrated Parts List\n"
+            "Title Page\nTP 1 to TP 2\nR",
+            "",
+            "TP 1\nFirst issue: APR 30/82\n"
+            "5306-255-00-11\n5306-265-00-10\n5306-266-20-10\n"
+            "5306-266-20-11\n5306-261-00-11",
+        ]
+    )
+
+    assert suggestions["meta_pnr_number"] == [
+        "5306-255-00-11", "5306-265-00-10", "5306-266-20-10",
+        "5306-266-20-11", "5306-261-00-11",
+    ]
+    assert suggestions["meta_first_issue_date"] == "APR 30/82"
+
+
+def test_tp1_pnr_takes_precedence_over_highlights() -> None:
+    for label in ("Part Number:", "PNR:"):
+        suggestions = suggest_cmm_metadata_from_pages(
+            [
+                "HIGHLIGHTS\nPNR: 5306-255-00-11\nTP 1 to TP 2\nR",
+                f"TP 1\n{label} 1-900-SB\nFirst Issue: APR 30/82",
+            ]
+        )
+
+        assert suggestions["meta_pnr_number"] == ["1-900-SB"]
+
+
+def test_pnr_fallback_ignores_other_sections_and_pages_after_four() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "HIGHLIGHTS\nNo part numbers listed.",
+            "TP 1\nFirst Issue: APR 30/82",
+            "INTRODUCTION\nPNR: 1-900-SB",
+            "PARTS LIST\nPart Number: 1-901-SB",
+            "HIGHLIGHTS\nPNR: 1-902-SB",
+        ]
+    )
+
+    assert suggestions["meta_pnr_number"] == []
+
+
+def test_returns_no_suggestions_when_labels_are_missing() -> None:
+    suggestions = suggest_cmm_metadata_from_pages(
+        [
+            "Document title\n80-80-01\nJUL 27/26",
+            "TP1\n80-80-01\nJUL 25/95",
+        ]
+    )
+
+    assert suggestions["meta_cmm_number"] is None
+    assert suggestions["meta_revision_number"] is None
+    assert suggestions["meta_revision_date"] is None
+    assert suggestions["meta_first_issue_date"] is None
+    assert suggestions["meta_pnr_number"] == []

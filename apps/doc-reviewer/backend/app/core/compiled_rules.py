@@ -49,7 +49,7 @@ DocumentMetaField = Literal[
 
 class RuleTarget(StrictModel):
     page: str
-    region: Literal["full_page", "header", "body", "footer"]
+    region: Literal["full_page", "page_without_footer", "header", "body", "footer"]
     page_type: str | None = None
     page_types: list[str] | None = None
     excluded_page_types: list[str] | None = None

@@ -15,7 +15,6 @@ dependencies = [
     "alembic>=1.13",
     "httpx>=0.28",
     "cryptography>=44.0",
-    "sse-starlette>=2.2",
     "structlog>=24.1",
     "truststore>=0.10",
     "python-multipart>=0.0.9",
@@ -23,6 +22,8 @@ dependencies = [
     # Requis uniquement pour l'execution reelle de la conversion (win32com pilote
     # Composer). Windows seulement ; sans effet sur le reste de l'app.
     "pywin32>=306; sys_platform == 'win32'",
+    # Dialogue Windows de selection de dossier ; aucun fichier n'est televerse.
+    "PySide6>=6.8; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

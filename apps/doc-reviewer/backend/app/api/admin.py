@@ -2,16 +2,16 @@
 
 Two endpoints, both destructive and irreversible :
 
-- `POST /admin/wipe-suggestions` deletes every Suggestion row
+- `POST /admin/wipe-suggestions` deletes every Suggestion row in the
+  current mode
   regardless of status (open, rejected, accepted, edited, applied).
   Custom Rule definitions, AppConfig and built-in Standards are
   preserved. EditHistory rows are kept too (they reference applied
   versions that already shipped on disk).
-- `POST /admin/reset` is the full reset : every Document is dropped
-    (cascading to suggestions, runs, history), user rules and compiled
-    checklists are deleted, every snapshot file in `storage/document_*/`
-    is removed, and orphan storage folders are cleaned up. Built-in
-    Standards, Mistral config and the AI prompt are preserved.
+- `POST /admin/reset` deletes Documents in the current mode (cascading to
+  suggestions, runs, history) and removes their snapshot files. User rules
+  and compiled checklists are reset only in normal mode. Built-in Standards,
+  Mistral config and the AI prompt are preserved.
 
 Both endpoints are local-first (palier 1 auth — bind 127.0.0.1) and
 deliberately have no authentication gate. Don't expose them on a
@@ -29,9 +29,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.demo_mode import get_demo_enabled
+from app.core.demo_scope import (
+    documents_in_current_mode,
+    suggestions_in_current_mode,
+)
 from app.db.models import CompiledRuleVersion, Document, EditHistory, Rule, Suggestion
 from app.db.session import get_db
-
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 _logger = structlog.get_logger(__name__)
@@ -81,14 +85,21 @@ def _remove_storage_dir(storage_dir: str) -> bool:
 
 @router.post("/wipe-suggestions")
 def wipe_all_suggestions(db: Session = Depends(get_db)) -> dict:
-    """Delete every Suggestion row, all statuses included.
+    """Delete every Suggestion row in the current mode, all statuses included.
 
-    Use this when you want to clear the analysis state on a corpus
+    Use this when you want to clear the analysis state in a mode
     without touching the documents or their applied edits."""
-    total = db.scalar(select(Suggestion).limit(1))
+    scoped_ids = (
+        suggestions_in_current_mode(db)
+        .with_only_columns(Suggestion.id)
+        .order_by(None)
+    )
+    total = db.scalar(
+        select(Suggestion.id).where(Suggestion.id.in_(scoped_ids)).limit(1)
+    )
     if total is None:
         return {"deleted": 0}
-    result = db.execute(delete(Suggestion))
+    result = db.execute(delete(Suggestion).where(Suggestion.id.in_(scoped_ids)))
     db.commit()
     deleted = result.rowcount if result.rowcount is not None else 0
     _logger.info("admin_wipe_suggestions", deleted=deleted)
@@ -97,23 +108,32 @@ def wipe_all_suggestions(db: Session = Depends(get_db)) -> dict:
 
 @router.post("/reset")
 def reset_all(db: Session = Depends(get_db)) -> dict:
-    """Nuclear reset : drop every Document (cascades suggestions, runs,
-    history), user rules and compiled checklists, then remove their
-    storage folders from disk. Orphan
-    storage folders (no matching Document row) are also cleaned up.
-    Returns a count summary so the UI can confirm the wipe scope."""
-    docs = list(db.scalars(select(Document)))
+    """Reset documents in the current mode and their storage folders.
+
+    User rules and compiled checklists are reset only in normal mode; demo
+    reset leaves normal-mode rules and documents untouched.
+    """
+    demo_mode = get_demo_enabled(db)
+    docs = list(db.scalars(documents_in_current_mode(db)))
     known_storage_dirs = {d.storage_dir for d in docs}
-    deleted_docs = len(docs)
-    deleted_rules = db.execute(delete(Rule)).rowcount or 0
-    deleted_checklist_rules = (
-        db.execute(
-            delete(CompiledRuleVersion).where(
-                CompiledRuleVersion.source == "user_checklist"
-            )
-        ).rowcount
-        or 0
+    other_mode_storage_dirs = set(
+        db.scalars(
+            select(Document.storage_dir).where(Document.is_demo.is_not(demo_mode))
+        )
     )
+    deleted_docs = len(docs)
+    deleted_rules = 0
+    deleted_checklist_rules = 0
+    if not demo_mode:
+        deleted_rules = db.execute(delete(Rule)).rowcount or 0
+        deleted_checklist_rules = (
+            db.execute(
+                delete(CompiledRuleVersion).where(
+                    CompiledRuleVersion.source == "user_checklist"
+                )
+            ).rowcount
+            or 0
+        )
 
     # 1. Delete docs in bulk — cascade=all,delete-orphan will wipe
     #    suggestions / analysis_runs / edit_history transparently.
@@ -133,10 +153,11 @@ def reset_all(db: Session = Depends(get_db)) -> dict:
     root = _doc_storage_root()
     orphans = 0
     if root.is_dir():
+        storage_prefix = "demo_document_" if demo_mode else "document_"
         for child in root.iterdir():
-            if not child.is_dir() or not child.name.startswith("document_"):
+            if not child.is_dir() or not child.name.startswith(storage_prefix):
                 continue
-            if child.name in known_storage_dirs:
+            if child.name in known_storage_dirs or child.name in other_mode_storage_dirs:
                 continue
             try:
                 _rmtree(child)

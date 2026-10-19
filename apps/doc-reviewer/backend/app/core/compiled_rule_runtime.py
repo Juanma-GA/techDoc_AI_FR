@@ -178,7 +178,14 @@ def scope_targets(
     if is_docx:
         if blocks is None:
             return None
-        allowed_ids = {block.target_id for block in blocks if block.zone == target_spec.region}
+        if target_spec.region == "page_without_footer":
+            allowed_ids = {block.target_id for block in blocks if block.zone != "footer"}
+        else:
+            allowed_ids = {
+                block.target_id
+                for block in blocks
+                if block.zone == target_spec.region
+            }
         return [target for target in scoped if target.target_id in allowed_ids]
     if pdf_pages is None:
         return None
@@ -193,7 +200,14 @@ def scope_targets(
         height = max_y - min_y
         if height <= 0:
             continue
-        if target_spec.region == "header":
+        if target_spec.region == "page_without_footer":
+            footer_top = (
+                page.page_height * 0.9
+                if page.page_height > 0
+                else max_y - max(height * 0.1, 50.0)
+            )
+            spans = [span for span in page.spans if span.bbox[1] < footer_top]
+        elif target_spec.region == "header":
             spans = [span for span in page.spans if span.bbox[1] <= min_y + height * 0.25]
         elif target_spec.region == "footer":
             footer_top = (

@@ -18,11 +18,11 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -93,6 +93,13 @@ class Document(Base):
     )
     standard_version_ids: Mapped[str] = mapped_column(
         Text, default="[]", server_default="[]"
+    )
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+        nullable=False,
+        index=True,
     )
     status: Mapped[str] = mapped_column(
         String(30), default="uploaded", server_default="uploaded", index=True

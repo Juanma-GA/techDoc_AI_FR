@@ -1,0 +1,54 @@
+{
+  "fr": {
+    "main_title": "EXTRACTION VISUELLE STRUCTURÉE",
+    "section_title": "OCR, vision et capitalisation",
+    "application_name": "OCR Vision",
+    "status": "POC À VALIDER",
+    "challenge": "Capitaliser le contenu d'images et de PDF exige d'extraire le texte, de comprendre les éléments visuels et de structurer les résultats pour leur réutilisation.",
+    "solution": "OCR Vision exécute l'OCR et la description multimodale, extrait des lignes structurées selon des modèles de table et exporte les résultats pour des workflows locaux de capitalisation.",
+    "features": [
+      "Traiter des images et des documents PDF",
+      "Exécuter OCR et description multimodale en parallèle",
+      "Extraire plusieurs lignes structurées",
+      "Exporter les résultats en CSV ou XLSX"
+    ],
+    "callouts": [
+      "OCR et vision multimodale",
+      "Extraction tabulaire structurée",
+      "Exports CSV et XLSX"
+    ],
+    "security": {
+      "local": "Application locale\nLe profil local est lié à 127.0.0.1 sans authentification. Projets, modèles et résultats sont stockés localement.",
+      "shared": "Usage partagé non validé\nUne exposition collaborative nécessite une architecture, une authentification et des droits approuvés."
+    },
+    "footnote": "Qualité dépendante de la lisibilité des sources et des règles de modèle ; capacités à revalider."
+  },
+  "en": {
+    "main_title": "STRUCTURED VISUAL EXTRACTION",
+    "section_title": "OCR, Vision and Capitalization",
+    "application_name": "OCR Vision",
+    "status": "POC TO VALIDATE",
+    "challenge": "Capitalizing content from images and PDFs requires extracting text, understanding visual elements and structuring results for reuse.",
+    "solution": "OCR Vision runs OCR and multimodal description, extracts structured rows using table templates and exports results for local capitalization workflows.",
+    "features": [
+      "Process images and PDF documents",
+      "Run OCR and multimodal description in parallel",
+      "Extract multiple structured rows",
+      "Export results as CSV or XLSX"
+    ],
+    "callouts": [
+      "OCR and multimodal vision",
+      "Structured table extraction",
+      "CSV and XLSX exports"
+    ],
+    "security": {
+      "local": "Local application\nThe local profile binds to 127.0.0.1 without authentication. Projects, templates and results are stored locally.",
+      "shared": "Shared use not validated\nCollaborative exposure requires an approved architecture, authentication and access rights."
+    },
+    "footnote": "Quality depends on source readability and template rules; capabilities require revalidation."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

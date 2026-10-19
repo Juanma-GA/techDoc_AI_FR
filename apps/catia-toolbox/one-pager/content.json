@@ -1,0 +1,54 @@
+{
+  "fr": {
+    "main_title": "AUTOMATISATION CATIA COMPOSER",
+    "section_title": "Plans, conversion et contrôle",
+    "application_name": "Catia Toolbox",
+    "status": "PROTOTYPE",
+    "challenge": "Passer d'une nomenclature CATIA à un assemblage Composer exige plusieurs opérations manuelles : identifier les pièces, comparer les versions, convertir, intégrer et contrôler.",
+    "solution": "Catia Toolbox guide ce processus en cinq étapes sur des données exportées. Il produit des plans relisables, pilote les conversions confirmées et préserve les sources.",
+    "features": [
+      "Identifier les CATPart depuis une nomenclature et un lot DE",
+      "Comparer de 2 à 10 nomenclatures par SIN",
+      "Préparer les conversions et mises à jour SMGXML",
+      "Créer des checklists QC et des exports relisables"
+    ],
+    "callouts": [
+      "Workflow guidé en cinq étapes",
+      "Configuration et planification Composer",
+      "Checklist QC interactive et exportable"
+    ],
+    "security": {
+      "local": "Application locale\nLe POC fonctionne sur le poste. Les plans sont relus et les fichiers sources ne sont jamais modifiés automatiquement.",
+      "shared": "Option on-premise à cadrer\nLe POC actuel est local et sans authentification. Une version collaborative nécessiterait des contrôles d'accès validés avec l'IT."
+    },
+    "footnote": "POC local uniquement ; validation humaine avant toute exécution."
+  },
+  "en": {
+    "main_title": "CATIA & COMPOSER AUTOMATION",
+    "section_title": "Planning, conversion and quality",
+    "application_name": "Catia Toolbox",
+    "status": "PROTOTYPE",
+    "challenge": "Turning a CATIA bill of materials into a Composer assembly requires several manual operations: identify parts, compare versions, convert, integrate and check.",
+    "solution": "Catia Toolbox guides this five-step process on exported data. It produces reviewable plans, drives confirmed conversions and preserves source files.",
+    "features": [
+      "Identify CATParts from a bill of materials and delivery package",
+      "Compare 2 to 10 bills of materials by SIN",
+      "Prepare conversions and SMGXML updates",
+      "Create QC checklists and reviewable exports"
+    ],
+    "callouts": [
+      "Guided five-step workflow",
+      "Composer configuration and planning",
+      "Interactive and exportable QC checklist"
+    ],
+    "security": {
+      "local": "Local application\nThe POC runs on the workstation. Plans remain under user review and source files are never modified automatically.",
+      "shared": "On-premise option to define\nThe current POC is local and unauthenticated. A collaborative version would require access controls approved with IT."
+    },
+    "footnote": "Local-only POC; human validation required before execution."
+  },
+  "screenshots": {
+    "top": "conversion.png",
+    "bottom": "quality-control.png"
+  }
+}

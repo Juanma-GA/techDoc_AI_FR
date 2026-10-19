@@ -12,6 +12,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core import docx_editor, docx_versioning
+from app.core.demo_mode import get_demo_enabled
+from app.core.demo_scope import (
+    get_document_in_current_mode,
+    get_suggestion_in_current_mode,
+    suggestions_in_current_mode,
+)
 from app.core.errors import AppError
 from app.core.llm_suggester import call_chat
 from app.core.mistral_settings import get_llm_enabled
@@ -27,7 +33,6 @@ from app.schemas import (
     SuggestionOut,
     SuggestionPatchIn,
 )
-
 
 router = APIRouter(tags=["suggestions"])
 
@@ -226,7 +231,7 @@ def list_suggestions(
     rule_kind: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[Suggestion]:
-    stmt = select(Suggestion)
+    stmt = suggestions_in_current_mode(db)
     if document_id:
         stmt = stmt.where(Suggestion.document_id == document_id)
     if status:
@@ -316,11 +321,10 @@ def rejections_summary(
     synthesize: bool = Query(default=True),
     db: Session = Depends(get_db),
 ) -> RejectionsSummaryOut:
-    """Synthèse des rejets, tous documents confondus : agrégat par règle +
-    paragraphe de synthèse IA (optionnel, gardé par l'interrupteur LLM)."""
+    """Summarize rejected suggestions and feedback for the current mode."""
     rejected = list(
         db.scalars(
-            select(Suggestion)
+            suggestions_in_current_mode(db)
             .where(Suggestion.status == "rejected")
             .order_by(Suggestion.rule_code, Suggestion.created_at.desc())
         )
@@ -328,7 +332,10 @@ def rejections_summary(
     counts = dict(
         db.execute(
             select(Suggestion.rule_code, func.count(Suggestion.id))
+            .select_from(Suggestion)
+            .join(Document, Suggestion.document_id == Document.id)
             .where(Suggestion.status == "rejected")
+            .where(Document.is_demo.is_(get_demo_enabled(db)))
             .group_by(Suggestion.rule_code)
         ).all()
     )
@@ -337,7 +344,13 @@ def rejections_summary(
         for code, cnt in sorted(counts.items(), key=lambda kv: -kv[1])
     ]
     # Nom de fichier par document (evite un N+1 : une seule passe).
-    doc_names = dict(db.execute(select(Document.id, Document.original_filename)).all())
+    doc_names = dict(
+        db.execute(
+            select(Document.id, Document.original_filename).where(
+                Document.is_demo.is_(get_demo_enabled(db))
+            )
+        ).all()
+    )
     items = [
         RejectionItem(
             id=s.id,
@@ -390,7 +403,11 @@ def bulk_update_status(
         )
     if not body.ids:
         return SuggestionBulkStatusOut(updated=0, status=body.status)
-    rows = list(db.scalars(select(Suggestion).where(Suggestion.id.in_(body.ids))))
+    rows = list(
+        db.scalars(
+            suggestions_in_current_mode(db).where(Suggestion.id.in_(body.ids))
+        )
+    )
     for s in rows:
         s.status = body.status
         if body.feedback is not None:
@@ -401,7 +418,7 @@ def bulk_update_status(
 
 @router.get("/suggestions/{suggestion_id}", response_model=SuggestionOut)
 def get_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) -> Suggestion:
-    s = db.get(Suggestion, suggestion_id)
+    s = get_suggestion_in_current_mode(db, suggestion_id)
     if s is None:
         raise AppError("SUGGESTION_NOT_FOUND", "Suggestion introuvable", status_code=404)
     return s
@@ -413,7 +430,7 @@ def patch_suggestion(
     body: SuggestionPatchIn,
     db: Session = Depends(get_db),
 ) -> Suggestion:
-    s = db.get(Suggestion, suggestion_id)
+    s = get_suggestion_in_current_mode(db, suggestion_id)
     if s is None:
         raise AppError("SUGGESTION_NOT_FOUND", "Suggestion introuvable", status_code=404)
     if s.status == "applied":
@@ -434,12 +451,12 @@ def patch_suggestion(
 
 @router.post("/suggestions/{suggestion_id}/apply", response_model=SuggestionApplyOut)
 def apply_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) -> SuggestionApplyOut:
-    s = db.get(Suggestion, suggestion_id)
+    s = get_suggestion_in_current_mode(db, suggestion_id)
     if s is None:
         raise AppError("SUGGESTION_NOT_FOUND", "Suggestion introuvable", status_code=404)
     _assert_applicable(s)
 
-    doc = db.get(Document, s.document_id)
+    doc = get_document_in_current_mode(db, s.document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
@@ -485,17 +502,17 @@ def apply_suggestion_group(
     transaction. Members that fail (text not found) or that an earlier
     member invalidated as a stale sibling are skipped, not aborted.
     """
-    s = db.get(Suggestion, suggestion_id)
+    s = get_suggestion_in_current_mode(db, suggestion_id)
     if s is None:
         raise AppError("SUGGESTION_NOT_FOUND", "Suggestion introuvable", status_code=404)
     _assert_applicable(s)
 
-    doc = db.get(Document, s.document_id)
+    doc = get_document_in_current_mode(db, s.document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
     group_stmt = (
-        select(Suggestion)
+        suggestions_in_current_mode(db)
         .where(
             Suggestion.document_id == doc.id,
             Suggestion.rule_code == s.rule_code,
@@ -544,7 +561,7 @@ def apply_suggestion_group(
 
 @router.post("/suggestions/{suggestion_id}/revert", response_model=SuggestionApplyOut)
 def revert_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) -> SuggestionApplyOut:
-    s = db.get(Suggestion, suggestion_id)
+    s = get_suggestion_in_current_mode(db, suggestion_id)
     if s is None:
         raise AppError("SUGGESTION_NOT_FOUND", "Suggestion introuvable", status_code=404)
     if s.status != "applied" or s.applied_version is None:
@@ -554,7 +571,7 @@ def revert_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db)) -
             status_code=400,
         )
 
-    doc = db.get(Document, s.document_id)
+    doc = get_document_in_current_mode(db, s.document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 

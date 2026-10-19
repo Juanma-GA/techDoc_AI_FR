@@ -1,4 +1,4 @@
-"""Routes /api/v1/smgxml - Etapes 3 & 4 : recolor / rename du SMGXML.
+"""Routes /api/v1/smgxml : renommage du SMGXML.
 
 Dry-run par defaut (`apply=false` : on calcule les changements sans ecrire).
 Avec `apply=true`, le SMGXML est modifie en conservant une copie `.bak`.
@@ -16,26 +16,19 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import color_ref
 from app.core import onedrive
-from app.core import smgxml as smgxml_engine
 from app.core import smgxml_batch
-from app.core import texture_ref
+from app.core import smgxml_rename as smgxml_engine
 from app.core.errors import AppError
 from app.core.security import safe_under_root
 from app.db.models import NomenclatureItem, NomenclatureRun, SmgxmlChange, SmgxmlRun
 from app.db.session import get_db
 from app.schemas import (
-    SmgxmlActorOut,
     SmgxmlBatchOut,
     SmgxmlBatchRenameIn,
     SmgxmlChangeOut,
-    SmgxmlInspectIn,
-    SmgxmlRecolorIn,
     SmgxmlRenameIn,
     SmgxmlRunOut,
-    SmgxmlTreeIn,
-    SmgxmlTreeOut,
 )
 
 
@@ -88,19 +81,6 @@ def _persist(db: Session, *, source_ref: str, operation: str, result: dict) -> S
     return run
 
 
-@router.post("/inspect", response_model=list[SmgxmlActorOut])
-def inspect(payload: SmgxmlInspectIn, db: Session = Depends(get_db)) -> list[SmgxmlActorOut]:
-    target = _resolve(db, payload.scope, payload.path)
-    return [SmgxmlActorOut(**a) for a in smgxml_engine.parse_actors(str(target))]
-
-
-@router.post("/tree", response_model=SmgxmlTreeOut)
-def tree(payload: SmgxmlTreeIn, db: Session = Depends(get_db)) -> SmgxmlTreeOut:
-    """Arbre XML brut d'un SMGXML (lecture seule) pour l'onglet Arborescence."""
-    target = _resolve(db, payload.scope, payload.path)
-    return SmgxmlTreeOut(**smgxml_engine.parse_tree(str(target), max_nodes=payload.max_nodes))
-
-
 def _resolve_dir(db: Session, scope: str, path: str, code: str):
     if scope not in ("input", "output"):
         raise AppError("SCOPE_INVALID", "scope attendu : input ou output.", status_code=400)
@@ -144,94 +124,11 @@ def batch_rename(payload: SmgxmlBatchRenameIn, db: Session = Depends(get_db)) ->
     return SmgxmlBatchOut(**result)
 
 
-def _match_key(item: NomenclatureItem, match_by: str) -> str:
-    """Cle d'appariement acteur SMGXML <-> ligne nomenclature."""
-    if match_by == "sin":
-        return item.sin.strip()
-    if match_by == "pn":
-        # PN de la piece : nouveau PN si renseigne (piece remplacee), sinon CATPart.
-        return (item.new_pn or item.catpart).strip()
-    return item.catpart.strip()
-
-
-@router.post("/recolor", response_model=SmgxmlRunOut)
-def recolor(payload: SmgxmlRecolorIn, db: Session = Depends(get_db)) -> SmgxmlRunOut:
-    target = _resolve(db, payload.scope, payload.path)
-    if db.get(NomenclatureRun, payload.nomenclature_run_id) is None:
-        raise AppError("RUN_NOT_FOUND", "Nomenclature introuvable.", status_code=404)
-    if payload.match_by not in ("sin", "catpart", "pn"):
-        raise AppError("MATCH_BY_INVALID", "match_by attendu : sin, catpart ou pn.", status_code=400)
-
-    stmt = select(NomenclatureItem).where(NomenclatureItem.run_id == payload.nomenclature_run_id)
-    if payload.simple_only:
-        # Pieces mono-corps = un seul slot renseigne (ou slots identiques),
-        # calcule a l'identification (colonnes Slot 1/2/3 de l'onglet Materiaux).
-        stmt = stmt.where(NomenclatureItem.mono_body.is_(True))
-    items = list(db.scalars(stmt))
-
-    # Cause frequente en test : 'mono-corps seulement' coche mais colonnes Slot
-    # non mappees a l'identification -> mono_body faux partout -> 0 piece.
-    if payload.simple_only and not items:
-        raise AppError(
-            "NO_MONO_BODY",
-            "Aucune piece mono-corps dans cette nomenclature. Mappez les colonnes "
-            "Slot 1/2/3 a l'identification, ou decochez « mono-corps seulement ».",
-            status_code=400,
-        )
-
-    # Referentiel Ref Couleur -> RGB (ex. "Visserie" -> (r,g,b)) pour Actor.Color.
-    ref_rgb = color_ref.resolve_map(db)
-    # Config textures : bibliotheque + extension (.SMGStyleSet) pour le nom de style.
-    tex = texture_ref.get_texture_config(db)
-
-    color_map: dict[str, tuple[int, int, int]] = {}
-    style_map: dict[str, str] = {}
-    for it in items:
-        key = _match_key(it, payload.match_by)
-        if not key:
-            continue
-        # RGB : d'abord via le referentiel (Ref Couleur), sinon la colonne couleur.
-        rgb: tuple[int, int, int] | None = None
-        if it.color_ref:
-            rgb = ref_rgb.get(color_ref.norm_name(it.color_ref))
-        if rgb is None and it.mono_color:
-            rgb = (it.color_r, it.color_g, it.color_b)
-        if rgb is not None:
-            color_map[key] = rgb
-        # Nom de style (texture) : Ref Couleur formatee vers la bibliotheque
-        # (<bibliotheque>/<nom>.SMGStyleSet) et ecrite dans Actor.Style.
-        if it.color_ref:
-            style_map[key] = texture_ref.format_style_value(it.color_ref, tex["library"], tex["ext"])
-
-    # Rien a poser (ni RGB resolu ni ref de style, selon les cases cochees) => 400.
-    nothing_to_do = (not payload.set_color or not color_map) and (not payload.set_style or not style_map)
-    if nothing_to_do:
-        raise AppError(
-            "NO_COLOR_TARGET",
-            "Aucune couleur a poser : renseignez le referentiel Ref Couleur -> RGB, "
-            "ou une couleur mono dans la nomenclature.",
-            status_code=400,
-        )
-
-    result = smgxml_engine.process(
-        str(target),
-        "recolor",
-        color_map=color_map,
-        style_map=style_map,
-        set_style=payload.set_style,
-        set_color=payload.set_color,
-        apply=payload.apply,
-    )
-    run = _persist(db, source_ref=str(target), operation="recolor", result=result)
-    log.info("smgxml recolor %s : %d changements (applied=%s)", run.id, result["summary"]["changes"], result["applied"])
-    return _run_out(run)
-
-
 @router.post("/rename", response_model=SmgxmlRunOut)
 def rename(payload: SmgxmlRenameIn, db: Session = Depends(get_db)) -> SmgxmlRunOut:
     target = _resolve(db, payload.scope, payload.path)
     rename_map = {p.old: p.new for p in payload.mapping}
-    result = smgxml_engine.process(str(target), "rename", rename_map=rename_map, apply=payload.apply)
+    result = smgxml_engine.rename(str(target), rename_map, apply=payload.apply)
     run = _persist(db, source_ref=str(target), operation="rename", result=result)
     log.info("smgxml rename %s : %d changements (applied=%s)", run.id, result["summary"]["changes"], result["applied"])
     return _run_out(run)

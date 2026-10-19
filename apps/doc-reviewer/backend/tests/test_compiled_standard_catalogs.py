@@ -665,6 +665,21 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
         [rule],
         document=SimpleNamespace(meta_cmm_number="79-30-02"),
     )
+    valid_with_a_suffix, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02A"),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02"),
+    )
+    valid_with_a_suffix_in_mapping, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02A"),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02A"),
+    )
+    invalid_with_other_suffix, _ = execute_pdf_rules(
+        _cmm_footer_pdf("79-30-02B"),
+        [rule],
+        document=SimpleNamespace(meta_cmm_number="79-30-02"),
+    )
     invalid, invalid_suggestions = execute_pdf_rules(
         _cmm_footer_pdf("79-33-02"),
         [rule],
@@ -677,6 +692,9 @@ def test_user_cmm_rule_uses_the_document_context_value() -> None:
     )
 
     assert valid[0].status == "PASS"
+    assert valid_with_a_suffix[0].status == "PASS"
+    assert valid_with_a_suffix_in_mapping[0].status == "PASS"
+    assert invalid_with_other_suffix[0].status == "FAIL"
     assert invalid[0].status == "FAIL"
     assert [(item.original, item.proposed) for item in invalid_suggestions] == [
         ("3", "0")
@@ -798,6 +816,12 @@ def test_tp2_important_notice_matches_the_exact_ata100_model() -> None:
         _tp2_notice_pdf(_IMPORTANT_NOTICE_TEXT.replace("sole property", "sole propriety", 1)),
         [rule],
     )
+    invalid_spacing, _ = execute_pdf_rules(
+        _tp2_notice_pdf(
+            _IMPORTANT_NOTICE_TEXT.replace("contained herein", "contained here in", 1)
+        ),
+        [rule],
+    )
     missing, missing_suggestions = execute_pdf_rules(
         _tp2_notice_pdf("TP2 notice missing", page_type=TP2_PAGE_TYPE),
         [rule],
@@ -806,6 +830,7 @@ def test_tp2_important_notice_matches_the_exact_ata100_model() -> None:
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
     assert invalid[0].status == "FAIL"
+    assert invalid_spacing[0].status == "FAIL"
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].proposed == "property"
     assert "Texte attendu" in invalid_suggestions[0].message
@@ -888,6 +913,37 @@ def test_highlights_rule_still_runs_when_mapping_anchors_are_wrong() -> None:
     assert parsed.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
     assert results[0].status == "FAIL"
     assert suggestions[0].proposed == "ATA No 79-30-02"
+
+
+def test_highlights_ata_rule_accepts_added_a_suffix_when_mapping_has_base() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ATA_NUMBER")
+    document = SimpleNamespace(
+        meta_revision_date="AUG 27/26",
+        meta_cmm_number="79-30-02",
+    )
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            _page_with_footer_lines(
+                1,
+                [
+                    "79-30-02A",
+                    "Highlights Page 1",
+                    "JUL 27/26",
+                    "ATA No 79-30-02A",
+                ],
+            )
+        ],
+        full_text="",
+        is_signed=False,
+    )
+
+    classify_pages(parsed, document)
+    results, suggestions = execute_pdf_rules(parsed, [rule], document=document)
+
+    assert parsed.pages[0].page_type == HIGHLIGHTS_FIRST_PAGE_TYPE
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_cmm_number_is_checked_on_each_page() -> None:
@@ -1543,6 +1599,28 @@ def test_highlights_pnr_header_requires_all_mapping_values() -> None:
     ] == [
         ("33140 - 02", "33140-02 and 33140-03")
     ]
+
+
+def test_highlights_pnr_header_accepts_shared_series_for_multiple_mapping_values() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    for mapping, header, expected_status in (
+        ("64809-505-1\n64809-509-1\n64809-525-1\n64809-526-1", "64809 Series", "PASS"),
+        ("123-1, 123-2", "123 series", "PASS"),
+        ("1234567-1, 1234567-2", "1234567 SERIES", "PASS"),
+        ("64809-505-1, 64809-509-1", "64808 Series", "FAIL"),
+        ("64809-505-1, 64809-509-1", "164809 Series", "FAIL"),
+        ("64809-505-1, 64810-509-1", "64809 Series", "FAIL"),
+        ("64809-505-1", "64809 Series", "FAIL"),
+    ):
+        page = _document_type_header_page(header, page_type=HIGHLIGHTS_PAGE_TYPE)
+        parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+        results, suggestions = execute_pdf_rules(
+            parsed, [rule], document=SimpleNamespace(meta_pnr_number=mapping)
+        )
+
+        assert results[0].status == expected_status, (mapping, header)
+        assert bool(suggestions) is (expected_status == "FAIL"), (mapping, header)
 
 
 def _document_type_header_page(
@@ -2427,7 +2505,19 @@ def test_deleted_highlights_require_chapter_or_page_deleted_description() -> Non
     assert suggestions[0].bbox[0] >= 300.0
 
 
-def test_revised_highlights_require_description_with_illustrated_parts_list_exception() -> None:
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Illustrated Parts List",
+        "Illustrated Part Lis",
+        "illustrated part list",
+        "Illustarted Parts List",
+        "IllustratedPartsList",
+    ],
+)
+def test_revised_highlights_require_description_with_illustrated_parts_list_exception(
+    chapter: str,
+) -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION")
     ordinary_missing, missing_suggestions = execute_pdf_rules(
         _highlights_structure_pdf(
@@ -2444,7 +2534,7 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     illustrated_list, illustrated_suggestions = execute_pdf_rules(
         _highlights_structure_pdf(
             [
-                ("Illustrated Parts List", "", "Revised to reflect this revision."),
+                (chapter, "", "Revised to reflect this revision."),
                 ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
                 ("NI/NUM 1101 Page 1", "R", ""),
             ]
@@ -2454,7 +2544,7 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     illustrated_missing, illustrated_missing_suggestions = execute_pdf_rules(
         _highlights_structure_pdf(
             [
-                ("Illustrated Parts List", "", ""),
+                (chapter, "", ""),
                 ("INTRO 1101 Page 1 to INTRO Page 2", "R", ""),
                 ("NI/NUM 1101 Page 1", "R", ""),
             ]
@@ -2593,6 +2683,36 @@ def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    ("bookmark_title", "page_title", "expected_status"),
+    [
+        ("LIST OF EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
+        ("LIST EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
+        ("LIST OF EFFECTIVE PAGES", "LIST OF EFECTIVE PAGES", "PASS"),
+        ("Illustrated Parts List", "ILLUSTRATED PART LIS", "PASS"),
+        ("REPAIR PROCEDURE", "REPAIR PROCEDURES", "PASS"),
+        ("REPAIR PROCEDURE", "INTRODUCTION", "FAIL"),
+        ("REPAIR PROCEDURE 101", "REPAIR PROCEDURE 102", "FAIL"),
+        ("CHECK", "CHEEK", "FAIL"),
+    ],
+)
+def test_pdf_bookmark_tolerates_small_title_typos_but_not_wrong_destinations(
+    bookmark_title: str, page_title: str, expected_status: str,
+) -> None:
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[ParsedPage(page=1, text=page_title)],
+        full_text=page_title,
+        is_signed=False,
+        bookmarks=[PdfBookmark(title=bookmark_title, page=1)],
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
+
+    assert results[0].status == expected_status
+    assert bool(suggestions) is (expected_status == "FAIL")
+
+
 def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
     header = "COMPONENT MAINTENANCE MANUAL"
     pages = [
@@ -2641,6 +2761,35 @@ def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
 
     assert results[0].status == "FAIL"
     assert [(item.original, item.page) for item in suggestions] == [(header, 1)]
+
+
+def test_pdf_bookmark_typo_does_not_match_running_header() -> None:
+    header = "COMPONENT MAINTENANCE MANUAL"
+    page = ParsedPage(
+        page=1,
+        text=f"{header}\nREPAIR PROCEDURE",
+        lines=[
+            PdfLine(header, (30.0, 18.0, 400.0, 30.0), 0, 0),
+            PdfLine("REPAIR PROCEDURE", (70.0, 180.0, 250.0, 200.0), 1, 0),
+        ],
+        spans=[
+            Span(header, (30.0, 18.0, 400.0, 30.0), 1, "Arial", 8.0),
+            Span("REPAIR PROCEDURE", (70.0, 180.0, 250.0, 200.0), 1, "Arial", 12.0),
+        ],
+        page_height=792.0,
+    )
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[page],
+        full_text=page.text,
+        is_signed=False,
+        bookmarks=[PdfBookmark(title="COMPONENT MAINTENACE MANUAL", page=1)],
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
 
 
 def test_pdf_bookmark_inconclusive_pages_survive_modified_only_filtering() -> None:

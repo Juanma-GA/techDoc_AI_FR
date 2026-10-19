@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
+import { DataResetCard } from "../components/business/DataResetCard";
 import { adminApi, type AdminStatsDto } from "../lib/api";
 
 function formatSize(n: number): string {
@@ -12,55 +12,7 @@ function formatSize(n: number): string {
 
 export function Data() {
   const { t } = useTranslation();
-  const qc = useQueryClient();
-
   const statsQuery = useQuery<AdminStatsDto>({ queryKey: ["admin", "stats"], queryFn: adminApi.stats });
-
-  const [armed, setArmed] = useState(false);
-  const [resetNotice, setResetNotice] = useState<string | null>(null);
-  const [resetError, setResetError] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    },
-    [],
-  );
-
-  const resetMutation = useMutation({
-    mutationFn: () => adminApi.resetAll(),
-    onSuccess: (data) => {
-      const items =
-        Object.entries(data.deleted ?? {})
-          .map(([k, v]) => `${k}: ${v}`)
-          .join(", ") || t("data.resetEmpty");
-      setResetNotice(t("data.resetOk", { items }));
-      void qc.invalidateQueries({ queryKey: ["admin", "stats"] });
-    },
-    onError: (e) => setResetError(e instanceof Error ? e.message : String(e)),
-  });
-
-  function disarm() {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = null;
-    setArmed(false);
-  }
-
-  function handleReset() {
-    setResetNotice(null);
-    setResetError(null);
-    if (!armed) {
-      setArmed(true);
-      timerRef.current = setTimeout(() => {
-        setArmed(false);
-        timerRef.current = null;
-      }, 3000);
-      return;
-    }
-    disarm();
-    resetMutation.mutate();
-  }
 
   const stats = statsQuery.data;
   const kpis: { key: string; label: string; value: string }[] = stats
@@ -103,18 +55,7 @@ export function Data() {
         )}
       </article>
 
-      <article className="card">
-        <h2 className="card-title">{t("data.resetTitle")}</h2>
-        <p className="banner warn">{t("data.resetBanner")}</p>
-        <div className="row">
-          <button type="button" className="btn danger" onClick={handleReset} disabled={resetMutation.isPending}>
-            {resetMutation.isPending ? <span className="spinner" /> : null}
-            <span>{armed ? t("common.confirmAgain") : t("data.resetAll")}</span>
-          </button>
-        </div>
-        {resetNotice ? <p className="success">{resetNotice}</p> : null}
-        {resetError ? <p className="error">{resetError}</p> : null}
-      </article>
+      <DataResetCard title={t("data.resetTitle")} description={t("data.resetBanner")} />
     </div>
   );
 }

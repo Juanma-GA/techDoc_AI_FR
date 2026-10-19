@@ -82,7 +82,9 @@ def test_cmm_number_rule_keeps_mapping_pattern_and_first_issue_anchor() -> None:
     check = definition.compiled_rule.checks[0]
 
     assert check.operator == "regex_exists"
-    assert check.expected == r"(?<!\w){{meta_cmm_number}}(?!\w)"
+    assert check.expected == (
+        r"(?<!\w){{meta_cmm_number}}(?:(?<![A-Za-z])A)?(?!\w)"
+    )
     assert check.expected_display == "{{meta_cmm_number}}"
     assert check.missing_anchor == r"(?i)\bFirst\s+Issue\b"
     assert definition.compiled_rule.target.region == "footer"

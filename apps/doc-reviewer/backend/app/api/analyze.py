@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from queue import Empty, SimpleQueue
-
 from typing import Optional
 
 import fitz
@@ -16,11 +15,15 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.checks.client_registry import active_standard_versions
+from app.checks.mode_registry import (
+    analysis_standard_version_ids,
+    get_request_client_configuration,
+)
 from app.config import settings
-from app.core.errors import AppError
-from app.core.document_context import missing_document_context
 from app.core.compiled_rules import RuleResult
+from app.core.demo_scope import get_document_in_current_mode
+from app.core.document_context import missing_document_context
+from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.core.page_range import (
     filter_docx,
@@ -29,13 +32,12 @@ from app.core.page_range import (
     select_pdf_page_numbers,
 )
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
-from app.core.security import read_upload_bounded
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
+from app.core.security import read_upload_bounded
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
 from app.db.session import SessionLocal, get_db
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import SuggestionOut
-
 
 router = APIRouter(tags=["analyze"])
 _logger = get_logger(__name__)
@@ -83,6 +85,8 @@ def latest_rule_results(
     document_id: uuid.UUID,
     db: Session = Depends(get_db),
 ) -> list[RuleResult]:
+    if get_document_in_current_mode(db, document_id) is None:
+        raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     run = db.scalar(
         select(AnalysisRun)
         .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
@@ -121,7 +125,7 @@ def clear_pending_page_suggestions(
     page_number: int,
     db: Session = Depends(get_db),
 ) -> None:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     resolve_page_range(page_number, page_number, doc.page_count)
@@ -179,7 +183,7 @@ def analyze_stream(
     ),
     db: Session = Depends(get_db),
 ) -> EventSourceResponse:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     previous_revision_bytes: bytes | None = None
@@ -221,7 +225,7 @@ def analyze_stream(
         if previous_revision_bytes is not None
         else None
     )
-    client_configuration = request.app.state.client_configuration
+    client_configuration = get_request_client_configuration(request, db)
     client_bundle = client_configuration.bundle
     previous_run = db.scalar(
         select(AnalysisRun)
@@ -332,7 +336,8 @@ def analyze_stream(
     # false positive is not re-surfaced on re-analysis. Signature = (rule_code,
     # original_text) — the verbatim span text is exact enough on a PDF. Empty
     # original_text (absence-type findings) can't be matched reliably → skipped.
-    from sqlalchemy import delete, select as _select
+    from sqlalchemy import delete
+    from sqlalchemy import select as _select
 
     rejected_rows = db.execute(
         _select(Suggestion.rule_code, Suggestion.original_text).where(
@@ -361,17 +366,13 @@ def analyze_stream(
             sv_ids_list = []
     except (ValueError, TypeError):
         sv_ids_list = []
-    if not sv_ids_list and sv_id is not None:
-        sv_ids_list = [str(sv_id)]
-    if not sv_ids_list:
-        sv_ids_list = [
-            str(version.id)
-            for version in active_standard_versions(
-                db,
-                client_configuration,
-            )
-        ]
-    if sv_id is None and sv_ids_list:
+    sv_ids_list = analysis_standard_version_ids(
+        request,
+        db,
+        sv_ids_list,
+        sv_id,
+    )
+    if sv_ids_list and (sv_id is None or str(sv_id) not in sv_ids_list):
         try:
             sv_id = uuid.UUID(str(sv_ids_list[0]))
         except (ValueError, TypeError):
@@ -380,12 +381,13 @@ def analyze_stream(
         {
             "client_bundle": {
                 "bundle": client_configuration.selection.bundle,
+                "rule_bundles": client_configuration.selection.rule_bundles,
                 "client_code": client_configuration.manifest.client_code,
                 "bundle_version": client_configuration.manifest.bundle_version,
                 "contract_version": client_configuration.manifest.contract_version,
                 "catalogs": [
                     catalog.model_dump(mode="json")
-                    for catalog in client_configuration.manifest.catalogs
+                    for catalog in client_configuration.bundle.catalogs
                 ],
                 "manifest_hash": client_configuration.manifest_hash,
                 "mapping_hash": client_configuration.mapping_hash,
@@ -638,8 +640,9 @@ def analyze_stream(
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
                     revision_state = getattr(parsed, "_thales_revision_state", None)
-                    revision_classification_available = bool(
-                        getattr(revision_state, "available", False)
+                    has_revision_evidence = revision_state is not None and bool(
+                        getattr(revision_state, "highlights_pages", ())
+                        or getattr(revision_state, "lep_pages", ())
                     )
                     for page in parsed.pages:
                         if page.page in page_overrides_value:
@@ -649,7 +652,9 @@ def analyze_stream(
                             "page": page.page,
                             "is_modified": page.is_modified,
                             "source": "manual" if page.page in page_overrides_value else "detected",
-                            "requires_review": revision_classification_available and page.is_modified is None,
+                            "requires_review": (
+                                has_revision_evidence and page.is_modified is None
+                            ),
                         }
                         for page in parsed.pages
                     ]
@@ -664,7 +669,7 @@ def analyze_stream(
                         modified_only=modified_only_value,
                         page_number=page_number_value,
                         additional_pages=additional_pages_value,
-                        include_undecided=not revision_classification_available,
+                        include_undecided=not has_revision_evidence,
                     )
                     cached_revision_state = getattr(parsed, "_thales_revision_state", None)
                     parsed = filter_pdf_pages(parsed, selected_page_numbers)

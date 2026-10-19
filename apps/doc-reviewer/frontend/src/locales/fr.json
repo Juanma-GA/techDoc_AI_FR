@@ -12,6 +12,11 @@
     "untested": "À TESTER",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "MODE DÉMO",
+    "pdfLoading": "Chargement du PDF de démonstration…",
+    "pdfLoadError": "Le PDF de démonstration n'a pas pu être chargé ({{message}}). Place-le dans frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf puis reconstruis le frontend."
+  },
   "nav": {
     "section": "Navigation",
     "ariaLabel": "Navigation principale",
@@ -52,7 +57,7 @@
     "f3": "Vue Rédacteur : suggestions triées (page, span_index, id). Diff original → proposed sauf si détection-only (règles structurelles, vision) où Accept est masqué.",
     "f4": "Cycle : open → accepted → applied. À l'apply : invalidation automatique des suggestions « stale » (texte modifié englobant).",
     "f5": "Tableau de bord : KPIs PDFs / suggestions open-applied-rejected / top docs / répartition severity-kind.",
-    "f6": "Export PDF édité ou rollback. Admin → /admin/wipe-suggestions (toutes statuts) ou /admin/reset (DB + dossiers disque + orphelins) pour reset complet à zéro."
+    "f6": "Export PDF édité ou rollback. Les actions Admin effacent les données du mode courant."
   },
   "data": {
     "title": "Données",
@@ -60,10 +65,10 @@
     "overview": "Vue d'ensemble",
     "reset": "Réinitialiser",
     "resetWarn": "Toutes ces opérations sont irréversibles. Les normes intégrées et la config Mistral sont préservées.",
-    "resetSugs": "Effacer toutes les suggestions",
-    "resetAll": "Tout supprimer (documents + règles + fichiers disque)",
-    "confirmSugs": "Effacer TOUTES les suggestions (ouvertes, rejetées, appliquées, éditées) ? Irréversible.",
-    "confirmAll": "Supprimer TOUS les documents, suggestions, règles custom, checklists et fichiers sur disque ? Irréversible.",
+    "resetSugs": "Effacer les suggestions du mode courant",
+    "resetAll": "Tout supprimer (données du mode courant)",
+    "confirmSugs": "Effacer TOUTES les suggestions du mode courant (ouvertes, rejetées, appliquées, éditées) ? Irréversible.",
+    "confirmAll": "Supprimer les documents, suggestions et fichiers du mode courant ? Les règles custom et checklists sont aussi supprimées uniquement en mode normal. Irréversible.",
     "wipedSugs": "{{count}} suggestion(s) supprimée(s).",
     "resetDone": "Reset effectué : {{docs}} document(s), {{rules}} règle(s) et {{folders}} dossier(s) supprimé(s).",
     "kpi.pdfs": "Documents",
@@ -109,6 +114,7 @@
     "listTitle": "Documents importés",
     "empty": "Aucun document importé",
     "uploading": "Import en cours…",
+    "upload.importDemo": "Importer le PDF de démo",
     "upload.dropTitle": "Glisse un PDF, Word ou .zip ici",
     "upload.dropHint": "ou clique pour parcourir",
     "upload.dropLimit": "PDF, .docx, .doc ou .zip · max 100 Mo",
@@ -182,7 +188,14 @@
     "analysis.incomplete.title": "Vérifications à reprendre ({{count}})",
     "analysis.incomplete.description": "Ces règles n'ont pas pu conclure. L'analyse est partielle : l'absence de constat ne prouve pas la conformité.",
     "analysis.incomplete.page": "Page {{page}}",
+    "analysis.cmmMappingWarning.title": "Vérifier le numéro CMM du mapping",
+    "analysis.cmmMappingWarning.description": "Au moins 90 % des pages indiquent le numéro CMM {{detected}}, alors que le mapping contient {{mapped}}. Êtes-vous sûr du numéro CMM renseigné dans le mapping ?",
     "meta.saveError": "Le mapping n'a pas pu être enregistré.",
+    "meta.detectFromPdf": "Détecter depuis les 4 premières pages du PDF",
+    "meta.detecting": "Analyse rapide en cours…",
+    "meta.detected": "{{count}} champ(s) proposé(s) à partir de {{pages}} page(s). Vérifiez le mapping avant de l'enregistrer.",
+    "meta.noReliableValues": "Aucune valeur suffisamment certaine trouvée. Le formulaire a été vidé ; vérifiez-le avant de l'enregistrer.",
+    "meta.detectError": "La détection a échoué : {{message}}",
     "meta.invalidFormat": "Le format saisi ne correspond pas au format attendu.",
     "meta.unsaved": "Modifications non enregistrées",
     "meta.revisionDate": "Date de révision",
@@ -289,8 +302,11 @@
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "règles",
+      "enableAll": "Tout activer",
+      "disableAll": "Tout désactiver",
       "loadFailed": "Impossible de charger le catalogue du client actif.",
-      "saveFailed": "Impossible d'enregistrer le statut de cette règle. Réessayez."
+      "saveFailed": "Impossible d'enregistrer le statut de cette règle. Réessayez.",
+      "bulkSaveFailed": "Certaines règles n'ont peut-être pas été modifiées. Vérifiez leur statut et réessayez."
     },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Etoile LEP presente pour chaque page revisee ou nouvelle",
@@ -304,6 +320,7 @@
       "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "Pages Highlights declarees par couple impaire/paire",
       "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "Libelle Page/Pages et alignement dans les Highlights",
       "CUSTOM_CMM_NUMBER": "Numero CMM conforme au contexte du document",
+      "CUSTOM_CMM_MAPPING_SUSPECT": "Vérification du numéro CMM renseigné dans le mapping",
       "CUSTOM_CMM_NUMBER_FONT_SIZE": "Taille de police du numero CMM (ATA)",
       "CUSTOM_THALES_LOGO_FONT_SIZE": "Taille du logo THALES sur les pages hors TP1",
       "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "Taille du logo THALES sur les pages TP1",
@@ -396,6 +413,7 @@
       "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "Page Highlights déclarée sans sa page paire ou impaire associée.",
       "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "Libellé Page/Pages ou alignement non conforme dans les Highlights.",
       "CUSTOM_CMM_NUMBER": "Le numéro CMM ne correspond pas au contexte du document.",
+      "CUSTOM_CMM_MAPPING_SUSPECT": "Le numéro CMM dominant des pieds de page diffère de celui du mapping.",
       "CUSTOM_CMM_NUMBER_FONT_SIZE": "La taille de police du numéro CMM (ATA) n'est pas 23 pt.",
       "CUSTOM_THALES_LOGO_FONT_SIZE": "La taille du logo THALES hors TP1 n'est pas 31 pt.",
       "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "La taille du logo THALES sur TP1 n'est pas 36 pt.",
@@ -568,6 +586,11 @@
   "settings": {
     "title": "Paramètres",
     "subtitle": "Configuration de l'application",
+    "demo.title": "Mode de fonctionnement",
+    "demo.hint": "Le mode normal est sélectionné par défaut. En mode démo, le bouton « Analyser un document » charge le PDF local dans le flux d'import habituel.",
+    "demo.normal": "Mode normal",
+    "demo.demo": "Mode démo",
+    "demo.saveError": "Impossible d'enregistrer le mode de fonctionnement.",
     "llmSection": "Configuration LLM (Mistral)",
     "standardsAdmin": "Administration des normes",
     "activeStandards.title": "Normes cibles actives",

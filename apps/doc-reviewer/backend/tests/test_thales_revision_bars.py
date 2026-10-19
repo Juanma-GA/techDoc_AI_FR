@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import fitz
+from dataclasses import replace
 from types import SimpleNamespace
 
+import fitz
+
+from app.checks.demo_rules import operations as demo_operations
 from app.checks.thales_rules import operations
 from app.checks.thales_rules.revision_engine import HighlightsEntry, RevisionState
 from app.checks.thales_rules.rules import (
@@ -128,6 +131,60 @@ def test_modified_revision_page_requires_at_least_one_bar() -> None:
     assert invalid.status == "FAIL"
 
 
+def test_modified_revision_bar_excludes_edi_ni_pl_by_body_heading() -> None:
+    for title in (
+        "EQUIPMENT DESIGNATOR INDEX",
+        "NUMERICAL INDEX",
+        "PARTS LIST",
+        "numerical index",
+        "PARTS   LIST",
+        "EQUIPMENT\nDESIGNATOR INDEX",
+    ):
+        spans = [
+            Span(title, (100.0, 150.0, 400.0, 175.0), 1, "Arial", 12.0),
+            Span("Page 1007", (450.0, 750.0, 550.0, 765.0), 1, "Arial", 10.0),
+        ]
+
+        result = _execute("revision_bar_modified", _context("R", [], spans=spans))
+
+        assert result.status == "INCONCLUSIVE", title
+
+
+def test_modified_revision_bar_does_not_exempt_mentions_or_footer_page_labels() -> None:
+    for text in (
+        "Refer to the NUMERICAL INDEX for part numbers.",
+        "See EQUIPMENT DESIGNATOR INDEX.",
+        "The PARTS LIST was updated.",
+        "ILLUSTRATED PARTS LIST",
+        "EDI 1",
+        "NI 1",
+        "PL 1",
+    ):
+        is_footer = text in {"EDI 1", "NI 1", "PL 1"}
+        top = 750.0 if is_footer else 150.0
+        spans = [Span(text, (100.0, top, 500.0, top + 15.0), 1, "Arial", 10.0)]
+        context = _context("R", [], spans=spans)
+        if is_footer:
+            state = getattr(context.runtime.parsed_pdf, operations._REVISION_STATE_ATTR)
+            state.highlights[0] = replace(state.highlights[0], page_keys=(text,))
+
+        result = _execute("revision_bar_modified", context)
+
+        assert result.status == "FAIL", text
+
+
+def test_edi_ni_pl_headings_do_not_exempt_other_revision_bar_controls() -> None:
+    for title in ("EQUIPMENT DESIGNATOR INDEX", "NUMERICAL INDEX", "PARTS LIST"):
+        spans = [Span(title, (100.0, 150.0, 400.0, 175.0), 1, "Arial", 12.0)]
+        new_page = _execute("revision_bar_new", _context("N", [], spans=spans))
+        misplaced_bar = _execute(
+            "revision_bar_margin", _context("R", [_bar(90.0, 180.0, 300.0)], spans=spans)
+        )
+
+        assert new_page.status == "FAIL", title
+        assert misplaced_bar.status == "FAIL", title
+
+
 def test_revision_bar_offset_matches_margin_on_odd_and_even_pages() -> None:
     odd = _execute(
         "revision_bar_margin",
@@ -147,7 +204,32 @@ def test_revision_bar_offset_matches_margin_on_odd_and_even_pages() -> None:
     assert misplaced.status == "FAIL"
 
 
-def test_tp2_modified_bar_must_overlap_body_text_outside_header_and_footer() -> None:
+def test_revision_bar_checks_exclude_lep_and_highlights_pages() -> None:
+    page_cases = (
+        (None, "HIGHLIGHTS"),
+        (None, "LIST OF EFFECTIVE PAGES"),
+        ("HIGHLIGHTS", "CONTINUATION"),
+        ("HIGHLIGHTS_PAGE_1", "CONTINUATION"),
+        ("LEP", "CONTINUATION"),
+    )
+    control_cases = (
+        ("revision_bar_new", "N", [_bar(75.6, 180.0, 500.0)]),
+        ("revision_bar_modified", "R", []),
+        ("revision_bar_margin", "R", [_bar(90.0, 180.0, 300.0)]),
+    )
+
+    for page_type, marker in page_cases:
+        spans = [Span(marker, (100.0, 100.0, 300.0, 120.0), 1, "Arial", 10.0)]
+        for control, status, bars in control_cases:
+            result = _execute(
+                control,
+                _context(status, bars, page_type=page_type, spans=spans),
+            )
+
+            assert result.status == "INCONCLUSIVE"
+
+
+def test_tp2_modified_bar_must_stay_outside_header_and_footer() -> None:
     spans = [
         Span("T", (50.0, 14.0, 70.0, 45.0), 1, "Arial-Bold", 30.0),
         Span("Modified text", (100.0, 200.0, 300.0, 220.0), 1, "Arial", 10.0),
@@ -170,6 +252,29 @@ def test_tp2_modified_bar_must_overlap_body_text_outside_header_and_footer() -> 
     assert body_bar.status == "PASS"
     assert header_bar.status == "FAIL"
     assert footer_bar.status == "FAIL"
+
+
+def test_tp2_revision_bar_can_face_an_empty_body_paragraph_in_both_bundles() -> None:
+    spans = [
+        Span("T", (50.0, 14.0, 70.0, 45.0), 1, "Arial-Bold", 30.0),
+        Span("THALES AVS FRANCE SAS", (50.0, 750.0, 250.0, 763.0), 1, "Arial", 9.0),
+        Span("TP 2", (500.0, 750.0, 560.0, 763.0), 1, "Arial", 9.0),
+    ]
+    context = _context(
+        "R",
+        [_bar(39.65, 300.0, 340.0)],
+        page_type="TP2",
+        spans=spans,
+    )
+
+    thales_result = _execute("revision_bar_tp2_body", context)
+    demo_result = demo_operations.DOCUMENT_STRUCTURE.execute(
+        context,
+        {"control": "revision_bar_tp2_body"},
+    )
+
+    assert thales_result.status == "PASS"
+    assert demo_result.status == "PASS"
 
 
 def test_tp2_new_page_is_not_applicable_to_the_tp2_modified_bar_rule() -> None:
