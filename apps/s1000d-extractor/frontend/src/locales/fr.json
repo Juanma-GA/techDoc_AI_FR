@@ -1,7 +1,6 @@
 {
   "app": {
     "title": "S1000D Extractor",
-    "version": "0.1.0",
     "description": "Extraction et versionnement de données techniques au format S1000D."
   },
   "nav": {
@@ -140,6 +139,38 @@
         "previewAlt": "Aperçu de la page {{page}}"
       }
     },
+    "brex": {
+      "addProfileTitle": "Ajouter un profil BREX",
+      "none": "Aucun profil BREX",
+      "loading": "Chargement des profils BREX…",
+      "listError": "Impossible de charger les profils BREX : {{message}}",
+      "file": "Fichier BREX (XML)",
+      "profileName": "Nom du profil",
+      "add": "Ajouter le profil",
+      "uploading": "Ajout en cours…",
+      "noFile": "Sélectionne un fichier BREX XML.",
+      "noName": "Saisis un nom pour le profil BREX.",
+      "profileMissing": "Le profil BREX enregistré n'est plus disponible. Sélectionne-en un autre.",
+      "issueMismatch": "L'Issue du BREX ({{brexIssue}}) doit correspondre à celle des DMs ({{dmIssue}}).",
+      "notReady": "Le profil BREX n'est pas prêt ou n'est pas compatible avec l'Issue sélectionnée.",
+      "loadingRules": "Chargement des règles BREX…",
+      "rulesError": "Impossible de lire les règles du BREX : {{message}}",
+      "rulesSummary": "Règles détectées ({{count}})",
+      "noStructuredRules": "Aucune règle structurelle automatisable détectée.",
+      "supported": "Interprétable par le moteur",
+      "notSupported": "Non interprétable automatiquement",
+      "flagForbidden": "Interdit (0)",
+      "flagRequired": "Obligatoire (1)",
+      "flagOptional": "Facultatif (2)",
+      "flagUnknown": "Flag non pris en charge ({{flag}})",
+      "allowedValues": "Valeurs autorisées",
+      "context": "Contexte",
+      "unsupportedCount": "{{count}} règle(s) détectée(s), mais non évaluée(s) automatiquement :",
+      "unsupportedNonContext": "Règle non-contextuelle (texte)",
+      "unsupportedNotation": "Règle de notation",
+      "unsupportedSns": "Règles SNS",
+      "unsupportedOther": "Autre famille de règles non automatisée"
+    },
     "docs": {
       "title": "Documents",
       "empty": "Aucun document. Charge un PDF/Word ci-dessus.",
@@ -264,8 +295,8 @@
     "dropHelp": "Plusieurs DM peuvent être vérifiés ensemble.",
     "selectFiles": "Importer des fichiers",
     "selectFolder": "Importer un dossier",
-    "brexDisabled": "BREX · bientôt",
-    "brexDisabledHelp": "La validation BREX sera ajoutée séparément.",
+    "brexDisabled": "BREX sur DMs importés · bientôt",
+    "brexDisabledHelp": "La validation des DMs importés avec un profil BREX, hors génération guidée, reste à venir.",
     "clear": "Vider la liste",
     "emptyList": "Importe un ou plusieurs DM XML pour commencer.",
     "filterErrorsOnly": "DM avec erreurs uniquement",

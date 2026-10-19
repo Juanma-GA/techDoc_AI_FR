@@ -72,6 +72,38 @@ class BrexProfileOut(BaseModel):
     created_at: str
 
 
+class BrexObjectValueOut(BaseModel):
+    value_allowed: str | None = None
+    value_text: str
+    value_form: str | None = None
+    value_tailoring: str
+
+
+class BrexRuleOut(BaseModel):
+    rule_id: str | None = None
+    object_path: str
+    allowed_flag: str
+    object_use: str
+    object_values: list[BrexObjectValueOut]
+    rules_context: str | None = None
+    context_id: str | None = None
+    severity_level: str | None = None
+    supported: bool
+
+
+class UnsupportedBrexRuleOut(BaseModel):
+    rule_type: str
+    rule_id: str | None = None
+    description: str
+
+
+class BrexProfileDetailOut(BrexProfileOut):
+    dmc: str
+    dm_code: dict[str, str]
+    rules: list[BrexRuleOut]
+    unsupported_rules: list[UnsupportedBrexRuleOut]
+
+
 class DocumentOut(BaseModel):
     id: str
     filename: str

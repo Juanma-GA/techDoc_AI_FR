@@ -1,7 +1,6 @@
 {
   "app": {
     "title": "S1000D Extractor",
-    "version": "0.1.0",
     "description": "Extract and version technical data in the S1000D format."
   },
   "nav": {
@@ -140,6 +139,38 @@
         "previewAlt": "Preview of page {{page}}"
       }
     },
+    "brex": {
+      "addProfileTitle": "Add a BREX profile",
+      "none": "No BREX profile",
+      "loading": "Loading BREX profiles…",
+      "listError": "Could not load BREX profiles: {{message}}",
+      "file": "BREX file (XML)",
+      "profileName": "Profile name",
+      "add": "Add profile",
+      "uploading": "Adding…",
+      "noFile": "Select a BREX XML file.",
+      "noName": "Enter a name for the BREX profile.",
+      "profileMissing": "The saved BREX profile is no longer available. Select another one.",
+      "issueMismatch": "The BREX Issue ({{brexIssue}}) must match the DM Issue ({{dmIssue}}).",
+      "notReady": "The BREX profile is not ready or does not match the selected Issue.",
+      "loadingRules": "Loading BREX rules…",
+      "rulesError": "Could not read the BREX rules: {{message}}",
+      "rulesSummary": "Detected rules ({{count}})",
+      "noStructuredRules": "No automatable structure rules were detected.",
+      "supported": "Interpretable by the engine",
+      "notSupported": "Not automatically interpretable",
+      "flagForbidden": "Forbidden (0)",
+      "flagRequired": "Required (1)",
+      "flagOptional": "Optional (2)",
+      "flagUnknown": "Unsupported flag ({{flag}})",
+      "allowedValues": "Allowed values",
+      "context": "Context",
+      "unsupportedCount": "{{count}} detected rule(s) are not evaluated automatically:",
+      "unsupportedNonContext": "Non-context rule (text)",
+      "unsupportedNotation": "Notation rule",
+      "unsupportedSns": "SNS rules",
+      "unsupportedOther": "Other non-automated rule family"
+    },
     "docs": {
       "title": "Documents",
       "empty": "No document yet. Upload a PDF/Word file above.",
@@ -264,8 +295,8 @@
     "dropHelp": "Multiple DMs can be checked together.",
     "selectFiles": "Import files",
     "selectFolder": "Import folder",
-    "brexDisabled": "BREX · coming later",
-    "brexDisabledHelp": "BREX validation will be added separately.",
+    "brexDisabled": "BREX for imported DMs · coming later",
+    "brexDisabledHelp": "Validating imported DMs against a BREX profile remains a separate future feature.",
     "clear": "Clear list",
     "emptyList": "Import one or more XML DMs to begin.",
     "filterErrorsOnly": "DMs with errors only",

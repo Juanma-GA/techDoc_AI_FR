@@ -1,8 +1,8 @@
 // Contenu FR (le preview source est FR-only).
 export function Architecture() {
   const workflow = [
-    "Paramètres → clé Mistral (active OCR scans + classification IA) ; validation BREX à venir.",
-    "Charger → PDF/Word + version S1000D (4.1/4.2) + nature dominante → « Générer ».",
+    "Paramètres → clé Mistral (active OCR scans + classification IA).",
+    "Charger → PDF/Word + version S1000D (4.1/4.2) + profil BREX optionnel → « Générer ».",
     "Découpage → choisir le niveau (chapitre/section/sous-section), revoir les Data Modules détectés.",
     "Types → corriger le type de chaque DM (descriptive / procedural / ipd).",
     "Structure → arbre par DM, trancher les nœuds ambigus (para ↔ proceduralStep).",
@@ -14,7 +14,7 @@ export function Architecture() {
     "découpage (étape 1) → 1 Data Module par section/chapitre/sous-section.",
     "typage par DM (étape 2) → descriptive / procedural / ipd (heuristique + IA Mistral).",
     "résolution (étape 3) → élément S1000D selon contexte × forme ; candidats multiples si ambigu.",
-    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD ; BREX à venir.",
+    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD + règles BREX prises en charge.",
   ];
 
   return (
@@ -38,9 +38,9 @@ export function Architecture() {
           <div className="arch-split">
             <div className="label accent-color">CE QUI VARIE PAR PROJET</div>
             <div>
-              La <strong>version S1000D</strong> (4.1 / 4.2 → schémas XSD locaux) et les
-              règles <strong>BREX</strong> seront prises en compte séparément. Le moteur
-              de mapping, lui, ne change jamais.
+              La <strong>version S1000D</strong> (4.1 / 4.2 → schémas XSD locaux) et le
+              <strong> BREX utilisateur</strong> fournissent les contraintes du projet.
+              Le BREX guide et vérifie les DMs sans remplacer le moteur de mapping.
             </div>
           </div>
         </div>
@@ -73,8 +73,10 @@ export function Architecture() {
           ))}
         </div>
         <div className="banner warn" style={{ marginTop: 12 }}>
-          Sortie = jeu de DMs, chacun un <strong>squelette best-effort</strong> : DMC /
-          applicabilité / ICN en placeholders <code>TODO</code>, à compléter par l'humain.
+          Sortie = jeu de DMs, chacun un <strong>squelette best-effort</strong> : DMC du
+          DM, applicabilité, SNS et ICN restent à confirmer par l'humain. Le
+          <code>brexDmRef</code> pointe vers le BREX sélectionné ; les règles non prises
+          en charge sont signalées séparément.
         </div>
       </div>
     </>

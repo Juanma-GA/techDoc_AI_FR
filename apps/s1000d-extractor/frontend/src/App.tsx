@@ -44,7 +44,6 @@ export function App() {
       className="dw"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
       headerStart={<Ai4TechDocLogo alt="" />}
       sidebarTop={
         demoEnabled ? (

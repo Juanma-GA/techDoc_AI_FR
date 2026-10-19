@@ -108,6 +108,38 @@ export type BrexProfile = {
   s1000d_issue: string;
 };
 
+export type BrexObjectValue = {
+  value_allowed: string | null;
+  value_text: string;
+  value_form: string | null;
+  value_tailoring: string;
+};
+
+export type BrexRule = {
+  rule_id: string | null;
+  object_path: string;
+  allowed_flag: string;
+  object_use: string;
+  object_values: BrexObjectValue[];
+  rules_context: string | null;
+  context_id: string | null;
+  severity_level: string | null;
+  supported: boolean;
+};
+
+export type UnsupportedBrexRule = {
+  rule_type: string;
+  rule_id: string | null;
+  description: string;
+};
+
+export type BrexProfileDetail = BrexProfile & {
+  dmc: string;
+  dm_code: Record<string, string>;
+  rules: BrexRule[];
+  unsupported_rules: UnsupportedBrexRule[];
+};
+
 export type Candidate = { element: string; score?: number; rationale?: string };
 
 export type NodeRef = { kind: string; target?: string; target_kind?: string; text?: string };
@@ -251,6 +283,23 @@ export type Override = { dm_id: string; node_id: string; element: string };
 
 export const brexApi = {
   list: () => api<BrexProfile[]>("/brex"),
+  detail: (brexId: string) => api<BrexProfileDetail>(`/brex/${encodeURIComponent(brexId)}`),
+  upload: async (
+    file: File,
+    name: string,
+    issue: S1000dIssue,
+  ): Promise<BrexProfile> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", name);
+    fd.append("s1000d_issue", issue);
+    const res = await fetch(`${API_BASE}/brex`, { method: "POST", body: fd });
+    if (!res.ok) {
+      const e = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(e?.message || res.statusText);
+    }
+    return (await res.json()) as BrexProfile;
+  },
 };
 
 export const documentsApi = {

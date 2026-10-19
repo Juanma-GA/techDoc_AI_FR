@@ -24,11 +24,20 @@ from time import perf_counter
 import structlog
 from sqlalchemy.orm import Session
 
-from app.core import context_classifier, form_segmenter, ingest, resolver, splitter, structure_infer
+from app.core import (
+    context_classifier,
+    dm_header,
+    form_segmenter,
+    ingest,
+    resolver,
+    splitter,
+    structure_infer,
+)
 from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
+from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
 from app.core.s1000d_serializer import (
     SerializationDiagnostics,
@@ -55,13 +64,27 @@ def steps_for(doc: Document) -> tuple[str, ...]:
 
 # --- helpers d'etat ----------------------------------------------------------
 
-def _brex_xml(db: Session, brex_id: str | None) -> str | None:
+def _brex_xml(
+    db: Session, brex_id: str | None, issue: str | None = None
+) -> str | None:
     if not brex_id:
         return None
     b = db.get(BrexProfile, brex_id)
-    if b and Path(b.xml_path).exists():
-        return Path(b.xml_path).read_text(encoding="utf-8")
-    return None
+    if b is None:
+        raise AppError("BREX_NOT_FOUND", "Profil BREX inconnu.", 404)
+    if issue is not None and b.s1000d_issue != issue:
+        raise AppError(
+            "BREX_ISSUE_MISMATCH",
+            f"Issue BREX {b.s1000d_issue} differente de l'Issue DM {issue}.",
+            422,
+        )
+    path = Path(b.xml_path)
+    if not path.is_file():
+        raise AppError("BREX_FILE_NOT_FOUND", "Le fichier du profil BREX est introuvable.", 404)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
 def images_dir(doc_id: str) -> Path:
@@ -355,7 +378,9 @@ def advance(db: Session, doc: Document, params: dict) -> dict:
         doc.status = (
             "incomplete"
             if any(
-                dm.get("xsd_valid") is not True or dm.get("missing_fields")
+                dm.get("xsd_valid") is not True
+                or dm.get("missing_fields")
+                or any(v.get("severity") == "error" for v in dm.get("violations") or [])
                 for dm in ws.load_dms(doc)
             )
             else "extracted"
@@ -421,7 +446,8 @@ def _generate_all(db: Session, doc: Document) -> None:
     Un DM qui echoue ne casse plus toute l'etape : il porte sa propre violation.
     """
     dms = ws.load_dms(doc)
-    brex_xml = _brex_xml(db, doc.brex_id)
+    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
+    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
     res = wres.load_resources(doc)
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     log.info(
@@ -466,7 +492,9 @@ def _generate_all(db: Session, doc: Document) -> None:
                 section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
                 missing_fields=template_missing_fields,
-                header_template=res.header_template,
+                header_template=dm_header.with_brex_dm_code(
+                    res.header_template, brex_dm_code
+                ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
                 diagnostics=serialization,
@@ -594,12 +622,16 @@ def _resources_state(doc: Document) -> dict:
     }
 
 
-def dm_xml(doc: Document, dm_id: str) -> str:
+def dm_xml(doc: Document, dm_id: str, *, db: Session | None = None) -> str:
     dms = ws.load_dms(doc)
     figure_offset = 0
     table_offset = 0
     section_offset = 0
     res = wres.load_resources(doc)
+    if doc.brex_id and db is None:
+        raise AppError("BREX_SESSION_REQUIRED", "Session de base requise pour charger le BREX.", 500)
+    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue) if db else None
+    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     reference_index = build_reference_index([
         (
@@ -633,7 +665,9 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
                 missing_fields=template_missing_fields,
-                header_template=res.header_template,
+                header_template=dm_header.with_brex_dm_code(
+                    res.header_template, brex_dm_code
+                ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
                 diagnostics=serialization,
@@ -642,6 +676,9 @@ def dm_xml(doc: Document, dm_id: str) -> str:
             dm["template_missing_fields"] = template_missing_fields
             xsd_results = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"],
+                brex_xml=brex_xml,
+                brex_rules=res.brex_rules,
+                dm=enriched,
             )
             xsd_results.extend(serialization.xsd_violations)
             dm["violations"] = [
@@ -655,7 +692,12 @@ def dm_xml(doc: Document, dm_id: str) -> str:
             doc.status = (
                 "incomplete"
                 if any(
-                    item.get("xsd_valid") is not True or item.get("missing_fields")
+                    item.get("xsd_valid") is not True
+                    or item.get("missing_fields")
+                    or any(
+                        violation.get("severity") == "error"
+                        for violation in item.get("violations") or []
+                    )
                     for item in dms
                 )
                 else "extracted"

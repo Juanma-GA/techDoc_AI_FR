@@ -7,6 +7,7 @@ import { useDemoMode } from "@internal/ui";
 
 import { DmPreview } from "../components/DmPreview";
 import { DM_TYPES, DmrlReview } from "../components/DmrlReview";
+import { BrexProfileControl } from "../components/BrexProfileControl";
 import { PdfCutStartSelector } from "../components/PdfCutStartSelector";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
@@ -170,6 +171,8 @@ export function Migration() {
   const [file, setFile] = useState<File | null>(null);
   const [lastDocumentName, setLastDocumentName] = useState<string | null>(null);
   const [issue, setIssue] = useState<S1000dIssue>("4.2");
+  const [brexId, setBrexId] = useState<string | null>(null);
+  const [brexReady, setBrexReady] = useState(true);
   const hint: ContextHint = "mixed";
   const [loadError, setLoadError] = useState<string | null>(null);
   const [demoFilesLoading, setDemoFilesLoading] = useState(false);
@@ -286,6 +289,7 @@ export function Migration() {
         const mapping = await migrationInputsApi.read();
         if (cancelled || mappingTouched.current) return;
         setIssue(mapping.issue === "5.0" ? "4.2" : mapping.issue);
+        setBrexId(mapping.brex_id);
         setLastDocumentName(mapping.files.document?.filename ?? null);
         const entries = (Object.entries(mapping.files) as [
           MigrationInputKind,
@@ -445,6 +449,10 @@ export function Migration() {
       setLoadError(t("migration.upload.noFile"));
       return;
     }
+    if (!brexReady) {
+      setLoadError(t("migration.brex.notReady"));
+      return;
+    }
     setLoadError(null);
     setFile(selectedFile);
     setLastDocumentName(selectedFile.name);
@@ -452,7 +460,7 @@ export function Migration() {
     setWizError(null);
     setPdfCut(null);
     try {
-      const doc = await documentsApi.upload(selectedFile, issue, hint);
+      const doc = await documentsApi.upload(selectedFile, issue, hint, brexId ?? undefined);
       setDocId(doc.id);
       // La DMRL doit etre attachee AVANT le demarrage : elle pilote le decoupage.
       for (const [kind, resource] of Object.entries(resourceFiles)) {
@@ -662,22 +670,20 @@ export function Migration() {
                 <option value="4.1">{t("migration.upload.issueValue", { issue: "4.1" })}</option>
               </select>
             </label>
-            <label className="grow">
-              <div className="migration-upload-label">
-                <span className="label">{t("migration.upload.brex")}</span>
-                <span className="migration-upload-status" id="migration-brex-status">
-                  {t("migration.upload.inDevelopment")}
-                </span>
-              </div>
-              <select
-                className="input"
-                value=""
-                disabled
-                aria-describedby="migration-brex-status"
-              >
-                <option value="">{t("migration.upload.inDevelopment")}</option>
-              </select>
-            </label>
+          </div>
+          <div className="row">
+            <div className="grow">
+              <BrexProfileControl
+                issue={issue}
+                value={brexId}
+                onChange={(nextId) => {
+                  mappingTouched.current = true;
+                  setBrexId(nextId);
+                }}
+                onReadyChange={setBrexReady}
+                disabled={demoFilesLoading || busy || starting !== null || pdfCutBusy}
+              />
+            </div>
           </div>
           <div className="row">
             <label className="grow">
@@ -760,7 +766,8 @@ export function Migration() {
               type="button"
               className="btn primary"
               disabled={
-                demoFilesLoading || busy || starting !== null || pdfCut !== null || pdfCutBusy
+                demoFilesLoading || busy || starting !== null || pdfCut !== null ||
+                pdfCutBusy || !brexReady
               }
               onClick={() => void doStart()}
             >

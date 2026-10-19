@@ -8,7 +8,6 @@ from pathlib import Path
 
 from lxml import etree
 
-
 DEFAULT_HEADER_TEMPLATE: dict = {
     "security": {"securityClassification": "02"},
     "language": {"countryIsoCode": "FR", "languageIsoCode": "fr"},
@@ -60,6 +59,17 @@ def _merge(base: dict, override: dict) -> dict:
 def merge_header_template(override: dict) -> dict:
     """Complete un profil partiel avec les valeurs client par defaut."""
     return _merge(DEFAULT_HEADER_TEMPLATE, override)
+
+
+def with_brex_dm_code(
+    template: dict | None,
+    brex_dm_code: dict[str, str] | None,
+) -> dict:
+    """Use the selected BREX profile as the source of truth for brexDmRef."""
+    result = merge_header_template(template or {})
+    if brex_dm_code is not None:
+        result["brexDmRef"] = {"dmCode": dict(brex_dm_code)}
+    return result
 
 
 def _xml_text(parent: etree._Element, path: str, default: str = "") -> str:

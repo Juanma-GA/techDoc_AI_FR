@@ -17,9 +17,11 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.config import settings
+from app.core import dm_header as dm_header_mod
 from app.core import ir as ir_mod
 from app.core import migration_inputs, pipeline
 from app.core import wizard_resources as wres
+from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
 from app.core.s1000d_schema import SELECTABLE_ISSUES
 from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields, serialize
@@ -110,8 +112,16 @@ async def upload_document(
     raw = await file.read()
     if len(raw) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", "Document trop volumineux.", 413)
-    if brex_id and db.get(BrexProfile, brex_id) is None:
-        raise AppError("BREX_NOT_FOUND", "Profil BREX inconnu.", 404)
+    if brex_id:
+        profile = db.get(BrexProfile, brex_id)
+        if profile is None:
+            raise AppError("BREX_NOT_FOUND", "Profil BREX inconnu.", 404)
+        if profile.s1000d_issue != s1000d_issue:
+            raise AppError(
+                "BREX_ISSUE_MISMATCH",
+                f"Issue BREX {profile.s1000d_issue} differente de l'Issue DM {s1000d_issue}.",
+                422,
+            )
 
     doc = Document(
         filename=file.filename or f"document.{fmt}", source_format=fmt,
@@ -195,6 +205,8 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
+    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
+    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
     serialization = SerializationDiagnostics()
     if doc.ir_json:
         root = ir_mod.from_dict(json.loads(doc.ir_json))
@@ -206,7 +218,9 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
             issue=doc.s1000d_issue,
             dm_type=doc.dm_type or "descriptive",
             dm_metadata=metadata,
-            header_template=resources.header_template,
+            header_template=dm_header_mod.with_brex_dm_code(
+                resources.header_template, brex_dm_code
+            ),
             diagnostics=serialization,
         )
         Path(doc.xml_path).write_text(xml, encoding="utf-8")
@@ -214,13 +228,18 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
         xml,
         issue=doc.s1000d_issue,
         dm_type=doc.dm_type or "descriptive",
+        brex_xml=brex_xml,
     )
     violations.extend(serialization.xsd_violations)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)
     missing_fields = missing_data_fields(xml)
     doc.status = (
         "incomplete"
-        if not xsd_is_valid(violations) or missing_fields
+        if (
+            not xsd_is_valid(violations)
+            or missing_fields
+            or any(v.get("severity") == "error" for v in violations)
+        )
         else "extracted"
     )
     db.commit()
@@ -251,6 +270,8 @@ def override_node(
     node.candidates = [chosen] + [c for c in node.candidates if c.element != body.element]
     node.confidence = 1.0
 
+    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
+    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
     resources = wres.load_resources(doc)
     entries = wres.dmrl_data_module_entries(doc)
     metadata = entries[0].to_dict() if entries else None
@@ -260,10 +281,11 @@ def override_node(
         issue=doc.s1000d_issue,
         dm_type=doc.dm_type or "descriptive",
         dm_metadata=metadata,
-        header_template=resources.header_template,
+        header_template=dm_header_mod.with_brex_dm_code(
+            resources.header_template, brex_dm_code
+        ),
         diagnostics=serialization,
     )
-    brex_xml = _brex_xml(db, doc.brex_id)
     violations = validate_document(
         xml,
         issue=doc.s1000d_issue,
@@ -274,7 +296,11 @@ def override_node(
     missing_fields = missing_data_fields(xml)
     doc.status = (
         "incomplete"
-        if not xsd_is_valid(violations) or missing_fields
+        if (
+            not xsd_is_valid(violations)
+            or missing_fields
+            or any(v.get("severity") == "error" for v in violations)
+        )
         else "extracted"
     )
     Path(doc.xml_path).write_text(xml, encoding="utf-8")  # type: ignore[arg-type]
@@ -297,13 +323,27 @@ def _require(db: Session, doc_id: str) -> Document:
     return doc
 
 
-def _brex_xml(db: Session, brex_id: str | None) -> str | None:
+def _brex_xml(
+    db: Session, brex_id: str | None, issue: str | None = None
+) -> str | None:
     if not brex_id:
         return None
     b = db.get(BrexProfile, brex_id)
-    if b and Path(b.xml_path).exists():
-        return Path(b.xml_path).read_text(encoding="utf-8")
-    return None
+    if b is None:
+        raise AppError("BREX_NOT_FOUND", "Profil BREX inconnu.", 404)
+    if issue is not None and b.s1000d_issue != issue:
+        raise AppError(
+            "BREX_ISSUE_MISMATCH",
+            f"Issue BREX {b.s1000d_issue} differente de l'Issue DM {issue}.",
+            422,
+        )
+    path = Path(b.xml_path)
+    if not path.is_file():
+        raise AppError("BREX_FILE_NOT_FOUND", "Le fichier du profil BREX est introuvable.", 404)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
 def _run_and_persist(doc_id: str, cb) -> dict:
@@ -314,7 +354,7 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         doc = db.get(Document, doc_id)
         if doc is None:
             raise AppError("DOC_NOT_FOUND", "Document inconnu.", 404)
-        brex_xml = _brex_xml(db, doc.brex_id)
+        brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
         dmrl_entries = wres.dmrl_data_module_entries(doc)
         try:
             result = pipeline.run(
@@ -337,7 +377,11 @@ def _run_and_persist(doc_id: str, cb) -> dict:
         missing_fields = missing_data_fields(result.xml)
         doc.status = (
             "incomplete"
-            if not xsd_is_valid(result.violations) or missing_fields
+            if (
+                not xsd_is_valid(result.violations)
+                or missing_fields
+                or any(v.get("severity") == "error" for v in result.violations)
+            )
             else "extracted"
         )
         db.commit()
