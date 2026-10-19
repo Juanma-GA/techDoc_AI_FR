@@ -88,7 +88,10 @@ _EXPECTED_HIGHLIGHTS_REVISION_PATTERN = (
     r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}\s+DATED\s+"
     r"{{meta_revision_date}}(?!\w)"
 )
-_EXPECTED_HIGHLIGHTS_ATA_PATTERN = r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}(?!\w)"
+_EXPECTED_HIGHLIGHTS_ATA_PATTERN = (
+    r"(?i)(?<!\w)ATA\s+No\.?\s*{{meta_cmm_number}}"
+    r"(?:(?<![A-Za-z])A)?(?!\w)"
+)
 _UNEXPECTED_HIGHLIGHTS_PNR_PATTERN = (
     r"(?i)(?<=PNR: )(?!{{meta_pnr_number}}(?!\w))"
     r"\d+-\d{3}-[A-Z]{2}(?!\w)"
@@ -109,7 +112,7 @@ _COPYRIGHT_PATTERN = (
     r"without\s+the\s+company's\s+prior\s+written\s+approval\.?"
 )
 IMPORTANT_NOTICE_TEXT = """IMPORTANT NOTICE
-This document and any information contained here in are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
+This document and any information contained herein are the sole property of THALES AVS FRANCE SAS and have been disclosed under a License Agreement. They cannot be used, reproduced or disclosed without the prior express written approval of THALES AVS FRANCE SAS.
 In particular, they shall not be used in the creation, manufacture, development or derivation of any repairs, modifications, spare parts, design, or configuration changes or to obtain EASA, FAA or any other government or regulatory approval to do so.
 Should THALES AVS FRANCE SAS consent be given for reproduction in whole or in part, this notice and the notice set forth on each page of this document shall appear in any such reproduction in whole or in part.
 The recipient shall not use this document for any purpose other than the one stated in the relevant applicable License agreement under which it has been disclosed and it shall be returned to THALES AVS FRANCE SAS immediately upon request.
@@ -301,6 +304,42 @@ CUSTOM_THALES_LOGO_FONT_SIZE = rule(
     },
 )
 
+CUSTOM_CMM_MAPPING_SUSPECT = rule(
+    code="CUSTOM_CMM_MAPPING_SUSPECT",
+    name="Verification du numero CMM renseigne dans le mapping",
+    description=(
+        "Avertit lorsque le meme numero CMM, different du mapping, est detecte "
+        "dans au moins 90 % des pieds de page exploitables."
+    ),
+    message=(
+        "Au moins 90 % des pages indiquent un numero CMM different de celui du mapping."
+    ),
+    kind="field_required",
+    severity="warning",
+    presentation_severity="warning",
+    target=RuleTarget(page="all", region="footer"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="cmm_mapping_consistency",
+        )
+    ],
+    failure_message="Le numero CMM dominant des pieds de page differe du mapping.",
+    only_if=Condition(field="meta_cmm_number", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "Warns when the same CMM number, different from the mapping, is "
+                "detected in at least 90% of usable footers."
+            ),
+            "message": (
+                "At least 90% of pages show a CMM number different from the mapping."
+            ),
+        }
+    },
+)
+
 CUSTOM_CMM_NUMBER_FONT_SIZE = rule(
     code="CUSTOM_CMM_NUMBER_FONT_SIZE",
     name="Taille de police du numero CMM (ATA)",
@@ -347,7 +386,7 @@ CUSTOM_CMM_NUMBER = rule(
         Check(
             field="text",
             operator="regex_exists",
-            expected=r"(?<!\w){{meta_cmm_number}}(?!\w)",
+            expected=r"(?<!\w){{meta_cmm_number}}(?:(?<![A-Za-z])A)?(?!\w)",
             require_all=True,
             expected_display="{{meta_cmm_number}}",
             missing_anchor=r"(?i)\bFirst\s+Issue\b",
@@ -677,11 +716,14 @@ CUSTOM_REVISION_BAR_NEW_PAGE = rule(
     code="CUSTOM_REVISION_BAR_NEW_PAGE",
     name="Barre de revision pleine hauteur sur les pages nouvelles",
     description=(
-        "Chaque page declaree N dans les Highlights doit porter une barre de "
-        "revision noire presque pleine hauteur, du haut du contenu jusqu'au "
-        "pied de page."
+        "Chaque page declaree N dans les Highlights, hors pages LEP et HIGHLIGHTS, "
+        "doit porter une barre de revision noire presque pleine hauteur, du haut "
+        "du contenu jusqu'au pied de page."
     ),
-    message="Une page nouvelle ne comporte pas de barre de revision pleine hauteur.",
+    message=(
+        "Une page nouvelle hors LEP/HIGHLIGHTS ne comporte pas de barre de revision "
+        "pleine hauteur."
+    ),
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -694,15 +736,20 @@ CUSTOM_REVISION_BAR_NEW_PAGE = rule(
         )
     ],
     failure_message=(
-        "Chaque page N doit porter une barre de revision noire du logo au pied de page."
+        "Chaque page N hors LEP/HIGHLIGHTS doit porter une barre de revision noire "
+        "du logo au pied de page."
     ),
     translations={
         "en": {
             "description": (
-                "Every page declared N in Highlights must have a nearly full-height "
-                "black revision bar from the top of the content to the footer."
+                "Every page declared N in Highlights, except LEP and HIGHLIGHTS "
+                "pages, must have a nearly full-height black revision bar from the "
+                "top of the content to the footer."
             ),
-            "message": "A new page is missing its full-height revision bar.",
+            "message": (
+                "A new page outside LEP/HIGHLIGHTS is missing its full-height "
+                "revision bar."
+            ),
         }
     },
 )
@@ -711,10 +758,12 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
     code="CUSTOM_REVISION_BAR_MODIFIED_PAGE",
     name="Barre de revision presente sur les pages modifiees",
     description=(
-        "Chaque page declaree R dans les Highlights doit porter au moins une "
-        "barre de revision noire."
+        "Chaque page declaree R dans les Highlights, hors pages LEP, HIGHLIGHTS, "
+        "Equipment Designator Index, Numerical Index et Parts List, doit porter "
+        "au moins une barre de revision noire. Les pages EDI/NI/PL sont reconnues "
+        "par leur titre dans le contenu de la page."
     ),
-    message="Une page modifiee ne comporte pas de barre de revision.",
+    message="Une page modifiee hors LEP/HIGHLIGHTS/EDI/NI/PL ne comporte pas de barre de revision.",
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -726,14 +775,19 @@ CUSTOM_REVISION_BAR_MODIFIED_PAGE = rule(
             operation_params={"control": "revision_bar_modified"},
         )
     ],
-    failure_message="Chaque page R doit comporter au moins une barre de revision noire.",
+    failure_message=(
+        "Chaque page R hors LEP/HIGHLIGHTS/EDI/NI/PL doit comporter au moins une barre de "
+        "revision noire."
+    ),
     translations={
         "en": {
             "description": (
-                "Every page declared R in Highlights must have at least one black "
-                "revision bar."
+                "Every page declared R in Highlights, except LEP, HIGHLIGHTS, "
+                "Equipment Designator Index, Numerical Index and Parts List "
+                "pages, must have at least one black revision bar. EDI/NI/PL "
+                "pages are identified by their title in the page content."
             ),
-            "message": "A modified page is missing a revision bar.",
+            "message": "A modified page outside LEP/HIGHLIGHTS/EDI/NI/PL is missing a revision bar.",
         }
     },
 )
@@ -742,10 +796,14 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
     code="CUSTOM_REVISION_BAR_MARGIN_POSITION",
     name="Position de la barre de revision par rapport a la marge",
     description=(
-        "Sur les pages N et R portant une barre, son ecart horizontal par rapport "
-        "a la marge gauche doit etre l=-0,38 cm (tolerance +/- 0,10 cm)."
+        "Sur les pages N et R hors LEP/HIGHLIGHTS portant une barre, son ecart "
+        "horizontal par rapport a la marge gauche doit etre l=-0,38 cm "
+        "(tolerance +/- 0,10 cm)."
     ),
-    message="Une barre de revision est mal positionnee par rapport a la marge.",
+    message=(
+        "Une barre de revision hors LEP/HIGHLIGHTS est mal positionnee par rapport "
+        "a la marge."
+    ),
     kind="field_required",
     severity="error",
     target=_ALL_PAGE_TARGET,
@@ -757,14 +815,21 @@ CUSTOM_REVISION_BAR_MARGIN_POSITION = rule(
             operation_params={"control": "revision_bar_margin"},
         )
     ],
-    failure_message="La barre de revision doit etre a l=-0,38 cm de la marge gauche.",
+    failure_message=(
+        "Hors LEP/HIGHLIGHTS, la barre de revision doit etre a l=-0,38 cm de la "
+        "marge gauche."
+    ),
     translations={
         "en": {
             "description": (
-                "On N and R pages with a revision bar, its horizontal offset from "
-                "the left margin must be l=-0.38 cm (tolerance +/- 0.10 cm)."
+                "On N and R pages outside LEP/HIGHLIGHTS with a revision bar, its "
+                "horizontal offset from the left margin must be l=-0.38 cm "
+                "(tolerance +/- 0.10 cm)."
             ),
-            "message": "A revision bar is incorrectly positioned relative to the margin.",
+            "message": (
+                "A revision bar outside LEP/HIGHLIGHTS is incorrectly positioned "
+                "relative to the margin."
+            ),
         }
     },
 )
@@ -807,10 +872,11 @@ CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
 
 CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
     code="CUSTOM_TP2_REVISION_BAR_BODY_ONLY",
-    name="Barre TP2/R limitee au texte du corps",
+    name="Barre TP2/R limitee a la zone du corps",
     description=(
-        "Sur une page TP2 declaree R, la barre de revision doit se trouver en "
-        "regard du texte du corps, sans traverser l'en-tete ni le pied de page."
+        "Sur une page TP2 declaree R, la barre de revision doit rester dans la "
+        "zone du corps, hors en-tete et pied de page. Elle peut se trouver en face "
+        "d'un paragraphe vide."
     ),
     message="La barre de revision d'une page TP2/R est dans l'en-tete ou le pied de page.",
     kind="field_required",
@@ -825,13 +891,15 @@ CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
         )
     ],
     failure_message=(
-        "Sur TP2/R, la barre ne doit apparaitre qu'en regard du texte modifie."
+        "Sur TP2/R, la barre doit rester dans la zone du corps, hors en-tete et "
+        "pied de page; elle peut etre en face d'un paragraphe vide."
     ),
     translations={
         "en": {
             "description": (
-                "On a TP2 page declared R, the revision bar must align with body "
-                "text and must not run through the header or footer."
+                "On a TP2 page declared R, the revision bar must stay in the body "
+                "area, outside the header and footer. It may align with an empty "
+                "paragraph."
             ),
             "message": "A TP2/R revision bar appears in the header or footer.",
         }
@@ -2677,6 +2745,7 @@ REVISION_RULE_DEFINITIONS = (
 RULE_DEFINITIONS = (
     *REVISION_RULE_DEFINITIONS,
     CUSTOM_CMM_NUMBER,
+    CUSTOM_CMM_MAPPING_SUSPECT,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
     CUSTOM_THALES_LOGO_FONT_SIZE,
     CUSTOM_TP1_THALES_LOGO_FONT_SIZE,

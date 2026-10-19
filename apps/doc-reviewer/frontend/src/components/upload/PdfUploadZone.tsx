@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
+import { useDemoMode } from "@internal/ui";
+
+import { loadDemoPdf } from "../../lib/demoPdf";
 
 type Props = {
   onFile: (file: File) => void;
@@ -16,11 +20,18 @@ type Props = {
 export function PdfUploadZone({ onFile, disabled, uploading, autoOpen = false }: Props) {
   const { t } = useTranslation();
   const autoOpenHandled = useRef(false);
+  const { mode, isReady } = useDemoMode();
+  const [demoPdfLoading, setDemoPdfLoading] = useState(false);
+  const [demoPdfError, setDemoPdfError] = useState<string | null>(null);
+  const isBusy = uploading || demoPdfLoading;
 
   const onDrop = useCallback(
     (accepted: File[]) => {
       const file = accepted[0];
-      if (file) onFile(file);
+      if (file) {
+        setDemoPdfError(null);
+        onFile(file);
+      }
     },
     [onFile],
   );
@@ -36,25 +47,45 @@ export function PdfUploadZone({ onFile, disabled, uploading, autoOpen = false }:
       "application/zip": [".zip"],
     },
     multiple: false,
-    disabled: disabled || uploading,
+    disabled: disabled || isBusy,
   });
 
   useEffect(() => {
-    if (!autoOpen || autoOpenHandled.current || disabled || uploading) return;
+    if (!autoOpen || autoOpenHandled.current || disabled || isBusy || !isReady) return;
     autoOpenHandled.current = true;
-    open();
-  }, [autoOpen, disabled, open, uploading]);
+    if (mode !== "demo") {
+      open();
+      return;
+    }
+
+    setDemoPdfError(null);
+    setDemoPdfLoading(true);
+    void loadDemoPdf()
+      .then(onFile)
+      .catch((error: unknown) => {
+        setDemoPdfError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => setDemoPdfLoading(false));
+  }, [autoOpen, disabled, isBusy, isReady, mode, onFile, open]);
 
   return (
     <div
       {...getRootProps()}
-      className={["dropzone", isDragActive ? "over" : "", disabled || uploading ? "disabled" : ""]
+      className={["dropzone", isDragActive ? "over" : "", disabled || isBusy ? "disabled" : ""]
         .filter(Boolean)
         .join(" ")}
-      aria-busy={uploading || undefined}
+      aria-busy={isBusy || undefined}
     >
       <input {...getInputProps()} aria-label={t("documents.upload.dropHint")} />
-      {uploading ? (
+      {demoPdfLoading ? (
+        <p
+          style={{ fontWeight: 600, color: "var(--fg)", margin: 0, display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}
+          role="status"
+        >
+          <span className="spinner" style={{ width: 14, height: 14 }} />
+          {t("demo.pdfLoading")}
+        </p>
+      ) : uploading ? (
         <p
           style={{ fontWeight: 600, color: "var(--fg)", margin: 0, display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}
         >
@@ -70,6 +101,11 @@ export function PdfUploadZone({ onFile, disabled, uploading, autoOpen = false }:
           <p className="label">{t("documents.upload.dropLimit")}</p>
         </>
       )}
+      {demoPdfError ? (
+        <p className="error" role="alert">
+          {t("demo.pdfLoadError", { message: demoPdfError })}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,0 +1,13 @@
+{
+  "label": "ASD-STE100",
+  "bundle_version": "1.0.0",
+  "catalogs": [
+    {
+      "code": "ASD-STE100",
+      "version": "issue 7"
+    }
+  ],
+  "modules": {
+    "rules": "rules.py"
+  }
+}

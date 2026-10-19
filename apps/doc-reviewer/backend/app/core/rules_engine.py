@@ -1,9 +1,9 @@
-"""Orchestrate standard + custom + units checks and persist suggestions.
+"""Orchestrate compiled, catalog, custom, and units checks.
 
-The analyse pipeline reads the active `StandardVersion.catalog_json`
-and runs every built-in rule via `catalog_runner`. Custom rules from
-the DB are scoped to that same `standard_version_id` (or unscoped =
-transverse — they run for every standard). Units conversion remains
+The pipeline reads the active `StandardVersion.catalog_json`. Deterministic
+compiled rules use `compiled_rule_executor`; sentence-length and legacy catalog
+checks use `catalog_runner`. Custom rules from the DB are scoped to the same
+`standard_version_id` (or unscoped = transverse). Units conversion remains
 fully transverse and applies to every analysis run.
 """
 
@@ -16,6 +16,7 @@ from collections import defaultdict
 from dataclasses import replace
 from typing import Any, Callable, Iterable, Literal, Optional
 
+import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -38,7 +39,6 @@ from app.core.compiled_rules import (
     validate_compiled_rule_json,
 )
 from app.core.errors import AppError
-from app.core.regex_safety import UserRegexPatternError, compile_user_regex
 from app.core.llm_suggester import rephrase_batch, scan_with_prompt
 from app.core.mistral_settings import (
     get_ai_custom_prompt,
@@ -47,12 +47,16 @@ from app.core.mistral_settings import (
     get_llm_enabled,
     get_vision_enabled,
 )
-from app.core.rule_applicability import RuleExecutionContext, is_rule_kind_applicable
+from app.core.regex_safety import UserRegexPatternError, compile_user_regex
+from app.core.rule_applicability import (
+    RuleExecutionContext,
+    is_rule_kind_applicable,
+    is_standard_applicable,
+    required_language_for_standard,
+)
 from app.core.standard_rule_compiler import MIGRATED_REGEX_FLAG_CODES, compile_standard_rule
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion, Suggestion
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, find_span_bbox, locate_with_search_for
-
-import structlog
 
 UnitSystem = Literal["metric", "imperial", "auto"]
 
@@ -130,7 +134,38 @@ def run_all(
         layout_enabled=layout_enabled,
         vision_override=vision_enabled_override,
     )
-    versions = standard_versions or []
+    selected_versions = standard_versions or []
+    execution_context = RuleExecutionContext.from_document(
+        document,
+        layout_enabled=layout_enabled,
+    )
+    skipped_standard_codes = sorted(
+        {
+            version.standard.code
+            for version in selected_versions
+            if not is_standard_applicable(version.standard.code, execution_context)
+        }
+    )
+    for code in skipped_standard_codes:
+        required_language = required_language_for_standard(code)
+        _logger.info(
+            "standard_rules_skipped",
+            standard_code=code,
+            required_language=required_language,
+            document_language=execution_context.document_language,
+        )
+        _append_analysis_warning(
+            warnings,
+            (
+                f"Les règles {code} n'ont pas été exécutées : "
+                f"déclarez la langue du document « {required_language} » pour les activer."
+            ),
+        )
+    versions = [
+        version
+        for version in selected_versions
+        if is_standard_applicable(version.standard.code, execution_context)
+    ]
     # Chaque standard selectionne peut classer les pages (`page.page_type`)
     # avant l'execution des regles compilees qui en dependent (RuleTarget.
     # page_type) via le bundle transmis/resolu pour ce run.
@@ -141,7 +176,6 @@ def run_all(
             classifier = None
         if classifier is not None:
             classifier(parsed, document)
-    execution_context = RuleExecutionContext.from_document(document, layout_enabled=layout_enabled)
     raw_target = document.target_unit_system
     target = raw_target if raw_target in {"metric", "imperial", "auto"} else "none"
     units_active = target != "none"
@@ -360,6 +394,9 @@ def load_compiled_rules(
         except (TypeError, ValueError):
             catalog = []
         for source in catalog if isinstance(catalog, list) else []:
+            # Sentence length needs token counts and is dispatched by the catalog runner.
+            if str(source.get("kind") or "").strip().casefold() == "sentence_length":
+                continue
             if str(source.get("code") or "") in disabled_codes:
                 continue
             rule = compile_standard_rule(

@@ -5,8 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-
 DocumentLanguage = Literal["fr", "en"]
+
+_STANDARD_LANGUAGES: dict[str, DocumentLanguage] = {
+    "ASD-STE100": "en",
+}
 
 
 @dataclass(frozen=True)
@@ -26,6 +29,18 @@ class RuleExecutionContext:
         if language not in {"fr", "en"}:
             language = None
         return cls(document_language=language, layout_enabled=layout_enabled)
+
+
+def required_language_for_standard(standard_code: str) -> DocumentLanguage | None:
+    return _STANDARD_LANGUAGES.get(standard_code.strip().upper())
+
+
+def is_standard_applicable(
+    standard_code: str,
+    context: RuleExecutionContext,
+) -> bool:
+    required_language = required_language_for_standard(standard_code)
+    return required_language is None or context.document_language == required_language
 
 
 def is_rule_kind_applicable(kind: str, context: RuleExecutionContext) -> bool:

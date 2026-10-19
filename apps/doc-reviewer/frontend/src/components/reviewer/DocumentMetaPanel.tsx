@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Save, Settings2, X } from "lucide-react";
+import { useDemoMode } from "@internal/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -260,9 +261,10 @@ function LegacyDocumentMetaPanel({ document }: Props) {
 }
 
 export function DocumentMetaPanel({ document }: Props) {
-  return import.meta.env.VITE_LEGACY_RULES_UI === "true" ? (
-    <LegacyDocumentMetaPanel document={document} />
-  ) : (
+  const { mode, isReady } = useDemoMode();
+  return mode === "demo" || !isReady || import.meta.env.VITE_LEGACY_RULES_UI !== "true" ? (
     <ClientMetadataPanel document={document} />
+  ) : (
+    <LegacyDocumentMetaPanel document={document} />
   );
 }

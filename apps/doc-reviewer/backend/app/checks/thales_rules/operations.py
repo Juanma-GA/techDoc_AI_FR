@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from statistics import median
 from typing import Any, cast
 
@@ -56,7 +57,7 @@ _PNR_HEADER_TOKEN_RE = re.compile(
     r"(?:\s*[-\u2010-\u2015\u2212]\s*[A-Z0-9]+)+)(?![A-Z0-9])"
 )
 _PNR_HEADER_SEPARATOR_RE = re.compile(r"[\s,;&]*(?:and[\s,;&]*)?", re.IGNORECASE)
-_PNR_VALUE_LIST_SEPARATOR_RE = re.compile(r"(?i)\s*(?:,|;|\band\b)\s*")
+_PNR_VALUE_LIST_SEPARATOR_RE = re.compile(r"(?i)\s*(?:,|;|[\r\n]+|\band\b)\s*")
 _TP1_PART_NUMBER_RE = re.compile(r"(?i)^\s*PART\s+NUMBERS?\s*:?\s*$")
 _HIGHLIGHTS_ATA_LINE_RE = re.compile(r"(?im)^\s*ATA\s+No\b[^\r\n]*")
 _HIGHLIGHTS_LEGEND_RE = re.compile(r"(?i)\bN\s*:\s*New\b.*\bD\s*:\s*Deleted\b")
@@ -82,6 +83,9 @@ _REVISION_BAR_MIN_LENGTH = 8.0
 _REVISION_BAR_MIN_THICKNESS = 1.0
 _REVISION_BAR_MAX_THICKNESS = 4.5
 _REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
+_REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE = re.compile(
+    r"(?im)^\s*(?:EQUIPMENT\s+DESIGNATOR\s+INDEX|NUMERICAL\s+INDEX|PARTS\s+LIST)\s*$"
+)
 _TP1_REVISION_LABEL_RE = re.compile(r"(?i)\bRevision\s+No\b")
 _TP1_FIRST_ISSUE_RE = re.compile(r"(?i)\bFirst\s+issue\b")
 _TP1_COPYRIGHT_FOOTER_RE = re.compile(
@@ -116,7 +120,6 @@ _CHAPTER_TITLE_CONNECTORS = frozenset(
     }
 )
 _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
-_ILLUSTRATED_PARTS_LIST_RE = re.compile(r"(?i)\billustrated\s+parts\s+list\b")
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
 _FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
@@ -987,9 +990,11 @@ def _document_pnr_values(document: Any | None) -> list[str]:
         return []
     return list(
         dict.fromkeys(
-            str(value).strip()
+            pnr.strip()
             for value in raw_values
-            if value is not None and str(value).strip()
+            if value is not None
+            for pnr in _PNR_VALUE_LIST_SEPARATOR_RE.split(str(value))
+            if pnr.strip()
         )
     )
 
@@ -1138,8 +1143,20 @@ def _highlights_pnr_header_findings(
     expected_patterns = [
         (value, _pnr_value_pattern(value)) for value in pnr_values
     ]
+    prefixes = {
+        _normalize_pnr_separators(value).partition("-")[0] if "-" in value else ""
+        for value in pnr_values
+    }
+    series_pattern = None
+    if len(pnr_values) > 1 and len(prefixes) == 1 and "" not in prefixes:
+        prefix = next(iter(prefixes))
+        series_pattern = re.compile(
+            rf"(?<![\w-]){re.escape(prefix)}\s+series\b", re.IGNORECASE
+        )
     findings: list[OperationResult] = []
     for target in targets:
+        if series_pattern is not None and series_pattern.search(target.text):
+            continue
         missing = [
             value
             for value, pattern in expected_patterns
@@ -1239,8 +1256,8 @@ def _highlights_description_findings(
         elif control == "highlights_revised_description":
             if entry.status != "R":
                 continue
-            illustrated_parts_list = bool(
-                _ILLUSTRATED_PARTS_LIST_RE.search(entry.subject)
+            illustrated_parts_list = (
+                revision.match_highlights_chapter(entry.subject) == "Illustrated Parts List"
             )
             description = (
                 entry.description
@@ -2093,11 +2110,19 @@ def _revision_bar_findings(
     control: str,
 ) -> tuple[list[OperationResult], int, str]:
     expected_by_control = {
-        "revision_bar_new": "Barre noire presque pleine hauteur pour chaque page N",
-        "revision_bar_modified": "Au moins une barre noire sur chaque page R",
-        "revision_bar_margin": "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm)",
+        "revision_bar_new": (
+            "Barre noire presque pleine hauteur pour chaque page N hors LEP/HIGHLIGHTS"
+        ),
+        "revision_bar_modified": (
+            "Au moins une barre noire sur chaque page R hors LEP/HIGHLIGHTS/EDI/NI/PL"
+        ),
+        "revision_bar_margin": (
+            "Barre a l=-0.38 cm de la marge gauche (+/- 0.10 cm), hors LEP/HIGHLIGHTS"
+        ),
         "revision_bar_tp1_footer": "Barre TP1/R de Revision jusqu'en dessous du copyright",
-        "revision_bar_tp2_body": "Barre TP2/R uniquement en regard du corps de texte",
+        "revision_bar_tp2_body": (
+            "Barre TP2/R dans la zone du corps, hors en-tete et pied de page"
+        ),
     }
     expected = expected_by_control.get(control)
     if expected is None:
@@ -2117,10 +2142,21 @@ def _revision_bar_findings(
     for page in parsed_pdf.pages:
         if target_pages and page.page not in target_pages:
             continue
+        if (
+            page.page_type in {"LEP", "HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"}
+            or revision._is_highlights_page(page)
+            or revision._is_lep_page(page)
+        ):
+            continue
         status, page_key = _revision_page_status(page, state)
         if control == "revision_bar_new" and status != "N":
             continue
         if control == "revision_bar_modified" and status != "R":
+            continue
+        if (
+            control == "revision_bar_modified"
+            and _REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE.search(page.text)
+        ):
             continue
         if control == "revision_bar_margin" and status not in {"N", "R"}:
             continue
@@ -2299,24 +2335,8 @@ def _revision_bar_findings(
             )
             header_bottom = page_height * 0.10
             footer_top = page_height * 0.90
-            body_spans = [
-                span
-                for span in page.spans
-                if span.text.strip()
-                and span.bbox[1] >= header_bottom
-                and span.bbox[3] <= footer_top
-                and _HIGHLIGHTS_FOOTER_COPYRIGHT_RE.search(span.text) is None
-            ]
             for bar in bars:
-                overlaps_body = any(
-                    bar.bottom >= span.bbox[1] and bar.top <= span.bbox[3]
-                    for span in body_spans
-                )
-                if (
-                    bar.top >= header_bottom
-                    and bar.bottom <= footer_top
-                    and overlaps_body
-                ):
+                if bar.top >= header_bottom and bar.bottom <= footer_top:
                     continue
                 findings.append(
                     OperationResult(
@@ -2325,8 +2345,7 @@ def _revision_bar_findings(
                         expected=expected,
                         message=(
                             f"La barre TP2/R de « {page_label} » doit etre placee "
-                            "uniquement en regard du texte du corps, hors en-tete "
-                            "et pied de page."
+                            "dans la zone du corps, hors en-tete et pied de page."
                         ),
                         original="",
                         page=page.page,
@@ -2418,6 +2437,84 @@ def _evaluate_document_structure(
     )
 
 
+def _cmm_mapping_values_match(mapped_value: str, document_value: str) -> bool:
+    mapped = mapped_value.strip().upper()
+    observed = document_value.strip().upper()
+    return observed == mapped or (
+        re.fullmatch(r"\d{2}-\d{2}-\d{2}", mapped) is not None
+        and observed == f"{mapped}A"
+    )
+
+
+def _evaluate_cmm_mapping_consistency(
+    context: Any,
+    parameters: Mapping[str, Any],
+) -> OperationResult:
+    runtime = getattr(context, "runtime", context)
+    if getattr(runtime, "is_docx", False) or getattr(runtime, "parsed_pdf", None) is None:
+        return OperationResult(status="INCONCLUSIVE")
+
+    document = getattr(runtime, "document", None)
+    mapped_value = str(getattr(document, "meta_cmm_number", "") or "").strip()
+    if not mapped_value:
+        return OperationResult(status="INCONCLUSIVE")
+
+    entities = getattr(runtime, "client_entities", None)
+    pattern_source = entities.get("cmm_number") if isinstance(entities, Mapping) else None
+    if not isinstance(pattern_source, str) or not pattern_source:
+        raise ValueError("cmm_mapping_consistency requires the cmm_number mapping entity")
+    pattern = re.compile(pattern_source)
+    if pattern.groups < 1:
+        raise ValueError("cmm_number mapping entity must define a capture group")
+
+    values_by_page: dict[int, set[str]] = defaultdict(set)
+    for target in getattr(context, "targets", ()):
+        page_number = getattr(target, "raw_page", None)
+        text = getattr(target, "text", None)
+        if not isinstance(page_number, int) or not isinstance(text, str):
+            continue
+        values_by_page[page_number].update(
+            match.group(1).strip().upper()
+            for match in pattern.finditer(text)
+            if match.group(1).strip()
+        )
+
+    values_by_page = {
+        page: values
+        for page, values in values_by_page.items()
+        if len(values) == 1
+    }
+    if not values_by_page:
+        return OperationResult(
+            status="INCONCLUSIVE",
+            expected=mapped_value,
+            message="Aucun numero CMM non ambigu detecte dans les pieds de page.",
+        )
+
+    counts = Counter(next(iter(values)) for values in values_by_page.values())
+    dominant_value, dominant_count = counts.most_common(1)[0]
+    sample_size = len(values_by_page)
+    is_mapping_suspect = (
+        not _cmm_mapping_values_match(mapped_value, dominant_value)
+        and dominant_count * 100 >= sample_size * 90
+    )
+    first_dominant_page = next(
+        page for page, values in values_by_page.items() if next(iter(values)) == dominant_value
+    )
+    return OperationResult(
+        status="FAIL" if is_mapping_suspect else "PASS",
+        severity="warning" if is_mapping_suspect else None,
+        observed=dominant_value,
+        expected=mapped_value,
+        page=first_dominant_page,
+        message=(
+            "Le numero CMM dominant des pieds de page differe du mapping."
+            if is_mapping_suspect
+            else None
+        ),
+    )
+
+
 def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> bool:
     if page.page_height <= 0 or line.bbox[3] > page.page_height * 0.15:
         return False
@@ -2438,6 +2535,20 @@ def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> boo
     if not line_spans or not body_font_sizes:
         return True
     return median(span.size for span in line_spans) < median(body_font_sizes) * 0.85
+
+
+def _pdf_bookmark_titles_match(title: str, candidate: str) -> bool:
+    normalized_title = re.sub(r"[\W_]+", "", title.casefold())
+    normalized_candidate = re.sub(r"[\W_]+", "", candidate.casefold())
+    if not normalized_title or not normalized_candidate:
+        return False
+    if normalized_title == normalized_candidate:
+        return True
+    if min(len(normalized_title), len(normalized_candidate)) < 8:
+        return False
+    if re.findall(r"\d+", title) != re.findall(r"\d+", candidate):
+        return False
+    return SequenceMatcher(None, normalized_title, normalized_candidate).ratio() >= 0.88
 
 
 def _pdf_bookmark_findings(
@@ -2519,8 +2630,21 @@ def _pdf_bookmark_findings(
             ]
             page_text = " ".join(" ".join(page_body_lines).split()).casefold()
         else:
+            page_body_lines = (
+                [line.text for line in page.lines] if page.lines else page.text.splitlines()
+            )
             page_text = " ".join(page.text.split()).casefold()
         if title in page_text:
+            continue
+        title_lines = (
+            [
+                line.text for line in page.lines
+                if not _pdf_bookmark_line_is_running_header(page, line)
+            ]
+            if page.lines and page.page_height > 0
+            else page_body_lines
+        )
+        if any(_pdf_bookmark_titles_match(title, line) for line in title_lines):
             continue
         findings.append(
             OperationResult(
@@ -2929,6 +3053,10 @@ PDF_BOOKMARKS = ClientOperation(
     execute=_evaluate_pdf_bookmarks,
     suggestions=_suggest_pdf_bookmarks,
 )
+CMM_MAPPING_CONSISTENCY = ClientOperation(
+    name="cmm_mapping_consistency",
+    execute=_evaluate_cmm_mapping_consistency,
+)
 OPERATIONS = {
     operation.name: operation
     for operation in (
@@ -2943,5 +3071,6 @@ OPERATIONS = {
         DOCUMENT_STRUCTURE,
         VENDOR_CODE_LIST,
         PDF_BOOKMARKS,
+        CMM_MAPPING_CONSISTENCY,
     )
 }

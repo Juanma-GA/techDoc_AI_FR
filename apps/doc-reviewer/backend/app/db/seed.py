@@ -70,12 +70,27 @@ def sync_custom_standards(
                 )
             )
             if version is None:
+                defaults_by_version = spec.get(
+                    "default_disabled_rule_codes_by_version",
+                    {},
+                )
+                default_disabled_rule_codes = sorted(
+                    {
+                        str(code)
+                        for code in defaults_by_version.get(version_label, [])
+                        if str(code).strip()
+                    }
+                )
                 db.add(
                     StandardVersion(
                         standard_id=standard.id,
                         label=version_label,
                         builtin=True,
                         catalog_json=payload,
+                        disabled_rule_codes=json.dumps(
+                            default_disabled_rule_codes,
+                            ensure_ascii=False,
+                        ),
                     )
                 )
                 changed += 1

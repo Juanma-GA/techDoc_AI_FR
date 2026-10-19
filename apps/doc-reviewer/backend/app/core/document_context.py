@@ -8,8 +8,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.checks.client_bundle import ClientMapping
+from app.core.demo_mode import get_demo_enabled
 from app.db.models import AppConfig
-
 
 REQUIRED_DOCUMENT_CONTEXT_FIELDS = (
     "meta_revision_date",
@@ -27,6 +27,15 @@ DOCUMENT_CONTEXT_FIELDS = REQUIRED_DOCUMENT_CONTEXT_FIELDS + (
 )
 
 _DOCUMENT_CONTEXT_DEFAULTS_KEY = "document.context_defaults"
+_DEMO_DOCUMENT_CONTEXT_DEFAULTS_KEY = "document.context_defaults.demo"
+DEMO_DOCUMENT_CONTEXT_DEFAULTS: dict[str, Any] = {
+    "meta_revision_date": "JUL 27/26",
+    "meta_cmm_number": "80-80-01",
+    "meta_first_issue_date": "JUL 25/95",
+    "meta_revision_number": "01",
+    "meta_pnr_number": ["1-900-SB"],
+    "document_language": "en",
+}
 DOCUMENT_MANUFACTURERS = ("Airbus", "Boeing")
 DEFAULT_DOCUMENT_MANUFACTURER = "Airbus"
 
@@ -78,7 +87,22 @@ def get_document_context_defaults(
         }
         allowed_fields = set(mapping.fields)
 
-    row = db.get(AppConfig, _DOCUMENT_CONTEXT_DEFAULTS_KEY)
+    demo_enabled = get_demo_enabled(db)
+    if demo_enabled:
+        defaults.update(
+            {
+                field: value
+                for field, value in DEMO_DOCUMENT_CONTEXT_DEFAULTS.items()
+                if field in allowed_fields
+            }
+        )
+
+    defaults_key = (
+        _DEMO_DOCUMENT_CONTEXT_DEFAULTS_KEY
+        if demo_enabled
+        else _DOCUMENT_CONTEXT_DEFAULTS_KEY
+    )
+    row = db.get(AppConfig, defaults_key)
     if row is None or not row.value:
         return defaults
     try:
@@ -143,9 +167,14 @@ def save_document_context_defaults(
         else:
             current[field] = value
     serialized = json.dumps(current, ensure_ascii=False, sort_keys=True)
-    row = db.get(AppConfig, _DOCUMENT_CONTEXT_DEFAULTS_KEY)
+    defaults_key = (
+        _DEMO_DOCUMENT_CONTEXT_DEFAULTS_KEY
+        if get_demo_enabled(db)
+        else _DOCUMENT_CONTEXT_DEFAULTS_KEY
+    )
+    row = db.get(AppConfig, defaults_key)
     if row is None:
-        db.add(AppConfig(key=_DOCUMENT_CONTEXT_DEFAULTS_KEY, value=serialized))
+        db.add(AppConfig(key=defaults_key, value=serialized))
     else:
         row.value = serialized
     db.commit()

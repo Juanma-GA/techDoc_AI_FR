@@ -17,7 +17,7 @@ Les règles communes s'appliquent à tous les POCs. Chaque app déclare explicit
 
 | Profil | Obligations supplémentaires |
 |---|---|
-| `local-first` | SQLite local, React/Vite buildé, bind `127.0.0.1` |
+| `local-first` | Persistance locale si nécessaire, React/Vite buildé, bind `127.0.0.1` |
 | `llm` | Pour les apps qui appellent une IA : Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
 | `files` | Validation MIME/taille, stockage sous `data/storage`, SHA-256 et versionnage |
 | `production` | Hors scope POC : PostgreSQL, authentification, déploiement et contrôles d'exploitation dédiés |
@@ -85,6 +85,12 @@ internal-poc-monorepo/
 ## 3. Backend
 
 ### 3.1 Stack
+
+**Stack par défaut du template**, non une obligation de réécrire un backend existant.
+Les apps Go sont prises en charge avec leur propre compilation, tests et packaging,
+sans ajout de Python. Les autres stacks nécessitent un adaptateur explicite.
+Les contrats transverses restent communs ; les écarts backend conservés sont déclarés
+dans le README de l'app. Voir [stacks et desktop](docs/standards/desktop-and-stacks.md).
 
 | Couche | Choix | Version |
 |---|---|---|
@@ -532,7 +538,7 @@ while (true) {
 `scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM et 1 de robustesse du launcher (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
-1. Préfixe `/api/v1/` monté dans chaque `apps/*/backend/app/main.py`.
+1. Préfixe `/api/v1/` monté dans chaque backend : routeur FastAPI ou groupe Gin pour Go.
 2. Absence de `console.log` dans `apps/*/frontend/src/`.
 3. Absence de `print(` dans `apps/*/backend/app/`.
 4. Absence de hex en dur hors `tokens.json` / `tailwind-preset.ts` / `theme.css`.
@@ -552,6 +558,13 @@ while (true) {
 ## 9. Lanceurs locaux et packaging
 
 Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/` :
+
+Les commandes Python ci-dessous s'appliquent au template FastAPI. Un backend Go
+utilise son binaire et un packager Node ; le frontend peut être embarqué via
+`go:embed`. Un helper Node partagé peut réaliser le rebuild conditionnel sur les
+deux OS, en surveillant aussi UI, tokens et lockfile racine. Les mêmes contraintes
+de port local, logs d'erreur, installation conditionnelle et exclusion des données
+s'appliquent. Tauri est optionnel et ne remplace jamais le mode web.
 
 | Fichier | Rôle |
 |---|---|
@@ -732,10 +745,10 @@ const fire = () => {
 ### Méthode recommandée — script d'instanciation
 
 ```bash
-bash scripts/new_poc.sh <slug> [<port>]
+node scripts/new_poc.mjs <slug> [<port>] [--desktop] [--dry-run]
 ```
 
-Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
+Le script Node `scripts/new_poc.mjs` (wrapper Bash `new_poc.sh` conservé) automatise les substitutions et :
 
 - Vérifie que `<slug>` est en kebab-case et que `apps/<slug>/` n'existe pas.
 - Choisit automatiquement le prochain port libre dès 8000 si le 2e argument est omis (sinon vérifie qu'il n'est pas déjà pris par un autre POC).
@@ -756,7 +769,9 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 
 ### Méthode manuelle (fallback)
 
-Si `scripts/new_poc.sh` n'est pas utilisable (système sans bash, debug du script), les substitutions à faire à la main sont :
+Sans Bash, utiliser directement Node. L'option `--desktop` instancie le catalogue
+`apps/_template/desktop` avec les mêmes identité, backend HTTP et UI que le web.
+Les validations restent à exécuter après génération. En fallback manuel :
 
 1. `cp -r apps/_template apps/<slug>`.
 2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/frontend/src/App.tsx` (`<span>` brand), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
