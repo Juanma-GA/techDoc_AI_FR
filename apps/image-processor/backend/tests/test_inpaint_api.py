@@ -27,7 +27,7 @@ def test_inpaint_route_proxies_image_and_mask_to_lama(client: TestClient, monkey
     monkeypatch.setattr("app.api.inpaint.requests.post", lambda *args, **kwargs: upstream_response)
 
     response = client.post(
-        "/api/v1/image-replace/inpaint",
+        "/api/v1/image-processor/inpaint",
         files={
             "image": ("source.png", b"synthetic-image", "image/png"),
             "mask": ("mask.png", b"synthetic-mask", "image/png"),
@@ -49,7 +49,7 @@ def test_inpaint_route_reports_unavailable_lama_service(client: TestClient, monk
 
     monkeypatch.setattr("app.api.inpaint.requests.post", raise_connection_error)
     response = client.post(
-        "/api/v1/image-replace/inpaint",
+        "/api/v1/image-processor/inpaint",
         files={
             "image": ("source.png", b"synthetic-image", "image/png"),
             "mask": ("mask.png", b"synthetic-mask", "image/png"),

@@ -17,7 +17,7 @@ from app.services.image_naming import history_filename, workspace_filename
 from app.services.workspace_storage import persist_state, purge_assets, restore_state
 from app.workspace_schemas import HistoryDetail, HistoryPage, HistorySummary, WorkspaceState
 
-router = APIRouter(prefix="/image-replace/history", tags=["history"])
+router = APIRouter(prefix="/image-processor/history", tags=["history"])
 log = structlog.get_logger(__name__)
 
 

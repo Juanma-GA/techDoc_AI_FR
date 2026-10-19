@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Image Replace",
+    "title": "Image Processor",
     "version": "0.1.0",
     "description": "Détection OCR et remplacement local de texte dans les images."
   },

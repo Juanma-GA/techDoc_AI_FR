@@ -48,21 +48,21 @@ export type HistoryDetail = HistorySummary & { state: WorkspaceSnapshot };
 export type HistoryPage = { items: HistorySummary[]; next_cursor: string | null };
 
 export const workspaceApi = {
-  readExcel: () => api<ExcelPreset>("/image-replace/workspace/excel"),
+  readExcel: () => api<ExcelPreset>("/image-processor/workspace/excel"),
   saveExcel: (state: ExcelPreset) =>
-    api<ExcelPreset>("/image-replace/workspace/excel", {
+    api<ExcelPreset>("/image-processor/workspace/excel", {
       method: "PUT",
       body: JSON.stringify(state),
     }),
   list: (cursor: string | null) =>
-    api<HistoryPage>(`/image-replace/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
-  read: (id: string) => api<HistoryDetail>(`/image-replace/history/${id}`),
+    api<HistoryPage>(`/image-processor/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`),
+  read: (id: string) => api<HistoryDetail>(`/image-processor/history/${id}`),
   save: (id: string, state: WorkspaceSnapshot) =>
-    api<HistorySummary>(`/image-replace/history/${id}`, {
+    api<HistorySummary>(`/image-processor/history/${id}`, {
       method: "PUT",
       body: JSON.stringify(state),
     }),
-  remove: (id: string) => apiDelete(`/image-replace/history/${id}`),
+  remove: (id: string) => apiDelete(`/image-processor/history/${id}`),
 };
 
 const storedFiles = new WeakMap<File, Promise<StoredFile>>();

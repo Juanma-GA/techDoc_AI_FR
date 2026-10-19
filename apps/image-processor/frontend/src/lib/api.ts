@@ -59,7 +59,7 @@ export async function apiForm<T>(path: string, formData: FormData): Promise<T> {
 }
 
 async function exportImage(formData: FormData): Promise<{ blob: Blob; filename: string }> {
-  const response = await formResponse("/image-replace/export", formData);
+  const response = await formResponse("/image-processor/export", formData);
   const encodedName = response.headers.get("Content-Disposition")?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   if (!encodedName || response.headers.get("Content-Type")?.split(";")[0] !== "image/jpeg") {
     throw new Error("The server returned an invalid JPEG download.");
@@ -142,15 +142,15 @@ export const settingsApi = {
 export const imageReplaceApi = {
   exportImage,
   excelSheets: (formData: FormData) =>
-    apiForm<{ sheets: string[] }>("/image-replace/excel/sheets", formData),
+    apiForm<{ sheets: string[] }>("/image-processor/excel/sheets", formData),
   excelColumns: (formData: FormData) =>
-    apiForm<{ columns: ExcelColumnDto[] }>("/image-replace/excel/columns", formData),
+    apiForm<{ columns: ExcelColumnDto[] }>("/image-processor/excel/columns", formData),
   excelPieces: (formData: FormData) =>
-    apiForm<{ pieces: ExcelPieceDto[] }>("/image-replace/excel/pieces", formData),
+    apiForm<{ pieces: ExcelPieceDto[] }>("/image-processor/excel/pieces", formData),
   excelPairs: (formData: FormData) =>
-    apiForm<{ pairs: ExcelReplacementPairDto[] }>("/image-replace/excel/pairs", formData),
+    apiForm<{ pairs: ExcelReplacementPairDto[] }>("/image-processor/excel/pairs", formData),
   runOcr: (formData: FormData) =>
-    apiForm<OcrResultDto>("/image-replace/ocr", formData),
+    apiForm<OcrResultDto>("/image-processor/ocr", formData),
   inpaint: (formData: FormData) =>
-    apiForm<{ edited_image: string }>("/image-replace/inpaint", formData),
+    apiForm<{ edited_image: string }>("/image-processor/inpaint", formData),
 };

@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from app.config import settings
 from app.services.constants import LAMA_SERVICE_TIMEOUT, MAX_IMAGE_BYTES
 
-router = APIRouter(prefix="/image-replace", tags=["image-replace"])
+router = APIRouter(prefix="/image-processor", tags=["image-processor"])
 log = structlog.get_logger(__name__)
 
 

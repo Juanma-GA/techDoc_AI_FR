@@ -32,15 +32,15 @@ export async function mockWorkspace(page: Page, initialPreset = emptyPreset) {
     const path = new URL(request.url()).pathname;
     const method = request.method();
     if (path === "/api/v1/settings") return route.fulfill({ json: { demo_enabled: false } });
-    if (path === "/api/v1/image-replace/workspace/excel") {
+    if (path === "/api/v1/image-processor/workspace/excel") {
       if (method === "PUT") preset = request.postDataJSON();
       return route.fulfill({ json: preset });
     }
-    if (path === "/api/v1/image-replace/history") {
+    if (path === "/api/v1/image-processor/history") {
       const items = [...entries.values()].map(({ state: _state, ...metadata }) => metadata);
       return route.fulfill({ json: { items, next_cursor: null } });
     }
-    const id = path.match(/^\/api\/v1\/image-replace\/history\/([^/]+)$/)?.[1];
+    const id = path.match(/^\/api\/v1\/image-processor\/history\/([^/]+)$/)?.[1];
     if (id) {
       if (method === "PUT") {
         const state: WorkspaceSnapshot = request.postDataJSON();

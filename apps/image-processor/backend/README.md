@@ -1,4 +1,4 @@
-# Image Replace — backend
+# Image Processor — backend
 
 FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog. Squelette minimal qui démarre, expose `/api/v1/health` et passe le test pytest.
 
@@ -32,7 +32,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Migration `0002_workspaces` adds `excel_preset`, `image_history`, and `file_asset`.
 - Backend tests use isolated SQLite databases and temporary synthetic-file storage.
   Never point test commands or migration checks at user data.
-- `POST /api/v1/image-replace/export` converts the current image to an A4/300 dpi
+- `POST /api/v1/image-processor/export` converts the current image to an A4/300 dpi
   JPEG and returns the selected Excel ICN as the download filename, without suffixes.
   It uses the same filename sanitization as OCR and history. History caches the
   output name in snapshot metadata; older snapshots derive it from their analysis

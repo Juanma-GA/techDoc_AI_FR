@@ -18,7 +18,7 @@ describe("JPEG download contract", () => {
     expect(exported.filename).toBe("ICN-é.jpg");
     const saved = await storeFile(new File([exported.blob], exported.filename, { type: exported.blob.type }));
     expect(saved.data_url).toBe("data:image/jpeg;base64,/9j/2Q==");
-    expect(fetch).toHaveBeenCalledWith("/api/v1/image-replace/export", { method: "POST", body: form });
+    expect(fetch).toHaveBeenCalledWith("/api/v1/image-processor/export", { method: "POST", body: form });
   });
 
   const invalidHeaders: HeadersInit[] = [

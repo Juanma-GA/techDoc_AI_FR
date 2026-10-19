@@ -133,7 +133,7 @@ def test_ocr_route_combines_manual_and_excel_pairs(
     monkeypatch.setattr("app.api.ocr.run_ocr_on_image", fake_ocr)
 
     response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files={
             "image": ("source.png", image.getvalue(), "image/png"),
             "workbook": (
@@ -211,7 +211,7 @@ def test_ocr_route_uses_edited_and_removed_excel_pairs(
     }
 
     edited_response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files=files,
         data={
             **excel_selection,
@@ -219,7 +219,7 @@ def test_ocr_route_uses_edited_and_removed_excel_pairs(
         },
     )
     removed_response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files=files,
         data={**excel_selection, "excel_replacement_pairs": "[]"},
     )
@@ -232,7 +232,7 @@ def test_ocr_route_uses_edited_and_removed_excel_pairs(
 
 def test_ocr_route_rejects_non_image_upload(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files={"image": ("notes.txt", b"synthetic text", "text/plain")},
     )
 

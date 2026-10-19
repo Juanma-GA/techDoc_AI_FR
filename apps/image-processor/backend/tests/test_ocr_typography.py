@@ -11,7 +11,7 @@ from PIL import Image, ImageChops
 
 from app.services.constants import A4_HEIGHT, A4_WIDTH, MAX_REPLACEMENT_FONT_SIZE
 
-BASE = "/api/v1/image-replace/ocr"
+BASE = "/api/v1/image-processor/ocr"
 
 
 def _prediction(texts, boxes):
@@ -93,7 +93,7 @@ def test_history_keeps_font_metadata_and_accepts_older_analysis(
         analysis["replacement_font_size"] = font_size
     workspace_state["revisions"][0]["analysis"] = analysis
     entry_id = str(uuid4())
-    response = workspace_client.put(f"/api/v1/image-replace/history/{entry_id}", json=workspace_state)
+    response = workspace_client.put(f"/api/v1/image-processor/history/{entry_id}", json=workspace_state)
     assert response.status_code == 200
-    restored = workspace_client.get(f"/api/v1/image-replace/history/{entry_id}").json()
+    restored = workspace_client.get(f"/api/v1/image-processor/history/{entry_id}").json()
     assert restored["state"]["revisions"][0]["analysis"]["replacement_font_size"] == font_size

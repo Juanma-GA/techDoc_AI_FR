@@ -7,7 +7,7 @@ from hashlib import sha256
 
 import pytest
 
-BASE = "/api/v1/image-replace/workspace/excel"
+BASE = "/api/v1/image-processor/workspace/excel"
 
 
 def test_empty_startup_preferences(workspace_client) -> None:

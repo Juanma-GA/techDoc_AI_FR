@@ -10,7 +10,7 @@ from app.db.session import get_db
 from app.services.workspace_storage import persist_state, purge_assets, restore_state
 from app.workspace_schemas import ExcelPresetState
 
-router = APIRouter(prefix="/image-replace/workspace", tags=["workspace"])
+router = APIRouter(prefix="/image-processor/workspace", tags=["workspace"])
 PRESET_ID = "c4c975cb-d58a-46c4-8d24-466bf86d95e0"
 
 

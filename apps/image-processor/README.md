@@ -1,4 +1,4 @@
-# Image Replace
+# Image Processor
 
 ## Auth
 
@@ -71,7 +71,7 @@ Run `bash start.sh`. The launcher starts the LaMa service alongside the API and 
 Run `start.bat` once to create and install the two Python environments. Stop its API window; the already-running LaMa service may be reused. From the repository root, run:
 
 ```bash
-pnpm dev:image-replace
+pnpm dev:image-processor
 ```
 
 The command starts the API, LaMa (or reuses its local health endpoint), and Vite. Vite proxies `/api` to the API on port `8010`.
@@ -119,19 +119,19 @@ Not applicable. No remote LLM is used. PaddleOCR and LaMa are local model workfl
 ## API
 
 - `GET /api/v1/health`
-- `POST /api/v1/image-replace/excel/sheets`
-- `POST /api/v1/image-replace/excel/columns`
-- `POST /api/v1/image-replace/excel/pieces`
-- `POST /api/v1/image-replace/excel/pairs`
-- `POST /api/v1/image-replace/ocr`
-- `POST /api/v1/image-replace/inpaint`
-- `POST /api/v1/image-replace/export` (ICN-named A4/300 dpi JPEG)
-- `GET /api/v1/image-replace/workspace/excel`
-- `PUT /api/v1/image-replace/workspace/excel`
-- `GET /api/v1/image-replace/history` (cursor-paginated, without image payloads)
-- `GET /api/v1/image-replace/history/{uuid}`
-- `PUT /api/v1/image-replace/history/{uuid}`
-- `DELETE /api/v1/image-replace/history/{uuid}`
+- `POST /api/v1/image-processor/excel/sheets`
+- `POST /api/v1/image-processor/excel/columns`
+- `POST /api/v1/image-processor/excel/pieces`
+- `POST /api/v1/image-processor/excel/pairs`
+- `POST /api/v1/image-processor/ocr`
+- `POST /api/v1/image-processor/inpaint`
+- `POST /api/v1/image-processor/export` (ICN-named A4/300 dpi JPEG)
+- `GET /api/v1/image-processor/workspace/excel`
+- `PUT /api/v1/image-processor/workspace/excel`
+- `GET /api/v1/image-processor/history` (cursor-paginated, without image payloads)
+- `GET /api/v1/image-processor/history/{uuid}`
+- `PUT /api/v1/image-processor/history/{uuid}`
+- `DELETE /api/v1/image-processor/history/{uuid}`
 - `GET /api/v1/admin/stats`
 - `POST /api/v1/admin/reset/history`
 - `POST /api/v1/admin/reset/all`

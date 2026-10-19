@@ -33,7 +33,7 @@ from app.services.ocr_engine import (
 )
 from app.services.ocr_inference import run_ocr_on_image
 
-router = APIRouter(prefix="/image-replace", tags=["image-replace"])
+router = APIRouter(prefix="/image-processor", tags=["image-processor"])
 log = structlog.get_logger(__name__)
 
 

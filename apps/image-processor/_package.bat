@@ -2,12 +2,12 @@
 chcp 65001 >nul
 setlocal
 
-REM Logique reelle du packaging - delegue a scripts\package_image-replace.py.
-REM Pour un nouveau POC : remplace image-replace par le nom du POC.
+REM Logique reelle du packaging - delegue a scripts\package_image-processor.py.
+REM Pour un nouveau POC : remplace image-processor par le nom du POC.
 cd /d "%~dp0..\.."
 
 echo ============================================================
-echo  image-replace - Generation du package partageable
+echo  image-processor - Generation du package partageable
 echo ============================================================
 echo.
 
@@ -18,7 +18,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python scripts\package_image-replace.py --out apps\image-replace\dist
+python scripts\package_image-processor.py --out apps\image-processor\dist
 if errorlevel 1 (
     echo.
     echo [erreur] Packaging echoue.
@@ -26,4 +26,4 @@ if errorlevel 1 (
 )
 
 echo.
-echo [info] Packaging termine. ZIP dans apps\image-replace\dist\.
+echo [info] Packaging termine. ZIP dans apps\image-processor\dist\.

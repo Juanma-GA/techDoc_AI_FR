@@ -11,7 +11,7 @@ from app.services.excel import (
     read_excel_upload,
 )
 
-router = APIRouter(prefix="/image-replace/excel", tags=["image-replace"])
+router = APIRouter(prefix="/image-processor/excel", tags=["image-processor"])
 
 
 @router.post("/sheets")

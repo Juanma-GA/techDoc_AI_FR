@@ -35,7 +35,7 @@ def _excel_upload(data: bytes) -> dict[str, tuple[str, bytes, str]]:
 
 def test_excel_sheet_route_lists_workbook_sheets(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/image-replace/excel/sheets",
+        "/api/v1/image-processor/excel/sheets",
         files=_excel_upload(_workbook_bytes()),
     )
 
@@ -45,7 +45,7 @@ def test_excel_sheet_route_lists_workbook_sheets(client: TestClient) -> None:
 
 def test_excel_columns_route_returns_header_names(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/image-replace/excel/columns",
+        "/api/v1/image-processor/excel/columns",
         files=_excel_upload(_workbook_bytes()),
         data={"sheet_name": "Repères"},
     )
@@ -61,7 +61,7 @@ def test_excel_columns_route_returns_header_names(client: TestClient) -> None:
 
 def test_excel_pieces_route_lists_only_section_headers(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/image-replace/excel/pieces",
+        "/api/v1/image-processor/excel/pieces",
         files=_excel_upload(_workbook_bytes()),
         data={"sheet_name": "Repères", "reference_column": "1", "piece_column": "5"},
     )
@@ -77,7 +77,7 @@ def test_excel_pieces_route_lists_only_section_headers(client: TestClient) -> No
 
 def test_excel_pairs_route_extracts_selected_piece_pairs(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/image-replace/excel/pairs",
+        "/api/v1/image-processor/excel/pairs",
         files=_excel_upload(_workbook_bytes()),
         data={
             "excel_sheet": "Repères",

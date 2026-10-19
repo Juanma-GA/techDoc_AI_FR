@@ -9,7 +9,7 @@ import pytest
 
 from app.config import settings
 
-BASE = "/api/v1/image-replace/history"
+BASE = "/api/v1/image-processor/history"
 
 
 def files() -> list[Path]:
@@ -53,7 +53,7 @@ def test_saved_checksum_is_checked_on_restore(workspace_client, workspace_state)
 
 
 def test_reset_deletes_all_saved_files(workspace_client, workspace_state, excel_preset) -> None:
-    workspace_client.put("/api/v1/image-replace/workspace/excel", json=excel_preset)
+    workspace_client.put("/api/v1/image-processor/workspace/excel", json=excel_preset)
     workspace_client.put(f"{BASE}/{uuid4()}", json=workspace_state)
     assert len(files()) == 3
     assert workspace_client.post("/api/v1/admin/reset/all").status_code == 200

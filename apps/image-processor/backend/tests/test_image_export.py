@@ -11,7 +11,7 @@ from PIL import Image
 
 from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH, MAX_IMAGE_BYTES
 
-BASE = "/api/v1/image-replace/export"
+BASE = "/api/v1/image-processor/export"
 
 
 def _image(workspace_state):

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    app_name: str = "Image Replace"
+    app_name: str = "Image Processor"
     app_version: str = "0.1.0"
     debug: bool = False
     log_level: str = "INFO"

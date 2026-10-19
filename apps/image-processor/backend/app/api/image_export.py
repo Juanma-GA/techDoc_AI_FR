@@ -13,7 +13,7 @@ from app.services.image_layout import export_jpeg, output_filename
 from app.services.image_naming import excel_output_filename
 from app.workspace_schemas import ExcelWorkspaceState
 
-router = APIRouter(prefix="/image-replace", tags=["image-replace"])
+router = APIRouter(prefix="/image-processor", tags=["image-processor"])
 
 
 @router.post("/export", response_class=Response)

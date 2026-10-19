@@ -9,10 +9,10 @@ set "BACKEND_DIR=%APP_DIR%backend"
 set "LAMA_DIR=%BACKEND_DIR%\lama_service"
 set "FRONTEND_DIR=%APP_DIR%frontend"
 echo ============================================================
-echo  image-replace - Local launch
+echo  image-processor - Local launch
 echo ============================================================
 set "MAIN_PY=%REPO_ROOT%\python-embed\python.exe"
-set "MAIN_MARK=%REPO_ROOT%\python-embed\.image-replace-installed"
+set "MAIN_MARK=%REPO_ROOT%\python-embed\.image-processor-installed"
 if not exist "%MAIN_PY%" (
     set "MAIN_BASE_PY="
     where py >nul 2>nul
@@ -25,7 +25,7 @@ if not exist "%MAIN_PY%" (
         if errorlevel 1 goto :setup_error
     )
     set "MAIN_PY=%BACKEND_DIR%\.venv\Scripts\python.exe"
-    set "MAIN_MARK=%BACKEND_DIR%\.venv\.image-replace-installed"
+    set "MAIN_MARK=%BACKEND_DIR%\.venv\.image-processor-installed"
 )
 if not exist "%MAIN_MARK%" (
     echo [setup] Installing PaddleOCR backend dependencies...
@@ -36,7 +36,7 @@ if not exist "%MAIN_MARK%" (
     type nul > "%MAIN_MARK%"
 )
 set "LAMA_PY=%REPO_ROOT%\python-embed-lama\python.exe"
-set "LAMA_MARK=%REPO_ROOT%\python-embed-lama\.image-replace-lama-installed"
+set "LAMA_MARK=%REPO_ROOT%\python-embed-lama\.image-processor-lama-installed"
 if not exist "%LAMA_PY%" (
     set "LAMA_BASE_PY="
     where py >nul 2>nul
@@ -58,7 +58,7 @@ if not exist "%LAMA_PY%" (
         if errorlevel 1 goto :setup_error
     )
     set "LAMA_PY=%LAMA_DIR%\.venv\Scripts\python.exe"
-    set "LAMA_MARK=%LAMA_DIR%\.venv\.image-replace-lama-installed"
+    set "LAMA_MARK=%LAMA_DIR%\.venv\.image-processor-lama-installed"
 )
 if not exist "%LAMA_MARK%" (
     echo [setup] Installing local LaMa dependencies...
@@ -111,7 +111,7 @@ goto :find_lama_port
 set "LAMA_PORT=%LAMA_TRY%"
 if "%LAMA_REUSE%"=="0" (
     echo [run] Starting local LaMa service on port %LAMA_PORT%...
-    start "image-replace LaMa" /D "%LAMA_DIR%" cmd /k ""%LAMA_PY%" -m uvicorn app:app --host 127.0.0.1 --port %LAMA_PORT%"
+    start "image-processor LaMa" /D "%LAMA_DIR%" cmd /k ""%LAMA_PY%" -m uvicorn app:app --host 127.0.0.1 --port %LAMA_PORT%"
     set "LAMA_READY=0"
     for /L %%I in (1,1,180) do (
         curl.exe -fsS --max-time 2 http://127.0.0.1:%LAMA_PORT%/health >nul 2>&1

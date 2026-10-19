@@ -7,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-BASE = "/api/v1/image-replace/history"
-PRESET = "/api/v1/image-replace/workspace/excel"
+BASE = "/api/v1/image-processor/history"
+PRESET = "/api/v1/image-processor/workspace/excel"
 
 
 def test_full_history_restores_all_state(workspace_client, workspace_state) -> None:

@@ -1,11 +1,11 @@
-"""Package the Image Replace app into a standalone Windows zip.
+"""Package the Image Processor app into a standalone Windows zip.
 
 The archive contains separate Python runtimes for PaddleOCR and LaMa. Dependency
 installation and model downloads occur on first use; inference remains local.
 
 Layout of the produced archive (with `--embed-python`, default ON):
 
-    image-replace-vX.Y.Z-YYYYMMDD/
+    image-processor-vX.Y.Z-YYYYMMDD/
     ├── start.bat               # one-click launcher → calls apps/<poc>/start.bat
     ├── LISEZ-MOI.txt           # quick-start FR for the colleague
     ├── PACKAGE_README.md       # detailed reference
@@ -16,9 +16,9 @@ Layout of the produced archive (with `--embed-python`, default ON):
     └── python-embed-lama/      # bundled Python 3.11 for LaMa
 
 Usage:
-    python scripts/package_image-replace.py
-    python scripts/package_image-replace.py --version 0.2.0 --out dist
-    python scripts/package_image-replace.py --no-embed-python
+    python scripts/package_image-processor.py
+    python scripts/package_image-processor.py --version 0.2.0 --out dist
+    python scripts/package_image-processor.py --no-embed-python
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ import sys
 import zipfile
 from pathlib import Path
 
-from image_replace_package_runtime import prepare_embedded_python
+from image_processor_package_runtime import prepare_embedded_python
 
 # =====================================================================
 # Variables a adapter par POC :
-APP_NAME = "Image Replace"
-APP_SLUG = "image-replace"      # nom du dossier sous apps/
-EMBED_PREFIX = "image_replace"
+APP_NAME = "Image Processor"
+APP_SLUG = "image-processor"      # nom du dossier sous apps/
+EMBED_PREFIX = "image_processor"
 _OCR_PYTHON_VERSION = "3.13.15"
 _LAMA_PYTHON_VERSION = "3.11.9"
 # =====================================================================
@@ -56,13 +56,12 @@ _EXCLUDED_DIRS = {
     ".ruff_cache",
     "playwright-report",
     "test-results",
-    f"{APP_SLUG.replace('-', '_')}_backend.egg-info",
 }
 _EXCLUDED_SUFFIXES = {".pyc", ".pyo", ".log", ".zip"}
 
 
 def _should_skip(rel: Path) -> bool:
-    if any(part in _EXCLUDED_DIRS for part in rel.parts):
+    if any(part in _EXCLUDED_DIRS or part.endswith(".egg-info") for part in rel.parts):
         return True
     if rel.suffix.lower() in _EXCLUDED_SUFFIXES:
         return True

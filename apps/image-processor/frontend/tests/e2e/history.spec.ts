@@ -5,7 +5,7 @@ import { excelPreset, mockWorkspace, syntheticImages } from "./workspace-mock";
 test("resumes selective OCR and brush edits, undo and full history, but starts home fresh", async ({ page }, info) => {
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
   const storage = await mockWorkspace(page, excelPreset);
-  await page.route("**/image-replace/excel/pairs", (route) => route.fulfill({
+  await page.route("**/image-processor/excel/pairs", (route) => route.fulfill({
     json: { pairs: [{ reference: "R-1", replacement: "N-1" }, { reference: "R-2", replacement: "N-2" }] },
   }));
   await page.goto("/");
@@ -13,7 +13,7 @@ test("resumes selective OCR and brush edits, undo and full history, but starts h
   const [original, replaced, brushed] = await syntheticImages(page);
   const ocrImages: Buffer[] = [];
   const ocrPairs: string[] = [];
-  await page.route("**/image-replace/ocr", (route) => {
+  await page.route("**/image-processor/ocr", (route) => {
     ocrImages.push(route.request().postDataBuffer() ?? Buffer.alloc(0));
     ocrPairs.push(route.request().postData() ?? "");
     return route.fulfill({ json: {
@@ -23,7 +23,7 @@ test("resumes selective OCR and brush edits, undo and full history, but starts h
     } });
   });
   const brushInputs: Buffer[] = [];
-  await page.route("**/image-replace/inpaint", (route) => {
+  await page.route("**/image-processor/inpaint", (route) => {
     brushInputs.push(route.request().postDataBuffer() ?? Buffer.alloc(0));
     return route.fulfill({ json: { edited_image: brushed } });
   });
@@ -95,7 +95,7 @@ test("local-color brush becomes the next OCR source, in a narrow English light-t
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
   const [original] = await syntheticImages(page);
   const requests: Buffer[] = [];
-  await page.route("**/image-replace/ocr", (route) => {
+  await page.route("**/image-processor/ocr", (route) => {
     requests.push(route.request().postDataBuffer() ?? Buffer.alloc(0));
     return route.fulfill({ json: {
       width: 100, height: 80, source_width: 100, source_height: 80,

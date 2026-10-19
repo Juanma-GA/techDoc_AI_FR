@@ -14,7 +14,7 @@ const originalUrlMethodDescriptors = new Map(
   ]),
 );
 
-describe("Image Replace home workflow", () => {
+describe("Image Processor home workflow", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("fr");
     mockWorkspaceApi();

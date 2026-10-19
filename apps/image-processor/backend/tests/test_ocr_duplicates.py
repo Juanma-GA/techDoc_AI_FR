@@ -55,7 +55,7 @@ def test_ocr_maps_duplicate_manual_references_to_occurrences_in_order(
     )
 
     response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files={"image": ("source.png", _image_bytes(), "image/png")},
         data={
             "replacement_pairs": (
@@ -82,7 +82,7 @@ def test_ocr_allows_duplicate_references_across_manual_and_excel_pairs(
     )
 
     response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files={
             "image": ("source.png", _image_bytes(), "image/png"),
             "workbook": (
@@ -123,7 +123,7 @@ def test_ocr_applies_each_excel_marker_to_its_matching_occurrence(
     )
 
     response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files={
             "image": ("source.png", _image_bytes(), "image/png"),
             "workbook": (
@@ -165,7 +165,7 @@ def test_ocr_does_not_reuse_one_occurrence_for_multiple_excel_markers(
     )
 
     response = client.post(
-        "/api/v1/image-replace/ocr",
+        "/api/v1/image-processor/ocr",
         files={
             "image": ("source.png", _image_bytes(), "image/png"),
             "workbook": (

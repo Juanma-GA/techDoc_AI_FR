@@ -1,7 +1,7 @@
 [project]
-name = "image-replace-lama-service"
+name = "image-processor-lama-service"
 version = "0.1.0"
-description = "Local LaMa inpainting service for Image Replace"
+description = "Local LaMa inpainting service for Image Processor"
 requires-python = ">=3.10,<3.12"
 dependencies = [
     "fastapi>=0.115",

@@ -38,7 +38,7 @@ test("detection workflow uploads an image and displays OCR replacements", async 
   await page.route("**/api/v1/settings", (route) =>
     route.fulfill({ json: { demo_enabled: false } }),
   );
-  await page.route("**/api/v1/image-replace/ocr", (route) =>
+  await page.route("**/api/v1/image-processor/ocr", (route) =>
     route.fulfill({ json: ocrResult }),
   );
 
@@ -96,10 +96,10 @@ test("Excel upload exposes sheet, columns, and part selection", async ({ page })
   await page.route("**/api/v1/settings", (route) =>
     route.fulfill({ json: { demo_enabled: false } }),
   );
-  await page.route("**/api/v1/image-replace/excel/sheets", (route) =>
+  await page.route("**/api/v1/image-processor/excel/sheets", (route) =>
     route.fulfill({ json: { sheets: ["Repères"] } }),
   );
-  await page.route("**/api/v1/image-replace/excel/columns", (route) =>
+  await page.route("**/api/v1/image-processor/excel/columns", (route) =>
     route.fulfill({
       json: {
         columns: [
@@ -113,11 +113,11 @@ test("Excel upload exposes sheet, columns, and part selection", async ({ page })
     }),
   );
   const pieceRequestBodies: string[] = [];
-  await page.route("**/api/v1/image-replace/excel/pieces", (route) => {
+  await page.route("**/api/v1/image-processor/excel/pieces", (route) => {
     pieceRequestBodies.push(route.request().postData() ?? "");
     return route.fulfill({ json: { pieces: [{ row: 2, name: "Pompe A" }] } });
   });
-  await page.route("**/api/v1/image-replace/excel/pairs", (route) =>
+  await page.route("**/api/v1/image-processor/excel/pairs", (route) =>
     route.fulfill({
       json: {
         pairs: [

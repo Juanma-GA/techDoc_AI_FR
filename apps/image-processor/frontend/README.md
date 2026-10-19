@@ -1,4 +1,4 @@
-# Image Replace Frontend
+# Image Processor Frontend
 
 The editor uses one authoritative current image for OCR, both brush modes, download,
 and per-operation undo. `WorkflowProvider` keeps the active workspace mounted while
@@ -18,7 +18,7 @@ later OCR runs so selecting another reference cannot change the common size.
 Undoing back to the original clears it. Older histories without the field remain
 readable and estimate their font on the next replacement.
 
-Downloads POST the current image and Excel selection to `/image-replace/export`.
+Downloads POST the current image and Excel selection to `/image-processor/export`.
 The server supplies the authoritative ICN filename and real A4/300 dpi JPEG;
 the brush preview and undo revisions are not re-encoded. Preparation disables
 editing, and export errors are shown without starting a download.

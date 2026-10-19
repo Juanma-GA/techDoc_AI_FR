@@ -21,7 +21,7 @@ for (const mode of ["lama", "color"] as const) {
   test(`ICN names and real JPEG downloads survive ${mode} before/after OCR, history and undo`, async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
     const storage = await mockWorkspace(page, excelPreset);
-    await page.route("**/image-replace/excel/pairs", (route) => route.fulfill({
+    await page.route("**/image-processor/excel/pairs", (route) => route.fulfill({
       json: { pairs: [{ reference: "R-1", replacement: "N-1" }] },
     }));
     await page.goto("/");
@@ -40,7 +40,7 @@ for (const mode of ["lama", "color"] as const) {
     }, edited);
     const jpeg = Buffer.from(jpegUrl.split(",")[1]!, "base64");
     const exports: Buffer[] = [];
-    await page.route("**/image-replace/export", (route) => {
+    await page.route("**/image-processor/export", (route) => {
       exports.push(route.request().postDataBuffer() ?? Buffer.alloc(0));
       return route.fulfill({
         body: jpeg, headers: {
@@ -49,10 +49,10 @@ for (const mode of ["lama", "color"] as const) {
         },
       });
     });
-    await page.route("**/image-replace/inpaint", (route) => route.fulfill({
+    await page.route("**/image-processor/inpaint", (route) => route.fulfill({
       json: { edited_image: edited },
     }));
-    await page.route("**/image-replace/ocr", (route) => route.fulfill({ json: {
+    await page.route("**/image-processor/ocr", (route) => route.fulfill({ json: {
       width: 100, height: 80, source_width: 100, source_height: 80,
       full_text: "", lines: [], references: [], edited_image: edited, filename: "ICN-TEST.jpg",
     } }));
@@ -110,11 +110,11 @@ test("a failed JPEG export is visible and leaves the edited image unchanged", as
   await mockWorkspace(page);
   await page.goto("/");
   const [original] = await syntheticImages(page);
-  await page.route("**/image-replace/ocr", (route) => route.fulfill({ json: {
+  await page.route("**/image-processor/ocr", (route) => route.fulfill({ json: {
     width: 100, height: 80, source_width: 100, source_height: 80,
     full_text: "", lines: [], references: [], edited_image: original, filename: "ICN-TEST.jpg",
   } }));
-  await page.route("**/image-replace/export", (route) => route.fulfill({
+  await page.route("**/image-processor/export", (route) => route.fulfill({
     status: 500, json: { message: "Synthetic export failure." },
   }));
   await page.locator('input[accept^="image/"]').setInputFiles({

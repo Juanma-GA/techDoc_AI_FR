@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# image-replace local launcher: PaddleOCR on Python 3.13 and LaMa on 3.11.
+# image-processor local launcher: PaddleOCR on Python 3.13 and LaMa on 3.11.
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ LAMA_DIR="${BACKEND_DIR}/lama_service"
 FRONTEND_DIR="${APP_DIR}/frontend"
 
 echo "============================================================"
-echo " image-replace - Local launch"
+echo " image-processor - Local launch"
 echo "============================================================"
 
 if command -v python3.13 >/dev/null 2>&1; then
@@ -40,11 +40,11 @@ if [[ ! -x .venv/bin/python ]]; then
     "${MAIN_BASE_PYTHON}" -m venv .venv
 fi
 MAIN_PYTHON="${BACKEND_DIR}/.venv/bin/python"
-if [[ ! -f .venv/.image-replace-installed ]]; then
+if [[ ! -f .venv/.image-processor-installed ]]; then
     echo "[setup] Installing PaddleOCR backend dependencies..."
     "${MAIN_PYTHON}" -m pip install --upgrade pip setuptools wheel
     "${MAIN_PYTHON}" -m pip install --no-build-isolation -e .
-    touch .venv/.image-replace-installed
+    touch .venv/.image-processor-installed
 fi
 
 if [[ ! -x "${LAMA_DIR}/.venv/bin/python" ]]; then
@@ -52,11 +52,11 @@ if [[ ! -x "${LAMA_DIR}/.venv/bin/python" ]]; then
     python3.11 -m venv "${LAMA_DIR}/.venv"
 fi
 LAMA_PYTHON="${LAMA_DIR}/.venv/bin/python"
-if [[ ! -f "${LAMA_DIR}/.venv/.image-replace-lama-installed" ]]; then
+if [[ ! -f "${LAMA_DIR}/.venv/.image-processor-lama-installed" ]]; then
     echo "[setup] Installing local LaMa dependencies..."
     "${LAMA_PYTHON}" -m pip install --upgrade pip setuptools wheel
     "${LAMA_PYTHON}" -m pip install --no-build-isolation -e "${LAMA_DIR}"
-    touch "${LAMA_DIR}/.venv/.image-replace-lama-installed"
+    touch "${LAMA_DIR}/.venv/.image-processor-lama-installed"
 fi
 
 port_is_listening() {

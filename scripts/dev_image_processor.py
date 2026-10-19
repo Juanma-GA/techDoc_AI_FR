@@ -9,10 +9,10 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parent.parent
-APP = ROOT / "apps" / "image-replace"
+APP = ROOT / "apps" / "image-processor"
 BACKEND = APP / "backend"
 LAMA = BACKEND / "lama_service"
-FRONTEND_FILTER = "@apps/image-replace-frontend"
+FRONTEND_FILTER = "@apps/image-processor-frontend"
 API_PORT = 8010
 LAMA_PORT = 8011
 
