@@ -14,7 +14,7 @@ Identify and compare CATIA delivery data, validate imported structures, and run 
 - Filter optimized parts using the `X000` marker in the nomenclature.
 - Compare 2 to 10 nomenclature versions by SIN, either chronologically or against a selected reference.
 - Compare imports and verify naming, depth, duplication, and structure rules.
-- Compare old and new CATPart folders without filename matching. SHA-256 finds byte-identical files; CADMPEG geometry signatures only suggest candidate pairs for manual review.
+- Screen old and new CATPart folders using GE identifiers. Files with the same SIN and PN are shown as identical; GE files with a shared SIN but different PNs remain reviewable. The Excel workbook includes separate Solo A and Solo B sheets for GE SINs absent from the other folder.
 - Prepare CATPart-to-Composer conversion plans and execute selected conversions through `ComposerConverter.exe`.
 - Optimize a Composer parts folder by copying only `.smgXml` and `.smgGeom` files
   to a new `<folder>_optimized` subfolder; unrelated source entries are ignored
@@ -36,7 +36,7 @@ The target default port is `8004`, followed by the next free port when needed. T
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. Exact SHA-256 CATPart comparison supports up to 20,000 files per folder and does not require CADMPEG or CATIA V5. Optional geometry suggestions require the CADMPEG CLI v0.6.1 or newer, installed separately and available on `PATH` or configured with `CADMPEG_PATH`; it analyzes at most 100 unmatched files per folder, and suggested pairs require manual review. Different hashes mean different file bytes, not necessarily changed geometry. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
+Python 3.11+, Node 20, and pnpm 9. Real conversion requires CATIA Composer Converter and an XML conversion profile saved from Composer Converter. The CATPart screening workflow reads filename metadata only, supports up to 20,000 files per folder, and does not require CADMPEG or CATIA V5. CATIA, OneDrive, UNC shares, or local folders apply only to relevant workflows.
 
 ## Start On Windows
 
