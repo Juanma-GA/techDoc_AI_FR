@@ -18,6 +18,7 @@ use std::{
 use tauri::{Manager, WebviewWindow};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+const MODEL_STARTUP_TIMEOUT: Duration = Duration::from_secs(600);
 
 #[derive(Default)]
 pub struct Backend {
@@ -75,7 +76,7 @@ pub fn start(app: &tauri::AppHandle, window: &WebviewWindow) -> Result<()> {
         &spec.lama,
         lama_address,
         &state.lama,
-        Duration::from_secs(30),
+        MODEL_STARTUP_TIMEOUT,
     )?;
 
     let mut api = api_command(
@@ -95,7 +96,7 @@ pub fn start(app: &tauri::AppHandle, window: &WebviewWindow) -> Result<()> {
         &spec.api,
         api_address,
         &state.api,
-        Duration::from_secs(30),
+        MODEL_STARTUP_TIMEOUT,
     )?;
     window.navigate(format!("http://{api_address}/").parse()?)?;
     Ok(())
@@ -142,7 +143,8 @@ fn api_command(
         .env("DATABASE_URL", database)
         .env("STORAGE_DIR", storage)
         .env("BIND_HOST", "127.0.0.1")
-        .env("LAMA_SERVICE_PORT", lama_port.to_string());
+        .env("LAMA_SERVICE_PORT", lama_port.to_string())
+        .env("DESKTOP_PRELOAD_MODELS", "true");
     if let Some(cache) = model_cache {
         command
             .env("OCR_MODEL_VARIANT", &cache.ocr_model_variant)
@@ -158,6 +160,7 @@ fn lama_command(
     model_cache: Option<&ModelCache>,
 ) -> Command {
     let mut command = base_command(root, service, &service.args, port);
+    command.env("DESKTOP_PRELOAD_MODELS", "true");
     if let Some(cache) = model_cache {
         command
             .env("TORCH_HOME", root.join(&cache.torch_home))

@@ -1,15 +1,10 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import type { TFunction } from "i18next";
-import { Button, Input } from "@internal/ui";
+import { Button } from "@internal/ui";
 import { Pencil } from "lucide-react";
 
 import type { OcrResultDto } from "../lib/api";
-
-type EditingTarget = {
-  reference: string;
-  replacement: string;
-  referenceIndex: number | null;
-};
+import { RecognizedTextEditor, type RecognizedTextEditTarget } from "./RecognizedTextEditor";
 
 type RecognizedTextLineProps = {
   result: OcrResultDto;
@@ -22,6 +17,7 @@ type RecognizedTextLineProps = {
     replacement: string,
     referenceIndex: number | null,
   ) => Promise<boolean>;
+  onUndoLine: (lineIndex: number, referenceIndex: number) => Promise<boolean>;
   t: TFunction;
 };
 
@@ -31,16 +27,14 @@ export function RecognizedTextLine({
   matched,
   disabled,
   onReplaceLine,
+  onUndoLine,
   t,
 }: RecognizedTextLineProps) {
-  const [editing, setEditing] = useState<EditingTarget | null>(null);
-  const [replacement, setReplacement] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<RecognizedTextEditTarget | null>(null);
   const line = result.lines[lineIndex];
 
   useEffect(() => {
     setEditing(null);
-    setReplacement("");
   }, [result]);
   if (!line) return null;
 
@@ -50,42 +44,23 @@ export function RecognizedTextLine({
           reference: reference.reference,
           replacement: reference.replacement ?? "",
           referenceIndex,
+          undo: reference.undo ?? null,
         }]
       : [],
   );
   const targets = matchedTargets.length > 0
     ? matchedTargets
     : line.text.trim()
-      ? [{ reference: line.text, replacement: "", referenceIndex: null }]
+      ? [{ reference: line.text, replacement: "", referenceIndex: null, undo: null }]
       : [];
   const firstTarget = targets[0];
-  const inputId = `recognized-replacement-${lineIndex}-${editing?.referenceIndex ?? "line"}`;
 
-  function openEditor(target: EditingTarget) {
+  function openEditor(target: RecognizedTextEditTarget) {
     setEditing(target);
-    setReplacement(target.replacement);
   }
 
   function cancelEdit() {
     setEditing(null);
-    setReplacement("");
-  }
-
-  async function submitEdit() {
-    if (!editing || disabled || saving || !replacement.trim()) return;
-    setSaving(true);
-    try {
-      if (await onReplaceLine(
-        lineIndex,
-        editing.reference,
-        replacement,
-        editing.referenceIndex,
-      )) {
-        cancelEdit();
-      }
-    } finally {
-      setSaving(false);
-    }
   }
 
   return (
@@ -144,53 +119,16 @@ export function RecognizedTextLine({
         </div>
       ) : null}
       {editing ? (
-        <div
-          role="group"
-          aria-label={t("image.replacementValue", { reference: editing.reference })}
-          className="flex flex-col gap-2 rounded-md border border-md bg-bg-2 p-2 sm:flex-row"
-          onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-            if (event.key === "Escape" && !saving) {
-              event.preventDefault();
-              cancelEdit();
-            } else if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void submitEdit();
-            }
-          }}
-        >
-          <label htmlFor={inputId} className="sr-only">
-            {t("image.replacementValue", { reference: editing.reference })}
-          </label>
-          <Input
-            id={inputId}
-            autoFocus
-            value={replacement}
-            disabled={disabled || saving}
-            aria-label={t("image.replacementValue", { reference: editing.reference })}
-            onChange={(event) => setReplacement(event.target.value)}
-            placeholder={t("image.replacementPlaceholder")}
-            className="min-w-0 flex-1"
-          />
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              disabled={disabled || saving || !replacement.trim()}
-              onClick={() => void submitEdit()}
-            >
-              {saving ? t("image.applyingLineReplacement") : t("image.applyLineReplacement")}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={saving}
-              onClick={cancelEdit}
-            >
-              {t("image.cancelLineReplacement")}
-            </Button>
-          </div>
-        </div>
+        <RecognizedTextEditor
+          key={`${editing.reference}-${editing.referenceIndex}`}
+          target={editing}
+          lineIndex={lineIndex}
+          disabled={disabled}
+          onReplaceLine={onReplaceLine}
+          onUndoLine={onUndoLine}
+          onClose={cancelEdit}
+          t={t}
+        />
       ) : null}
     </li>
   );

@@ -58,12 +58,27 @@ class OcrLine(StateModel):
     matched_references: list[str]
 
 
-class OcrReference(StateModel):
+class OcrReferenceSnapshot(StateModel):
     reference: str
     found: bool
     line_indices: list[int]
     replacement: str = ""
     replacement_count: int = 0
+
+
+class OcrReferenceUndo(StateModel):
+    previous_image_value: str
+    previous_reference_index: int | None = Field(default=None, ge=0)
+    previous_reference: OcrReferenceSnapshot | None = None
+    previous_matched_references: list[str] = Field(default_factory=list)
+    previous_pair_source: Literal["manual", "excel", "created"]
+    previous_pair_id: int = Field(ge=0)
+    previous_pair_replacement: str = ""
+    previous_pair_enabled: bool = True
+
+
+class OcrReference(OcrReferenceSnapshot):
+    undo: OcrReferenceUndo | None = None
 
 
 class OcrAnalysis(StateModel):

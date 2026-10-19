@@ -8,6 +8,7 @@ import { useExcelMapping } from "./useExcelMapping";
 import { useImageDocument } from "./useImageDocument";
 import { useImageDownload } from "./useImageDownload";
 import { useRecognizedTextReplacement } from "./useRecognizedTextReplacement";
+import { useRecognizedTextUndo } from "./useRecognizedTextUndo";
 import { useWorkspaceStorage } from "./useWorkspaceStorage";
 
 export type { ReplacementPair } from "../lib/workspace-api";
@@ -26,10 +27,12 @@ export function useImageReplace(t: TFunction) {
     excelPending: excel.excelLoading || (excel.excelSelectionConfigured && !excel.excelPairsReady),
     document: image.document, manualPairs: replacementPairs,
   });
-  const replaceRecognizedLine = useRecognizedTextReplacement({
+  const recognizedTextOptions = {
     image, manualPairs: replacementPairs, setManualPairs: setReplacementPairs,
     excel, loading, restoring, downloading: download.downloading, retouching, setLoading, setError, t,
-  });
+  };
+  const replaceRecognizedLine = useRecognizedTextReplacement(recognizedTextOptions);
+  const undoRecognizedLine = useRecognizedTextUndo(recognizedTextOptions);
 
   async function chooseImage(files: File[]) {
     setRestoring(true);
@@ -138,7 +141,7 @@ export function useImageReplace(t: TFunction) {
     downloading: download.downloading, savingAs: download.savingAs, restoring, retouching,
     setRetouching,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
-    replaceRecognizedLine, openHistory,
+    replaceRecognizedLine, undoRecognizedLine, openHistory,
     downloadImage: download.downloadImage,
     downloadImageAs: download.downloadImageAs,
     retrySave,

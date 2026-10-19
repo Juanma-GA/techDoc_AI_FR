@@ -1,12 +1,17 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import type { TFunction } from "i18next";
 
-import { imageReplaceApi, type OcrReferenceDto, type OcrResultDto } from "../lib/api";
+import {
+  imageReplaceApi,
+  type OcrReferenceUndoDto,
+  type OcrResultDto,
+} from "../lib/api";
 import { requestError, type ReplacementPair } from "../lib/workspace-api";
 import type { useExcelMapping } from "./useExcelMapping";
 import type { useImageDocument } from "./useImageDocument";
+import { referenceKey, updateReferenceResults } from "./useRecognizedTextUndo";
 
-type Options = {
+export type RecognizedTextOperationOptions = {
   image: ReturnType<typeof useImageDocument>;
   manualPairs: ReplacementPair[];
   setManualPairs: Dispatch<SetStateAction<ReplacementPair[]>>;
@@ -20,57 +25,6 @@ type Options = {
   t: TFunction;
 };
 
-function referenceKey(value: string) {
-  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-function updateReferenceResults(
-  result: OcrResultDto,
-  referenceIndex: number | null,
-  lineIndex: number,
-  reference: string,
-  replacement: string,
-  replacementCount: number,
-): OcrReferenceDto[] {
-  const selected = referenceIndex === null ? undefined : result.references[referenceIndex];
-  if (!selected || !selected.line_indices.includes(lineIndex)) {
-    return [
-      ...result.references,
-      { reference, found: true, line_indices: [lineIndex], replacement, replacement_count: replacementCount },
-    ];
-  }
-
-  const remainingLines = selected.line_indices.filter((index) => index !== lineIndex);
-  const previouslyReplaced = selected.line_indices
-    .slice(0, selected.replacement_count ?? 0)
-    .includes(lineIndex);
-  const remainingReplacementCount = Math.max(
-    0,
-    (selected.replacement_count ?? 0) - Number(previouslyReplaced),
-  );
-  return result.references.flatMap((item, index) => {
-    if (index !== referenceIndex) return [item];
-    return [
-      ...(remainingLines.length > 0
-        ? [{
-            ...selected,
-            found: true,
-            line_indices: remainingLines,
-            replacement_count: remainingReplacementCount,
-          }]
-        : []),
-      {
-        ...selected,
-        found: true,
-        line_indices: [lineIndex],
-        replacement,
-        replacement_count: replacementCount,
-      },
-    ];
-  });
-}
-
 export function useRecognizedTextReplacement({
   image,
   manualPairs,
@@ -83,7 +37,7 @@ export function useRecognizedTextReplacement({
   setLoading,
   setError,
   t,
-}: Options) {
+}: RecognizedTextOperationOptions) {
   return useCallback(async (
     lineIndex: number,
     reference: string,
@@ -100,6 +54,44 @@ export function useRecognizedTextReplacement({
       setError(t("image.errorLineReplacement"));
       return false;
     }
+
+    const selectedReference = referenceIndex === null
+      ? undefined
+      : result.references[referenceIndex];
+    const previousReference = selectedReference?.line_indices.includes(lineIndex)
+      ? selectedReference
+      : null;
+    const previousImageValue = previousReference &&
+      previousReference.line_indices.slice(0, previousReference.replacement_count ?? 0)
+        .includes(lineIndex)
+      ? previousReference.replacement ?? reference
+      : reference;
+    const previousReplacement = previousReference?.replacement ?? "";
+    const key = referenceKey(reference);
+    const candidates = [
+      ...manualPairs.map((pair) => ({ source: "manual" as const, pair })),
+      ...excel.excelPairs.map((pair) => ({ source: "excel" as const, pair })),
+    ].filter(({ pair }) => referenceKey(pair.reference) === key);
+    const target = candidates.find(({ pair }) =>
+      previousReplacement && pair.replacement.trim() === previousReplacement.trim(),
+    ) ?? candidates[0];
+    const undo: OcrReferenceUndoDto = {
+      previous_image_value: previousImageValue,
+      previous_reference_index: previousReference ? referenceIndex : null,
+      previous_reference: previousReference ? {
+        reference: previousReference.reference,
+        found: previousReference.found,
+        line_indices: previousReference.line_indices,
+        replacement: previousReference.replacement,
+        replacement_count: previousReference.replacement_count,
+      } : null,
+      previous_matched_references: line.matched_references,
+      previous_pair_source: target?.source ?? "created",
+      previous_pair_id: target?.pair.id ??
+        Math.max(-1, ...manualPairs.map((pair) => pair.id)) + 1,
+      previous_pair_replacement: target?.pair.replacement ?? "",
+      previous_pair_enabled: target?.pair.enabled ?? false,
+    };
 
     setLoading(true);
     setError("");
@@ -130,22 +122,11 @@ export function useRecognizedTextReplacement({
           reference,
           replacement,
           rendered.replacement_count,
+          undo,
         ),
         replacement_font_size: rendered.replacement_font_size,
       };
       image.applyTextReplacement(updatedResult);
-
-      const key = referenceKey(reference);
-      const candidates = [
-        ...manualPairs.map((pair) => ({ source: "manual" as const, pair })),
-        ...excel.excelPairs.map((pair) => ({ source: "excel" as const, pair })),
-      ].filter(({ pair }) => referenceKey(pair.reference) === key);
-      const previousReplacement = referenceIndex === null
-        ? ""
-        : result.references[referenceIndex]?.replacement ?? "";
-      const target = candidates.find(({ pair }) =>
-        previousReplacement && pair.replacement.trim() === previousReplacement.trim(),
-      ) ?? candidates[0];
 
       if (target?.source === "manual") {
         setManualPairs((current) => current.map((pair) => pair.id === target.pair.id
@@ -158,7 +139,7 @@ export function useRecognizedTextReplacement({
         setManualPairs((current) => [
           ...current,
           {
-            id: Math.max(-1, ...current.map((pair) => pair.id)) + 1,
+            id: undo.previous_pair_id,
             reference,
             replacement,
             enabled: true,

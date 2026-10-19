@@ -148,6 +148,7 @@ describe("recognized text replacement", () => {
         selectionRequest={null}
         onSelectionHandled={vi.fn()}
         onReplaceLine={onReplaceLine}
+        onUndoLine={vi.fn(async () => false)}
         t={i18n.getFixedT("en")}
       />,
     );

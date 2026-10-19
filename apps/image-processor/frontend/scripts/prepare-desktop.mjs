@@ -41,6 +41,12 @@ if (process.platform !== "win32" || process.arch !== "x64") {
 
 prepareAppIcon();
 buildFrontend(repo, frontend, path.join(frontend, "dist"));
+if (!existsSync(path.join(frontend, "dist", "src", "desktop-startup.html"))) {
+  throw new Error("Missing desktop startup page in frontend bundle.");
+}
+if (!existsSync(path.join(frontend, "dist", "src", "desktop-startup.html"))) {
+  throw new Error("Missing desktop startup page in frontend bundle.");
+}
 if (mode === "dev") {
   prepareDevelopmentRuntime(frontend);
 } else {

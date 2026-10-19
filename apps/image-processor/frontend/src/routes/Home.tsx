@@ -70,6 +70,7 @@ export function Home() {
             result={workflow.result}
             disabled={busy}
             onReplaceLine={workflow.replaceRecognizedLine}
+            onUndoLine={workflow.undoRecognizedLine}
             selectionRequest={lineSelectionRequest}
             onSelectionHandled={handleLineSelection}
             t={t}

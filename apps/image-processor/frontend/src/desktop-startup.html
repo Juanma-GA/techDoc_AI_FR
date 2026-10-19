@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Processor</title>
+    <script>
+      (function () {
+        const theme = localStorage.getItem("theme") === "light" ? "light" : "dark";
+        if (theme === "dark") {
+          document.documentElement.classList.add("dark");
+        }
+        const nativeWindow = window.__TAURI__?.window?.getCurrentWindow?.();
+        if (!nativeWindow) {
+          console.error("Tauri window API is unavailable; check withGlobalTauri.");
+          return;
+        }
+        nativeWindow.setTheme(theme).catch((error) => {
+          console.error("Unable to synchronize desktop window theme:", error);
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./desktop-startup.tsx"></script>
+  </body>
+</html>

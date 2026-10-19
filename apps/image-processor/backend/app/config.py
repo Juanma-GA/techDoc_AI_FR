@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     ocr_model_variant: Literal["medium", "small", "tiny"] = "tiny"
     ocr_cpu_threads: int = Field(default=10, ge=1)
+    desktop_preload_models: bool = False
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 'image-replace.db'}"
     storage_dir: str = str(BASE_DIR / "data" / "storage")

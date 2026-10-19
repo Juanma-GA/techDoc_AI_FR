@@ -75,7 +75,62 @@ stops the managed process. Do not enable uvicorn reload in desktop mode.
 The native shell chooses a loopback port, runs bootstrap, waits for HTTP 200 on
 health and only then navigates. Startup failures appear in the startup window and
 stderr. Closing the window cancels startup and terminates/reaps the managed child.
-No remote-page IPC permissions are granted by the scaffold.
+The scaffold grants no broad remote-page IPC. Its only remote capability is
+`core:window:allow-set-theme` for the app's `http://127.0.0.1:*` UI origin.
+
+## Native window theme
+
+Desktop windows must follow the React app's persisted dark/light theme while
+retaining the operating system's native title bar. Start the window with the
+dark theme to match the app's default, set `app.withGlobalTauri` to
+`true` only in the desktop Tauri configuration, and apply the stored preference
+from the desktop startup page before navigating to the main app. The React shell
+then observes changes to the root `.dark` class and calls
+`getCurrentWindow().setTheme("dark" | "light")` when the user toggles themes.
+
+The Tauri capability must grant only `core:window:allow-set-theme` and scope its
+remote URL to `http://127.0.0.1:*`; the backend selects an ephemeral loopback
+port. Do not add broad IPC permissions or expose this capability to other
+origins.
+
+Keep this integration optional in shared app React code: web-only apps must
+continue to work without Tauri globals or Tauri npm dependencies. Log failures
+to synchronize the native theme rather than silently ignoring them. The desktop
+scaffold and the generator regression test cover this contract.
+
+## Desktop startup screen
+
+The initial Tauri window should show a loading screen until startup is complete,
+then navigate to the app's normal React entry point. Keep the screen in the
+desktop scaffold as `frontend/src/desktop-startup.html` plus
+`frontend/src/desktop-startup.tsx`, included as a second Vite entry only when
+present. Its TSX page must use existing `@internal/ui` components (for example
+`Card`, `Ai4TechDocLogo`, and `LoadingOverlay`), the shared theme CSS, and the
+app's existing i18n resources. Use the HTML title or app configuration for
+app-specific branding rather than hardcoding a POC name in the shared scaffold.
+
+The loader is indeterminate; do not show a fabricated percentage. Its `role=status`
+and `aria-busy` state should remain accessible. On startup failure, stop the
+spinner and expose the error as an alert. The Rust shell keeps the window on this
+page through migrations and all startup-critical service/model warm-ups, and
+navigates only after the relevant health checks succeed. Apps without startup
+model warm-up should keep model inference lazy rather than adding expensive work
+to the generic template.
+
+For apps that need model warm-up before first use, pass a desktop-only opt-in
+environment flag to the API and model service. Their ASGI startup lifespan must
+load the model before the health endpoint can return 200. Keep that flag off for
+web/ZIP launchers unless their behavior is explicitly intended to change. The
+Image Processor desktop adapter sets `DESKTOP_PRELOAD_MODELS=true` for OCR and
+LaMa; its health waits have a bounded 10-minute timeout, after which the splash
+shows an explicit startup error.
+
+Build the second HTML entry with Vite and point the initial Tauri window at its
+output path. Run desktop preparation synchronously before `tauri dev` or `tauri
+build`; do not depend on a parallel Tauri hook to produce files Cargo needs.
+For example, Image Processor opts into `DESKTOP_PRELOAD_MODELS=true` for both
+local services, so its health checks stay pending until OCR and LaMa models are
+loaded; the general template does not enable model warm-up by default.
 
 ## Default FastAPI desktop adapter
 
@@ -88,7 +143,11 @@ pnpm desktop:build:my-desktop-app
 ```
 
 Or run `package.bat desktop` inside the generated app; this puts Cargo output in
-`apps/<slug>/dist/tauri/`. Direct Tauri CLI builds use its usual target directory.
+`apps/<slug>/dist/tauri/`. The generated `tauri:dev` and `tauri:build` package
+scripts prepare frontend and runtime resources synchronously before invoking
+Tauri. Direct Tauri CLI commands must first run
+`node scripts/prepare-desktop.mjs dev` or `build`; they use the usual target
+directory.
 
 Development creates/uses the app's virtual environment. Packaging downloads the
 same Python 3.11.9 Windows embeddable runtime used by the existing ZIP packager,

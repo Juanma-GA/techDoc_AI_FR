@@ -17,6 +17,7 @@ type OcrResultsProps = {
     replacement: string,
     referenceIndex: number | null,
   ) => Promise<boolean>;
+  onUndoLine: (lineIndex: number, referenceIndex: number) => Promise<boolean>;
   t: TFunction;
 };
 
@@ -26,6 +27,7 @@ export function OcrResults({
   selectionRequest,
   onSelectionHandled,
   onReplaceLine,
+  onUndoLine,
   t,
 }: OcrResultsProps) {
   const recognizedLinesRef = useRef<HTMLUListElement>(null);
@@ -119,6 +121,7 @@ export function OcrResults({
                   matched={matchedLines.has(index)}
                   disabled={disabled}
                   onReplaceLine={onReplaceLine}
+                  onUndoLine={onUndoLine}
                   t={t}
                 />
               ))}

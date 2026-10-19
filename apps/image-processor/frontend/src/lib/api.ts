@@ -105,12 +105,27 @@ export type OcrLineDto = {
   matched_references: string[];
 };
 
-export type OcrReferenceDto = {
+export type OcrReferenceSnapshotDto = {
   reference: string;
   found: boolean;
   line_indices: number[];
   replacement?: string;
   replacement_count?: number;
+};
+
+export type OcrReferenceUndoDto = {
+  previous_image_value: string;
+  previous_reference_index: number | null;
+  previous_reference: OcrReferenceSnapshotDto | null;
+  previous_matched_references: string[];
+  previous_pair_source: "manual" | "excel" | "created";
+  previous_pair_id: number;
+  previous_pair_replacement: string;
+  previous_pair_enabled: boolean;
+};
+
+export type OcrReferenceDto = OcrReferenceSnapshotDto & {
+  undo?: OcrReferenceUndoDto | null;
 };
 
 export type OcrResultDto = {

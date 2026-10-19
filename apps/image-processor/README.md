@@ -81,6 +81,10 @@ The command starts the API, LaMa (or reuses its local health endpoint), and Vite
 The optional Tauri desktop app starts and supervises the local API and LaMa
 services. It uses the same React interface and keeps its database and storage in
 Tauri's app-specific local-data directory, separate from the web launcher's data.
+The native window title bar follows the persisted dark/light theme and the
+sidebar theme toggle.
+Its startup screen remains visible while migrations run and the OCR and LaMa
+models load; desktop startup is therefore longer than web/ZIP startup.
 
 For development, run `pnpm desktop:dev:image-processor` from the repository root.
 The first run creates the Python 3.13 and 3.11 development environments and

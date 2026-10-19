@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 
 from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH
-from app.workspace_schemas import ImageRevision, Operation
+from app.workspace_schemas import ImageRevision, OcrReference, Operation
 
 
 def _a4_jpeg() -> bytes:
@@ -33,6 +33,30 @@ def test_workspace_accepts_text_replacement_revisions_and_operations() -> None:
 
     assert revision.kind == "text-replacement"
     assert operation.kind == "text-replacement"
+
+
+def test_workspace_accepts_local_ocr_replacement_undo_metadata() -> None:
+    reference = OcrReference.model_validate({
+        "reference": "A100",
+        "found": True,
+        "line_indices": [1],
+        "replacement": "A200",
+        "replacement_count": 1,
+        "undo": {
+            "previous_image_value": "A100",
+            "previous_reference_index": None,
+            "previous_reference": None,
+            "previous_matched_references": [],
+            "previous_pair_source": "created",
+            "previous_pair_id": 0,
+            "previous_pair_replacement": "",
+            "previous_pair_enabled": False,
+        },
+    })
+
+    assert reference.undo is not None
+    assert reference.undo.previous_image_value == "A100"
+    assert reference.undo.previous_pair_source == "created"
 
 
 def test_replace_line_renders_only_the_requested_ocr_line(

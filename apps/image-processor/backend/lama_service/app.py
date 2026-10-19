@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from io import BytesIO
 from time import perf_counter
@@ -18,8 +22,6 @@ if TYPE_CHECKING:
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 LAMA_CROP_PADDING_PX = 256
 
-app = FastAPI(title="Local LaMa inpainting service")
-
 
 def _elapsed_ms(started: float) -> float:
     return round((perf_counter() - started) * 1000, 3)
@@ -34,6 +36,16 @@ def get_lama() -> SimpleLama:
     from simple_lama_inpainting import SimpleLama
 
     return SimpleLama()
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    if os.environ.get("DESKTOP_PRELOAD_MODELS", "").strip().lower() in {"1", "true", "yes", "on"}:
+        await asyncio.to_thread(get_lama)
+    yield
+
+
+app = FastAPI(title="Local LaMa inpainting service", lifespan=_lifespan)
 
 
 def _open_source_image(image_bytes: bytes) -> Image.Image:

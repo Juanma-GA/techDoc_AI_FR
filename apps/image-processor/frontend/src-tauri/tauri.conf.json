@@ -7,8 +7,11 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [],
-    "security": {}
+    "security": {
+      "capabilities": ["default"]
+    }
   },
   "bundle": {
     "active": true,

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
@@ -15,6 +18,7 @@ from app.config import settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.request_id import REQUEST_ID_HEADER, RequestIdMiddleware
+from app.services.ocr_inference import get_ocr_engine
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
@@ -54,6 +58,13 @@ def _validate_security_posture() -> None:
         )
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    if settings.desktop_preload_models:
+        await asyncio.to_thread(get_ocr_engine)
+    yield
+
+
 def create_app() -> FastAPI:
     configure_logging(settings.log_level)
     _validate_security_posture()
@@ -65,6 +76,7 @@ def create_app() -> FastAPI:
         docs_url="/api/v1/docs",
         redoc_url="/api/v1/redoc",
         openapi_url="/api/v1/openapi.json",
+        lifespan=_lifespan,
     )
 
     app.add_middleware(
