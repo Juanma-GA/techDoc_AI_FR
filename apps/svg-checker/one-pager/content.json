@@ -1,0 +1,54 @@
+{
+  "fr": {
+    "main_title": "VALIDATION DES ILLUSTRATIONS SVG",
+    "section_title": "Hotspots et règles BRDP S1000D",
+    "application_name": "SVG Checker",
+    "status": "CONCEPT",
+    "challenge": "La validation des illustrations techniques et de leurs hotspots nécessite des contrôles cohérents avec les règles BRDP et les schémas S1000D.",
+    "solution": "SVG Checker vise à contrôler les hotspots et les fichiers SVG selon les règles BRDP conformes au schéma S1000D, avec une convergence envisagée vers le périmètre XML Proofreader.",
+    "features": [
+      "Contrôler les illustrations SVG",
+      "Vérifier les hotspots associés",
+      "Appliquer des règles BRDP liées à S1000D",
+      "Préparer un rapprochement avec XML Proofreader"
+    ],
+    "callouts": [
+      "Contrôles SVG",
+      "Validation des hotspots",
+      "Convergence XML envisagée"
+    ],
+    "security": {
+      "local": "Posture locale à définir\nLe traitement, le stockage et la confidentialité des illustrations restent à valider.",
+      "shared": "Posture partagée à définir\nL'intégration avec XML Proofreader et les contrôles d'accès ne sont pas vérifiés."
+    },
+    "footnote": "Concept non vérifié ; la conformité BRDP/S1000D et l'intégration restent à valider."
+  },
+  "en": {
+    "main_title": "SVG ILLUSTRATION VALIDATION",
+    "section_title": "Hotspots and S1000D BRDP Rules",
+    "application_name": "SVG Checker",
+    "status": "CONCEPT",
+    "challenge": "Validating technical illustrations and their hotspots requires consistent checks against BRDP rules and S1000D schemas.",
+    "solution": "SVG Checker aims to validate hotspots and SVG files against S1000D-related BRDP rules, with a potential future convergence with XML Proofreader.",
+    "features": [
+      "Check SVG illustrations",
+      "Validate associated hotspots",
+      "Apply S1000D-related BRDP rules",
+      "Prepare potential integration with XML Proofreader"
+    ],
+    "callouts": [
+      "SVG checks",
+      "Hotspot validation",
+      "Planned XML convergence"
+    ],
+    "security": {
+      "local": "Local posture to be defined\nIllustration processing, storage and confidentiality remain to be validated.",
+      "shared": "Shared posture to be defined\nXML Proofreader integration and access controls are unverified."
+    },
+    "footnote": "Unverified concept; BRDP/S1000D compliance and integration remain to be validated."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -39,6 +39,8 @@ class SettingsIn(BaseModel):
     onedrive_input_root: Optional[str] = None
     onedrive_output_root: Optional[str] = None
     composer_license_server: Optional[str] = None
+    composer_converter_path: Optional[str] = None
+    composer_settings_path: Optional[str] = None
 
 
 class SettingsOut(BaseModel):
@@ -51,6 +53,8 @@ class SettingsOut(BaseModel):
     onedrive_input_root: str = ""
     onedrive_output_root: str = ""
     composer_license_server: str = ""
+    composer_converter_path: str = ""
+    composer_settings_path: str = ""
 
 
 # ----- Navigation OneDrive (browse) -----------------------------------------
@@ -84,6 +88,17 @@ class BrowseListOut(BaseModel):
     root: str
     path: str
     entries: list[BrowseEntryOut] = Field(default_factory=list)
+
+
+class LocalUploadFileOut(BaseModel):
+    path: str
+    rel: str
+    size: int
+
+
+class LocalUploadOut(BaseModel):
+    root: str
+    files: list[LocalUploadFileOut] = Field(default_factory=list)
 
 
 class BrowsePreviewIn(BaseModel):
@@ -120,17 +135,6 @@ class ZipImportIn(BaseModel):
 
 
 # ----- Ecriture des livrables dans le dossier de sortie ---------------------
-
-
-class ExportSaveIn(BaseModel):
-    filename: str = Field(..., min_length=1)
-    kind: str = Field(default="csv")  # csv | bat | sh
-    status: str = Field(default="accepted")
-
-
-class ExportSaveOut(BaseModel):
-    path: str
-    bytes_written: int
 
 
 class TestConnectionOut(BaseModel):
@@ -196,80 +200,6 @@ class ImportOut(BaseModel):
     node_count: int
     created_at: datetime
     metrics: dict = Field(default_factory=dict)
-
-
-class TreeNodeOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    rel_path: str
-    name: str
-    ext: str
-    kind: str
-    depth: int
-    size: int
-    mtime: Optional[datetime] = None
-    children: list["TreeNodeOut"] = Field(default_factory=list)
-
-
-class TreeOut(BaseModel):
-    import_id: uuid.UUID
-    root_label: str
-    node_count: int
-    metrics: dict = Field(default_factory=dict)
-    nodes: list[TreeNodeOut] = Field(default_factory=list)
-
-
-# ----- Optimisation ---------------------------------------------------------
-
-
-class OptimizeIn(BaseModel):
-    target_max_depth: int = Field(default=5, ge=1, le=20)
-    strategy: str = Field(default="by_type")
-    use_llm: bool = True
-
-
-class OptimizationRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    import_id: uuid.UUID
-    status: str
-    summary: dict = Field(default_factory=dict)
-    started_at: datetime
-    finished_at: Optional[datetime] = None
-
-
-# ----- Suggestions ----------------------------------------------------------
-
-
-class SuggestionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    run_id: uuid.UUID
-    old_path: str
-    new_path: str
-    action: str
-    rationale: str
-    confidence: str
-    source: str
-    status: str
-    created_at: datetime
-
-
-class SuggestionStatusIn(BaseModel):
-    status: str
-
-
-class SuggestionBulkStatusIn(BaseModel):
-    ids: list[uuid.UUID] = Field(default_factory=list)
-    status: str
-
-
-class SuggestionBulkStatusOut(BaseModel):
-    updated: int
-    status: str
 
 
 # ----- Module Comparaison ---------------------------------------------------
@@ -366,6 +296,16 @@ class ConversionExecOut(BaseModel):
     stdout: str = ""
     stderr: str = ""
     base: str = ""  # dossier racine utilise pour resoudre les chemins
+    converted: int = 0
+    failed: int = 0
+
+
+class ComposerConverterStatusOut(BaseModel):
+    available: bool
+    executable: str = ""
+    settings_file: str = ""
+    version: str = ""
+    message: str
 
 
 class ConversionItemOut(BaseModel):
@@ -427,34 +367,29 @@ class ReplacementFromSourceIn(BaseModel):
 # ----- Module Colorisation --------------------------------------------------
 
 
-class ColorizationIn(BaseModel):
-    strategy: str = "by_type"  # by_change | by_type | by_depth
-    diff_run_id: Optional[uuid.UUID] = None  # requis si strategy == by_change
+class MonoBodyColorizationIn(BaseModel):
+    scope: str = Field(default="input")
+    pieces_root: str = Field(..., min_length=1)
+    profiles_root: str = Field(..., min_length=1)
+    nomenclature_run_id: uuid.UUID
+    apply: bool = False
 
 
-class ColorizationItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class MonoBodyColorizationItemOut(BaseModel):
+    old_pn: str = ""
+    texture_ref: str = ""
+    profile_path: str = ""
+    path: str = ""
+    status: str = ""
+    actors_total: int = 0
+    actors_changed: int = 0
+    message: str = ""
+    applied: bool = False
 
-    id: uuid.UUID
-    rel_path: str
-    color_r: int
-    color_g: int
-    color_b: int
-    reason: str
 
-
-class ColorizationRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    import_id: uuid.UUID
-    diff_run_id: Optional[uuid.UUID] = None
-    strategy: str
-    status: str
+class MonoBodyColorizationOut(BaseModel):
+    items: list[MonoBodyColorizationItemOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
-    created_at: datetime
-
-    _v_summary = field_validator("summary", mode="before")(_parse_json_dict)
 
 
 # ----- Etape 1 : Identification (nomenclature .xlsm + DE .zip) ---------------
@@ -471,6 +406,7 @@ class NomenclatureMapping(BaseModel):
     sin: Optional[int] = Field(default=None, ge=0)
     version: Optional[int] = Field(default=None, ge=0)
     to_treat: Optional[int] = Field(default=None, ge=0)
+    optimized: Optional[int] = Field(default=None, ge=0)
     color: Optional[int] = Field(default=None, ge=0)
     old_pn: Optional[int] = Field(default=None, ge=0)
     new_pn: Optional[int] = Field(default=None, ge=0)
@@ -506,8 +442,10 @@ class MonoCorpsIn(BaseModel):
 
 class MonoCorpsItemOut(BaseModel):
     identity: str = ""
+    old_pn: str = ""
     slots: list[str] = Field(default_factory=list)
     mono_body: bool = False
+    mono_texture: str = ""
 
 
 class MonoCorpsResultOut(BaseModel):
@@ -548,6 +486,7 @@ class NomenclatureItemOut(BaseModel):
     version: str
     to_treat: bool
     to_treat_value: str
+    optimized: bool
     replaced: bool
     old_pn: str
     new_pn: str
@@ -556,6 +495,7 @@ class NomenclatureItemOut(BaseModel):
     color_ref: str
     materials: str
     mono_body: bool
+    mono_texture: str
     mono_color: bool
     color_r: int
     color_g: int
@@ -585,14 +525,15 @@ class NomenclatureCompareIn(BaseModel):
 
 class SinEntryOut(BaseModel):
     sin: str
-    pn: str = ""
+    old_pn: str = ""
+    old_pn_v2: str = ""
     designation: str = ""
 
 
 class PnChangeOut(BaseModel):
-    # Comparaison : seul l'OLD PN (PN de V0, a remplacer) est reporte.
     sin: str
     old_pn: str = ""
+    old_pn_v2: str = ""
     designation: str = ""
 
 
@@ -602,6 +543,36 @@ class NomenclatureCompareOut(BaseModel):
     added_sin: list[SinEntryOut] = Field(default_factory=list)
     removed_sin: list[SinEntryOut] = Field(default_factory=list)
     changed_pn: list[PnChangeOut] = Field(default_factory=list)
+    summary: dict = Field(default_factory=dict)
+
+
+class NomenclatureMultiCompareIn(BaseModel):
+    """Comparaison ordonnee de 2 a 10 runs de nomenclature."""
+
+    run_ids: list[uuid.UUID] = Field(..., min_length=2, max_length=10)
+    mode: Literal["chronology", "reference"] = "chronology"
+    reference_run_id: uuid.UUID | None = None
+
+
+class NomenclatureMatrixCellOut(BaseModel):
+    run_id: uuid.UUID
+    present: bool
+    pn: str = ""
+    state: Literal["unchanged", "added", "removed", "changed", "reference"] = "unchanged"
+
+
+class NomenclatureMatrixRowOut(BaseModel):
+    sin: str
+    designation: str = ""
+    cells: list[NomenclatureMatrixCellOut] = Field(default_factory=list)
+
+
+class NomenclatureMultiCompareOut(BaseModel):
+    mode: Literal["chronology", "reference"]
+    run_ids: list[uuid.UUID]
+    reference_run_id: Optional[uuid.UUID] = None
+    comparisons: list[NomenclatureCompareOut] = Field(default_factory=list)
+    matrix: list[NomenclatureMatrixRowOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
 
 
@@ -622,74 +593,6 @@ class ZipImportOut(ImportOut):
 
     count: int = 0
     entries: list[ZipEntryOut] = Field(default_factory=list)
-
-
-# ----- Etapes 3 & 4 : SMGXML ------------------------------------------------
-
-
-class ColorRefEntry(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    r: int = Field(default=0, ge=0, le=255)
-    g: int = Field(default=0, ge=0, le=255)
-    b: int = Field(default=0, ge=0, le=255)
-
-
-class ColorRefListIn(BaseModel):
-    entries: list[ColorRefEntry] = Field(default_factory=list)
-
-
-class ColorRefListOut(BaseModel):
-    entries: list[ColorRefEntry] = Field(default_factory=list)
-
-
-class TextureConfigIn(BaseModel):
-    """Config textures : bibliotheque de styles + extension (ex. .SMGStyleSet)."""
-
-    library: str = Field(default="", max_length=500)
-    ext: str = Field(default=".SMGStyleSet", max_length=40)
-
-
-class TextureConfigOut(BaseModel):
-    library: str = ""
-    ext: str = ".SMGStyleSet"
-
-
-class SmgxmlInspectIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
-
-
-class SmgxmlActorOut(BaseModel):
-    name: str
-    tag: str = ""
-    color: str = ""
-
-
-class SmgxmlTreeIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
-    max_nodes: int = Field(default=20000, ge=1, le=200000)
-
-
-class SmgxmlTreeNodeOut(BaseModel):
-    """Noeud de l'arbre XML brut d'un SMGXML (meme forme que TreeNodeOut cote
-    front, mais `id` est un chemin d'index, pas un UUID persiste)."""
-
-    id: str
-    rel_path: str = ""
-    name: str
-    ext: str = ""
-    kind: str
-    depth: int = 0
-    size: int = 0
-    mtime: Optional[datetime] = None
-    children: list["SmgxmlTreeNodeOut"] = Field(default_factory=list)
-
-
-class SmgxmlTreeOut(BaseModel):
-    root_label: str
-    node_count: int = 0
-    nodes: list[SmgxmlTreeNodeOut] = Field(default_factory=list)
 
 
 class SmgxmlBatchRenameIn(BaseModel):
@@ -721,18 +624,6 @@ class SmgxmlBatchItemOut(BaseModel):
 class SmgxmlBatchOut(BaseModel):
     items: list[SmgxmlBatchItemOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
-
-
-class SmgxmlRecolorIn(BaseModel):
-    scope: str = Field(default="input")
-    path: str = Field(..., min_length=1)
-    nomenclature_run_id: uuid.UUID  # source des pieces + couleurs / ref couleur
-    match_by: str = Field(default="sin")  # sin | catpart | pn
-    # Ne cibler que les pieces simples (mono-corps) : colonne Materiaux vide.
-    simple_only: bool = False
-    set_style: bool = True   # poser Actor.Style Value (nom de style depuis Ref Couleur)
-    set_color: bool = True   # poser Actor.Color RGB (SCLIT > Neutral)
-    apply: bool = False  # False = dry-run (rien ecrit)
 
 
 class RenamePair(BaseModel):
@@ -812,3 +703,35 @@ class QcChecklistOut(BaseModel):
     created_at: datetime
     items: list[QcItemOut] = Field(default_factory=list)
     summary: dict = Field(default_factory=dict)
+
+
+class TreeOptimizationCountIn(BaseModel):
+    path: str = Field(..., min_length=1)
+
+
+class TreeOptimizationCountOut(BaseModel):
+    path: str
+    files_count: int
+
+
+class TreeOptimizationIn(BaseModel):
+    path: str = Field(..., min_length=1)
+    apply: bool = False
+
+
+class TreeOptimizationFolderPickerIn(BaseModel):
+    initial_path: Optional[str] = None
+    title: str = Field(default="Select a folder", max_length=120)
+
+
+class TreeOptimizationFolderPickerOut(BaseModel):
+    path: Optional[str] = None
+
+
+class TreeOptimizationOut(BaseModel):
+    path: str
+    applied: bool
+    files_scanned: int
+    files_with_changes: int
+    files_modified: int
+    removed_elements: int

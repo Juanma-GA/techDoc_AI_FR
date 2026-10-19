@@ -12,14 +12,15 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core import nomenclature as nomen
 from app.core import onedrive
-from app.core.errors import AppError
 from app.core import parser as parser_mod
+from app.core.errors import AppError
 from app.core.parser import ParsedTree
 from app.core.security import read_and_validate, safe_under_root
 from app.core.tree_metrics import compute_metrics
@@ -33,7 +34,6 @@ from app.schemas import (
     ZipImportIn,
     ZipImportOut,
 )
-
 
 log = logging.getLogger("catia_toolbox.imports")
 
@@ -127,8 +127,7 @@ def select_import(payload: SelectImportIn, db: Session = Depends(get_db)) -> Imp
         raise AppError("SELECT_EMPTY", "Selection vide ou hors racine.", status_code=400)
 
     n = len(payload.paths)
-    source_ref = confined[0] if n == 1 else f"{n} elements sous {root}"
-    imp = _persist_tree(db, tree, source_mode="selection", source_ref=source_ref)
+    imp = _persist_tree(db, tree, source_mode="selection", source_ref=str(root))
     log.info("select import %s : %d noeuds (%d selectionnes)", imp.id, imp.node_count, n)
     return _to_out(imp)
 
@@ -183,10 +182,11 @@ def get_import(import_id: uuid.UUID, db: Session = Depends(get_db)) -> ImportOut
     return _to_out(imp)
 
 
-@router.delete("/{import_id}", status_code=204)
-def delete_import(import_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
+@router.delete("/{import_id}", status_code=204, response_class=Response)
+def delete_import(import_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
     imp = db.get(StructureImport, import_id)
     if imp is None:
         raise AppError("IMPORT_NOT_FOUND", "Import introuvable.", status_code=404, detail={"id": str(import_id)})
     db.delete(imp)
     db.commit()
+    return Response(status_code=204)

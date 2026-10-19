@@ -96,6 +96,24 @@
         border-color: rgba(245, 158, 11, 0.8);
         background: rgba(245, 158, 11, 0.12);
       }
+      .card.planned {
+        border-style: dashed;
+        background: var(--panel);
+      }
+      .card.planned:hover {
+        border-color: var(--border);
+        background: var(--panel);
+      }
+      .card.planned .card-badge {
+        border-color: var(--border);
+        background: var(--panel-2);
+        color: var(--dim);
+      }
+      .card.active .card-badge {
+        border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+        background: color-mix(in srgb, var(--ok) 12%, transparent);
+        color: var(--ok);
+      }
       .card.external {
         background: var(--card-external);
         border-color: color-mix(in srgb, var(--external-accent) 28%, var(--border));
@@ -403,31 +421,38 @@
         list.className = "grid";
 
         items.forEach((poc) => {
-          const a = document.createElement("a");
-          a.className = "card";
+          const isPlanned = poc.status === "planned";
+          const card = document.createElement(isPlanned ? "article" : "a");
+          card.className = "card";
           if (poc.status === "validation") {
-            a.classList.add("validation");
+            card.classList.add("validation");
           }
-          const isExternalUrl = typeof poc.url === "string" && /^https?:\/\//i.test(poc.url);
-          a.href = isExternalUrl ? poc.url : poc.slug + "/";
-          if (isExternalUrl) {
-            a.classList.add("external");
+          if (isPlanned) {
+            card.classList.add("planned");
+          } else {
+            if (poc.status !== "validation") {
+              card.classList.add("active");
+            }
+            const isExternalUrl = typeof poc.url === "string" && /^https?:\/\//i.test(poc.url);
+            card.href = isExternalUrl ? poc.url : poc.slug + "/";
+            if (isExternalUrl) {
+              card.classList.add("external");
+              card.target = "_blank";
+              card.rel = "noopener noreferrer";
+            }
           }
-          if (isExternalUrl) {
-            a.target = "_blank";
-            a.rel = "noopener noreferrer";
-          }
-          a.innerHTML = '<div class="card-head"><div class="card-name"></div><div class="card-badge"></div></div><div class="card-desc"></div>';
-          a.querySelector(".card-name").textContent = poc.name;
-          const badge = a.querySelector(".card-badge");
+          card.innerHTML = '<div class="card-head"><div class="card-name"></div><div class="card-badge"></div></div><div class="card-desc"></div>';
+          card.querySelector(".card-name").textContent = poc.name;
+          const badge = card.querySelector(".card-badge");
           if (poc.status === "validation") {
             badge.textContent = lang === "fr" ? "À valider" : "To validate";
+          } else if (isPlanned) {
+            badge.textContent = lang === "fr" ? "À venir" : "Coming soon";
           } else {
-            badge.textContent = "";
-            badge.style.display = "none";
+            badge.textContent = lang === "fr" ? "Actif" : "Active";
           }
-          a.querySelector(".card-desc").textContent = poc.desc[lang];
-          list.appendChild(a);
+          card.querySelector(".card-desc").textContent = poc.desc[lang];
+          list.appendChild(card);
         });
 
         section.appendChild(list);
@@ -444,14 +469,18 @@
           return;
         }
 
-        const active = POCS.filter((poc) => poc.status !== "validation");
-        const validation = POCS.filter((poc) => poc.status === "validation");
+        const categories = Array.isArray(CONFIG?.categories) ? CONFIG.categories : [];
+        categories.forEach((category) => {
+          const items = POCS.filter((poc) => poc.category === category.key);
+          if (items.length) {
+            grid.appendChild(buildSection(category.label?.[lang] || category.key, items, lang));
+          }
+        });
 
-        if (active.length) {
-          grid.appendChild(buildSection(lang === "fr" ? "Applications actives" : "Active applications", active, lang));
-        }
-        if (validation.length) {
-          grid.appendChild(buildSection(lang === "fr" ? "À valider" : "To validate", validation, lang));
+        const knownCategories = new Set(categories.map((category) => category.key));
+        const uncategorized = POCS.filter((poc) => !knownCategories.has(poc.category));
+        if (uncategorized.length) {
+          grid.appendChild(buildSection(lang === "fr" ? "Autres applications" : "Other applications", uncategorized, lang));
         }
       }
 

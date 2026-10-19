@@ -1,0 +1,258 @@
+"""Optimize Composer part XML files in a selected input folder."""
+
+from __future__ import annotations
+
+import ipaddress
+import json
+import os
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.core import onedrive
+from app.core.composer_pieces import (
+    copy_composer_pieces_to_workspace,
+    resolve_piece_folder_path,
+)
+from app.core.errors import AppError
+from app.core.tree_optimization import (
+    FolderResult,
+    count_smgxml_files,
+    iter_optimize_folder_events,
+    optimize_folder,
+)
+from app.db.session import get_db
+from app.schemas import (
+    TreeOptimizationCountIn,
+    TreeOptimizationCountOut,
+    TreeOptimizationFolderPickerIn,
+    TreeOptimizationFolderPickerOut,
+    TreeOptimizationIn,
+    TreeOptimizationOut,
+)
+
+router = APIRouter(prefix="/tree-optimization", tags=["tree-optimization"])
+
+_QT_APPLICATION = None
+
+
+def _is_local_request(request: Request) -> bool:
+    local_bind = settings.bind_host.strip().lower() in {"127.0.0.1", "localhost", "::1"}
+    if not local_bind or request.client is None:
+        return False
+    host = request.client.host.lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _open_folder_dialog(initial_path: str | None, title: str) -> str | None:
+    if os.name == "nt":
+        return open_qt_folder_dialog(initial_path, title)
+
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError as exc:
+        raise AppError(
+            "FOLDER_DIALOG_UNAVAILABLE",
+            "Le selecteur natif de dossier n'est pas disponible dans cet environnement.",
+            status_code=503,
+        ) from exc
+
+    root = None
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        options = {"parent": root, "title": title, "mustexist": True}
+        if initial_path and Path(initial_path).is_dir():
+            options["initialdir"] = initial_path
+        selected = filedialog.askdirectory(**options)
+        return str(Path(selected).resolve()) if selected else None
+    except tk.TclError as exc:
+        raise AppError(
+            "FOLDER_DIALOG_UNAVAILABLE",
+            "Le selecteur de dossier local n'est pas disponible.",
+            status_code=503,
+        ) from exc
+    finally:
+        if root is not None:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+
+
+def open_qt_folder_dialog(initial_path: str | None, title: str) -> str | None:
+    global _QT_APPLICATION
+
+    try:
+        from PySide6.QtWidgets import QApplication, QFileDialog
+    except ImportError as exc:
+        raise AppError(
+            "FOLDER_DIALOG_UNAVAILABLE",
+            "Le selecteur Qt de dossier n'est pas disponible dans cet environnement.",
+            status_code=503,
+        ) from exc
+
+    application = QApplication.instance()
+    if application is None:
+        application = QApplication([])
+        application.setQuitOnLastWindowClosed(False)
+    _QT_APPLICATION = application
+
+    initial_directory = initial_path if initial_path and Path(initial_path).is_dir() else ""
+    selected_path = QFileDialog.getExistingDirectory(
+        None,
+        title,
+        initial_directory,
+        QFileDialog.Option.ShowDirsOnly,
+    )
+    return str(Path(selected_path).resolve()) if selected_path else None
+
+
+@router.post("/pick-folder", response_model=TreeOptimizationFolderPickerOut)
+async def pick_local_folder(
+    payload: TreeOptimizationFolderPickerIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> TreeOptimizationFolderPickerOut:
+    if not _is_local_request(request):
+        raise AppError(
+            "LOCAL_FOLDER_PICKER_ONLY",
+            "Le selecteur natif est disponible uniquement depuis l'application locale.",
+            status_code=403,
+        )
+    if onedrive.get_onedrive_roots(db)["input"]:
+        raise AppError(
+            "INPUT_ROOT_CONFIGURED",
+            "Parcourez les dossiers depuis la racine Input configurée.",
+            status_code=400,
+        )
+    return TreeOptimizationFolderPickerOut(
+        path=_open_folder_dialog(payload.initial_path, payload.title),
+    )
+
+
+def _resolve_input_folder(db: Session, path: str) -> Path:
+    input_root = onedrive.get_onedrive_roots(db)["input"]
+    folder = resolve_piece_folder_path(
+        input_root,
+        path,
+        settings.bind_host,
+        invalid_path_code="TREE_OPTIMIZATION_PATH_INVALID",
+        invalid_path_message="Sans racine Input, fournissez un chemin absolu.",
+    )
+
+    if not folder.is_dir():
+        raise AppError(
+            "TREE_OPTIMIZATION_PATH_INVALID",
+            "Le chemin doit désigner un dossier existant sous la racine Input.",
+            status_code=400,
+            detail={"path": str(folder)},
+        )
+    return folder
+
+
+def _copy_input_pieces(folder: Path) -> Path:
+    try:
+        return copy_composer_pieces_to_workspace(folder)
+    except OSError as exc:
+        raise AppError(
+            "TREE_OPTIMIZATION_COPY_FAILED",
+            "Copie des fichiers Composer impossible.",
+            status_code=500,
+            detail={"path": str(folder)},
+        ) from exc
+
+
+def _tree_optimization_out(result: FolderResult) -> TreeOptimizationOut:
+    return TreeOptimizationOut(
+        path=result["path"],
+        applied=result["applied"],
+        files_scanned=result["files_scanned"],
+        files_with_changes=result["files_with_changes"],
+        files_modified=result["files_modified"],
+        removed_elements=result["removed_elements"],
+    )
+
+
+@router.post("/count", response_model=TreeOptimizationCountOut)
+def count_tree_optimization_files(
+    payload: TreeOptimizationCountIn,
+    db: Session = Depends(get_db),
+) -> TreeOptimizationCountOut:
+    folder = _resolve_input_folder(db, payload.path)
+    try:
+        files_count = count_smgxml_files(folder)
+    except OSError as exc:
+        raise AppError(
+            "TREE_OPTIMIZATION_READ_FAILED",
+            "Lecture du dossier impossible.",
+            status_code=400,
+            detail={"path": str(folder)},
+        ) from exc
+    return TreeOptimizationCountOut(path=str(folder), files_count=files_count)
+
+
+@router.post("/run", response_model=TreeOptimizationOut)
+def run_tree_optimization(
+    payload: TreeOptimizationIn,
+    db: Session = Depends(get_db),
+) -> TreeOptimizationOut:
+    source_folder = _resolve_input_folder(db, payload.path)
+    folder = _copy_input_pieces(source_folder)
+    try:
+        result = optimize_folder(folder, apply=payload.apply)
+    except OSError as exc:
+        raise AppError(
+            "TREE_OPTIMIZATION_READ_FAILED",
+            "Lecture du dossier impossible.",
+            status_code=400,
+            detail={"path": str(folder)},
+        ) from exc
+    return _tree_optimization_out(result)
+
+
+@router.post("/run-stream")
+def stream_tree_optimization(
+    payload: TreeOptimizationIn,
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    source_folder = _resolve_input_folder(db, payload.path)
+    folder = _copy_input_pieces(source_folder)
+
+    def generate_events():
+        try:
+            for event in iter_optimize_folder_events(folder, apply=payload.apply):
+                if event["type"] == "complete":
+                    output_event = {
+                        "type": "complete",
+                        "result": jsonable_encoder(_tree_optimization_out(event["result"])),
+                    }
+                else:
+                    output_event = event
+                yield json.dumps(output_event, ensure_ascii=False) + "\n"
+        except OSError:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": "Lecture du dossier impossible.",
+                    "detail": {"path": str(folder)},
+                },
+                ensure_ascii=False,
+            ) + "\n"
+
+    return StreamingResponse(
+        generate_events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

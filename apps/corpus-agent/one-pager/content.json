@@ -1,0 +1,54 @@
+{
+  "fr": {
+    "main_title": "CONFORMITÉ DES CORPUS DOCUMENTAIRES",
+    "section_title": "Analyse, checklist et chat contextualisé",
+    "application_name": "Corpus AGENT",
+    "status": "POC À VALIDER",
+    "challenge": "Analyser un corpus technique multi-format, repérer les écarts et retrouver les informations utiles exige de consolider de nombreux documents et contrôles.",
+    "solution": "Corpus AGENT charge et synchronise des corpus DOCX, XLSM et PDF, les indexe, exécute des analyses par checklist et fournit un chat contextualisé sur les documents.",
+    "features": [
+      "Charger et synchroniser des corpus DOCX, XLSM et PDF",
+      "Parser, indexer et dédupliquer les documents",
+      "Exécuter des checklists éditables avec Mistral",
+      "Diffuser l'analyse et le chat contextualisé en SSE"
+    ],
+    "callouts": [
+      "Corpus multi-format",
+      "Analyse par checklist",
+      "Chat fondé sur les documents"
+    ],
+    "security": {
+      "local": "Application locale\nLe profil local est lié à 127.0.0.1 sans authentification. Les données et la configuration sont stockées localement.",
+      "shared": "Usage partagé hors profil POC\nUne exposition collaborative nécessite une architecture, une authentification et des droits validés."
+    },
+    "footnote": "Fonctions d'analyse et de chat dépendantes de Mistral ; qualité OCR et comportements à revalider."
+  },
+  "en": {
+    "main_title": "DOCUMENT CORPUS COMPLIANCE",
+    "section_title": "Analysis, Checklists and Grounded Chat",
+    "application_name": "Corpus AGENT",
+    "status": "POC TO VALIDATE",
+    "challenge": "Analysing a multi-format technical corpus, identifying findings and retrieving useful information requires consolidating many documents and checks.",
+    "solution": "Corpus AGENT uploads and synchronizes DOCX, XLSM and PDF corpora, indexes them, runs checklist analysis and provides document-grounded chat.",
+    "features": [
+      "Upload and synchronize DOCX, XLSM and PDF corpora",
+      "Parse, index and deduplicate documents",
+      "Run editable checklists with Mistral",
+      "Stream analysis and grounded chat over SSE"
+    ],
+    "callouts": [
+      "Multi-format corpus",
+      "Checklist analysis",
+      "Document-grounded chat"
+    ],
+    "security": {
+      "local": "Local application\nThe local profile binds to 127.0.0.1 without authentication. Data and runtime configuration are stored locally.",
+      "shared": "Shared use outside the POC profile\nCollaborative exposure requires an approved architecture, authentication and access rights."
+    },
+    "footnote": "Analysis and chat depend on Mistral; OCR quality and behavior require revalidation."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

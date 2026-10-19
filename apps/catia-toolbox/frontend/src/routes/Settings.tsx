@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
+import { DataResetCard } from "../components/business/DataResetCard";
 import { browseApi, settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 
 const schema = z.object({
@@ -27,7 +28,6 @@ export function Settings() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
     reset,
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -228,7 +228,6 @@ export function Settings() {
 
       <article className="card">
         <h2 className="card-title">{t("settings.onedriveTitle")}</h2>
-        <p className="banner info">{t("settings.onedriveNotice")}</p>
         <div className="form">
           <div className="field">
             <label htmlFor="od_input" className="field-label">
@@ -287,7 +286,6 @@ export function Settings() {
 
       <article className="card">
         <h2 className="card-title">{t("settings.composerTitle")}</h2>
-        <p className="banner info">{t("settings.composerNotice")}</p>
         <div className="form">
           <div className="field">
             <label htmlFor="lic_server" className="field-label">
@@ -319,6 +317,11 @@ export function Settings() {
           {licNotice ? <p className="success">{licNotice}</p> : null}
         </div>
       </article>
+
+      <DataResetCard
+        title={t("settings.deleteUserDataTitle")}
+        description={t("settings.deleteUserDataHint")}
+      />
     </div>
   );
 }

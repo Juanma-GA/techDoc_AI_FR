@@ -19,7 +19,7 @@ cd "$ROOT"
 
 violations=0
 
-EXCLUDE_DIRS=(node_modules .venv __pycache__ dist build .git playwright-report test-results coverage legacy)
+EXCLUDE_DIRS=(node_modules .venv __pycache__ dist build generated target gen .git playwright-report test-results coverage legacy)
 exclude_args=()
 for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
@@ -30,15 +30,23 @@ pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
 # ------------------------------------------------------------------
-# 1. Every FastAPI app mounts a router under /api/v1.
+# 1. Check the API prefix using the declared backend's source layout.
 # ------------------------------------------------------------------
-step 1 "FastAPI mounts /api/v1 prefix"
-if compgen -G 'apps/*/backend/app/main.py' >/dev/null && \
-   grep -lq 'prefix="/api/v1"' apps/*/backend/app/main.py 2>/dev/null; then
-  pass
-else
-  fail "No 'prefix=\"/api/v1\"' found in apps/*/backend/app/main.py"
-fi
+step 1 "Backend API prefix /api/v1"
+missing=""
+for backend in apps/*/backend; do
+  [[ -d "$backend" ]] || continue
+  if [[ -f "$backend/go.mod" ]]; then
+    grep -rq --include='*.go' 'Group("/api/v1")' "$backend/cmd" ||
+      missing+="$backend -- Go API group /api/v1 missing\n"
+  elif [[ -f "$backend/pyproject.toml" ]]; then
+    grep -q 'prefix="/api/v1"' "$backend/app/main.py" ||
+      missing+="$backend -- FastAPI prefix /api/v1 missing\n"
+  else
+    missing+="$backend -- backend stack needs an explicit checker adapter\n"
+  fi
+done
+if [[ -z "$missing" ]]; then pass; else fail "$missing"; fi
 
 # ------------------------------------------------------------------
 # 2. No console.log in frontend src/.
@@ -188,8 +196,8 @@ if [[ -z "$missing" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 12. Le package.json racine declare 'dev:<poc>' pour chaque dossier
-#    sous apps/ (sauf _template).
+# 12. Le package.json racine declare 'dev:<poc>' pour chaque app
+#    avec un dossier backend ou frontend (sauf _template).
 # ------------------------------------------------------------------
 step 12 "package.json racine wire"
 missing=""
@@ -197,13 +205,14 @@ if [[ -f package.json ]]; then
   for d in apps/*/; do
     poc="$(basename "$d")"
     [[ "$poc" == "_template" ]] && continue
+    [[ -d "${d}backend" || -d "${d}frontend" ]] || continue
     if ! grep -q "\"dev:${poc}\"" package.json; then
       missing+="apps/$poc/ -- manque 'dev:${poc}' dans package.json racine\n"
     fi
   done
 fi
 if [[ -z "$missing" ]]; then pass; else
-  fail "Chaque POC doit avoir un script 'dev:<poc>' au niveau racine :\n$missing"
+  fail "Chaque app avec backend ou frontend doit avoir un script 'dev:<poc>' au niveau racine :\n$missing"
 fi
 
 # ------------------------------------------------------------------

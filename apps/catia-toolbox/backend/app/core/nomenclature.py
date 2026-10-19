@@ -37,6 +37,7 @@ HEADER_KEYS: dict[str, tuple[str, ...]] = {
     "sin": ("sin",),
     "version": ("version", "indice", "evolution"),
     "to_treat": ("a traiter", "traiter", "modifie", "modification", "maj", "statut", "status", "evolue"),
+    "optimized": ("x000", "pieces optimisees", "piece optimisee"),
     "color": ("couleur", "color", "rvb", "rgb"),
     "catpart": ("catpart", "cat part", "nom fichier", "fichier", "part number", "reference", "piece"),
 }
@@ -169,7 +170,7 @@ def preview_sheet(path: str, sheet: Optional[str] = None, rows: int = 15) -> dic
 
 
 _FIELDS = (
-    "catpart", "designation", "sin", "version", "to_treat", "color",
+    "catpart", "designation", "sin", "version", "to_treat", "optimized", "color",
     "old_pn", "new_pn", "old_rev", "new_rev", "replaced", "color_ref", "materials",
 )
 
@@ -245,17 +246,19 @@ def _build_items(rows: list[list], header_idx: int, colmap: dict[str, int]) -> l
         color_ref = _text(_cell(row, "color_ref"))[:200]
         materials = _text(_cell(row, "materials"))[:200]
         to_treat_raw = _text(_cell(row, "to_treat"))
+        optimized_raw = _text(_cell(row, "optimized"))
         color = parse_color(_cell(row, "color"))
         # On prend TOUTES les lignes des colonnes mappees : on n'ignore qu'une
         # ligne entierement vide (aucune cellule mappee renseignee).
         if not any(
             [catpart, sin, designation, version, old_pn, new_pn, old_rev, new_rev,
-             color_ref, materials, to_treat_raw, color]
+             color_ref, materials, to_treat_raw, optimized_raw, color]
         ):
             continue
         # "A traiter" = cellule "A TRAITER" NON VIDE (seul filtre attendu), quel
         # que soit son contenu -- pas de liste de valeurs "vraies".
         to_treat = ("to_treat" in colmap) and bool(to_treat_raw)
+        optimized = ("optimized" in colmap) and _norm(optimized_raw) == "x"
         # "Piece remplacee" : colonne dediee non vide OU ancien/nouveau PN differents.
         replaced_flag = ("replaced" in colmap) and bool(_text(_cell(row, "replaced")))
         replaced = replaced_flag or bool(old_pn and new_pn and old_pn != new_pn)
@@ -267,6 +270,7 @@ def _build_items(rows: list[list], header_idx: int, colmap: dict[str, int]) -> l
                 "version": version,
                 "to_treat": to_treat,
                 "to_treat_value": to_treat_raw,
+                "optimized": optimized,
                 "replaced": replaced,
                 "old_pn": old_pn,
                 "new_pn": new_pn,
@@ -309,6 +313,7 @@ def parse_nomenclature(path: str, sheet: Optional[str] = None, mapping: Optional
     summary = {
         "rows": len(items),
         "to_treat": sum(1 for it in items if it["to_treat"]),
+        "optimized": sum(1 for it in items if it["optimized"]),
         "replaced": sum(1 for it in items if it["replaced"]),
         "mono_body": 0,  # renseigne apres l'etape Mono-Corps (onglet Materiaux)
         "mono_color": sum(1 for it in items if it["mono_color"]),

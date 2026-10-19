@@ -41,7 +41,6 @@ export function Qc() {
     <div className="flex max-w-3xl flex-col gap-4">
       <article className="card">
         <h2 className="card-title">{t("qc.title")}</h2>
-        <p className="banner info">{t("qc.banner")}</p>
         <div className="row">
           <input
             className="input grow"

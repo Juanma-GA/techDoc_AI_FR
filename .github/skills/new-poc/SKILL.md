@@ -13,6 +13,7 @@ Create a standards-aligned POC from `apps/_template` with controlled, reviewable
 
 - Application slug and display name.
 - Business purpose and declared profiles.
+- Web-only or web + optional Tauri desktop; backend stack and native target platform.
 - Requested default port or permission to select the next unassigned target port.
 - Explicit approval of a proposed mutation batch.
 
@@ -33,11 +34,16 @@ Ask for missing values and reject ambiguous or unsafe slugs.
 3. Inspect `apps/_template` and the documented creation procedure without reading prohibited data.
 4. Present one mutation batch listing every path to create or modify, substitutions, expected scripts, and validations.
 5. Obtain explicit approval for that exact batch.
-6. Prefer the repository-supported `scripts/new_poc.sh` workflow when an approved execution capability is available.
+6. Prefer `node scripts/new_poc.mjs <slug> [port] [--desktop]` (or the compatible `new_poc.sh` wrapper). Use `--dry-run` to review resolved identity and port without mutations. The default backend remains FastAPI; do not convert existing Go apps to Python.
 7. Otherwise use the documented manual fallback: copy `_template`, exclude generated/data directories, replace template markers, create the matching packaging script from `scripts/package_TEMPLATE.py`, and update root workspace scripts.
 8. Search the created source and configuration for unresolved `TEMPLATE`, `_template`, template logger, database, package, and port markers.
 9. Validate README sections, launchers, backend tests, frontend tests, and packaging paths.
 10. Report every executed and blocked validation separately.
+
+For desktop scaffolding, copy only the canonical optional assets under
+`apps/_template/desktop`, never an existing application's Tauri sources.
+Validate identity, backend preparation, resource paths, health readiness and
+child-process shutdown. Follow `docs/standards/desktop-and-stacks.md`.
 
 Any change outside the approved path list requires a new mutation batch and confirmation.
 
