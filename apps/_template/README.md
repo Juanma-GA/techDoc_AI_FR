@@ -16,10 +16,15 @@ Provide the required FastAPI and React/Vite foundation for a new local-first POC
 - AI4TECHDOC identity through the shared `@internal/ui` logo component.
 - React/Vite frontend served by FastAPI at `/`.
 - Windows and Unix launchers, conditional frontend rebuild, and Windows packaging wrappers.
+- Optional Tauri desktop shell, selected with `node scripts/new_poc.mjs <slug> [port] --desktop`.
 
 ## Auth
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
+
+## Profiles
+- `local-first`
+- `llm`
 
 ## Port
 
@@ -73,6 +78,9 @@ For scenario registration and the shared icon path, see the [frontend integratio
 ## Limitations
 
 The template has no business workflow and must be completed after instantiation.
+The optional FastAPI desktop adapter currently targets Windows x64; web mode remains
+available on Windows and Unix. See the [desktop and stack guide](../../docs/standards/desktop-and-stacks.md)
+for runtime preparation, custom backend adapters, packaging and lifecycle validation.
 
 ## Standard Deviations
 

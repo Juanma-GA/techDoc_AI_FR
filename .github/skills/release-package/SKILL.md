@@ -20,7 +20,7 @@ Validate release readiness and, only after dedicated confirmation, generate the 
 
 1. `STANDARD_POC.md` launcher and packaging rules.
 2. `CLAUDE.md` conditional build, dependency-install guard, output, and data-safety rules.
-3. The application's README, launchers, and `scripts/package_<poc>.py`.
+3. The application's README, launchers, and declared packaging entry point (`.py` for FastAPI, `.mjs` for PDF Toolkit Go).
 4. `docs/apps/README.md` for target default port policy.
 
 ## Procedure
@@ -47,7 +47,8 @@ Validate release readiness and, only after dedicated confirmation, generate the 
 - Launcher defaults and free-port behavior match the target policy.
 - Bind remains `127.0.0.1` and the chosen port is printed and opened.
 - Frontend rebuild is conditional; dependency installation occurs only when `node_modules` is absent.
-- ZIP output is under `apps/<poc>/dist/` and includes required launchers, app source, frontend dist, design tokens, and embedded runtime when specified.
+- ZIP output is under `apps/<poc>/dist/` and includes required launchers and runtime assets. FastAPI packages carry source, frontend dist and embedded Python; PDF Toolkit web packages carry the Windows x64 Go toolchain, allowlisted backend source, vendored dependencies, built UI, documentation and licenses. They compile offline at first launch and reuse the binary conditionally. Do not require Python in a Go package or promise that local compilation bypasses endpoint protection.
+- Optional Tauri installers retain the web workflow. Verify the backend resource, startup health/error handling, installed paths and child shutdown; use the app's `package.bat desktop` output policy.
 - ZIP excludes databases, data, storage, uploads, secrets, virtual environments, caches, and unrelated apps.
 - Executed and recommended checks are separate.
 
