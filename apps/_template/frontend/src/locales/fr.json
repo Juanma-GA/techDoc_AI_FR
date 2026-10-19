@@ -1,7 +1,6 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0",
     "description": "Squelette de démarrage pour les POCs ATEXIS."
   },
   "nav": {

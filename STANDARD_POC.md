@@ -675,7 +675,7 @@ L'UI de chaque POC est l'**app React buildée** (`frontend/dist/`), servie par l
 
 Le POC ajoute ses onglets métier. Les endpoints d'administration restent disponibles même si aucun onglet Données n'est exposé.
 
-Le titre HTML initial (`<title>`), le `document.title` React et le titre de fenêtre Tauri (`productName`) doivent reprendre le même `app.title` que l'application affiche dans le sidebar. Le générateur produit le titre lisible de l'application pour ces surfaces.
+Le titre HTML initial (`<title>`), le `document.title` React et le titre de fenêtre Tauri (`productName`) doivent reprendre le même `app.title` que l'application affiche dans le sidebar. Le générateur produit le titre lisible de l'application pour ces surfaces. Ne pas afficher la version applicative (`vX.Y.Z`) dans le sidebar.
 
 ### Conventions visuelles
 

@@ -43,7 +43,6 @@ export function App() {
     <AppShell
       title={appTitle}
       brandTitle={t("app.description")}
-      version={t("app.version")}
       headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
       themeToggleLabel={t("nav.themeToggle")}

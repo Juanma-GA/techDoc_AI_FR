@@ -1,7 +1,6 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0",
     "description": "Starter shell for ATEXIS proof-of-concept apps."
   },
   "nav": {
