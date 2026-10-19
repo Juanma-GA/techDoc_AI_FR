@@ -7,8 +7,38 @@ This repository uses one coherent task per branch and one pull request per task.
 - Use `feature/<name>` for features and documentation additions.
 - Use `fixing/<name>` for corrections.
 - Do not work directly on `main` unless that choice is explicit.
-- While the `Standard-apps` pull request targets `main`, base related work on `Standard-apps`.
-- After `Standard-apps` is merged, rebase open branches onto `main` and update them with `--force-with-lease`.
+- For an independent feature, start from the latest `origin/main`:
+
+  ```bash
+  git status
+  git fetch origin
+  git switch -c feature/<name> origin/main
+  ```
+
+- For a feature that depends on an open pull request, make sure the parent PR's source branch is checked out, then create the new branch from the current branch:
+
+  ```bash
+  git status --short --branch
+  git switch -c feature/<name>
+  ```
+
+  The new branch inherits the current branch's commits, so it remains dependent on that PR until the parent is merged.
+
+- After the parent PR is merged into `main`, update the dependent branch by merging `origin/main` into it:
+
+  ```bash
+  git status --short --branch
+  git fetch origin
+  git merge --no-commit --no-ff origin/main
+  git status
+  ```
+
+  Review the status and resolve any conflicts. If conflicts occurred, stage the resolved files with `git add <resolved-files>`. Then finish and publish the merge:
+
+  ```bash
+  git commit -m "Merge origin/main into <branch-name>"
+  git push origin <branch-name>
+  ```
 
 ## Before a Push or Pull Request
 

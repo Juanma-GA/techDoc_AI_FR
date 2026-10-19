@@ -174,8 +174,8 @@ Créer ensuite les skills mutantes, avec confirmation explicite avant tout chang
 - une branche par tâche
 - une PR par tâche
 - branches empilées
-- base Standard-apps quand la PR vers main est ouverte
-- rebase vers main après merge de Standard-apps
+- branche courante associée à la PR parente comme base d'une branche dépendante
+- merge de origin/main dans la branche dépendante après le merge de la PR parente
 - validations avant chaque push.
 
 
@@ -227,9 +227,9 @@ Phase 7 — Workflow Git et PR
 - fixing/<name> pour un correctif
 - une seule tâche cohérente par branche
 - une PR par fix ou feature
-- cibler Standard-apps lorsque sa PR vers main est encore ouverte
-- changer la base vers main après le merge de Standard-apps
-- effectuer un rebase avec --force-with-lease
+- créer une branche dépendante depuis la branche courante associée à la PR parente encore ouverte
+- après le merge de la PR parente, fusionner origin/main dans la branche dépendante et vérifier/résoudre les conflits
+- valider le merge, puis pousser la branche dépendante
 - exécuter les validations avant chaque push ou ouverture de PR
 2. Mettre à jour :
 - README.md

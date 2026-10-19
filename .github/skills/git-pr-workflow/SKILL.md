@@ -26,9 +26,9 @@ Keep one coherent task per branch and one pull request per task while making eve
 
 1. Inspect current branch, worktree status, and relevant remote/base state using read-only capabilities when available.
 2. Classify the task as `feature/<name>` or `fixing/<name>` and verify that the scope is coherent.
-3. While the `Standard-apps` pull request remains open against `main`, propose `Standard-apps` as the base for dependent work. After it merges, propose rebasing onto `main`.
-4. Present a local mutation batch for branch creation and, separately when appropriate, commit creation. Include exact names, included paths, excluded unrelated changes, and validations.
-5. Obtain explicit approval before creating a branch or commit.
+3. For independent work, use `origin/main` as the base. For work depending on an open pull request, use the currently checked-out branch associated with that PR; after the parent PR merges, update the dependent branch by merging `origin/main` as documented in `CONTRIBUTING.md`.
+4. Present each local mutation batch, including branch creation, merging `origin/main` into a dependent branch, and commit creation. Include exact names, included paths, excluded unrelated changes, and validations.
+5. Obtain explicit approval before creating a branch, merging into a branch, or creating a commit.
 6. Stage only approved paths and never discard unrelated user changes.
 7. Use a short conventional commit message aligned with the task.
 8. Treat push, rebase, `--force-with-lease`, pull request creation, and pull request base changes as remote or history-affecting actions requiring a separate explicit confirmation, even when local branch or commit approval already exists.
@@ -38,7 +38,7 @@ Keep one coherent task per branch and one pull request per task while making eve
 
 - Without Git execution, return exact proposed commands and stop before mutation.
 - Without hosting-service access, provide the pull request title, base, body, and validation summary without claiming a PR exists.
-- Without remote-state access, ask the user whether `Standard-apps` is still open before selecting the PR base.
+- Without parent-PR state, ask the user whether the parent pull request is still open before selecting the base.
 - Without permission for remote actions, keep push, rebase, and PR steps recommended only.
 
 ## Validations
@@ -47,7 +47,7 @@ Keep one coherent task per branch and one pull request per task while making eve
 - The base branch decision is explicit and supported by current or user-provided state.
 - Only approved paths are staged; unrelated changes remain untouched.
 - Required checks are executed or clearly listed as blocked/recommended before push or PR.
-- Rebase updates use `--force-with-lease`, never an unconditional force push.
+- After a parent PR merges, update dependent branches by merging `origin/main`; verify conflict resolution before committing and pushing.
 
 ## Expected Output
 
