@@ -66,20 +66,23 @@ export function ImageToolbar({
           <Maximize2 size={15} aria-hidden="true" />
         </Button>
         {result || editor.manualEditedImage ? (
-          <Button
-            variant="secondary" size="sm" disabled={disabled || downloading}
-            onClick={onDownload} aria-busy={downloading && !savingAs}
-          >
-            <Download size={15} aria-hidden="true" />
-            {t(downloading && !savingAs ? "image.downloading" : "image.save")}
-          </Button>
-          <Button
-            variant="secondary" size="sm" disabled={disabled || downloading}
-            onClick={onDownloadAs} aria-busy={savingAs}
-          >
-            <FolderOpen size={15} aria-hidden="true" />
-            {t(savingAs ? "image.savingAs" : "image.saveAs")}
-          </Button>
+          <>
+            <Button
+              variant="secondary" size="sm" disabled={disabled || downloading}
+              onClick={onDownload} aria-busy={downloading && !savingAs}
+            >
+              <Download size={15} aria-hidden="true" />
+              {t(downloading && !savingAs ? "image.downloading" : "image.save")}
+            </Button>
+            <Button
+              variant="secondary" size="sm" disabled={disabled || downloading}
+              onClick={onDownloadAs} aria-busy={savingAs}
+              title={t("image.saveAsHint")}
+            >
+              <FolderOpen size={15} aria-hidden="true" />
+              {t(savingAs ? "image.savingAs" : "image.saveAs")}
+            </Button>
+          </>
         ) : null}
       </div>
     </div>

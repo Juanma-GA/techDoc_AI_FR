@@ -186,6 +186,9 @@ test("Save as opens the native picker and writes the exported JPEG", async ({ pa
   await page.getByRole("button", { name: "Lancer l’OCR sur CPU" }).click();
   await page.getByRole("button", { name: "Enregistrer sous", exact: true }).click();
 
+  await expect.poll(
+    () => page.evaluate(() => (window as SavePickerTestWindow).__savedFile?.closed),
+  ).toBe(true);
   const pickerOptions = await page.evaluate(() =>
     (window as SavePickerTestWindow).__savePickerOptions,
   );
