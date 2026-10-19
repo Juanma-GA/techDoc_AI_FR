@@ -105,6 +105,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
     }
     assert severities == {
         "CUSTOM_CMM_NUMBER": "error",
+        "CUSTOM_CMM_MAPPING_SUSPECT": "warning",
         "CUSTOM_CMM_NUMBER_FONT_SIZE": "error",
         "CUSTOM_THALES_LOGO_FONT_SIZE": "warning",
         "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "warning",

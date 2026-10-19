@@ -318,6 +318,8 @@ class ClientConfigOut(BaseModel):
 
 class ClientRuleOut(BaseModel):
     code: str
+    bundle_code: str
+    bundle_label: str
     name: str
     description: str
     message: str
@@ -435,6 +437,7 @@ class MistralSettingsIn(BaseModel):
     vision_enabled: Optional[bool] = None
     llm_enabled: Optional[bool] = None
     checklist_ai_scan: Optional[bool] = None
+    demo_enabled: Optional[bool] = None
 
 
 class MistralSettingsOut(BaseModel):
@@ -452,6 +455,7 @@ class MistralSettingsOut(BaseModel):
     llm_enabled: bool = True
     llm_tested: bool = False
     checklist_ai_scan: bool = False
+    demo_enabled: bool = False
 
 
 class TestConnectionOut(BaseModel):

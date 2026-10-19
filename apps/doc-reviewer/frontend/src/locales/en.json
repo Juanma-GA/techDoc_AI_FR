@@ -12,6 +12,11 @@
     "untested": "UNTESTED",
     "noKey": "NO KEY"
   },
+  "demo": {
+    "badge": "DEMO MODE",
+    "pdfLoading": "Loading the demo PDF…",
+    "pdfLoadError": "The demo PDF could not be loaded ({{message}}). Place it at frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf and rebuild the frontend."
+  },
   "nav": {
     "section": "Navigation",
     "ariaLabel": "Main navigation",
@@ -52,7 +57,7 @@
     "f3": "Reviewer view: suggestions ordered by (page, span_index, id). original → proposed diff unless detection-only (structural rules, vision) where Accept is hidden.",
     "f4": "Lifecycle: open → accepted → applied. On apply: stale siblings (overlapping text) are auto-rejected.",
     "f5": "Dashboard: KPIs PDFs / suggestions open-applied-rejected / top docs / severity-kind breakdown.",
-    "f6": "Export edited PDF or rollback. Admin → /admin/wipe-suggestions (every status) or /admin/reset (DB + disk folders + orphans) for a full zero reset."
+    "f6": "Export edited PDF or rollback. Admin actions clear data from the current mode."
   },
   "data": {
     "title": "Data",
@@ -60,10 +65,10 @@
     "overview": "Overview",
     "reset": "Reset",
     "resetWarn": "All these operations are irreversible. Built-in standards and Mistral config are preserved.",
-    "resetSugs": "Wipe all suggestions",
-    "resetAll": "Delete everything (documents + rules + disk files)",
-    "confirmSugs": "Wipe EVERY suggestion (open, rejected, applied, edited)? Irreversible.",
-    "confirmAll": "Delete EVERY document, suggestion, custom rule, checklist and disk file? Irreversible.",
+    "resetSugs": "Wipe suggestions in the current mode",
+    "resetAll": "Delete everything in the current mode",
+    "confirmSugs": "Wipe EVERY suggestion in the current mode (open, rejected, applied, edited)? Irreversible.",
+    "confirmAll": "Delete documents, suggestions and files in the current mode? Custom rules and checklists are deleted only in normal mode. Irreversible.",
     "wipedSugs": "{{count}} suggestion(s) deleted.",
     "resetDone": "Reset done: {{docs}} document(s), {{rules}} rule(s), and {{folders}} folder(s) deleted.",
     "kpi.pdfs": "Documents",
@@ -109,6 +114,7 @@
     "listTitle": "Imported documents",
     "empty": "No document imported",
     "uploading": "Uploading…",
+    "upload.importDemo": "Import demo PDF",
     "upload.dropTitle": "Drop a PDF, Word or .zip here",
     "upload.dropHint": "or click to browse",
     "upload.dropLimit": "PDF, .docx, .doc or .zip · max 100 MB",
@@ -182,7 +188,14 @@
     "analysis.incomplete.title": "Checks to review ({{count}})",
     "analysis.incomplete.description": "These rules could not reach a conclusion. The analysis is partial; no finding does not prove compliance.",
     "analysis.incomplete.page": "Page {{page}}",
+    "analysis.cmmMappingWarning.title": "Verify the CMM number in the mapping",
+    "analysis.cmmMappingWarning.description": "At least 90% of pages show CMM number {{detected}}, while the mapping contains {{mapped}}. Are you sure the CMM number entered in the mapping is correct?",
     "meta.saveError": "The mapping could not be saved.",
+    "meta.detectFromPdf": "Detect from the first 4 PDF pages",
+    "meta.detecting": "Scanning pages…",
+    "meta.detected": "{{count}} field(s) suggested from {{pages}} page(s). Review the mapping before saving.",
+    "meta.noReliableValues": "No sufficiently reliable values found. The form was cleared; review it before saving.",
+    "meta.detectError": "Metadata detection failed: {{message}}",
     "meta.invalidFormat": "The value does not match the expected format.",
     "meta.unsaved": "Unsaved changes",
     "meta.revisionDate": "Revision date",
@@ -289,8 +302,11 @@
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "rules",
+      "enableAll": "Enable all",
+      "disableAll": "Disable all",
       "loadFailed": "Could not load the active client catalog.",
-      "saveFailed": "Could not save this rule's status. Try again."
+      "saveFailed": "Could not save this rule's status. Try again.",
+      "bulkSaveFailed": "Some rules may not have been updated. Check their status and try again."
     },
     "catalog": {
       "CUSTOM_REVISION_LEP_STAR": "Revised or new page marked with a star in the LEP",
@@ -304,6 +320,7 @@
       "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "Highlights pages declared as odd/even pairs",
       "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "Page/Pages label and alignment in Highlights",
       "CUSTOM_CMM_NUMBER": "CMM number matches the document context",
+      "CUSTOM_CMM_MAPPING_SUSPECT": "Verify the CMM number entered in the mapping",
       "CUSTOM_CMM_NUMBER_FONT_SIZE": "CMM number font size (ATA)",
       "CUSTOM_THALES_LOGO_FONT_SIZE": "THALES logo font size on non-TP1 pages",
       "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "THALES logo font size on TP1 pages",
@@ -396,6 +413,7 @@
       "CUSTOM_HIGHLIGHTS_PAGE_PAIRING": "A Highlights page is declared without its corresponding odd or even page.",
       "CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT": "The Page/Pages label or alignment is not compliant in Highlights.",
       "CUSTOM_CMM_NUMBER": "The CMM number does not match the document context.",
+      "CUSTOM_CMM_MAPPING_SUSPECT": "The dominant CMM number in the footers differs from the mapping.",
       "CUSTOM_CMM_NUMBER_FONT_SIZE": "The CMM number (ATA) font size is not 23 pt.",
       "CUSTOM_THALES_LOGO_FONT_SIZE": "The THALES logo size outside TP1 is not 31 pt.",
       "CUSTOM_TP1_THALES_LOGO_FONT_SIZE": "The THALES logo size on TP1 is not 36 pt.",
@@ -568,6 +586,11 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Application configuration",
+    "demo.title": "Operating mode",
+    "demo.hint": "Normal mode is selected by default. In demo mode, the dashboard's Analyze a document action loads the local PDF through the regular upload flow.",
+    "demo.normal": "Normal mode",
+    "demo.demo": "Demo mode",
+    "demo.saveError": "Could not save the operating mode.",
     "llmSection": "LLM configuration (Mistral)",
     "standardsAdmin": "Standards administration",
     "activeStandards.title": "Active target standards",

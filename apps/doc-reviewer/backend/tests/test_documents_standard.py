@@ -30,13 +30,17 @@ def test_upload_without_standard_version_id_uses_active_bundle_versions(
     sample_pdf_bytes: bytes,
 ) -> None:
     active_version = _get_version_id(client, "THALES-CUSTOM")
+    expected_version_ids = [
+        catalog["standard_version_id"]
+        for catalog in client.get("/api/v1/client-config").json()["catalogs"]
+    ]
     resp = client.post(
         "/api/v1/documents?target=auto",
         files={"file": ("b.pdf", sample_pdf_bytes, "application/pdf")},
     )
     assert resp.status_code == 201
     assert resp.json()["standard_version_id"] == active_version
-    assert resp.json()["standard_version_ids"] == [active_version]
+    assert resp.json()["standard_version_ids"] == expected_version_ids
 
 
 def test_upload_with_unknown_standard_version_id_400(

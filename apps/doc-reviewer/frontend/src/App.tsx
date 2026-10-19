@@ -1,5 +1,8 @@
 import {
+  Ai4TechDocLogo,
   AppShell,
+  DemoModeBadge,
+  DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
   sidebarNavItemClass,
@@ -9,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
+import { useMistralSettings } from "./hooks/useMistralSettings";
 import i18n from "./i18n";
 
 const Dashboard = lazy(async () => ({
@@ -52,7 +56,9 @@ const LANGS = ["fr", "en"] as const;
 export function App() {
   const { t } = useTranslation();
   const location = useLocation();
+  const settingsQuery = useMistralSettings();
   const currentLang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
+  const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
   // Le reviewer (detail d'un document) occupe tout le viewport pour maximiser
   // la lisibilite du PDF et des surlignages (disposition split plein ecran) —
@@ -60,15 +66,20 @@ export function App() {
   const isReviewer = location.pathname.startsWith("/documents/");
   if (isReviewer) {
     return (
-      <div className="pr">
-        <ErrorBoundary>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/documents/:id" element={<DocumentReviewer />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
-      </div>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <div className="pr">
+          <ErrorBoundary>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/documents/:id" element={<DocumentReviewer />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      </DemoModeProvider>
     );
   }
 
@@ -78,8 +89,16 @@ export function App() {
       title={t("app.title")}
       brandTitle={t("app.description")}
       version={t("app.version")}
+      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
       themeToggleLabel={t("nav.themeToggle")}
+      sidebarTop={
+        demoEnabled ? (
+          <div className="border-b border-md px-4 py-2">
+            <DemoModeBadge label={t("demo.badge")} />
+          </div>
+        ) : null
+      }
       llmStatus={<LlmBadge />}
       navigation={navItems.map(({ to, labelKey, end }) => (
         <NavLink
@@ -100,17 +119,22 @@ export function App() {
         />
       }
     >
-      <ErrorBoundary>
-        <Suspense fallback={<RouteFallback />}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/documents" element={<DocumentsList />} />
-            <Route path="/rejections" element={<Rejections />} />
-            <Route path="/rules" element={<Rules />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <ErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/documents" element={<DocumentsList />} />
+              <Route path="/rejections" element={<Rejections />} />
+              <Route path="/rules" element={<Rules />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </DemoModeProvider>
     </AppShell>
   );
 }

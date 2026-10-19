@@ -21,9 +21,12 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import delete  # noqa: E402
 
-from app.db.session import Base, engine  # noqa: E402
 from app.db.models import AppConfig  # noqa: E402
-from app.db.session import SessionLocal  # noqa: E402
+from app.db.session import (  # noqa: E402
+    Base,
+    SessionLocal,  # noqa: E402
+    engine,
+)
 from app.main import create_app  # noqa: E402
 
 
@@ -38,12 +41,14 @@ def _seed_builtin_standards() -> None:
     rather than `alembic upgrade`)."""
     import json
 
-    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     from app.checks.client_registry import load_active_client_configuration
-    from app.db.seed import sync_user_standard
+    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     from app.db.models import Standard, StandardVersion
+    from app.db.seed import sync_user_standard
     from app.db.session import SessionLocal
 
+    configuration = load_active_client_configuration()
+    client_standard_specs = configuration.bundle.standard_specs
     session = SessionLocal()
     try:
         existing_codes = {
@@ -61,17 +66,23 @@ def _seed_builtin_standards() -> None:
             session.add(std)
             session.flush()
             for label in spec["versions"]:
+                default_disabled_codes = (
+                    client_standard_specs.get(spec["code"], {})
+                    .get("default_disabled_rule_codes_by_version", {})
+                    .get(label, [])
+                )
                 session.add(
                     StandardVersion(
                         standard_id=std.id,
                         label=label,
                         builtin=True,
                         catalog_json=json.dumps(serialize_builtin_version(spec, label)),
+                        disabled_rule_codes=json.dumps(default_disabled_codes),
                     )
                 )
             sync_user_standard(
                 session,
-                load_active_client_configuration().bundle.standard_specs,
+                client_standard_specs,
             )
     finally:
         session.close()
@@ -104,7 +115,16 @@ def _reset_document_context_defaults() -> None:
     """Do not leak the persisted next-upload mapping between tests."""
     session = SessionLocal()
     try:
-        session.execute(delete(AppConfig).where(AppConfig.key == "document.context_defaults"))
+        session.execute(
+            delete(AppConfig).where(
+                AppConfig.key.in_(
+                    (
+                        "document.context_defaults",
+                        "document.context_defaults.demo",
+                    )
+                )
+            )
+        )
         session.commit()
     finally:
         session.close()

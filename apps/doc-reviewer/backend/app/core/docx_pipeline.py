@@ -17,15 +17,16 @@ import uuid
 from collections import defaultdict
 from typing import Any, Callable, Optional
 
-from app.checks.client_bundle import ClientBundle
-from app.checks.client_registry import load_active_client_configuration
 from sqlalchemy.orm import Session
 
 from app.checks import docx_checks
+from app.checks.client_bundle import ClientBundle
+from app.checks.client_registry import load_active_client_configuration
 from app.checks.raw import RawSuggestion
 from app.core import docx_zones, rules_engine
 from app.core.compiled_rule_executor import execute_docx_rules
 from app.core.compiled_rules import RuleResult
+from app.core.rule_applicability import RuleExecutionContext, is_standard_applicable
 from app.db.models import Document, StandardVersion, Suggestion
 from app.parsers.docx_parser import Block, ParsedDocx
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
@@ -94,9 +95,15 @@ def run_docx(
         execute_compiled=False,
         client_bundle=client_bundle,
     )
+    execution_context = RuleExecutionContext.from_document(document)
+    applicable_versions = [
+        version
+        for version in standard_versions or []
+        if is_standard_applicable(version.standard.code, execution_context)
+    ]
     compiled_rules = rules_engine.load_compiled_rules(
         db,
-        standard_versions or [],
+        applicable_versions,
         checklist_enabled=checklist_enabled,
     )
     compiled_rules_for_execution, _compiled_checklist_rules_for_ai = rules_engine.route_compiled_rules(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findInconclusiveResults } from "./IncompleteChecksNotice";
+import { findCmmMappingWarning, findInconclusiveResults } from "./IncompleteChecksNotice";
 import type { RuleResult } from "../../types/domain";
 
 describe("findInconclusiveResults", () => {
@@ -20,6 +20,12 @@ describe("findInconclusiveResults", () => {
         },
       },
       {
+        rule_id: "CUSTOM_CMM_MAPPING_SUSPECT",
+        status: "INCONCLUSIVE",
+        inconclusive_pages: ["1"],
+        evidence: null,
+      },
+      {
         rule_id: "RULE_PARTIAL_FAILURE",
         rule_title: "Bookmark destinations",
         status: "FAIL",
@@ -37,5 +43,36 @@ describe("findInconclusiveResults", () => {
       ["24", "26"],
       ["31"],
     ]);
+  });
+});
+
+describe("findCmmMappingWarning", () => {
+  it("returns a failed CMM mapping check with both values", () => {
+    const warning: RuleResult = {
+      rule_id: "CUSTOM_CMM_MAPPING_SUSPECT",
+      status: "FAIL",
+      evidence: {
+        page: "1",
+        location: { type: "bbox", bbox: [0, 0, 0, 0] },
+        observed_value: "79-30-01",
+        expected_value: "79-30-02",
+      },
+    };
+
+    expect(findCmmMappingWarning([
+      { ...warning, rule_id: "OTHER_RULE" },
+      { ...warning, status: "PASS" },
+      warning,
+    ])).toBe(warning);
+  });
+
+  it("ignores results without usable evidence", () => {
+    expect(findCmmMappingWarning([
+      {
+        rule_id: "CUSTOM_CMM_MAPPING_SUSPECT",
+        status: "FAIL",
+        evidence: null,
+      },
+    ])).toBeUndefined();
   });
 });
