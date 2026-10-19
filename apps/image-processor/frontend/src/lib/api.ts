@@ -126,6 +126,12 @@ export type OcrResultDto = {
   replacement_font_size?: number | null;
 };
 
+export type LineReplacementDto = {
+  edited_image: string;
+  replacement_count: number;
+  replacement_font_size: number | null;
+};
+
 export const healthApi = { read: () => api<HealthDto>("/health") };
 
 export const adminApi = {
@@ -151,6 +157,8 @@ export const imageReplaceApi = {
     apiForm<{ pairs: ExcelReplacementPairDto[] }>("/image-processor/excel/pairs", formData),
   runOcr: (formData: FormData) =>
     apiForm<OcrResultDto>("/image-processor/ocr", formData),
+  replaceLine: (formData: FormData) =>
+    apiForm<LineReplacementDto>("/image-processor/replace-line", formData),
   inpaint: (formData: FormData) =>
     apiForm<{ edited_image: string }>("/image-processor/inpaint", formData),
 };

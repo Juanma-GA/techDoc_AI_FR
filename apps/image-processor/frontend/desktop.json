@@ -1,0 +1,63 @@
+{
+  "adapter": "image-processor",
+  "slug": "image-processor",
+  "services": {
+    "api": {
+      "dev": {
+        "executable": "../backend/.venv/Scripts/python.exe",
+        "cwd": "../backend"
+      },
+      "build": {
+        "executable": "runtime/python-ocr/python.exe",
+        "cwd": "runtime/backend"
+      },
+      "args": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "{port}"
+      ],
+      "health_path": "/api/v1/health"
+    },
+    "lama": {
+      "dev": {
+        "executable": "../backend/lama_service/.venv/Scripts/python.exe",
+        "cwd": "../backend/lama_service"
+      },
+      "build": {
+        "executable": "runtime/python-lama/python.exe",
+        "cwd": "runtime/backend/lama_service"
+      },
+      "args": [
+        "-m",
+        "uvicorn",
+        "app:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "{port}"
+      ],
+      "health_path": "/health"
+    }
+  },
+  "bootstrap": [
+    "-m",
+    "alembic",
+    "upgrade",
+    "head"
+  ],
+  "model_cache": {
+    "paddlex": "runtime/models/paddlex",
+    "torch_home": "runtime/models/torch",
+    "ocr_model_variant": "tiny",
+    "ocr_models": [
+      "PP-OCRv6_tiny_det",
+      "PP-OCRv6_tiny_rec",
+      "PP-LCNet_x1_0_textline_ori"
+    ],
+    "lama_model_url": "https://github.com/enesmsahin/simple-lama-inpainting/releases/download/v0.1.0/big-lama.pt"
+  }
+}

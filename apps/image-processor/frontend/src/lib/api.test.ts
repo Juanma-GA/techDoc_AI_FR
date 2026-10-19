@@ -46,4 +46,21 @@ describe("JPEG download contract", () => {
     await expect(apiForm("/test", new FormData())).rejects.toThrow("Synthetic selection failure.");
     await expect(apiForm("/test", new FormData())).resolves.toEqual({ pairs: [] });
   });
+
+  it("posts a targeted OCR-line replacement as multipart data", async () => {
+    const form = new FormData();
+    const payload = {
+      edited_image: "data:image/jpeg;base64,c3ludGhldGlj",
+      replacement_count: 1,
+      replacement_font_size: 12,
+    };
+    const fetch = vi.fn().mockResolvedValue(Response.json(payload));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(imageReplaceApi.replaceLine(form)).resolves.toEqual(payload);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/v1/image-processor/replace-line",
+      { method: "POST", body: form },
+    );
+  });
 });

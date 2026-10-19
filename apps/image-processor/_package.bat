@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal
+if /i "%~1"=="desktop" goto :desktop
 
 REM Logique reelle du packaging - delegue a scripts\package_image-processor.py.
 REM Pour un nouveau POC : remplace image-processor par le nom du POC.
@@ -27,3 +28,21 @@ if errorlevel 1 (
 
 echo.
 echo [info] Packaging termine. ZIP dans apps\image-processor\dist\.
+exit /b 0
+
+:desktop
+if not exist "%~dp0frontend\desktop.json" (
+    echo [error] Desktop is not enabled for image-processor.
+    exit /b 1
+)
+set "CARGO_TARGET_DIR=%~dp0dist\tauri"
+pushd "%~dp0frontend"
+if not exist node_modules call pnpm install
+if errorlevel 1 (
+    popd
+    exit /b 1
+)
+call pnpm tauri:build
+set "STATUS=%ERRORLEVEL%"
+popd
+exit /b %STATUS%

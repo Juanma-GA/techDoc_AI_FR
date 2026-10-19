@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, excel, health, history, image_export, inpaint, ocr, workspace
+from app.api import admin, excel, health, history, image_export, inpaint, line_replacement, ocr, workspace
 from app.api import settings as settings_route
 from app.config import settings
 from app.core.errors import register_error_handlers
@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(admin.router)
     api_v1.include_router(excel.router)
     api_v1.include_router(ocr.router)
+    api_v1.include_router(line_replacement.router)
     api_v1.include_router(inpaint.router)
     api_v1.include_router(image_export.router)
     api_v1.include_router(workspace.router)

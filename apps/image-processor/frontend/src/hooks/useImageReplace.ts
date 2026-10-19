@@ -6,6 +6,7 @@ import { analysisForm, imageForm } from "../lib/analysis-form";
 import { requestError, workspaceApi, type ReplacementPair } from "../lib/workspace-api";
 import { useExcelMapping } from "./useExcelMapping";
 import { useImageDocument } from "./useImageDocument";
+import { useRecognizedTextReplacement } from "./useRecognizedTextReplacement";
 import { useWorkspaceStorage } from "./useWorkspaceStorage";
 
 export type { ReplacementPair } from "../lib/workspace-api";
@@ -23,6 +24,10 @@ export function useImageReplace(t: TFunction) {
     excel: excel.persistenceState, restoreExcel: excel.restoreExcel,
     excelPending: excel.excelLoading || (excel.excelSelectionConfigured && !excel.excelPairsReady),
     document: image.document, manualPairs: replacementPairs,
+  });
+  const replaceRecognizedLine = useRecognizedTextReplacement({
+    image, manualPairs: replacementPairs, setManualPairs: setReplacementPairs,
+    excel, loading, restoring, downloading, retouching, setLoading, setError, t,
   });
 
   async function chooseImage(files: File[]) {
@@ -153,7 +158,7 @@ export function useImageReplace(t: TFunction) {
   return {
     ...excel, ...image, storage, replacementPairs, error, loading, downloading, restoring, retouching,
     setRetouching,
-    chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit, openHistory,
-    downloadImage, retrySave,
+    chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
+    replaceRecognizedLine, openHistory, downloadImage, retrySave,
   };
 }

@@ -67,6 +67,15 @@ export function useImageDocument(t: TFunction) {
     });
   }
 
+  function applyTextReplacement(payload: OcrResultDto) {
+    const { edited_image, ...analysis } = payload;
+    appendRevision({
+      kind: "text-replacement",
+      image: { name: payload.filename, data_url: edited_image },
+      analysis,
+    });
+  }
+
   function applyBrush(image: string, mode: "lama" | "color") {
     const extension = image.startsWith("data:image/jpeg") ? "jpg" : "png";
     const baseName = revision?.analysis?.filename ?? currentFile?.name ?? "image";
@@ -99,7 +108,7 @@ export function useImageDocument(t: TFunction) {
     imageUrl: revision?.image.data_url || sourceUrl,
     manuallyEdited: Boolean(revision?.kind.startsWith("brush-")),
     canUndo: Boolean(document?.revisions.length),
-    chooseImage, applyOcr, applyBrush, undo, restore,
+    chooseImage, applyOcr, applyTextReplacement, applyBrush, undo, restore,
     clear: () => setDocument(null),
   };
 }

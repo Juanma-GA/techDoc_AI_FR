@@ -19,6 +19,7 @@ type ImagePreviewProps = {
   downloading: boolean;
   onImageEdited: (image: string, mode: "lama" | "color") => void;
   onInpaintingChange: (busy: boolean) => void;
+  onSelectLine: (lineIndex: number) => void;
   t: TFunction;
 };
 
@@ -34,6 +35,7 @@ export function ImagePreview({
   downloading,
   onImageEdited,
   onInpaintingChange,
+  onSelectLine,
   t,
 }: ImagePreviewProps) {
   const editor = useImageEditor({
@@ -95,24 +97,44 @@ export function ImagePreview({
               <svg
                 className="pointer-events-none absolute inset-0 h-full w-full"
                 viewBox={`0 0 ${result.width} ${result.height}`}
-                aria-hidden="true"
+                role="group"
+                aria-label={t("image.recognizedBoxes")}
               >
-                {result.lines.map((line, index) =>
-                  line.box.length >= 3 ? (
+                {result.lines.map((line, index) => {
+                  const reference = result.references.find((item) => item.line_indices.includes(index));
+                  const canSelect = !disabled && !editor.brushEnabled;
+                  return line.box.length >= 3 ? (
                     <polygon
                       key={index}
                       points={line.box.map(([x, y]) => `${x},${y}`).join(" ")}
-                      className={
+                      className={`pointer-events-auto cursor-pointer focus-visible:stroke-brand focus-visible:stroke-2 ${
                         matchedLines.has(index)
                           ? "fill-danger stroke-danger"
                           : "fill-transparent stroke-brand-blue-light"
-                      }
+                      }`}
                       fillOpacity={matchedLines.has(index) ? 0.15 : undefined}
                       strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
+                      role="button"
+                      tabIndex={canSelect ? 0 : -1}
+                      aria-disabled={!canSelect}
+                      aria-label={t(
+                        reference ? "image.editRecognizedReplacement" : "image.replaceRecognizedLine",
+                        { reference: reference?.reference ?? line.text },
+                      )}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={() => {
+                        if (canSelect) onSelectLine(index);
+                      }}
+                      onKeyDown={(event) => {
+                        if (canSelect && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault();
+                          onSelectLine(index);
+                        }
+                      }}
                     />
-                  ) : null,
-                )}
+                  ) : null;
+                })}
               </svg>
             ) : null}
             <canvas

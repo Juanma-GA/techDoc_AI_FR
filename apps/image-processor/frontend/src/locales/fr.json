@@ -131,6 +131,15 @@
     "foundNotReplaced": "Trouvée, non remplacée",
     "notFound": "Absente",
     "recognizedText": "Texte reconnu",
+    "recognizedBoxes": "Zones de texte reconnues",
+    "editRecognizedHint": "Clique sur une ligne pour modifier son contenu dans l’image.",
+    "editRecognizedReplacement": "Modifier le remplacement de {{reference}}",
+    "replaceRecognizedLine": "Remplacer la ligne {{reference}}",
+    "replacementValue": "Nouveau texte pour {{reference}}",
+    "applyLineReplacement": "Appliquer le remplacement",
+    "applyingLineReplacement": "Remplacement en cours…",
+    "cancelLineReplacement": "Annuler",
+    "errorLineReplacement": "Impossible de modifier cette ligne OCR.",
     "noText": "Aucun texte détecté.",
     "imageMeta": "A4 portrait · {{width}} × {{height}} px · {{lines}} ligne(s) détectée(s) · {{filename}}",
     "errorImageType": "Choisis un fichier image pris en charge.",
@@ -168,6 +177,7 @@
     "saved": "Sauvegarde locale à jour.",
     "actions": {
       "ocr": "Analyse et remplacement OCR",
+      "text-replacement": "Remplacement manuel depuis le texte reconnu",
       "brush-lama": "Effacement au pinceau avec LaMa",
       "brush-color": "Effacement au pinceau avec couleur locale",
       "undo": "Annulation de la dernière modification"

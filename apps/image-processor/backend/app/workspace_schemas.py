@@ -78,7 +78,7 @@ class OcrAnalysis(StateModel):
     replacement_font_size: int | None = Field(default=None, ge=1, le=MAX_REPLACEMENT_FONT_SIZE)
 
 
-EditKind = Literal["ocr", "brush-lama", "brush-color"]
+EditKind = Literal["ocr", "brush-lama", "brush-color", "text-replacement"]
 
 
 class ImageRevision(StateModel):
@@ -88,7 +88,7 @@ class ImageRevision(StateModel):
 
 
 class Operation(StateModel):
-    kind: Literal["ocr", "brush-lama", "brush-color", "undo"]
+    kind: Literal["ocr", "brush-lama", "brush-color", "text-replacement", "undo"]
     at: datetime
 
 

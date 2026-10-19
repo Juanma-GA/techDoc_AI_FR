@@ -131,6 +131,15 @@
     "foundNotReplaced": "Found, not replaced",
     "notFound": "Not found",
     "recognizedText": "Recognized text",
+    "recognizedBoxes": "Recognized text boxes",
+    "editRecognizedHint": "Select a line to change its content in the image.",
+    "editRecognizedReplacement": "Edit replacement for {{reference}}",
+    "replaceRecognizedLine": "Replace line {{reference}}",
+    "replacementValue": "New text for {{reference}}",
+    "applyLineReplacement": "Apply replacement",
+    "applyingLineReplacement": "Applying replacement…",
+    "cancelLineReplacement": "Cancel",
+    "errorLineReplacement": "This OCR line could not be updated.",
     "noText": "No text detected.",
     "imageMeta": "A4 portrait · {{width}} × {{height}} px · {{lines}} line(s) detected · {{filename}}",
     "errorImageType": "Choose a supported image file.",
@@ -168,6 +177,7 @@
     "saved": "Local save is up to date.",
     "actions": {
       "ocr": "OCR analysis and replacement",
+      "text-replacement": "Manual replacement from recognized text",
       "brush-lama": "LaMa brush erasing",
       "brush-color": "Local-color brush erasing",
       "undo": "Undo last change"

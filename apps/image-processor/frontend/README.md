@@ -18,6 +18,10 @@ later OCR runs so selecting another reference cannot change the common size.
 Undoing back to the original clears it. Older histories without the field remain
 readable and estimate their font on the next replacement.
 
+Recognized lines can be edited in place after OCR. The selected OCR box is rendered
+on the current image without running OCR again; each edit is saved as an undoable
+workspace revision.
+
 Downloads POST the current image and Excel selection to `/image-processor/export`.
 The server supplies the authoritative ICN filename and real A4/300 dpi JPEG;
 the brush preview and undo revisions are not re-encoded. Preparation disables

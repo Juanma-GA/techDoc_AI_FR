@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from "react";
 import { Button } from "@internal/ui";
 import { ImagePlus } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -9,9 +10,20 @@ import { WorkspaceOperations } from "../components/WorkspaceOperations";
 import { WorkspaceStatus } from "../components/WorkspaceStatus";
 import { useWorkflow } from "../hooks/WorkflowProvider";
 
+type LineSelectionRequest = { lineIndex: number; requestId: number };
+
 export function Home() {
   const { t } = useTranslation();
   const workflow = useWorkflow();
+  const [lineSelectionRequest, setLineSelectionRequest] = useState<LineSelectionRequest | null>(null);
+  const selectionRequestId = useRef(0);
+  const selectRecognizedLine = useCallback((lineIndex: number) => {
+    selectionRequestId.current += 1;
+    setLineSelectionRequest({ lineIndex, requestId: selectionRequestId.current });
+  }, []);
+  const handleLineSelection = useCallback((requestId: number) => {
+    setLineSelectionRequest((current) => current?.requestId === requestId ? null : current);
+  }, []);
   const busy =
     !workflow.storage.ready || workflow.loading || workflow.excelLoading ||
     workflow.excelPairsLoading || workflow.retouching || workflow.restoring || workflow.downloading;
@@ -49,9 +61,17 @@ export function Home() {
             downloading={workflow.downloading}
             onImageEdited={workflow.applyBrush}
             onInpaintingChange={workflow.setRetouching}
+            onSelectLine={selectRecognizedLine}
             t={t}
           />
-          <OcrResults result={workflow.result} t={t} />
+          <OcrResults
+            result={workflow.result}
+            disabled={busy}
+            onReplaceLine={workflow.replaceRecognizedLine}
+            selectionRequest={lineSelectionRequest}
+            onSelectionHandled={handleLineSelection}
+            t={t}
+          />
         </div>
       </form>
       <WorkspaceOperations operations={workflow.document?.operations ?? []} />

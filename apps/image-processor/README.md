@@ -49,12 +49,12 @@ The main API and React UI use default port `8010`; the internal LaMa service use
 - Node 20 and pnpm 9 for frontend development and builds.
 - Windows: `py` launcher and `curl.exe`. The launcher can install Python 3.11 from the repository installer; Python 3.13 must already be installed unless using a package with embedded runtimes.
 - Unix: `python3.13`, `python3.11`, `lsof`, and `curl`.
-- Package users do not need a system Python; the Windows package includes separate Python 3.13 and 3.11 runtimes.
+- ZIP package users do not need a system Python; the Windows ZIP includes separate Python 3.13 and 3.11 runtimes.
 
-Dependencies install on first launch. The Windows launcher installs build tools in its embedded Python runtimes before installing app dependencies. PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
+Dependencies install on first launch. The Windows launcher installs build tools in its embedded Python runtimes before installing app dependencies. In the web launchers and ZIP package, PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
 
 Text-line orientation uses `PP-LCNet_x1_0_textline_ori` (approximately 6.5 MB of
-model weights). After updating, the next OCR may download this additional model.
+model weights). Web and ZIP launches may download this model on first OCR.
 No images are sent to a remote service; the classifier runs locally. Its actual
 CPU cost depends on all detected text lines, not just the selected replacements.
 
@@ -75,6 +75,27 @@ pnpm dev:image-processor
 ```
 
 The command starts the API, LaMa (or reuses its local health endpoint), and Vite. Vite proxies `/api` to the API on port `8010`.
+
+## Desktop (Windows x64)
+
+The optional Tauri desktop app starts and supervises the local API and LaMa
+services. It uses the same React interface and keeps its database and storage in
+Tauri's app-specific local-data directory, separate from the web launcher's data.
+
+For development, run `pnpm desktop:dev:image-processor` from the repository root.
+The first run creates the Python 3.13 and 3.11 development environments and
+installs their dependencies. On a fresh checkout, run `pnpm install` at the
+repository root first to install the Tauri CLI and frontend dependencies.
+
+The self-contained NSIS installer is built with
+`pnpm desktop:build:image-processor` or `package.bat desktop`. It bundles the
+React UI, both embedded Python runtimes and their dependencies, PaddleOCR tiny
+detection/recognition and text-line orientation models, and the LaMa checkpoint.
+The installed app needs no system Python or Node. NSIS silently installs
+WebView2 from its embedded offline installer, so the user needs neither a
+separate setup nor a network connection. The installer can be large; building
+it requires a trusted network connection to fetch runtimes, dependencies, model
+weights, and WebView2, plus Rust and Visual Studio C++ build tools.
 
 ## Served Interface
 
@@ -162,7 +183,10 @@ The LaMa service is internal to the local application and listens on `127.0.0.1:
 
 The API console emits structured `image_ocr_timing` and `image_inpaint_timing` events with stage durations and image/crop dimensions only; they do not include image contents, filenames, or detected text. Run one OCR and one LaMa operation, then share those log lines. LaMa inference uses a 256 px context margin around the painted mask and merges the result only into masked pixels.
 
-To compare PP-OCRv6 sizes, set `OCR_MODEL_VARIANT=small` or `OCR_MODEL_VARIANT=tiny` in `backend/.env` and restart the API; the default is `medium`. Each selection changes only the detection/recognition model pair.
+To compare PP-OCRv6 sizes in web or ZIP mode, set `OCR_MODEL_VARIANT=small` or
+`OCR_MODEL_VARIANT=medium` in `backend/.env` and restart the API. The default is
+`tiny`; each selection changes only the detection/recognition model pair. The
+Tauri installer always bundles the tiny variant.
 
 To benchmark CPU thread counts, set `OCR_CPU_THREADS` in `backend/.env` and restart the API; the default is 10. The OCR timing event includes the active model variant and thread count.
 
@@ -179,7 +203,9 @@ No real-model orientation benchmark was run for the typography change.
 ## Limitations
 
 - The launcher requires compatible Python runtimes on developer machines; package users receive embedded runtimes.
-- The first dependency/model setup requires network access. Subsequent inference is local.
+- The web launcher and ZIP package need network access for first-time dependency
+  setup and uncached models. The Tauri installer includes its dependencies and
+  models; its build step requires network access, but the installed app runs offline.
 - Model accuracy, latency, and packaging size have not been benchmarked with representative production images.
 - The backend preserves the source OCR and Excel behavior; frontend labels and error messages are localized, while some backend validation details remain French.
 

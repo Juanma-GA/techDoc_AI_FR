@@ -19,7 +19,7 @@ export type ExcelPreset = {
   pieces: ExcelPieceDto[];
 };
 export type ExcelSnapshot = ExcelPreset & { pieceRow: string; pairs: ReplacementPair[] };
-export type EditKind = "ocr" | "brush-lama" | "brush-color";
+export type EditKind = "ocr" | "brush-lama" | "brush-color" | "text-replacement";
 export type ImageRevision = {
   image: StoredFile;
   analysis: Omit<OcrResultDto, "edited_image"> | null;

@@ -1,15 +1,47 @@
+import { useEffect, useRef } from "react";
 import type { TFunction } from "i18next";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@internal/ui";
 import { CheckCircle2, Circle, ScanText } from "lucide-react";
 
 import type { OcrResultDto } from "../lib/api";
+import { RecognizedTextLine } from "./RecognizedTextLine";
 
 type OcrResultsProps = {
   result: OcrResultDto | null;
+  disabled: boolean;
+  selectionRequest: { lineIndex: number; requestId: number } | null;
+  onSelectionHandled: (requestId: number) => void;
+  onReplaceLine: (
+    lineIndex: number,
+    reference: string,
+    replacement: string,
+    referenceIndex: number | null,
+  ) => Promise<boolean>;
   t: TFunction;
 };
 
-export function OcrResults({ result, t }: OcrResultsProps) {
+export function OcrResults({
+  result,
+  disabled,
+  selectionRequest,
+  onSelectionHandled,
+  onReplaceLine,
+  t,
+}: OcrResultsProps) {
+  const recognizedLinesRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (!selectionRequest) return;
+    const row = recognizedLinesRef.current?.querySelector<HTMLElement>(
+      `[data-ocr-line-index="${selectionRequest.lineIndex}"]`,
+    );
+    if (typeof row?.scrollIntoView === "function") {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    row?.querySelector<HTMLButtonElement>("button")?.click();
+    onSelectionHandled(selectionRequest.requestId);
+  }, [selectionRequest, onSelectionHandled]);
+
   if (!result) return null;
 
   const foundCount = result.references.filter((item) => item.found).length;
@@ -74,22 +106,21 @@ export function OcrResults({ result, t }: OcrResultsProps) {
             <ScanText size={17} aria-hidden="true" />
             {t("image.recognizedText")}
           </CardTitle>
+          <p className="text-xs text-fg-dim">{t("image.editRecognizedHint")}</p>
         </CardHeader>
         <CardContent>
           {result.lines.length > 0 ? (
-            <ul className="max-h-80 space-y-1 overflow-auto">
+            <ul ref={recognizedLinesRef} className="max-h-80 space-y-1 overflow-auto">
               {result.lines.map((line, index) => (
-                <li
+                <RecognizedTextLine
                   key={`${index}-${line.text}`}
-                  className={`flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 ${
-                    matchedLines.has(index) ? "bg-brand/10 text-fg" : "text-fg-dim"
-                  }`}
-                >
-                  <span className="break-all text-sm">{line.text}</span>
-                  <span className="shrink-0 font-mono text-xs">
-                    {Math.round(line.confidence * 100)}%
-                  </span>
-                </li>
+                  result={result}
+                  lineIndex={index}
+                  matched={matchedLines.has(index)}
+                  disabled={disabled}
+                  onReplaceLine={onReplaceLine}
+                  t={t}
+                />
               ))}
             </ul>
           ) : (
