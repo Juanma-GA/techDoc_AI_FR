@@ -49,14 +49,14 @@ export function PreparationOcrStep({
     state.ocr_results_available.some(
       (item) => item.provider === provider && item.page === pageNumber,
     );
-  const results = {
-    mistral: useOcrPageResult(documentId, pageNumber, "mistral", hasResult("mistral")),
-    paddle: useOcrPageResult(documentId, pageNumber, "paddle", hasResult("paddle")),
-    indra: useOcrPageResult(documentId, pageNumber, "indra", hasResult("indra")),
-  };
-  const displayedProviders = providers.filter(
-    (provider) => provider.id === testProvider || hasResult(provider.id),
+  const result = useOcrPageResult(
+    documentId,
+    pageNumber,
+    testProvider,
+    hasResult(testProvider),
   );
+  const selectedProvider = providers.find((provider) => provider.id === testProvider);
+  const isSelected = state.selected_provider === testProvider;
   const pageLabel = t("preparation.ocrPage", {
     page: pageNumber,
     count: state.page_count,
@@ -99,32 +99,21 @@ export function PreparationOcrStep({
         </p>
       ) : null}
       <div className="preparation-ocr-comparison">
-        {displayedProviders.map((provider) => {
-          const result = results[provider.id];
-          const isSelected = state.selected_provider === provider.id;
-          return (
-            <section
-              className="preparation-ocr-engine"
-              key={provider.id}
-              aria-label={provider.label}
-            >
-              <h3 className="card-title">{provider.label}</h3>
-              <PreparationOcrResult
-                imageUrl={`${API_BASE_URL}/documents/${documentId}/pages/${pageNumber}.png`}
-                pageLabel={pageLabel}
-                providerLabel={provider.label}
-                data={result.data}
-                isLoading={result.isLoading}
-                error={result.isError ? result.error.message : null}
-                needsOcr={Boolean(page?.needs_ocr)}
-                isCurrentProvider={isSelected}
-                validated={isSelected && state.validated_pages.includes(pageNumber)}
-                validating={validating}
-                onValidate={(value) => onValidate(pageNumber, provider.id, value)}
-              />
-            </section>
-          );
-        })}
+        <section className="preparation-ocr-engine" aria-label={selectedProvider?.label ?? testProvider}>
+          <PreparationOcrResult
+            imageUrl={`${API_BASE_URL}/documents/${documentId}/pages/${pageNumber}.png`}
+            pageLabel={pageLabel}
+            providerLabel={selectedProvider?.label ?? testProvider}
+            data={result.data}
+            isLoading={result.isLoading}
+            error={result.isError ? result.error.message : null}
+            needsOcr={Boolean(page?.needs_ocr)}
+            isCurrentProvider={isSelected}
+            validated={isSelected && state.validated_pages.includes(pageNumber)}
+            validating={validating}
+            onValidate={(value) => onValidate(pageNumber, testProvider, value)}
+          />
+        </section>
       </div>
     </section>
   );

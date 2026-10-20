@@ -29,6 +29,7 @@ def run_mistral_ocr(
     payload = {
         "model": config.get("ocr_model") or "mistral-ocr-latest",
         "include_blocks": True,
+        "confidence_scores_granularity": "block",
         "document": {
             "type": "image_url",
             "image_url": "data:image/png;base64," + base64.b64encode(image_bytes).decode("ascii"),
@@ -61,4 +62,9 @@ def run_mistral_ocr(
             "La réponse Mistral OCR n'est pas un JSON valide.",
             status_code=502,
         ) from exc
-    return extract_result(response_payload, image_width, image_height)
+    return extract_result(
+        response_payload,
+        image_width,
+        image_height,
+        coordinate_mode="pixels",
+    )

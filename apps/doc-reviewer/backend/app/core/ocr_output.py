@@ -17,8 +17,18 @@ def extract_result(
 
     def visit(node: Any) -> None:
         if isinstance(node, dict):
-            raw_text = node.get("text") or node.get("markdown")
+            raw_text = node.get("text") or node.get("markdown") or node.get("content")
             raw_box = node.get("bbox") or node.get("box") or node.get("polygon")
+            if raw_box is None and all(
+                isinstance(node.get(key), (int, float))
+                for key in ("top_left_x", "top_left_y", "bottom_right_x", "bottom_right_y")
+            ):
+                raw_box = [
+                    node["top_left_x"],
+                    node["top_left_y"],
+                    node["bottom_right_x"],
+                    node["bottom_right_y"],
+                ]
             recognition_texts = node.get("rec_texts")
             recognition_boxes = node.get("rec_boxes") or node.get("rec_polys")
             recognition_scores = node.get("rec_scores")
@@ -56,11 +66,15 @@ def extract_result(
                     else None
                 )
                 if isinstance(raw_text, str) and raw_text.strip():
+                    confidence = node.get("confidence", node.get("score", node.get("conf")))
+                    confidence_scores = node.get("confidence_scores")
+                    if confidence is None and isinstance(confidence_scores, dict):
+                        confidence = confidence_scores.get("average_content_confidence_score")
                     if raw_box is not None:
                         box = normalized_box(
                             raw_box,
                             raw_text.strip(),
-                            node.get("confidence", node.get("score", node.get("conf"))),
+                            confidence,
                             image_width,
                             image_height,
                             coordinate_mode,
@@ -77,7 +91,9 @@ def extract_result(
             for key, value in node.items():
                 if key not in {
                     "text",
+                    "content",
                     "markdown",
+                    "type",
                     "bbox",
                     "box",
                     "polygon",
@@ -118,7 +134,9 @@ def extract_result(
 
 def _has_text_items(value: Any) -> bool:
     return isinstance(value, list) and any(
-        isinstance(item, dict) and isinstance(item.get("text"), str) and item["text"].strip()
+        isinstance(item, dict)
+        and isinstance(item.get("text") or item.get("content"), str)
+        and (item.get("text") or item.get("content")).strip()
         for item in value
     )
 

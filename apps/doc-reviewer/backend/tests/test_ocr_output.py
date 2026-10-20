@@ -5,8 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core import ocr_local
-from app.core import ocr_mistral
+from app.core import ocr_local, ocr_mistral
 from app.core.ocr_output import extract_result
 
 
@@ -62,18 +61,42 @@ def test_extract_mistral_blocks_without_repeating_page_markdown() -> None:
         "pages": [
             {
                 "markdown": "Section title\nNext line",
+                "dimensions": {"width": 1000, "height": 2000},
                 "blocks": [
-                    {"text": "Section title", "bbox": [50, 100, 250, 140]},
-                    {"text": "Next line", "bbox": [50, 150, 220, 190]},
+                    {
+                        "type": "heading",
+                        "content": "Section title",
+                        "top_left_x": 50,
+                        "top_left_y": 100,
+                        "bottom_right_x": 250,
+                        "bottom_right_y": 140,
+                        "confidence_scores": {"average_content_confidence_score": 0.94},
+                    },
+                    {
+                        "type": "paragraph",
+                        "content": "Next line",
+                        "top_left_x": 50,
+                        "top_left_y": 150,
+                        "bottom_right_x": 220,
+                        "bottom_right_y": 190,
+                    },
                 ],
             }
         ]
     }
 
-    text, boxes = extract_result(payload, image_width=1000, image_height=2000)
+    text, boxes = extract_result(
+        payload,
+        image_width=1000,
+        image_height=2000,
+        coordinate_mode="pixels",
+    )
 
     assert text == "Section title\nNext line"
     assert len(boxes) == 2
+    assert boxes[0].x0 == pytest.approx(0.05)
+    assert boxes[0].y0 == pytest.approx(0.05)
+    assert boxes[0].confidence == pytest.approx(0.94)
 
 
 def test_paddle_adapter_uses_supported_tiny_models_and_json_output(

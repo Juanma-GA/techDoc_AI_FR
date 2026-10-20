@@ -28,18 +28,6 @@ export function OcrPagePreview({
           />
         ))}
       </div>
-      {boxes.length > 0 ? (
-        <ol className="item-list" aria-label={pageLabel}>
-          {boxes.map((box, index) => (
-            <li className="item-row" key={`${index}-${box.text}`}>
-              <span className="item-main">{box.text}</span>
-              {box.confidence !== null ? (
-                <span className="label">{Math.round(box.confidence * 100)}%</span>
-              ) : null}
-            </li>
-          ))}
-        </ol>
-      ) : null}
     </div>
   );
 }

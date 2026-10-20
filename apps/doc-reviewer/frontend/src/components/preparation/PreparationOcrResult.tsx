@@ -48,9 +48,21 @@ export function PreparationOcrResult({
               {data.text || t("preparation.ocrNoText")}
             </pre>
             {data.boxes.length > 0 ? (
-              <p className="label">
-                {t("preparation.ocrBoxes", { count: data.boxes.length })}
-              </p>
+              <>
+                <p className="label">
+                  {t("preparation.ocrBoxes", { count: data.boxes.length })}
+                </p>
+                <ol className="preparation-ocr-lines" aria-label={pageLabel}>
+                  {data.boxes.map((box, index) => (
+                    <li className="item-row" key={`${index}-${box.text}`}>
+                      <span className="item-main">{box.text}</span>
+                      {box.confidence !== null ? (
+                        <span className="label">{Math.round(box.confidence * 100)}%</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              </>
             ) : (
               <p className="hint">{t("preparation.ocrNoBoxes")}</p>
             )}
