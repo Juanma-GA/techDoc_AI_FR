@@ -178,7 +178,6 @@
     "ocrReadable": "Usable native text",
     "ocrValidate": "Validate this result for preparation",
     "ocrValidated": "Result validated",
-    "ocrExternalNotice": "Mistral OCR sends only the selected page image to an external service.",
     "ocrUnavailable": "Engine unavailable: {{reason}}",
     "ocrPage": "Page {{page}} / {{count}}",
     "ocrSelectPage": "Select page",

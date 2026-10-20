@@ -178,7 +178,6 @@
     "ocrReadable": "Texte natif exploitable",
     "ocrValidate": "Valider ce résultat pour la préparation",
     "ocrValidated": "Résultat validé",
-    "ocrExternalNotice": "Mistral OCR transmet uniquement l'image de la page sélectionnée à un service externe.",
     "ocrUnavailable": "Moteur indisponible : {{reason}}",
     "ocrPage": "Page {{page}} / {{count}}",
     "ocrSelectPage": "Sélectionner la page",

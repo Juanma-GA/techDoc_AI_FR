@@ -62,9 +62,6 @@ export function PreparationOcrControls({
             {t("preparation.ocrUnavailable", { reason: providerInfo.reason })}
           </span>
         ) : null}
-        {providerInfo?.external ? (
-          <span className="banner warn" role="note">{t("preparation.ocrExternalNotice")}</span>
-        ) : null}
         <button
           type="button"
           className="btn secondary small"
