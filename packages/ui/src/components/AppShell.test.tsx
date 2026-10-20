@@ -5,6 +5,10 @@ import { AppShell, sidebarNavItemClass } from "./AppShell";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LlmStatus } from "./LlmStatus";
 
+vi.mock("../hooks/useMediaQuery", () => ({
+  useMediaQuery: () => false,
+}));
+
 const labels = {
   label: "LLM",
   title: "LLM status",
@@ -30,6 +34,38 @@ describe("AppShell", () => {
     expect(screen.getByText("v2")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Main navigation" })).toBeTruthy();
     expect(screen.getByText("Page content")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Collapse sidebar" })).toBeNull();
+  });
+
+  it("toggles the sidebar between expanded and icon-only states", () => {
+    render(
+      <AppShell
+        title="Example"
+        collapsible
+        collapseLabel="Replier le menu"
+        expandLabel="Déplier le menu"
+        navigation={
+          <a className={sidebarNavItemClass(true)} href="/" aria-label="Accueil">
+            Accueil
+          </a>
+        }
+      >
+        <p>Page content</p>
+      </AppShell>,
+    );
+
+    const sidebar = screen.getByRole("complementary");
+    const collapseButton = screen.getByRole("button", { name: "Replier le menu" });
+    expect(sidebar.getAttribute("data-collapsed")).toBe("false");
+    expect(collapseButton.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(collapseButton);
+
+    expect(sidebar.getAttribute("data-collapsed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Déplier le menu" }).getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(screen.getByRole("link", { name: "Accueil" })).toBeTruthy();
   });
 
   it("marks the selected language and reports changes", () => {

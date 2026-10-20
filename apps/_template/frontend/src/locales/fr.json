@@ -7,6 +7,8 @@
     "ariaLabel": "Navigation principale",
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu",
     "home": "Accueil",
     "data": "Données",
     "settings": "Paramètres"

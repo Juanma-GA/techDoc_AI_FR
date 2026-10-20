@@ -10,6 +10,7 @@ import {
   LlmStatus,
   sidebarNavItemClass,
 } from "@internal/ui";
+import { Database, House, Settings as SettingsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
@@ -19,6 +20,12 @@ import { Home } from "./routes/Home";
 import { Settings } from "./routes/Settings";
 
 const LANGUAGES = ["fr", "en"] as const;
+
+const NAV_ITEMS = [
+  { to: "/", key: "nav.home", icon: House, end: true },
+  { to: "/data", key: "nav.data", icon: Database },
+  { to: "/settings", key: "nav.settings", icon: SettingsIcon },
+];
 
 export function App() {
   const { t, i18n } = useTranslation();
@@ -45,6 +52,9 @@ export function App() {
       brandTitle={t("app.description")}
       headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
+      collapsible
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       themeToggleLabel={t("nav.themeToggle")}
       sidebarTop={
         demoEnabled ? (
@@ -55,15 +65,23 @@ export function App() {
       }
       navigation={
         <>
-          <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.home")}
-          </NavLink>
-          <NavLink to="/data" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.data")}
-          </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.settings")}
-          </NavLink>
+          {NAV_ITEMS.map(({ to, key, icon: Icon, end }) => {
+            const label = t(key);
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                title={label}
+                aria-label={label}
+                className={({ isActive }) => sidebarNavItemClass(isActive)}
+              >
+                <Icon size={16} aria-hidden="true" />
+                <span className="ui-nav-label">{label}</span>
+              </NavLink>
+            );
+          })}
         </>
       }
       llmStatus={
