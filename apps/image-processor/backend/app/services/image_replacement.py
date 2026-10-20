@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import hypot
 from typing import TypedDict
 
 import structlog
@@ -16,6 +17,7 @@ from app.services.replacement_typography import (
 from app.services.text_geometry import _box_points
 
 log = structlog.get_logger(__name__)
+REPLACEMENT_BOTTOM_INSET = 3.0
 
 
 class _ReplacementOccurrence(TypedDict):
@@ -57,6 +59,13 @@ def _replacement_segment(
     top_end = _interpolate_point(points[0], points[1], end_ratio)
     bottom_end = _interpolate_point(points[3], points[2], end_ratio)
     bottom_start = _interpolate_point(points[3], points[2], start_ratio)
+    box_height = (
+        hypot(points[3][0] - points[0][0], points[3][1] - points[0][1])
+        + hypot(points[2][0] - points[1][0], points[2][1] - points[1][1])
+    ) / 2
+    bottom_inset_ratio = min(REPLACEMENT_BOTTOM_INSET / max(box_height, 1.0), 0.12)
+    bottom_start = _interpolate_point(bottom_start, top_start, bottom_inset_ratio)
+    bottom_end = _interpolate_point(bottom_end, top_end, bottom_inset_ratio)
     return [top_start, top_end, bottom_end, bottom_start]
 
 

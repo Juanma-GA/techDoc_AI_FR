@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.services import image_replacement
 from app.services.image_replacement import apply_replacements
@@ -73,3 +73,18 @@ def test_replacement_uses_local_background_instead_of_white_rectangle() -> None:
         pixel[0] < 80 and pixel[1] < 80 and pixel[2] < 80
         for pixel in result.crop((10, 10, 50, 30)).getdata()
     )
+
+
+def test_replacement_preserves_thin_rule_at_bottom_of_text_box() -> None:
+    source = Image.new("RGB", (80, 40), "white")
+    ImageDraw.Draw(source).line((10, 29, 70, 29), fill="black", width=1)
+
+    result, applied_counts, _ = apply_replacements(
+        source,
+        [{"text": "R1", "box": [[10, 10], [70, 10], [70, 30], [10, 30]]}],
+        [{"reference": "R1", "replacement": "7"}],
+        replacement_font_size=14,
+    )
+
+    assert applied_counts == [1]
+    assert result.getpixel((12, 29)) == (0, 0, 0)

@@ -18,9 +18,12 @@ def _ink(image):
 
 @pytest.mark.parametrize(
     ("angle", "expected"),
-    [(0, 0), (-5, 0), (5, 0), (5.01, 5.01), (17, 17), (85, 90), (95, 90), (175, 180), (-91, -90)],
+    [
+        (0, 0), (-6.99, 0), (6.99, 0), (7, 7), (7.01, 7.01), (17, 17),
+        (83.01, 90), (96.99, 90), (175, 180), (-91, -90),
+    ],
 )
-def test_only_angles_within_five_degrees_of_an_axis_are_snapped(angle, expected):
+def test_only_angles_less_than_seven_degrees_from_an_axis_are_snapped(angle, expected):
     assert snapped_angle(angle) == pytest.approx(expected)
 
 
