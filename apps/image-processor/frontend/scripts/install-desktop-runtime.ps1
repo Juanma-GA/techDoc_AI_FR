@@ -19,7 +19,7 @@ try {
   $cache = $config.model_cache
   $paddleCache = Join-Path $runtimeRoot $cache.paddlex
   foreach ($model in $cache.ocr_models) {
-    if (!(Test-Path -LiteralPath (Join-Path $paddleCache $model) -PathType Container)) {
+    if (!(Test-ContainsDirectory -Directory $paddleCache -Name $model)) {
       throw "Bundled PaddleOCR model is missing: $model"
     }
   }

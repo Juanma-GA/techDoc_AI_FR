@@ -3,6 +3,21 @@ function Write-InstallerProgress {
   [Console]::Out.WriteLine("[Image Processor] $Message")
 }
 
+function Test-ContainsDirectory {
+  param(
+    [string]$Directory,
+    [string]$Name
+  )
+
+  if (!(Test-Path -LiteralPath $Directory -PathType Container)) {
+    return $false
+  }
+  $match = Get-ChildItem -LiteralPath $Directory -Directory -Recurse -Force |
+    Where-Object { $_.Name -ieq $Name } |
+    Select-Object -First 1
+  return $null -ne $match
+}
+
 function Download-File {
   param(
     [string]$Url,
