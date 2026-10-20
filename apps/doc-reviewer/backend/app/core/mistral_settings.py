@@ -22,7 +22,7 @@ from app.db.models import AppConfig
 
 logger = structlog.get_logger(__name__)
 
-_KEYS = ("api_key", "base_url", "chat_model", "vision_model")
+_KEYS = ("api_key", "base_url", "chat_model", "vision_model", "ocr_model")
 _PREFIX = "mistral."
 
 # Cles (bare, sans prefixe) dont la valeur est chiffree au repos dans AppConfig
@@ -144,6 +144,7 @@ def get_effective(db: Session) -> dict[str, str]:
         "base_url": settings.mistral_base_url,
         "chat_model": settings.mistral_chat_model,
         "vision_model": settings.mistral_vision_model,
+        "ocr_model": settings.mistral_ocr_model,
     }
     out: dict[str, str] = {}
     for k in _KEYS:

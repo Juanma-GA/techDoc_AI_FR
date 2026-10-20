@@ -5,7 +5,7 @@ from __future__ import annotations
 import mimetypes
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 
 # Windows n'enregistre pas `.mjs` dans son registre MIME : StaticFiles le sert
 # alors en application/octet-stream, et le navigateur REFUSE de charger un
@@ -19,8 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 
-from app.api import admin, analyze, documents, health, metadata_suggestions, rules, standards, suggestions
-from app.api import settings as settings_api
+from app.api.router import api_v1
 from app.checks.client_registry import (
     LoadedClientConfiguration,
     active_standard_versions,
@@ -148,16 +147,6 @@ def create_app() -> FastAPI:
 
     register_error_handlers(app)
 
-    api_v1 = APIRouter(prefix="/api/v1")
-    api_v1.include_router(health.router)
-    api_v1.include_router(documents.router)
-    api_v1.include_router(metadata_suggestions.router)
-    api_v1.include_router(analyze.router)
-    api_v1.include_router(suggestions.router)
-    api_v1.include_router(rules.router)
-    api_v1.include_router(standards.router)
-    api_v1.include_router(settings_api.router)
-    api_v1.include_router(admin.router)
     app.include_router(api_v1)
 
     _sync_standard_catalogs(client_configuration, demo_client_configuration)

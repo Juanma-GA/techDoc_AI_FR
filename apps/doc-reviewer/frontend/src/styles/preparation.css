@@ -1,0 +1,98 @@
+.preparation-steps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.preparation-step {
+  flex: 1 1 180px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px;
+  background: var(--card);
+}
+
+.preparation-step[aria-current="step"] {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
+}
+
+.preparation-ocr-preview {
+  position: relative;
+  width: min(100%, 900px);
+  margin-inline: auto;
+}
+
+.preparation-ocr-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.preparation-ocr-box {
+  position: absolute;
+  border: 1px solid var(--brand);
+  background: transparent;
+  pointer-events: none;
+}
+
+.preparation-ocr-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.preparation-ocr-engine {
+  min-width: 0;
+}
+
+.preparation-ocr-engine .preparation-ocr-preview {
+  width: 100%;
+}
+
+.preparation-review {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 34%);
+  min-height: 65dvh;
+  max-height: 78dvh;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+}
+
+.preparation-review .reviewer-viewer {
+  min-height: 0;
+  height: 100%;
+}
+
+.preparation-review .reviewer-canvas {
+  min-height: 0;
+  overflow: auto;
+}
+
+.preparation-review .reviewer-panel {
+  min-height: 0;
+  height: 100%;
+}
+
+@media (max-width: 900px) {
+  .preparation-ocr-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preparation-review {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: none;
+    overflow: auto;
+  }
+
+  .preparation-review .reviewer-viewer {
+    min-height: 55dvh;
+  }
+
+  .preparation-review .reviewer-panel {
+    min-height: 45dvh;
+  }
+}
