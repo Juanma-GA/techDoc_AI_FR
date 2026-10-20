@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Ai4TechDocLogo,
@@ -19,7 +20,50 @@ import { Settings } from "./routes/Settings";
 
 const LANGUAGES = ["fr", "en"] as const;
 
+declare global {
+  interface Window {
+    __TAURI__?: {
+      window?: {
+        getCurrentWindow?: () => {
+          setTheme: (theme: "dark" | "light") => Promise<void>;
+        };
+      };
+    };
+  }
+}
+
 export function App() {
+  useEffect(() => {
+    const tauri = window.__TAURI__;
+    if (!tauri) {
+      if ("__TAURI_INTERNALS__" in window) {
+        console.error("Tauri window API is unavailable; check withGlobalTauri.");
+      }
+      return;
+    }
+
+    const nativeWindow = tauri.window?.getCurrentWindow?.();
+    if (!nativeWindow) {
+      console.error("Tauri window API is unavailable; check withGlobalTauri.");
+      return;
+    }
+
+    const syncTheme = () => {
+      const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+      void nativeWindow.setTheme(theme).catch((error: unknown) => {
+        console.error("Unable to synchronize desktop window theme:", error);
+      });
+    };
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    syncTheme();
+
+    return () => observer.disconnect();
+  }, []);
+
   const { t, i18n } = useTranslation();
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
   const healthQuery = useQuery<HealthDto>({

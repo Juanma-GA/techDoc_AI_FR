@@ -24,8 +24,8 @@ export function createPoc({ repo, slug, port: requested, desktop = false, dryRun
       const manifest = path.join(app, "frontend", "package.json");
       const pkg = JSON.parse(readFileSync(manifest, "utf8"));
       Object.assign(pkg.scripts, {
-        "tauri:dev": "tauri dev",
-        "tauri:build": "tauri build",
+        "tauri:dev": "node scripts/prepare-desktop.mjs dev && tauri dev",
+        "tauri:build": "node scripts/prepare-desktop.mjs build && tauri build",
       });
       pkg.devDependencies["@tauri-apps/cli"] = "^2.12.2";
       writeFileSync(manifest, JSON.stringify(pkg, null, 2) + "\n");
@@ -51,6 +51,8 @@ export function createPoc({ repo, slug, port: requested, desktop = false, dryRun
       `## Package\n\nWindows web ZIP: \`package.bat\`, output in \`dist/\`.\n\n` +
       (desktop ? `## Desktop\n\nOptional Tauri: \`pnpm desktop:dev:${slug}\` or ` +
         `\`pnpm desktop:build:${slug}\` from the repository root. Windows packaging is supported; ` +
+        `the localized startup screen remains visible until the local backend is ready. ` +
+        `Customize \`frontend/src/desktop-startup.tsx\` for the app. ` +
         `Rust, Visual Studio C++ tools and WebView2 are required. ` +
         `See [desktop guide](../../docs/standards/desktop-and-stacks.md).\n\n` : "") +
       `## Tests\n\nRun backend pytest, frontend typecheck, test, build and Playwright smoke tests.\n\n` +

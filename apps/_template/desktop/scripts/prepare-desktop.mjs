@@ -12,6 +12,12 @@ const mode = process.argv[2];
 if (!["dev", "build"].includes(mode)) throw new Error("Expected dev or build.");
 prepareDesktopIcons(frontend, repo);
 buildFrontend(repo, frontend, path.join(frontend, "dist"));
+if (!existsSync(path.join(frontend, "dist", "src", "desktop-startup.html"))) {
+  throw new Error("Missing desktop startup page in frontend bundle.");
+}
+if (!existsSync(path.join(frontend, "dist", "src", "desktop-startup.html"))) {
+  throw new Error("Missing desktop startup page in frontend bundle.");
+}
 if (config.adapter === "fastapi") {
   await prepareFastApi(frontend, mode);
 } else if (config.adapter === "command") {
