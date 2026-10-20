@@ -1,0 +1,176 @@
+{
+  "app": {
+    "title": "Flowchart Generator",
+    "description": "Generateur de logigrammes industriels (diagnostic, depannage, procedures) multi-formats"
+  },
+  "nav": {
+    "editor": "Editeur",
+    "data": "Données",
+    "settings": "Paramètres",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "État de la connexion Mistral",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  },
+  "common": {
+    "confirm": "Cliquer encore pour confirmer"
+  },
+  "formats": {
+    "mermaid": "texte Mermaid (Markdown, wikis, GitLab/GitHub)",
+    "xlsx": "Excel : feuille Étapes + feuille Transitions, réimportable",
+    "pptx": "PowerPoint avec formes et connecteurs natifs modifiables",
+    "drawio": "draw.io / diagrams.net, importable dans Visio",
+    "bpmn": "BPMN 2.0 XML (Camunda, Bizagi, Signavio)",
+    "svg": "image vectorielle pour documentation",
+    "json": "graphe JSON (échange, réimport, API)",
+    "s1000d": "module de données S1000D fault isolation (approximation Issue 4.x)"
+  },
+  "nodeTypes": {
+    "start": "Début",
+    "end": "Fin",
+    "process": "Action",
+    "decision": "Décision",
+    "io": "Entrée/sortie",
+    "document": "Document",
+    "subprocess": "Sous-procédure",
+    "connector": "Renvoi",
+    "check": "Contrôle",
+    "repair": "Réparation",
+    "safety": "Sécurité"
+  },
+  "editor": {
+    "title": "Éditeur",
+    "newFlow": "Nouveau logigramme",
+    "reset": "Effacer",
+    "counts": "{{nodes}} étapes, {{edges}} liens",
+    "llmUsed": "Structuré par Mistral",
+    "preview": {
+      "title": "Aperçu",
+      "emptyTitle": "Aucun logigramme",
+      "emptyHelp": "Décrivez une panne à l'assistant ou joignez un fichier pour afficher le logigramme.",
+      "alt": "Aperçu du logigramme {{title}}"
+    },
+    "save": {
+      "title": "Enregistrement",
+      "name": "Nom",
+      "create": "Enregistrer",
+      "update": "Mettre à jour",
+      "done": "Logigramme enregistré.",
+      "nameInvalid": "Nom requis (200 caractères max)."
+    },
+    "nodes": {
+      "title": "Étapes",
+      "id": "ID",
+      "type": "Type",
+      "label": "Libellé",
+      "lane": "Acteur",
+      "next": "Suivants",
+      "ref": "Référence",
+      "expected": "Attendu",
+      "tools": "Outillage",
+      "warning": "Sécurité",
+      "duration": "Durée"
+    },
+    "assistant": {
+      "welcome": "Décrivez la panne ou le système à traiter (symptôme, véhicule, contraintes de sécurité), ou joignez un fichier (Excel, CSV, DSL, JSON, document de référence). Je génère un plan de maintenance sous forme de logigramme, puis vous pouvez me demander des modifications en direct.",
+      "placeholder": "Ex. : Génère un plan de dépannage pour un camion dont le moteur ne démarre pas, batterie 24 V.",
+      "placeholderEdit": "Demandez une modification : ajoute un contrôle du relais de démarreur après la batterie...",
+      "send": "Envoyer",
+      "hint": "Ctrl+Entrée pour envoyer",
+      "thinking": "L'assistant travaille sur le logigramme...",
+      "title": "Assistant",
+      "attach": "Joindre",
+      "attachHelp": "Joindre un logigramme (.xlsx, .xlsm, .csv, .json, .dsl) ou un document de référence (.txt, .md, .docx, .pdf, .pptx). Glisser-déposer accepté.",
+      "imported": "Fichier « {{name}} » importé : {{nodes}} étapes. Vous pouvez maintenant me demander des modifications.",
+      "documentAdded": "Document « {{name}} » joint. Je m'en servirai comme référence pour générer ou modifier le logigramme.",
+      "documentTruncated": "Document « {{name}} » joint (tronqué : seul le début est utilisé comme référence).",
+      "removeDocument": "Retirer {{name}}",
+      "uploading": "Lecture du fichier..."
+    },
+    "validate": "Valider le logigramme",
+    "validateHelp": "Validez le logigramme pour débloquer les téléchargements.",
+    "validated": "Logigramme validé",
+    "modify": "Modifier"
+  },
+  "data": {
+    "title": "Données",
+    "kpi": {
+      "flows": "Logigrammes",
+      "nodes": "Étapes",
+      "edges": "Liens"
+    },
+    "flowsTitle": "Logigrammes enregistrés",
+    "exportFormat": "Format",
+    "emptyTitle": "Aucun logigramme enregistré",
+    "emptyHelp": "Les logigrammes enregistrés depuis l'éditeur apparaissent ici.",
+    "col": {
+      "name": "Nom",
+      "source": "Source",
+      "size": "Taille",
+      "updated": "Modifié"
+    },
+    "source": {
+      "text": "Texte",
+      "table": "Tableau",
+      "json": "JSON",
+      "dsl": "DSL"
+    },
+    "open": "Ouvrir",
+    "export": "Exporter",
+    "delete": "Supprimer",
+    "resetTitle": "Réinitialisation",
+    "resetHelp": "Supprime tous les logigrammes. La configuration Mistral est conservée.",
+    "resetAll": "Tout supprimer"
+  },
+  "settings": {
+    "saved": "Paramètres enregistrés.",
+    "testOk": "Connexion OK ({{count}} modèles disponibles).",
+    "testFail": "Échec du test : {{error}}",
+    "aiTitle": "Intelligence artificielle",
+    "llmEnabled": "LLM activé",
+    "llmHelp": "Désactivé : l'assistant n'appelle pas Mistral ; il structure la description ligne par ligne et les fichiers joints restent importables.",
+    "mistralTitle": "Mistral",
+    "configured": "Clé configurée",
+    "notConfigured": "Aucune clé",
+    "apiKey": "Clé API",
+    "apiKeyKept": "Laisser vide pour conserver la clé actuelle",
+    "baseUrl": "URL de l'API",
+    "chatModel": "Modèle de chat",
+    "embedModel": "Modèle d'embedding",
+    "save": "Enregistrer",
+    "test": "Tester la connexion",
+    "demo": {
+      "title": "Mode de l'application",
+      "hint": "Le mode démo affiche des jeux d'inputs industriels factices (chariot télescopique TELEMAX TH-3500) à charger dans l'assistant. Aucune donnée réelle.",
+      "normal": "Normal",
+      "demo": "Démo",
+      "saveError": "Impossible d'enregistrer le mode."
+    }
+  },
+  "demo": {
+    "badge": "Mode démo",
+    "button": "Démo",
+    "pickerTitle": "Fichiers et demande de démonstration (factices)",
+    "pickerHint": "Les fichiers cochés sont joints à l'assistant et la demande est préremplie : relisez-la puis cliquez sur Envoyer.",
+    "use": "Joindre et préremplir",
+    "scenarioLabel": "Scénario",
+    "sampleFiles": "Fichiers d'exemple",
+    "promptLabel": "Demande suggérée à l'assistant",
+    "hydraulic": {
+      "title": "Diagnostic hydraulique TH-3500",
+      "description": "Procédure Word, données de maintenance Excel, consignes HSE PDF et REX PowerPoint sur la perte de pression hydraulique.",
+      "prompt": "Génère le logigramme de diagnostic de la perte de pression hydraulique du TH-3500 à partir des documents joints, en intégrant les consignes de sécurité et les seuils de pression."
+    },
+    "engineStart": {
+      "title": "Non-démarrage moteur TH-3500",
+      "description": "Tableau Excel d'étapes de diagnostic du non-démarrage moteur, importé directement en logigramme.",
+      "prompt": "Ajoute une étape de contrôle du coupe-batterie avant le test du démarreur."
+    }
+  }
+}
