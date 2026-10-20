@@ -1,62 +1,100 @@
 ---
 name: git-pr-workflow
-description: "Use when: planning or performing the repository branch, commit, rebase, push, or pull request workflow for one task. Do not use for: destructive history rewrites, direct main work without explicit approval, or combining unrelated tasks."
+description: "Use when: creating or switching Git branches, using worktrees, syncing a feature branch with main, committing, pushing, or creating/updating a pull request in this monorepo. Do not use for: destructive history rewrites, force-pushes, or unrelated tasks."
 ---
 
 # Git And Pull Request Workflow
 
 ## Purpose And Non-Goals
 
-Keep one coherent task per branch and one pull request per task while making every mutating Git action explicit.
+Keep one coherent task per branch and one pull request per task. Complete explicitly requested Git actions promptly without asking for the same approval twice.
+
+This skill does not authorize destructive history changes, force-pushes, branch deletion, or work on `main` without an explicit request.
 
 ## Expected Inputs
 
-- Task type and short name.
-- Current branch and intended pull request base.
-- Changed scope and validation status.
-- Explicit approval of each proposed Git mutation batch.
+- The requested action: branch/worktree creation, branch sync, commit, push, or pull request.
+- The task's relevant changes and, when needed, the intended branch or worktree path.
+- Validation status for changes being committed or published.
+
+Infer details from the current task and Git state when clear. Ask only when ambiguity affects the target, mixes unrelated work, or could risk user changes.
 
 ## Normative Documents
 
-1. `CONTRIBUTING.md` is the workflow source of truth.
-2. `CLAUDE.md` defines safety and required validation.
-3. `STANDARD_POC.md` defines local technical checks.
+1. `CONTRIBUTING.md` defines the repository branch, worktree, commit, validation, and pull request workflow.
+2. `CLAUDE.md` defines repository safety and required validation.
+3. `STANDARD_POC.md` and the relevant app documentation define technical requirements for application changes.
 
 ## Procedure
 
-1. Inspect current branch, worktree status, and relevant remote/base state using read-only capabilities when available.
-2. Classify the task as `feature/<name>` or `fixing/<name>` and verify that the scope is coherent.
-3. For independent work, use `origin/main` as the base. For work depending on an open pull request, use the currently checked-out branch associated with that PR; after the parent PR merges, update the dependent branch by merging `origin/main` as documented in `CONTRIBUTING.md`.
-4. Present each local mutation batch, including branch creation, merging `origin/main` into a dependent branch, and commit creation. Include exact names, included paths, excluded unrelated changes, and validations.
-5. Obtain explicit approval before creating a branch, merging into a branch, or creating a commit.
-6. Stage only approved paths and never discard unrelated user changes.
-7. Use a short conventional commit message aligned with the task.
-8. Treat push, rebase, `--force-with-lease`, pull request creation, and pull request base changes as remote or history-affecting actions requiring a separate explicit confirmation, even when local branch or commit approval already exists.
-9. Report the resulting branch, commit, validation evidence, excluded changes, and remaining remote actions.
+1. **Inspect once, narrowly.** Check `git status --short --branch`, the current branch, and `git worktree list` when worktrees affect the task. Inspect only the relevant diff and paths. Do not repeat checks whose state has not changed.
+2. **Choose the right branch.**
+   - Use `feature/<name>` for features and documentation additions; use `fixing/<name>` for corrections.
+   - Start independent work from the latest `origin/main`.
+   - Start dependent work from the parent PR branch. After that PR merges, merge `origin/main` into the dependent branch as documented in `CONTRIBUTING.md`.
+   - Do not commit on `main` unless the user explicitly asks to.
+3. **Handle worktrees without disturbing another checkout.**
+   - Check `git worktree list` before creating or switching a branch. If the target branch is already checked out elsewhere, use that worktree or ask before moving it; never force a checkout.
+   - For a new independent worktree, fetch and create its branch from `origin/main`:
 
-## Optional Capabilities And Fallbacks
+     ```text
+     git fetch origin
+     git worktree add -b feature/<name> "C:\path\to\worktree" origin/main
+     ```
 
-- Without Git execution, return exact proposed commands and stop before mutation.
-- Without hosting-service access, provide the pull request title, base, body, and validation summary without claiming a PR exists.
-- Without parent-PR state, ask the user whether the parent pull request is still open before selecting the base.
-- Without permission for remote actions, keep push, rebase, and PR steps recommended only.
+   - For an existing branch, create a worktree for it:
+
+     ```text
+     git worktree add "C:\path\to\worktree" feature/<name>
+     ```
+
+   - For dependent work, create the new worktree from the parent branch, or use `git switch -c feature/<name>` in the parent worktree when the user wants to continue there.
+   - To move the current branch out of the primary worktree, first confirm it is clean, switch that worktree to `main`, then add a worktree for the now-free feature branch. Use quoted Windows paths and verify with `git worktree list`.
+4. **Treat the requested operation as approval for that operation.** A direct request such as “commit this” or “commit and push” authorizes the named action(s); do not ask for a second confirmation. Do not infer permission to commit or push from “fix this”, “prepare”, or a request that only asks for advice. A request to sync a branch authorizes the documented local merge; push only when the user asks to push or publish.
+5. **Keep scope precise.** Stage only files belonging to the current task. Never stage all changes blindly. If changes contain multiple unrelated tasks or the requested commit scope is unclear, ask which paths to include. Never stage secrets, databases, uploads, user data, or generated personal content.
+6. **Validate efficiently.**
+   - Before a commit, run `bash scripts/check_standard.sh` unless it has already passed after the latest relevant changes.
+   - Before pushing application changes, run the applicable checks from `CONTRIBUTING.md`. Reuse successful checks for unchanged files; do not run unrelated app checks for documentation-only changes.
+   - If a required check fails, report it and do not claim the commit/push is validated. Do not silently bypass it.
+7. **Commit and push only what was requested.**
+   - Use a short conventional commit message matching the task.
+   - Do not create an empty commit when there are no task changes to commit.
+   - Push the current feature branch to its configured upstream. If it has no upstream, use `git push -u origin <branch>` when `origin` is the intended remote.
+   - Never force-push. If the current branch is `main`, stop unless direct work on `main` was explicitly requested.
+8. **Sync a dependent branch after its parent PR merges.** Confirm the worktree is clean, then fetch and merge `origin/main`:
+
+   ```text
+   git status --short --branch
+   git fetch origin
+   git merge --no-commit --no-ff origin/main
+   git status
+   ```
+
+   Review conflicts before continuing. If Git reports that the branch is already up to date, no merge commit is needed. Otherwise, finish a conflict-free merge with a merge commit; if there are conflicts, stop for resolution rather than committing an incomplete merge. Push only if requested. Follow `CONTRIBUTING.md` for the exact merge commit message and publish steps.
+9. **Handle pull requests only when requested.** Use the repository's GitHub workflow and correct base branch (including the parent branch for a dependent PR). Prefer available GitHub tooling; do not require a particular CLI. Never claim a PR was created or updated unless verified.
 
 ## Validations
 
-- Branch prefix matches task type and contains one coherent task.
-- The base branch decision is explicit and supported by current or user-provided state.
-- Only approved paths are staged; unrelated changes remain untouched.
-- Required checks are executed or clearly listed as blocked/recommended before push or PR.
-- After a parent PR merges, update dependent branches by merging `origin/main`; verify conflict resolution before committing and pushing.
+- The current branch, intended base, and worktree are correct for the task.
+- Only task-related paths are staged; unrelated work remains untouched.
+- `scripts/check_standard.sh` passed after the latest relevant changes before commit.
+- Applicable app validations were run before push, or clearly reported as blocked/unverified.
+- A dependent branch was updated from `origin/main` only after its parent PR merged; conflicts were reviewed before committing.
+- Push and PR actions match the user's explicit request and target branch.
 
 ## Expected Output
 
-Return an English workflow report containing current state, branch/base decision, approved local mutation batch, commit message, validations, included and excluded paths, remote actions requiring confirmation, and PR draft content when requested.
+Respond in the user's language and keep routine Git reports concise. State the branch, files included (and any excluded unrelated changes), commit hash/message when created, push result, validations actually run, and PR link when applicable. Clearly identify anything blocked or not verified.
 
-## Limits
+## Limits And Fallbacks
 
-By default this skill may perform only approved local branch and commit actions. It must not push, rebase, force-update, create or edit a PR, merge, reset, or delete branches without a separate explicit confirmation.
+- If Git or hosting-service access is unavailable, provide the exact commands and label them as not executed.
+- If the remote, target branch, worktree, commit scope, or conflict resolution is uncertain, stop only that operation and ask a focused question.
+- Do not claim remote state, successful validation, or PR status without checking it.
 
-## Safety
+## Safety And Data Handling
 
-Never use destructive reset or checkout operations to remove user changes. Never stage secrets, databases, uploads, user data, or generated personal content. Never bypass hooks or validations silently.
+- Never discard user changes or use destructive reset/checkout commands.
+- Never rebase, force-push, delete branches, or bypass hooks/validations unless the user explicitly requests the specific operation; still explain material risks before a destructive history rewrite.
+- Never read or commit application databases, uploaded files, user storage, secrets, API keys, or generated personal data.
+- Leave unrelated worktree changes untouched.

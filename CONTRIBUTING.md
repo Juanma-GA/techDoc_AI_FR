@@ -2,6 +2,36 @@
 
 This repository uses one coherent task per branch and one pull request per task.
 
+## Git Worktrees
+
+Use worktrees to keep branches available in separate folders without repeatedly switching the primary checkout. Check the current worktree and working tree before changing branches:
+
+```text
+git worktree list
+git status --short --branch
+```
+
+For a new independent feature, create its worktree from the latest `origin/main`:
+
+```text
+git fetch origin
+git worktree add -b feature/<name> "C:\path\to\worktree" origin/main
+```
+
+For an existing local branch that is not checked out elsewhere:
+
+```text
+git worktree add "C:\path\to\worktree" feature/<name>
+```
+
+If the branch is currently checked out in the primary worktree and needs to be moved, first confirm that worktree is clean, switch it to `main` to release the branch, then add the worktree. Do not force a checkout or disturb uncommitted changes. For a dependent feature, base its worktree on the parent PR branch:
+
+```text
+git worktree add -b feature/<name> "C:\path\to\worktree" feature/<parent-name>
+```
+
+Alternatively, create the dependent branch in place with `git switch -c feature/<name>` while on the parent branch. Verify worktree locations with `git worktree list`.
+
 ## Branches
 
 - Use `feature/<name>` for features and documentation additions.
