@@ -1,4 +1,10 @@
-import { AppShell, ErrorBoundary, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
+import {
+  AppShell,
+  ErrorBoundary,
+  LanguageSwitcher,
+  SidebarNavContent,
+  sidebarNavItemClass,
+} from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
@@ -12,11 +18,11 @@ import { Settings } from "./routes/Settings";
 import { Templates } from "./routes/Templates";
 
 const navItems = [
-  { to: "/", labelKey: "nav.ocr" },
-  { to: "/extraction", labelKey: "nav.extraction" },
-  { to: "/templates", labelKey: "nav.templates" },
-  { to: "/data", labelKey: "nav.data" },
-  { to: "/settings", labelKey: "nav.settings" },
+  { to: "/", labelKey: "nav.ocr", icon: "scan" },
+  { to: "/extraction", labelKey: "nav.extraction", icon: "file" },
+  { to: "/templates", labelKey: "nav.templates", icon: "templates" },
+  { to: "/data", labelKey: "nav.data", icon: "data" },
+  { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;
@@ -31,18 +37,26 @@ export function App() {
       className="dw"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === "/"}
-          className={({ isActive }) => sidebarNavItemClass(isActive)}
-        >
-          {t(labelKey)}
-        </NavLink>
-      ))}
+      navigation={navItems.map(({ to, labelKey, icon }) => {
+        const label = t(labelKey);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === "/"}
+            title={label}
+            aria-label={label}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon={icon} label={label} />
+          </NavLink>
+        );
+      })}
       languageSwitcher={
         <LanguageSwitcher
           languages={LANGS}

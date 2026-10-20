@@ -3,6 +3,7 @@ import {
   ErrorBoundary,
   LanguageSwitcher,
   PortalLink,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,10 +21,10 @@ import { Settings } from "./routes/Settings";
 // Coquille pixel-identique au preview.html : .layout / .sidebar / .nav-item /
 // .lang-switch (CSS dans styles/preview-skin.css). Pas de logos sur les onglets.
 const navItems = [
-  { to: "/", labelKey: "nav.generate" },
-  { to: "/documents", labelKey: "nav.documents" },
-  { to: "/data", labelKey: "nav.data" },
-  { to: "/settings", labelKey: "nav.settings" },
+  { to: "/", labelKey: "nav.generate", icon: "home" },
+  { to: "/documents", labelKey: "nav.documents", icon: "files" },
+  { to: "/data", labelKey: "nav.data", icon: "data" },
+  { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;
 
 const LANGS = ["fr", "en", "es"] as const;
@@ -70,32 +71,42 @@ export function App() {
   return (
     <AppShell
       className="dw"
-      headerStart={<PortalLink className="sidebar-home" label={t("nav.portal")} />}
       title={t("app.title")}
       brandTitle={t("app.title")}
-      version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       sidebarTop={
-        session?.enabled && session.authenticated ? (
-          <div className="current-user-badge">
-            {session.display_name || session.email}
-            {" · "}
-            <button type="button" className="btn ghost small" onClick={() => void logout()}>
-              {t("auth.logout")}
-            </button>
-          </div>
-        ) : null
+        <>
+          <PortalLink className="sidebar-home" label={t("nav.portal")} />
+          {session?.enabled && session.authenticated ? (
+            <div className="current-user-badge">
+              {session.display_name || session.email}
+              {" · "}
+              <button type="button" className="btn ghost small" onClick={() => void logout()}>
+                {t("auth.logout")}
+              </button>
+            </div>
+          ) : null}
+        </>
       }
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === "/"}
-          className={({ isActive }) => sidebarNavItemClass(isActive)}
-        >
-          {t(labelKey)}
-        </NavLink>
-      ))}
+      navigation={navItems.map(({ to, labelKey, icon }) => {
+        const label = t(labelKey);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === "/"}
+            title={label}
+            aria-label={label}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon={icon} label={label} />
+          </NavLink>
+        );
+      })}
       languageSwitcher={
         <LanguageSwitcher
           languages={LANGS}

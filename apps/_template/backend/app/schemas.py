@@ -2,44 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class HealthResponse(BaseModel):
     status: str
     version: str
     db: str
-    llm: str
 
 
-# ----- Settings (Mistral runtime config) ------------------------------------
+# ----- Runtime preferences --------------------------------------------------
 
 
 class SettingsIn(BaseModel):
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    chat_model: Optional[str] = None
-    embed_model: Optional[str] = None
-    llm_enabled: Optional[bool] = None
-    demo_enabled: Optional[bool] = None
+    demo_enabled: bool | None = None
 
 
 class SettingsOut(BaseModel):
-    api_key_set: bool
-    base_url: str
-    chat_model: str
-    embed_model: str
-    llm_enabled: bool
     demo_enabled: bool
-    llm_tested: bool = False
-
-
-class TestConnectionOut(BaseModel):
-    ok: bool
-    models: list[str] = Field(default_factory=list)
-    error: Optional[str] = None
 
 
 # ----- Admin (stats + reset) ------------------------------------------------

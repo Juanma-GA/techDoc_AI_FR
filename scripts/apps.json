@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "defaultProfiles": ["local-first"],
+  "profiles": ["local-first", "llm", "files"],
+  "apps": [
+    {
+      "slug": "_template",
+      "displayName": "TEMPLATE",
+      "kind": "template",
+      "backend": "fastapi",
+      "targetPort": 8000,
+      "profiles": ["local-first"],
+      "desktop": true,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "corpus-agent",
+      "displayName": "Corpus Agent",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8001,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "doc-writer",
+      "displayName": "Doc Writer",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8002,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "doc-reviewer",
+      "displayName": "Doc Reviewer",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8003,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "catia-toolbox",
+      "displayName": "CATIA Toolbox",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8004,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "ocr-vision",
+      "displayName": "OCR Vision",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8005,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "s1000d-extractor",
+      "displayName": "S1000D Extractor",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8006,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "ecm-automation",
+      "displayName": "ECM Automation",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8009,
+      "profiles": ["local-first"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "flowchart-generator",
+      "displayName": "Flowchart Generator",
+      "kind": "app",
+      "backend": "fastapi",
+      "targetPort": 8010,
+      "profiles": ["local-first", "llm", "files"],
+      "desktop": false,
+      "e2e": true,
+      "openapi": true
+    },
+    {
+      "slug": "pdf-toolkit",
+      "displayName": "PDF Toolkit",
+      "kind": "app",
+      "backend": "go",
+      "backendCommand": "go run ./cmd/pdf-toolkit",
+      "targetPort": 8085,
+      "profiles": ["local-first", "files"],
+      "desktop": true,
+      "e2e": false,
+      "openapi": false
+    }
+  ]
+}

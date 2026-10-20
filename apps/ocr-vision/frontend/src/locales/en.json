@@ -11,7 +11,12 @@
     "home": "Home",
     "architecture": "Architecture",
     "data": "Data",
-    "settings": "Settings"
+    "settings": "Settings",
+    "ariaLabel": "Main navigation",
+    "themeToggle": "Switch theme",
+    "languageSwitcher": "Language",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu"
   },
   "llm": {
     "label": "LLM",

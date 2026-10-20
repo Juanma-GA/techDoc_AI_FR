@@ -12,8 +12,7 @@
     <script>
       (function () {
         var stored = localStorage.getItem("theme");
-        var useDark = stored !== "light";
-        if (useDark) {
+        if (stored !== "light") {
           document.documentElement.classList.add("dark");
         }
       })();

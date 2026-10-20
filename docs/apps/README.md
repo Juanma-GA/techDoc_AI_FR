@@ -1,37 +1,36 @@
 # Application Inventory
 
-This inventory lists instantiated applications and the canonical template. Application README files remain authoritative for application-specific behavior.
+This inventory is generated from [`scripts/apps.json`](../../scripts/apps.json).
+The registry is the single source of truth for application identity, backend,
+profiles, desktop capability, and target default ports.
 
-## Target Port Policy
+## Target Ports and Profiles
 
-Each application has a unique default port. A launcher should try that port first and, when it is unavailable, increment until it finds a free port. It must print and open the selected port. Windows and Unix launchers must implement the same behavior.
+Every app starts with its registered default and selects the next free port
+when necessary. Windows, Unix, development commands, and API tooling must use
+the same registered value.
 
-The assignments below are the target defaults. Current launcher differences are known deviations and are not corrected by the documentation reorganization.
+<!-- APP_REGISTRY_START -->
+| Application | Backend | Profiles | Target default port | Desktop |
+|---|---|---|---:|---:|
+| [_template](../../apps/_template/README.md) | fastapi | `local-first` | 8000 | Yes |
+| [corpus-agent](../../apps/corpus-agent/README.md) | fastapi | `local-first`, `llm`, `files` | 8001 | No |
+| [doc-writer](../../apps/doc-writer/README.md) | fastapi | `local-first`, `llm`, `files` | 8002 | No |
+| [doc-reviewer](../../apps/doc-reviewer/README.md) | fastapi | `local-first`, `llm`, `files` | 8003 | No |
+| [catia-toolbox](../../apps/catia-toolbox/README.md) | fastapi | `local-first`, `llm`, `files` | 8004 | No |
+| [ocr-vision](../../apps/ocr-vision/README.md) | fastapi | `local-first`, `llm`, `files` | 8005 | No |
+| [s1000d-extractor](../../apps/s1000d-extractor/README.md) | fastapi | `local-first`, `llm`, `files` | 8006 | No |
+| [ecm-automation](../../apps/ecm-automation/README.md) | fastapi | `local-first` | 8009 | No |
+| [flowchart-generator](../../apps/flowchart-generator/README.md) | fastapi | `local-first`, `llm`, `files` | 8010 | No |
+| [pdf-toolkit](../../apps/pdf-toolkit/README.md) | go | `local-first`, `files` | 8085 | Yes |
+<!-- APP_REGISTRY_END -->
 
-| Application | Type | Target default port | Documentation status |
-|---|---|---:|---|
-| `_template` | Canonical template | 8000 | To normalize first |
-| `corpus-agent` | Active POC | 8001 | To normalize |
-| `doc-writer` | Active POC | 8002 | To normalize |
-| `doc-reviewer` | Active POC | 8003 | To normalize |
-| `catia-toolbox` | Active POC | 8004 | To normalize |
-| `ocr-vision` | Active POC | 8005 | To normalize |
-| `s1000d-extractor` | Active POC | 8006 | To normalize |
-| `brdp-manager` | Active POC | 8007 | To normalize |
-| `xml-proofreader` | Active POC | 8008 | To normalize |
-| `ecm-automation` | Active POC | 8009 | Local ECM tracker workflow |
-| `flowchart-generator` | Active POC | 8010 | Documented |
-| `pdf-toolkit` | Go/Gin web app, optional Tauri | 8085 | Shared UI, no Python runtime |
+## Adding an App
 
-## Known Baseline Deviations
+Use `node scripts/new_poc.mjs <slug> [port] [--profile llm] [--profile files] [--desktop]`.
+The default profile is `local-first`; LLM and file-handling capabilities must be
+selected explicitly. `production` is outside the local POC scope.
 
-- Several `start.sh` defaults differ from their Windows `_run.bat` defaults.
-- `catia-toolbox` and `s1000d-extractor` currently share Windows default port 8004.
-- Existing root and application documentation contains stale port values.
-- `brdp-manager` and `xml-proofreader` were missing from older repository inventories.
-
-Launcher and port changes require a separate code change because they are excluded from the documentation reorganization.
-
-## Compliance Matrix
-
-Use the local `audit-standard` skill for a factual per-app assessment against `STANDARD_POC.md`. Use the `aacf-compliance` skill only for live external AACF controls. Operational guides and historical reports are not normative compliance evidence.
+The scaffold updates the registry and synchronized documentation/commands.
+Application-specific behavior remains documented in each app README. Run the
+app checks and `bash scripts/check_standard.sh` after scaffolding.

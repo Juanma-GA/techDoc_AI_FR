@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Provide the required FastAPI and React/Vite foundation for a new local-first POC. Create applications with `scripts/new_poc.sh`; do not use an existing POC as a template.
+Provide the required FastAPI and React/Vite foundation for a new local-first POC. Create applications with `node scripts/new_poc.mjs`; do not use an existing POC as a template.
 
 ## Maturity
 
@@ -11,11 +11,11 @@ Provide the required FastAPI and React/Vite foundation for a new local-first POC
 ## Features
 
 - Standard health, settings, admin statistics, and reset endpoints under `/api/v1/`.
-- Runtime Mistral configuration through `AppConfig`.
 - Normal/demo mode setting persisted through `AppConfig`, with a local synthetic scenario.
 - AI4TECHDOC identity through the shared `@internal/ui` logo component.
 - React/Vite frontend served by FastAPI at `/`.
 - Windows and Unix launchers, conditional frontend rebuild, and Windows packaging wrappers.
+- Optional profile overlays for LLM and file workflows.
 - Optional Tauri desktop shell, selected with `node scripts/new_poc.mjs <slug> [port] --desktop`.
 
 ## Auth
@@ -23,18 +23,19 @@ Provide the required FastAPI and React/Vite foundation for a new local-first POC
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
 ## Profiles
+
+<!-- APP_PROFILES_START -->
 - `local-first`
-- `llm`
+<!-- APP_PROFILES_END -->
 
 ## Port
 
-The target default port is `8000`. Launchers must select and display the next free port when it is unavailable. See the [application inventory](../../docs/apps/README.md).
+The reserved template port is `8000`. New apps use the next unassigned target port from [`scripts/apps.json`](../../scripts/apps.json).
 
 ## Prerequisites
 
 - Python 3.11 or later.
 - Node 20 and pnpm 9 for frontend development and builds.
-- A Mistral API key only for features that use the LLM profile.
 
 ## Start On Windows
 
@@ -50,7 +51,7 @@ From the repository root:
 
 ```bash
 pnpm install
-pnpm dev:TEMPLATE
+pnpm dev:<slug>
 ```
 
 ## Served Interface
@@ -59,11 +60,10 @@ FastAPI serves the built React application from `frontend/dist/` at `/`. If the 
 
 ## Persistence
 
-The local-first profile uses the gitignored SQLite file `backend/data/TEMPLATE.db`. `AppConfig` stores runtime configuration and is preserved by the standard admin reset convention.
-
-## LLM Configuration
-
-The scaffold provides runtime settings, health states, connection testing, and the global `llm_enabled` switch. An instantiated POC must document deterministic or empty-result behavior when LLM use is disabled.
+The local-first profile uses the gitignored SQLite file `backend/data/TEMPLATE.db`.
+`AppConfig` stores local runtime preferences such as demo mode and is preserved by
+the standard admin reset convention. No LLM client, key, settings endpoint, or UI
+is included unless the `llm` profile is explicitly selected at scaffold time.
 
 ## Tests
 

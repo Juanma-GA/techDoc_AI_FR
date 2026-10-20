@@ -1,6 +1,9 @@
-# 🧪 GUIDE DE TEST — 6 POCs AACF 100% Conforme
+# Guide de test historique — archive
 
-**Objectif** : Valider que chaque POC démarre correctement et respecte les règles AACF (HR0–HR21).
+> Archive historique : ce guide décrit un ancien état du dépôt. Il n'est pas
+> opérationnel et ne constitue pas une preuve de conformité AACF. Pour
+> l'inventaire et les commandes actuels, consulter
+> [QUICK_START.md](../../QUICK_START.md).
 
 ---
 

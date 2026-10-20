@@ -1,10 +1,10 @@
 import {
-  Ai4TechDocLogo,
   AppShell,
   DemoModeBadge,
   DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { lazy, Suspense } from "react";
@@ -43,12 +43,17 @@ function RouteFallback() {
 }
 
 // Navigation principale et reviewer plein ecran pour le document courant.
-const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
-  { to: "/", labelKey: "nav.dashboard", end: true },
-  { to: "/documents", labelKey: "nav.documents" },
-  { to: "/rejections", labelKey: "nav.rejections" },
-  { to: "/rules", labelKey: "nav.rules" },
-  { to: "/settings", labelKey: "nav.settings" },
+const navItems: ReadonlyArray<{
+  to: string;
+  labelKey: string;
+  icon: "home" | "files" | "review" | "rules" | "settings";
+  end?: boolean;
+}> = [
+  { to: "/", labelKey: "nav.dashboard", icon: "home", end: true },
+  { to: "/documents", labelKey: "nav.documents", icon: "files" },
+  { to: "/rejections", labelKey: "nav.rejections", icon: "review" },
+  { to: "/rules", labelKey: "nav.rules", icon: "rules" },
+  { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;
@@ -88,10 +93,10 @@ export function App() {
       className="pr"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
-      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
       themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       sidebarTop={
         demoEnabled ? (
           <div className="border-b border-md px-4 py-2">
@@ -100,16 +105,21 @@ export function App() {
         ) : null
       }
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          className={({ isActive }) => sidebarNavItemClass(isActive)}
-        >
-          {t(labelKey)}
-        </NavLink>
-      ))}
+      navigation={navItems.map(({ to, labelKey, icon, end }) => {
+        const label = t(labelKey);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={end}
+            title={label}
+            aria-label={label}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon={icon} label={label} />
+          </NavLink>
+        );
+      })}
       languageSwitcher={
         <LanguageSwitcher
           languages={LANGS}

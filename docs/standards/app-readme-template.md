@@ -14,6 +14,14 @@ State the maturity level and what has been validated.
 
 List user-visible capabilities and critical workflows.
 
+## Auth
+
+State the supported authentication tier and bind address. POC apps are local-only and bind to `127.0.0.1`.
+
+## Profiles
+
+Declare `local-first` and only the optional profiles actually used (`llm`, `files`). Do not declare `production` for a local POC.
+
 ## Port
 
 State the assigned default port and explain that launchers select the next free port when needed. Link to the repository application inventory.
@@ -42,9 +50,13 @@ State that FastAPI serves the built React application from `frontend/dist/` at `
 
 Describe application-owned persistence, reset scopes, and retained configuration without exposing user data.
 
-## LLM Configuration
+## LLM Configuration (only when the `llm` profile is declared)
 
 Describe runtime configuration, enable/disable behavior, health states, and graceful behavior when disabled.
+
+## File Handling (only when the `files` profile is declared)
+
+Describe accepted formats, MIME/size validation, storage location, hashing, versioning, and cleanup behavior.
 
 ## Tests
 

@@ -7,8 +7,11 @@ Application web locale, légère et open source pour les opérations PDF courant
 Palier 1 : local seul, bind `127.0.0.1`, sans authentification. Ne pas exposer ce serveur sur le réseau.
 
 ## Profiles
+
+<!-- APP_PROFILES_START -->
 - `local-first`
 - `files`
+<!-- APP_PROFILES_END -->
 
 ## Stack et intégration monorepo
 

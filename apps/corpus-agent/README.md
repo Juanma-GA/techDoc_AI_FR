@@ -19,6 +19,15 @@ Analyze multi-format technical document corpora, detect checklist findings, and 
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication in the local-first profile.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## Port
 
 The target default port is `8001`, followed by the next free port when needed. The current Unix and development defaults are known to differ and require a separate launcher correction.
@@ -57,13 +66,15 @@ Use the backend pytest suite and the frontend scripts declared in `frontend/pack
 
 ## Limitations
 
-OCR quality depends on source documents and optional local tooling. Current launcher port defaults are not yet aligned across platforms.
+OCR quality depends on source documents and optional local tooling.
 
 ## Standard Deviations
 
 - Checklist analysis has no deterministic finding fallback because business rules remain editable and LLM-driven.
-- The React UI retains app-specific preview skin CSS instead of using only `@internal/ui` primitives.
-- Deployment-oriented hardening and CI material exist outside the strict local-first default profile.
+- App-specific page styling remains in the preview skin; the shared shell,
+  navigation, theme/language controls, and LLM status use `@internal/ui`.
+- Deployment-oriented hardening remains outside the local-first profile; repository
+  CI runs quality checks only and does not deploy.
 
 ## Technical References
 

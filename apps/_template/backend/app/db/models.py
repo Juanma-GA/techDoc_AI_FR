@@ -1,8 +1,7 @@
 """SQLAlchemy 2.0 models pour le squelette TEMPLATE.
 
-Une seule table de base : `AppConfig` (key/value) pour la config runtime et
-les preferences (notamment la cle Mistral et le mode demo). Chaque POC ajoute
-ses propres tables ici.
+Une seule table de base : `AppConfig` (key/value) pour les preferences locales.
+Chaque POC ajoute ses propres tables ici.
 """
 
 from __future__ import annotations

@@ -4,7 +4,9 @@ Référence technique des règles de développement. Lue par les humains et par 
 
 **Hiérarchie** : l'AACF live est normative. Ce document définit le profil local-first de ce monorepo ; [`CLAUDE.md`](./CLAUDE.md) en est le résumé opératoire. Une exception locale doit être documentée, bornée et ne peut pas affaiblir une règle AACF.
 
-**Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker, pas de CI, pas de déploiement dans le périmètre du standard. Si un POC sort de ce périmètre, il bascule vers un autre standard (hors scope ici).
+Les règles complémentaires relatives au registre des apps, aux profils et au CI sont définies dans [`docs/standards/profiles-and-ci.md`](./docs/standards/profiles-and-ci.md).
+
+**Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker ni de déploiement dans le périmètre du standard. Le CI du dépôt est limité aux contrôles de qualité et ne déploie ni ne publie les apps. Si un POC sort de ce périmètre local, il bascule vers un autre standard (hors scope ici).
 
 ### Profils d'application
 
@@ -712,8 +714,7 @@ Pattern obligatoire dans `<head>` (anti-flash, applique le theme AVANT que le HT
 <script>
   (function () {
     var stored = localStorage.getItem("theme");
-    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+    if (stored !== "light") {
       document.documentElement.classList.add("dark");
     }
   })();
@@ -747,18 +748,19 @@ const fire = () => {
 ### Méthode recommandée — script d'instanciation
 
 ```bash
-node scripts/new_poc.mjs <slug> [<port>] [--desktop] [--dry-run]
+node scripts/new_poc.mjs <slug> [<port>] [--profile llm] [--profile files] [--desktop] [--dry-run]
 ```
 
 Le script Node `scripts/new_poc.mjs` (wrapper Bash `new_poc.sh` conservé) automatise les substitutions et :
 
 - Vérifie que `<slug>` est en kebab-case et que `apps/<slug>/` n'existe pas.
-- Choisit automatiquement le prochain port libre dès 8000 si le 2e argument est omis (sinon vérifie qu'il n'est pas déjà pris par un autre POC).
-- Copie `apps/_template/` → `apps/<slug>/` puis substitue tous les marqueurs `TEMPLATE` / `8000` / `'template'` dans `pyproject.toml`, `config.py`, `alembic.ini`, `.env.example`, les 4 `.bat` + `start.sh`, `frontend/package.json`, `vite.config.ts`, `index.html`, `locales/{fr,en}.json`, `backend/README.md`, `db/models.py`, `App.tsx`, `tests/e2e/home.spec.ts`.
+- Utilise `local-first` par défaut. Le LLM et la gestion de fichiers sont opt-in et peuvent être combinés avec des options `--profile` répétées.
+- Choisit automatiquement le prochain port cible non attribué depuis `scripts/apps.json` si le port est omis, ou refuse un port déjà réservé.
+- Copie `apps/_template/` → `apps/<slug>/`, superpose uniquement les profils demandés, puis substitue les marqueurs `TEMPLATE` / port / `'template'` dans les fichiers concernés.
 - Génère `scripts/package_<slug>.py` depuis `package_TEMPLATE.py` avec les bons `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX`.
-- Ajoute `dev:<slug>` / `test:e2e:<slug>` / `openapi:gen:<slug>` dans `package.json` racine.
+- Met à jour `scripts/apps.json`; les commandes, inventaires et matrices CI dérivent de ce registre, sans workflow dédié par app.
 - Écrase `apps/<slug>/README.md` par un stub avec bannière **« À RÉÉCRIRE »** + section `## Auth` palier 1.
-- Exécute `scripts/check_standard.sh` pour valider l'instanciation. Rollback automatique en cas d'échec.
+- Exécute `scripts/check_standard.sh` pour valider l'instanciation. Rollback automatique du scaffold et des artefacts synchronisés en cas d'échec. Si Bash est absent, le check est signalé comme ignoré et doit être exécuté manuellement avant usage.
 
 **Après le script**, il reste à la charge du dev :
 
@@ -777,9 +779,9 @@ Les validations restent à exécuter après génération. En fallback manuel :
 
 1. `cp -r apps/_template apps/<slug>`.
 2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/frontend/src/App.tsx` (`<span>` brand), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
-3. Choisir un port unique (8000, 8001, …) et le poser dans `set "PORT=80XX"` (`_run.bat`), `PORT="${PORT:-80XX}"` (`start.sh`), proxy `"/api"` (`vite.config.ts`), `openapi:gen` (`frontend/package.json`), `cors_origins` (`config.py`).
+3. Réserver un port unique dans `scripts/apps.json` et le synchroniser dans `set "PORT=80XX"` (`_run.bat`), `PORT="${PORT:-80XX}"` (`start.sh`), le proxy (`vite.config.ts`), `openapi:gen` (`frontend/package.json`) et `cors_origins` (`config.py`).
 4. `cp scripts/package_TEMPLATE.py scripts/package_<slug>.py` puis adapter `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête. Mettre à jour `_package.bat` pour appeler le nouveau script.
-5. Ajouter dans `package.json` racine : `dev:<slug>`, `test:e2e:<slug>`, `openapi:gen:<slug>`.
+5. Ajouter l'app à `scripts/apps.json`, puis synchroniser les commandes et inventaires avec `node scripts/sync_app_registry.mjs`. Le CI est découvert depuis le même registre.
 6. Vérifier `bash scripts/check_standard.sh` exit 0 — les checks 8 à 13 valident l'instanciation (nom `pyproject`, README réécrit, DB renommée, section Auth, scripts racine, bind 127.0.0.1).
 7. Premier commit : `feat(<slug>): bootstrap from template`.
 

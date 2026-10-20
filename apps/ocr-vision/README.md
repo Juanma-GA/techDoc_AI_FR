@@ -19,6 +19,15 @@ Run OCR and multimodal vision on images or PDFs, then extract structured table r
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## Port
 
 The target default port is `8005`, followed by the next free port when needed. The current Unix launcher and development configuration use older defaults.

@@ -1,4 +1,4 @@
-import { AppShell, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
+import { AppShell, LanguageSwitcher, SidebarNavContent, sidebarNavItemClass } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
@@ -9,10 +9,10 @@ import { Settings } from "./routes/Settings";
 import { Versioning } from "./routes/Versioning";
 
 const navItems = [
-  { to: "/migration", labelKey: "nav.migration" },
-  { to: "/data", labelKey: "nav.data" },
-  { to: "/settings", labelKey: "nav.settings" },
-  { to: "/versioning", labelKey: "nav.versioning" },
+  { to: "/migration", labelKey: "nav.migration", icon: "migration" },
+  { to: "/data", labelKey: "nav.data", icon: "data" },
+  { to: "/settings", labelKey: "nav.settings", icon: "settings" },
+  { to: "/versioning", labelKey: "nav.versioning", icon: "versioning" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;
@@ -28,17 +28,25 @@ export function App() {
       className="dw"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey }) => (
-        <NavLink
-          key={to}
-          to={to}
-          className={({ isActive }) => sidebarNavItemClass(isActive)}
-        >
-          {t(labelKey)}
-        </NavLink>
-      ))}
+      navigation={navItems.map(({ to, labelKey, icon }) => {
+        const label = t(labelKey);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            title={label}
+            aria-label={label}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon={icon} label={label} />
+          </NavLink>
+        );
+      })}
       languageSwitcher={
         <LanguageSwitcher
           languages={LANGS}

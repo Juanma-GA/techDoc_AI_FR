@@ -19,16 +19,20 @@ Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
 | [`apps/s1000d-extractor/`](apps/s1000d-extractor/) | Extraction et transformation S1000D | 8006 |
 | [`apps/brdp-manager/`](apps/brdp-manager/) | Gestion de BRDP | 8007 |
 | [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
+| [`apps/ecm-automation/`](apps/ecm-automation/) | Préparation de dossiers ECM/ECN et mise à jour de tracker | 8009 |
+| [`apps/flowchart-generator/`](apps/flowchart-generator/) | Génération de logigrammes industriels | 8010 |
 | [`apps/pdf-toolkit/`](apps/pdf-toolkit/) | Outils PDF Go, web et bureau Tauri optionnel | 8085 |
 | [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
 
-Le launcher tente le port par défaut puis utilise le premier port libre
-suivant. Les différences actuelles entre launchers sont recensées dans
-[`docs/apps/README.md`](docs/apps/README.md) et seront corrigées séparément.
+Les ports cibles et profils canoniques sont définis dans
+[`scripts/apps.json`](scripts/apps.json); le launcher utilise le premier port
+libre suivant si le port cible est occupé. Voir
+[`QUICK_START.md`](QUICK_START.md) pour toutes les apps.
 
 > **Principe directeur** : ces apps sont des **POC local-first stricts**
-> — ils tournent localement sur le PC du dev. Pas de Docker, pas de CI,
-> pas de déploiement dans le périmètre du standard (voir [`CLAUDE.md`](CLAUDE.md)).
+> — ils tournent localement sur le PC du dev. Pas de Docker ni de déploiement.
+> Le CI du dépôt vérifie la qualité sans déployer ni publier (voir
+> [`docs/standards/profiles-and-ci.md`](docs/standards/profiles-and-ci.md)).
 
 ## Démarrage
 
@@ -92,7 +96,8 @@ le packaging Tauri optionnel.
 │   ├── standards/              # modèles et contrats partagés
 │   ├── history/                # rapports datés non normatifs
 │   └── adr/                    # Architecture Decision Records
-├── scripts/                    # check_standard.sh + package_<poc>.py (un par app)
+├── scripts/                    # apps.json, scaffold, CI matrix, checker, packagers
+├── .github/workflows/           # CI qualité réutilisable par stack
 ├── tools/                      # binaires optionnels (ex. installeur Python silencieux)
 ├── STANDARD_POC.md             # référence technique du standard
 ├── CLAUDE.md                   # méthode et sécurité locales

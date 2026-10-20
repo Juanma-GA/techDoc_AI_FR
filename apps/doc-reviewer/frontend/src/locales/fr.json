@@ -29,7 +29,9 @@
     "rules": "Règles",
     "architecture": "Architecture",
     "data": "Données",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "dashboard": {
     "title": "Tableau de bord",

@@ -1,20 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import {
-  Ai4TechDocLogo,
   AppShell,
   DemoModeBadge,
   DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
-  LlmStatus,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
-import { Database, House, Settings as SettingsIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { healthApi, settingsApi, type HealthDto, type SettingsDto } from "./lib/api";
+import { settingsApi, type SettingsDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Home } from "./routes/Home";
 import { Settings } from "./routes/Settings";
@@ -22,20 +20,15 @@ import { Settings } from "./routes/Settings";
 const LANGUAGES = ["fr", "en"] as const;
 
 const NAV_ITEMS = [
-  { to: "/", key: "nav.home", icon: House, end: true },
-  { to: "/data", key: "nav.data", icon: Database },
-  { to: "/settings", key: "nav.settings", icon: SettingsIcon },
-];
+  { to: "/", key: "nav.home", icon: "home" },
+  { to: "/data", key: "nav.data", icon: "data" },
+  { to: "/settings", key: "nav.settings", icon: "settings" },
+] as const;
 
 export function App() {
   const { t, i18n } = useTranslation();
   const appTitle = t("app.title");
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
-  const healthQuery = useQuery<HealthDto>({
-    queryKey: ["health"],
-    queryFn: healthApi.read,
-    refetchInterval: 15_000,
-  });
   const settingsQuery = useQuery<SettingsDto>({
     queryKey: ["settings"],
     queryFn: settingsApi.read,
@@ -50,9 +43,7 @@ export function App() {
     <AppShell
       title={appTitle}
       brandTitle={t("app.description")}
-      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
-      collapsible
       collapseLabel={t("nav.collapse")}
       expandLabel={t("nav.expand")}
       themeToggleLabel={t("nav.themeToggle")}
@@ -65,37 +56,23 @@ export function App() {
       }
       navigation={
         <>
-          {NAV_ITEMS.map(({ to, key, icon: Icon, end }) => {
+          {NAV_ITEMS.map(({ to, key, icon }) => {
             const label = t(key);
 
             return (
               <NavLink
                 key={to}
                 to={to}
-                end={end}
+                end={to === "/"}
                 title={label}
                 aria-label={label}
                 className={({ isActive }) => sidebarNavItemClass(isActive)}
               >
-                <Icon size={16} aria-hidden="true" />
-                <span className="ui-nav-label">{label}</span>
+                <SidebarNavContent icon={icon} label={label} />
               </NavLink>
             );
           })}
         </>
-      }
-      llmStatus={
-        <LlmStatus
-          status={healthQuery.data?.llm}
-          labels={{
-            label: t("llm.label"),
-            title: t("llm.title"),
-            on: t("llm.on"),
-            off: t("llm.off"),
-            untested: t("llm.untested"),
-            noKey: t("llm.noKey"),
-          }}
-        />
       }
       languageSwitcher={
         <LanguageSwitcher

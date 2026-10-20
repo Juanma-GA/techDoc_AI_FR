@@ -12,7 +12,9 @@
     "ariaLabel": "Navigation principale",
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
-    "tools": "Outils PDF"
+    "tools": "Outils PDF",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "tools": {
     "merge": {

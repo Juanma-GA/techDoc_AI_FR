@@ -1,6 +1,8 @@
 import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+import { readAppRegistry, resolveTargetPort } from "./app-registry.mjs";
+
 export const excluded = new Set([
   "node_modules", ".venv", "__pycache__", "data", "storage", "uploads", "dist", "target",
   ".git", ".cache", ".pytest_cache", "coverage", "test-results", "playwright-report", "build",
@@ -31,18 +33,5 @@ export function substituteTree(root, replacements) {
 }
 
 export function resolvePort(repo, requested) {
-  const used = new Set();
-  for (const name of readdirSync(path.join(repo, "apps"))) {
-    if (name === "_template") continue;
-    const file = path.join(repo, "apps", name, "_run.bat");
-    if (!existsSync(file)) continue;
-    const match = readFileSync(file, "utf8").match(/set "PORT=(\d+)"/);
-    if (match) used.add(Number(match[1]));
-  }
-  let port = Number(requested ?? 8000);
-  if (!Number.isInteger(port) || port < 1024 || port > 65515) throw new Error("Invalid port (1024..65515).");
-  if (requested !== undefined && used.has(port)) throw new Error(`Port ${port} is assigned to another app.`);
-  while (used.has(port) && port <= 8099) port++;
-  if (requested === undefined && port > 8099) throw new Error("No unassigned port in 8000..8099.");
-  return port;
+  return resolveTargetPort(readAppRegistry(repo), requested);
 }
