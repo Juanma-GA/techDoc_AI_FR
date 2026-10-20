@@ -756,6 +756,8 @@ importers:
       '@fontsource/orbitron':
         specifier: ^5.1.0
         version: 5.3.0
+  apps/flowchart-generator/frontend:
+    dependencies:
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
