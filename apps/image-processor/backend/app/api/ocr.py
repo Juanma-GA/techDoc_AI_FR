@@ -152,7 +152,7 @@ async def run_ocr(
 
     stage_started = perf_counter()
     lines, matches = _match_references(_build_lines(prediction), reference_list)
-    output_image, scale_x, scale_y, offset_x, offset_y = create_a4_page(source_canvas)
+    output_image, scale_x, scale_y, offset_x, offset_y = create_a4_page(source_canvas, icn=output_icn)
     for line in lines:
         line["box"] = [
             [point[0] * scale_x + offset_x, point[1] * scale_y + offset_y] for point in line["box"]

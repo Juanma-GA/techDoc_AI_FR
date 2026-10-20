@@ -5,9 +5,15 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import HTTPException
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 
 from app.services.constants import A4_DPI, A4_HEIGHT, A4_WIDTH, SUPPORTED_FORMATS
+from app.services.replacement_typography import load_replacement_font
+
+ICN_FOOTER_HEIGHT = 180
+ICN_FOOTER_FONT_SIZE = 64
+ICN_FOOTER_MIN_FONT_SIZE = 32
+ICN_FOOTER_SIDE_MARGIN = 120
 
 
 def _safe_filename_component(value: str) -> str:
@@ -53,17 +59,48 @@ def prepare_source_image(image_bytes: bytes) -> tuple[Image.Image, bytes]:
     return normalized_image, encoded_image.getvalue()
 
 
-def create_a4_page(image: Image.Image) -> tuple[Image.Image, float, float, int, int]:
+def _draw_icn_footer(page: Image.Image, icn: str) -> None:
+    text = Path(output_filename(None, icn)).stem
+    available_width = page.width - ICN_FOOTER_SIDE_MARGIN * 2
+    low, high = ICN_FOOTER_MIN_FONT_SIZE, ICN_FOOTER_FONT_SIZE
+    font_size: int | None = None
+    while low <= high:
+        candidate = (low + high) // 2
+        box = load_replacement_font(candidate).getbbox(text)
+        if box[2] - box[0] <= available_width:
+            font_size = candidate
+            low = candidate + 1
+        else:
+            high = candidate - 1
+    if font_size is None:
+        raise HTTPException(status_code=422, detail="Le numéro ICN est trop long pour le pied de page.")
+
+    font = load_replacement_font(font_size)
+    draw = ImageDraw.Draw(page)
+    box = draw.textbbox((0, 0), text, font=font)
+    text_width, text_height = box[2] - box[0], box[3] - box[1]
+    x = (page.width - text_width) // 2 - box[0]
+    footer_top = page.height - ICN_FOOTER_HEIGHT
+    y = footer_top + (ICN_FOOTER_HEIGHT - text_height) // 2 - box[1]
+    draw.text((x, y), text, font=font, fill=(0, 0, 0))
+
+
+def create_a4_page(
+    image: Image.Image, *, icn: str | None = None,
+) -> tuple[Image.Image, float, float, int, int]:
     source = image_on_white(image)
-    scale = min(A4_WIDTH / source.width, A4_HEIGHT / source.height)
+    content_height = A4_HEIGHT - (ICN_FOOTER_HEIGHT if icn is not None else 0)
+    scale = min(A4_WIDTH / source.width, content_height / source.height)
     resized_width = max(1, min(A4_WIDTH, round(source.width * scale)))
-    resized_height = max(1, min(A4_HEIGHT, round(source.height * scale)))
+    resized_height = max(1, min(content_height, round(source.height * scale)))
     resized = source.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
     left = (A4_WIDTH - resized_width) // 2
-    top = (A4_HEIGHT - resized_height) // 2
+    top = (content_height - resized_height) // 2
 
     page = Image.new("RGB", (A4_WIDTH, A4_HEIGHT), "white")
     page.paste(resized, (left, top))
+    if icn is not None:
+        _draw_icn_footer(page, icn)
     return page, resized_width / source.width, resized_height / source.height, left, top
 
 

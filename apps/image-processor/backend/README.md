@@ -54,6 +54,8 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 - Text is rendered after A4 layout. Optional `replacement_font_size` is validated
   in OCR forms and persisted analysis, so reruns/history reuse the same A4 size.
   Missing ink with no existing size returns an explicit 422 rather than inventing one.
+- When Excel supplies an ICN, OCR reserves a bottom band and prints the sanitized
+  ICN centered in black at title size. OCR without an ICN keeps the existing layout.
 - `PP-LCNet_x1_0_textline_ori` runs locally and may download about 6.5 MB on first use.
   `ocr_orientation_ms` isolates its inference time; automated tests simulate the model and
   never download weights or read user files.
