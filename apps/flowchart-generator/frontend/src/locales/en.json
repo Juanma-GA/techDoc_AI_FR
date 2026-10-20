@@ -1,0 +1,176 @@
+{
+  "app": {
+    "title": "Flowchart Generator",
+    "description": "Multi-format industrial flowchart generator (diagnostics, troubleshooting, procedures)"
+  },
+  "nav": {
+    "editor": "Editor",
+    "data": "Data",
+    "settings": "Settings",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "Mistral connection status",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "UNTESTED",
+    "noKey": "NO KEY"
+  },
+  "common": {
+    "confirm": "Click again to confirm"
+  },
+  "formats": {
+    "mermaid": "Mermaid text (Markdown, wikis, GitLab/GitHub)",
+    "xlsx": "Excel: Steps sheet + Transitions sheet, re-importable",
+    "pptx": "PowerPoint with native editable shapes and connectors",
+    "drawio": "draw.io / diagrams.net, importable into Visio",
+    "bpmn": "BPMN 2.0 XML (Camunda, Bizagi, Signavio)",
+    "svg": "vector image for documentation",
+    "json": "graph JSON (exchange, re-import, API)",
+    "s1000d": "S1000D fault isolation data module (Issue 4.x approximation)"
+  },
+  "nodeTypes": {
+    "start": "Start",
+    "end": "End",
+    "process": "Action",
+    "decision": "Decision",
+    "io": "Input/output",
+    "document": "Document",
+    "subprocess": "Sub-procedure",
+    "connector": "Connector",
+    "check": "Check",
+    "repair": "Repair",
+    "safety": "Safety"
+  },
+  "editor": {
+    "title": "Editor",
+    "newFlow": "New flowchart",
+    "reset": "Clear",
+    "counts": "{{nodes}} steps, {{edges}} links",
+    "llmUsed": "Structured by Mistral",
+    "preview": {
+      "title": "Preview",
+      "emptyTitle": "No flowchart",
+      "emptyHelp": "Describe a fault to the assistant or attach a file to display the flowchart.",
+      "alt": "Preview of flowchart {{title}}"
+    },
+    "save": {
+      "title": "Save",
+      "name": "Name",
+      "create": "Save",
+      "update": "Update",
+      "done": "Flowchart saved.",
+      "nameInvalid": "Name required (200 characters max)."
+    },
+    "nodes": {
+      "title": "Steps",
+      "id": "ID",
+      "type": "Type",
+      "label": "Label",
+      "lane": "Actor",
+      "next": "Next",
+      "ref": "Reference",
+      "expected": "Expected",
+      "tools": "Tools",
+      "warning": "Safety",
+      "duration": "Duration"
+    },
+    "assistant": {
+      "welcome": "Describe the fault or system to handle (symptom, vehicle, safety constraints), or attach a file (Excel, CSV, DSL, JSON, reference document). I generate a maintenance plan as a flowchart, then you can ask me for live changes.",
+      "placeholder": "E.g.: Generate a troubleshooting plan for a truck whose engine does not start, 24 V battery.",
+      "placeholderEdit": "Ask for a change: add a starter relay check after the battery...",
+      "send": "Send",
+      "hint": "Ctrl+Enter to send",
+      "thinking": "The assistant is working on the flowchart...",
+      "title": "Assistant",
+      "attach": "Attach",
+      "attachHelp": "Attach a flowchart (.xlsx, .xlsm, .csv, .json, .dsl) or a reference document (.txt, .md, .docx, .pdf, .pptx). Drag and drop supported.",
+      "imported": "File \"{{name}}\" imported: {{nodes}} steps. You can now ask me for changes.",
+      "documentAdded": "Document \"{{name}}\" attached. I will use it as a reference to generate or edit the flowchart.",
+      "documentTruncated": "Document \"{{name}}\" attached (truncated: only the beginning is used as reference).",
+      "removeDocument": "Remove {{name}}",
+      "uploading": "Reading file..."
+    },
+    "validate": "Validate flowchart",
+    "validateHelp": "Validate the flowchart to unlock downloads.",
+    "validated": "Flowchart validated",
+    "modify": "Edit"
+  },
+  "data": {
+    "title": "Data",
+    "kpi": {
+      "flows": "Flowcharts",
+      "nodes": "Steps",
+      "edges": "Links"
+    },
+    "flowsTitle": "Saved flowcharts",
+    "exportFormat": "Format",
+    "emptyTitle": "No saved flowchart",
+    "emptyHelp": "Flowcharts saved from the editor appear here.",
+    "col": {
+      "name": "Name",
+      "source": "Source",
+      "size": "Size",
+      "updated": "Updated"
+    },
+    "source": {
+      "text": "Text",
+      "table": "Table",
+      "json": "JSON",
+      "dsl": "DSL"
+    },
+    "open": "Open",
+    "export": "Export",
+    "delete": "Delete",
+    "resetTitle": "Reset",
+    "resetHelp": "Deletes all flowcharts. The Mistral configuration is kept.",
+    "resetAll": "Delete all"
+  },
+  "settings": {
+    "saved": "Settings saved.",
+    "testOk": "Connection OK ({{count}} models available).",
+    "testFail": "Test failed: {{error}}",
+    "aiTitle": "Artificial intelligence",
+    "llmEnabled": "LLM enabled",
+    "llmHelp": "Disabled: the assistant does not call Mistral; it structures the description line by line and attached files can still be imported.",
+    "mistralTitle": "Mistral",
+    "configured": "Key configured",
+    "notConfigured": "No key",
+    "apiKey": "API key",
+    "apiKeyKept": "Leave empty to keep the current key",
+    "baseUrl": "API URL",
+    "chatModel": "Chat model",
+    "embedModel": "Embedding model",
+    "save": "Save",
+    "test": "Test connection",
+    "demo": {
+      "title": "Application mode",
+      "hint": "Demo mode shows fictitious industrial input sets (TELEMAX TH-3500 telehandler) that can be loaded into the assistant. No real data.",
+      "normal": "Normal",
+      "demo": "Demo",
+      "saveError": "Unable to save the mode."
+    }
+  },
+  "demo": {
+    "badge": "Demo mode",
+    "button": "Demo",
+    "pickerTitle": "Demo files and request (fictitious)",
+    "pickerHint": "Checked files are attached to the assistant and the request is prefilled: review it, then click Send.",
+    "use": "Attach and prefill",
+    "scenarioLabel": "Scenario",
+    "sampleFiles": "Sample files",
+    "promptLabel": "Suggested request for the assistant",
+    "hydraulic": {
+      "title": "TH-3500 hydraulic diagnosis",
+      "description": "Word procedure, Excel maintenance data, PDF HSE instructions and PowerPoint lessons learned about hydraulic pressure loss.",
+      "prompt": "Generate the TH-3500 hydraulic pressure loss troubleshooting flowchart from the attached documents, including the safety instructions and pressure thresholds."
+    },
+    "engineStart": {
+      "title": "TH-3500 engine no-start",
+      "description": "Excel table of engine no-start diagnostic steps, imported directly as a flowchart.",
+      "prompt": "Add a battery isolator check step before the starter test."
+    }
+  }
+}
