@@ -1,8 +1,8 @@
 {
   "title": "AI4TECHDOC",
   "subtitle": {
-    "fr": "Applications de preuve de concept",
-    "en": "Proof-of-concept applications"
+    "fr": "Notre écosystème innovant pour la documentation",
+    "en": "Our innovative documentation ecosystem"
   },
   "footer": {
     "fr": "Hébergé sur l'espace de la plateforme IA Atexis.",
@@ -81,26 +81,6 @@
       "desc": {
         "fr": "Traduction contextuelle assistée par IA.",
         "en": "AI-assisted context-aware translation."
-      }
-    },
-    {
-      "slug": "brdp-manager",
-      "name": "BRDP Manager",
-      "stage": "validation",
-      "status": "validation",
-      "desc": {
-        "fr": "Gestion des BRDP S1000D/DITA, génération BREX/Schematron, extraction IA.",
-        "en": "S1000D/DITA BRDP management, BREX/Schematron generation, AI extraction."
-      }
-    },
-    {
-      "slug": "xml-proofreader",
-      "name": "XML Proofreader",
-      "stage": "validation",
-      "status": "validation",
-      "desc": {
-        "fr": "Annotation DITA/S1000D façon PDF, compatible Oxygen XML Author.",
-        "en": "PDF-like annotation of DITA/S1000D content, Oxygen XML Author compatible."
       }
     }
   ]
