@@ -1,9 +1,7 @@
 """Documents API — upload / list / get / pdf / export / rollback / history."""
 
-from __future__ import annotations
-
-import uuid
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -13,27 +11,32 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.checks.client_bundle import ClientMapping, ClientMappingField
 from app.checks.client_registry import (
     LoadedClientConfiguration,
     active_standard_versions,
 )
-from app.checks.client_bundle import ClientMapping, ClientMappingField
+from app.checks.mode_registry import get_request_client_configuration
 from app.config import settings
 from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
+from app.core.demo_mode import get_demo_enabled
+from app.core.demo_scope import documents_in_current_mode, get_document_in_current_mode
 from app.core.document_context import (
+    DEFAULT_DOCUMENT_MANUFACTURER,
     DOCUMENT_CONTEXT_FIELDS,
     get_document_context_defaults,
     save_document_context_defaults,
 )
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path, init_storage, path_for
+from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
+from app.core.security import read_upload_bounded
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Document, EditHistory, StandardVersion
 from app.db.session import get_db
 from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import DocumentMetaPatchIn, DocumentOut, EditHistoryOut, RollbackIn
-
 
 router = APIRouter(tags=["documents"])
 
@@ -92,6 +95,17 @@ def _validate_client_metadata_patch(
         if definition.allowed_values is not None:
             candidates = value if definition.type == "string_list" else [value]
             if any(item not in definition.allowed_values for item in candidates):
+                value_is_valid = False
+        if definition.pattern is not None and value_is_valid:
+            candidates = value if definition.type == "string_list" else [value]
+            pattern = compile_user_regex(definition.pattern)
+            try:
+                if any(
+                    pattern.fullmatch(item, timeout=USER_REGEX_TIMEOUT_SECONDS) is None
+                    for item in candidates
+                ):
+                    value_is_valid = False
+            except TimeoutError:
                 value_is_valid = False
         if not value_is_valid:
             raise AppError(
@@ -169,6 +183,7 @@ def _persist_pdf(
     source_format: str = "pdf",
     original_data: Optional[bytes] = None,
     client_mapping: ClientMapping | None = None,
+    is_demo: bool = False,
 ) -> Document:
     """Persist a **PDF** (native or converted from Word) as a new `Document` row.
 
@@ -182,7 +197,8 @@ def _persist_pdf(
 
     sha = sha256_of_bytes(pdf_bytes)
     doc_id = uuid.uuid4()
-    storage_dir_value = f"document_{doc_id.hex}"
+    storage_prefix = "demo_document" if is_demo else "document"
+    storage_dir_value = f"{storage_prefix}_{doc_id.hex}"
     init_storage(storage_dir_value, pdf_bytes)
 
     try:
@@ -226,13 +242,17 @@ def _persist_pdf(
         text_coverage=report.coverage,
         quality=report.state,
         client_metadata=dict(context_defaults),
+        is_demo=is_demo,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
         meta_last_issue_date=context_defaults.get("meta_last_issue_date"),
         meta_revision_number=context_defaults.get("meta_revision_number"),
         meta_pnr_number=_legacy_metadata_value(context_defaults.get("meta_pnr_number")),
-        meta_manufacturer=context_defaults.get("meta_manufacturer", "Airbus"),
+        meta_manufacturer=(
+            context_defaults.get("meta_manufacturer")
+            or DEFAULT_DOCUMENT_MANUFACTURER
+        ),
         document_language=context_defaults.get("document_language"),
     )
     db.add(document)
@@ -281,6 +301,7 @@ def _persist_docx(
     source_format: Optional[str] = None,
     engine_override: Optional[str] = None,
     client_mapping: ClientMapping | None = None,
+    is_demo: bool = False,
 ) -> Document:
     """Persist a DOCX working document while retaining the detected source.
 
@@ -288,7 +309,7 @@ def _persist_docx(
     parse pour compter les blocs/pages — aucune conversion.
 
     `.doc` (legacy binaire) : converti **une seule fois, en interne** en
-    `.docx` via LibreOffice (`doc_convert.office_to_docx_bytes`) pour pouvoir
+    `.docx` via Word ou LibreOffice (`doc_convert.office_to_docx_bytes`) pour pouvoir
     beneficier de la revue native au lieu d'etre bascule vers le pipeline PDF.
     L'utilisateur n'a rien a convertir lui-meme : `original_filename` garde
     l'extension `.doc` d'origine, et l'export (`GET .../export`) reconvertit
@@ -316,7 +337,7 @@ def _persist_docx(
         # Conversion interne .doc -> .docx (silencieuse pour l'utilisateur) :
         # le fichier de travail est du docx, mais `original_filename` conserve
         # le suffixe .doc pour un aller-retour transparent a l'export.
-        working_data = doc_convert.office_to_docx_bytes(data, ".doc")
+        working_data, _ = doc_convert.office_to_docx_bytes(data, ".doc")
         engine = "docx-native-from-doc"
     else:
         if data[:2] != b"PK":
@@ -326,7 +347,8 @@ def _persist_docx(
 
     sha = sha256_of_bytes(working_data)
     doc_id = uuid.uuid4()
-    storage_dir_value = f"document_{doc_id.hex}"
+    storage_prefix = "demo_document" if is_demo else "document"
+    storage_dir_value = f"{storage_prefix}_{doc_id.hex}"
     docx_versioning.write_version(storage_dir_value, 0, working_data)
     source_data = original_data if original_data is not None else data
     original_path = docx_versioning.write_original(storage_dir_value, source_data, safe)
@@ -359,13 +381,17 @@ def _persist_docx(
         text_coverage=100,
         quality="analyzable",
         client_metadata=dict(context_defaults),
+        is_demo=is_demo,
         meta_revision_date=context_defaults.get("meta_revision_date"),
         meta_cmm_number=context_defaults.get("meta_cmm_number"),
         meta_first_issue_date=context_defaults.get("meta_first_issue_date"),
         meta_last_issue_date=context_defaults.get("meta_last_issue_date"),
         meta_revision_number=context_defaults.get("meta_revision_number"),
         meta_pnr_number=_legacy_metadata_value(context_defaults.get("meta_pnr_number")),
-        meta_manufacturer=context_defaults.get("meta_manufacturer", "Airbus"),
+        meta_manufacturer=(
+            context_defaults.get("meta_manufacturer")
+            or DEFAULT_DOCUMENT_MANUFACTURER
+        ),
         document_language=context_defaults.get("document_language"),
     )
     db.add(document)
@@ -386,11 +412,13 @@ def upload_document(
     ),
     db: Session = Depends(get_db),
 ) -> Document:
+    client_configuration = get_request_client_configuration(request, db)
+    demo_mode = get_demo_enabled(db)
     primary, all_ids = _resolve_standard_versions(
-        standard_version_id,
-        standard_version_ids,
+        None if demo_mode else standard_version_id,
+        None if demo_mode else standard_version_ids,
         db,
-        request.app.state.client_configuration,
+        client_configuration,
     )
     name = file.filename or "upload"
     if name.lower().endswith(".zip"):
@@ -399,7 +427,7 @@ def upload_document(
             "Les archives .zip doivent etre envoyees via /documents/batch",
             status_code=400,
         )
-    data = file.file.read()
+    data = read_upload_bounded(file, settings.max_upload_size_bytes)
     prepared = ingest.prepare_document(name, data)
     if prepared.working_format == "docx":
         return _persist_docx(
@@ -409,7 +437,8 @@ def upload_document(
             original_data=prepared.original_bytes,
             source_format=prepared.source_format,
             engine_override=prepared.convert_engine,
-            client_mapping=request.app.state.client_configuration.mapping,
+            client_mapping=client_configuration.mapping,
+            is_demo=demo_mode,
         )
     return _persist_pdf(
         prepared.working_bytes, prepared.filename, target, db,
@@ -418,7 +447,8 @@ def upload_document(
         convert_engine=prepared.convert_engine,
         source_format=prepared.source_format,
         original_data=prepared.original_bytes,
-        client_mapping=request.app.state.client_configuration.mapping,
+        client_mapping=client_configuration.mapping,
+        is_demo=demo_mode,
     )
 
 
@@ -444,45 +474,82 @@ def upload_documents_batch(
             status_code=400,
         )
 
+    client_configuration = get_request_client_configuration(request, db)
+    demo_mode = get_demo_enabled(db)
     primary, all_ids = _resolve_standard_versions(
-        standard_version_id,
-        standard_version_ids,
+        None if demo_mode else standard_version_id,
+        None if demo_mode else standard_version_ids,
         db,
-        request.app.state.client_configuration,
+        client_configuration,
     )
-    raw_items = [(f.filename or "upload", f.file.read()) for f in files]
-    expanded, ignored = ingest.expand_uploads(raw_items)
-
     created: list[dict] = []
     failed: list[dict] = []
-    for name, data in expanded:
+    ignored: list[str] = []
+    expanded_count = 0
+    for upload in files:
+        upload_name = upload.filename or "upload"
         try:
-            prepared = ingest.prepare_document(name, data)
-            if prepared.working_format == "docx":
-                doc = _persist_docx(
-                    prepared.filename, prepared.working_bytes, target, db,
-                    standard_version_id=primary,
-                    standard_version_ids=all_ids,
-                    original_data=prepared.original_bytes,
-                    source_format=prepared.source_format,
-                    engine_override=prepared.convert_engine,
-                    client_mapping=request.app.state.client_configuration.mapping,
+            raw = read_upload_bounded(upload, settings.max_upload_size_bytes)
+            expanded, file_ignored = ingest.expand_uploads(
+                [(upload_name, raw)],
+                max_total_uncompressed=settings.max_upload_size_bytes,
+                allow_empty=True,
+            )
+            ignored.extend(file_ignored)
+            if expanded_count + len(expanded) > ingest.MAX_FILES:
+                raise AppError(
+                    "TOO_MANY_FILES",
+                    f"Plus de {ingest.MAX_FILES} fichiers dans l'upload.",
+                    status_code=413,
                 )
-            else:
-                doc = _persist_pdf(
-                    prepared.working_bytes, prepared.filename, target, db,
-                    standard_version_id=primary,
-                    standard_version_ids=all_ids,
-                    convert_engine=prepared.convert_engine,
-                    source_format=prepared.source_format,
-                    original_data=prepared.original_bytes,
-                    client_mapping=request.app.state.client_configuration.mapping,
-                )
-            created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
+            expanded_count += len(expanded)
         except AppError as exc:
-            failed.append({"filename": name, "code": exc.code, "message": exc.message})
-        except Exception as exc:  # noqa: BLE001
-            failed.append({"filename": name, "code": "INTERNAL_ERROR", "message": str(exc)})
+            failed.append({"filename": upload_name, "code": exc.code, "message": exc.message})
+            continue
+
+        for name, data in expanded:
+            try:
+                prepared = ingest.prepare_document(name, data)
+                if prepared.working_format == "docx":
+                    doc = _persist_docx(
+                        prepared.filename, prepared.working_bytes, target, db,
+                        standard_version_id=primary,
+                        standard_version_ids=all_ids,
+                        original_data=prepared.original_bytes,
+                        source_format=prepared.source_format,
+                        engine_override=prepared.convert_engine,
+                        client_mapping=client_configuration.mapping,
+                        is_demo=demo_mode,
+                    )
+                else:
+                    doc = _persist_pdf(
+                        prepared.working_bytes, prepared.filename, target, db,
+                        standard_version_id=primary,
+                        standard_version_ids=all_ids,
+                        convert_engine=prepared.convert_engine,
+                        source_format=prepared.source_format,
+                        original_data=prepared.original_bytes,
+                        client_mapping=client_configuration.mapping,
+                        is_demo=demo_mode,
+                    )
+                created.append(DocumentOut.model_validate(doc).model_dump(mode="json"))
+            except AppError as exc:
+                failed.append({"filename": name, "code": exc.code, "message": exc.message})
+            except Exception as exc:  # noqa: BLE001
+                failed.append(
+                    {
+                        "filename": name,
+                        "code": "INTERNAL_ERROR",
+                        "message": "Erreur interne pendant le traitement du fichier.",
+                    }
+                )
+
+    if not created and not failed:
+        raise AppError(
+            "NO_SUPPORTED_FILE",
+            "Aucun fichier .pdf / .doc / .docx trouvé dans l'upload.",
+            status_code=400,
+        )
 
     status = 201 if not failed else (207 if created else 400)
     return JSONResponse(
@@ -502,12 +569,16 @@ def _has_signature(doc: fitz.Document) -> bool:
 
 @router.get("/documents", response_model=list[DocumentOut])
 def list_documents(db: Session = Depends(get_db)) -> list[Document]:
-    return list(db.scalars(select(Document).order_by(Document.created_at.desc())))
+    return list(
+        db.scalars(
+            documents_in_current_mode(db).order_by(Document.created_at.desc())
+        )
+    )
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut)
 def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Document:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     return doc
@@ -521,12 +592,12 @@ def patch_document_meta(
     db: Session = Depends(get_db),
 ) -> Document:
     """Enregistre le mapping manuel et la langue du document."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     patch = body.model_dump(exclude_unset=True)
     client_metadata_patch = patch.pop("client_metadata", {})
-    client_mapping = request.app.state.client_configuration.mapping
+    client_mapping = get_request_client_configuration(request, db).mapping
     _validate_client_metadata_patch(
         client_metadata_patch,
         client_mapping.fields,
@@ -552,6 +623,8 @@ def patch_document_meta(
     doc.client_metadata = client_metadata
     for key, value in metadata_updates.items():
         if key in DOCUMENT_CONTEXT_FIELDS:
+            if key == "meta_manufacturer" and value is None:
+                continue
             setattr(doc, key, _legacy_metadata_value(value))
 
     db.commit()
@@ -568,7 +641,7 @@ def patch_document_meta(
 
 @router.delete("/documents/{document_id}", status_code=204)
 def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> None:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     storage_dir = doc.storage_dir
@@ -589,7 +662,7 @@ def get_pdf(
     version: str = Query(default="current"),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if doc.working_format != "pdf":
@@ -632,7 +705,7 @@ def render_page_png(
     Used by the preview HTML viewer to overlay suggestion bboxes over a
     bitmap rendering of the page (no PDF.js dependency).
     """
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if doc.working_format != "pdf":
@@ -697,7 +770,7 @@ def _commented_pdf_response(doc: Document, db: Session) -> Response:
 @router.get("/documents/{document_id}/exports")
 def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """Return exports supported by the current state and their conversion warnings."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     available: list[dict[str, str]] = []
@@ -712,11 +785,11 @@ def list_document_exports(document_id: uuid.UUID, db: Session = Depends(get_db))
         if doc.has_applied_edits:
             available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": ""})
     else:
-        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente", "warning": "Conversion Word -> PDF : le rendu peut varier selon LibreOffice."})
+        available.append({"kind": "commented", "format": "pdf", "label": "PDF commente", "warning": "Conversion Word -> PDF : le rendu peut varier selon le moteur de conversion (Word ou LibreOffice)."})
         if doc.has_applied_edits:
             available.append({"kind": "corrected", "format": "docx", "label": "DOCX corrige", "warning": ""})
-            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": "Conversion Word -> PDF : le rendu peut varier selon LibreOffice."})
-    if doc_convert._find_soffice():
+            available.append({"kind": "corrected", "format": "pdf", "label": "PDF corrige", "warning": "Conversion Word -> PDF : le rendu peut varier selon le moteur de conversion (Word ou LibreOffice)."})
+    if doc_convert.can_convert_formats():
         if doc.working_format == "pdf":
             available.append({"kind": "converted", "format": "docx", "label": "DOCX converti", "warning": "Conversion PDF -> DOCX : mise en page, tableaux, polices et positionnement peuvent etre modifies."})
         available.append({"kind": "converted", "format": "doc", "label": "DOC converti", "warning": "Conversion vers DOC legacy : degradation possible de la mise en page, des polices et des elements avances."})
@@ -734,7 +807,7 @@ def export_pdf(
     format: Optional[Literal["original", "corrected", "commented", "pdf", "docx", "doc"]] = Query(default=None),
     db: Session = Depends(get_db),
 ) -> FileResponse | Response:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if format == "commented":
@@ -822,7 +895,7 @@ def export_pdf(
 def get_docx_blocks(document_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """Vue blocs d'un document Word natif (reviewer Phase 1). 400 si le document
     n'est pas en pipeline docx."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     if doc.working_format != "docx":
@@ -843,7 +916,7 @@ def export_commented_pdf(document_id: uuid.UUID, db: Session = Depends(get_db)) 
     """PDF **commente** : le PDF fidele + les anomalies retenues (non rejetees)
     estampillees en annotations, plus une page-sommaire. C'est le livrable sur
     lequel le relecteur s'appuie pour corriger son document Word."""
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     return _commented_pdf_response(doc, db)
@@ -855,7 +928,7 @@ def rollback_document(
     body: RollbackIn,
     db: Session = Depends(get_db),
 ) -> Document:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 
@@ -891,7 +964,7 @@ def rollback_document(
 
 @router.get("/documents/{document_id}/history", response_model=list[EditHistoryOut])
 def get_history(document_id: uuid.UUID, db: Session = Depends(get_db)) -> list[EditHistory]:
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     stmt = (
@@ -917,7 +990,7 @@ def list_document_suggestions(
     from app.db.models import Suggestion as SuggestionModel
     from app.schemas import SuggestionOut
 
-    doc = db.get(Document, document_id)
+    doc = get_document_in_current_mode(db, document_id)
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
 

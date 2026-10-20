@@ -1,158 +1,244 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Palette } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { FilePicker } from "../components/FilePicker";
 import {
   ApiClientError,
   colorizationApi,
-  exportUrl,
-  type ColorizationItemDto,
-  type ColorizationRunDto,
-  type DiffRunDto,
+  identificationApi,
+  type MonoBodyColorizationDto,
+  type NomenclatureItemDto,
+  type NomenclatureRunDto,
 } from "../lib/api";
 import { useWorkspace } from "../stores/workspace";
 
+const CONFIRM_MS = 3000;
+const RESULT_LIMIT = 200;
+
+function fileName(ref: string): string {
+  return (ref || "").split(/[\\/]/).pop() ?? "";
+}
+
 export function Colorization() {
   const { t } = useTranslation();
-  const { importId } = useWorkspace();
-  const [strategy, setStrategy] = useState("by_type");
-  const [diffRunId, setDiffRunId] = useState("");
-  const [run, setRun] = useState<ColorizationRunDto | null>(null);
-  const [items, setItems] = useState<ColorizationItemDto[]>([]);
+  const queryClient = useQueryClient();
+  const piecesRoot = useWorkspace((state) => state.sources.optimizedPiecesRoot);
+  const profilesRoot = useWorkspace((state) => state.sources.profilesRoot);
+  const preferredRunId = useWorkspace((state) => state.nomenclatureRunId);
+  const setSource = useWorkspace((state) => state.setSource);
+  const [runId, setRunId] = useState(preferredRunId ?? "");
+  const [apply, setApply] = useState(false);
+  const [armed, setArmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<MonoBodyColorizationDto | null>(null);
 
-  const diffsQuery = useQuery<DiffRunDto[]>({
-    queryKey: ["diffs", importId],
-    queryFn: () => colorizationApi.diffs(importId as string),
-    enabled: !!importId,
+  const runsQuery = useQuery<NomenclatureRunDto[]>({
+    queryKey: ["identification"],
+    queryFn: identificationApi.list,
   });
+  const runs = runsQuery.data ?? [];
+  const monoPartsQuery = useQuery<NomenclatureItemDto[]>({
+    queryKey: ["identification", runId, "colorization-mono-body"],
+    queryFn: () => identificationApi.items(runId, { monoBody: true }),
+    enabled: !!runId,
+  });
+  const monoParts = monoPartsQuery.data ?? [];
+  const distinctOldPns = new Set(monoParts.map((item) => item.old_pn.trim()).filter(Boolean));
+  const missingProfiles = monoParts.filter((item) => !item.mono_texture.trim()).length;
+  const displayError = (reason: unknown) =>
+    reason instanceof ApiClientError && reason.code === "PIECES_FOLDER_CONTENT_INVALID"
+      ? t("colorization.invalidFolderContents")
+      : reason instanceof Error
+        ? reason.message
+        : String(reason);
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const body = strategy === "by_change" ? { strategy, diff_run_id: diffRunId } : { strategy };
-      const r = await colorizationApi.run(importId as string, body);
-      const it = await colorizationApi.items(r.id);
-      return { r, it };
-    },
-    onSuccess: ({ r, it }) => {
+  useEffect(() => {
+    if (preferredRunId) setRunId(preferredRunId);
+  }, [preferredRunId]);
+
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+    setArmed(false);
+  }, [runId, piecesRoot, profilesRoot]);
+
+  const colorizeMutation = useMutation({
+    mutationFn: () =>
+      colorizationApi.monoBody({
+        scope: "input",
+        pieces_root: piecesRoot.trim(),
+        profiles_root: profilesRoot.trim(),
+        nomenclature_run_id: runId,
+        apply,
+      }),
+    onSuccess: (data) => {
+      setArmed(false);
       setError(null);
-      setRun(r);
-      setItems(it);
+      setResult(data);
+      if (data.summary.applied) {
+        void queryClient.invalidateQueries({ queryKey: ["identification", runId] });
+      }
     },
-    onError: (e) => setError(e instanceof ApiClientError ? e.message : String(e)),
+    onError: (cause) => {
+      setArmed(false);
+      setError(displayError(cause));
+    },
   });
 
-  if (!importId) {
-    return (
-      <div className="empty-state">
-        <h3 className="card-title">{t("colorization.noImport")}</h3>
-        <p className="hint">{t("tree.noImportDesc")}</p>
-      </div>
-    );
-  }
+  const canRun =
+    !!piecesRoot.trim() &&
+    !!profilesRoot.trim() &&
+    !!runId &&
+    monoPartsQuery.isSuccess &&
+    monoParts.length > 0 &&
+    missingProfiles === 0;
 
-  const textOn = (r: number, g: number, b: number) =>
-    (r * 299 + g * 587 + b * 114) / 1000 > 140 ? "black" : "white";
+  const onRun = () => {
+    if (!canRun) {
+      setError(t("colorization.required"));
+      return;
+    }
+    setError(null);
+    if (apply && !armed) {
+      setArmed(true);
+      window.setTimeout(() => setArmed(false), CONFIRM_MS);
+      return;
+    }
+    colorizeMutation.mutate();
+  };
 
-  const diffs = diffsQuery.data ?? [];
-  const stratOptions = [
-    { value: "by_type", label: t("colorization.byType") },
-    { value: "by_depth", label: t("colorization.byDepth") },
-    { value: "by_change", label: t("colorization.byChange") },
-  ];
+  const resultRows = result?.items.slice(0, RESULT_LIMIT) ?? [];
+  const statusLabel = (status: string) => t(`colorization.statusLabel.${status}`, { defaultValue: status });
 
   return (
-    <div className="form" style={{ maxWidth: "56rem" }}>
+    <div className="form">
       <article className="card">
-        <h2 className="card-title">{t("colorization.runTitle")}</h2>
-        <p className="banner warn">
-          <strong>{t("export.dryRunTitle")}</strong> {t("colorization.dryRun")}
-        </p>
-        <div className="row" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
-          <label className="field grow">
-            <span className="field-label">{t("colorization.strategy")}</span>
-            <select className="input" value={strategy} onChange={(e) => setStrategy(e.target.value)}>
-              {stratOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+        <h2 className="card-title">{t("colorization.title")}</h2>
+        <div className="grid-2">
+          <div className="field">
+            <label htmlFor="colorization-nomenclature" className="field-label">
+              {t("colorization.nomenLabel")}
+            </label>
+            <select
+              id="colorization-nomenclature"
+              className="input"
+              value={runId}
+              onChange={(event) => setRunId(event.target.value)}
+              disabled={runsQuery.isLoading}
+            >
+              <option value="">{t("colorization.nomenEmpty")}</option>
+              {runs.map((run) => (
+                <option key={run.id} value={run.id}>{fileName(run.source_ref)}</option>
               ))}
             </select>
-          </label>
-          {strategy === "by_change" ? (
-            <label className="field grow">
-              <span className="field-label">{t("colorization.comparison")}</span>
-              <select
-                className="input"
-                value={diffRunId || diffs[0]?.id || ""}
-                onChange={(e) => setDiffRunId(e.target.value)}
-              >
-                {(diffs.length
-                  ? diffs.map((d) => ({ value: d.id, label: `${t("nav.diff")} ${d.id.slice(0, 8)}` }))
-                  : [{ value: "", label: t("colorization.noDiff") }]
-                ).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+          </div>
+          <div className="field">
+            <span className="field-label">{t("colorization.selectionSummary", {
+              parts: monoParts.length,
+              oldPns: distinctOldPns.size,
+            })}</span>
+            {monoPartsQuery.isLoading ? <span className="spinner" /> : null}
+            {runId && monoPartsQuery.isSuccess && monoParts.length === 0 ? (
+              <p className="hint">{t("colorization.noMonoParts")}</p>
+            ) : null}
+            {missingProfiles > 0 ? (
+              <p className="error">{t("colorization.missingProfiles", { count: missingProfiles })}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="grid-2">
+          <div className="field">
+            <label htmlFor="colorization-pieces-root" className="field-label">
+              {t("colorization.piecesRoot")}
             </label>
-          ) : null}
+            <input
+              id="colorization-pieces-root"
+              className="input"
+              value={piecesRoot}
+              readOnly
+            />
+            {!piecesRoot ? <p className="hint" role="status">{t("colorization.required")}</p> : null}
+          </div>
+          <div className="field">
+            <span className="field-label">{t("colorization.profilesRoot")}</span>
+            <FilePicker
+              mode="folder"
+              exts={[]}
+              value={profilesRoot}
+              onChange={(path) => setSource("profilesRoot", path)}
+            />
+          </div>
+        </div>
+
+        <label className="checkbox">
+          <input type="checkbox" checked={apply} onChange={(event) => setApply(event.target.checked)} />
+          <span>{t("colorization.apply")}</span>
+        </label>
+
+        <div className="row">
           <button
             type="button"
             className="btn primary"
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || (strategy === "by_change" && !diffs.length)}
+            onClick={onRun}
+            disabled={colorizeMutation.isPending || !canRun}
           >
-            {t("colorization.run")}
+            {colorizeMutation.isPending ? <span className="spinner" /> : <Palette className="h-4 w-4" />}
+            <span>{armed ? t("colorization.confirmWrite") : t("colorization.launch")}</span>
           </button>
+          {error ? <span className="error">{error}</span> : null}
         </div>
-        {error ? <p className="error">{error}</p> : null}
       </article>
 
-      {run ? (
+      {result ? (
         <article className="card">
-          <h2 className="card-title">{t("colorization.resultTitle", { count: items.length })}</h2>
-          <div className="row" style={{ flexWrap: "wrap", marginBottom: "0.75rem" }}>
-            <a href={exportUrl.colorizationCsv(run.id)}>
-              <button type="button" className="btn secondary small">{t("common.exportCsv")}</button>
-            </a>
-            <a href={exportUrl.colorizationComposer(run.id)}>
-              <button type="button" className="btn secondary small">{t("colorization.composerScript")}</button>
-            </a>
-            <a href={exportUrl.colorizationMacro(run.id)}>
-              <button type="button" className="btn secondary small">{t("colorization.macro")}</button>
-            </a>
-            <a href={exportUrl.colorizationSvg(run.id)} target="_blank" rel="noreferrer">
-              <button type="button" className="btn secondary small">{t("colorization.svg")}</button>
-            </a>
-          </div>
-
-          {/* Simulation : chaque piece dans sa couleur attribuee. */}
-          <p className="hint">{t("colorization.simulation")}</p>
-          <div className="grid-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(10rem, 1fr))" }}>
-            {items.map((it) => (
-              <div
-                key={it.id}
-                style={{
-                  overflow: "hidden",
-                  borderRadius: "4px",
-                  padding: "0.5rem",
-                  fontSize: "0.75rem",
-                  backgroundColor: `rgb(${it.color_r}, ${it.color_g}, ${it.color_b})`,
-                  color: textOn(it.color_r, it.color_g, it.color_b),
-                }}
-                title={it.rel_path}
-              >
-                <div className="label" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {it.rel_path.split("/").pop()}
-                </div>
-                <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: 0.8 }}>
-                  {it.reason}
-                </div>
-              </div>
-            ))}
-          </div>
+          <h2 className="card-title">{t("colorization.resultsTitle")}</h2>
+          <p className={result.summary.applied ? "banner success" : "banner warn"}>
+            {t("colorization.summary", {
+              files: result.summary.files_found ?? 0,
+              changed: result.summary.files_changed ?? 0,
+              actors: result.summary.actors_changed ?? 0,
+              skipped: result.summary.skipped ?? 0,
+            })}
+          </p>
+          {resultRows.length ? (
+            <div style={{ overflow: "auto" }}>
+              <table className="tbl" style={{ whiteSpace: "nowrap" }}>
+                <thead>
+                  <tr>
+                    <th>{t("identification.colOldPn")}</th>
+                    <th>{t("colorization.profile")}</th>
+                    <th>{t("colorization.file")}</th>
+                    <th>{t("colorization.actors")}</th>
+                    <th>{t("colorization.status")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultRows.map((item, index) => (
+                    <tr key={`${item.path}-${index}`}>
+                      <td>{item.old_pn}</td>
+                      <td>{item.texture_ref}</td>
+                      <td title={item.path}>{fileName(item.path)}</td>
+                      <td>{item.actors_changed}/{item.actors_total}</td>
+                      <td>
+                        <span className={item.status === "applied" || item.status === "planned" ? "badge ok" : "badge warn"}>
+                          {statusLabel(item.status)}
+                        </span>
+                        {item.message ? <span className="hint"> {item.message}</span> : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="hint">{t("colorization.noFiles")}</p>
+          )}
+          {result.items.length > RESULT_LIMIT ? (
+            <p className="hint">{t("colorization.resultsLimit", { shown: RESULT_LIMIT, total: result.items.length })}</p>
+          ) : null}
         </article>
       ) : null}
     </div>

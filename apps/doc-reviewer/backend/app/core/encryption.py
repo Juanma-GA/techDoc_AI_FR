@@ -6,12 +6,7 @@ Secrets are encrypted before storage in DB and decrypted on retrieval.
 
 from __future__ import annotations
 
-import logging
-
 from cryptography.fernet import Fernet, InvalidToken
-
-logger = logging.getLogger(__name__)
-
 
 class EncryptionError(Exception):
     """Raised when encryption/decryption fails."""
@@ -21,8 +16,8 @@ class SecretManager:
     """Manages encryption and decryption of sensitive data.
 
     Uses Fernet (symmetric encryption with AES 128 in CBC mode). Key must be
-    32 url-safe base64-encoded bytes. Key absent -> encryption disabled
-    (plaintext passthrough, dev/local only).
+    32 url-safe base64-encoded bytes. A missing key refuses secret reads/writes;
+    plaintext passthrough is never allowed.
     """
 
     def __init__(self, encryption_key: str | None) -> None:
@@ -40,8 +35,7 @@ class SecretManager:
 
     def encrypt(self, plaintext: str) -> str:
         if not self._enabled or not self._cipher:
-            logger.warning("Encryption disabled - storing plaintext (INSECURE)")
-            return plaintext
+            raise EncryptionError("Encryption key is required to store secrets.")
         try:
             return self._cipher.encrypt(plaintext.encode()).decode()
         except Exception as e:
@@ -49,7 +43,7 @@ class SecretManager:
 
     def decrypt(self, ciphertext: str) -> str:
         if not self._enabled or not self._cipher:
-            return ciphertext
+            raise EncryptionError("Encryption key is required to read stored secrets.")
         try:
             return self._cipher.decrypt(ciphertext.encode()).decode()
         except InvalidToken as e:

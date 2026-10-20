@@ -44,13 +44,22 @@ page fonctionne quel que soit le parent — **aucune URL ni IP en dur**.
 // config.json
 {
   "pocs": [
-    { "slug": "corpus-agent", "name": "...", "desc": { "fr": "...", "en": "..." } },
+    { "slug": "corpus-agent", "name": "...", "category": "quality", "desc": { "fr": "...", "en": "..." } },
+    { "slug": "future-app", "name": "...", "category": "assistants", "status": "planned", "desc": { "fr": "...", "en": "..." } },
     // ajouter ici
   ],
   "subtitle": { "fr": "...", "en": "..." },
   "footer": { "fr": "...", "en": "..." }
 }
 ```
+
+Le statut `planned` affiche une carte « À venir » sans créer de lien vers une
+route qui n'existe pas encore. Le statut `validation` conserve une carte
+cliquable avec le badge « À valider ».
+
+Les familles et leur ordre d'affichage sont déclarés dans `categories`. Chaque
+application référence une famille avec la propriété `category`; une catégorie
+inconnue reste visible dans une section de repli « Autres applications ».
 
 Aucune étape de build : les pages chargent `portal.css` et `portal.js` pour
 l'UI commune, puis `config.json` pour les applications et textes configurables.

@@ -35,6 +35,8 @@ def _doc_with_rejections() -> None:
                        message="m2", status="rejected", feedback="hors perimetre"),
             Suggestion(document_id=doc.id, rule_kind="units", rule_code="UNIT_CONVERT",
                        message="m3", status="rejected", feedback=""),
+            Suggestion(document_id=doc.id, rule_kind="custom", rule_code="AI_SCAN",
+                       source_kind="ai", message="m5", status="rejected", feedback="IA"),
             # une suggestion OUVERTE ne doit pas compter
             Suggestion(document_id=doc.id, rule_kind="standard", rule_code="STE_FIRST_PERSON",
                        message="m4", status="open"),
@@ -49,13 +51,17 @@ def test_rejections_summary_aggregates(client: TestClient) -> None:
     r = client.get("/api/v1/suggestions/rejections-summary?synthesize=false")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["total"] == 3
+    assert body["total"] == 4
     by_rule = {c["rule_code"]: c["count"] for c in body["by_rule"]}
-    assert by_rule == {"STE_PASSIVE_VOICE": 2, "UNIT_CONVERT": 1}
+    assert by_rule == {"STE_PASSIVE_VOICE": 2, "UNIT_CONVERT": 1, "AI_SCAN": 1}
     assert body["by_rule"][0]["rule_code"] == "STE_PASSIVE_VOICE"  # tri desc
     # items exploitables (parite corpus-agent) : fichier + regle + motif.
-    assert len(body["items"]) == 3
+    assert len(body["items"]) == 4
     assert all(i["file"] == "manual.pdf" for i in body["items"])
+    assert len({i["document_id"] for i in body["items"]}) == 1
+    assert all(uuid.UUID(i["document_id"]) for i in body["items"])
+    ai_item = next(item for item in body["items"] if item["rule_code"] == "AI_SCAN")
+    assert ai_item["source_kind"] == "ai"
     motifs = {i["feedback"] for i in body["items"]}
     assert "faux positif" in motifs and "hors perimetre" in motifs
     assert body["synthese"] == ""
@@ -76,7 +82,7 @@ def test_rejections_summary_ai_graceful(client: TestClient) -> None:
         r = client.get("/api/v1/suggestions/rejections-summary?synthesize=true")
         assert r.status_code == 200
         body = r.json()
-        assert body["total"] == 3
+        assert body["total"] == 4
         assert body["synthese"] == ""
         assert body["llm_used"] is False
     finally:

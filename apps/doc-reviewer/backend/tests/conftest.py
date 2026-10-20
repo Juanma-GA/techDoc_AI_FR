@@ -21,9 +21,12 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import delete  # noqa: E402
 
-from app.db.session import Base, engine  # noqa: E402
 from app.db.models import AppConfig  # noqa: E402
-from app.db.session import SessionLocal  # noqa: E402
+from app.db.session import (  # noqa: E402
+    Base,
+    SessionLocal,  # noqa: E402
+    engine,
+)
 from app.main import create_app  # noqa: E402
 
 
@@ -38,12 +41,14 @@ def _seed_builtin_standards() -> None:
     rather than `alembic upgrade`)."""
     import json
 
-    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     from app.checks.client_registry import load_active_client_configuration
-    from app.db.seed import sync_user_standard
+    from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
     from app.db.models import Standard, StandardVersion
+    from app.db.seed import sync_user_standard
     from app.db.session import SessionLocal
 
+    configuration = load_active_client_configuration()
+    client_standard_specs = configuration.bundle.standard_specs
     session = SessionLocal()
     try:
         existing_codes = {
@@ -61,25 +66,48 @@ def _seed_builtin_standards() -> None:
             session.add(std)
             session.flush()
             for label in spec["versions"]:
+                default_disabled_codes = (
+                    client_standard_specs.get(spec["code"], {})
+                    .get("default_disabled_rule_codes_by_version", {})
+                    .get(label, [])
+                )
                 session.add(
                     StandardVersion(
                         standard_id=std.id,
                         label=label,
                         builtin=True,
                         catalog_json=json.dumps(serialize_builtin_version(spec, label)),
+                        disabled_rule_codes=json.dumps(default_disabled_codes),
                     )
                 )
             sync_user_standard(
                 session,
-                load_active_client_configuration().bundle.standard_specs,
+                client_standard_specs,
             )
     finally:
         session.close()
 
 
+LOCAL_BASE_URL = "http://127.0.0.1:8003"
+
+
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app())
+    """Client se comportant comme le front servi en local : Host de bouclage et
+    en-tete anti-CSRF envoye sur chaque requete (cf. core.request_guard)."""
+    from app.core.request_guard import CSRF_HEADER, CSRF_HEADER_VALUE
+
+    return TestClient(
+        create_app(),
+        base_url=LOCAL_BASE_URL,
+        headers={CSRF_HEADER: CSRF_HEADER_VALUE},
+    )
+
+
+@pytest.fixture
+def bare_client() -> TestClient:
+    """Client SANS l'en-tete anti-CSRF (simule une requete forgee par un site tiers)."""
+    return TestClient(create_app(), base_url=LOCAL_BASE_URL)
 
 
 @pytest.fixture(autouse=True)
@@ -87,7 +115,16 @@ def _reset_document_context_defaults() -> None:
     """Do not leak the persisted next-upload mapping between tests."""
     session = SessionLocal()
     try:
-        session.execute(delete(AppConfig).where(AppConfig.key == "document.context_defaults"))
+        session.execute(
+            delete(AppConfig).where(
+                AppConfig.key.in_(
+                    (
+                        "document.context_defaults",
+                        "document.context_defaults.demo",
+                    )
+                )
+            )
+        )
         session.commit()
     finally:
         session.close()

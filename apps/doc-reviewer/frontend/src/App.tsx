@@ -1,10 +1,18 @@
-import { ErrorBoundary } from "@internal/ui";
+import {
+  Ai4TechDocLogo,
+  AppShell,
+  DemoModeBadge,
+  DemoModeProvider,
+  ErrorBoundary,
+  LanguageSwitcher,
+  sidebarNavItemClass,
+} from "@internal/ui";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
+import { useMistralSettings } from "./hooks/useMistralSettings";
 import i18n from "./i18n";
 
 const Dashboard = lazy(async () => ({
@@ -22,6 +30,9 @@ const Settings = lazy(async () => ({
 const Rules = lazy(async () => ({
   default: (await import("./routes/Rules")).Rules,
 }));
+const Rejections = lazy(async () => ({
+  default: (await import("./routes/Rejections")).Rejections,
+}));
 
 function RouteFallback() {
   return (
@@ -35,6 +46,7 @@ function RouteFallback() {
 const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> = [
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/documents", labelKey: "nav.documents" },
+  { to: "/rejections", labelKey: "nav.rejections" },
   { to: "/rules", labelKey: "nav.rules" },
   { to: "/settings", labelKey: "nav.settings" },
 ] as const;
@@ -44,7 +56,9 @@ const LANGS = ["fr", "en"] as const;
 export function App() {
   const { t } = useTranslation();
   const location = useLocation();
+  const settingsQuery = useMistralSettings();
   const currentLang = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
+  const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
   // Le reviewer (detail d'un document) occupe tout le viewport pour maximiser
   // la lisibilite du PDF et des surlignages (disposition split plein ecran) —
@@ -52,70 +66,75 @@ export function App() {
   const isReviewer = location.pathname.startsWith("/documents/");
   if (isReviewer) {
     return (
-      <div className="pr">
-        <ErrorBoundary>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/documents/:id" element={<DocumentReviewer />} />
-            </Routes>
-          </Suspense>
-        </ErrorBoundary>
-      </div>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <div className="pr">
+          <ErrorBoundary>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/documents/:id" element={<DocumentReviewer />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </div>
+      </DemoModeProvider>
     );
   }
 
   return (
-    <div className="pr">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <span className="brand">{t("app.title")}</span>
-            <span className="label">{t("app.version")}</span>
-            <ThemeToggleButton />
+    <AppShell
+      className="pr"
+      title={t("app.title")}
+      brandTitle={t("app.description")}
+      version={t("app.version")}
+      headerStart={<Ai4TechDocLogo alt="" />}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      sidebarTop={
+        demoEnabled ? (
+          <div className="border-b border-md px-4 py-2">
+            <DemoModeBadge label={t("demo.badge")} />
           </div>
-
-          <LlmBadge />
-
-          <nav>
-            {navItems.map(({ to, labelKey, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
-              >
-                {t(labelKey)}
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {LANGS.map((lng) => (
-              <button
-                key={lng}
-                type="button"
-                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
-                onClick={() => void i18n.changeLanguage(lng)}
-              >
-                {lng.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main>
-          <ErrorBoundary>
-            <Suspense fallback={<RouteFallback />}>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/documents" element={<DocumentsList />} />
-                <Route path="/rules" element={<Rules />} />
-                <Route path="/settings" element={<Settings />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
-        </main>
-      </div>
-    </div>
+        ) : null
+      }
+      llmStatus={<LlmBadge />}
+      navigation={navItems.map(({ to, labelKey, end }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={end}
+          className={({ isActive }) => sidebarNavItemClass(isActive)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={LANGS}
+          currentLanguage={currentLang}
+          onLanguageChange={(language) => void i18n.changeLanguage(language)}
+          ariaLabel={t("nav.languageSwitcher")}
+        />
+      }
+    >
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <ErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/documents" element={<DocumentsList />} />
+              <Route path="/rejections" element={<Rejections />} />
+              <Route path="/rules" element={<Rules />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </DemoModeProvider>
+    </AppShell>
   );
 }

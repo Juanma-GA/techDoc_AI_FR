@@ -20,10 +20,11 @@ INTRODUCTION_PAGE_TYPE = "INTRODUCTION"
 REPAIR_PAGE_TYPE = "REPAIR"
 TESTING_PAGE_TYPE = "TESTING"
 STORAGE_PAGE_TYPE = "STORAGE"
+NUMERICAL_INDEX_PAGE_TYPE = "NUMERICAL_INDEX"
 
 _NOTE_PAGE_TYPES = (REPAIR_PAGE_TYPE, TESTING_PAGE_TYPE, STORAGE_PAGE_TYPE)
 _PAGE_TYPE_MARKERS = {
-    page_type: re.compile(rf"(?im)^\s*{page_type}\s*$")
+    page_type: re.compile(rf"(?im)^\s*(?:\d+(?:\.\d+)*[.)]?\s+)?{page_type}\s*$")
     for page_type in _NOTE_PAGE_TYPES
 }
 _HIGHLIGHTS_PAGE_1_MARKER = re.compile(r"(?i)\bHighlights\s+Page\s+1\b")
@@ -108,8 +109,6 @@ def identify_page_type(
             _logger.debug(
                 "tp1_detection_no_match",
                 page=page.page,
-                expected_anchors=expected_anchors,
-                footer_lines=lines,
             )
         page_types[str(page.page)] = page.page_type
     return page_types
@@ -128,6 +127,11 @@ def identify_note_pages(parsed: ParsedPdf) -> dict[str, str | None]:
     """Classify NOTE pages from a standalone REPAIR/TESTING/STORAGE heading."""
     page_types: dict[str, str | None] = {}
     for page in parsed.pages:
+        if revision._is_lep_page(page) or _TABLE_OF_CONTENTS_MARKER.search(page.text or ""):
+            if page.page_type in _NOTE_PAGE_TYPES:
+                page.page_type = None
+            page_types[str(page.page)] = page.page_type
+            continue
         detected_types = [
             page_type
             for page_type, marker in _PAGE_TYPE_MARKERS.items()
@@ -160,6 +164,20 @@ def identify_introduction_pages(parsed: ParsedPdf) -> dict[str, str | None]:
     return page_types
 
 
+def identify_numerical_index_pages(parsed: ParsedPdf) -> dict[str, str | None]:
+    """Classify every physical page whose footer belongs to the Numerical Index."""
+    page_types: dict[str, str | None] = {}
+    for page in parsed.pages:
+        footer = revision.extract_footer(page)
+        page_key = footer.page_key if footer is not None else None
+        if page_key is not None and page_key.casefold().startswith("ni/num "):
+            page.page_type = NUMERICAL_INDEX_PAGE_TYPE
+        elif page.page_type == NUMERICAL_INDEX_PAGE_TYPE:
+            page.page_type = None
+        page_types[str(page.page)] = page.page_type
+    return page_types
+
+
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
     """Classify page types and initialize the document's revision state."""
     identify_tp1_pages(
@@ -181,6 +199,7 @@ def classify_pages(parsed: ParsedPdf, document: object) -> None:
     )
     identify_note_pages(parsed)
     identify_introduction_pages(parsed)
+    identify_numerical_index_pages(parsed)
     revision_state(parsed, document)
 
 
@@ -188,6 +207,7 @@ __all__ = [
     "HIGHLIGHTS_FIRST_PAGE_TYPE",
     "HIGHLIGHTS_PAGE_TYPE",
     "INTRODUCTION_PAGE_TYPE",
+    "NUMERICAL_INDEX_PAGE_TYPE",
     "REPAIR_PAGE_TYPE",
     "STORAGE_PAGE_TYPE",
     "TESTING_PAGE_TYPE",
@@ -196,6 +216,7 @@ __all__ = [
     "classify_pages",
     "identify_introduction_pages",
     "identify_note_pages",
+    "identify_numerical_index_pages",
     "identify_page_type",
     "identify_tp1_pages",
 ]

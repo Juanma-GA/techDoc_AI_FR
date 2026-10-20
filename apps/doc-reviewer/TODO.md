@@ -1,13 +1,12 @@
 FRONT :
 
-- DocumentReviewer.tsx utilise encore des caractères Unicode ◀ et ▶, en contradiction avec la règle locale interdisant les icônes Unicode.
+
 
 BACK :
 
 - execution "manual" pas relié jusqu'au user
 - L’exécution sémantique n’est pas intégrée au contrat CompiledRule --> divergence entre le modèle conceptuel et l’implémentation réelle; donc rajouter la possibilité de semantic qui sera un appel LLM en fonction du besoin semantique
 - Implémenter le PDF vers DOCX dans les exports possibles
-- La suppression de la regle checklist ne la supprime pas elle la rend juste pas active
 
 OTHER :
 
@@ -18,11 +17,24 @@ OTHER :
 
 - Ajouter l'ancienne version en input pour qu'il puisse detecter et comparer la LEP pour etre sur des R U N D
 
-PROBLEMES REGLES : 
+- Vérifier que 250ms pour le regex suffit
 
-- CUSTOM_HIGHLIGHTS_PAGE_LABEL_FORMAT : Je comprend pas pourquoi dans "Page  1001" il détecte qu'il manque un espace alors que y'a bien les 2...
+- Installer libre office (ou word je sais plus) pour la conversion en .docx ou .doc et la tester 
 
-Il peut y avoir des pages sur plusieurs pages "1101-1 to 1101-2" qui correspondent enfait à 1101 Page 1 et 1102 Page 2 attention dans Highlights et LEP mais ducoup le tiret correspond pas à plusieurs pas : quand y'a juste marqué "Page  1101-1" c'est bien une seule page
+- Faire une détection par exemple si le numéro CMM est noté 90% du temps X alors dire que le mapping n'est pas bon et il faut le vérifier et relancer l'analyse
+
+- Pourquoi ça met bcp de temps l'analyse avant de tout afficher ? ça passe de 5% à 100% direct apres 20 secondes au lieu d'analyser petit à petit et d'afficher le poucentage en meme temps
 
 
-- 
+21-33-13 : 
+JUL 30/26
+JUL 30/73
+AUG 30/75
+05
+33140-02
+
+79-30-02:
+JUL 27/26
+JUL 66
+01
+1-879-SB

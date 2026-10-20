@@ -18,11 +18,11 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -93,6 +93,13 @@ class Document(Base):
     )
     standard_version_ids: Mapped[str] = mapped_column(
         Text, default="[]", server_default="[]"
+    )
+    is_demo: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="0",
+        nullable=False,
+        index=True,
     )
     status: Mapped[str] = mapped_column(
         String(30), default="uploaded", server_default="uploaded", index=True
@@ -193,8 +200,7 @@ class Suggestion(Base):
     )
     rule_kind: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     rule_code: Mapped[str] = mapped_column(String(80), nullable=False)
-    # Provenance affichee dans la liste des anomalies : "norme" | "checklist" |
-    # "regle" (custom deterministe) | "transverse" (unites/mise en page/vision).
+    # Provenance affichee : norme, checklist, regle, transverse ou sortie IA.
     # Calculee a la materialisation par `rules_engine.classify_source`.
     source_kind: Mapped[str] = mapped_column(
         String(20), default="norme", server_default="norme", index=True

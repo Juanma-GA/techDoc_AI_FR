@@ -9,6 +9,7 @@ type Props = {
   confirmLabel: string;
   cancelLabel: string;
   onConfirm: () => void;
+  confirmDisabled?: boolean;
   destructive?: boolean;
   children?: ReactNode;
 };
@@ -21,12 +22,16 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   onConfirm,
+  confirmDisabled = false,
   destructive,
   children,
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      {/* The "x" close button is equivalent to Cancel here, and every
+          caller already supplies a translated cancelLabel — reuse it
+          instead of leaving the shared Dialog's English default (L-12). */}
+      <DialogContent closeLabel={cancelLabel}>
         <DialogTitle>{title}</DialogTitle>
         {description ? <DialogDescription>{description}</DialogDescription> : null}
         {children}
@@ -37,6 +42,7 @@ export function ConfirmDialog({
           <button
             type="button"
             className={destructive ? "btn danger" : "btn primary"}
+            disabled={confirmDisabled}
             onClick={() => {
               onConfirm();
               onOpenChange(false);

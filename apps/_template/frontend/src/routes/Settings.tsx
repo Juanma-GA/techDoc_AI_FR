@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Switch } from "@internal/ui";
 
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
+import { DemoModeSettings } from "./DemoModeSettings";
 
 /**
  * Mistral configuration page — same fields/behavior on every POC (STANDARD_POC.md
@@ -10,6 +12,7 @@ import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/ap
  * Save + Test connection. Personnalise le libelle/description au bootstrap.
  */
 export function Settings() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -37,7 +40,7 @@ export function Settings() {
       }),
     onSuccess: () => {
       setApiKey("");
-      setFeedback({ kind: "ok", text: "Parametres enregistres." });
+      setFeedback({ kind: "ok", text: t("settings.mistral.saveSuccess") });
       void qc.invalidateQueries({ queryKey: ["settings"] });
       void qc.invalidateQueries({ queryKey: ["health"] });
     },
@@ -49,8 +52,8 @@ export function Settings() {
     onSuccess: (r: TestConnectionDto) => {
       setFeedback(
         r.ok
-          ? { kind: "ok", text: `Connexion OK (${r.models.length} modeles disponibles).` }
-          : { kind: "error", text: `Echec : ${r.error ?? ""}` },
+          ? { kind: "ok", text: t("settings.mistral.testSuccess", { count: r.models.length }) }
+          : { kind: "error", text: t("settings.mistral.testError", { message: r.error ?? "" }) },
       );
       void qc.invalidateQueries({ queryKey: ["health"] });
     },
@@ -71,23 +74,22 @@ export function Settings() {
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
+      <DemoModeSettings />
       <Card>
         <CardHeader>
-          <CardTitle>Intelligence artificielle</CardTitle>
+          <CardTitle>{t("settings.ai.title")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="label">LLM active</div>
-              <p className="text-sm text-fg-dim">
-                Desactiver saute les taches confiees a l&apos;IA. La cle Mistral est conservee.
-              </p>
+              <div className="label">{t("settings.ai.toggleLabel")}</div>
+              <p className="text-sm text-fg-dim">{t("settings.ai.toggleHint")}</p>
             </div>
             <Switch
               checked={llmEnabled}
               onCheckedChange={(v) => llmToggle.mutate(v)}
               disabled={llmToggle.isPending}
-              aria-label="LLM active"
+              aria-label={t("settings.ai.toggleLabel")}
             />
           </div>
         </CardContent>
@@ -96,15 +98,15 @@ export function Settings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Configuration Mistral
+            {t("settings.mistral.title")}
             <Badge variant={apiKeySet ? "success" : "warning"}>
-              {apiKeySet ? "CONFIGURED" : "NOT CONFIGURED"}
+              {apiKeySet ? t("settings.mistral.configured") : t("settings.mistral.notConfigured")}
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="label">Cle API Mistral</span>
+            <span className="label">{t("settings.mistral.apiKeyLabel")}</span>
             <Input
               type="password"
               autoComplete="off"
@@ -113,22 +115,20 @@ export function Settings() {
               onChange={(e) => setApiKey(e.target.value)}
             />
             {apiKeySet && (
-              <span className="text-sm text-fg-dim">
-                Une cle est deja enregistree (laisser vide pour la conserver).
-              </span>
+              <span className="text-sm text-fg-dim">{t("settings.mistral.apiKeyHint")}</span>
             )}
           </label>
           <label className="flex flex-col gap-1">
-            <span className="label">Base URL</span>
+            <span className="label">{t("settings.mistral.baseUrlLabel")}</span>
             <Input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
           </label>
           <div className="flex gap-3">
             <label className="flex flex-1 flex-col gap-1">
-              <span className="label">Modele chat</span>
+              <span className="label">{t("settings.mistral.chatModelLabel")}</span>
               <Input value={chatModel} onChange={(e) => setChatModel(e.target.value)} />
             </label>
             <label className="flex flex-1 flex-col gap-1">
-              <span className="label">Modele embeddings</span>
+              <span className="label">{t("settings.mistral.embedModelLabel")}</span>
               <Input value={embedModel} onChange={(e) => setEmbedModel(e.target.value)} />
             </label>
           </div>
@@ -141,7 +141,7 @@ export function Settings() {
                 saveMutation.mutate();
               }}
             >
-              Enregistrer
+              {t("common.save")}
             </Button>
             <Button
               variant="secondary"
@@ -151,7 +151,7 @@ export function Settings() {
                 testMutation.mutate();
               }}
             >
-              Tester la connexion
+              {t("settings.mistral.test")}
             </Button>
           </div>
           {feedback && (

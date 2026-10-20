@@ -140,6 +140,39 @@ def test_client_metadata_patch_validates_manifest_fields(
     )
     assert invalid_value.status_code == 422
     assert invalid_value.json()["code"] == "CLIENT_METADATA_INVALID"
+    valid_cmm_suffix = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_cmm_number": "79-30-02A"}},
+    )
+    assert valid_cmm_suffix.status_code == 200, valid_cmm_suffix.text
+    assert valid_cmm_suffix.json()["client_metadata"]["meta_cmm_number"] == "79-30-02A"
+
+    invalid_format = client.patch(
+        f"/api/v1/documents/{doc['id']}",
+        json={"client_metadata": {"meta_cmm_number": "7930-02"}},
+    )
+    assert invalid_format.status_code == 422
+    assert invalid_format.json()["code"] == "CLIENT_METADATA_INVALID"
+
+
+def test_clearing_manufacturer_keeps_legacy_column_valid_and_clears_future_mapping(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    document = _upload(client, sample_pdf_bytes)
+    response = client.patch(
+        f"/api/v1/documents/{document['id']}",
+        json={"client_metadata": {"meta_manufacturer": None}},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["client_metadata"]["meta_manufacturer"] is None
+    assert body["meta_manufacturer"] in {"Airbus", "Boeing"}
+
+    next_document = _upload(client, sample_pdf_bytes)
+    assert next_document["client_metadata"]["meta_manufacturer"] is None
+    assert next_document["meta_manufacturer"] == "Airbus"
 
 
 def test_client_metadata_supports_multiple_pnr_values(
@@ -170,6 +203,58 @@ def test_get_pdf_returns_v0_bytes(client: TestClient, sample_pdf_bytes: bytes) -
     assert pdf_resp.status_code == 200
     assert pdf_resp.headers["content-type"].startswith("application/pdf")
     assert pdf_resp.content.startswith(b"%PDF-")
+
+
+def test_metadata_suggestions_scan_only_four_pages_without_persisting(
+    client: TestClient,
+) -> None:
+    import fitz
+
+    pdf = fitz.open()
+    page_texts = [
+        "HIGHLIGHTS PAGE 1\nATA No. 80-80-01\nRevision No. 01\nRevision Date: JUL 27/26",
+        "TP1\nPart Number: 1-900-SB\nRevision No. 01\nFirst Issue: JUL 25/95",
+        "",
+        "",
+        "TP1\nPart Number: 9-999-ZZ\nFirst Issue: AUG 01/01",
+    ]
+    for text in page_texts:
+        page = pdf.new_page()
+        if text:
+            page.insert_textbox(
+                fitz.Rect(30, 30, 560, 800),
+                text,
+                fontname="helv",
+                fontsize=11,
+            )
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    document = _upload(client, pdf_bytes)
+    before = client.get(f"/api/v1/documents/{document['id']}").json()
+    response = client.post(
+        f"/api/v1/documents/{document['id']}/metadata-suggestions"
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "pages_scanned": 4,
+        "meta_cmm_number": "80-80-01",
+        "meta_pnr_number": ["1-900-SB"],
+        "meta_revision_number": "01",
+        "meta_revision_date": "JUL 27/26",
+        "meta_first_issue_date": "JUL 25/95",
+    }
+    after = client.get(f"/api/v1/documents/{document['id']}").json()
+    assert after["client_metadata"] == before["client_metadata"]
+    for field in (
+        "meta_cmm_number",
+        "meta_pnr_number",
+        "meta_revision_number",
+        "meta_revision_date",
+        "meta_first_issue_date",
+    ):
+        assert after[field] == before[field]
 
 
 def test_get_pdf_unknown_version(client: TestClient, sample_pdf_bytes: bytes) -> None:

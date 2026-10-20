@@ -8,12 +8,17 @@ Référence technique des règles de développement. Lue par les humains et par 
 
 ### Profils d'application
 
-Les règles communes s'appliquent à tous les POCs. Les capacités optionnelles sont déclarées dans le README de l'app :
+Les règles communes s'appliquent à tous les POCs. Chaque app déclare explicitement ses profils dans une section `## Profiles` de son README, avec un profil par puce Markdown. Les capacités optionnelles s'appliquent uniquement si le profil correspondant est déclaré. Une app déterministe sans IA déclare par exemple `local-first` sans `llm` :
+
+```markdown
+## Profiles
+- `local-first`
+```
 
 | Profil | Obligations supplémentaires |
 |---|---|
-| `local-first` | SQLite local, React/Vite buildé, bind `127.0.0.1` |
-| `llm` | Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
+| `local-first` | Persistance locale si nécessaire, React/Vite buildé, bind `127.0.0.1` |
+| `llm` | Pour les apps qui appellent une IA : Mistral via `httpx` async, SSE si nécessaire, audit des appels, Settings et interrupteur `llm_enabled` |
 | `files` | Validation MIME/taille, stockage sous `data/storage`, SHA-256 et versionnage |
 | `production` | Hors scope POC : PostgreSQL, authentification, déploiement et contrôles d'exploitation dédiés |
 
@@ -81,6 +86,12 @@ internal-poc-monorepo/
 
 ### 3.1 Stack
 
+**Stack par défaut du template**, non une obligation de réécrire un backend existant.
+Les apps Go sont prises en charge avec leur propre compilation, tests et packaging,
+sans ajout de Python. Les autres stacks nécessitent un adaptateur explicite.
+Les contrats transverses restent communs ; les écarts backend conservés sont déclarés
+dans le README de l'app. Voir [stacks et desktop](docs/standards/desktop-and-stacks.md).
+
 | Couche | Choix | Version |
 |---|---|---|
 | Runtime | Python | 3.11+ |
@@ -126,7 +137,7 @@ apps/<poc>/backend/
 | Règle | Standard |
 |---|---|
 | Préfixe URL | `/api/v1/` obligatoire dès J1 |
-| Health check | `GET /api/v1/health` → `{status, version, db, llm}` |
+| Health check | `GET /api/v1/health` → `{status, version, db}` ; le champ `llm` et ses états s'appliquent uniquement au profil `llm` (cf. §3.7). |
 | Format d'erreur | `{code, message, detail, request_id}` partout |
 | Codes HTTP | 400 / 401 / 403 / 404 / 422 / 500 explicites |
 | IDs ressources | UUID v4 (jamais d'auto-incrément exposé) |
@@ -208,7 +219,7 @@ async def create_project(request: Request):
 |---|---|
 | Logs backend | `structlog` JSON, niveau via env var |
 | `request_id` | uuid4 en header `X-Request-Id`, propagé via `contextvars` dans toute la chaîne |
-| Health check | `GET /api/v1/health` retournant `{status, version, db, llm}` |
+| Health check | `GET /api/v1/health` retournant `{status, version, db}` ; le champ `llm` et ses états s'appliquent uniquement au profil `llm` (cf. §3.7). |
 | Logs frontend | `console.error` en dev OK, jamais de `console.log` committé |
 | ErrorBoundary | Obligatoire au niveau App + par route React |
 
@@ -220,7 +231,7 @@ Au-delà de `/health`, tout POC déclarant le profil `llm` expose :
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Consommé par l'onglet Données de l'app React. |
+| `GET /api/v1/admin/stats` | Compteurs (documents, chunks, sessions, messages, total_size_bytes). Peut alimenter un onglet Données optionnel ou un autre écran d'administration. |
 | `POST /api/v1/admin/reset/all` | Vide les tables métier ; **préserve `app_config`** (clé Mistral). |
 | `POST /api/v1/admin/reset/<scope>` | Reset par scope (ex. `documents`, `sessions`). |
 | `GET /api/v1/settings` | Lit la config Mistral runtime (`api_key_set: bool`, `base_url`, `chat_model`, `embed_model`, `llm_enabled: bool`, `llm_tested: bool`). |
@@ -418,7 +429,7 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 Toggle dark/light dans l'app React :
 
 - **Rendu** : `App.tsx` avec un bouton sun/moon dans le sidebar (cf. §10), ou `<ThemeToggle />` de `@internal/ui`.
-- **Mode initial** : si `localStorage['theme']` est défini → respect ; à défaut → dark (continuité POC).
+- **Mode initial** : respecter une préférence `dark`/`light` explicitement sauvegardée ; sinon démarrer toujours en dark, indépendamment de `prefers-color-scheme`. Une valeur absente ou invalide signifie dark.
 - **Application** : classe `.dark` sur `<html>`. Le preset Tailwind est en `darkMode: "class"`.
 - **Persistance** : seules des préférences non sensibles (`theme` et éventuellement `language`) peuvent être conservées dans le navigateur. Jamais d'authentification, d'état métier ou de session dans `localStorage`/`sessionStorage`.
 
@@ -438,6 +449,8 @@ Toggle dark/light dans l'app React :
 **`meta color-scheme`** : valeur `"dark light"` dans le `<head>` (les deux thèmes supportés). Jamais `"dark"` seul (forcerait le scrollbar dark même en mode light).
 
 ## 6. LLM
+
+Les règles de cette section s'appliquent uniquement aux apps qui déclarent le profil `llm` dans leur README. Une app déterministe sans appel IA ne déclare pas ce profil et n'a pas à implémenter Mistral, `AppConfig`, l'audit ou l'interrupteur `llm_enabled`.
 
 | Règle | Standard |
 |---|---|
@@ -525,7 +538,7 @@ while (true) {
 `scripts/check_standard.sh` doit retourner exit 0 avant tout commit. Il vérifie actuellement 15 contraintes — 7 structurelles, 6 d'instanciation, 1 de configuration LLM et 1 de robustesse du launcher (le dossier `apps/_template/` est exclu des checks d'instanciation puisqu'il porte légitimement les marqueurs `TEMPLATE`). Toute nouvelle contrainte doit être ajoutée à cette liste et au rapport du script :
 
 **Structurelles** :
-1. Préfixe `/api/v1/` monté dans chaque `apps/*/backend/app/main.py`.
+1. Préfixe `/api/v1/` monté dans chaque backend : routeur FastAPI ou groupe Gin pour Go.
 2. Absence de `console.log` dans `apps/*/frontend/src/`.
 3. Absence de `print(` dans `apps/*/backend/app/`.
 4. Absence de hex en dur hors `tokens.json` / `tailwind-preset.ts` / `theme.css`.
@@ -545,6 +558,13 @@ while (true) {
 ## 9. Lanceurs locaux et packaging
 
 Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/` :
+
+Les commandes Python ci-dessous s'appliquent au template FastAPI. Un backend Go
+utilise son binaire et un packager Node ; le frontend peut être embarqué via
+`go:embed`. Un helper Node partagé peut réaliser le rebuild conditionnel sur les
+deux OS, en surveillant aussi UI, tokens et lockfile racine. Les mêmes contraintes
+de port local, logs d'erreur, installation conditionnelle et exclusion des données
+s'appliquent. Tauri est optionnel et ne remplace jamais le mode web.
 
 | Fichier | Rôle |
 |---|---|
@@ -645,15 +665,15 @@ L'UI de chaque POC est l'**app React buildée** (`frontend/dist/`), servie par l
 
 > Historique : un « preview HTML autonome » (vanilla JS, sans Node) servait d’UI de repli. Il est **supprimé** du standard et ne doit plus être développé ni présenté comme mode supporté. Les références historiques sont conservées uniquement dans les ADRs marquées `Superseded`.
 
-### Onglets standards (minimum)
+### Navigation standard
 
-| Onglet | Contenu |
-|---|---|
-| **Home** | Page d'accueil sobre. Statut backend (`/health`) en badge. Pointe vers les fichiers à éditer pour personnaliser le POC. |
-| **Données** | KPI grid alimentée par `GET /api/v1/admin/stats` + bouton "Tout supprimer" avec pattern double-clic → `POST /api/v1/admin/reset/all`. |
-| **Paramètres** | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
+| Onglet | Statut | Contenu |
+|---|---|---|
+| **Home** | Optionnel | Si présent : page d'accueil sobre avec le statut backend (`/health`) en badge. |
+| **Données** | Optionnel | Si présent : KPI grid alimentée par `GET /api/v1/admin/stats` + bouton "Tout supprimer" avec pattern double-clic → `POST /api/v1/admin/reset/all`. |
+| **Paramètres** | Obligatoire pour le profil `llm` | Formulaire Mistral (api_key / base_url / chat_model / embed_model) + bouton "Tester la connexion" → `POST /api/v1/settings/test`. |
 
-Le POC ajoute ses onglets métier.
+Le POC ajoute ses onglets métier. Les endpoints d'administration restent disponibles même si aucun onglet Données n'est exposé.
 
 ### Conventions visuelles
 
@@ -690,8 +710,7 @@ Pattern obligatoire dans `<head>` (anti-flash, applique le theme AVANT que le HT
 <script>
   (function () {
     var stored = localStorage.getItem("theme");
-    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+    if (stored !== "light") {
       document.documentElement.classList.add("dark");
     }
   })();
@@ -725,10 +744,10 @@ const fire = () => {
 ### Méthode recommandée — script d'instanciation
 
 ```bash
-bash scripts/new_poc.sh <slug> [<port>]
+node scripts/new_poc.mjs <slug> [<port>] [--desktop] [--dry-run]
 ```
 
-Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
+Le script Node `scripts/new_poc.mjs` (wrapper Bash `new_poc.sh` conservé) automatise les substitutions et :
 
 - Vérifie que `<slug>` est en kebab-case et que `apps/<slug>/` n'existe pas.
 - Choisit automatiquement le prochain port libre dès 8000 si le 2e argument est omis (sinon vérifie qu'il n'est pas déjà pris par un autre POC).
@@ -744,12 +763,14 @@ Le script `scripts/new_poc.sh` automatise les 14 substitutions et :
 2. **Ajouter la logique métier** dans `backend/app/api/<feature>.py` (+ register dans `main.py`) et `backend/app/db/models.py` (au-delà d'`AppConfig`).
 3. **Générer la migration métier** : `alembic revision -m "0002 <feature>"`. La migration `0001_initial` (table `AppConfig`) est déjà fournie par le template.
 4. **Adapter l'UI React** : `frontend/src/App.tsx` (brand + onglets) et la page `frontend/src/routes/Home.tsx`.
-5. **Implémenter les routes React** dans `frontend/src/routes/` (onglets métier au-delà des 4 standards) + remplir `locales/{fr,en}.json`.
+5. **Implémenter les routes React** dans `frontend/src/routes/` (onglets métier au-delà de la navigation standard) + remplir `locales/{fr,en}.json`.
 6. **Premier commit** : `feat(<slug>): bootstrap from template`.
 
 ### Méthode manuelle (fallback)
 
-Si `scripts/new_poc.sh` n'est pas utilisable (système sans bash, debug du script), les substitutions à faire à la main sont :
+Sans Bash, utiliser directement Node. L'option `--desktop` instancie le catalogue
+`apps/_template/desktop` avec les mêmes identité, backend HTTP et UI que le web.
+Les validations restent à exécuter après génération. En fallback manuel :
 
 1. `cp -r apps/_template apps/<slug>`.
 2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/frontend/src/App.tsx` (`<span>` brand), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).

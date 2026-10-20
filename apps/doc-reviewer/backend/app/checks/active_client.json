@@ -1,3 +1,4 @@
 {
-  "bundle": "thales_rules"
+  "bundle": "thales_rules",
+  "rule_bundles": ["ste100_rules"]
 }

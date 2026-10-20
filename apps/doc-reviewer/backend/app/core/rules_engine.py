@@ -1,9 +1,9 @@
-"""Orchestrate standard + custom + units checks and persist suggestions.
+"""Orchestrate compiled, catalog, custom, and units checks.
 
-The analyse pipeline reads the active `StandardVersion.catalog_json`
-and runs every built-in rule via `catalog_runner`. Custom rules from
-the DB are scoped to that same `standard_version_id` (or unscoped =
-transverse — they run for every standard). Units conversion remains
+The pipeline reads the active `StandardVersion.catalog_json`. Deterministic
+compiled rules use `compiled_rule_executor`; sentence-length and legacy catalog
+checks use `catalog_runner`. Custom rules from the DB are scoped to the same
+`standard_version_id` (or unscoped = transverse). Units conversion remains
 fully transverse and applies to every analysis run.
 """
 
@@ -13,12 +13,21 @@ import json
 import re
 import uuid
 from collections import defaultdict
+from dataclasses import replace
 from typing import Any, Callable, Iterable, Literal, Optional
 
+import structlog
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.checks import catalog_runner, custom_rules, layout_checks, units_check, vision_checks
+from app.checks import (
+    catalog_runner,
+    custom_rules,
+    layout_checks,
+    pagination_checks,
+    units_check,
+    vision_checks,
+)
 from app.checks.client_bundle import ClientBundle
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.raw import RawSuggestion
@@ -38,12 +47,16 @@ from app.core.mistral_settings import (
     get_llm_enabled,
     get_vision_enabled,
 )
-from app.core.rule_applicability import RuleExecutionContext, is_rule_kind_applicable
+from app.core.regex_safety import UserRegexPatternError, compile_user_regex
+from app.core.rule_applicability import (
+    RuleExecutionContext,
+    is_rule_kind_applicable,
+    is_standard_applicable,
+    required_language_for_standard,
+)
 from app.core.standard_rule_compiler import MIGRATED_REGEX_FLAG_CODES, compile_standard_rule
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion, Suggestion
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, find_span_bbox, locate_with_search_for
-
-import structlog
 
 UnitSystem = Literal["metric", "imperial", "auto"]
 
@@ -76,6 +89,7 @@ def run_all(
     compiled_results: Optional[list[RuleResult]] = None,
     execute_compiled: bool = True,
     client_bundle: ClientBundle[Any] | None = None,
+    previous_revision_pdf: ParsedPdf | None = None,
 ) -> list[RawSuggestion]:
     """Run every check against the parsed PDF, return raw suggestions.
 
@@ -120,7 +134,38 @@ def run_all(
         layout_enabled=layout_enabled,
         vision_override=vision_enabled_override,
     )
-    versions = standard_versions or []
+    selected_versions = standard_versions or []
+    execution_context = RuleExecutionContext.from_document(
+        document,
+        layout_enabled=layout_enabled,
+    )
+    skipped_standard_codes = sorted(
+        {
+            version.standard.code
+            for version in selected_versions
+            if not is_standard_applicable(version.standard.code, execution_context)
+        }
+    )
+    for code in skipped_standard_codes:
+        required_language = required_language_for_standard(code)
+        _logger.info(
+            "standard_rules_skipped",
+            standard_code=code,
+            required_language=required_language,
+            document_language=execution_context.document_language,
+        )
+        _append_analysis_warning(
+            warnings,
+            (
+                f"Les règles {code} n'ont pas été exécutées : "
+                f"déclarez la langue du document « {required_language} » pour les activer."
+            ),
+        )
+    versions = [
+        version
+        for version in selected_versions
+        if is_standard_applicable(version.standard.code, execution_context)
+    ]
     # Chaque standard selectionne peut classer les pages (`page.page_type`)
     # avant l'execution des regles compilees qui en dependent (RuleTarget.
     # page_type) via le bundle transmis/resolu pour ce run.
@@ -131,7 +176,6 @@ def run_all(
             classifier = None
         if classifier is not None:
             classifier(parsed, document)
-    execution_context = RuleExecutionContext.from_document(document, layout_enabled=layout_enabled)
     raw_target = document.target_unit_system
     target = raw_target if raw_target in {"metric", "imperial", "auto"} else "none"
     units_active = target != "none"
@@ -155,6 +199,10 @@ def run_all(
     if checklist_ai_scan and (
         not get_llm_enabled(db) or not get_effective(db).get("api_key")
     ):
+        _append_analysis_warning(
+            warnings,
+            "Le scan IA de la checklist est indisponible; les contrôles IA demandés sont incomplets.",
+        )
         checklist_ai_scan = False
     compiled_rules_for_execution, compiled_checklist_rules_for_ai = route_compiled_rules(
         compiled_rules,
@@ -212,6 +260,8 @@ def run_all(
             document=document,
             client_operations=client_bundle.operations,
             client_entities=client_bundle.mapping.entities,
+            warnings=warnings,
+            previous_revision_pdf=previous_revision_pdf,
         )
         if compiled_results is not None:
             compiled_results.extend(compiled_results_for_log)
@@ -229,8 +279,17 @@ def run_all(
     )
 
     stage_start = len(out)
+    out.extend(pagination_checks.run(parsed))
+    _logger.info(
+        "rules_stage_finished",
+        stage="pagination",
+        enabled=True,
+        raw_suggestion_count=len(out) - stage_start,
+    )
+
+    stage_start = len(out)
     if catalog:
-        out.extend(catalog_runner.run(parsed, catalog))
+        out.extend(catalog_runner.run(parsed, catalog, warnings=warnings))
     _logger.info(
         "rules_stage_finished",
         stage="catalog",
@@ -239,7 +298,7 @@ def run_all(
     )
 
     stage_start = len(out)
-    out.extend(custom_rules.run(active_custom, parsed.pages))
+    out.extend(custom_rules.run(active_custom, parsed.pages, warnings=warnings))
     _logger.info(
         "rules_stage_finished",
         stage="custom",
@@ -261,9 +320,9 @@ def run_all(
     if src_path and execution_context.layout_enabled:
         # Controles geometriques (alignement / disposition / pieds de page).
         try:
-            out.extend(layout_checks.run(src_path))
+            out.extend(layout_checks.run(src_path, warnings=warnings))
         except Exception as exc:  # noqa: BLE001
-            _logger.warning("layout_run_skipped", error=type(exc).__name__, message=str(exc))
+            _logger.warning("layout_run_skipped", error=type(exc).__name__)
     _logger.info(
         "rules_stage_finished",
         stage="layout",
@@ -298,9 +357,9 @@ def run_all(
     stage_start = len(out)
     if src_path and vision_active:
         try:
-            out.extend(vision_checks.run(db, src_path))
+            out.extend(vision_checks.run(db, src_path, warnings=warnings))
         except Exception as exc:  # noqa: BLE001
-            _logger.warning("vision_run_skipped", error=type(exc).__name__, message=str(exc))
+            _logger.warning("vision_run_skipped", error=type(exc).__name__)
     _logger.info(
         "rules_stage_finished",
         stage="vision",
@@ -308,7 +367,7 @@ def run_all(
         raw_suggestion_count=len(out) - stage_start,
     )
 
-    out = _enrich_with_ai(out, db)
+    out = _enrich_with_ai(out, db, warnings=warnings)
     out = _apply_reliability(out, db)
     deduped = _dedupe(out)
     _logger.info(
@@ -335,6 +394,9 @@ def load_compiled_rules(
         except (TypeError, ValueError):
             catalog = []
         for source in catalog if isinstance(catalog, list) else []:
+            # Sentence length needs token counts and is dispatched by the catalog runner.
+            if str(source.get("kind") or "").strip().casefold() == "sentence_length":
+                continue
             if str(source.get("code") or "") in disabled_codes:
                 continue
             rule = compile_standard_rule(
@@ -428,7 +490,7 @@ def _apply_reliability(raws: list[RawSuggestion], db: Session) -> list[RawSugges
     try:
         kept = verifier.verify_batch(db, llm_findings, budget, passes=passes)
     except Exception as exc:  # noqa: BLE001 — la fiabilisation ne doit jamais casser l'analyse
-        _logger.warning("reliability_skipped", error=type(exc).__name__, message=str(exc))
+        _logger.warning("reliability_skipped", error=type(exc).__name__)
         return others + llm_findings
     return others + kept
 
@@ -491,9 +553,12 @@ def _dedupe(raws: list[RawSuggestion]) -> list[RawSuggestion]:
 
 
 # Volume de texte par appel Mistral (un lot = plusieurs pages/blocs concatenes
-# jusqu'a cette limite) et budget total scanne par analyse (borne le cout,
-# equivalent grosso modo a l'ancien "30 pages" mais compte en caracteres pour
-# rester correct quelle que soit la taille d'une page/bloc).
+# jusqu'a cette limite) et budget total scanne par analyse (borne le cout ET
+# l'exposition de donnees client vers l'API externe — voir le hardening B-1 :
+# sans ce budget, un document arbitrairement long sort INTEGRALEMENT vers
+# https://api.mistral.ai, sans aucune borne de volume. equivalent grosso modo
+# a l'ancien "30 pages" mais compte en caracteres pour rester correct quelle
+# que soit la taille d'une page/bloc).
 _AI_GROUP_CHAR_LIMIT = 4000
 _AI_TOTAL_CHAR_BUDGET = 120_000
 
@@ -503,33 +568,56 @@ def _group_pages_by_text_budget(
     per_call_limit: int,
     total_budget: int,
 ) -> list[list[ParsedPage]]:
-    """Regroupe des pages/blocs en lots de ~`per_call_limit` caracteres.
+    """Split long pages, then group every text segment within the call limit,
+    stopping once `total_budget` characters have been queued across all
+    groups.
 
     Le pipeline docx natif presente chaque BLOC (paragraphe, souvent quelques
     dizaines de caracteres) comme une pseudo-page (`docx_pipeline.
     blocks_to_pages`) — un budget compte en NOMBRE de pages (l'ancien
     `_AI_PAGE_LIMIT`) n'y couvrait donc que les tout premiers blocs du
-    document (souvent la page de garde), jamais le corps. Compter en VOLUME
-    de texte couvre proportionnellement le document quel que soit le
-    decoupage en pages/blocs, pour un cout Mistral equivalent (un appel par
-    lot de ~`per_call_limit` caracteres, borne au total par `total_budget`)."""
+    document (souvent la page de garde), jamais le corps. Segmentation par
+    volume couvre le texte proportionnellement sans couper les pages au
+    milieu — l'arret se fait a une frontiere de segment, jamais en plein mot,
+    pour que le lot envoye a Mistral reste toujours un texte coherent."""
     groups: list[list[ParsedPage]] = []
     current: list[ParsedPage] = []
     current_len = 0
     total_len = 0
     for page in pages:
+        if total_len >= total_budget:
+            break
         text = page.text or ""
         if not text.strip():
             continue
-        if total_len >= total_budget:
-            break
-        if current and current_len + len(text) > per_call_limit:
-            groups.append(current)
-            current = []
-            current_len = 0
-        current.append(page)
-        current_len += len(text)
-        total_len += len(text)
+        segments: list[str] = []
+        start = 0
+        while start < len(text):
+            end = min(start + per_call_limit, len(text))
+            if end < len(text):
+                boundary_start = start + per_call_limit // 2
+                boundary = max(
+                    text.rfind("\n", boundary_start, end),
+                    text.rfind(" ", boundary_start, end),
+                    text.rfind("\t", boundary_start, end),
+                )
+                if boundary >= boundary_start:
+                    end = boundary + 1
+            segments.append(text[start:end])
+            start = end
+
+        for segment in segments:
+            if total_len >= total_budget:
+                break
+            separator_length = 1 if current else 0
+            if current and current_len + separator_length + len(segment) > per_call_limit:
+                groups.append(current)
+                current = []
+                current_len = 0
+                separator_length = 0
+            current.append(replace(page, text=segment))
+            current_len += separator_length + len(segment)
+            total_len += len(segment)
     if current:
         groups.append(current)
     return groups
@@ -648,8 +736,28 @@ def _run_ai_custom(
     # Regroupement par volume de texte (pas par nombre de pages/blocs) : voir
     # `_group_pages_by_text_budget` — couvre le document proportionnellement
     # a son contenu reel, indispensable pour le pipeline docx natif ou une
-    # "page" est un simple bloc/paragraphe.
+    # "page" est un simple bloc/paragraphe. Borne a `_AI_TOTAL_CHAR_BUDGET`
+    # par analyse (hardening B-1) : au-dela, le reste du document n'est pas
+    # envoye a Mistral et un avertissement explicite signale la couverture
+    # incomplete (jamais de troncature silencieuse).
     groups = _group_pages_by_text_budget(parsed.pages, _AI_GROUP_CHAR_LIMIT, _AI_TOTAL_CHAR_BUDGET)
+    covered_chars = sum(len(p.text or "") for group in groups for p in group)
+    total_chars = sum(len(p.text or "") for p in parsed.pages)
+    if covered_chars < total_chars:
+        _logger.warning(
+            "ai_custom_budget_exceeded",
+            covered_chars=covered_chars,
+            total_chars=total_chars,
+            budget=_AI_TOTAL_CHAR_BUDGET,
+        )
+        if warnings is not None:
+            warning = (
+                f"Scan IA/checklist limite a {_AI_TOTAL_CHAR_BUDGET} caracteres "
+                "par analyse : le reste du document n'a pas ete envoye a Mistral, "
+                "sa couverture est incomplete."
+            )
+            if warning not in warnings:
+                warnings.append(warning)
     total_groups = len(groups) or 1
     for group_idx, group in enumerate(groups):
         if progress_cb is not None:
@@ -669,13 +777,6 @@ def _run_ai_custom(
             group_count=total_groups,
             pages=[page.page for page in group],
             text_chars=len(combined_text),
-            document_metadata=_doc_meta_block(document),
-        )
-        _logger.debug(
-            "ai_custom_group_text",
-            group_index=group_idx,
-            pages=[page.page for page in group],
-            text=combined_text,
         )
         try:
             items = scan_with_prompt(
@@ -692,12 +793,11 @@ def _run_ai_custom(
                 "ai_custom_scan_skipped",
                 pages=[p.page for p in group],
                 error_code=exc.code,
-                message=exc.message,
             )
             # HR7 : signaler la degradation, mais laisser les autres lots de
             # pages poursuivre leur analyse.
             if warnings is not None:
-                warning = f"Scan checklist/IA partiellement indisponible ({exc.code}) : {exc.message}"
+                warning = f"Scan IA partiellement indisponible : {exc.message}"
                 if warning not in warnings:
                     warnings.append(warning)
             continue
@@ -714,9 +814,10 @@ def _run_ai_custom(
             # Le lot combine plusieurs pages/blocs : retrouve celui qui porte
             # reellement le texte detecte pour que `page` (-> target_id / bbox
             # a la materialisation) reste precis, pas juste "le lot entier".
-            owner = next((p for p in group if original in (p.text or "")), None)
-            if owner is None:
+            segment = next((p for p in group if original in (p.text or "")), None)
+            if segment is None:
                 continue
+            owner = next((page for page in parsed.pages if page.page == segment.page), segment)
             start = (owner.text or "").find(original)
             out.append(
                 RawSuggestion(
@@ -728,15 +829,21 @@ def _run_ai_custom(
                     proposed=item["proposed"],
                     page=owner.page,
                     span=(start, start + len(original)),
+                    ai_generated=True,
                 )
             )
     return out
 
 
-def _enrich_with_ai(raws: list[RawSuggestion], db: Session) -> list[RawSuggestion]:
+def _enrich_with_ai(
+    raws: list[RawSuggestion],
+    db: Session,
+    *,
+    warnings: list[str] | None = None,
+) -> list[RawSuggestion]:
     """For every AI-aware rule code, batch-call Mistral to fill in
-    `proposed`. Suggestions for which Mistral fails to produce a usable
-    rewrite are dropped silently."""
+    `proposed`. When unavailable, preserve detection-only findings and mark
+    the reduced correction coverage explicitly."""
     by_code: dict[str, list[RawSuggestion]] = {}
     others: list[RawSuggestion] = []
     for raw in raws:
@@ -755,16 +862,36 @@ def _enrich_with_ai(raws: list[RawSuggestion], db: Session) -> list[RawSuggestio
                 rule_code=code,
                 count=len(items),
                 error_code=exc.code,
-                message=exc.message,
             )
+            _append_analysis_warning(
+                warnings,
+                "Certaines suggestions ne disposent pas de reformulation IA et restent à traiter manuellement.",
+            )
+            for raw in items:
+                raw.proposed = ""
+            others.extend(items)
             continue
 
-        for raw, rewrite in zip(items, rewrites):
+        for index, raw in enumerate(items):
+            rewrite = rewrites[index] if index < len(rewrites) else None
             if rewrite and rewrite.strip() and rewrite.strip() != raw.original:
                 raw.proposed = rewrite.strip()
+                raw.ai_generated = True
                 enriched.append(raw)
+            else:
+                raw.proposed = ""
+                others.append(raw)
+                _append_analysis_warning(
+                    warnings,
+                    "Certaines suggestions ne disposent pas de reformulation IA et restent à traiter manuellement.",
+                )
 
     return others + enriched
+
+
+def _append_analysis_warning(warnings: list[str] | None, message: str) -> None:
+    if warnings is not None and message not in warnings:
+        warnings.append(message)
 
 
 def materialize(
@@ -871,7 +998,11 @@ def materialize(
                     run_id=run_id,
                     rule_kind=raw.rule_kind,
                     rule_code=raw.rule_code,
-                    source_kind=classify_source(raw.rule_kind, raw.rule_code),
+                    source_kind=classify_source(
+                        raw.rule_kind,
+                        raw.rule_code,
+                        ai_generated=raw.ai_generated,
+                    ),
                     severity=raw.severity,
                     message=raw.message,
                     original_text=raw.original,
@@ -897,18 +1028,20 @@ _RE_VALID = re.compile(r".+")
 _TRANSVERSE_STANDARD_CODES = {"DOCX_REVISION_BAR"}
 
 
-def classify_source(rule_kind: str, rule_code: str) -> str:
+def classify_source(rule_kind: str, rule_code: str, *, ai_generated: bool = False) -> str:
     """Classe une anomalie par provenance pour l'affichage (colonne « Source »)
     et le filtre associé dans la liste des anomalies :
 
-    - `"norme"`      — règle du catalogue d'une norme sélectionnée.
-    - `"checklist"`  — jugée par le LLM (checklist importée `semantic`/`manual`
-      ou scan libre `AI_SCAN`).
+        - `"ai"`         — sortie ou reformulation produite par le LLM.
+        - `"norme"`      — règle du catalogue d'une norme sélectionnée.
+        - `"checklist"`  — règle issue d'une checklist importée.
     - `"regle"`      — règle custom déterministe (regex/terme) créée par
       l'utilisateur, transverse ou scopée à une norme.
     - `"transverse"` — contrôle moteur indépendant de toute norme (unités,
       mise en page, vision, barre de révision Word).
     """
+    if ai_generated:
+        return "ai"
     if rule_kind == "units" or rule_kind == "layout" or rule_kind == "vision":
         return "transverse"
     if rule_kind == "compiled_standard":
@@ -924,13 +1057,10 @@ def classify_source(rule_kind: str, rule_code: str) -> str:
 
 def validate_rule_pattern(pattern: str) -> None:
     try:
-        re.compile(pattern)
-    except re.error as exc:  # noqa: B902
+        compile_user_regex(pattern)
+    except UserRegexPatternError as exc:
         raise AppError(
-            "RULE_PATTERN_INVALID",
-            f"Expression régulière invalide : {exc.msg}",
+            exc.code,
+            exc.message,
             status_code=400,
-            detail={"pattern": pattern},
         ) from exc
-    if not _RE_VALID.match(pattern):
-        raise AppError("RULE_PATTERN_INVALID", "Motif vide", status_code=400)

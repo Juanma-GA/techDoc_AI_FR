@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, FileSearch } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
 import { SeverityBadge } from "../components/SeverityBadge";
+import { useClientRules } from "../hooks/useClientConfig";
 import { useDocuments } from "../hooks/useDocuments";
 import { api } from "../lib/api";
-import { localizedSuggestionMessage } from "../lib/suggestionText";
+import { localizedRuleCode, localizedSuggestionMessage } from "../lib/suggestionText";
 import type { Severity, Suggestion } from "../types/domain";
 
 type KpiTone = "info" | "warn" | "danger";
@@ -28,6 +29,7 @@ type BarRow = { label: string; count: number; fill: string };
 
 type FrequentError = {
   ruleCode: string;
+  ruleNumber: number | null;
   message: string;
   severity: Severity;
   count: number;
@@ -37,10 +39,14 @@ export function Dashboard(): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const docs = useDocuments();
+  const clientRules = useClientRules();
   const suggestions = useQuery({
     queryKey: ["suggestions", "all"],
     queryFn: () => api.get<Suggestion[]>("/suggestions"),
   });
+  const ruleNumberByCode = new Map(
+    (clientRules.data ?? []).map((rule) => [rule.code, rule.rule_number]),
+  );
 
   const docList = docs.data ?? [];
   const sugList = suggestions.data ?? [];
@@ -71,7 +77,8 @@ export function Dashboard(): JSX.Element {
     } else {
       errorsByRule.set(ruleCode, {
         ruleCode,
-        message: localizedSuggestionMessage(s, t) || ruleCode,
+        ruleNumber: ruleNumberByCode.get(ruleCode) ?? null,
+        message: localizedSuggestionMessage(s, t) || localizedRuleCode(ruleCode, t),
         severity: s.severity,
         count: 1,
       });
@@ -94,7 +101,12 @@ export function Dashboard(): JSX.Element {
           <div className="kpi-grid">
             <Kpi label={t("dashboard.kpi.pdfs")} value={docList.length} tone="info" />
             <Kpi label={t("dashboard.kpi.open")} value={proposed} tone="warn" />
-            <Kpi label={t("dashboard.kpi.rejected")} value={rejected} tone="danger" />
+            <Kpi
+              label={t("dashboard.kpi.rejected")}
+              value={rejected}
+              tone="danger"
+              onClick={() => navigate("/rejections")}
+            />
           </div>
         )}
       </Card>
@@ -120,11 +132,21 @@ export function Dashboard(): JSX.Element {
                     <div className="row" style={{ alignItems: "flex-start" }}>
                       <div className="grow" style={{ minWidth: 0 }}>
                         <div className="row" style={{ gap: 8 }}>
+                          {error.ruleNumber != null ? (
+                            <Link
+                              className="badge default suggestion-rule-number"
+                              to={`/rules?rule=${encodeURIComponent(error.ruleCode)}`}
+                              title={t("rules.client.openRule", { number: error.ruleNumber })}
+                              aria-label={t("rules.client.openRule", { number: error.ruleNumber })}
+                            >
+                              #{error.ruleNumber}
+                            </Link>
+                          ) : null}
                           <strong
-                            title={error.ruleCode}
+                            title={localizedRuleCode(error.ruleCode, t)}
                             style={{ overflow: "hidden", textOverflow: "ellipsis" }}
                           >
-                            {error.ruleCode}
+                            {localizedRuleCode(error.ruleCode, t)}
                           </strong>
                           <SeverityBadge severity={error.severity} />
                         </div>
@@ -180,17 +202,29 @@ function Kpi({
   label,
   value,
   tone,
+  onClick,
 }: {
   label: string;
   value: number;
   tone: KpiTone;
+  onClick?: () => void;
 }): JSX.Element {
-  return (
-    <div className="kpi">
+  const content = (
+    <>
       <span className="label">{label}</span>
-      <div className={["kpi-value", KPI_TONE[tone]].filter(Boolean).join(" ")}>
+      <span className={["kpi-value", KPI_TONE[tone]].filter(Boolean).join(" ")}>
         {value}
-      </div>
+      </span>
+    </>
+  );
+
+  return onClick ? (
+    <button type="button" className="kpi kpi-clickable" onClick={onClick}>
+      {content}
+    </button>
+  ) : (
+    <div className="kpi">
+      {content}
     </div>
   );
 }

@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 import io
 
+import pytest
 from docx import Document as Docx
 from fastapi.testclient import TestClient
+
+from app.parsers.docx_parser import parse_docx
 
 
 def _docx_bytes(text: str) -> bytes:
@@ -34,13 +38,56 @@ def _set_document_context(client: TestClient, document_id: str) -> None:
             "meta_cmm_number": "79-30-02",
             "meta_first_issue_date": "JUL 1966",
             "meta_revision_number": "Rev. 01",
+            "meta_pnr_number": "1-900-SB",
             "document_language": "en",
         },
     )
     assert response.status_code == 200, response.text
 
 
-def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
+def test_parse_docx_reports_progress_by_block(tmp_path) -> None:
+    doc = Docx()
+    for block_number in range(51):
+        doc.add_paragraph(f"Paragraph {block_number}")
+    path = tmp_path / "progress.docx"
+    doc.save(path)
+    progress: list[tuple[int, int | None]] = []
+
+    parsed = parse_docx(path, progress_cb=lambda current, total: progress.append((current, total)))
+
+    expected = [(count, None) for count in range(25, parsed.block_count + 1, 25)]
+    if parsed.block_count % 25:
+        expected.append((parsed.block_count, None))
+    assert progress == expected
+
+
+@pytest.fixture
+def ste100_vocab_rule_enabled(client: TestClient) -> Iterator[None]:
+    rules = client.get("/api/v1/client-rules").json()
+    vocabulary_rule = next(
+        rule for rule in rules if rule["code"] == "STE_VOCAB_NON_APPROVED"
+    )
+    was_active = vocabulary_rule["active"]
+    if not was_active:
+        enabled = client.patch(
+            "/api/v1/client-rules/STE_VOCAB_NON_APPROVED",
+            json={"active": True},
+        )
+        assert enabled.status_code == 200, enabled.text
+
+    yield
+
+    if not was_active:
+        restored = client.patch(
+            "/api/v1/client-rules/STE_VOCAB_NON_APPROVED",
+            json={"active": False},
+        )
+        assert restored.status_code == 200, restored.text
+
+
+def test_docx_upload_analyze_apply_export(
+    client: TestClient, ste100_vocab_rule_enabled: None
+) -> None:
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool before the check.")
 
@@ -72,6 +119,7 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
         assert stream.status_code == 200
         body = b"".join(stream.iter_bytes())
     assert b"done" in body
+    assert b'"unit": "block"' in body
 
     # 3. La regle STE_VOCAB_NON_APPROVED (term_replace utilize->use) doit sortir,
     #    localisee par target_id (bloc docx), pas par bbox.
@@ -100,7 +148,9 @@ def test_docx_upload_analyze_apply_export(client: TestClient) -> None:
     assert "utilize" not in full
 
 
-def test_docx_undo_restores_original(client: TestClient) -> None:
+def test_docx_undo_restores_original(
+    client: TestClient, ste100_vocab_rule_enabled: None
+) -> None:
     """Phase 2 : l'undo (revert) d'une correction docx restaure le .docx precedent."""
     sv_id = _ste100_version_id(client)
     data = _docx_bytes("You must utilize the special tool.")
@@ -128,7 +178,13 @@ def test_docx_undo_restores_original(client: TestClient) -> None:
     assert "utilize" in "\n".join(p.text for p in restored.paragraphs)
 
 
-def test_docx_upload_selects_working_format_automatically(client: TestClient) -> None:
+def test_docx_upload_selects_working_format_automatically(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import doc_convert
+
+    # Sans moteur de conversion : seuls les exports natifs sont proposes.
+    monkeypatch.setattr(doc_convert, "can_convert_formats", lambda: False)
     data = _docx_bytes("A native Word document")
     up = client.post(
         "/api/v1/documents",

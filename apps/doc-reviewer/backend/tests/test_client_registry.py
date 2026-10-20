@@ -56,6 +56,7 @@ def test_repository_active_client_configuration_loads() -> None:
     configuration = load_active_client_configuration()
 
     assert configuration.selection.bundle == "thales_rules"
+    assert configuration.selection.rule_bundles == ["ste100_rules"]
     assert configuration.manifest.client_code == "THALES"
     assert configuration.manifest.catalogs[0].code == "THALES-CUSTOM"
     assert configuration.manifest.modules["rules"] == "rules.py"
@@ -63,19 +64,34 @@ def test_repository_active_client_configuration_loads() -> None:
     assert configuration.manifest.modules["page_classifier"] == "page_classifier.py"
     assert configuration.manifest.modules["revision_engine"] == "revision_engine.py"
     assert "meta_pnr_number" in configuration.mapping.fields
+    assert configuration.mapping.fields["meta_pnr_number"].required
     assert configuration.manifest_hash
     assert configuration.mapping_hash
     assert configuration.configuration_hash
     assert configuration.bundle_hash == configuration.configuration_hash
-    assert len(configuration.bundle.rules) == 52
+    assert [catalog.code for catalog in configuration.bundle.catalogs] == [
+        "THALES-CUSTOM",
+        "ASD-STE100",
+    ]
+    assert len(configuration.bundle.rules) == 79
+    ste_rule = next(
+        rule for rule in configuration.bundle.rules if rule.code == "STE_NO_MAYBE"
+    )
+    assert ste_rule.bundle_code == "ste100_rules"
+    assert ste_rule.bundle_label == "ASD-STE100"
     assert set(configuration.bundle.operations) == {
         "revision_consistency",
         "shop_verification",
+        "cmm_mapping_consistency",
         "highlights_holder",
         "highlights_document_type",
         "paragraph_justification",
         "highlights_legend_footer",
         "copyright_position",
+        "page_content_position",
+        "document_structure",
+        "vendor_code_list",
+        "pdf_bookmarks",
     }
     assert configuration.bundle.page_classifier is not None
 
@@ -176,6 +192,63 @@ def test_manifest_modules_build_executable_client_bundle(tmp_path: Path) -> None
     assert parsed.marker == "synthetic-classifier"
 
 
+def test_selected_rule_bundle_adds_catalog_and_group_metadata(tmp_path: Path) -> None:
+    _write_bundle(tmp_path, "synthetic_client", select=True)
+    (tmp_path / "active_client.json").write_text(
+        json.dumps(
+            {
+                "bundle": "synthetic_client",
+                "rule_bundles": ["synthetic_rules"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    addon_dir = tmp_path / "synthetic_rules"
+    addon_dir.mkdir()
+    (addon_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "label": "Synthetic rules",
+                "bundle_version": "1.0.0",
+                "catalogs": [{"code": "ADDON", "version": "v1"}],
+                "modules": {"rules": "rules.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (addon_dir / "rules.py").write_text(
+        "from app.checks.client_bundle import ClientRuleDefinition\n"
+        "from app.core.compiled_rules import Check, CompiledRule, RuleTarget\n"
+        "rule = CompiledRule(id='ADDON_RULE', topic='Addon rule', "
+        "execution='deterministic', target=RuleTarget(page='all', region='full_page'), "
+        "checks=[Check(field='text', operator='exists', expected='required')], "
+        "source='standard_rule')\n"
+        "definition = ClientRuleDefinition(compiled_rule=rule, name='Addon rule', "
+        "description='An additive rule.', message='Required text is missing.', "
+        "kind='compiled')\n"
+        "RULE_DEFINITIONS = (definition,)\n"
+        "STANDARD_SPEC = {'code': 'ADDON', 'label': 'Addon', "
+        "'description': 'An additive catalog.', 'versions': {'v1': [rule]}, "
+        "'metadata': {'ADDON_RULE': definition.metadata}}\n",
+        encoding="utf-8",
+    )
+
+    configuration = load_active_client_configuration(tmp_path, environ={})
+
+    assert [catalog.code for catalog in configuration.bundle.catalogs] == [
+        "EXAMPLE",
+        "ADDON",
+    ]
+    assert configuration.bundle.standard_specs["ADDON"]["versions"].keys() == {"v1"}
+    rule = configuration.bundle.rules[-1]
+    assert rule.code == "ADDON_RULE"
+    assert rule.bundle_code == "synthetic_rules"
+    assert rule.bundle_label == "Synthetic rules"
+    assert configuration.bundle.standard_specs["ADDON"][
+        "default_disabled_rule_codes_by_version"
+    ] == {"v1": ["ADDON_RULE"]}
+
+
 def test_declared_rules_module_must_export_definitions(tmp_path: Path) -> None:
     _write_bundle(
         tmp_path,
@@ -226,7 +299,7 @@ def test_repository_sample_client_runs_its_declared_rule() -> None:
     assert results[0].status == "PASS"
 
 
-def test_active_standard_versions_resolves_manifest_catalogs() -> None:
+def test_active_standard_versions_resolves_selected_bundle_catalogs() -> None:
     configuration = load_active_client_configuration()
     db = SessionLocal()
     try:
@@ -235,7 +308,7 @@ def test_active_standard_versions_resolves_manifest_catalogs() -> None:
     finally:
         db.close()
 
-    assert resolved == [("THALES-CUSTOM", "v1")]
+    assert resolved == [("THALES-CUSTOM", "v1"), ("ASD-STE100", "issue 7")]
 
 
 def test_client_bundle_environment_variable_overrides_selection(tmp_path: Path) -> None:

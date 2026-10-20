@@ -15,11 +15,12 @@ from pathlib import Path
 import fitz
 import httpx
 
+# En-tete anti-CSRF exige par le backend sur les requetes de modification.
+CSRF_HEADERS = {"X-Requested-With": "doc-reviewer"}
+
 HERE = Path(__file__).resolve().parent
 STATE_FILE = HERE / "state.json"
 OUTPUT_DIR = HERE / "outputs"
-
-PDF_TEST="C:\\PROJECTS\\TECHDOC\\doc-reviewer-v0.1.0-20260902\\Docs_test\\79-30-02-01_test_erreur.pdf"
 
 
 def base_url() -> str:
@@ -107,7 +108,7 @@ def main() -> None:
     if not args.pdf.is_file():
         raise SystemExit(f"Fichier introuvable: {args.pdf}")
     inspect_pdf(args.pdf, "PDF source")
-    with httpx.Client(timeout=args.timeout) as client:
+    with httpx.Client(timeout=args.timeout, headers=CSRF_HEADERS) as client:
         check_health(client)
         data = upload_pdf(client, args.pdf, args.target)
         save_state(data, args.pdf)

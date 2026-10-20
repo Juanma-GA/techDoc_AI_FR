@@ -194,8 +194,27 @@
         background: var(--ok);
       }
 
-      .chip.validation .dot {
-        background: var(--warning);
+      .chip.upcoming {
+        border-style: dashed;
+        color: var(--muted);
+      }
+
+      .chip.upcoming:hover {
+        transform: none;
+        border-color: var(--line);
+      }
+
+      .chip.upcoming .dot {
+        background: var(--muted);
+      }
+
+      .chip-status {
+        padding-left: 6px;
+        border-left: 1px solid var(--line);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
 
       .chip.external .dot {
@@ -253,6 +272,9 @@
       }
 
       @media (max-width: 760px) {
+        .stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
         .stack {
           grid-template-columns: 1fr;
         }
@@ -295,8 +317,8 @@
             <span class="v" id="stat-active">0</span>
           </div>
           <div class="stat">
-            <span class="k" id="stat-validation-label">À valider</span>
-            <span class="v" id="stat-validation">0</span>
+            <span class="k" id="stat-upcoming-label">À venir</span>
+            <span class="v" id="stat-upcoming">0</span>
           </div>
         </aside>
       </section>
@@ -304,9 +326,9 @@
       <section class="flow" id="flow"></section>
 
       <section class="legend">
-        <span class="legend-item"><span class="legend-dot" style="background:#34d399"></span><span id="legend-active">App active</span></span>
-        <span class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span><span id="legend-validation">App en validation</span></span>
-        <span class="legend-item"><span class="legend-dot" style="background:#9a8bff"></span><span id="legend-external">App externe</span></span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--ok)"></span><span id="legend-active">App active</span></span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--muted)"></span><span id="legend-upcoming">App à venir</span></span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--violet)"></span><span id="legend-external">App externe</span></span>
       </section>
     </main>
 
@@ -331,10 +353,11 @@
           layer3Text: "Cible: automatiser seulement les cas répétitifs à faible risque avec garde-fous.",
           statTotalLabel: "Applications",
           statActiveLabel: "Actives",
-          statValidationLabel: "À valider",
+          statUpcomingLabel: "À venir",
           legendActive: "App active",
-          legendValidation: "App en validation",
+          legendUpcoming: "App à venir",
           legendExternal: "App externe",
+          upcomingState: "À venir",
           stages: [
             { key: "structuring", title: "Analyse, préparation & migration des données", desc: "Transformer des données brutes en documentation structurée.", solution: "Transformer le contenu technique legacy en actifs numériques structurés, recherchables et réutilisables." },
             { key: "translation", title: "Rédaction & traduction technique", desc: "Créer, éditer et traduire documents et illustrations.", solution: "Accélérer les mises à jour multilingues tout en conservant la cohérence terminologique." },
@@ -355,10 +378,11 @@
           layer3Text: "Target: automate only repetitive low-risk cases with guardrails.",
           statTotalLabel: "Applications",
           statActiveLabel: "Active",
-          statValidationLabel: "To validate",
+          statUpcomingLabel: "Coming soon",
           legendActive: "Active app",
-          legendValidation: "Validation app",
+          legendUpcoming: "Coming soon app",
           legendExternal: "External app",
+          upcomingState: "Coming soon",
           stages: [
             { key: "structuring", title: "Data analysis, preparation & migration", desc: "Turn raw data into structured technical documentation.", solution: "Transform legacy technical content into structured, searchable and reusable digital assets." },
             { key: "translation", title: "Authoring & technical translation", desc: "Create, edit and translate documents and illustrations.", solution: "Accelerate multilingual documentation updates while maintaining terminology consistency." },
@@ -378,7 +402,6 @@
         "imagebot-ai-processing-image": "illustration",
         "xml-proofreader": "validation",
         "doc-reviewer": "validation",
-        "brdp-manager": "validation",
         "doc-writer": "translation"
       };
 
@@ -395,9 +418,9 @@
         document.getElementById("layer-3-text").textContent = t.layer3Text;
         document.getElementById("stat-total-label").textContent = t.statTotalLabel;
         document.getElementById("stat-active-label").textContent = t.statActiveLabel;
-        document.getElementById("stat-validation-label").textContent = t.statValidationLabel;
+        document.getElementById("stat-upcoming-label").textContent = t.statUpcomingLabel;
         document.getElementById("legend-active").textContent = t.legendActive;
-        document.getElementById("legend-validation").textContent = t.legendValidation;
+        document.getElementById("legend-upcoming").textContent = t.legendUpcoming;
         document.getElementById("legend-external").textContent = t.legendExternal;
       }
 
@@ -456,25 +479,37 @@
 
           const stageApps = grouped[stage.key] || [];
           stageApps.forEach((app) => {
-            const a = document.createElement("a");
-            a.className = "chip";
+            const isPlanned = app.status === "planned";
+            const isUpcoming = isPlanned || app.status === "validation";
+            const chip = document.createElement(isPlanned ? "span" : "a");
+            chip.className = "chip";
             const isExternal = typeof app.url === "string" && /^https?:\/\//i.test(app.url);
-            const isValidation = app.status === "validation";
-            if (isExternal) a.classList.add("external");
-            if (isValidation) a.classList.add("validation");
-            a.href = appHref(app);
-            if (isExternal) {
-              a.target = "_blank";
-              a.rel = "noopener noreferrer";
+            if (isExternal) chip.classList.add("external");
+            if (isUpcoming) {
+              chip.classList.add("upcoming");
+              chip.title = lang === "fr" ? "Application à venir" : "Coming soon";
+            }
+            if (!isPlanned) {
+              chip.href = appHref(app);
+              if (isExternal) {
+                chip.target = "_blank";
+                chip.rel = "noopener noreferrer";
+              }
             }
 
             const dot = document.createElement("span");
             dot.className = "dot";
             const txt = document.createElement("span");
             txt.textContent = app.name || app.slug || "App";
-            a.appendChild(dot);
-            a.appendChild(txt);
-            chips.appendChild(a);
+            chip.appendChild(dot);
+            chip.appendChild(txt);
+            if (isUpcoming) {
+              const status = document.createElement("span");
+              status.className = "chip-status";
+              status.textContent = t.upcomingState;
+              chip.appendChild(status);
+            }
+            chips.appendChild(chip);
           });
           if (!stageApps.length && stage.empty) {
             const empty = document.createElement("span");
@@ -511,11 +546,13 @@
 
         const total = apps.length;
         const validation = apps.filter((a) => a.status === "validation").length;
-        const active = total - validation;
+        const planned = apps.filter((a) => a.status === "planned").length;
+        const upcoming = validation + planned;
+        const active = total - upcoming;
 
         document.getElementById("stat-total").textContent = String(total);
         document.getElementById("stat-active").textContent = String(active);
-        document.getElementById("stat-validation").textContent = String(validation);
+        document.getElementById("stat-upcoming").textContent = String(upcoming);
 
         renderFlow(apps, currentLang);
       }

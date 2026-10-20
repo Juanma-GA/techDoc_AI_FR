@@ -169,7 +169,7 @@ def test_layout_rules_are_disabled_by_default(monkeypatch) -> None:
         mat_v = _get_version(session, "MAT10000")
         monkeypatch.setattr(
             "app.core.rules_engine.layout_checks.run",
-            lambda path: calls.append(path) or [],
+            lambda path, **_kwargs: calls.append(path) or [],
         )
 
         run_all(_parsed("Texte neutre."), _doc("fr"), session, [mat_v], src_path="sample.pdf")
@@ -186,7 +186,7 @@ def test_layout_rules_require_explicit_opt_in(monkeypatch) -> None:
         mat_v = _get_version(session, "MAT10000")
         monkeypatch.setattr(
             "app.core.rules_engine.layout_checks.run",
-            lambda path: calls.append(path) or [],
+            lambda path, **_kwargs: calls.append(path) or [],
         )
 
         run_all(
@@ -199,6 +199,33 @@ def test_layout_rules_require_explicit_opt_in(monkeypatch) -> None:
         )
 
         assert calls == ["sample.pdf"]
+    finally:
+        session.close()
+
+
+def test_chapter_parity_is_transverse_and_not_gated_by_layout_toggle() -> None:
+    session = SessionLocal()
+    try:
+        page_texts = (
+            "Cover page",
+            "CHAPTER 1: INTRODUCTION",
+            "Chapter content",
+            "End matter",
+        )
+        pages = [
+            ParsedPage(page=page_number, text=text)
+            for page_number, text in enumerate(page_texts, start=1)
+        ]
+        parsed = ParsedPdf(
+            page_count=len(pages),
+            pages=pages,
+            full_text="\n".join(page_texts),
+            is_signed=False,
+        )
+
+        findings = run_all(parsed, _doc(), session, None, layout_enabled=False)
+
+        assert "LAYOUT_CHAPTER_PARITY" in {finding.rule_code for finding in findings}
     finally:
         session.close()
 
@@ -265,11 +292,11 @@ def test_mistral_read_timeout_is_retried_once(monkeypatch) -> None:
         monkeypatch.setattr(llm_suggester, "get_llm_enabled", lambda _db: True)
         monkeypatch.setattr(
             llm_suggester,
-            "get_effective",
+            "get_endpoint",
             lambda _db: {
                 "api_key": "test-key",
                 "chat_model": "test-model",
-                "base_url": "https://example.invalid",
+                "base_url": "https://api.mistral.ai",
             },
         )
         monkeypatch.setattr(llm_suggester.httpx, "Client", _Client)
@@ -306,7 +333,7 @@ def test_ai_scan_continues_after_failed_page_group(monkeypatch) -> None:
 
         assert calls == 2
         assert [item.page for item in results] == [2]
-        assert warnings == ["Scan checklist/IA partiellement indisponible (LLM_REPHRASE_FAILED) : ReadTimeout"]
+        assert warnings == ["Scan IA partiellement indisponible : ReadTimeout"]
     finally:
         session.close()
 

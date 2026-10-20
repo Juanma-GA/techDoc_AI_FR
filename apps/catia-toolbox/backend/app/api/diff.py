@@ -9,7 +9,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -33,6 +33,12 @@ def _require_import(db: Session, import_id: uuid.UUID) -> StructureImport:
 
 @router.post("/diff", response_model=DiffRunOut)
 def create_diff(body: DiffIn, db: Session = Depends(get_db)) -> DiffRun:
+    if body.base_import_id == body.other_import_id:
+        raise AppError(
+            "COMPARE_SAME_IMPORT",
+            "Selectionnez deux imports differents.",
+            status_code=400,
+        )
     _require_import(db, body.base_import_id)
     _require_import(db, body.other_import_id)
     base_nodes, _ = load_parsed_nodes(db, body.base_import_id)
@@ -58,7 +64,9 @@ def create_diff(body: DiffIn, db: Session = Depends(get_db)) -> DiffRun:
 def list_diffs(import_id: uuid.UUID, db: Session = Depends(get_db)) -> list[DiffRun]:
     return list(
         db.scalars(
-            select(DiffRun).where(DiffRun.base_import_id == import_id).order_by(DiffRun.created_at.desc())
+            select(DiffRun)
+            .where(or_(DiffRun.base_import_id == import_id, DiffRun.other_import_id == import_id))
+            .order_by(DiffRun.created_at.desc())
         )
     )
 

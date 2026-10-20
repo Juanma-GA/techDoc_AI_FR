@@ -56,14 +56,6 @@
   --info: var(--color-semantic-info);
 }
 
-.theme-toggle { display: inline-flex; align-items: center; justify-content: center; margin-left: auto; width: 28px; height: 28px; padding: 0; border: none; background: transparent; color: var(--fg-dim); border-radius: 6px; cursor: pointer; transition: background 0.15s, color 0.15s; }
-.theme-toggle:hover { background: var(--card-hover); color: var(--fg); }
-.theme-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
-.theme-toggle-sun { display: none; }
-.theme-toggle-moon { display: block; }
-.dark .theme-toggle-sun { display: block; }
-.dark .theme-toggle-moon { display: none; }
-
 .pr *, .pr *::before, .pr *::after { box-sizing: border-box; }
 .pr { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; min-height: 100dvh; }
 .pr a { color: var(--brand-light); text-decoration: none; }
@@ -94,6 +86,7 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .banner { background: var(--card); border: 1px solid var(--border-bright); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; color: var(--fg-dim); }
 .banner strong { color: var(--fg); }
 .banner.warn { border-color: var(--warning); color: var(--warning); }
+.incomplete-checks-summary { cursor: pointer; }
 .banner code { font-family: "JetBrains Mono", monospace; background: var(--bg-2); padding: 1px 6px; border-radius: 4px; }
 
 .card { min-width: 0; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: clamp(14px, 2vw, 20px); box-shadow: var(--shadow-card); margin-bottom: 16px; }
@@ -112,7 +105,10 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 12px; }
 .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
-.kpi-value { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
+.kpi-clickable { appearance: none; width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.kpi-clickable:hover { background: var(--card-hover); border-color: var(--border-bright); }
+.kpi-clickable:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--brand-light); }
+.kpi-value { display: block; font-family: "JetBrains Mono", monospace; font-weight: 700; font-size: 1.4rem; margin-top: 4px; }
 .kpi-value.ok { color: var(--success); }
 .kpi-value.warn { color: var(--warning); }
 .kpi-value.err { color: var(--danger); }
@@ -146,6 +142,8 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .btn.danger:hover { opacity: 0.85; }
 .btn.small { padding: 4px 10px; font-size: 0.8rem; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.btn.ghost[aria-disabled="true"]:hover { background: transparent; color: var(--fg-dim); }
 
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--brand-light); border-radius: 50%; animation: pr-spin 0.8s linear infinite; vertical-align: -2px; }
 @keyframes pr-spin { to { transform: rotate(360deg); } }
@@ -268,6 +266,13 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .reviewer-toolbar-actions .analysis-page-range { flex: 1 1 0; flex-wrap: nowrap; }
 .reviewer-toolbar-actions .analysis-page-range-select { flex: 1 1 180px; width: 180px; }
 .reviewer-toolbar-actions .export-selector { flex: 0 0 auto; }
+.reviewer-toolbar-actions .analysis-page-range-select,
+.reviewer-toolbar-actions .analysis-page-range-input,
+.reviewer-toolbar-actions .analysis-page-range > .btn,
+.reviewer-toolbar-actions .export-menu > .btn {
+  box-sizing: border-box; height: 36px; min-height: 36px; padding: 0 10px;
+  border-radius: 6px; font-size: 0.8rem; font-weight: 500; line-height: 1.25;
+}
 .reviewer-canvas { flex: 1; overflow: auto; padding: 16px; display: flex; justify-content: center; }
 .reviewer-canvas-stack { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px; }
 .viewer-surface { width: 100%; min-width: 0; text-align: center; }
@@ -313,9 +318,10 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .pdf-highlight { position: absolute; box-sizing: border-box; min-width: 0; min-height: 0; margin: 0; padding: 0; line-height: 0; appearance: none; border: 2px solid var(--warning); background: rgba(217, 119, 6, 0.12); border-radius: 2px; cursor: pointer; transition: background 0.12s; }
 .pdf-highlight:hover, .pdf-highlight.active { background: rgba(37, 99, 235, 0.2); border-color: var(--brand); }
 .pdf-highlight.error { border-color: var(--danger); background: rgba(220, 38, 38, 0.12); }
+.pdf-highlight.error.active { border-color: var(--brand); background: rgba(37, 99, 235, 0.2); }
 
 /* Item de suggestion dans le panneau */
-.suggestion { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-2); transition: border-color 0.12s, box-shadow 0.12s, background 0.12s; }
+.suggestion { box-sizing: border-box; width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-2); transition: border-color 0.12s, box-shadow 0.12s, background 0.12s; }
 .suggestion:hover { border-color: var(--border-bright); }
 
 @media (max-width: 720px) {
@@ -410,27 +416,32 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .suggestion-actions { display: flex; gap: 6px; margin-top: 8px; }
 
 /* Groupe d'occurrences par regle, depliable. */
-.suggestion-bucket { display: flex; flex-direction: column; gap: 8px; }
-.suggestion-bucket.expanded {
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card-hover);
-}
+.suggestion-bucket { display: flex; flex: 0 0 auto; flex-direction: column; gap: 8px; width: 100%; min-width: 0; }
+.suggestion-bucket.expanded { border-radius: 8px; background: var(--card-hover); box-shadow: 0 0 0 4px var(--card-hover); }
 .suggestion-bucket-head {
-  display: flex; align-items: stretch; gap: 8px; width: 100%;
-  border: 1px solid var(--border); border-radius: 8px; padding: 0 10px;
+  box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0;
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
   background: var(--bg-2); color: var(--fg); text-align: left;
   transition: border-color 0.12s, background 0.12s;
 }
 .suggestion-bucket-head:hover { border-color: var(--border-bright); background: var(--card-hover); }
 .suggestion-bucket-toggle {
   display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
-  border: 0; padding: 8px 0; background: transparent; color: inherit;
+  border: 0; padding: 4px 0; background: transparent; color: inherit;
   cursor: pointer; text-align: left;
 }
-.suggestion-bucket-toggle .suggestion-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.suggestion-bucket .suggestion { margin-left: 18px; }
+.suggestion-bucket-toggle > svg { flex-shrink: 0; }
+.suggestion-bucket-toggle .suggestion-loc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-bucket-rule-number,
+.suggestion-bucket-count { flex-shrink: 0; font-family: "JetBrains Mono", monospace; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.suggestion-bucket-rule-number { text-decoration: none; }
+.suggestion-bucket-rule-number:hover { color: var(--brand-light); text-decoration: underline; }
+.suggestion-bucket-count { font-variant-numeric: tabular-nums; }
+.suggestion-bucket-reject { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 28px; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--danger); cursor: pointer; }
+.suggestion-bucket-reject:hover { background: var(--danger); color: white; }
+.suggestion-bucket-toggle:focus-visible,
+.suggestion-bucket-rule-number:focus-visible,
+.suggestion-bucket-reject:focus-visible { outline: 2px solid var(--brand-light); outline-offset: 2px; }
 .input.small { padding: 3px 8px; font-size: 0.8rem; width: auto; }
 
 .export-menu { position: relative; display: inline-flex; }
@@ -492,3 +503,12 @@ table.tbl tr:hover td { background: var(--bg-2); }
 .rules-table td input, .rules-table td textarea, .rules-table td select { width: 100%; }
 .rules-table textarea { min-height: 38px; resize: vertical; font-family: inherit; }
 .rules-table tr.row-selected { background: var(--card-hover); }
+.client-rules-table { table-layout: fixed; min-width: 0; }
+.client-rules-table th:first-child, .client-rules-table td:first-child { width: 48px; }
+.client-rules-table .rule-name-cell { min-width: 0; }
+.client-rule-summary { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.client-rule-summary strong { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.client-rule-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.client-rule-description { width: 100%; max-width: 72ch; margin: 8px 0 4px; white-space: normal; overflow-wrap: anywhere; }
+a.suggestion-rule-number { text-decoration: none; }
+a.suggestion-rule-number:hover { text-decoration: underline; }

@@ -6,19 +6,21 @@ versions) are fully editable; they can be cloned from a built-in via
 the `POST /standards/{id}/versions` endpoint with a copied `catalog`.
 """
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from pydantic import BaseModel
-
+from app.checks.mode_registry import (
+    get_request_client_configuration,
+    visible_client_standards,
+)
 from app.core.errors import AppError
+from app.core.rules_engine import validate_rule_pattern
 from app.db.models import Rule, Standard, StandardVersion
 from app.db.session import get_db
 from app.schemas import (
@@ -32,7 +34,6 @@ from app.schemas import (
     StandardVersionIn,
     StandardVersionOut,
 )
-from app.core.rules_engine import validate_rule_pattern
 
 
 class RuleToggleIn(BaseModel):
@@ -44,13 +45,16 @@ router = APIRouter(tags=["standards"])
 
 
 @router.get("/standards", response_model=list[StandardOut])
-def list_standards(db: Session = Depends(get_db)) -> list[Standard]:
+def list_standards(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> list[Standard]:
     stmt = (
         select(Standard)
         .options(selectinload(Standard.versions))
         .order_by(Standard.builtin.desc(), Standard.code)
     )
-    return list(db.scalars(stmt))
+    return visible_client_standards(request, db, db.scalars(stmt))
 
 
 @router.post("/standards", response_model=StandardOut, status_code=201)
@@ -303,7 +307,7 @@ def reset_catalog_rule(
     factory_rule = None
     factory_specs = [
         *BUILTIN_STANDARDS,
-        *request.app.state.client_configuration.bundle.standard_specs.values(),
+        *get_request_client_configuration(request, db).bundle.standard_specs.values(),
     ]
     for spec in factory_specs:
         if spec["code"] != std.code:

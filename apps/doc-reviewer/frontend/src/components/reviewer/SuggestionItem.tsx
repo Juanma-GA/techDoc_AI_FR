@@ -1,15 +1,21 @@
 import { Check, Pencil, Undo2, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 import { DiffInline } from "../DiffInline";
 import { SeverityBadge } from "../SeverityBadge";
 import { UnitChip } from "../UnitChip";
-import { localizedSuggestionMessage } from "../../lib/suggestionText";
+import {
+  isAiGeneratedSuggestion,
+  localizedRuleCode,
+  localizedSuggestionMessage,
+} from "../../lib/suggestionText";
 import type { Suggestion } from "../../types/domain";
 
 type Props = {
   suggestion: Suggestion;
+  ruleNumber: number | null;
   isSelected: boolean;
   onSelect: () => void;
   onAccept: () => void;
@@ -24,6 +30,7 @@ type Props = {
 
 export function SuggestionItem({
   suggestion,
+  ruleNumber,
   isSelected,
   onSelect,
   onAccept,
@@ -35,6 +42,14 @@ export function SuggestionItem({
 }: Props) {
   const { t } = useTranslation();
   const message = localizedSuggestionMessage(suggestion, t);
+  const ruleCodeLabel = localizedRuleCode(suggestion.rule_code, t);
+  const sourceKind = isAiGeneratedSuggestion(
+    suggestion.source_kind,
+    suggestion.rule_code,
+    suggestion.proposed_text,
+  )
+    ? "ai"
+    : suggestion.source_kind;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(suggestion.proposed_text);
   const [feedbackDraft, setFeedbackDraft] = useState(suggestion.feedback ?? "");
@@ -55,10 +70,21 @@ export function SuggestionItem({
         <SeverityBadge severity={suggestion.severity} />
         {suggestion.rule_kind === "units" ? <UnitChip /> : null}
         <span className="suggestion-loc">
-          p.{suggestion.page} · {suggestion.rule_code}
+          p.{suggestion.page} · {ruleCodeLabel}
         </span>
-        <span className="badge default" title={t(`source.${suggestion.source_kind}`)}>
-          {t(`source.${suggestion.source_kind}`)}
+        {ruleNumber != null ? (
+          <Link
+            className="badge default suggestion-rule-number"
+            to={`/rules?rule=${encodeURIComponent(suggestion.rule_code)}`}
+            title={t("rules.client.openRule", { number: ruleNumber })}
+            aria-label={t("rules.client.openRule", { number: ruleNumber })}
+            onClick={(event) => event.stopPropagation()}
+          >
+            #{ruleNumber}
+          </Link>
+        ) : null}
+        <span className="badge default" title={t(`reviewer.source.${sourceKind}`)}>
+          {t(`reviewer.source.${sourceKind}`)}
         </span>
         {isApplied ? (
           <span className="badge ok" style={{ marginLeft: "auto" }}>

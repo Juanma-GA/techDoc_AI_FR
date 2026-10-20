@@ -17,7 +17,7 @@ export default defineConfig(({ command }) => ({
     host: "127.0.0.1",
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8005",
+      "/api": "http://127.0.0.1:8004",
     },
   },
 }));

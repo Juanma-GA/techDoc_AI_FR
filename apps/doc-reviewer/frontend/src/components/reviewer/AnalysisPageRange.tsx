@@ -5,14 +5,18 @@ import { useTranslation } from "react-i18next";
 type Props = {
   pageCount: number;
   running: boolean;
-  onStart: (range?: { firstPage: number; lastPage: number }) => void;
+  onStart: (scope: {
+    modifiedOnly: boolean;
+    firstPage?: number;
+    lastPage?: number;
+  }) => void;
   blocked?: boolean;
   blockReason?: string;
 };
 
 export function AnalysisPageRange({ pageCount, running, onStart, blocked = false, blockReason }: Props) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<"all" | "range">("all");
+  const [mode, setMode] = useState<"modified" | "all" | "range">("modified");
   const [firstPage, setFirstPage] = useState(1);
   const [lastPage, setLastPage] = useState(Math.max(pageCount, 1));
 
@@ -32,9 +36,10 @@ export function AnalysisPageRange({ pageCount, running, onStart, blocked = false
       <select
         className="input analysis-page-range-select"
         value={mode}
-        onChange={(event) => setMode(event.target.value as "all" | "range")}
+        onChange={(event) => setMode(event.target.value as "modified" | "all" | "range")}
         aria-label={t("reviewer.pageScope.label")}
       >
+        <option value="modified">{t("reviewer.pageScope.modified")}</option>
         <option value="all">{t("reviewer.pageScope.all")}</option>
         <option value="range">{t("reviewer.pageScope.range")}</option>
       </select>
@@ -67,7 +72,13 @@ export function AnalysisPageRange({ pageCount, running, onStart, blocked = false
 
       <button
         type="button"
-        onClick={() => onStart(mode === "range" ? { firstPage, lastPage } : undefined)}
+        onClick={() =>
+          onStart(
+            mode === "range"
+              ? { modifiedOnly: false, firstPage, lastPage }
+              : { modifiedOnly: mode === "modified" },
+          )
+        }
         disabled={blocked || running || pageCount < 1 || (mode === "range" && !rangeValid)}
         title={blocked ? blockReason : undefined}
         className="btn secondary small"

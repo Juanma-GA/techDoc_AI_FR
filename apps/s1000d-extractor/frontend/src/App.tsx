@@ -1,8 +1,8 @@
+import { AppShell, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { Data } from "./routes/Data";
 import { Migration } from "./routes/Migration";
 import { Settings } from "./routes/Settings";
@@ -24,57 +24,38 @@ export function App() {
   const showMigration = location.pathname === "/migration";
 
   return (
-    <div className="dw">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <span className="brand">S1000D Extractor</span>
-            <span className="label">v{t("app.version")}</span>
-            <ThemeToggleButton />
-          </div>
-
-          <LlmBadge />
-
-          <nav>
-            {navItems.map(({ to, labelKey }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  isActive ? "nav-item active" : "nav-item"
-                }
-              >
-                {t(labelKey)}
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {LANGS.map((lng) => (
-              <button
-                key={lng}
-                type="button"
-                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
-                onClick={() => void i18n.changeLanguage(lng)}
-              >
-                {lng.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main>
-          <div hidden={!showMigration}>
-            <Migration />
-          </div>
-          <Routes>
-            <Route path="/" element={<Navigate to="/migration" replace />} />
-            <Route path="/data" element={<Data />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/versioning" element={<Versioning />} />
-          </Routes>
-        </main>
+    <AppShell
+      className="dw"
+      title={t("app.title")}
+      brandTitle={t("app.description")}
+      version={t("app.version")}
+      llmStatus={<LlmBadge />}
+      navigation={navItems.map(({ to, labelKey }) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) => sidebarNavItemClass(isActive)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={LANGS}
+          currentLanguage={currentLang}
+          onLanguageChange={(language) => void i18n.changeLanguage(language)}
+        />
+      }
+    >
+      <div hidden={!showMigration}>
+        <Migration />
       </div>
-    </div>
+      <Routes>
+        <Route path="/" element={<Navigate to="/migration" replace />} />
+        <Route path="/data" element={<Data />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/versioning" element={<Versioning />} />
+      </Routes>
+    </AppShell>
   );
 }

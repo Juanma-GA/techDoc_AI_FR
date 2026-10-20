@@ -19,6 +19,10 @@ The assignments below are the target defaults. Current launcher differences are 
 | `s1000d-extractor` | Active POC | 8006 | To normalize |
 | `brdp-manager` | Active POC | 8007 | To normalize |
 | `xml-proofreader` | Active POC | 8008 | To normalize |
+| `ecm-automation` | Active POC | 8009 | Local ECM tracker workflow |
+| `image-processor` | Active POC | 8010 | PaddleOCR API 8010; internal LaMa service defaults to 8011 |
+| `flowchart-generator` | Active POC | 8010 | Documented |
+| `pdf-toolkit` | Go/Gin web app, optional Tauri | 8085 | Shared UI, no Python runtime |
 
 ## Known Baseline Deviations
 

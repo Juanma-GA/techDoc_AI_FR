@@ -11,6 +11,7 @@ from app.checks.raw import RawSuggestion
 from app.core.compiled_rules import CompiledRule, RuleResult
 from app.core.llm_suggester import call_chat
 from app.core.logging import get_logger
+from app.core.regex_safety import UserRegexPatternError
 from app.parsers.docx_parser import Block
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 from app.core.compiled_rule_runtime import (
@@ -18,11 +19,9 @@ from app.core.compiled_rule_runtime import (
     _TextTarget,
     scope_targets as _scope_targets,
     evidence as _evidence,
-    document_metadata as _document_metadata,
     page_span_ranges,
 )
 
-_LOG_TEXT_LIMIT = 800
 _logger = get_logger(__name__)
 
 
@@ -33,6 +32,8 @@ def execute_pdf_rules(
     document: Any | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    warnings: list[str] | None = None,
+    previous_revision_pdf: ParsedPdf | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
@@ -53,8 +54,10 @@ def execute_pdf_rules(
         db=db,
         document=document,
         parsed_pdf=parsed,
+        previous_revision_pdf=previous_revision_pdf,
         client_operations=client_operations,
         client_entities=client_entities,
+        warnings=warnings,
     )
 
 
@@ -65,6 +68,7 @@ def execute_docx_rules(
     document: Any | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     targets = [
         _TextTarget(
@@ -85,6 +89,7 @@ def execute_docx_rules(
         document=document,
         client_operations=client_operations,
         client_entities=client_entities,
+        warnings=warnings,
     )
 
 
@@ -98,8 +103,10 @@ def _execute(
     db: Session | None = None,
     document: Any | None = None,
     parsed_pdf: ParsedPdf | None = None,
+    previous_revision_pdf: ParsedPdf | None = None,
     client_operations: Mapping[str, Any] | None = None,
     client_entities: Mapping[str, str] | None = None,
+    warnings: list[str] | None = None,
 ) -> tuple[list[RuleResult], list[RawSuggestion]]:
     from app.core.compiled_rule_operators import condition_met, evaluate_rule
 
@@ -113,35 +120,36 @@ def _execute(
         document=document,
         db=db,
         parsed_pdf=parsed_pdf,
+        previous_revision_pdf=previous_revision_pdf,
         client_operations=client_operations,
         client_entities=client_entities,
     )
-    metadata = _document_metadata(document)
     _logger.info(
         "compiled_rules_execution_started",
         rule_count=len(rules),
         target_count=len(targets),
         pages=[target.page for target in targets],
-        document_metadata=metadata,
         is_docx=is_docx,
     )
     for rule in rules:
         _logger.info(
             "compiled_rule_started",
             rule_id=rule.id,
-            topic=rule.topic,
             execution=rule.execution,
-            target=rule.target.model_dump(mode="json"),
-            checks=[check.model_dump(mode="json") for check in rule.checks],
-            document_metadata=metadata,
         )
-        if rule.only_if is not None and not condition_met(rule.only_if, ctx):
+        try:
+            condition_matches = rule.only_if is None or condition_met(rule.only_if, ctx)
+        except (TimeoutError, UserRegexPatternError):
+            result = _inconclusive_result(rule, targets, is_docx, pdf_pages)
+            results.append(result)
+            _logger.warning("compiled_rule_inconclusive", rule_id=rule.id, reason="regex_timeout")
+            _log_rule_finished(rule.id, result, 0)
+            continue
+        if not condition_matches:
             _logger.info(
                 "compiled_rule_skipped",
                 rule_id=rule.id,
                 reason="only_if_not_met",
-                condition=rule.only_if.model_dump(mode="json"),
-                document_metadata=metadata,
             )
             continue
         scoped = _scope_targets(
@@ -154,15 +162,13 @@ def _execute(
         _logger.info(
             "compiled_rule_scoped",
             rule_id=rule.id,
-            target=rule.target.model_dump(mode="json"),
             target_count=len(scoped or []),
-            targets=[_target_log_payload(target) for target in scoped or []],
         )
         if rule.execution == "semantic":
             from app.core.compiled_rule_semantic import execute_semantic
 
             result, semantic_raws = execute_semantic(
-                rule, scoped or [], db, is_docx, pdf_pages, document
+                rule, scoped or [], db, is_docx, pdf_pages, document, warnings=warnings
             )
             results.append(result)
             raws.extend(semantic_raws)
@@ -205,31 +211,47 @@ def _execute(
             results.append(result)
             _log_rule_finished(rule.id, result, 0)
             continue
-        result = evaluate_rule(rule, scoped, is_docx, pdf_pages, ctx)
+        try:
+            result = evaluate_rule(rule, scoped, is_docx, pdf_pages, ctx)
+        except (TimeoutError, UserRegexPatternError):
+            result = _inconclusive_result(rule, scoped, is_docx, pdf_pages)
+            results.append(result)
+            _logger.warning("compiled_rule_inconclusive", rule_id=rule.id, reason="regex_timeout")
+            _log_rule_finished(rule.id, result, 0)
+            continue
         results.append(result)
         rule_raws: list[RawSuggestion] = []
         if result.status == "FAIL" and result.evidence is not None:
             from app.core.compiled_rule_suggestions import deterministic_suggestions
 
-            rule_raws = deterministic_suggestions(rule, scoped, result, pdf_pages, ctx)
+            try:
+                rule_raws = deterministic_suggestions(rule, scoped, result, pdf_pages, ctx)
+            except (TimeoutError, UserRegexPatternError):
+                result = _inconclusive_result(rule, scoped, is_docx, pdf_pages)
+                results[-1] = result
+                _logger.warning(
+                    "compiled_rule_inconclusive",
+                    rule_id=rule.id,
+                    reason="regex_timeout",
+                )
+                _log_rule_finished(rule.id, result, 0)
+                continue
             raws.extend(rule_raws)
         _log_rule_finished(rule.id, result, len(rule_raws))
     return results, raws
 
 
-def _short_text(value: str, limit: int = _LOG_TEXT_LIMIT) -> str:
-    value = value.replace("\n", " ").strip()
-    return value if len(value) <= limit else f"{value[:limit - 1]}..."
-
-
-def _target_log_payload(target: _TextTarget) -> dict[str, object]:
-    return {
-        "page": target.page,
-        "raw_page": target.raw_page,
-        "target_id": target.target_id,
-        "text": _short_text(target.text),
-        "page_type": target.page_type,
-    }
+def _inconclusive_result(
+    rule: CompiledRule,
+    targets: list[_TextTarget],
+    is_docx: bool,
+    pdf_pages: list[ParsedPage] | None,
+) -> RuleResult:
+    return RuleResult(
+        rule_id=rule.id,
+        status="INCONCLUSIVE",
+        evidence=_evidence(targets[0] if targets else None, None, None, is_docx, pdf_pages),
+    )
 
 
 def _log_rule_finished(rule_id: str, result: RuleResult, raw_count: int) -> None:
@@ -238,7 +260,5 @@ def _log_rule_finished(rule_id: str, result: RuleResult, raw_count: int) -> None
         rule_id=rule_id,
         status=result.status,
         evidence_page=result.evidence.page if result.evidence else None,
-        observed=_short_text(result.evidence.observed_value or "") if result.evidence else None,
-        expected=_short_text(result.evidence.expected_value or "") if result.evidence else None,
         suggestion_count=raw_count,
     )

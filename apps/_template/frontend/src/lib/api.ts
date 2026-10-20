@@ -37,6 +37,7 @@ export type SettingsDto = {
   chat_model: string;
   embed_model: string;
   llm_enabled: boolean;
+  demo_enabled: boolean;
   llm_tested: boolean;
 };
 export type SettingsInput = {
@@ -45,10 +46,26 @@ export type SettingsInput = {
   chat_model?: string;
   embed_model?: string;
   llm_enabled?: boolean;
+  demo_enabled?: boolean;
 };
 export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
 
+export type AdminStatsDto = {
+  documents: number;
+  chunks: number;
+  sessions: number;
+  messages: number;
+  total_size_bytes: number;
+};
+
+export type AdminResetDto = { scope: string; deleted: Record<string, number> };
+
 export const healthApi = { read: () => api<HealthDto>("/health") };
+
+export const adminApi = {
+  stats: () => api<AdminStatsDto>("/admin/stats"),
+  resetAll: () => api<AdminResetDto>("/admin/reset/all", { method: "POST" }),
+};
 
 export const settingsApi = {
   read: () => api<SettingsDto>("/settings"),

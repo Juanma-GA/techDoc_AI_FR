@@ -10,6 +10,7 @@ from typing import Any, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.compiled_rules import CompiledRule
+from app.core.regex_safety import UserRegexPatternError, compile_user_regex
 
 
 class _StrictModel(BaseModel):
@@ -24,6 +25,8 @@ class ClientMappingField(_StrictModel):
     max_length: int | None = Field(default=None, gt=0)
     max_items: int | None = Field(default=None, gt=0)
     allowed_values: list[str] | None = None
+    pattern: str | None = None
+    format_hint: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_field_definition(self) -> ClientMappingField:
@@ -38,6 +41,13 @@ class ClientMappingField(_StrictModel):
             raise ValueError("max_length is only valid for string and enum fields")
         if self.max_items is not None and self.type != "string_list":
             raise ValueError("max_items is only valid for string_list fields")
+        if self.pattern is not None:
+            if self.type not in {"string", "enum", "string_list"}:
+                raise ValueError("pattern is only valid for string-like fields")
+            try:
+                compile_user_regex(self.pattern)
+            except UserRegexPatternError as exc:
+                raise ValueError(f"invalid field pattern: {exc.message}") from exc
 
         if self.default is None:
             return self
@@ -79,9 +89,9 @@ class ClientMapping(_StrictModel):
     def validate_entities(self) -> ClientMapping:
         for name, pattern in self.entities.items():
             try:
-                compiled = re.compile(pattern)
-            except re.error as exc:
-                raise ValueError(f"invalid entity pattern for {name}: {exc.msg}") from exc
+                compiled = compile_user_regex(pattern)
+            except UserRegexPatternError as exc:
+                raise ValueError(f"invalid entity pattern for {name}: {exc.message}") from exc
             if compiled.groups == 0:
                 raise ValueError(f"entity pattern for {name} must define a capture group")
         return self
@@ -94,6 +104,7 @@ class ClientCatalog(_StrictModel):
 
 class OperationResult(_StrictModel):
     status: Literal["PASS", "FAIL", "INCONCLUSIVE"]
+    severity: Literal["info", "warning", "error"] | None = None
     observed: str | None = None
     expected: str | None = None
     message: str | None = None
@@ -101,6 +112,7 @@ class OperationResult(_StrictModel):
     proposed: str | None = None
     span: tuple[int, int] | None = None
     page: int | None = Field(default=None, gt=0)
+    inconclusive_pages: list[int] = Field(default_factory=list)
     bbox: tuple[float, float, float, float] | None = None
     bbox_strategy: Literal[
         "text",
@@ -124,6 +136,8 @@ class ClientRuleDefinition(_StrictModel):
     kind: str = Field(min_length=1, max_length=80)
     presentation_severity: Literal["info", "warning", "error"] | None = None
     translations: dict[str, dict[str, str]] = Field(default_factory=dict)
+    bundle_code: str = Field(default="client", min_length=1, max_length=80)
+    bundle_label: str = Field(default="Client rules", min_length=1, max_length=200)
 
     @property
     def code(self) -> str:

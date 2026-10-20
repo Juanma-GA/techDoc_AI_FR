@@ -9,6 +9,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.regex_safety import MAX_USER_REGEX_LENGTH
+
 
 # =============================================================================
 # Documents
@@ -192,7 +194,7 @@ RuleKind = Literal[
 class RuleIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     kind: RuleKind
-    pattern: str = Field(..., min_length=1)
+    pattern: str = Field(..., min_length=1, max_length=MAX_USER_REGEX_LENGTH)
     replacement: str = ""
     severity: Literal["info", "warning", "error"] = "warning"
     message: str = ""
@@ -203,7 +205,7 @@ class RuleIn(BaseModel):
 class RulePatchIn(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=255)
     kind: Optional[RuleKind] = None
-    pattern: Optional[str] = None
+    pattern: Optional[str] = Field(default=None, max_length=MAX_USER_REGEX_LENGTH)
     replacement: Optional[str] = None
     severity: Optional[Literal["info", "warning", "error"]] = None
     message: Optional[str] = None
@@ -245,6 +247,10 @@ class RuleSuggestionItem(BaseModel):
 class RuleSuggestOut(BaseModel):
     suggestions: list[RuleSuggestionItem]
     documents_analyzed: int
+    # H-04: count of documents whose text was cut to fit the per-document
+    # budget before being sent to Mistral — surfaced so the UI can say so
+    # explicitly instead of silently basing suggestions on partial text.
+    documents_truncated: int = 0
 
 
 # ----- Import checklist Excel -------------------------------------------------
@@ -312,9 +318,12 @@ class ClientConfigOut(BaseModel):
 
 class ClientRuleOut(BaseModel):
     code: str
+    bundle_code: str
+    bundle_label: str
     name: str
     description: str
     message: str
+    rule_number: int
     kind: str
     severity: Literal["info", "warning", "error"]
     execution: Literal["deterministic", "semantic", "manual", "unsupported"]
@@ -428,11 +437,17 @@ class MistralSettingsIn(BaseModel):
     vision_enabled: Optional[bool] = None
     llm_enabled: Optional[bool] = None
     checklist_ai_scan: Optional[bool] = None
+    demo_enabled: Optional[bool] = None
 
 
 class MistralSettingsOut(BaseModel):
     api_key_set: bool
     api_key_preview: str = ""
+    # H-03 hardening : true quand une cle est stockee mais illisible avec
+    # l'ENCRYPTION_KEY courante (cle manquante/rotee, ou valeur heritee
+    # d'avant le chiffrement obligatoire) -- l'UI doit avertir au lieu de se
+    # comporter comme si aucune cle n'avait jamais ete configuree.
+    api_key_unreadable: bool = False
     base_url: str
     chat_model: str
     vision_model: str = "mistral-medium-3-5"
@@ -440,6 +455,7 @@ class MistralSettingsOut(BaseModel):
     llm_enabled: bool = True
     llm_tested: bool = False
     checklist_ai_scan: bool = False
+    demo_enabled: bool = False
 
 
 class TestConnectionOut(BaseModel):

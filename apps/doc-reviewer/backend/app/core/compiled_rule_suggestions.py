@@ -9,6 +9,7 @@ from typing import Any
 
 from app.checks.raw import RawSuggestion
 from app.core.compiled_rules import Check, CompiledRule
+from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
 from app.parsers.pdf_parser import ParsedPage
 
 from app.core.compiled_rule_runtime import (
@@ -30,6 +31,8 @@ from app.core.compiled_rule_operators import (
     normalize,
     pressure_conversion_issues,
     unit_conversion_issues,
+    is_list_of_materials_page,
+    is_table_row_match,
     resolve_field_ref,
     resolve_regex_pattern,
     resolve_replacement_template,
@@ -119,7 +122,10 @@ def deterministic_suggestions(
         }:
             operation_name = check.operation or check.operator
             operation = (ctx.client_operations or {}).get(operation_name)
-            if operation is not None and operation.suggestions is None:
+            if operation is not None and (
+                operation.suggestions is None
+                or check.operation_params.get("suppress_fallback_suggestion") is True
+            ):
                 has_non_repairable_check = True
             suggestions.extend(
                 client_operation_suggestions_for_rule(
@@ -300,7 +306,7 @@ def client_operation_suggestions_for_rule(
             RawSuggestion(
                 rule_kind=rule_kind,
                 rule_code=rule.id,
-                severity=rule.severity,
+                severity=result.severity or rule.severity,
                 message=result.message or rule.failure_message or rule.topic,
                 original=result.original,
                 proposed=result.proposed or "",
@@ -829,10 +835,8 @@ def missing_item_bbox(
     for check in rule.checks:
         if not check.missing_anchor:
             continue
-        try:
-            match = re.search(check.missing_anchor, target.text)
-        except re.error:
-            match = None
+        pattern = compile_user_regex(check.missing_anchor)
+        match = pattern.search(target.text, timeout=USER_REGEX_TIMEOUT_SECONDS)
         if match is None:
             continue
         anchor = observed_bbox(
@@ -1103,20 +1107,26 @@ def regex_suggestions(
     message: str,
     ctx: _EvalContext,
 ) -> list[RawSuggestion]:
+    if check.replacement == _TEMPERATURE_FAHRENHEIT_REPLACEMENT:
+        targets = [target for target in targets if not is_list_of_materials_page(target.text)]
+        if not targets:
+            return []
     resolved_pattern, _context_fields, missing_context = resolve_regex_pattern(
         str(check.expected), ctx
     )
     if missing_context:
         return []
-    try:
-        matches = [
-            (target, match)
-            for target in targets
-            for match in re.finditer(resolved_pattern, target.text)
-            if match.group(0)
-        ]
-    except re.error:
-        return []
+    pattern = compile_user_regex(resolved_pattern)
+    matches = [
+        (target, match)
+        for target in targets
+        for match in pattern.finditer(target.text, timeout=USER_REGEX_TIMEOUT_SECONDS)
+        if match.group(0)
+        and (
+            check.replacement != _TEMPERATURE_FAHRENHEIT_REPLACEMENT
+            or not is_table_row_match(match.span(), target.span_ranges)
+        )
+    ]
     suggestions: list[RawSuggestion] = []
     replacement = resolve_replacement_template(check.replacement, ctx.document)
     for target, match in matches:
@@ -1185,9 +1195,17 @@ def unit_conversion_suggestions(
     suggestions: list[RawSuggestion] = []
     for target in targets:
         issues = (
-            pressure_conversion_issues(target.text, str(check.expected))
+            pressure_conversion_issues(
+                target.text,
+                str(check.expected),
+                span_ranges=target.span_ranges,
+            )
             if check.operator == "pressure_conversion"
-            else unit_conversion_issues(target.text, str(check.expected))
+            else unit_conversion_issues(
+                target.text,
+                str(check.expected),
+                span_ranges=target.span_ranges,
+            )
         )
         for issue in issues:
             suggestions.append(

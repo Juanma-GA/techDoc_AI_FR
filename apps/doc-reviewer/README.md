@@ -13,6 +13,11 @@ validation remain environment-dependent.
 ## Features
 
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
+- Use Airbus and English as initial mapping defaults for new imports; saved
+  mapping values continue to be reused.
+- Offer a no-OCR mapping suggestion from the first four pages of a PDF CMM.
+  The action clears the whole draft, leaves uncertain values blank, and
+  requires the user to verify and save explicitly.
 - Apply deterministic technical-writing catalogs, unit checks, editable rules, and optional LLM checklist analysis.
 - Accept, edit, reject, and remember review decisions.
 - Review native DOCX blocks as well as PDF pages.
@@ -24,6 +29,31 @@ validation remain environment-dependent.
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+## CI And Repository Content
+
+The dedicated GitHub Actions workflow is an intentional exception to the
+local-first standard's CI scope. Its content-policy job rejects tracked `.pdf`,
+`.doc`, and `.docx` files under `apps/doc-reviewer/`, except that a `.pdf` is
+allowed when its filename contains `anonyme` (case-insensitively). It checks
+file paths only and does not read document contents. This applies to committed
+files, not documents imported locally while using the app.
+
+## Demo Mode
+
+The Settings page can enable a persistent demo mode. It loads
+`frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf` through the existing upload,
+analysis, and review workflow; no results are simulated. The Documents tab also
+offers a direct demo-PDF import action. Demo uploads and their default mapping
+are stored in a separate demo scope in the same SQLite database; switching to
+normal mode shows normal documents and mapping defaults unchanged.
+
+The demo preset is `JUL 27/26`, CMM `80-80-01`, First Issue `JUL 25/95`,
+revision `01`, PNR `1-900-SB`, and language `en`. Manufacturer is omitted from
+the demo mapping. Demo mode uses only the isolated `demo_rules` catalog and its
+demo address; normal rule activation states remain unchanged. Place the PDF at
+that path locally. If a demo PDF is intentionally tracked, its filename must
+contain `anonyme` to pass the content-policy check.
+
 ## Port
 
 The target default port is `8003`, followed by the next free port when needed.
@@ -31,7 +61,7 @@ The Vite development proxy and CORS configuration use the same port.
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is optional for checklist rules. Word or LibreOffice is needed for supported Word-to-PDF conversions.
+Python 3.11+, Node 20, and pnpm 9. Mistral is optional for checklist rules. Document conversions need either Microsoft Word (desktop, Microsoft 365) or LibreOffice, chosen with `OFFICE_CONVERTER` (default: Word, then LibreOffice). With Word on a tenant with mandatory sensitivity labels, set `WORD_SENSITIVITY_LABEL_ID` (see `backend/README.md`).
 
 ## Start On Windows
 
@@ -74,8 +104,9 @@ remain available.
 - `.doc` is preserved as the original and converted to DOCX for review.
 - PDF, commented PDF, corrected DOCX, corrected DOC, and other converted
 	outputs are listed by `GET /api/v1/documents/{id}/exports`.
-- PDF-to-DOCX and Word-to-DOC conversions require LibreOffice and are marked
-	as potentially degraded in the reviewer before download.
+- PDF-to-DOCX and Word-to-DOC conversions use Microsoft Word (or LibreOffice
+	when configured) and are marked as potentially degraded in the reviewer
+	before download.
 
 ## Tests
 

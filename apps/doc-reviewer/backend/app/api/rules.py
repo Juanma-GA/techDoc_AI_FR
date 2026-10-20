@@ -1,12 +1,10 @@
 """Rules CRUD — user-defined regex rules used during analyze."""
 
-from __future__ import annotations
-
 import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import structlog
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
@@ -15,23 +13,31 @@ from sqlalchemy import delete, desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.checks.client_registry import active_standard_versions
+from app.checks.mode_registry import get_request_client_configuration
+from app.config import settings
 from app.core import ingest
 from app.core.checklist_compiler import compile_checklist_rule
 from app.core.compiled_rule_store import persist_compiled_rule
 from app.core.compiled_rules import describe_compiled_rule, validate_compiled_rule_json
-from app.core.standard_rule_compiler import compile_standard_rule
+from app.core.demo_scope import documents_in_current_mode
 from app.core.errors import AppError
 from app.core.excel_rules import list_sheets, parse_checklist
 from app.core.llm_suggester import suggest_rules_from_corpus
 from app.core.pdf_versioning import current_path
 from app.core.rules_engine import validate_rule_pattern
+from app.core.security import read_upload_limited
+from app.core.standard_rule_compiler import compile_standard_rule
 from app.db.models import CompiledRuleVersion, Document, Rule, StandardVersion
 from app.db.session import get_db
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import (
-    RuleImportResult,
-    CompiledRuleSummary,
+    ClientCatalogOut,
+    ClientConfigOut,
+    ClientRuleOut,
+    ClientRulePatchIn,
     CompiledRulePatchIn,
+    CompiledRuleSummary,
+    RuleImportResult,
     RuleIn,
     RuleOut,
     RulePatchIn,
@@ -40,10 +46,6 @@ from app.schemas import (
     RuleSuggestOut,
     SheetInfo,
     SheetInspectOut,
-    ClientCatalogOut,
-    ClientConfigOut,
-    ClientRuleOut,
-    ClientRulePatchIn,
 )
 
 # Kinds produits par l'import checklist (langage naturel juge par le LLM +
@@ -54,9 +56,23 @@ _CHECKLIST_TEMPLATE = Path(__file__).resolve().parent.parent / "static" / "check
 logger = structlog.get_logger(__name__)
 
 
-_SUGGEST_TEXT_BUDGET = 12_000  # total chars sent to Mistral
-_SUGGEST_PER_DOC_BUDGET = 2_000  # per-document char cap
 _SUGGEST_MAX_DOCS = 20  # never sample more than this
+_SUGGEST_PER_DOC_BUDGET = 6_000  # chars kept per document before the LLM call (H-04)
+
+
+def _truncate_sample(text: str, limit: int) -> tuple[str, bool]:
+    """Cap `text` to `limit` chars at a whitespace boundary (never mid-word)
+    and mark the cut explicitly in the returned text (H-04 hardening: a real
+    multi-page PDF easily exceeds the total request budget when sent whole;
+    per-document truncation keeps the feature usable, and the explicit
+    `[...]` marker — plus `documents_truncated` in the response — means the
+    cut is visible instead of silent)."""
+    if len(text) <= limit:
+        return text, False
+    cut = text.rfind(" ", 0, limit)
+    if cut <= 0:
+        cut = limit
+    return text[:cut].rstrip() + " [...]", True
 
 
 router = APIRouter(tags=["rules"])
@@ -76,7 +92,7 @@ def _client_rule_catalog(
 
 
 def _client_rule_statuses(request: Request, db: Session) -> dict[tuple[str, str], set[str]]:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     versions = active_standard_versions(db, configuration)
     disabled_by_catalog: dict[tuple[str, str], set[str]] = {}
     for version in versions:
@@ -95,7 +111,7 @@ def get_client_config(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ClientConfigOut:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     versions = active_standard_versions(db, configuration)
     version_ids = {
         (version.standard.code, version.label): version.id
@@ -116,7 +132,7 @@ def get_client_config(
                 version=catalog.version,
                 standard_version_id=version_ids[(catalog.code, catalog.version)],
             )
-            for catalog in configuration.manifest.catalogs
+            for catalog in configuration.bundle.catalogs
         ],
         mapping=configuration.mapping.model_dump(mode="json"),
         ui_options=configuration.manifest.ui_options,
@@ -128,7 +144,7 @@ def list_client_rules(
     request: Request,
     db: Session = Depends(get_db),
 ) -> list[ClientRuleOut]:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     disabled_by_catalog = _client_rule_statuses(request, db)
     results: list[ClientRuleOut] = []
     for definition in configuration.bundle.rules:
@@ -140,9 +156,12 @@ def list_client_rules(
         results.append(
             ClientRuleOut(
                 code=definition.code,
+                bundle_code=definition.bundle_code,
+                bundle_label=definition.bundle_label,
                 name=definition.name,
                 description=definition.description,
                 message=definition.message,
+                rule_number=len(results) + 1,
                 kind=definition.kind,
                 severity=definition.presentation_severity or compiled.severity,
                 execution=compiled.execution,
@@ -162,7 +181,7 @@ def patch_client_rule(
     request: Request,
     db: Session = Depends(get_db),
 ) -> ClientRuleOut:
-    configuration = request.app.state.client_configuration
+    configuration = get_request_client_configuration(request, db)
     definition = next(
         (item for item in configuration.bundle.rules if item.code == rule_code),
         None,
@@ -170,6 +189,11 @@ def patch_client_rule(
     catalog = _client_rule_catalog(configuration.bundle, rule_code)
     if definition is None or catalog is None:
         raise AppError("CLIENT_RULE_NOT_FOUND", "Règle client introuvable", status_code=404)
+    rule_number = next(
+        index
+        for index, item in enumerate(configuration.bundle.rules, start=1)
+        if item.code == rule_code
+    )
     version = next(
         (
             item
@@ -194,9 +218,12 @@ def patch_client_rule(
     compiled = definition.compiled_rule
     return ClientRuleOut(
         code=definition.code,
+        bundle_code=definition.bundle_code,
+        bundle_label=definition.bundle_label,
         name=definition.name,
         description=definition.description,
         message=definition.message,
+        rule_number=rule_number,
         kind=definition.kind,
         severity=definition.presentation_severity or compiled.severity,
         execution=compiled.execution,
@@ -336,7 +363,7 @@ def suggest_rules(
             "catalog": catalog if isinstance(catalog, list) else [],
         }
 
-    stmt = select(Document)
+    stmt = documents_in_current_mode(db)
     if body.document_ids:
         stmt = stmt.where(Document.id.in_(body.document_ids))
     documents = list(db.scalars(stmt.order_by(Document.created_at.desc())))
@@ -346,32 +373,42 @@ def suggest_rules(
             "Aucun document dans le périmètre — uploade d'abord des PDFs.",
             status_code=400,
         )
+    if len(documents) > _SUGGEST_MAX_DOCS:
+        raise AppError(
+            "RULE_SUGGEST_TOO_MANY_DOCUMENTS",
+            f"Sélectionnez au plus {_SUGGEST_MAX_DOCS} documents; aucun document n'a été ignoré.",
+            status_code=413,
+        )
 
     samples: list[str] = []
-    total_chars = 0
     docs_analyzed = 0
-    for doc in documents[:_SUGGEST_MAX_DOCS]:
+    docs_truncated = 0
+    for doc in documents:
         try:
             pdf_path = current_path(doc.storage_dir, doc.current_version)
             parsed = parse_pdf(pdf_path)
         except Exception as exc:
-            # A missing or unparseable snapshot must not sink the whole call.
             logger.warning(
                 "rule_suggest_doc_skipped",
-                document_id=str(doc.id),
                 error=type(exc).__name__,
-                message=str(exc),
             )
-            continue
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un document du périmètre n'a pas pu être analysé intégralement; aucune suggestion n'a été produite.",
+                status_code=422,
+            ) from exc
         text = (parsed.full_text or "").strip()
         if not text:
-            continue
-        snippet = text[:_SUGGEST_PER_DOC_BUDGET]
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un document du périmètre ne contient pas de texte analysable; aucune suggestion n'a été produite.",
+                status_code=422,
+            )
+        snippet, was_truncated = _truncate_sample(text, _SUGGEST_PER_DOC_BUDGET)
+        if was_truncated:
+            docs_truncated += 1
         samples.append(f"=== {doc.original_filename} ===\n{snippet}")
-        total_chars += len(snippet)
         docs_analyzed += 1
-        if total_chars >= _SUGGEST_TEXT_BUDGET:
-            break
 
     if not samples:
         raise AppError(
@@ -399,6 +436,7 @@ def suggest_rules(
             for item in items
         ],
         documents_analyzed=docs_analyzed,
+        documents_truncated=docs_truncated,
     )
 
 
@@ -421,10 +459,10 @@ def download_checklist_template() -> FileResponse:
 
 
 @router.post("/rules/inspect", response_model=SheetInspectOut)
-async def inspect_checklist(file: UploadFile) -> SheetInspectOut:
+def inspect_checklist(file: UploadFile) -> SheetInspectOut:
     """Liste les onglets + grille d'apercu + ligne d'en-tete detectee d'un .xlsx
     (pour piloter le mapping des colonnes cote UI avant l'import)."""
-    data = await file.read()
+    data = read_upload_limited(file, settings.max_upload_size_bytes)
     try:
         sheets = list_sheets(data)
     except Exception as exc:  # noqa: BLE001
@@ -534,7 +572,7 @@ def patch_compiled_rule(
 
 
 @router.post("/rules/import", response_model=RuleImportResult)
-async def import_checklist(
+def import_checklist(
     request: Request,
     file: UploadFile,
     sheet: Optional[str] = Form(default=None),
@@ -550,7 +588,7 @@ async def import_checklist(
     if mode not in {"replace", "add"}:
         raise AppError("BAD_MODE", f"Mode d'import inconnu : {mode}.", status_code=400)
 
-    data = await file.read()
+    data = read_upload_limited(file, settings.max_upload_size_bytes)
     parsed_mapping: Optional[dict] = None
     if mapping:
         try:
@@ -600,7 +638,7 @@ async def import_checklist(
             db,
             pr,
             file.filename or "checklist.xlsx",
-            client_bundle=request.app.state.client_configuration.bundle,
+            client_bundle=get_request_client_configuration(request, db).bundle,
         )
         if compiled.id in seen:
             continue
@@ -643,7 +681,7 @@ def validate_all(db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/rules/suggest/from-files", response_model=RuleSuggestOut)
-async def suggest_rules_from_files(
+def suggest_rules_from_files(
     files: list[UploadFile] = File(...),
     standard_version_id: Optional[uuid.UUID] = Form(default=None),
     db: Session = Depends(get_db),
@@ -654,30 +692,48 @@ async def suggest_rules_from_files(
     regles proposees a une norme (optionnel)."""
     import fitz  # PyMuPDF
 
+    if len(files) > _SUGGEST_MAX_DOCS:
+        raise AppError(
+            "RULE_SUGGEST_TOO_MANY_DOCUMENTS",
+            f"Sélectionnez au plus {_SUGGEST_MAX_DOCS} fichiers; aucun fichier n'a été ignoré.",
+            status_code=413,
+        )
+
     samples: list[str] = []
-    total = 0
     analyzed = 0
+    truncated = 0
     for f in files[:_SUGGEST_MAX_DOCS]:
-        data = await f.read()
+        data = read_upload_limited(f, settings.max_upload_size_bytes)
         try:
             pdf_bytes, name, _engine = ingest.to_pdf_bytes(f.filename or "upload", data)
-        except AppError:
-            continue  # format non supporte / conversion indisponible -> on saute
+        except AppError as exc:
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un fichier du périmètre n'a pas pu être converti; aucune suggestion n'a été produite.",
+                status_code=422,
+            ) from exc
         try:
             fdoc = fitz.open(stream=pdf_bytes, filetype="pdf")
             text = "\n".join(p.get_text() for p in fdoc)
             fdoc.close()
-        except Exception:  # noqa: BLE001
-            continue
+        except Exception as exc:  # noqa: BLE001
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un fichier du périmètre n'a pas pu être analysé intégralement; aucune suggestion n'a été produite.",
+                status_code=422,
+            ) from exc
         text = (text or "").strip()
         if not text:
-            continue
-        snippet = text[:_SUGGEST_PER_DOC_BUDGET]
+            raise AppError(
+                "RULE_SUGGEST_INPUT_INCOMPLETE",
+                "Un fichier du périmètre ne contient pas de texte analysable; aucune suggestion n'a été produite.",
+                status_code=422,
+            )
+        snippet, was_truncated = _truncate_sample(text, _SUGGEST_PER_DOC_BUDGET)
+        if was_truncated:
+            truncated += 1
         samples.append(f"=== {name} ===\n{snippet}")
-        total += len(snippet)
         analyzed += 1
-        if total >= _SUGGEST_TEXT_BUDGET:
-            break
 
     if not samples:
         raise AppError(
@@ -704,4 +760,5 @@ async def suggest_rules_from_files(
             for item in items
         ],
         documents_analyzed=analyzed,
+        documents_truncated=truncated,
     )

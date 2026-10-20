@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.core.errors import AppError
 from app.parsers.docx_parser import ParsedDocx
-from app.parsers.pdf_parser import ParsedPdf
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 
 def resolve_page_range(
@@ -23,13 +23,62 @@ def resolve_page_range(
 
 
 def filter_pdf(parsed: ParsedPdf, first_page: int, last_page: int) -> ParsedPdf:
-    pages = [page for page in parsed.pages if first_page <= page.page <= last_page]
+    return filter_pdf_pages(
+        parsed,
+        [page.page for page in parsed.pages if first_page <= page.page <= last_page],
+    )
+
+
+def filter_pdf_pages(parsed: ParsedPdf, page_numbers: list[int]) -> ParsedPdf:
+    selected = set(page_numbers)
+    pages = [page for page in parsed.pages if page.page in selected]
+    full_document_pages = parsed.full_document_pages
+    if full_document_pages is None:
+        full_document_pages = parsed.pages
     return ParsedPdf(
         page_count=len(pages),
         pages=pages,
         full_text="\n".join(f"[PAGE: {page.page}]\n{page.text}" for page in pages),
         is_signed=parsed.is_signed,
+        full_document_pages=full_document_pages,
+        bookmarks=parsed.bookmarks,
     )
+
+
+def select_pdf_page_numbers(
+    parsed: ParsedPdf,
+    *,
+    first_page: int,
+    last_page: int | None,
+    modified_only: bool,
+    page_number: int | None = None,
+    additional_pages: list[int] | None = None,
+    include_undecided: bool = True,
+) -> list[int]:
+    """Select pages, optionally excluding unresolved revision statuses."""
+    def is_selected(page: ParsedPage) -> bool:
+        return page.is_modified is True or (include_undecided and page.is_modified is None)
+
+    if page_number is not None:
+        resolve_page_range(page_number, page_number, parsed.page_count)
+        page = next((item for item in parsed.pages if item.page == page_number), None)
+        return [page_number] if page is not None and is_selected(page) else []
+    if modified_only:
+        return [page.page for page in parsed.pages if is_selected(page)]
+    resolved_first, resolved_last = resolve_page_range(
+        first_page,
+        last_page,
+        parsed.page_count,
+    )
+    additional = set(additional_pages or [])
+    for requested_page in additional:
+        resolve_page_range(requested_page, requested_page, parsed.page_count)
+    return [
+        page.page
+        for page in parsed.pages
+        if (resolved_first <= page.page <= resolved_last or page.page in additional)
+        and is_selected(page)
+    ]
 
 
 def filter_docx(parsed: ParsedDocx, first_page: int, last_page: int) -> ParsedDocx:

@@ -5,12 +5,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.thales_rules import revision_engine as revision
 from app.checks.thales_rules.page_classifier import classify_pages
 from app.checks.thales_rules.rules import REVISION_RULE_DEFINITIONS
 from app.core.compiled_rule_executor import execute_pdf_rules as _execute_pdf_rules
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfWord, Span
 
 
 _TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
@@ -44,6 +46,21 @@ def _span(text: str, x: float, y: float, page: int) -> Span:
         page=page,
         font="Arial",
         size=10.0,
+    )
+
+
+def _word(text: str, x_position: float, center_y: float, word_index: int) -> PdfWord:
+    return PdfWord(
+        text=text,
+        bbox=(
+            x_position,
+            center_y - 5.0,
+            x_position + 6.0 * len(text),
+            center_y + 5.0,
+        ),
+        block_index=0,
+        line_index=0,
+        word_index=word_index,
     )
 
 
@@ -86,7 +103,8 @@ def _highlights_page(rows: list[tuple[str, str, str]], page: int = 1) -> ParsedP
     for subject, pages_text, status in rows:
         spans.append(_span(subject, 90.7, y, page))
         spans.append(_span(pages_text, 90.7, y + 14.0, page))
-        spans.append(_span(status, 322.2, y + 14.0, page))
+        if status:
+            spans.append(_span(status, 322.2, y + 14.0, page))
         spans.append(_span("Updated.", 366.4, y + 14.0, page))
         y += 42.0
     spans.extend(_footer(page, "Highlights Page 1", _REVISION_DATE))
@@ -201,9 +219,318 @@ def test_page_key_normalization_unifies_the_three_sources() -> None:
     assert revision.normalize_page_key("ROR Page 1") == "ROR 1"
     assert revision.normalize_page_key("Page 401") == "401"
     assert revision.normalize_page_key("TP 1") == "TP 1"
+    assert revision.normalize_page_key("INTRO 1101 Page 1") == "INTRO 1101 1"
+    assert revision.normalize_page_key("NI/NUM 1101 Page 2") == "NI/NUM 1101 2"
     assert revision.expand_page_range("Pages 701 to 704") == ("701", "702", "703", "704")
     assert revision.expand_page_range("TP 1 to TP 2") == ("TP 1", "TP 2")
     assert revision.expand_page_range("ROR Page 1 to ROR Page 2") == ("ROR 1", "ROR 2")
+    assert revision.expand_page_range(
+        "INTRO 1101 Page 1 to INTRO Page 2"
+    ) == ("INTRO 1101 1", "INTRO 1101 2")
+    assert revision.expand_page_range(
+        "Pages 1101-1 to 1101-2"
+    ) == ("1101 1", "1102 2")
+    assert revision.expand_page_range("Page  1101-1") == ("1101 1",)
+
+
+def test_highlights_page_range_keeps_spans_past_the_header_boundary() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation", 285.0, 100.0, 1),
+            _span("Description of Change", 366.0, 100.0, 1),
+            _span("Introduction", 90.7, 120.0, 1),
+            _span("INTRO", 90.7, 140.0, 1),
+            _span("Page 1", 126.7, 140.0, 1),
+            _span("to INTRO", 168.7, 140.0, 1),
+            _span("Page 2", 222.7, 140.0, 1),
+            _span("N", 322.2, 140.0, 1),
+            _span("Shop verification added.", 366.4, 140.0, 1),
+        ],
+    )
+
+    entry = revision.extract_highlights(page)[0]
+
+    assert entry.pages_text == "INTRO Page 1 to INTRO Page 2"
+    assert entry.page_keys == ("INTRO 1", "INTRO 2")
+
+
+def test_highlights_extracts_row_and_illustrated_parts_list_descriptions() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation", 285.0, 100.0, 1),
+            _span("Description of Change", 366.0, 100.0, 1),
+            _span("Illustrated Parts List", 90.7, 120.0, 1),
+            _span("Revised to reflect", 366.0, 120.0, 1),
+            _span("this revision.", 480.0, 120.0, 1),
+            _span("INTRO 1101 Page 1 to INTRO Page 2", 90.7, 140.0, 1),
+            _span("R", 322.2, 140.0, 1),
+            _span("INTRO 1101 Page 3 to INTRO Page 4", 90.7, 160.0, 1),
+            _span("R", 322.2, 160.0, 1),
+            _span("Repair", 90.7, 180.0, 1),
+            _span("Page 601", 90.7, 200.0, 1),
+            _span("D", 322.2, 200.0, 1),
+            _span("Chapter deleted", 366.0, 200.0, 1),
+        ],
+    )
+
+    entries = revision.extract_highlights(page)
+
+    assert len(entries) == 3
+    assert entries[0].subject == "Illustrated Parts List"
+    assert entries[0].subject_description == "Revised to reflect this revision."
+    assert entries[0].description == ""
+    assert entries[0].subject_description_bbox is not None
+    assert entries[1].status == "R"
+    assert entries[1].subject_description == "Revised to reflect this revision."
+    assert entries[1].description == ""
+    assert entries[2].status == "D"
+    assert entries[2].description == "Chapter deleted"
+
+
+def test_highlights_keeps_chapter_and_page_pair_across_missing_designation() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation", 285.0, 100.0, 1),
+            _span("Description of Change", 366.0, 100.0, 1),
+            _span("Assembly", 90.7, 120.0, 1),
+            _span("Page 701", 90.7, 140.0, 1),
+            _span("R", 322.2, 140.0, 1),
+            _span("Consumables and Standard Practices", 366.0, 140.0, 1),
+            _span("Manual updated.", 366.0, 154.0, 1),
+            _span("Page 702", 90.7, 180.0, 1),
+            _span("Page 705", 90.7, 220.0, 1),
+            _span("U", 322.2, 220.0, 1),
+            _span("Page 706", 90.7, 240.0, 1),
+            _span("R", 322.2, 240.0, 1),
+            _span("Updated.", 366.0, 240.0, 1),
+        ],
+    )
+
+    entries = revision.extract_highlights(page)
+    state = revision.RevisionState(highlights=entries)
+
+    assert [entry.page_keys for entry in entries] == [("701",), ("702",), ("705",), ("706",)]
+    assert [entry.subject for entry in entries] == ["Assembly"] * 4
+    assert [entry.status for entry in entries] == ["R", "", "U", "R"]
+    assert entries[0].description == "Consumables and Standard Practices Manual updated."
+    assert revision._pairing_findings(state) == []
+    assert revision._highlights_chapter_findings(state) == []
+    missing = revision.extract_missing_highlights_designations(page)
+    assert [entry.page_keys for entry in missing] == [("702",)]
+
+
+def test_compound_highlights_lep_and_footer_names_match() -> None:
+    highlights = _highlights_page(
+        [
+            ("Illustrated Parts List", "INTRO 1101 Page 1 to INTRO Page 2", "R"),
+            ("Illustrated Parts List", "NI/NUM 1101 Page 1", "R"),
+        ],
+        page=1,
+    )
+    lep = _lep_page(
+        left=[
+            ("INTRO 1101", "1", f"{_REVISION_DATE} *"),
+            ("", "2", f"{_REVISION_DATE} *"),
+            ("NI/NUM 1101", "1", f"{_REVISION_DATE} *"),
+        ],
+        right=[],
+        page=2,
+    )
+    parsed = _document(
+        [
+            highlights,
+            lep,
+            _page(3, _footer(3, "INTRO 1101 Page 1", _REVISION_DATE)),
+            _page(4, _footer(4, "INTRO 1101 Page 2", _REVISION_DATE)),
+            _page(5, _footer(5, "NI/NUM 1101 Page 1", _REVISION_DATE)),
+        ]
+    )
+
+    state = _state(parsed)
+
+    assert [page.is_modified for page in parsed.pages[2:]] == [True, True, True]
+    assert not any(
+        finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+        for finding in state.findings
+    )
+
+
+def test_hyphenated_highlights_pages_match_numbered_lep_pages() -> None:
+    highlights_page = _highlights_page(
+        [("Illustrated Parts List", "Pages 1101-1 to 1101-2", "R")]
+    )
+    lep_page = _lep_page(
+        left=[
+            ("", "1101 1", f"{_REVISION_DATE} *"),
+            ("", "1102 2", f"{_REVISION_DATE} *"),
+        ],
+        right=[],
+        page=2,
+    )
+    highlights = revision.extract_highlights(highlights_page)
+    lep, _subject = revision.extract_lep(lep_page)
+    state = revision.RevisionState(highlights=highlights, lep=lep)
+
+    assert highlights[0].page_keys == ("1101 1", "1102 2")
+    assert [state.highlights_status_for_lep(entry) for entry in lep] == ["R", "R"]
+    assert revision._pairing_findings(state) == []
+
+
+def test_footer_reassembles_section_page_and_split_date_spans() -> None:
+    page = _page(
+        1,
+        [
+            _span("INTRO", 459.2, 740.0, 1),
+            _span("1101", 492.0, 740.0, 1),
+            _span("Page", 524.0, 740.0, 1),
+            _span("2", 556.0, 740.0, 1),
+            _span("Aug.", 467.9, 760.0, 1),
+            _span("30/75", 498.0, 760.0, 1),
+        ],
+    )
+
+    footer = revision.extract_footer(page)
+
+    assert footer is not None
+    assert footer.page_key == "INTRO 1101 2"
+    assert footer.date is not None
+    assert footer.date.same_as(revision.parse_date("AUG 30/75"))
+    assert footer.date_text == "Aug. 30/75"
+
+
+def test_footer_reassembles_month_abbreviation_with_extraction_artifact() -> None:
+    page = _page(
+        79,
+        [
+            _span(_COPYRIGHT, 85.9, 756.0, 79),
+            _span("Page 1104-0", 453.3, 747.6, 79),
+            _span("Aug_.", 458.86, 763.2, 79),
+            _span("30/75", 488.98, 763.2, 79),
+        ],
+    )
+
+    footer = revision.extract_footer(page)
+
+    assert footer is not None
+    assert footer.date is not None
+    assert footer.date.same_as(revision.parse_date("AUG 30/75"))
+    assert footer.date_text == "Aug_. 30/75"
+
+
+def test_footer_reassembles_split_day_and_year_spans() -> None:
+    page = _page(
+        3,
+        [
+            _span(_COPYRIGHT, 85.9, 756.0, 3),
+            _span("TP 1", 500.0, 756.0, 3),
+            _span("JUL", 507.34, 771.36, 3),
+            _span("30", 531.34, 771.36, 3),
+            _span("/", 543.34, 771.36, 3),
+            _span("26", 549.34, 771.36, 3),
+        ],
+    )
+
+    footer = revision.extract_footer(page)
+
+    assert footer is not None
+    assert footer.date is not None
+    assert footer.date.same_as(revision.parse_date("JUL 30/26"))
+    assert footer.date_text == "JUL 30 / 26"
+    assert footer.date_bbox == (507.34, 766.36, 561.34, 776.36)
+
+
+def test_footer_reassembles_page_number_split_across_spans() -> None:
+    page = _page(
+        40,
+        [
+            _span(_COPYRIGHT, 85.9, 756.0, 40),
+            _span("Page", 477.58, 756.0, 40),
+            _span("50", 507.58, 756.0, 40),
+            _span("2", 519.58, 756.0, 40),
+            _span("JUL 30/26", 507.34, 772.0, 40),
+        ],
+    )
+    page.words = [
+        _word("Page", 477.58, 756.0, 0),
+        _word("502", 507.58, 756.0, 1),
+        _word("JUL", 507.34, 772.0, 2),
+        _word("30/26", 531.34, 772.0, 3),
+    ]
+
+    footer = revision.extract_footer(page)
+
+    assert footer is not None
+    assert footer.page_key == "502"
+    assert footer.label_text == "Page 502"
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "LIST OF EFFECTIVES PAGES",
+        "LIST OF EFECTIVE PAGES",
+        "LSIT OF EFFECTIVE PAGES",
+        "LIST OF EFFETCIVE PAGES",
+        "LIST OF EFFECTIVE PAGS",
+        "LIST OF EFECTIVES PAGS",
+        "List of effective pages:",
+        "LIST OF EFFECTIVE\nPAGES",
+        "LISTOFEFFECTIVEPAGES",
+    ],
+)
+def test_lep_detection_tolerates_title_typos_with_table_structure(title: str) -> None:
+    parsed = _consistent_document()
+    page = parsed.pages[1]
+    page.spans[0].text = title
+    for span in page.spans:
+        span.text = span.text.replace("LEP Page 1", "Page 401")
+    page.text = "\n".join(span.text for span in page.spans)
+
+    state = _state(parsed)
+
+    assert state.lep_pages == (2,)
+    assert state.available
+    assert parsed.pages[2].is_modified is True
+    assert parsed.pages[4].is_modified is False
+
+
+def test_lep_detection_uses_table_and_footer_when_title_is_unreadable() -> None:
+    page = _lep_with(("Repair", "401", f"{_REVISION_DATE} *"))
+    page.spans[0].text = "Unreadable heading"
+    page.text = "\n".join(span.text for span in page.spans)
+
+    assert revision._is_lep_page(page)
+
+
+@pytest.mark.parametrize("title", ["LIST OF MATERIALS", "RECORD OF REVISIONS"])
+def test_lep_detection_rejects_other_tables(title: str) -> None:
+    page = _lep_with(("Repair", "401", f"{_REVISION_DATE} *"))
+    page.spans[0].text = title
+    for span in page.spans:
+        span.text = span.text.replace("LEP Page 1", "Page 401")
+    page.text = "\n".join(span.text for span in page.spans)
+
+    assert not revision._is_lep_page(page)
+
+
+def test_lep_detection_rejects_fuzzy_title_without_table() -> None:
+    page = _page(1, [_span("LIST OF EFFECTIVES PAGES", 100.0, 100.0, 1)])
+
+    assert not revision._is_lep_page(page)
+
+
+def test_lep_detection_rejects_highlights_mention() -> None:
+    page = _highlights_page(
+        [("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N")]
+    )
+
+    assert not revision._is_lep_page(page)
 
 
 def test_ror_detection_requires_the_full_record_of_revisions_title() -> None:
@@ -266,6 +593,25 @@ def test_ror_insertion_date_mismatch_is_reported_with_the_expected_month() -> No
     assert findings[0].proposed == "AUG 26"
 
 
+def test_ror_insertion_date_only_checks_the_last_table_row() -> None:
+    spans = [
+        _span("RECORD OF REVISIONS", 100.0, 100.0, 1),
+        _span("REVISION DATE", 200.0, 140.0, 1),
+        _span("INSERTION DATE", 350.0, 140.0, 1),
+        _span("DEC 15/20", 200.0, 170.0, 1),
+        _span("FEB 21", 350.0, 170.0, 1),
+        _span("JUL 27/26", 200.0, 190.0, 1),
+        _span("AUG 26", 350.0, 190.0, 1),
+    ]
+    document = SimpleNamespace(
+        meta_revision_date="JUL 27/26",
+        meta_first_issue_date="JUL 1966",
+        meta_last_issue_date="MAR 77",
+    )
+
+    assert _codes(_document([_page(1, spans)]), document) == []
+
+
 def test_ror_revision_date_must_match_the_highlights_revision_date() -> None:
     assert _codes(_document([_ror_page(_REVISION_DATE, "AUG 26")])) == []
 
@@ -274,6 +620,92 @@ def test_ror_revision_date_must_match_the_highlights_revision_date() -> None:
     assert [finding.control for finding in findings] == [revision.ROR_REVISION_DATE]
     assert findings[0].original == "JUN 27/26"
     assert findings[0].proposed == _REVISION_DATE
+
+
+@pytest.mark.parametrize(
+    ("highlights_pages", "lep_subject"),
+    [
+        ("Intro Page 1", "Introduction"),
+        ("TC page 1", "Table of Contents"),
+        ("TP page 1", "Title Page"),
+    ],
+)
+def test_lep_star_matches_intro_and_section_aliases(
+    highlights_pages: str,
+    lep_subject: str,
+) -> None:
+    revision_date = revision.parse_date(_REVISION_DATE)
+    assert revision_date is not None
+    highlights = revision.HighlightsEntry(
+        subject="Introduction",
+        pages_text=highlights_pages,
+        page_keys=revision.expand_page_range(highlights_pages),
+        status="R",
+        page=1,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+        status_bbox=(0.0, 0.0, 1.0, 1.0),
+    )
+    lep_entry = revision.LepEntry(
+        subject=lep_subject,
+        page_key="1",
+        date=revision_date,
+        date_text=_REVISION_DATE,
+        is_blank=False,
+        starred=False,
+        page=2,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+    )
+    state = revision.RevisionState(
+        revision_date=revision_date,
+        highlights=[highlights],
+        lep=[lep_entry],
+    )
+
+    findings = revision._lep_findings(state)
+
+    assert revision.LEP_STAR in [finding.control for finding in findings]
+
+
+def test_table_of_contents_status_does_not_contaminate_title_page_status() -> None:
+    revision_date = revision.parse_date(_REVISION_DATE)
+    assert revision_date is not None
+    highlights = [
+        revision.HighlightsEntry(
+            subject="Table of Contents",
+            pages_text="TC Page 1 to TC Page 2",
+            page_keys=revision.expand_page_range("TC Page 1 to TC Page 2"),
+            status="R",
+            page=1,
+            bbox=(0.0, 0.0, 1.0, 1.0),
+            status_bbox=(0.0, 0.0, 1.0, 1.0),
+        ),
+        revision.HighlightsEntry(
+            subject="Title Page",
+            pages_text="TP 2",
+            page_keys=revision.expand_page_range("TP 2"),
+            status="N",
+            page=1,
+            bbox=(0.0, 0.0, 1.0, 1.0),
+            status_bbox=(0.0, 0.0, 1.0, 1.0),
+        ),
+    ]
+    title_page = revision.LepEntry(
+        subject="Title Page",
+        page_key="TP 2",
+        date=revision_date,
+        date_text=f"{_REVISION_DATE} *",
+        is_blank=False,
+        starred=True,
+        page=2,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+    )
+    state = revision.RevisionState(
+        revision_date=revision_date,
+        highlights=highlights,
+        lep=[title_page],
+    )
+
+    assert state.highlights_status_for_lep(title_page, "TP 2") == "N"
 
 
 def test_page_keys_accept_any_section_abbreviation() -> None:
@@ -330,9 +762,27 @@ def test_lep_column_group_count_is_read_from_the_header() -> None:
 
 
 def test_dates_compare_across_their_two_written_forms() -> None:
-    assert revision.parse_date("JUL 1966").same_as(revision.parse_date("JUL 66"))
-    assert not revision.parse_date("JUL 27/26").same_as(revision.parse_date("JUL 66"))
-    assert revision.parse_date("JUL 27/26").sort_key > revision.parse_date("MAR 77").sort_key
+    july_1966 = revision.parse_date("JUL 1966")
+    july_66 = revision.parse_date("JUL 66")
+    july_27_26 = revision.parse_date("JUL 27/26")
+    march_77 = revision.parse_date("MAR 77")
+    assert july_1966 is not None
+    assert july_66 is not None
+    assert july_27_26 is not None
+    assert march_77 is not None
+
+    assert july_1966.same_as(july_66)
+    assert not july_27_26.same_as(july_66)
+    assert july_27_26.sort_key > march_77.sort_key
+
+
+def test_abbreviated_month_date_with_period_is_recognized() -> None:
+    abbreviated = revision.parse_date("Aug. 30/75")
+    unpunctuated = revision.parse_date("AUG 30/75")
+    assert abbreviated is not None
+    assert unpunctuated is not None
+
+    assert abbreviated.same_as(unpunctuated)
 
 
 def test_lep_rows_are_split_into_two_independent_entries() -> None:
@@ -351,7 +801,106 @@ def test_consistent_document_reports_nothing_and_marks_modified_pages() -> None:
     parsed = _consistent_document()
 
     assert _codes(parsed) == []
-    assert [page.is_modified for page in parsed.pages] == [None, True, True, True, False]
+    assert [page.is_modified for page in parsed.pages] == [True, True, True, True, False]
+
+
+def test_first_page_of_each_revision_section_is_always_modified() -> None:
+    title_page = _page(3, [_span("Title page body", 100.0, 120.0, 3)])
+    title_page.page_type = "TP1"
+    parsed = _document(
+        [
+            _highlights_page([], page=1),
+            _lep_page(left=[], right=[], page=2),
+            title_page,
+            _ror_page(_REVISION_DATE, "JUL 66", page=4),
+        ]
+    )
+
+    state = _state(parsed)
+
+    assert state.available is False
+    assert [page.is_modified for page in parsed.pages] == [True, True, True, True]
+
+
+def test_highlights_page_2_is_forced_modified_and_unmatched_pages_default_unchanged() -> None:
+    parsed = _consistent_document()
+    second_highlights = _highlights_page([], page=2)
+    for span in second_highlights.spans:
+        if span.text == "Highlights Page 1":
+            span.text = "Highlights Page 2"
+    second_highlights.text = "\n".join(span.text for span in second_highlights.spans)
+    parsed.pages.insert(1, second_highlights)
+    parsed.pages.append(_page(7, _footer(7, "Page 999", "JUL 66")))
+    for page_number, page in enumerate(parsed.pages, start=1):
+        page.page = page_number
+        for span in page.spans:
+            span.page = page_number
+    parsed.page_count = len(parsed.pages)
+
+    state = _state(parsed)
+
+    assert state.available is True
+    assert parsed.pages[1].is_modified is True
+    assert parsed.pages[-1].is_modified is False
+
+
+def test_current_footer_date_alone_does_not_mark_a_page_modified() -> None:
+    parsed = _document([_page(1, _footer(1, "Page 401", _REVISION_DATE))])
+
+    state = _state(parsed)
+
+    assert state.available is False
+    assert parsed.pages[0].is_modified is None
+
+
+def test_current_lep_date_without_highlights_or_footer_agreement_is_undecided() -> None:
+    parsed = _consistent_document()
+    parsed.pages[1] = _lep_page(
+        left=[
+            ("List of Effec-", "", ""),
+            ("tive Pages", "", ""),
+            ("", "LEP 1", f"{_REVISION_DATE} *"),
+            ("", "LEP 2", "Blank     *"),
+            ("Repair", "401", f"{_REVISION_DATE} *"),
+            ("", "402", f"{_REVISION_DATE} *"),
+        ],
+        right=[("Assembly", "501", _REVISION_DATE)],
+        page=2,
+    )
+
+    _state(parsed)
+
+    assert parsed.pages[4].is_modified is None
+
+
+def test_page_state_requires_agreement_between_all_three_sources() -> None:
+    cases = (
+        ("R", _REVISION_DATE, True, _REVISION_DATE, True),
+        ("N", _REVISION_DATE, True, _REVISION_DATE, True),
+        ("R", _REVISION_DATE, False, _REVISION_DATE, None),
+        ("R", _REVISION_DATE, True, "JUL 66", None),
+        ("U", _REVISION_DATE, True, _REVISION_DATE, None),
+        ("U", "JUL 66", False, "JUL 66", False),
+    )
+
+    for status, lep_date, starred, footer_date, expected in cases:
+        parsed = _consistent_document()
+        parsed.pages[0] = _highlights_page(
+            [
+                ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                ("Repair", "Pages 401 to 402", status),
+            ]
+        )
+        starred_date = f"{lep_date} *" if starred else lep_date
+        parsed.pages[1] = _lep_with(
+            ("Repair", "401", starred_date),
+            ("", "402", f"{_REVISION_DATE} *"),
+        )
+        parsed.pages[2] = _page(3, _footer(3, "Page 401", footer_date))
+
+        _state(parsed)
+
+        assert parsed.pages[2].is_modified is expected
 
 
 def test_missing_lep_footer_page_number_is_reported() -> None:
@@ -383,6 +932,41 @@ def test_missing_lep_footer_page_number_is_reported() -> None:
         for raw in raws
         if raw.rule_code == "CUSTOM_FOOTER_PAGE_NUMBER"
     ] == [("CUSTOM_FOOTER_PAGE_NUMBER", 3, "", "LEP Page 2")]
+
+
+def test_footer_page_number_ignores_cached_findings_outside_selected_pages() -> None:
+    from app.checks.thales_rules import operations
+    from app.core.page_range import filter_pdf_pages
+
+    parsed = _consistent_document()
+    unchanged_page = _page(
+        6,
+        [
+            _span(_COPYRIGHT, 85.9, 756.0, 6),
+            _span(_REVISION_DATE, 507.0, 772.0, 6),
+        ],
+    )
+    parsed.pages.append(unchanged_page)
+    parsed.page_count = 6
+    state = _state(parsed)
+    unchanged_page.is_modified = False
+
+    assert any(
+        finding.control == revision.FOOTER_PAGE_NUMBER and finding.page == 6
+        for finding in state.findings
+    )
+    partial = filter_pdf_pages(parsed, [1])
+    setattr(partial, operations._REVISION_STATE_ATTR, state)
+    footer_rule = next(
+        rule for rule in _REVISION_RULES if rule.id == "CUSTOM_FOOTER_PAGE_NUMBER"
+    )
+
+    results, raws = execute_pdf_rules(partial, [footer_rule], document=_DOCUMENT)
+
+    assert [(result.rule_id, result.status) for result in results] == [
+        ("CUSTOM_FOOTER_PAGE_NUMBER", "PASS")
+    ]
+    assert raws == []
 
 
 def test_missing_footer_page_number_anchors_on_line_above_revision_date() -> None:
@@ -495,6 +1079,185 @@ def test_star_without_a_revised_status_in_the_highlights_is_reported() -> None:
     assert findings[0].proposed == "JUL 66"
 
 
+def test_star_with_missing_highlights_designation_is_informational() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", ""),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", f"{_REVISION_DATE} *"),
+        ("", "402", _REVISION_DATE),
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "info"
+    assert star.proposed == ""
+    assert "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED" in star.message
+    assert "peut être justifiée" in star.message
+
+
+def test_missing_highlights_designation_on_another_page_does_not_downgrade_star() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Other", "Page 999", ""),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", f"{_REVISION_DATE} *"),
+        ("", "402", _REVISION_DATE),
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "error"
+    assert star.proposed == _REVISION_DATE
+    assert "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED" not in star.message
+
+
+def test_star_with_invalid_highlights_designation_is_informational() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "X"),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "info"
+    assert star.proposed == ""
+    assert "CUSTOM_REVISION_HIGHLIGHTS_STATUS" in star.message
+    assert "invalide" in star.message
+
+
+def test_star_conflicting_with_unchanged_highlights_is_informational() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "U"),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    star = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_STAR"
+        and "page 401" in raw.message
+    )
+
+    assert star.severity == "info"
+    assert star.proposed == ""
+    assert "CUSTOM_REVISION_HIGHLIGHTS_STATUS" in star.message
+
+
+def test_unchanged_revision_evidence_downgrades_linked_star_and_footer_dates() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", "JUL 66"),
+        ("", "402", "JUL 66"),
+    )
+    parsed.pages[2] = _page(3, _footer(3, "Page 401", "JUL 66"))
+    parsed.pages[3] = _page(4, _footer(4, "Page 402", "JUL 66"))
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    linked = [
+        raw
+        for raw in raws
+        if raw.rule_code in {
+            "CUSTOM_REVISION_LEP_STAR",
+            "CUSTOM_REVISION_FOOTER_DATE",
+        }
+    ]
+
+    assert len(linked) == 4
+    assert all(raw.severity == "info" for raw in linked)
+    assert all(raw.proposed == "" for raw in linked)
+    assert all("CUSTOM_REVISION_HIGHLIGHTS_STATUS" in raw.message for raw in linked)
+
+
+def test_undeclared_page_mentions_invalid_designation_without_downgrading() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "X"),
+        ]
+    )
+    parsed.pages[1] = _lep_with(
+        ("Repair", "401", _REVISION_DATE),
+        ("", "402", f"{_REVISION_DATE} *"),
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    undeclared = next(
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_REVISION_UNDECLARED_PAGE"
+        and "page 401" in raw.message
+    )
+
+    assert undeclared.severity == "error"
+    assert "CUSTOM_REVISION_HIGHLIGHTS_STATUS" in undeclared.message
+    assert "invalide" in undeclared.message
+    assert "indice indépendant" in undeclared.message
+
+
+def test_wrong_known_section_footer_number_does_not_report_page_as_absent() -> None:
+    parsed = _consistent_document()
+    lep_page = parsed.pages[1]
+    for span in lep_page.spans:
+        if span.text == "LEP Page 1":
+            span.text = "LEP Page 99"
+    lep_page.text = "\n".join(span.text for span in lep_page.spans)
+
+    findings = _findings(parsed)
+
+    assert any(
+        finding.control == revision.FOOTER_PAGE_NUMBER
+        and finding.page == 2
+        and finding.proposed == "LEP Page 1"
+        for finding in findings
+    )
+    assert not any(
+        finding.control == revision.PAGE_NOT_IN_LEP and finding.page == 2
+        for finding in findings
+    )
+    assert revision.MODIFIED_PAGE_ABSENT not in _codes(parsed)
+
+
 def test_highlights_r_and_n_are_both_valid_when_lep_and_footer_show_revision() -> None:
     for status in ("R", "N"):
         parsed = _consistent_document()
@@ -592,6 +1355,379 @@ def test_compiled_highlights_status_rule_comments_on_the_designation_cell() -> N
     assert status_raws[0].original == "U"
     assert status_raws[0].bbox == highlight_entry.status_bbox
     assert status_raws[0].severity == "warning"
+
+
+def test_compiled_highlights_status_rule_uses_previous_lep() -> None:
+    current = _consistent_document()
+    current.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Page 401", "N"),
+            ("Assembly", "Page 503", "R"),
+            ("Deleted page", "Page 502", "D"),
+            ("New page", "Page 504", "N"),
+            ("Old unchanged page", "Page 406", "U"),
+            ("Missing old unchanged page", "Page 505", "U"),
+            ("Missing deleted page", "Page 506", "D"),
+        ]
+    )
+    previous = _document(
+        [
+            _lep_page(
+                left=[
+                    ("Repair", "401", "JUL 66"),
+                    ("Old unchanged page", "406", "JUL 66"),
+                ],
+                right=[("Deleted page", "502", "JUL 66")],
+            )
+        ]
+    )
+    status_rule = next(
+        rule for rule in _REVISION_RULES if rule.id == "CUSTOM_REVISION_HIGHLIGHTS_STATUS"
+    )
+
+    _results, raws = execute_pdf_rules(
+        current,
+        [status_rule],
+        document=_DOCUMENT,
+        previous_revision_pdf=previous,
+    )
+    status_raws = [raw for raw in raws if raw.rule_code == status_rule.id]
+
+    assert sorted((raw.original, raw.page) for raw in status_raws) == [
+        ("D", 1),
+        ("N", 1),
+        ("R", 1),
+        ("U", 1),
+    ]
+    assert all("LEP N-1" in raw.message for raw in status_raws)
+
+
+def test_compiled_highlights_status_rule_skips_ambiguous_previous_lep_pages() -> None:
+    current = _consistent_document()
+    current.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Page 401", "N"),
+        ]
+    )
+    previous = _document(
+        [
+            _lep_page(
+                left=[("Repair", "401", "JUL 66")],
+                right=[("Assembly", "401", "JUL 66")],
+            )
+        ]
+    )
+    status_rule = next(
+        rule for rule in _REVISION_RULES if rule.id == "CUSTOM_REVISION_HIGHLIGHTS_STATUS"
+    )
+
+    _results, raws = execute_pdf_rules(
+        current,
+        [status_rule],
+        document=_DOCUMENT,
+        previous_revision_pdf=previous,
+    )
+
+    assert not any(raw.rule_code == status_rule.id for raw in raws)
+
+
+def test_invalid_highlights_designation_is_reported_on_its_cell() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "X"),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "X"
+    assert findings[0].bbox is not None
+    assert "R, N, U ou D" in findings[0].message
+
+
+def test_highlights_page_row_without_designation_is_reported() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", ""),
+            ("Avionics", "Pages 403 to 404", "   "),
+        ]
+    )
+
+    _results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
+    missing = [
+        raw
+        for raw in raws
+        if raw.rule_code == "CUSTOM_HIGHLIGHTS_DESIGNATION_REQUIRED"
+    ]
+
+    assert len(missing) == 2
+    assert missing[0].page == 1
+    assert missing[0].bbox is not None
+    assert missing[0].severity == "error"
+    assert not any(
+        raw.rule_code == "CUSTOM_REVISION_HIGHLIGHTS_STATUS" for raw in raws
+    )
+
+
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Assembly",
+        "Assembly and Storage",
+        "Assembly Including Storage",
+        "Assembly (Including Storage)",
+        "Check",
+        "Cleaning",
+        "Description and Operation",
+        "Disassembly",
+        "Fault Isolation",
+        "Illustrated Parts List",
+        "Introduction",
+        "List of Effective Pages",
+        "List of Illustrations",
+        "List of Materials",
+        "Record of Revisions",
+        "Record of Temporary Revisions",
+        "Repair",
+        "Service Bulletin List",
+        "Special Tools, Fixtures and Equipment",
+        "Special Tools, Fixtures, Equipment and Consumables",
+        "Special Tools, Fixtures and Equipment - List of Special Materials",
+        "Storage",
+        "Table of Contents",
+        "Testing",
+        "Testing and Fault Isolation",
+        "Testing and Trouble Shooting",
+        "Title Page",
+        "Vendor Code List",
+        "Illustrated Part Lis",
+        "Illustrated part list",
+        "Illustarted Parts List",
+        "Assebmly",
+        "Testng and Fault Isolaton",
+        "Specal Tools, Fixtures and Equipmnt",
+        "Repa ir",
+        "Reapir",
+        "Chekc",
+    ],
+)
+def test_highlights_chapter_rule_accepts_catalog_titles(chapter: str) -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            (chapter, "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+@pytest.mark.parametrize("chapter", ["Avionics", "Warranty Conditions"])
+def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell(chapter: str) -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            (chapter, "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+    finding = next(item for item in suggestions if item.rule_code == rule.id)
+    subject_bbox = revision.extract_highlights(parsed.pages[0])[-1].subject_bbox
+
+    assert results[0].status == "FAIL"
+    assert finding.original == chapter
+    assert finding.proposed == ""
+    assert finding.bbox == subject_bbox
+
+
+def test_highlights_chapter_rule_ignores_case_and_repeated_spaces() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("aSSEMBLY   and Storage", "Pages 401 to 402", "R"),
+        ]
+    )
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
+    rule = next(
+        item for item in _REVISION_RULES if item.id == "CUSTOM_HIGHLIGHTS_CHAPTER"
+    )
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=_DOCUMENT,
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_highlights_extraction_does_not_merge_subject_across_page_row() -> None:
+    spans = [
+        Span("Chapter/Section and Page No", (69.8, 179.9, 231.8, 194.1), 1, "Arial", 10.0),
+        Span("Designation", (255.4, 179.9, 321.4, 194.1), 1, "Arial", 10.0),
+        Span("Description of Change", (363.5, 179.9, 489.5, 194.1), 1, "Arial", 10.0),
+        Span("Testing", (54.0, 194.6, 96.0, 208.8), 1, "Arial", 10.0),
+        Span("Pages 701 to 702 ", (54.0, 208.7, 156.0, 222.9), 1, "Arial", 10.0),
+        Span("Environmental conditions and ", (329.0, 208.7, 500.2, 222.9), 1, "Arial", 10.0),
+        Span("minor technical correction added.", (329.0, 222.9, 511.1, 237.1), 1, "Arial", 10.0),
+        Span("Storage Instructions", (54.0, 251.2, 174.0, 265.4), 1, "Arial", 10.0),
+        Span("Page  901 ", (54.0, 265.4, 114.0, 279.6), 1, "Arial", 10.0),
+        Span("R ", (285.5, 265.4, 297.5, 279.6), 1, "Arial", 10.0),
+        Span("Environmental conditions and ", (329.0, 265.4, 500.2, 279.6), 1, "Arial", 10.0),
+    ]
+    highlights_page = ParsedPage(
+        page=1,
+        text="\n".join(span.text for span in spans),
+        spans=spans,
+        page_type="HIGHLIGHTS_PAGE_1",
+    )
+    entries = revision.extract_highlights(highlights_page)
+
+    assert [
+        (entry.subject, entry.pages_text, entry.status)
+        for entry in entries
+    ] == [
+        ("Testing", "Pages 701 to 702", ""),
+        ("Storage Instructions", "Page  901", "R"),
+    ]
+
+
+def test_deleted_highlights_status_conflicts_with_page_still_in_current_document() -> None:
+    parsed = _consistent_document()
+    parsed.pages[0] = _highlights_page(
+        [
+            ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+            ("Repair", "Pages 401 to 402", "D"),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "D"
+    assert findings[0].bbox is not None
+    assert "401" in findings[0].message
+
+
+def test_deleted_status_is_checked_even_without_an_extracted_lep() -> None:
+    highlights = _highlights_page(
+        [
+            ("Repair", "Page 601", "D"),
+        ]
+    )
+    parsed = _document(
+        [
+            highlights,
+            _page(2, _footer(2, "Page 601", "JUL 66")),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "D"
+    assert "601" in findings[0].message
+
+
+def test_deleted_status_accepts_blank_lep_entries_without_current_pages() -> None:
+    parsed = _document(
+        [
+            _highlights_page(
+                [
+                    ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                    ("List of Approved Repairs", "LAR Page 1 to LAR Page 2", "D"),
+                ]
+            ),
+            _lep_page(
+                left=[
+                    ("List of Approved Repairs", "LAR 1", "Blank *"),
+                    ("", "LAR 2", "Blank *"),
+                ],
+                right=[],
+                page=2,
+            ),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert findings == []
+
+
+def test_deleted_status_accepts_deleted_lep_placeholders_without_current_pages() -> None:
+    parsed = _document(
+        [
+            _highlights_page(
+                [
+                    ("List of Effective Pages", "LEP Page 1 to LEP Page 2", "N"),
+                    ("List of Approved Repairs", "LAR Page 1 to LAR Page 2", "D"),
+                ]
+            ),
+            _lep_page(
+                left=[
+                    ("List of Approved Repairs", "LAR 1", "Deleted *"),
+                    ("", "LAR 2", "Deleted *"),
+                ],
+                right=[],
+                page=2,
+            ),
+        ]
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.HIGHLIGHTS_STATUS_CONSISTENCY
+    ]
+
+    assert findings == []
 
 
 def test_highlights_u_matches_unstarred_previous_lep_and_footer_dates() -> None:
@@ -692,6 +1828,22 @@ def test_footer_date_must_match_the_revision_on_a_modified_page() -> None:
     )
 
 
+def test_footer_page_number_rejects_two_numbers_and_suggests_the_first() -> None:
+    parsed = _consistent_document()
+    parsed.pages[2] = _page(3, _footer(3, "Page 25/26", _REVISION_DATE))
+
+    findings = [
+        finding
+        for finding in _findings(parsed)
+        if finding.control == revision.FOOTER_PAGE_NUMBER and finding.page == 3
+    ]
+
+    assert len(findings) == 1
+    assert findings[0].original == "Page 25/26"
+    assert findings[0].proposed == "Page 25"
+    assert findings[0].bbox is not None
+
+
 def test_unchanged_page_keeps_its_own_date_in_the_footer() -> None:
     parsed = _consistent_document()
     parsed.pages[4] = _page(5, _footer(5, "Page 501", "JAN 66"))
@@ -716,7 +1868,95 @@ def test_page_absent_from_the_lep_is_reported() -> None:
     parsed.pages.append(_page(6, _footer(6, "Page 601", "JUL 66")))
     parsed.page_count = 6
 
+    state = _state(parsed)
+    findings = [finding for finding in state.findings if finding.control == revision.PAGE_NOT_IN_LEP]
+
     assert _codes(parsed) == [revision.PAGE_NOT_IN_LEP]
+    assert len(findings) == 1
+    assert findings[0].bbox == state.footers[-1].label_bbox
+
+
+def test_lep_page_ids_fused_with_subject_spans_are_still_extracted() -> None:
+    page = _lep_page(
+        left=[
+            ("Trouble Shooting", "801", "AUG 30/75"),
+            ("", "802", "AUG 30/75"),
+            ("Special Equipment", "1001", "JUL 30/26 *"),
+            ("and Tooling", "1002", "AUG 30/75"),
+        ],
+        right=[],
+        page=2,
+    )
+    merged_ids = {"Trouble Shooting": "801", "Special Equipment": "1001"}
+    spans = []
+    for span in page.spans:
+        if span.text in merged_ids:
+            spans.append(
+                _span(
+                    f"{span.text} {merged_ids[span.text]}",
+                    span.bbox[0],
+                    (span.bbox[1] + span.bbox[3]) / 2,
+                    page.page,
+                )
+            )
+        elif span.text not in merged_ids.values():
+            spans.append(span)
+    page.spans = spans
+    page.text = "\n".join(span.text for span in spans)
+
+    entries, _subject = revision.extract_lep(page)
+    subject_by_page = {entry.page_key: entry.subject for entry in entries}
+
+    assert subject_by_page["801"] == "Trouble Shooting"
+    assert subject_by_page["802"] == "Trouble Shooting"
+    assert subject_by_page["1001"] == "Special Equipment"
+    assert subject_by_page["1002"] == "Special Equipment and Tooling"
+
+
+def test_ambiguous_page_number_listed_in_lep_is_not_reported_absent() -> None:
+    date = revision.parse_date("JUL 66")
+    assert date is not None
+    state = revision.RevisionState(
+        revision_date=revision.parse_date(_REVISION_DATE),
+        full_document=True,
+        lep=[
+            revision.LepEntry(
+                subject="Description and Operation",
+                page_key="1",
+                date=date,
+                date_text="JUL 66",
+                is_blank=False,
+                starred=False,
+                page=9,
+                bbox=(0.0, 0.0, 100.0, 10.0),
+            ),
+            revision.LepEntry(
+                subject="Illustrated Parts List",
+                page_key="1",
+                date=date,
+                date_text="JUL 66",
+                is_blank=False,
+                starred=False,
+                page=10,
+                bbox=(0.0, 0.0, 100.0, 10.0),
+            ),
+        ],
+        footers=[
+            revision.PageFooter(
+                page=19,
+                page_key="1",
+                observed_page_key="1",
+                label_text="Page 1",
+                label_bbox=(0.0, 0.0, 100.0, 10.0),
+                page_number_bbox=(0.0, 0.0, 100.0, 10.0),
+                date=date,
+                date_text="JUL 66",
+                date_bbox=(0.0, 10.0, 100.0, 20.0),
+            )
+        ],
+    )
+
+    assert revision._footer_findings(state) == []
 
 
 def test_a_partial_page_range_silences_the_absence_controls() -> None:
@@ -750,6 +1990,51 @@ def test_highlights_must_declare_pages_by_odd_even_pair() -> None:
     assert "402" in findings[0].message
 
 
+def test_highlights_pairing_accepts_compound_intro_odd_even_range() -> None:
+    page = _highlights_page(
+        [("Illustrated Parts List", "INTRO 1101 Page 3 to INTRO Page 4", "R")]
+    )
+    entries = revision.extract_highlights(page)
+    state = revision.RevisionState(highlights=entries)
+
+    assert entries[0].page_keys == ("INTRO 1101 3", "INTRO 1101 4")
+    assert revision._pairing_findings(state) == []
+
+
+def test_highlights_pairing_reports_blank_lep_partner_omitted_from_highlights() -> None:
+    state = revision.RevisionState(
+        highlights=[
+            revision.HighlightsEntry(
+                subject="List of Materials",
+                pages_text="LM Page 1",
+                page_keys=("LM 1",),
+                status="R",
+                page=1,
+                bbox=(0.0, 0.0, 100.0, 10.0),
+                status_bbox=(100.0, 0.0, 110.0, 10.0),
+            )
+        ],
+        lep=[
+            revision.LepEntry(
+                subject="List of Materials",
+                page_key="LM 2",
+                date=None,
+                date_text="Blank *",
+                is_blank=True,
+                starred=True,
+                page=9,
+                bbox=(0.0, 0.0, 100.0, 10.0),
+            )
+        ],
+    )
+
+    findings = revision._pairing_findings(state)
+
+    assert len(findings) == 1
+    assert findings[0].control == revision.HIGHLIGHTS_PAIRING
+    assert "LM 2" in findings[0].message
+
+
 def test_highlights_page_label_wording_and_alignment() -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(
@@ -763,6 +2048,32 @@ def test_highlights_page_label_wording_and_alignment() -> None:
 
     assert [finding.control for finding in findings] == [revision.HIGHLIGHTS_PAGE_LABEL]
     assert findings[0].proposed == "Pages 401 to 402"
+
+
+def test_single_page_highlights_label_passes_when_number_is_visually_aligned() -> None:
+    page = _highlights_page(
+        [
+            ("Repair", "Page 1001", "R"),
+            ("Repair", "Page  1002", "R"),
+            ("Illustrated Parts List", "Pages 1101-1 to 1101-2", "R"),
+        ]
+    )
+    page.words = [
+        _word("Page", 90.7, 264.0, 0),
+        _word("1001", 126.7, 264.0, 1),
+        _word("Page", 90.7, 306.0, 2),
+        _word("1002", 126.7, 306.0, 3),
+        _word("Pages", 90.7, 348.0, 4),
+        _word("1101-1", 126.7, 348.0, 5),
+        _word("to", 168.7, 348.0, 6),
+        _word("1101-2", 180.7, 348.0, 7),
+    ]
+
+    entries = revision.extract_highlights(page)
+    state = revision.RevisionState(highlights=entries)
+
+    assert entries[0].page_number_x == 126.7
+    assert revision._page_label_findings(state) == []
 
 
 def test_single_page_label_requires_two_spaces() -> None:
@@ -790,6 +2101,7 @@ def test_revised_page_without_footer_number_is_reported() -> None:
 
 def test_compiled_rules_emit_one_suggestion_per_divergence() -> None:
     parsed = _consistent_document()
+    parsed.pages[0].page_type = "HIGHLIGHTS_PAGE_1"
     parsed.pages[2] = _page(3, _footer(3, "Page 401", "JAN 27/26"))
 
     results, raws = execute_pdf_rules(parsed, _REVISION_RULES, document=_DOCUMENT)
@@ -843,4 +2155,4 @@ def test_classify_pages_marks_modified_pages_before_the_other_rules() -> None:
 
     classify_pages(parsed, _DOCUMENT)
 
-    assert [page.is_modified for page in parsed.pages] == [None, True, True, True, False]
+    assert [page.is_modified for page in parsed.pages] == [True, True, True, True, False]

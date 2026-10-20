@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Tuiles foncées -->
+    <linearGradient id="gTL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#307fe2"/>
+      <stop offset="1" stop-color="#0a3fb5"/>
+    </linearGradient>
+    <linearGradient id="gBR" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a3fb5"/>
+      <stop offset="1" stop-color="#001e60"/>
+    </linearGradient>
+
+    <!-- Tuiles claires -->
+    <linearGradient id="gTR" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a9cf0"/>
+      <stop offset="1" stop-color="#307fe2"/>
+    </linearGradient>
+    <linearGradient id="gBL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#41b6e6"/>
+      <stop offset="1" stop-color="#20a0d3"/>
+    </linearGradient>
+
+    <!-- Tuile foncée : grands arrondis en haut à gauche et en bas à droite -->
+    <path id="tileDark" d="M48 8 H84 A12 12 0 0 1 96 20 V56 A40 40 0 0 1 56 96 H20 A12 12 0 0 1 8 84 V48 A40 40 0 0 1 48 8 Z"/>
+    <!-- Tuile claire : grands arrondis en haut à droite et en bas à gauche -->
+    <path id="tileLight" d="M20 8 H56 A40 40 0 0 1 96 48 V84 A12 12 0 0 1 84 96 H48 A40 40 0 0 1 8 56 V20 A12 12 0 0 1 20 8 Z"/>
+  </defs>
+
+  <!-- Haut gauche (foncée) -->
+  <use href="#tileDark" fill="url(#gTL)"/>
+  <!-- Haut droite (claire) -->
+  <use href="#tileLight" fill="url(#gTR)" transform="translate(96 0)"/>
+  <!-- Bas gauche (claire) -->
+  <use href="#tileLight" fill="url(#gBL)" transform="translate(0 96)"/>
+  <!-- Bas droite (foncée) -->
+  <use href="#tileDark" fill="url(#gBR)" transform="translate(96 96)"/>
+
+  <!-- Étoile centrale -->
+  <path fill="#307fe2" d="M100 82 Q104 96 118 100 Q104 104 100 118 Q96 104 82 100 Q96 96 100 82 Z"/>
+</svg>

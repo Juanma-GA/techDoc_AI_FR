@@ -24,6 +24,11 @@ from app.core.compiled_rules import (
 )
 from app.parsers.pdf_parser import ParsedPage
 from app.core.logging import get_logger
+from app.core.regex_safety import (
+    USER_REGEX_TIMEOUT_SECONDS,
+    UserRegexPatternError,
+    compile_user_regex,
+)
 
 from app.core.compiled_rule_runtime import (
     _ENTITY_PATTERNS,
@@ -64,6 +69,7 @@ _BAR_PSI_CONVERSION_RE = re.compile(
     re.IGNORECASE,
 )
 _PARENTHESIZED_VALUE_RE = re.compile(r"[ \t]*\([^()\r\n]{0,120}\)")
+_LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _BAR_TO_PSI = Decimal("14.5037738")
 _KG_TO_LB = Decimal(1) / Decimal("0.45359237")
 _NM_TO_LBF_IN = Decimal("8.850745767378715")
@@ -168,6 +174,21 @@ _UNIT_CONVERSION_POLICIES = {
         source_modifier_pattern=_PERCENT_UNCERTAINTY_PATTERN,
     ),
 }
+_METRIC_LENGTH_RANGE_RE = re.compile(
+    rf"(?<![\w.])(?P<first_source>(?P<first_source_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?P<first_source_unit>km|cm|mm|m)\b)"
+    r"[ \t]+and[ \t]+"
+    rf"(?P<second_source>(?P<second_source_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?P<second_source_unit>km|cm|mm|m)\b)"
+    r"[ \t]*\([ \t]*"
+    rf"(?P<first_target>(?P<first_target_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?:inch(?:es)?|in\.?))"
+    r"[ \t]+and[ \t]+"
+    rf"(?P<second_target>(?P<second_target_value>{_PRESSURE_VALUE_PATTERN})\s*"
+    r"(?:inch(?:es)?|in\.?))"
+    r"[ \t]*\)",
+    re.IGNORECASE,
+)
 FONT_SIZE_TOLERANCE = 0.1
 _ENUMERATION_START_RE = re.compile(
     r"^\s*(?P<marker>(?:[-*]|\([A-Za-z0-9]+\)|[A-Z]\.\s*|\d+[.)]\s+))"
@@ -184,6 +205,13 @@ _PAGE_LABEL_RE = re.compile(
     r"(?:PAGE\s+)?\d+\s*$"
 )
 _HEADING_RE = re.compile(r"^\s*(?:\d+\.\s+|[A-Z]\.\s+)[A-Z].*$")
+_FIGURE_CAPTION_RE = re.compile(r"(?i)^\s*(?:table|figure|fig\.?)\s+\d+\b")
+_COLUMN_LABEL_RE = re.compile(
+    r"(?i)^\s*[-*]\s*\d+(?:st|nd|rd|th)\s+column\s*:"
+)
+_FIGURE_ITEM_LIST_LABEL_RE = re.compile(
+    r"(?i)^\s*[-*]\s*the\s+figure\s+and\s+item\s+number\b.*\blist\s*$"
+)
 _STRUCTURAL_PAGE_RE = re.compile(
     r"(?im)^\s*(?:HIGHLIGHTS|LIST OF EFFECTIVE PAGES|"
     r"RECORD OF REVISIONS|TABLE OF CONTENTS)\s*$"
@@ -223,12 +251,77 @@ class _PunctuationBlock:
     last_end: int
 
 
+def _table_row_span_ranges(
+    span_ranges: tuple[_SpanRange, ...],
+) -> tuple[_SpanRange, ...]:
+    rows: list[tuple[float, list[_SpanRange]]] = []
+    for item in sorted(span_ranges, key=lambda item: item[2][1]):
+        center = (item[2][1] + item[2][3]) / 2
+        if rows and abs(center - rows[-1][0]) <= 3.0:
+            rows[-1][1].append(item)
+        else:
+            rows.append((center, [item]))
+    candidate_rows: list[tuple[float, list[_SpanRange]]] = []
+    for center, _row in rows:
+        nearby = [
+            item
+            for item in span_ranges
+            if abs((item[2][1] + item[2][3]) / 2 - center) <= 16.0
+        ]
+        if (
+            len(nearby) >= 2
+            and max(item[2][2] for item in nearby)
+            - min(item[2][0] for item in nearby)
+            > 40.0
+        ):
+            candidate_rows.append((center, nearby))
+    if len(candidate_rows) < 3:
+        return ()
+    table_rows: list[tuple[float, list[_SpanRange]]] = []
+    for row in candidate_rows:
+        anchors = sorted(item[2][0] for item in row[1])[:2]
+        aligned_rows = [
+            candidate
+            for candidate in candidate_rows
+            if all(
+                abs(candidate_anchor - anchor) <= 5.0
+                for candidate_anchor, anchor in zip(
+                    sorted(item[2][0] for item in candidate[1])[:2],
+                    anchors,
+                    strict=True,
+                )
+            )
+        ]
+        if len(aligned_rows) >= 3:
+            for candidate in aligned_rows:
+                if candidate not in table_rows:
+                    table_rows.append(candidate)
+    return tuple(item for _center, row in table_rows for item in row)
+
+
+def _span_overlaps_table_row(
+    span: tuple[int, int],
+    table_span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    start, end = span
+    return any(item[1] > start and item[0] < end for item in table_span_ranges)
+
+
+def is_table_row_match(
+    span: tuple[int, int],
+    span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    return _span_overlaps_table_row(span, _table_row_span_ranges(span_ranges))
+
+
 def pressure_conversion_issues(
     text: str,
     policy: str = "bar_to_psi",
+    *,
+    span_ranges: tuple[_SpanRange, ...] = (),
 ) -> list[PressureConversionIssue]:
     """Return bar values missing or carrying an incorrect psi conversion."""
-    return unit_conversion_issues(text, policy)
+    return unit_conversion_issues(text, policy, span_ranges=span_ranges)
 
 
 def _uncertainty_key(modifier: str | None) -> tuple[str, Decimal] | None:
@@ -252,18 +345,115 @@ def _uncertainty_matches(source: str | None, converted: str | None) -> bool:
     return _uncertainty_key(source) == _uncertainty_key(converted)
 
 
+def is_list_of_materials_page(text: str) -> bool:
+    return _LIST_OF_MATERIALS_TITLE_RE.search(text) is not None
+
+
+def _format_expected_conversion(
+    source_value: Decimal,
+    factor: Decimal,
+    policy: UnitConversionPolicy,
+    modifier: str | None = None,
+) -> tuple[str, Decimal, Decimal]:
+    expected_value = source_value * factor
+    if policy.significant_digits is not None and expected_value != 0:
+        precision = policy.significant_digits - 1 - expected_value.adjusted()
+    elif policy.significant_digits is not None:
+        precision = policy.significant_digits - 1
+    else:
+        absolute_value = abs(expected_value)
+        precision = (
+            2
+            if absolute_value >= Decimal("0.01") or absolute_value == 0
+            else 4
+            if absolute_value >= Decimal("0.0001")
+            else 8
+        )
+    display_quantum = Decimal(1).scaleb(-precision)
+    formatted_value = expected_value.quantize(
+        display_quantum,
+        rounding=ROUND_HALF_UP,
+    )
+    rendered_precision = max(precision, 0)
+    expected_conversion = (
+        f"({formatted_value:.{rendered_precision}f} {policy.target_unit}"
+    )
+    if modifier is not None:
+        expected_conversion += f" {modifier}"
+    return f"{expected_conversion})", expected_value, display_quantum
+
+
 def unit_conversion_issues(
     text: str,
     policy: str,
+    *,
+    span_ranges: tuple[_SpanRange, ...] = (),
 ) -> list[PressureConversionIssue]:
     """Return SI values missing or carrying an incorrect paired conversion."""
+    if is_list_of_materials_page(text):
+        return []
     conversion_policy = _UNIT_CONVERSION_POLICIES.get(policy)
     if conversion_policy is None:
         return []
 
     issues: list[PressureConversionIssue] = []
+    paired_ranges: list[tuple[int, int]] = []
+    table_span_ranges = _table_row_span_ranges(span_ranges)
+    if policy == "metric_length_to_inch":
+        for match in _METRIC_LENGTH_RANGE_RE.finditer(text):
+            if _span_overlaps_table_row(match.span(), table_span_ranges):
+                continue
+            paired_ranges.append(match.span())
+            source_units = (
+                match.group("first_source_unit").casefold(),
+                match.group("second_source_unit").casefold(),
+            )
+            source_values = (
+                Decimal(match.group("first_source_value").replace(",", ".")),
+                Decimal(match.group("second_source_value").replace(",", ".")),
+            )
+            target_values = (
+                Decimal(match.group("first_target_value").replace(",", ".")),
+                Decimal(match.group("second_target_value").replace(",", ".")),
+            )
+            expected_conversions: list[str] = []
+            pair_is_valid = True
+            for unit, source_value, target_value in zip(
+                source_units,
+                source_values,
+                target_values,
+                strict=True,
+            ):
+                expected, expected_value, quantum = _format_expected_conversion(
+                    source_value,
+                    conversion_policy.factors[unit],
+                    conversion_policy,
+                )
+                expected_conversions.append(expected[1:-1])
+                pair_is_valid = pair_is_valid and (
+                    abs(target_value - expected_value) <= quantum / 2
+                )
+            if not pair_is_valid:
+                expected = f"({' and '.join(expected_conversions)})"
+                proposed = (
+                    f"{match.group('first_source')} and {match.group('second_source')} "
+                    f"{expected}"
+                )
+                issues.append(
+                    PressureConversionIssue(
+                        original=match.group(0),
+                        proposed=proposed,
+                        expected=expected,
+                        span=match.span(),
+                    )
+                )
+
     ignored_until = 0
     for source_match in conversion_policy.source_pattern.finditer(text):
+        if _span_overlaps_table_row(source_match.span(), table_span_ranges):
+            continue
+        if any(start <= source_match.start() < end for start, end in paired_ranges):
+            continue
         if source_match.start() < ignored_until:
             continue
         try:
@@ -298,34 +488,14 @@ def unit_conversion_issues(
             else None
         )
 
-        expected_value = source_value * factor
-        if conversion_policy.significant_digits is not None and expected_value != 0:
-            precision = (
-                conversion_policy.significant_digits - 1 - expected_value.adjusted()
+        expected_conversion, expected_value, display_quantum = (
+            _format_expected_conversion(
+                source_value,
+                factor,
+                conversion_policy,
+                source_modifier,
             )
-        elif conversion_policy.significant_digits is not None:
-            precision = conversion_policy.significant_digits - 1
-        else:
-            absolute_value = abs(expected_value)
-            precision = (
-                2
-                if absolute_value >= Decimal("0.01") or absolute_value == 0
-                else 4
-                if absolute_value >= Decimal("0.0001")
-                else 8
-            )
-        display_quantum = Decimal(1).scaleb(-precision)
-        formatted_value = expected_value.quantize(
-            display_quantum,
-            rounding=ROUND_HALF_UP,
         )
-        rendered_precision = max(precision, 0)
-        expected_conversion = (
-            f"({formatted_value:.{rendered_precision}f} {conversion_policy.target_unit}"
-        )
-        if source_modifier is not None:
-            expected_conversion += f" {source_modifier}"
-        expected_conversion += ")"
         conversion_match = conversion_policy.target_pattern.match(
             text,
             conversion_start,
@@ -442,27 +612,11 @@ def _block_is_table_like(
     span_ranges: tuple[_SpanRange, ...],
 ) -> bool:
     relevant = _block_span_ranges(block, span_ranges)
-    if not relevant:
+    table_spans = _table_row_span_ranges(span_ranges)
+    if not relevant or not table_spans:
         return False
-    rows: list[tuple[float, list[_SpanRange]]] = []
-    for item in sorted(span_ranges, key=lambda item: item[2][1]):
-        center = (item[2][1] + item[2][3]) / 2
-        if rows and abs(center - rows[-1][0]) <= 3.0:
-            rows[-1][1].append(item)
-        else:
-            rows.append((center, [item]))
-    table_rows = [
-        row
-        for row in rows
-        if len(row[1]) >= 3
-        and max(item[2][0] for item in row[1])
-        - min(item[2][0] for item in row[1])
-        > 40.0
-    ]
-    if len(table_rows) < 3:
-        return False
-    table_top = min(item[2][1] for _center, row in table_rows for item in row) - 70.0
-    table_bottom = max(item[2][3] for _center, row in table_rows for item in row) + 5.0
+    table_top = min(item[2][1] for item in table_spans) - 70.0
+    table_bottom = max(item[2][3] for item in table_spans) + 5.0
     return any(
         table_top
         <= (item[2][1] + item[2][3]) / 2
@@ -492,7 +646,11 @@ def _is_non_sentence_block(text: str) -> bool:
         compact,
     ):
         return True
-    if re.match(r"(?i)^\s*(?:table|figure)\s+\d+\b", compact):
+    if (
+        _FIGURE_CAPTION_RE.match(compact)
+        or _COLUMN_LABEL_RE.match(compact)
+        or _FIGURE_ITEM_LIST_LABEL_RE.match(compact)
+    ):
         return True
     if _HEADING_RE.fullmatch(compact):
         return True
@@ -524,6 +682,13 @@ def _replace_terminal_punctuation(value: str, expected: str) -> str:
     return f"{stripped}{expected}{closing_quotes}"
 
 
+def _terminal_punctuation(value: str) -> str:
+    terminal = value.rstrip()
+    while terminal and terminal[-1] in "\"'»”":
+        terminal = terminal[:-1].rstrip()
+    return terminal[-1] if terminal and terminal[-1] in ".,;:!?" else ""
+
+
 def sentence_punctuation_issues(
     text: str,
     span_ranges: tuple[_SpanRange, ...] = (),
@@ -543,6 +708,40 @@ def sentence_punctuation_issues(
         and not _is_non_sentence_block(block.text)
     ]
     classified = [(block, _enumeration_family(block.text)) for block in candidates]
+    enumeration_expected: dict[int, str] = {}
+    group_start = 0
+    while group_start < len(classified):
+        family = classified[group_start][1]
+        if family is None:
+            group_start += 1
+            continue
+        group_end = group_start
+        while group_end + 1 < len(classified) and classified[group_end + 1][1] == family:
+            group_end += 1
+        group_indexes = list(range(group_start, group_end + 1))
+        observed_marks = [
+            _terminal_punctuation(classified[index][0].last_line)
+            for index in group_indexes
+        ]
+        vote_marks = [
+            mark
+            for member_index, mark in zip(group_indexes, observed_marks, strict=True)
+            if mark in {"", ".", ",", ";"}
+            and not classified[member_index][0].last_line.rstrip().endswith(":")
+        ]
+        dominant_mark = max(set(vote_marks), key=vote_marks.count) if vote_marks else ""
+        has_majority = (
+            len(group_indexes) > 1
+            and vote_marks.count(dominant_mark) > len(vote_marks) / 2
+        )
+        for index in group_indexes:
+            enumeration_expected[index] = (
+                dominant_mark
+                if has_majority
+                else "," if index < group_end else "."
+            )
+        group_start = group_end + 1
+
     issues: list[SentencePunctuationIssue] = []
     for index, (block, family) in enumerate(classified):
         next_family = classified[index + 1][1] if index + 1 < len(classified) else None
@@ -551,13 +750,7 @@ def sentence_punctuation_issues(
             if block.text.rstrip().endswith(":"):
                 continue
         else:
-            group_end = index
-            while (
-                group_end + 1 < len(classified)
-                and classified[group_end + 1][1] == family
-            ):
-                group_end += 1
-            expected = "," if group_end > index else "."
+            expected = enumeration_expected[index]
             if (
                 block.text.rstrip().endswith(":")
                 and next_family is not None
@@ -568,11 +761,16 @@ def sentence_punctuation_issues(
         terminal = observed.rstrip()
         while terminal and terminal[-1] in "\"'»”":
             terminal = terminal[:-1].rstrip()
-        if terminal.endswith(expected):
+        terminal_punctuation = _terminal_punctuation(terminal)
+        if (
+            terminal_punctuation == expected
+            if family is not None
+            else terminal.endswith(".")
+        ):
             continue
-        terminal_punctuation = terminal[-1] if terminal else ""
         enumeration_swap = (
             family is not None
+            and expected in {".", ","}
             and terminal_punctuation in {".", ","}
             and terminal_punctuation != expected
         )
@@ -619,18 +817,28 @@ def evaluate_rule(
             "compiled_check_evaluated",
             rule_id=rule.id,
             check_index=check_index,
-            check=check.model_dump(mode="json"),
             status=status,
             page=target.page,
-            observed=observed,
-            expected=expected_repr,
         )
         if status != "PASS" and first_failure is None:
             first_failure = (status, target, observed, expected_repr)
+    inconclusive_pages = ctx.inconclusive_pages.pop(rule.id, [])
     if first_failure is not None:
         status, target, observed, expected_repr = first_failure
         result_evidence = evidence(target, observed, expected_repr, is_docx, pdf_pages)
-        return RuleResult(rule_id=rule.id, status=status, evidence=result_evidence)
+        return RuleResult(
+            rule_id=rule.id,
+            status=status,
+            evidence=result_evidence,
+            inconclusive_pages=[str(page) for page in inconclusive_pages],
+        )
+    if inconclusive_pages:
+        return RuleResult(
+            rule_id=rule.id,
+            status="INCONCLUSIVE",
+            evidence=evidence(last_target, last_observed, last_expected, is_docx, pdf_pages),
+            inconclusive_pages=[str(page) for page in inconclusive_pages],
+        )
     return RuleResult(
         rule_id=rule.id,
         status="PASS",
@@ -657,6 +865,14 @@ def evaluate_check(
         for target in targets
     ]
     expected = None if check.expected is None or isinstance(check.expected, list) else str(check.expected)
+    if check.replacement == "{{temperature_fahrenheit}}":
+        values = [
+            (target, value)
+            for target, value in values
+            if not is_list_of_materials_page(target.text)
+        ]
+        if not values:
+            return "PASS", targets[0], None, expected
     if check.operator == "exists":
         match = next(((target, value) for target, value in values if value and (expected is None or expected in value)), None)
         target, observed = match or (targets[0], None)
@@ -672,7 +888,11 @@ def evaluate_check(
     if check.operator == "pressure_conversion":
         policy = str(check.expected)
         for target, value in values:
-            issues = pressure_conversion_issues(value or "", policy)
+            issues = pressure_conversion_issues(
+                value or "",
+                policy,
+                span_ranges=target.span_ranges,
+            )
             if issues:
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected
@@ -680,7 +900,11 @@ def evaluate_check(
     if check.operator == "unit_conversion":
         policy = str(check.expected)
         for target, value in values:
-            issues = unit_conversion_issues(value or "", policy)
+            issues = unit_conversion_issues(
+                value or "",
+                policy,
+                span_ranges=target.span_ranges,
+            )
             if issues:
                 issue = issues[0]
                 return "FAIL", target, issue.original, issue.expected
@@ -704,7 +928,7 @@ def evaluate_check(
         "highlights_holder",
         "highlights_document_type",
     }:
-        return evaluate_client_operation(check, targets, ctx)
+        return evaluate_client_operation(check, targets, ctx, rule_id)
     if check.operator == "contains_any":
         terms = [str(term) for term in (check.expected or [])]
         joined = ", ".join(terms)
@@ -836,8 +1060,12 @@ def field_value(
             return None
         return text[start.start() : end.end()].strip()
     pattern_text = (client_entities or {}).get(field)
-    pattern = re.compile(pattern_text) if pattern_text is not None else _ENTITY_PATTERNS.get(field)
-    match = pattern.search(text) if pattern else None
+    if pattern_text is not None:
+        pattern = compile_user_regex(pattern_text)
+        match = pattern.search(text, timeout=USER_REGEX_TIMEOUT_SECONDS)
+    else:
+        pattern = _ENTITY_PATTERNS.get(field)
+        match = pattern.search(text) if pattern else None
     return match.group(1).strip() if match else None
 
 
@@ -912,6 +1140,7 @@ def evaluate_client_operation(
     check: Check,
     targets: list[_TextTarget],
     ctx: _EvalContext,
+    rule_id: str,
 ) -> tuple[Literal["PASS", "FAIL", "INCONCLUSIVE"], _TextTarget, str | None, str | None]:
     operation_name = check.operation
     parameters = check.operation_params
@@ -939,6 +1168,8 @@ def evaluate_client_operation(
         targets=tuple(targets),
     )
     result = operation.execute(operation_context, parameters)
+    if result.inconclusive_pages:
+        ctx.inconclusive_pages[rule_id] = result.inconclusive_pages
     target = next(
         (item for item in targets if result.page is not None and item.raw_page == result.page),
         targets[0],
@@ -1080,34 +1311,29 @@ def evaluate_regex(
     if missing_context:
         return "INCONCLUSIVE", values[0][0], None, expected
     try:
-        pattern = re.compile(resolved_pattern)
-    except re.error:
+        pattern = compile_user_regex(resolved_pattern)
+    except UserRegexPatternError:
         return "INCONCLUSIVE", values[0][0], None, expected
 
     first_match: tuple[_TextTarget, re.Match[str]] | None = None
     for target, value in values:
         text = value or ""
-        matches = list(pattern.finditer(text))
+        try:
+            matches = list(pattern.finditer(text, timeout=USER_REGEX_TIMEOUT_SECONDS))
+        except TimeoutError:
+            _logger.warning("compiled_regex_timeout", rule_id=rule_id, page=target.page)
+            return "INCONCLUSIVE", target, None, expected
+        if check.replacement == "{{temperature_fahrenheit}}":
+            matches = [
+                match
+                for match in matches
+                if not is_table_row_match(match.span(), target.span_ranges)
+            ]
         _logger.info(
             "compiled_regex_evaluated",
             rule_id=rule_id,
             page=target.page,
-            pattern=resolved_pattern,
             match_count=len(matches),
-            document_metadata={
-                field: str(raw).strip()
-                for field in (
-                    "meta_revision_date",
-                    "meta_cmm_number",
-                    "meta_first_issue_date",
-                    "meta_last_issue_date",
-                    "meta_revision_number",
-                    "meta_pnr_number",
-                    "meta_manufacturer",
-                    "document_language",
-                )
-                if (raw := getattr(ctx.document, field, None)) is not None and str(raw).strip()
-            },
         )
         if matches and first_match is None:
             first_match = (target, matches[0])
@@ -1118,12 +1344,26 @@ def evaluate_regex(
             return "FAIL", target, match.group(0), expected
         return "PASS", values[0][0], None, expected
     if check.require_all:
-        missing_target = next(
-            (target for target, _value in values if not pattern.search(_value or "")),
-            None,
-        )
+        try:
+            missing_target = next(
+                (
+                    target
+                    for target, _value in values
+                    if not pattern.search(_value or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                ),
+                None,
+            )
+        except TimeoutError:
+            return "INCONCLUSIVE", values[0][0], None, expected
         if missing_target is None:
-            target, match = first_match or (values[0][0], pattern.search(values[0][1] or ""))
+            if first_match is not None:
+                target, match = first_match
+            else:
+                target = values[0][0]
+                try:
+                    match = pattern.search(values[0][1] or "", timeout=USER_REGEX_TIMEOUT_SECONDS)
+                except TimeoutError:
+                    return "INCONCLUSIVE", target, None, expected
             return "PASS", target, match.group(0) if match is not None else None, expected
         return "FAIL", missing_target, None, expected
     if first_match is not None:
@@ -1150,14 +1390,26 @@ def resolve_regex_pattern(
             missing_context.append(field)
             return match.group(0)
         if isinstance(raw, list):
-            return "(?:" + "|".join(re.escape(item) for item in raw) + ")"
-        escaped = re.escape(raw)
-        if field == "meta_first_pnr_number":
-            escaped = escaped.replace(r"\-", r"\s*-\s*")
-        return escaped
+            return "(?:" + "|".join(_regex_literal_with_layout_whitespace(item) for item in raw) + ")"
+        return _regex_literal_with_layout_whitespace(raw)
 
     resolved = _CONTEXT_TOKEN_RE.sub(replace_token, pattern)
     return resolved, context_fields, sorted(set(missing_context))
+
+
+def _regex_literal_with_layout_whitespace(value: str) -> str:
+    tokens = re.findall(r"\w+|[^\w\s]+", value.strip())
+    if not tokens:
+        return ""
+
+    pattern = [r"\s*".join(re.escape(character) for character in tokens[0])]
+    previous_is_word = tokens[0][0].isalnum() or tokens[0][0] == "_"
+    for token in tokens[1:]:
+        is_word = token[0].isalnum() or token[0] == "_"
+        pattern.append(r"\s+" if previous_is_word and is_word else r"\s*")
+        pattern.append(r"\s*".join(re.escape(character) for character in token))
+        previous_is_word = is_word
+    return "".join(pattern)
 
 
 def resolve_replacement_template(template: str | None, document: Any | None) -> str | None:

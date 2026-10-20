@@ -1,8 +1,10 @@
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useRejectionsSummary } from "../hooks/useSuggestions";
-
-import { BarList, type BarItem } from "./BarList";
+import { toCsv } from "../lib/csv";
+import { isAiGeneratedSuggestion, localizedRuleCode } from "../lib/suggestionText";
+import type { RejectionItem } from "../types/domain";
 
 const SEV_CLASS: Record<string, string> = {
   error: "danger",
@@ -10,33 +12,41 @@ const SEV_CLASS: Record<string, string> = {
   info: "info",
 };
 
-function truncate(s: string, n = 90): string {
-  const t = (s ?? "").replace(/\s+/g, " ").trim();
-  return t.length > n ? `${t.slice(0, n)}…` : t;
-}
-
-/**
- * Synthèse des rejets (parité 1:1 avec corpus-agent) : paragraphe de synthèse
- * IA (motifs récurrents, règles à affiner) + répartition des rejets par règle
- * + tableau exploitable (fichier, règle, sévérité, message, motif) + export CSV.
- * Tout provient de `GET /suggestions/rejections-summary`.
- */
 export function RejectionsSummaryCard() {
   const { t } = useTranslation();
-  const q = useRejectionsSummary();
+  const q = useRejectionsSummary(false);
   const data = q.data;
-
-  const byRule: BarItem[] = (data?.by_rule ?? []).map((r) => ({
-    label: r.rule_code || t("data.rejects.noRule"),
-    value: r.count,
-  }));
+  const byDocument = new Map<string, { file: string; items: RejectionItem[] }>();
+  for (const item of data?.items ?? []) {
+    const group = byDocument.get(item.document_id);
+    if (group) group.items.push(item);
+    else byDocument.set(item.document_id, { file: item.file, items: [item] });
+  }
+  const documents = Array.from(byDocument, ([documentId, group]) => {
+    const byRule = new Map<string, RejectionItem[]>();
+    for (const item of group.items) {
+      const ruleItems = byRule.get(item.rule_code);
+      if (ruleItems) ruleItems.push(item);
+      else byRule.set(item.rule_code, [item]);
+    }
+    const rules = Array.from(byRule, ([ruleCode, items]) => ({ ruleCode, items })).sort(
+      (left, right) =>
+        right.items.length - left.items.length || left.ruleCode.localeCompare(right.ruleCode),
+    );
+    return { documentId, ...group, rules };
+  }).sort((left, right) => left.file.localeCompare(right.file));
 
   const exportCsv = (): void => {
     if (!data) return;
     const header = ["fichier", "regle", "severite", "message", "motif"];
-    const rows = data.items.map((i) => [i.file, i.rule_code, i.severity, i.message, i.feedback]);
-    const esc = (c: string): string => `"${(c ?? "").replace(/"/g, '""')}"`;
-    const csv = [header, ...rows].map((r) => r.map(esc).join(";")).join("\n");
+    const rows = data.items.map((i) => [
+      i.file,
+      localizedRuleCode(i.rule_code, t),
+      t(`reviewer.suggestion.severity.${i.severity}`),
+      i.message,
+      i.feedback,
+    ]);
+    const csv = toCsv([header, ...rows]);
     const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -49,9 +59,9 @@ export function RejectionsSummaryCard() {
   return (
     <article className="card">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-        <h2 className="card-title" style={{ margin: 0 }}>
-          {t("data.rejects.title")}
-        </h2>
+        {data ? (
+          <span className="label">{t("data.rejects.total", { count: data.total })}</span>
+        ) : <span />}
         <button
           type="button"
           className="btn ghost small"
@@ -61,73 +71,115 @@ export function RejectionsSummaryCard() {
           {t("data.rejects.export")}
         </button>
       </div>
-      <p className="card-sub">{t("data.rejects.subtitle")}</p>
 
       {q.isLoading ? (
         <div className="empty-state">{t("common.loading")}</div>
+      ) : q.error ? (
+        <div className="empty-state error">{q.error.message}</div>
       ) : !data || data.total === 0 ? (
         <div className="empty-state">{t("data.rejects.empty")}</div>
       ) : (
-        <>
-          <div className="label" style={{ margin: "4px 0 10px" }}>
-            {t("data.rejects.total", { count: data.total })}
-          </div>
+        <div style={{ display: "grid", gap: 18, marginTop: 12 }}>
+          <section>
+            <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>
+              {t("data.rejects.globalByRule")}
+            </h2>
+            <ol style={{ display: "grid", gap: 6, listStyle: "none", margin: 0, padding: 0 }}>
+              {data.by_rule.map((rule, index) => (
+                <li
+                  className="row"
+                  key={rule.rule_code}
+                  style={{ justifyContent: "space-between", padding: "6px 10px" }}
+                >
+                  <div className="row" style={{ gap: 8, minWidth: 0 }}>
+                    <span className="label">{index + 1}.</span>
+                    <strong className="grow" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                      {localizedRuleCode(rule.rule_code, t)}
+                    </strong>
+                  </div>
+                  <span className="label" style={{ whiteSpace: "nowrap" }}>
+                    {t("data.rejects.total", { count: rule.count })}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </section>
 
-          {/* Synthèse IA (ou note si indisponible). */}
-          {data.llm_used && data.synthese ? (
-            <div
-              className="banner"
-              style={{ display: "block", marginBottom: 12, lineHeight: 1.5, whiteSpace: "pre-wrap" }}
-            >
-              <strong style={{ display: "block", marginBottom: 4 }}>
-                {t("data.rejects.aiTitle")}
-              </strong>
-              {data.synthese}
+          <section>
+            <h2 style={{ fontSize: 16, margin: "0 0 8px" }}>
+              {t("data.rejects.byDocument")}
+            </h2>
+            <div style={{ display: "grid", gap: 10 }}>
+              {documents.map((document) => (
+                <details className="collapsible" key={document.documentId}>
+                  <summary
+                    className="collapsible-summary"
+                    style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
+                  >
+                    <ChevronRight size={16} aria-hidden="true" />
+                    <strong
+                      className="grow"
+                      title={document.file}
+                      style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                    >
+                      {document.file}
+                    </strong>
+                    <span className="label" style={{ whiteSpace: "nowrap" }}>
+                      {t("data.rejects.total", { count: document.items.length })}
+                    </span>
+                  </summary>
+                  <div style={{ display: "grid", gap: 8, padding: "8px 10px" }}>
+                    {document.rules.map((rule) => (
+                      <details className="collapsible" key={rule.ruleCode}>
+                        <summary
+                          className="collapsible-summary"
+                          style={{ cursor: "pointer", listStyle: "none", userSelect: "none" }}
+                        >
+                          <ChevronRight size={16} aria-hidden="true" />
+                          <strong className="grow" style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                            {localizedRuleCode(rule.ruleCode, t)}
+                          </strong>
+                          <span className="label" style={{ whiteSpace: "nowrap" }}>
+                            {t("data.rejects.total", { count: rule.items.length })}
+                          </span>
+                        </summary>
+                        <ul style={{ listStyle: "none", margin: 0, padding: "0 10px" }}>
+                          {rule.items.map((item) => (
+                            <li
+                              key={item.id}
+                              style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}
+                            >
+                              <div className="row" style={{ alignItems: "flex-start" }}>
+                                <div className="grow" style={{ minWidth: 0 }}>
+                                  <div className="row" style={{ gap: 6 }}>
+                                    <span className={`badge ${SEV_CLASS[item.severity] ?? "info"}`}>
+                                      {t(`reviewer.suggestion.severity.${item.severity}`)}
+                                    </span>
+                                    {isAiGeneratedSuggestion(item.source_kind, item.rule_code) ? (
+                                      <span className="badge info">{t("reviewer.source.ai")}</span>
+                                    ) : null}
+                                  </div>
+                                  <p style={{ margin: "8px 0 0", overflowWrap: "anywhere" }}>
+                                    {item.message}
+                                  </p>
+                                  {item.feedback?.trim() ? (
+                                    <p style={{ margin: "6px 0 0", overflowWrap: "anywhere" }}>
+                                      <strong>{t("data.rejects.motifs")}:</strong> {item.feedback}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ))}
+                  </div>
+                </details>
+              ))}
             </div>
-          ) : (
-            <p className="hint" style={{ marginBottom: 12 }}>
-              {t("data.rejects.aiDisabled")}
-            </p>
-          )}
-
-          {/* Répartition par règle (indice de faux positifs par règle). */}
-          <h3 className="card-title" style={{ fontSize: "0.95rem" }}>
-            {t("data.rejects.byRule")}
-          </h3>
-          <div style={{ marginBottom: 12 }}>
-            <BarList items={byRule} />
-          </div>
-
-          {/* Tableau exploitable des rejets. */}
-          <div className="table-scroll">
-            <table className="rules-table">
-              <thead>
-                <tr>
-                  <th>{t("data.rejects.document")}</th>
-                  <th>{t("data.rejects.rule")}</th>
-                  <th>{t("data.rejects.colSeverity")}</th>
-                  <th>{t("data.rejects.colMessage")}</th>
-                  <th>{t("data.rejects.motifs")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((i) => (
-                  <tr key={i.id}>
-                    <td title={i.file}>{truncate(i.file, 34)}</td>
-                    <td>
-                      <span className="badge default">{i.rule_code}</span>
-                    </td>
-                    <td>
-                      <span className={`badge ${SEV_CLASS[i.severity] ?? "info"}`}>{i.severity}</span>
-                    </td>
-                    <td title={i.message}>{truncate(i.message)}</td>
-                    <td>{i.feedback?.trim() ? i.feedback : <span className="label">—</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
+          </section>
+        </div>
       )}
     </article>
   );

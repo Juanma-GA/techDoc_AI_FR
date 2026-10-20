@@ -1,10 +1,89 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0"
+    "version": "0.1.0",
+    "description": "Squelette de démarrage pour les POCs ATEXIS."
+  },
+  "nav": {
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "home": "Accueil",
+    "data": "Données",
+    "settings": "Paramètres"
+  },
+  "llm": {
+    "label": "LLM",
+    "title": "État du LLM (voir Paramètres)",
+    "on": "ON",
+    "off": "OFF",
+    "untested": "À TESTER",
+    "noKey": "NO KEY"
+  },
+  "demo": {
+    "badge": "MODE DÉMO",
+    "panelTitle": "Scénario de démonstration",
+    "panelDescription": "Le traitement est local et déterministe. Les saisies restent séparées des données utilisateur et ne sont pas envoyées à un service externe.",
+    "scenarioLabel": "Scénario",
+    "sampleFiles": "Fichiers d'exemple",
+    "run": "Exécuter localement",
+    "reset": "Réinitialiser le scénario",
+    "result": "Résultat",
+    "empty": "Aucun scénario démo n'est configuré.",
+    "error": "Le scénario n'a pas pu être exécuté.",
+    "scenarioTitle": "Résumé de texte",
+    "scenarioDescription": "Compter les mots et caractères d'un texte synthétique.",
+    "textLabel": "Texte à analyser",
+    "sampleText": "Bonjour depuis l’exemple AI4TECHDOC.",
+    "sampleFileName": "exemple.txt",
+    "sampleFileContent": "Fichier synthétique créé en mémoire.\nAucune donnée métier ou client.",
+    "outputWords": "Mots",
+    "outputCharacters": "Caractères",
+    "outputFileCharacters": "Caractères du fichier"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "confirm": "Confirmer",
+    "save": "Enregistrer"
   },
   "home": {
     "title": "Bienvenue",
     "subtitle": "Squelette POC — adapte routes/Home.tsx, app/api/, et locales/."
+  },
+  "data": {
+    "title": "Données",
+    "subtitle": "État des données locales de cette application.",
+    "overview": "Vue d'ensemble",
+    "documents": "Documents",
+    "chunks": "Segments",
+    "sessions": "Sessions",
+    "messages": "Messages",
+    "storage": "Stockage",
+    "resetTitle": "Réinitialisation",
+    "resetHint": "Les paramètres et la configuration LLM sont conservés.",
+    "resetButton": "Tout supprimer",
+    "resetDone": "Réinitialisation terminée ({{count}} éléments supprimés)."
+  },
+  "settings": {
+    "demo.title": "Mode de fonctionnement",
+    "demo.hint": "Le mode normal est sélectionné par défaut. Le choix est enregistré dans la configuration locale de l’application.",
+    "demo.normal": "Mode normal",
+    "demo.demo": "Mode démo",
+    "demo.saveError": "Impossible d'enregistrer le mode.",
+    "ai.title": "Intelligence artificielle",
+    "ai.toggleLabel": "LLM actif",
+    "ai.toggleHint": "Désactiver saute les tâches confiées à l'IA. La clé Mistral est conservée.",
+    "mistral.title": "Configuration Mistral",
+    "mistral.configured": "CONFIGURÉE",
+    "mistral.notConfigured": "NON CONFIGURÉE",
+    "mistral.apiKeyLabel": "Clé API Mistral",
+    "mistral.apiKeyHint": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
+    "mistral.baseUrlLabel": "Base URL",
+    "mistral.chatModelLabel": "Modèle chat",
+    "mistral.embedModelLabel": "Modèle embeddings",
+    "mistral.test": "Tester la connexion",
+    "mistral.saveSuccess": "Paramètres enregistrés.",
+    "mistral.testSuccess": "Connexion OK ({{count}} modèles disponibles).",
+    "mistral.testError": "Échec : {{message}}"
   }
 }

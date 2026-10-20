@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
 import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
+import { DemoPdfImportButton } from "../components/upload/DemoPdfImportButton";
 import { AnalysisTargetBanner } from "../components/reviewer/AnalysisTargetBanner";
 import { useAnalyze } from "../hooks/useAnalyze";
 import { useDeleteDocument, useDocuments, useUploadDocument } from "../hooks/useDocuments";
@@ -101,6 +102,7 @@ export function DocumentsList() {
               uploading={isUploading}
               autoOpen={autoOpenUploadDialog}
             />
+            <DemoPdfImportButton onFile={handleUpload} disabled={isUploading} />
 
             {/* Statut d'import explicite (l'upload est synchrone cote serveur :
                 conversion Word->PDF, portail qualite -> plusieurs secondes).
@@ -194,9 +196,17 @@ function DocRow({
           <p className="hint">{t("reviewer.meta.required")}</p>
         ) : null}
         {analyze.status === "running" ? (
-          <div className="progress" style={{ marginTop: 6 }}>
-            <div className="progress-bar" style={{ width: `${analyze.progress}%` }} />
-          </div>
+          <>
+            <div className="progress" style={{ marginTop: 6 }}>
+              <div
+                className={`progress-bar${analyze.progressIndeterminate ? " indeterminate" : ""}`}
+                style={analyze.progressIndeterminate ? undefined : { width: `${analyze.progress}%` }}
+              />
+            </div>
+            <p className="item-meta" aria-live="polite" style={{ marginTop: 4 }}>
+              {analyze.progress}%
+            </p>
+          </>
         ) : null}
       </div>
 

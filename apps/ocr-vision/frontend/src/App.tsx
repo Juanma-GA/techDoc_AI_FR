@@ -1,9 +1,8 @@
-import { ErrorBoundary } from "@internal/ui";
+import { AppShell, ErrorBoundary, LanguageSwitcher, sidebarNavItemClass } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { ThemeToggleButton } from "./components/ThemeToggleButton";
 import { Architecture } from "./routes/Architecture";
 import { Data } from "./routes/Data";
 import { Extraction } from "./routes/Extraction";
@@ -28,61 +27,40 @@ export function App() {
 
   return (
     <ErrorBoundary>
-    <div className="dw">
-      <div className="layout">
-        <aside className="sidebar">
-          <div className="sidebar-header">
-            <span className="brand" title={t("app.description")} style={{ cursor: "help" }}>
-              OCR Vision
-            </span>
-            <span className="label">v{t("app.version")}</span>
-            <ThemeToggleButton />
-          </div>
-
-          <LlmBadge />
-
-          <nav>
-            {navItems.map(({ to, labelKey }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === "/"}
-                className={({ isActive }) =>
-                  isActive ? "nav-item active" : "nav-item"
-                }
-              >
-                {t(labelKey)}
-              </NavLink>
-            ))}
-          </nav>
-
-          <div className="lang-switch" role="group" aria-label="Language">
-            {LANGS.map((lng) => (
-              <button
-                key={lng}
-                type="button"
-                className={currentLang === lng ? "lang-btn active" : "lang-btn"}
-                onClick={() => void i18n.changeLanguage(lng)}
-              >
-                {lng.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        <main>
-          <Routes>
-            <Route path="/" element={<Ocr />} />
-            <Route path="/extraction" element={<Extraction />} />
-            <Route path="/templates" element={<Templates />} />
-            <Route path="/home" element={<Home />} />
-            <Route path="/architecture" element={<Architecture />} />
-            <Route path="/data" element={<Data />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </main>
-      </div>
-    </div>
+    <AppShell
+      className="dw"
+      title={t("app.title")}
+      brandTitle={t("app.description")}
+      version={t("app.version")}
+      llmStatus={<LlmBadge />}
+      navigation={navItems.map(({ to, labelKey }) => (
+        <NavLink
+          key={to}
+          to={to}
+          end={to === "/"}
+          className={({ isActive }) => sidebarNavItemClass(isActive)}
+        >
+          {t(labelKey)}
+        </NavLink>
+      ))}
+      languageSwitcher={
+        <LanguageSwitcher
+          languages={LANGS}
+          currentLanguage={currentLang}
+          onLanguageChange={(language) => void i18n.changeLanguage(language)}
+        />
+      }
+    >
+      <Routes>
+        <Route path="/" element={<Ocr />} />
+        <Route path="/extraction" element={<Extraction />} />
+        <Route path="/templates" element={<Templates />} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/architecture" element={<Architecture />} />
+        <Route path="/data" element={<Data />} />
+        <Route path="/settings" element={<Settings />} />
+      </Routes>
+    </AppShell>
     </ErrorBoundary>
   );
 }

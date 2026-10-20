@@ -8,65 +8,99 @@
     "fr": "Hébergé sur l'espace de la plateforme IA Atexis.",
     "en": "Hosted on the Atexis AI platform workspace."
   },
+  "categories": [
+    {
+      "key": "assistants",
+      "label": {
+        "fr": "Assistants & connaissance",
+        "en": "Assistants & knowledge"
+      }
+    },
+    {
+      "key": "structuring",
+      "label": {
+        "fr": "Extraction & structuration",
+        "en": "Extraction & structuring"
+      }
+    },
+    {
+      "key": "lifecycle",
+      "label": {
+        "fr": "Rédaction & cycle documentaire",
+        "en": "Authoring & document lifecycle"
+      }
+    },
+    {
+      "key": "quality",
+      "label": {
+        "fr": "Qualité & conformité",
+        "en": "Quality & compliance"
+      }
+    },
+    {
+      "key": "illustration",
+      "label": {
+        "fr": "Illustration & 3D",
+        "en": "Illustration & 3D"
+      }
+    }
+  ],
   "pocs": [
     {
       "slug": "corpus-agent",
       "name": "Corpus Agent",
+      "category": "quality",
       "stage": "validation",
       "desc": {
-        "fr": "Contrôle de cohérence d'un corpus documentaire.",
-        "en": "Document corpus consistency checks."
+        "fr": "Contrôle de conformité d'un corpus documentaire.",
+        "en": "Documentation corpus compliance checker."
       }
     },
     {
       "slug": "doc-writer",
       "name": "Doc Writer",
+      "category": "lifecycle",
       "stage": "translation",
       "desc": {
-        "fr": "Génération assistée de documents à partir de templates.",
-        "en": "Assisted document generation from templates."
-      }
-    },
-    {
-      "slug": "doc-reviewer",
-      "name": "Doc Reviewer",
-      "stage": "validation",
-      "desc": {
-        "fr": "Relecture détection-first de PDF / Word, PDF commenté en sortie.",
-        "en": "Detection-first PDF / Word review with an annotated PDF output."
+        "fr": "Générateur de contenu pour alimenter des modèles définis.",
+        "en": "Content generator to populate defined templates."
       }
     },
     {
       "slug": "catia-toolbox",
-      "name": "Catia Toolbox",
+      "name": "CATIA Toolbox",
+      "category": "illustration",
       "stage": "illustration",
       "desc": {
-        "fr": "Automatisations CATIA sur données neutres, plans relisables (dry-run).",
-        "en": "CATIA automations on neutral data, reviewable dry-run plans."
+        "fr": "Ensemble d'automatisations pour les tâches CATIA.",
+        "en": "Several automations for CATIA tasks."
       }
     },
     {
       "slug": "ocr-vision",
       "name": "OCR Vision",
+      "category": "structuring",
       "stage": "structuring",
       "desc": {
-        "fr": "OCR et reconnaissance visuelle de documents techniques.",
-        "en": "OCR and visual recognition of technical documents."
+        "fr": "Extraction du contenu des images et documents afin de le comprendre et de le capitaliser dans des bases de données.",
+        "en": "Extract content from images and documents to understand and capitalize on it in databases."
       }
     },
     {
       "slug": "s1000d-extractor",
       "name": "S1000D Extractor",
+      "category": "structuring",
       "stage": "structuring",
       "desc": {
-        "fr": "Migration de documentation legacy vers un squelette XML S1000D.",
-        "en": "Legacy documentation migration into an S1000D XML skeleton."
+        "fr": "Migration de PDF ou Word vers XML S1000D avec extraction des illustrations et images.",
+        "en": "Migrate from PDF or Word to S1000D XML and extract illustrations and images."
       }
     },
     {
       "slug": "imagebot-ai-processing-image",
       "url": "http://itgfrapapp800.prod.altengroup.dir:2010/",
-      "name": "ImageBot- AI Processing Image",
+      "name": "ImageBot - AI Processing Image",
+      "category": "illustration",
       "stage": "illustration",
       "desc": {
         "fr": "Traitement d'image assisté par IA.",
@@ -77,6 +111,7 @@
       "slug": "a3-linguo",
       "url": "https://context-aware-translation.apps.alten.ai/home",
       "name": "A³ Linguo",
+      "category": "lifecycle",
       "stage": "translation",
       "desc": {
         "fr": "Traduction contextuelle assistée par IA.",

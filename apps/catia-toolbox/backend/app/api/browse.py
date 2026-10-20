@@ -11,18 +11,21 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
+import uuid
 from datetime import datetime, timezone
-from pathlib import PurePath
+from pathlib import Path, PurePath, PurePosixPath
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core import nomenclature as nomen
 from app.core import onedrive
 from app.core import parser as parser_mod
 from app.core.errors import AppError
-from app.core.security import safe_under_root
+from app.core.security import safe_filename, safe_storage_join, safe_under_root
 from app.db.session import get_db
 from app.schemas import (
     BrowseEntryOut,
@@ -31,8 +34,9 @@ from app.schemas import (
     BrowsePreviewIn,
     BrowsePreviewOut,
     BrowseRootsOut,
+    LocalUploadFileOut,
+    LocalUploadOut,
 )
-
 
 _EXCEL_EXTS = (".xlsx", ".xlsm")
 
@@ -50,6 +54,58 @@ def browse_roots(db: Session = Depends(get_db)) -> BrowseRootsOut:
         output=roots["output"],
         detected=onedrive.detect_onedrive_roots(),
     )
+
+
+def _safe_upload_relative(raw: str) -> Path:
+    normalized = (raw or "").replace("\\", "/")
+    parsed = PurePosixPath(normalized)
+    if not normalized or parsed.is_absolute() or any(part == ".." for part in parsed.parts):
+        raise AppError("LOCAL_UPLOAD_PATH_INVALID", "Chemin de fichier local invalide.", status_code=400)
+    parts = [safe_filename(part) for part in parsed.parts if part not in ("", ".")]
+    if not parts:
+        raise AppError("LOCAL_UPLOAD_NAME_INVALID", "Nom de fichier local invalide.", status_code=400)
+    return Path(*parts)
+
+
+@router.post("/local-upload", response_model=LocalUploadOut)
+async def local_upload(files: list[UploadFile] = File(...)) -> LocalUploadOut:
+    """Depose une selection native du navigateur dans le stockage local."""
+    if not files:
+        raise AppError("LOCAL_UPLOAD_EMPTY", "Aucun fichier selectionne.", status_code=400)
+
+    root = (Path(settings.storage_dir).expanduser().resolve() / "local" / uuid.uuid4().hex)
+    root.mkdir(parents=True, exist_ok=False)
+    seen: set[str] = set()
+    uploaded: list[LocalUploadFileOut] = []
+    try:
+        for upload in files:
+            relative = _safe_upload_relative(upload.filename or "")
+            relative_key = relative.as_posix().lower()
+            if relative_key in seen:
+                raise AppError(
+                    "LOCAL_UPLOAD_DUPLICATE",
+                    "La selection contient deux fois le meme fichier.",
+                    status_code=400,
+                    detail={"path": relative.as_posix()},
+                )
+            seen.add(relative_key)
+            data = await upload.read()
+            if len(data) > settings.max_upload_size_bytes:
+                raise AppError(
+                    "FILE_TOO_LARGE",
+                    f"Fichier trop volumineux (> {settings.max_upload_size_mb} Mo).",
+                    status_code=413,
+                    detail={"path": relative.as_posix(), "size": len(data)},
+                )
+            target = safe_storage_join(root, *relative.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+            uploaded.append(LocalUploadFileOut(path=str(target), rel=relative.as_posix(), size=len(data)))
+    except Exception:
+        shutil.rmtree(root, ignore_errors=True)
+        raise
+
+    return LocalUploadOut(root=str(root), files=uploaded)
 
 
 @router.post("/list", response_model=BrowseListOut)

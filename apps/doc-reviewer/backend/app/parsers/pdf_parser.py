@@ -12,6 +12,7 @@ Also flags PDFs that won't allow safe in-place edits:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,6 +37,30 @@ class PdfLine:
     direction: tuple[float, float] = (1.0, 0.0)
 
 
+@dataclass(frozen=True)
+class PdfWord:
+    text: str
+    bbox: tuple[float, float, float, float]
+    block_index: int
+    line_index: int
+    word_index: int
+
+
+@dataclass(frozen=True)
+class PdfVectorPrimitive:
+    kind: str
+    bbox: tuple[float, float, float, float]
+    color: tuple[float, ...] | None
+    fill: tuple[float, ...] | None
+    width: float
+
+
+@dataclass(frozen=True)
+class PdfBookmark:
+    title: str
+    page: int
+
+
 @dataclass
 class ParsedPage:
     page: int  # 1-indexed
@@ -44,12 +69,15 @@ class ParsedPage:
     has_text_layer: bool = True
     page_type: str | None = None
     # Filled by a standard's page classifier when the document declares which
-    # pages the revision touched. None = undecided (no such declaration, or
-    # the page could not be matched), which every consumer must treat as
-    # "do not filter this page out".
+    # pages the revision touched. None = undecided (no declaration or page
+    # match); callers may include it or require manual review depending on
+    # classifier availability.
     is_modified: bool | None = None
     lines: list[PdfLine] = field(default_factory=list)
+    page_width: float = 0.0
     page_height: float = 0.0
+    words: list[PdfWord] = field(default_factory=list)
+    vector_primitives: list[PdfVectorPrimitive] = field(default_factory=list)
 
 
 @dataclass
@@ -58,12 +86,22 @@ class ParsedPdf:
     pages: list[ParsedPage]
     full_text: str
     is_signed: bool
+    full_document_pages: list[ParsedPage] | None = None
+    bookmarks: list[PdfBookmark] = field(default_factory=list)
 
 
-def parse_pdf(path: str | Path) -> ParsedPdf:
-    doc = fitz.open(str(path))
+def parse_pdf(
+    path: str | Path | bytes,
+    *,
+    progress_cb: Callable[[int, int], None] | None = None,
+) -> ParsedPdf:
+    doc = fitz.open(stream=path, filetype="pdf") if isinstance(path, bytes) else fitz.open(str(path))
     try:
         is_signed = _has_digital_signature(doc)
+        bookmarks = [
+            PdfBookmark(title=str(title or ""), page=int(page_number))
+            for _level, title, page_number in doc.get_toc(simple=True)
+        ]
         pages: list[ParsedPage] = []
         all_text: list[str] = []
 
@@ -72,6 +110,7 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
             data = page.get_text("dict")
             spans: list[Span] = []
             lines: list[PdfLine] = []
+            vector_primitives: list[PdfVectorPrimitive] = []
             for block_index, block in enumerate(data.get("blocks", [])):
                 for line_index, line in enumerate(block.get("lines", [])):
                     line_spans = line.get("spans", [])
@@ -100,6 +139,64 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
                                 size=float(span.get("size", 0.0)),
                             )
                         )
+            for drawing in page.get_drawings():
+                raw_color = drawing.get("color")
+                color = (
+                    tuple(float(component) for component in raw_color)
+                    if raw_color is not None
+                    else None
+                )
+                raw_fill = drawing.get("fill")
+                fill = (
+                    tuple(float(component) for component in raw_fill)
+                    if raw_fill is not None
+                    else None
+                )
+                width = float(drawing.get("width") or 0.0)
+                for item in drawing.get("items", []):
+                    if item[0] == "l":
+                        start, end = item[1], item[2]
+                        bbox = (
+                            min(float(start.x), float(end.x)),
+                            min(float(start.y), float(end.y)),
+                            max(float(start.x), float(end.x)),
+                            max(float(start.y), float(end.y)),
+                        )
+                        kind = "line"
+                    elif item[0] == "re":
+                        rectangle = item[1]
+                        bbox = (
+                            float(rectangle.x0),
+                            float(rectangle.y0),
+                            float(rectangle.x1),
+                            float(rectangle.y1),
+                        )
+                        kind = "rect"
+                    else:
+                        continue
+                    vector_primitives.append(
+                        PdfVectorPrimitive(
+                            kind=kind,
+                            bbox=bbox,
+                            color=color,
+                            fill=fill,
+                            width=width,
+                        )
+                    )
+            words: list[PdfWord] = []
+            for word in page.get_text("words"):
+                x0, y0, x1, y1, word_text, block_index, line_index, word_index = word
+                if not str(word_text).strip():
+                    continue
+                words.append(
+                    PdfWord(
+                        text=str(word_text),
+                        bbox=(float(x0), float(y0), float(x1), float(y1)),
+                        block_index=int(block_index),
+                        line_index=int(line_index),
+                        word_index=int(word_index),
+                    )
+                )
             pages.append(
                 ParsedPage(
                     page=idx,
@@ -107,16 +204,22 @@ def parse_pdf(path: str | Path) -> ParsedPdf:
                     spans=spans,
                     has_text_layer=bool(text.strip()),
                     lines=lines,
+                    page_width=float(page.rect.width),
                     page_height=float(page.rect.height),
+                    words=words,
+                    vector_primitives=vector_primitives,
                 )
             )
             all_text.append(f"[PAGE: {idx}]\n{text}")
+            if progress_cb is not None:
+                progress_cb(idx, doc.page_count)
 
         return ParsedPdf(
             page_count=doc.page_count,
             pages=pages,
             full_text="\n".join(all_text),
             is_signed=is_signed,
+            bookmarks=bookmarks,
         )
     finally:
         doc.close()
