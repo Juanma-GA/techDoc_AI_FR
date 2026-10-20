@@ -8,11 +8,86 @@ import fitz
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
+from app.core.ocr_mistral import run_mistral_ocr_document
+from app.core.ocr_output import extract_result
 from app.core.ocr_providers import run_ocr
 from app.core.pdf_versioning import current_path
 from app.core.preparation_state import _find_page, _load_json
 from app.db.models import Document
 from app.db.preparation_models import DocumentPreparation
+
+
+def run_document_ocr(
+    db: Session,
+    document: Document,
+    record: DocumentPreparation,
+) -> dict[str, Any]:
+    pdf_bytes = current_path(document.storage_dir, document.current_version).read_bytes()
+    response, elapsed_ms = run_mistral_ocr_document(pdf_bytes, db)
+    response_pages = response.get("pages")
+    page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
+    if not isinstance(response_pages, list) or len(response_pages) != len(page_metadata):
+        raise AppError(
+            "MISTRAL_OCR_PAGE_COUNT_MISMATCH",
+            "Mistral OCR n'a pas renvoyé de résultat pour chaque page du document.",
+            status_code=502,
+            detail={
+                "expected_pages": len(page_metadata),
+                "returned_pages": len(response_pages) if isinstance(response_pages, list) else 0,
+            },
+        )
+
+    results: dict[str, dict[str, Any]] = {}
+    for page_number, (page_payload, metadata) in enumerate(
+        zip(response_pages, page_metadata, strict=True),
+        start=1,
+    ):
+        if not isinstance(page_payload, dict):
+            raise AppError(
+                "MISTRAL_OCR_RESPONSE_INVALID",
+                "Un résultat de page Mistral OCR est invalide.",
+                status_code=502,
+            )
+        dimensions = page_payload.get("dimensions")
+        dimensions = dimensions if isinstance(dimensions, dict) else {}
+        width = _positive_int(dimensions.get("width")) or round(float(metadata["width"]) * 200 / 72)
+        height = _positive_int(dimensions.get("height")) or round(float(metadata["height"]) * 200 / 72)
+        text, boxes = extract_result(
+            page_payload,
+            width,
+            height,
+            coordinate_mode="pixels",
+        )
+        results[str(page_number)] = {
+            "page": page_number,
+            "provider": "mistral",
+            "text": text,
+            "boxes": [
+                {
+                    "x0": box.x0,
+                    "y0": box.y0,
+                    "x1": box.x1,
+                    "y1": box.y1,
+                    "text": box.text,
+                    "confidence": box.confidence,
+                }
+                for box in boxes
+            ],
+            "elapsed_ms": elapsed_ms,
+        }
+
+    record.ocr_results_json = json.dumps({"mistral": results}, ensure_ascii=False)
+    record.selected_provider = "mistral"
+    record.validated_pages_json = json.dumps({"mistral": []})
+    record.updated_at = datetime.now(UTC)
+    db.commit()
+    return {"provider": "mistral", "page_count": len(results), "elapsed_ms": elapsed_ms}
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return None
+    return round(value)
 
 
 def run_page_ocr(

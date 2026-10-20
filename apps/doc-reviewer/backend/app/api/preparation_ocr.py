@@ -8,12 +8,31 @@ from sqlalchemy.orm import Session
 
 from app.api.preparation_common import get_preparation_context
 from app.core.errors import AppError
-from app.core.preparation_ocr_service import run_page_ocr
+from app.core.preparation_ocr_service import run_document_ocr, run_page_ocr
 from app.core.preparation_state import get_or_create_record, get_page_ocr_result, set_ocr_validation
 from app.db.session import get_db
-from app.preparation_schemas import OcrResultOut, OcrRunIn, OcrValidationPatchIn
+from app.preparation_schemas import (
+    OcrDocumentRunOut,
+    OcrResultOut,
+    OcrRunIn,
+    OcrValidationPatchIn,
+)
 
 router = APIRouter(tags=["preparation"])
+
+
+@router.post(
+    "/documents/{document_id}/preparation/ocr",
+    response_model=OcrDocumentRunOut,
+)
+def run_ocr_for_document(
+    document_id: uuid.UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    document, _config = get_preparation_context(request, document_id, db)
+    record = get_or_create_record(db, document)
+    return run_document_ocr(db, document, record)
 
 
 @router.post(

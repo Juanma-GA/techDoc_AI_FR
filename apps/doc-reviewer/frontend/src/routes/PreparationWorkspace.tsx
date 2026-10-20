@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -10,15 +10,11 @@ import { useDocument } from "../hooks/useDocuments";
 import {
   useDetectPreparationPages,
   useImportPreparationChecklist,
-  useOcrProviders,
-  usePatchPageReadability,
   usePatchPreparationDecision,
   usePreparationState,
-  useRunOcrPage,
-  useSelectOcrProvider,
+  useRunOcrDocument,
   useValidateOcrPage,
 } from "../hooks/usePreparation";
-import type { OcrProvider } from "../types/preparation";
 
 type Step = 1 | 2 | 3;
 
@@ -32,10 +28,7 @@ export function PreparationWorkspace() {
   const { id } = useParams();
   const document = useDocument(id);
   const preparation = usePreparationState(id);
-  const providers = useOcrProviders(id);
-  const selectProvider = useSelectOcrProvider(id);
-  const patchReadability = usePatchPageReadability(id);
-  const runOcr = useRunOcrPage(id);
+  const runOcrDocument = useRunOcrDocument(id);
   const validateOcr = useValidateOcrPage(id);
   const importChecklist = useImportPreparationChecklist(id);
   const detectPages = useDetectPreparationPages(id);
@@ -43,19 +36,20 @@ export function PreparationWorkspace() {
   const [step, setStep] = useState<Step>(1);
 
   const state = preparation.data;
-  const needsOcr = useMemo(
-    () => state?.pages.filter((page) => page.needs_ocr) ?? [],
-    [state?.pages],
-  );
-  const unvalidated = needsOcr.filter(
-    (page) => !state?.validated_pages.includes(page.page),
-  );
-  const canContinueToChecklist = Boolean(
+  const ocrComplete = Boolean(
     state &&
-    state.page_count > 0 &&
-      (needsOcr.length === 0 ||
-        (state.selected_provider && unvalidated.length === 0)),
+      state.page_count > 0 &&
+      state.pages.length === state.page_count &&
+      state.pages.every((page) =>
+        state.ocr_results_available.some(
+          (result) => result.provider === "mistral" && result.page === page.page,
+        ),
+      ),
   );
+  const unvalidated = state?.pages.filter(
+    (page) => !state.validated_pages.includes(page.page),
+  ) ?? [];
+  const canContinueToChecklist = ocrComplete && unvalidated.length === 0;
   const decisions = state?.page_decisions ?? [];
   const hasUnknown = decisions.some((decision) => decision.is_modified === null);
   const canContinueToReview =
@@ -69,11 +63,11 @@ export function PreparationWorkspace() {
   }, [canContinueToChecklist, canContinueToReview, step]);
 
   if (!id) return null;
-  if (document.isLoading || preparation.isLoading || providers.isLoading) {
+  if (document.isLoading || preparation.isLoading) {
     return <p className="empty-state">{t("common.loading")}</p>;
   }
-  if (document.isError || !document.data || preparation.isError || providers.isError || !state) {
-    const error = document.error ?? preparation.error ?? providers.error;
+  if (document.isError || !document.data || preparation.isError || !state) {
+    const error = document.error ?? preparation.error;
     return (
       <section className="card">
         <p className="banner warn" role="alert">{messageOf(error) || t("common.retry")}</p>
@@ -131,18 +125,21 @@ export function PreparationWorkspace() {
         <PreparationOcrStep
           documentId={id}
           state={state}
-          providers={providers.data ?? []}
-          error={runOcr.isError ? messageOf(runOcr.error) : null}
-          onSetProvider={(provider: OcrProvider) => selectProvider.mutate({ provider })}
-          selectingProvider={selectProvider.isPending}
-          onSetNeedsOcr={(page, needsOcrValue) =>
-            patchReadability.mutate({ page, needs_ocr: needsOcrValue })
+          error={
+            runOcrDocument.isError
+              ? messageOf(runOcrDocument.error)
+              : detectPages.isError
+                ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
+                : null
           }
-          updatingReadability={patchReadability.isPending}
-          onRunOcr={(page, provider) => runOcr.mutate({ page, provider })}
-          runningOcr={runOcr.isPending}
-          onValidate={(page, provider, validated) =>
-            validateOcr.mutate({ page, provider, validated })
+          onRunOcrAll={() => runOcrDocument.mutate()}
+          runningOcrAll={runOcrDocument.isPending}
+          onAnalyzeAfterValidation={() =>
+            detectPages.mutate(undefined, { onSuccess: () => setStep(2) })
+          }
+          analyzing={detectPages.isPending}
+          onValidate={(page, validated) =>
+            validateOcr.mutate({ page, provider: "mistral", validated })
           }
           validating={validateOcr.isPending}
         />

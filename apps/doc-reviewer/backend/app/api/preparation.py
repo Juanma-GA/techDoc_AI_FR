@@ -32,7 +32,13 @@ def get_preparation_state(
 ) -> dict:
     document, config = get_preparation_context(request, document_id, db)
     get_or_create_record(db, document)
-    return state_payload(db, document, config.bundle.client_code)
+    preparation_rule_count = sum(rule.preparation for rule in config.bundle.rules)
+    return state_payload(
+        db,
+        document,
+        config.bundle.client_code,
+        preparation_rule_count=preparation_rule_count,
+    )
 
 
 @router.get("/documents/{document_id}/preparation/ocr/providers")

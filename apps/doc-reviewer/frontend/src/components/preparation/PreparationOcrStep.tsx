@@ -3,11 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useOcrPageResult } from "../../hooks/usePreparation";
 import { API_BASE_URL } from "../../lib/api";
-import type {
-  OcrProvider,
-  OcrProviderInfo,
-  PreparationState,
-} from "../../types/preparation";
+import type { PreparationState } from "../../types/preparation";
 import { PreparationOcrControls } from "./PreparationOcrControls";
 import { PreparationOcrResult } from "./PreparationOcrResult";
 import "../../styles/preparation.css";
@@ -15,48 +11,43 @@ import "../../styles/preparation.css";
 type Props = {
   documentId: string;
   state: PreparationState;
-  providers: OcrProviderInfo[];
   error: string | null;
-  onSetProvider: (provider: OcrProvider) => void;
-  selectingProvider: boolean;
-  onSetNeedsOcr: (page: number, needsOcr: boolean) => void;
-  updatingReadability: boolean;
-  onRunOcr: (page: number, provider: OcrProvider) => void;
-  runningOcr: boolean;
-  onValidate: (page: number, provider: OcrProvider, validated: boolean) => void;
+  onRunOcrAll: () => void;
+  runningOcrAll: boolean;
+  onAnalyzeAfterValidation: () => void;
+  analyzing: boolean;
+  onValidate: (page: number, validated: boolean) => void;
   validating: boolean;
 };
 
 export function PreparationOcrStep({
   documentId,
   state,
-  providers,
   error,
-  onSetProvider,
-  selectingProvider,
-  onSetNeedsOcr,
-  updatingReadability,
-  onRunOcr,
-  runningOcr,
+  onRunOcrAll,
+  runningOcrAll,
+  onAnalyzeAfterValidation,
+  analyzing,
   onValidate,
   validating,
 }: Props) {
   const { t } = useTranslation();
-  const [testProvider, setTestProvider] = useState<OcrProvider>("mistral");
   const [pageNumber, setPageNumber] = useState(1);
   const page = state.pages.find((item) => item.page === pageNumber);
-  const hasResult = (provider: OcrProvider) =>
-    state.ocr_results_available.some(
-      (item) => item.provider === provider && item.page === pageNumber,
-    );
-  const result = useOcrPageResult(
-    documentId,
-    pageNumber,
-    testProvider,
-    hasResult(testProvider),
+  const hasResult = state.ocr_results_available.some(
+    (item) => item.provider === "mistral" && item.page === pageNumber,
   );
-  const selectedProvider = providers.find((provider) => provider.id === testProvider);
-  const isSelected = state.selected_provider === testProvider;
+  const result = useOcrPageResult(documentId, pageNumber, "mistral", hasResult);
+  const ocrComplete =
+    state.pages.length === state.page_count &&
+    state.page_count > 0 &&
+    state.pages.every((item) =>
+      state.ocr_results_available.some(
+        (entry) => entry.provider === "mistral" && entry.page === item.page,
+      ),
+    );
+  const allValidated =
+    ocrComplete && state.pages.every((item) => state.validated_pages.includes(item.page));
   const pageLabel = t("preparation.ocrPage", {
     page: pageNumber,
     count: state.page_count,
@@ -77,44 +68,57 @@ export function PreparationOcrStep({
         </span>
       </div>
       {error ? <p className="error" role="alert">{error}</p> : null}
+      <div className="row" style={{ gap: 10, flexWrap: "wrap", margin: "12px 0" }}>
+        <span className="badge info">Mistral OCR</span>
+        <button
+          type="button"
+          className="btn primary small"
+          disabled={runningOcrAll}
+          onClick={onRunOcrAll}
+        >
+          {runningOcrAll
+            ? t("preparation.ocrRunning")
+            : ocrComplete
+              ? t("preparation.rerunOcrAll")
+              : t("preparation.runOcrAll")}
+        </button>
+      </div>
       <PreparationOcrControls
         state={state}
-        providers={providers}
-        provider={testProvider}
         pageNumber={pageNumber}
         page={page}
-        updatingReadability={updatingReadability}
-        selectingProvider={selectingProvider}
-        runningOcr={runningOcr}
-        onProviderChange={setTestProvider}
-        onSelectProvider={() => onSetProvider(testProvider)}
         onPageChange={setPageNumber}
-        onSetNeedsOcr={(needsOcr) => onSetNeedsOcr(pageNumber, needsOcr)}
-        onRunOcr={() => onRunOcr(pageNumber, testProvider)}
       />
-      {state.selected_provider ? (
-        <p className="hint" style={{ marginTop: 8 }}>
-          {t("preparation.ocrSelected")}:{" "}
-          {providers.find((provider) => provider.id === state.selected_provider)?.label}
-        </p>
-      ) : null}
       <div className="preparation-ocr-comparison">
-        <section className="preparation-ocr-engine" aria-label={selectedProvider?.label ?? testProvider}>
+        <section className="preparation-ocr-engine" aria-label="Mistral OCR">
           <PreparationOcrResult
             imageUrl={`${API_BASE_URL}/documents/${documentId}/pages/${pageNumber}.png`}
             pageLabel={pageLabel}
-            providerLabel={selectedProvider?.label ?? testProvider}
+            providerLabel="Mistral OCR"
             data={result.data}
             isLoading={result.isLoading}
             error={result.isError ? result.error.message : null}
-            needsOcr={Boolean(page?.needs_ocr)}
-            isCurrentProvider={isSelected}
-            validated={isSelected && state.validated_pages.includes(pageNumber)}
+            needsOcr
+            isCurrentProvider
+            validated={state.validated_pages.includes(pageNumber)}
             validating={validating}
-            onValidate={(value) => onValidate(pageNumber, testProvider, value)}
+            onValidate={(value) => onValidate(pageNumber, value)}
           />
         </section>
       </div>
+      {allValidated ? (
+        <div className="row" style={{ gap: 12, marginTop: 16, flexWrap: "wrap" }}>
+          <p className="hint" style={{ margin: 0 }}>{t("preparation.allOcrValidated")}</p>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={analyzing}
+            onClick={onAnalyzeAfterValidation}
+          >
+            {analyzing ? t("preparation.detectingPages") : t("preparation.analyzeAfterOcr")}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

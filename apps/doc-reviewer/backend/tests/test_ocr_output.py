@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -195,3 +196,67 @@ def test_mistral_ocr_uses_the_persisted_model_setting(
     assert captured["model"] == "mistral-ocr-custom"
     assert text == "ATA 32"
     assert boxes == []
+
+
+def test_mistral_document_ocr_sends_complete_pdf_and_requests_block_boxes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pdf_bytes = b"%PDF-synthetic"
+    captured: dict[str, object] = {}
+    response_payload = {
+        "pages": [
+            {
+                "index": 0,
+                "markdown": "Page one",
+                "blocks": [],
+                "dimensions": {"width": 100, "height": 200},
+            }
+        ]
+    }
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, object]:
+            return response_payload
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> Client:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def post(self, _url: str, *, headers: dict[str, str], json: dict[str, object]) -> Response:
+            captured["payload"] = json
+            return Response()
+
+    monkeypatch.setattr(ocr_mistral, "get_llm_enabled", lambda _db: True)
+    monkeypatch.setattr(
+        ocr_mistral,
+        "get_endpoint",
+        lambda _db: {
+            "api_key": "synthetic-key",
+            "base_url": "https://api.mistral.ai",
+            "ocr_model": "mistral-ocr-custom",
+        },
+    )
+    monkeypatch.setattr(ocr_mistral.httpx, "Client", Client)
+
+    result, _elapsed_ms = ocr_mistral.run_mistral_ocr_document(pdf_bytes, object())
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == "mistral-ocr-custom"
+    assert payload["include_blocks"] is True
+    assert payload["confidence_scores_granularity"] == "block"
+    document = payload["document"]
+    assert isinstance(document, dict)
+    assert document["type"] == "document_url"
+    encoded_pdf = str(document["document_url"]).split(",", maxsplit=1)[1]
+    assert base64.b64decode(encoded_pdf) == pdf_bytes
+    assert result == response_payload

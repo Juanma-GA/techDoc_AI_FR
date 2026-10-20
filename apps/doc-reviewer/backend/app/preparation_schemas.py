@@ -29,6 +29,8 @@ class PreparationStateOut(BaseModel):
     ocr_results_available: list[dict[str, Any]] = Field(default_factory=list)
     validated_pages: list[int] = Field(default_factory=list)
     checklist_rule_count: int
+    checklist_imported_rule_count: int = 0
+    preparation_rule_count: int = 0
     checklist_source_filename: str | None
     page_decisions: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -38,6 +40,12 @@ class OcrResultOut(BaseModel):
     provider: str
     text: str
     boxes: list[dict[str, Any]] = Field(default_factory=list)
+    elapsed_ms: int
+
+
+class OcrDocumentRunOut(BaseModel):
+    provider: Literal["mistral"]
+    page_count: int
     elapsed_ms: int
 
 

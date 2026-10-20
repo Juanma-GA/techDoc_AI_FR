@@ -78,8 +78,12 @@ export function PreparationChecklistStep({
         <p className="label" style={{ marginTop: 8 }}>
           {t("preparation.checklistSource", {
             filename: state.checklist_source_filename,
-            count: state.checklist_rule_count,
+            count: state.checklist_imported_rule_count,
           })}
+        </p>
+      ) : state.preparation_rule_count > 0 ? (
+        <p className="hint" style={{ marginTop: 8 }}>
+          {t("preparation.builtinRules", { count: state.preparation_rule_count })}
         </p>
       ) : (
         <p className="hint" style={{ marginTop: 8 }}>{t("preparation.checklistMissing")}</p>

@@ -25,6 +25,24 @@ def get_record(db: Session, document_id: uuid.UUID) -> DocumentPreparation | Non
 def get_or_create_record(db: Session, document: Document) -> DocumentPreparation:
     record = get_record(db, document.id)
     if record is not None and record.source_version == document.current_version:
+        pages = _load_json(record.page_metadata_json, "page_metadata_json")
+        needs_reset = False
+        for page in pages:
+            if not page.get("needs_ocr"):
+                page["needs_ocr"] = True
+                needs_reset = True
+        provider_changed = record.selected_provider != "mistral"
+        if needs_reset:
+            record.page_metadata_json = json.dumps(pages)
+        if needs_reset or provider_changed:
+            record.ocr_results_json = "{}"
+            record.validated_pages_json = "{}"
+            record.page_decisions_json = "[]"
+        if provider_changed:
+            record.selected_provider = "mistral"
+        if needs_reset or provider_changed:
+            record.updated_at = datetime.now(UTC)
+            db.commit()
         return record
 
     path = current_path(document.storage_dir, document.current_version)
@@ -41,7 +59,7 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
                 {
                     "page": index,
                     "native_text_chars": len((page.get_text("text") or "").strip()),
-                    "needs_ocr": not bool((page.get_text("text") or "").strip()),
+                    "needs_ocr": True,
                     "width": float(page.rect.width),
                     "height": float(page.rect.height),
                 }
@@ -64,6 +82,7 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
             source_sha256=sha256(data).hexdigest(),
             page_count=page_count,
             source_version=document.current_version,
+            selected_provider="mistral",
             page_metadata_json=json.dumps(page_metadata),
         )
         db.add(record)
@@ -87,6 +106,8 @@ def state_payload(
     db: Session,
     document: Document,
     client_code: str,
+    *,
+    preparation_rule_count: int = 0,
 ) -> dict[str, Any]:
     record = get_record(db, document.id)
     checklist = db.get(PreparationChecklist, client_code)
@@ -122,7 +143,9 @@ def state_payload(
         "pages": pages,
         "ocr_results_available": available_results,
         "validated_pages": validated,
-        "checklist_rule_count": len(rules),
+        "checklist_rule_count": preparation_rule_count + len(rules),
+        "checklist_imported_rule_count": len(rules),
+        "preparation_rule_count": preparation_rule_count,
         "checklist_source_filename": checklist.source_filename if checklist else None,
         "page_decisions": decisions,
     }

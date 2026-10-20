@@ -93,6 +93,19 @@ export function useRunOcrPage(documentId: string | undefined) {
   });
 }
 
+export function useRunOcrDocument(documentId: string | undefined) {
+  return usePreparationMutation<
+    void,
+    { provider: "mistral"; page_count: number; elapsed_ms: number }
+  >(
+    documentId,
+    () =>
+      api.post<{ provider: "mistral"; page_count: number; elapsed_ms: number }>(
+        `/documents/${documentId}/preparation/ocr`,
+      ),
+  );
+}
+
 export function useValidateOcrPage(documentId: string | undefined) {
   return usePreparationMutation<
     { page: number; provider: OcrProvider; validated: boolean },

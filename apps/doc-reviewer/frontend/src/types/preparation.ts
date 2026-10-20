@@ -63,6 +63,8 @@ export type PreparationState = {
   ocr_results_available: { provider: OcrProvider; page: number }[];
   validated_pages: number[];
   checklist_rule_count: number;
+  checklist_imported_rule_count: number;
+  preparation_rule_count: number;
   checklist_source_filename: string | null;
   page_decisions: PreparationPageDecision[];
 };
