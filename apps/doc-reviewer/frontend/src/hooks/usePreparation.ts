@@ -106,6 +106,19 @@ export function useRunOcrDocument(documentId: string | undefined) {
   );
 }
 
+export function useValidateAllOcrPages(documentId: string | undefined) {
+  return usePreparationMutation<
+    void,
+    { provider: "mistral"; validated_pages: number[] }
+  >(
+    documentId,
+    () =>
+      api.post<{ provider: "mistral"; validated_pages: number[] }>(
+        `/documents/${documentId}/preparation/ocr/validation`,
+      ),
+  );
+}
+
 export function useValidateOcrPage(documentId: string | undefined) {
   return usePreparationMutation<
     { page: number; provider: OcrProvider; validated: boolean },

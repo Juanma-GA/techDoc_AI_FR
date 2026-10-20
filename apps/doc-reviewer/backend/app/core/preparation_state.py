@@ -196,6 +196,29 @@ def set_ocr_validation(
     db.commit()
 
 
+def validate_all_ocr_pages(
+    db: Session,
+    record: DocumentPreparation,
+) -> list[int]:
+    page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
+    ocr_results = _load_json(record.ocr_results_json, "ocr_results_json")
+    mistral_results = ocr_results.get("mistral", {})
+    pages = [int(page["page"]) for page in page_metadata]
+    missing = [page for page in pages if str(page) not in mistral_results]
+    if missing:
+        raise AppError(
+            "OCR_RESULTS_INCOMPLETE",
+            "Lancez Mistral OCR sur tout le document avant de valider les pages.",
+            status_code=409,
+            detail={"pages": missing},
+        )
+    record.selected_provider = "mistral"
+    record.validated_pages_json = json.dumps({"mistral": pages})
+    record.updated_at = datetime.now(UTC)
+    db.commit()
+    return pages
+
+
 def set_page_decision(
     db: Session,
     record: DocumentPreparation,

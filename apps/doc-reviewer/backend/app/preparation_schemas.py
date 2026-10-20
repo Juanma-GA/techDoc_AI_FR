@@ -49,6 +49,11 @@ class OcrDocumentRunOut(BaseModel):
     elapsed_ms: int
 
 
+class OcrDocumentValidationOut(BaseModel):
+    provider: Literal["mistral"]
+    validated_pages: list[int]
+
+
 class OcrRunIn(BaseModel):
     provider: Literal["mistral", "paddle", "indra"]
 

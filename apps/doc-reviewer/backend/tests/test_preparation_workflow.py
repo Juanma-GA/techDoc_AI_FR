@@ -103,6 +103,13 @@ def test_document_ocr_batches_every_page_and_requires_each_validation(
         lambda _pdf_bytes, _db: (synthetic_response, 1234),
     )
 
+    missing_validation = client.post(
+        f"/api/v1/documents/{document_id}/preparation/ocr/validation"
+    )
+    assert missing_validation.status_code == 409
+    assert missing_validation.json()["code"] == "OCR_RESULTS_INCOMPLETE"
+    assert missing_validation.json()["detail"]["pages"] == [1, 2]
+
     ocr = client.post(f"/api/v1/documents/{document_id}/preparation/ocr")
     assert ocr.status_code == 200, ocr.text
     assert ocr.json() == {"provider": "mistral", "page_count": 2, "elapsed_ms": 1234}
@@ -120,12 +127,11 @@ def test_document_ocr_batches_every_page_and_requires_each_validation(
     assert blocked.json()["code"] == "OCR_VALIDATION_REQUIRED"
     assert blocked.json()["detail"]["pages"] == [1, 2]
 
-    for page_number in (1, 2):
-        validated = client.patch(
-            f"/api/v1/documents/{document_id}/preparation/ocr/pages/{page_number}/validation",
-            json={"provider": "mistral", "validated": True},
-        )
-        assert validated.status_code == 200, validated.text
+    validated = client.post(
+        f"/api/v1/documents/{document_id}/preparation/ocr/validation"
+    )
+    assert validated.status_code == 200, validated.text
+    assert validated.json() == {"provider": "mistral", "validated_pages": [1, 2]}
 
     detected = client.post(f"/api/v1/documents/{document_id}/preparation/detect")
     assert detected.status_code == 200, detected.text

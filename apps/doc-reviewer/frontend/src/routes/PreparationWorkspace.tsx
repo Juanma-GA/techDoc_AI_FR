@@ -13,7 +13,7 @@ import {
   usePatchPreparationDecision,
   usePreparationState,
   useRunOcrDocument,
-  useValidateOcrPage,
+  useValidateAllOcrPages,
 } from "../hooks/usePreparation";
 
 type Step = 1 | 2 | 3;
@@ -29,7 +29,7 @@ export function PreparationWorkspace() {
   const document = useDocument(id);
   const preparation = usePreparationState(id);
   const runOcrDocument = useRunOcrDocument(id);
-  const validateOcr = useValidateOcrPage(id);
+  const validateAllOcr = useValidateAllOcrPages(id);
   const importChecklist = useImportPreparationChecklist(id);
   const detectPages = useDetectPreparationPages(id);
   const patchDecision = usePatchPreparationDecision(id);
@@ -134,14 +134,13 @@ export function PreparationWorkspace() {
           }
           onRunOcrAll={() => runOcrDocument.mutate()}
           runningOcrAll={runOcrDocument.isPending}
-          onAnalyzeAfterValidation={() =>
-            detectPages.mutate(undefined, { onSuccess: () => setStep(2) })
+          onValidateAllAndAnalyze={() =>
+            validateAllOcr.mutate(undefined, {
+              onSuccess: () => detectPages.mutate(undefined, { onSuccess: () => setStep(2) }),
+            })
           }
+          validatingAll={validateAllOcr.isPending}
           analyzing={detectPages.isPending}
-          onValidate={(page, validated) =>
-            validateOcr.mutate({ page, provider: "mistral", validated })
-          }
-          validating={validateOcr.isPending}
         />
       ) : null}
 

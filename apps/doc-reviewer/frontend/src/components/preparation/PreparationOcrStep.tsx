@@ -14,10 +14,9 @@ type Props = {
   error: string | null;
   onRunOcrAll: () => void;
   runningOcrAll: boolean;
-  onAnalyzeAfterValidation: () => void;
+  onValidateAllAndAnalyze: () => void;
+  validatingAll: boolean;
   analyzing: boolean;
-  onValidate: (page: number, validated: boolean) => void;
-  validating: boolean;
 };
 
 export function PreparationOcrStep({
@@ -26,10 +25,9 @@ export function PreparationOcrStep({
   error,
   onRunOcrAll,
   runningOcrAll,
-  onAnalyzeAfterValidation,
+  onValidateAllAndAnalyze,
+  validatingAll,
   analyzing,
-  onValidate,
-  validating,
 }: Props) {
   const { t } = useTranslation();
   const [pageNumber, setPageNumber] = useState(1);
@@ -46,8 +44,6 @@ export function PreparationOcrStep({
         (entry) => entry.provider === "mistral" && entry.page === item.page,
       ),
     );
-  const allValidated =
-    ocrComplete && state.pages.every((item) => state.validated_pages.includes(item.page));
   const pageLabel = t("preparation.ocrPage", {
     page: pageNumber,
     count: state.page_count,
@@ -98,26 +94,23 @@ export function PreparationOcrStep({
             data={result.data}
             isLoading={result.isLoading}
             error={result.isError ? result.error.message : null}
-            needsOcr
-            isCurrentProvider
-            validated={state.validated_pages.includes(pageNumber)}
-            validating={validating}
-            onValidate={(value) => onValidate(pageNumber, value)}
           />
         </section>
       </div>
-      {allValidated ? (
-        <div className="row" style={{ gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-          <p className="hint" style={{ margin: 0 }}>{t("preparation.allOcrValidated")}</p>
-          <button
-            type="button"
-            className="btn primary"
-            disabled={analyzing}
-            onClick={onAnalyzeAfterValidation}
-          >
-            {analyzing ? t("preparation.detectingPages") : t("preparation.analyzeAfterOcr")}
-          </button>
-        </div>
+      {ocrComplete ? (
+        <button
+          type="button"
+          className="btn primary"
+          style={{ marginTop: 16 }}
+          disabled={runningOcrAll || validatingAll || analyzing}
+          onClick={onValidateAllAndAnalyze}
+        >
+          {validatingAll
+            ? t("preparation.validatingAll")
+            : analyzing
+              ? t("preparation.detectingPages")
+              : t("preparation.validateAllAndAnalyze")}
+        </button>
       ) : null}
     </section>
   );

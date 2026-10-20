@@ -56,13 +56,34 @@
 
 .preparation-ocr-content > section {
   min-width: 0;
+  max-width: 100%;
   margin-top: 0 !important;
 }
 
+.preparation-ocr-text {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  max-height: 38dvh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .preparation-ocr-lines {
+  min-width: 0;
+  max-width: 100%;
   max-height: 32dvh;
   overflow: auto;
   margin: 8px 0 0;
+}
+
+.preparation-ocr-lines .item-row,
+.preparation-ocr-lines .item-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .preparation-review {

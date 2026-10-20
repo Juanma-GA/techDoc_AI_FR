@@ -10,11 +10,6 @@ type Props = {
   data: OcrPageResult | undefined;
   isLoading: boolean;
   error: string | null;
-  needsOcr: boolean;
-  isCurrentProvider: boolean;
-  validated: boolean;
-  validating: boolean;
-  onValidate: (validated: boolean) => void;
 };
 
 export function PreparationOcrResult({
@@ -24,11 +19,6 @@ export function PreparationOcrResult({
   data,
   isLoading,
   error,
-  needsOcr,
-  isCurrentProvider,
-  validated,
-  validating,
-  onValidate,
 }: Props) {
   const { t } = useTranslation();
   return (
@@ -77,17 +67,6 @@ export function PreparationOcrResult({
         ) : (
           <p className="empty-state">{t("preparation.ocrNoResult")}</p>
         )}
-        {isCurrentProvider && needsOcr && data ? (
-          <label className="row" style={{ gap: 8, marginTop: 12 }}>
-            <input
-              type="checkbox"
-              checked={validated}
-              disabled={validating}
-              onChange={(event) => onValidate(event.target.checked)}
-            />
-            {validated ? t("preparation.ocrValidated") : t("preparation.ocrValidate")}
-          </label>
-        ) : null}
       </section>
     </div>
   );
