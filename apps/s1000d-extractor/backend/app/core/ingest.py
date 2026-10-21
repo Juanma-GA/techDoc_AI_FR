@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
+from time import perf_counter
 
 from sqlalchemy.orm import Session
 
@@ -42,8 +43,32 @@ def extract_blocks(
     if fmt != "pdf":
         raise AppError("UNSUPPORTED_FORMAT", f"Format non supporte : {fmt}", status_code=415)
 
-    pages = parse_pdf_pages(path)
+    last_pct = 10
+
+    def report_parse_progress(completed: int, total: int) -> None:
+        nonlocal last_pct
+        if progress_cb is None or total <= 0:
+            return
+        pct = 10 + (20 * completed) // total
+        if pct > last_pct:
+            last_pct = pct
+            progress_cb("parse", pct)
+
+    parse_started = perf_counter()
+    pages = parse_pdf_pages(
+        path,
+        progress_cb=report_parse_progress if progress_cb is not None else None,
+    )
     scanned = [p for p in pages if not p.has_text]
+    log.info(
+        "pdf_parse_timing duration_ms=%.1f page_count=%d text_page_count=%d "
+        "scanned_page_count=%d block_count=%d",
+        (perf_counter() - parse_started) * 1000,
+        len(pages),
+        len(pages) - len(scanned),
+        len(scanned),
+        sum(len(page.blocks) for page in pages),
+    )
 
     # Cas 1 : tout est lisible en texte -> aucun OCR.
     if not scanned:
@@ -66,15 +91,24 @@ def extract_blocks(
 
     # Cas 3 : OCR des pages scannees, fusion avec les pages texte (ordre conserve).
     if progress_cb:
-        progress_cb("ocr", 20)
-    pages_md = ocr.run_ocr(path, db)  # type: ignore[arg-type]
+        progress_cb("ocr", 30)
+    scanned_page_numbers = [p.index for p in scanned]
+    ocr_started = perf_counter()
+    pages_md = ocr.run_ocr(path, db, page_numbers=scanned_page_numbers)  # type: ignore[arg-type]
+    log.info(
+        "pdf_ocr_timing duration_ms=%.1f scanned_page_count=%d result_page_count=%d",
+        (perf_counter() - ocr_started) * 1000,
+        len(scanned_page_numbers),
+        len(pages_md),
+    )
+    markdown_by_page = dict(zip(scanned_page_numbers, pages_md, strict=False))
 
     blocks: list[RawBlock] = []
     for p in pages:
         if p.has_text:
             blocks.extend(p.blocks)
         else:
-            md = pages_md[p.index - 1] if 0 <= p.index - 1 < len(pages_md) else ""
+            md = markdown_by_page.get(p.index, "")
             blocks.extend(ocr.markdown_to_blocks(md, page=p.index))
 
     if not blocks:

@@ -20,13 +20,16 @@ def safe_parser() -> etree.XMLParser:
 
 
 def _reject_dtd(tree: etree._ElementTree, *, allow_internal_dtd: bool = False) -> None:
-    """Refuse toute DTD : le parseur ne resout deja plus les entites, mais un
-    document qui en declare est suspect (XXE / bombe d'entites) et doit etre
-    signale a l'utilisateur plutot que traite a moitie."""
+    """Always refuse external DTDs; internal subsets require explicit opt-in."""
     info = tree.docinfo
-    if info.externalDTD is not None or (info.internalDTD is not None and not allow_internal_dtd):
+    has_external_subset = (
+        info.externalDTD is not None or info.system_url is not None or info.public_id is not None
+    )
+    if has_external_subset or (info.internalDTD is not None and not allow_internal_dtd):
+        reason = "DTD externe interdite." if has_external_subset else "DTD interdite."
         raise etree.XMLSyntaxError(
-            "DTD interdite (risque XXE / bombe d'entites) : retire le <!DOCTYPE>.", 0, 0, 0
+            f"{reason} Retire le <!DOCTYPE> externe (risque XXE / bombe d'entites).",
+            0, 0, 0,
         )
 
 

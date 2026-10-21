@@ -1,12 +1,12 @@
 {
   "app": {
     "title": "S1000D Extractor",
-    "version": "0.1.0",
     "description": "Extract and version technical data in the S1000D format."
   },
   "nav": {
     "home": "Home",
     "migration": "Migration",
+    "validation": "Validation",
     "architecture": "Architecture",
     "data": "Data",
     "settings": "Settings",
@@ -19,6 +19,11 @@
     "off": "OFF",
     "untested": "UNTESTED",
     "noKey": "NO KEY"
+  },
+  "demo": {
+    "badge": "DEMO MODE",
+    "filesLoading": "Loading demo files…",
+    "filesError": "Could not load demo files: {{message}}"
   },
   "dmType": {
     "descriptive": "Descriptive",
@@ -58,6 +63,11 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Mistral API key and models in use.",
+    "demoTitle": "Operating mode",
+    "demoHint": "Demo mode preloads the sample files. Processing starts only when you start the migration.",
+    "normalMode": "Normal mode",
+    "demoMode": "Demo mode",
+    "demoSaveError": "Could not save the mode.",
     "aiTitle": "Artificial intelligence",
     "llmEnabled": "LLM enabled",
     "llmHelp": "Disabling stops tasks delegated to AI (scan OCR, classification, splitting). The Mistral key is kept.",
@@ -99,25 +109,28 @@
   },
   "migration": {
     "title": "Migration",
-    "subtitle": "Guided legacy → S1000D assistant.",
+    "subtitle": "Guided generation of S1000D Data Modules.",
     "upload": {
       "title": "Upload a document",
       "file": "PDF or Word document",
       "issue": "S1000D version",
       "issueValue": "Issue {{issue}}",
-      "hint": "Dominant nature (hint)",
-      "hintMixed": "Mixed",
       "brex": "Project BREX",
-      "brexNone": "(no BREX)",
+      "inDevelopment": "In development",
       "dmrl": "DMRL (xlsx / csv / json) — drives the split + the PMC",
       "cir": "CIR (xml) — shared content",
-      "rules": "Client rules (json)",
       "dmHeader": "Client DM header (json / xml)",
-      "start": "Start the assistant",
-      "noFile": "Pick a PDF or Word file.",
+      "dmHeaderHelp": "This JSON or XML file supplies shared Data Module header metadata, such as language, security classification, responsible or originating organization, and applicability.",
+      "start": "Generate",
+      "noFile": "Select a PDF or Word file to start a new generation.",
+      "selectedFile": "File sent to Generate: {{filename}}",
+      "lastDocument": "Last file used: {{filename}}. Select a source file to generate.",
       "pdfCut": {
         "title": "Set the page range to analyse",
         "help": "The suggested range starts at the first detected chapter and ends at the last page.",
+        "firstDmTitle": "First DM title to search for",
+        "detectWithTitle": "Search with this title",
+        "searching": "Searching…",
         "startPage": "From page",
         "endPage": "To page",
         "candidate": "Page {{page}} — score {{score}}",
@@ -126,16 +139,63 @@
         "previewAlt": "Preview of page {{page}}"
       }
     },
+    "brex": {
+      "addProfileTitle": "Add a BREX profile",
+      "none": "No BREX profile",
+      "loading": "Loading BREX profiles…",
+      "listError": "Could not load BREX profiles: {{message}}",
+      "file": "BREX file (XML)",
+      "profileName": "Profile name",
+      "add": "Add profile",
+      "uploading": "Adding…",
+      "noFile": "Select a BREX XML file.",
+      "noName": "Enter a name for the BREX profile.",
+      "profileMissing": "The saved BREX profile is no longer available. Select another one.",
+      "issueMismatch": "The BREX Issue ({{brexIssue}}) must match the DM Issue ({{dmIssue}}).",
+      "notReady": "The BREX profile is not ready or does not match the selected Issue.",
+      "loadingRules": "Loading BREX rules…",
+      "rulesError": "Could not read the BREX rules: {{message}}",
+      "rulesSummary": "Detected rules ({{count}})",
+      "noStructuredRules": "No automatable structure rules were detected.",
+      "coverageAutomatic": "{{count}} directly interpretable",
+      "coverageContextual": "{{count}} conditional on the DM schema",
+      "coverageUnsupported": "{{count}} not automated",
+      "supportStatus": {
+        "automatic": "Automatic",
+        "contextual": "Schema-dependent",
+        "unsupported": "Not automated"
+      },
+      "supportReason": {
+        "unsupported_flag": "Unsupported allowedObjectFlag.",
+        "missing_object_path": "Missing objectPath.",
+        "unsupported_value_form": "Unsupported objectValue form or tailoring.",
+        "invalid_value_pattern": "Invalid BREX value pattern.",
+        "invalid_object_path": "Invalid or unsupported XPath.",
+        "other": "This rule is not applied automatically."
+      },
+      "flagForbidden": "Forbidden (0)",
+      "flagRequired": "Required (1)",
+      "flagOptional": "Optional (2)",
+      "flagUnknown": "Unsupported flag ({{flag}})",
+      "allowedValues": "Allowed values",
+      "context": "Context",
+      "unsupportedCount": "{{count}} detected rule(s) are not evaluated automatically:",
+      "unsupportedNonContext": "Non-context rule (text)",
+      "unsupportedNotation": "Notation rule",
+      "unsupportedSns": "SNS rules",
+      "unsupportedOther": "Other non-automated rule family"
+    },
     "docs": {
       "title": "Documents",
       "empty": "No document yet. Upload a PDF/Word file above.",
-      "open": "Open the assistant",
+      "open": "Resume generation",
       "delete": "Delete"
     },
     "start": {
-      "title": "Starting the assistant",
-      "starting": "Starting…",
-      "failed": "Startup failed.",
+      "title": "Document generation",
+      "starting": "Generating…",
+      "preparing": "Preparing modules…",
+      "failed": "Generation failed.",
       "parse": "Reading the document…",
       "ocr": "Scanned PDF: running OCR (AI)…",
       "infer": "Analysing the structure…",
@@ -145,9 +205,9 @@
       "fallback": "Processing…"
     },
     "resource": {
-      "notApplied": "Resource attached but NOT APPLIED — {{detail}}",
+      "notApplied": "Resource not applied — {{detail}}",
       "headerLoaded": "Header profile loaded",
-      "headerLoadedHelp": "It will be applied to the XML files during the Generation step."
+      "headerLoadedHelp": "It will be applied to the generated XML files."
     },
     "step": {
       "dmrl": "DMRL",
@@ -167,16 +227,35 @@
     },
     "dmrl": {
       "title": "Validate the DMRL ({{count}} Data Modules)",
-      "help": "Review the expected DMs before splitting. \"Found\" = title matched exactly; \"check\" = approximate match, the DM may be anchored in the wrong place; \"not found\" = the DM will be created empty.",
-      "counts": "{{missing}} not found, {{uncertain}} to check.",
+      "help": "Review the expected DMs before splitting. \"PM title\" rows remain in the PMC and do not generate DMs.",
+      "counts": "{{missing}} not found, {{uncertain}} to check, {{pmTitles}} PM title(s) (PMC only).",
+      "missingAlert_one": "{{count}} DMRL data module was not found in the source document.",
+      "missingAlert_other": "{{count}} DMRL data modules were not found in the source document.",
+      "missingAlertHelp_one": "Use Exclude below if you do not want to keep this DM.",
+      "missingAlertHelp_other": "Use Exclude below for the DMs you do not want to keep.",
+      "pmTitle": "PM title",
+      "titleInput": "Title for DMRL row {{title}}",
+      "typeLabel": "Type for DM {{title}}",
+      "typeIssuesTitle": "Reviewing the InfoCode-derived DM types ({{count}} DMs).",
+      "typeIssuesPending": "{{count}} type(s) need resolution: choose the type to use when generating each DM.",
+      "typeIssuesResolved": "A type has been selected for every row. Review the differences before validating.",
+      "typeConflict": "InfoCode {{infoCode}} maps to schema \"{{schema}}\"{{mappedType}}, while the DMRL proposes \"{{dmrlType}}\".",
+      "missingInfoCode": "No InfoCode is provided, so the reference workbook cannot determine the DM type (the DMRL proposes \"{{dmrlType}}\").",
+      "unmappedInfoCode": "InfoCode {{infoCode}} is not listed in the Issue 4.1 reference workbook (the DMRL proposes \"{{dmrlType}}\").",
+      "unsupportedSchema": "InfoCode {{infoCode}} maps to schema \"{{schema}}\", which the current generator does not support.",
+      "typeResolutionRequiredRow": "Choose the type to use for this DM before continuing.",
+      "typeSelected": "Type selected for generation: {{type}}.",
+      "selectType": "Choose the actual type…",
       "pmc": "Download the PMC",
       "validate": "Validate the DMRL →",
       "icn": "ICN",
       "rename": "Rename",
-      "exclude": "Exclude"
+      "exclude": "Exclude",
+      "confirmExclude": "Click again to confirm"
     },
     "split": {
-      "title": "Split into Data Modules ({{count}})",
+      "title": "Proposed split ({{count}} Data Modules)",
+      "review": "Show or edit the split ({{count}} modules)",
       "dmrlDriven": "Split driven by the DMRL ({{count}} expected DMs): the heading level is ignored.",
       "level": "Split level",
       "levelChapter": "Chapter",
@@ -187,11 +266,15 @@
       "needTwo": "Select at least 2 DMs.",
       "hideZones": "Hide headers/footers",
       "undo": "Undo",
-      "validate": "Validate the split →",
       "help": "Tick several DMs then \"Merge\"; edit a title then \"Rename\"; \"Split\" re-splits; \"Exclude\" removes noise.",
       "rename": "Rename",
       "split": "Split",
       "exclude": "Exclude"
+    },
+    "analysis": {
+      "help": "Review or edit the proposed split, or validate it now to generate the Data Modules.",
+      "validate": "Validate and generate Data Modules",
+      "processing": "Generating…"
     },
     "type": {
       "title": "Type of each Data Module",
@@ -203,15 +286,89 @@
       "level": "lvl. {{level}}"
     },
     "generate": {
-      "title": "Generated Data Modules ({{count}})",
+      "title": "Analysis complete — {{count}} Data Modules",
       "pmc": "Download the PMC",
-      "violations": "{{count}} viol.",
-      "missingFields": "{{count}} empty template section(s)",
-      "cirUnresolved": "{{count}} unresolved CIR ref(s)",
-      "xml": "XML",
+      "validate": "Validate DMs",
+      "cirUnresolved": "{{count}} shared-content reference(s) to review",
+      "xml": "Download DM",
       "images": "Extracted illustrations ({{count}})",
       "imageAlt": "Extracted illustration {{index}}",
-      "zip": "Download all (ZIP)"
+      "zip": "Download all (ZIP)",
+      "generationPending": "Download unavailable until DM generation is complete.",
+      "xsdIncomplete": "Incomplete DM: XSD validation failed.",
+      "xsdNoDetails": "The schema could not be run or returned no details.",
+      "missingDataWarning": "The XSD passes, but some business data still needs confirmation.",
+      "commonMissingFields": "Information to review or complete in every DM.",
+      "missingFields": "{{count}} item(s) to complete",
+      "brexCheckTitle": "BREX violations for this DM",
+      "brexViolations": "BREX violations ({{count}})",
+      "brexAnalysisTitle": "BREX check summary",
+      "brexAnalysisPending": "BREX check pending: {{completed}}/{{total}} DMs generated.",
+      "brexCoverageLoading": "Loading BREX profile coverage…",
+      "brexCoverageError": "Could not load BREX profile coverage: {{message}}",
+      "brexProfileIdMissing": "The BREX profile associated with this analysis is unavailable.",
+      "brexViolationsFound": "{{count}} BREX violation(s) found in {{dmCount}} DM(s).",
+      "brexNoViolations": "No violations detected among automated and applicable rules.",
+      "brexPartialStatus": "This is not a complete conformance result: some rules were not checked automatically.",
+      "brexWarningGroupCount": "Warnings for rules not fully checked ({{count}} groups)",
+      "brexAffectedDms": "Affected DMs: {{count}} of {{total}}",
+      "brexRuleId": "BREX rule",
+      "brexSeverityLevel": "Severity level declared by the BREX",
+      "brexSeverity": {
+        "error": "Error",
+        "warning": "Warning",
+        "info": "Information"
+      }
+    }
+  },
+  "validation": {
+    "title": "Data Module validation",
+    "subtitle": "Deterministic XML and XSD checks, with no AI processing.",
+    "dropTitle": "Drop XML files here",
+    "dropHelp": "Multiple DMs can be checked together.",
+    "selectFiles": "Import files",
+    "selectFolder": "Import folder",
+    "brexDisabled": "BREX for imported DMs · coming later",
+    "brexDisabledHelp": "Validating imported DMs against a BREX profile remains a separate future feature.",
+    "clear": "Clear list",
+    "emptyList": "Import one or more XML DMs to begin.",
+    "filterErrorsOnly": "DMs with errors only",
+    "noErrorsToShow": "No DMs contain errors.",
+    "listTitle": "Documents ({{count}})",
+    "pending": "Validation in progress ({{count}})",
+    "remove": "Remove this DM",
+    "chooseIssue": "Choose Issue",
+    "chooseIssueFor": "Choose the S1000D Issue for {{filename}}",
+    "line": "Line {{line}}",
+    "columns": {
+      "parsing": "Parsing",
+      "dmc": "DMC",
+      "version": "Version",
+      "schema": "Schema",
+      "errorType": "Error type",
+      "errorCount": "Error count"
+    },
+    "status": {
+      "checking": "Checking",
+      "valid": "Valid",
+      "invalid": "Errors",
+      "needs_issue": "Issue required",
+      "unverifiable": "Unverifiable"
+    },
+    "summary": {
+      "documents": "{{count}} DMs",
+      "valid": "{{count}} valid",
+      "invalid": "{{count}} with errors",
+      "unverifiable": "{{count}} unverifiable"
+    },
+    "detail": {
+      "panelTitle": "Result",
+      "checking": "Validating XML against the local schema…",
+      "valid": "The DM is valid.",
+      "chooseIssue": "The S1000D Issue could not be detected. Choose a version to start validation.",
+      "unverifiable": "XSD validation could not be completed. See the details below.",
+      "violations": "Violations ({{count}})",
+      "selectDm": "Select a DM to inspect its result."
     }
   }
 }

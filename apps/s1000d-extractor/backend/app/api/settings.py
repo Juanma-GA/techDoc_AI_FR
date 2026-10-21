@@ -17,6 +17,7 @@ from app.core.mistral_client import (
     set_llm_enabled,
     set_llm_tested,
 )
+from app.core.demo_mode import get_demo_enabled, set_demo_enabled
 from app.db.session import get_db
 from app.schemas import SettingsIn, SettingsOut, TestConnectionOut
 
@@ -34,6 +35,7 @@ def _settings_out(db: Session) -> SettingsOut:
         embed_model=s["embed_model"],
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
+        demo_enabled=get_demo_enabled(db),
     )
 
 
@@ -44,9 +46,11 @@ def read_settings(db: Session = Depends(get_db)) -> SettingsOut:
 
 @router.post("", response_model=SettingsOut)
 def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> SettingsOut:
-    save_settings(db, payload.model_dump(exclude_unset=True))
+    save_settings(db, payload.model_dump(exclude_unset=True, exclude={"demo_enabled"}))
     if payload.llm_enabled is not None:
         set_llm_enabled(db, payload.llm_enabled)
+    if payload.demo_enabled is not None:
+        set_demo_enabled(db, payload.demo_enabled)
     return _settings_out(db)
 
 
