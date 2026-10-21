@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from difflib import SequenceMatcher
-
+from app.core.comparison_page_similarity import align_page_sequences
 from app.core.document_comparison import PdfTextPage
 
 
@@ -12,82 +11,50 @@ def align_pages(
     comparison_pages: tuple[PdfTextPage, ...],
     comparison_index: int,
 ) -> list[dict]:
-    matcher = SequenceMatcher(
-        a=[page.text for page in reference_pages],
-        b=[page.text for page in comparison_pages],
-    )
     alignment: list[dict] = []
-    for operation, ref_start, ref_end, doc_start, doc_end in matcher.get_opcodes():
-        if operation == "equal":
-            for offset in range(ref_end - ref_start):
-                reference_page = reference_pages[ref_start + offset].page
-                comparison_page = comparison_pages[doc_start + offset].page
-                alignment.append(
-                    _row(
-                        reference_page,
-                        comparison_page,
-                        "aligned",
-                        f"reference-{reference_page}",
-                        (reference_page, 0, 0, 0),
-                    )
+    reference_offset = 0
+    comparison_offset = 0
+    for reference_page, comparison_page in align_page_sequences(
+        reference_pages,
+        comparison_pages,
+    ):
+        if reference_page is not None and comparison_page is not None:
+            status = "aligned" if reference_page.text == comparison_page.text else "changed"
+            alignment.append(
+                _row(
+                    reference_page.page,
+                    comparison_page.page,
+                    status,
+                    f"reference-{reference_page.page}",
+                    (reference_page.page, 0, 0, 0),
                 )
-        elif operation == "replace":
-            paired_count = min(ref_end - ref_start, doc_end - doc_start)
-            for offset in range(paired_count):
-                reference_page = reference_pages[ref_start + offset].page
-                comparison_page = comparison_pages[doc_start + offset].page
-                alignment.append(
-                    _row(
-                        reference_page,
-                        comparison_page,
-                        "changed",
-                        f"reference-{reference_page}",
-                        (reference_page, 0, 0, 0),
-                    )
+            )
+            reference_offset += 1
+            comparison_offset += 1
+        elif reference_page is not None:
+            alignment.append(
+                _row(
+                    reference_page.page,
+                    None,
+                    "reference_only",
+                    f"reference-{reference_page.page}",
+                    (reference_page.page, 0, 0, 0),
                 )
-            for page in reference_pages[ref_start + paired_count : ref_end]:
-                alignment.append(
-                    _row(
-                        page.page,
-                        None,
-                        "reference_only",
-                        f"reference-{page.page}",
-                        (page.page, 0, 0, 0),
-                    )
+            )
+            reference_offset += 1
+        elif comparison_page is not None:
+            alignment.append(
+                _row(
+                    None,
+                    comparison_page.page,
+                    "comparison_only",
+                    f"comparison-{comparison_index}-page-{comparison_page.page}",
+                    (reference_offset + 0.5, 1, comparison_index, comparison_offset),
                 )
-            anchor = ref_start + paired_count
-            for offset, page in enumerate(comparison_pages[doc_start + paired_count : doc_end]):
-                alignment.append(
-                    _row(
-                        None,
-                        page.page,
-                        "comparison_only",
-                        f"comparison-{comparison_index}-page-{page.page}",
-                        (anchor + 0.5, 1, comparison_index, offset),
-                    )
-                )
-        elif operation == "delete":
-            for page in reference_pages[ref_start:ref_end]:
-                alignment.append(
-                    _row(
-                        page.page,
-                        None,
-                        "reference_only",
-                        f"reference-{page.page}",
-                        (page.page, 0, 0, 0),
-                    )
-                )
-        elif operation == "insert":
-            for offset, page in enumerate(comparison_pages[doc_start:doc_end]):
-                alignment.append(
-                    _row(
-                        None,
-                        page.page,
-                        "comparison_only",
-                        f"comparison-{comparison_index}-page-{page.page}",
-                        (ref_start + 0.5, 1, comparison_index, offset),
-                    )
-                )
+            )
+            comparison_offset += 1
+        else:
+            raise RuntimeError("Page alignment step contained no page.")
     return alignment
 
 

@@ -5,7 +5,6 @@ import { bboxToPercentRect } from "../../lib/bbox";
 import {
   comparisonApi,
   type ComparisonPageAlignment,
-  type ComparisonPageSlot,
   type ComparisonChange,
 } from "../../lib/comparisonApi";
 
@@ -109,18 +108,13 @@ export function ComparisonPagePane({
 }
 
 export function ComparisonAlignmentStatus({
-  slot,
   alignment,
 }: {
-  slot: ComparisonPageSlot | undefined;
   alignment: ComparisonPageAlignment | undefined;
 }) {
   const { t } = useTranslation();
-  if (!slot) {
-    return <p className="comparison-alignment-status" role="status">{t("comparison.noAlignment")}</p>;
-  }
   if (!alignment) {
-    return <p className="comparison-alignment-status" role="status">{t("comparison.pageSlotFromOtherVersion")}</p>;
+    return <p className="comparison-alignment-status" role="status">{t("comparison.noAlignment")}</p>;
   }
 
   const messages: string[] = [];
@@ -141,5 +135,49 @@ export function ComparisonAlignmentStatus({
   }
   return messages.length ? (
     <p className="comparison-alignment-status" role="status">{messages.join(" · ")}</p>
+  ) : null;
+}
+
+export function ComparisonUnmatchedPagesNotice({
+  pageAlignment,
+}: {
+  pageAlignment: ComparisonPageAlignment[];
+}) {
+  const { t } = useTranslation();
+  const referenceOnlyPages = pageAlignment
+    .flatMap((item) =>
+      item.status === "reference_only" && item.reference_page !== null
+        ? [item.reference_page]
+        : [],
+    )
+    .sort((first, second) => first - second);
+  const comparisonOnlyPages = pageAlignment
+    .flatMap((item) =>
+      item.status === "comparison_only" && item.comparison_page !== null
+        ? [item.comparison_page]
+        : [],
+    )
+    .sort((first, second) => first - second);
+  const messages: string[] = [];
+
+  if (referenceOnlyPages.length) {
+    messages.push(
+      t("comparison.referenceOnlyPages", { pages: referenceOnlyPages.join(", ") }),
+    );
+  }
+  if (comparisonOnlyPages.length) {
+    messages.push(
+      t("comparison.comparisonOnlyPages", { pages: comparisonOnlyPages.join(", ") }),
+    );
+  }
+
+  return messages.length ? (
+    <p
+      className="comparison-alignment-status comparison-unmatched-pages-status"
+      role="status"
+      aria-live="polite"
+    >
+      {messages.join(" · ")}
+    </p>
   ) : null;
 }

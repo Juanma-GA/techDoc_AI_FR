@@ -33,6 +33,85 @@ def _create(client: TestClient, reference: bytes, comparison: bytes) -> dict:
     return response.json()
 
 
+def test_similar_pages_align_after_insertions_and_report_unmatched_pages(
+    client: TestClient,
+) -> None:
+    page_bodies = [
+        "Introduction and scope",
+        "Hydraulic pump removal instructions",
+        "Fuel pressure inspection limits",
+        "Electrical harness routing details",
+        "Approved engine lubrication fluids",
+        "Landing gear actuator adjustment",
+        "Rotor blade balance procedure",
+        "Cabin panel fastener locations",
+        "Emergency lighting circuit tests",
+        "Corrosion protection inspection",
+    ]
+    reference_pages = [
+        f"{body} printed page {page}"
+        for page, body in enumerate(page_bodies, start=1)
+    ]
+    comparison_pages = [
+        reference_pages[0],
+        "Inserted appendix for calibration notes",
+        "Inserted appendix for terminology",
+        *reference_pages[1:6],
+        f"{page_bodies[6]} printed page 9",
+    ]
+    result = _create(
+        client,
+        _multipage_pdf(reference_pages),
+        _multipage_pdf(comparison_pages),
+    )
+
+    comparison = result["report"]["comparisons"][0]
+    page_seven_match = next(
+        row for row in comparison["page_alignment"] if row["reference_page"] == 7
+    )
+    assert page_seven_match["comparison_page"] == 9
+    assert page_seven_match["status"] == "changed"
+    assert [
+        row["reference_page"]
+        for row in comparison["page_alignment"]
+        if row["status"] == "reference_only"
+    ] == [8, 9, 10]
+    assert [
+        row["comparison_page"]
+        for row in comparison["page_alignment"]
+        if row["status"] == "comparison_only"
+    ] == [2, 3]
+    assert {(change["kind"], change["page"]) for change in comparison["changes"]} == {
+        ("removed", 7),
+        ("added", 9),
+    }
+    assert all(
+        "Inserted candidate page" not in change["text"]
+        for change in comparison["changes"]
+    )
+
+
+def test_replaced_pages_below_similarity_threshold_remain_unmatched(
+    client: TestClient,
+) -> None:
+    result = _create(
+        client,
+        _multipage_pdf(["Anchor start", "R" * 50, "Anchor end"]),
+        _multipage_pdf(["Anchor start", "C" * 50, "Anchor end"]),
+    )
+
+    comparison = result["report"]["comparisons"][0]
+    middle_pages = [
+        row for row in comparison["page_alignment"]
+        if row["reference_page"] == 2 or row["comparison_page"] == 2
+    ]
+    assert {row["status"] for row in middle_pages} == {
+        "reference_only",
+        "comparison_only",
+    }
+    assert comparison["changes"] == []
+
+
 def test_page_text_alignment_keeps_inserted_pages_as_slots_and_renders_png(
     client: TestClient,
 ) -> None:
@@ -44,7 +123,10 @@ def test_page_text_alignment_keeps_inserted_pages_as_slots_and_renders_png(
 
     report = result["report"]
     comparison = report["comparisons"][0]
-    assert report["schema_version"] == 2
+    assert report["schema_version"] == 5
+    assert comparison["changes"] == []
+    assert comparison["added_count"] == 0
+    assert comparison["removed_count"] == 0
     assert [slot["id"] for slot in report["page_slots"]] == [
         "reference-1",
         "comparison-1-page-2",
@@ -74,8 +156,8 @@ def test_page_text_alignment_keeps_inserted_pages_as_slots_and_renders_png(
 def test_opening_legacy_saved_report_rebuilds_alignment(client: TestClient) -> None:
     result = _create(
         client,
-        _multipage_pdf(["Same page"]),
-        _multipage_pdf(["Changed page"]),
+        _multipage_pdf(["Reference procedure printed page 7"]),
+        _multipage_pdf(["Reference procedure printed page 9"]),
     )
     comparison_id = uuid.UUID(result["id"])
 
@@ -92,13 +174,21 @@ def test_opening_legacy_saved_report_rebuilds_alignment(client: TestClient) -> N
                 bbox = change["bbox"]
                 change["bbox"] = [bbox["x0"], bbox["y0"], bbox["x1"], bbox["y1"]]
         row.report_json = json.dumps(legacy)
+        row.ai_summary_json = json.dumps(
+            {"summary": "Stale", "key_changes": [], "impact": "Stale"}
+        )
+        row.ai_status = "completed"
+        row.ai_summary_truncated = True
         db.commit()
 
     opened = client.get(f"/api/v1/comparisons/{result['id']}")
     assert opened.status_code == 200
     upgraded = opened.json()["report"]
-    assert upgraded["schema_version"] == 2
+    assert upgraded["schema_version"] == 5
     assert upgraded["page_slots"]
     assert upgraded["comparisons"][0]["page_alignment"]
     assert upgraded["comparisons"][0]["changes"][0]["group_id"]
     assert isinstance(upgraded["comparisons"][0]["changes"][0]["bbox"], dict)
+    assert opened.json()["ai_summary"] is None
+    assert opened.json()["ai_status"] == "pending"
+    assert opened.json()["ai_summary_truncated"] is False

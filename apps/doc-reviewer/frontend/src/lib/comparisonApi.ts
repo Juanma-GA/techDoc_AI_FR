@@ -46,7 +46,7 @@ export type ComparisonPair = {
 };
 
 export type ComparisonReport = {
-  schema_version: 2;
+  schema_version: 5;
   reference_index: number;
   documents: ComparisonDocumentInfo[];
   comparisons: ComparisonPair[];

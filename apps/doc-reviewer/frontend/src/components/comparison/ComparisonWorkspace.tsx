@@ -7,9 +7,21 @@ import {
   type ComparisonDetail,
   type ComparisonPair,
 } from "../../lib/comparisonApi";
-import { ComparisonAlignmentStatus, ComparisonPagePane } from "./ComparisonPagePane";
+import {
+  ComparisonAlignmentStatus,
+  ComparisonPagePane,
+  ComparisonUnmatchedPagesNotice,
+} from "./ComparisonPagePane";
 import "../../styles/comparison.css";
 import "../../styles/comparison-pages.css";
+
+const matchedPagesFor = (pair: ComparisonPair | undefined) =>
+  pair?.page_alignment.filter(
+    (item) =>
+      (item.status === "aligned" || item.status === "changed") &&
+      item.reference_page !== null &&
+      item.comparison_page !== null,
+  ) ?? [];
 
 export function ComparisonWorkspace({
   comparison,
@@ -27,11 +39,10 @@ export function ComparisonWorkspace({
   const [transitionFrom, setTransitionFrom] = useState<number | null>(null);
   const transitionTimer = useRef<number | null>(null);
   const pairs = comparison.report.comparisons;
-  const slots = comparison.report.page_slots;
   const activeIndex = Math.min(candidateIndex, Math.max(0, pairs.length - 1));
   const activePair = pairs[activeIndex];
-  const slot = slots[pageIndex];
-  const alignment = activePair?.page_alignment.find((item) => item.slot_id === slot?.id);
+  const matchedPages = matchedPagesFor(activePair);
+  const alignment = matchedPages[pageIndex];
   const reference = comparison.report.documents[comparison.report.reference_index];
 
   useEffect(() => {
@@ -54,6 +65,7 @@ export function ComparisonWorkspace({
     if (nextIndex === activeIndex || transitionTimer.current !== null) return;
     setTransitionFrom(activeIndex);
     setCandidateIndex(nextIndex);
+    setPageIndex(0);
     setSelectedGroupId(null);
     onSelectDifference(null);
     transitionTimer.current = window.setTimeout(() => {
@@ -70,20 +82,12 @@ export function ComparisonWorkspace({
     setSelectedGroupId(groupId);
     if (activePair) onSelectDifference({ documentIndex: activePair.document_index, groupId });
   };
-  const referenceUnavailable = slot
-    ? t("comparison.pageMissingInReference")
-    : t("comparison.noAlignment");
-  const comparisonUnavailable = !slot
-    ? t("comparison.noAlignment")
-    : !alignment && slot.reference_page === null
-      ? t("comparison.pageSlotFromOtherVersion")
-      : t("comparison.pageMissingInVersion");
   const renderCandidatePane = (
     pair: ComparisonPair,
     index: number,
     className: string,
   ) => {
-    const pageMatch = pair.page_alignment.find((item) => item.slot_id === slot?.id);
+    const pageMatch = matchedPagesFor(pair)[pageIndex];
     return (
       <div key={`${pair.document_index}-${index}`} className={className}>
         <ComparisonPagePane
@@ -94,7 +98,7 @@ export function ComparisonWorkspace({
           side="comparison"
           changes={pair.changes}
           selectedGroupId={selectedGroupId}
-          unavailableMessage={pageMatch?.comparison_page === null ? t("comparison.pageMissingInVersion") : comparisonUnavailable}
+          unavailableMessage={t("comparison.noAlignment")}
           onSelectGroup={selectGroup}
         />
       </div>
@@ -115,15 +119,15 @@ export function ComparisonWorkspace({
             <ChevronLeft size={16} aria-hidden="true" />
           </button>
           <span aria-live="polite">
-            {slots.length
-              ? t("comparison.pagePosition", { current: pageIndex + 1, total: slots.length })
+            {matchedPages.length
+              ? t("comparison.pagePosition", { current: pageIndex + 1, total: matchedPages.length })
               : t("comparison.noAlignment")}
           </span>
           <button
             type="button"
             className="btn secondary small"
             aria-label={t("comparison.nextPage")}
-            disabled={pageIndex >= slots.length - 1}
+            disabled={pageIndex >= matchedPages.length - 1}
             onClick={() => changePage(pageIndex + 1)}
           >
             <ChevronRight size={16} aria-hidden="true" />
@@ -168,17 +172,18 @@ export function ComparisonWorkspace({
         ) : null}
       </div>
 
-      <ComparisonAlignmentStatus slot={slot} alignment={alignment} />
+      <ComparisonAlignmentStatus alignment={alignment} />
+      <ComparisonUnmatchedPagesNotice pageAlignment={activePair?.page_alignment ?? []} />
       <div className="comparison-split-view">
         <ComparisonPagePane
           comparisonId={comparison.id}
           documentIndex={comparison.report.reference_index}
           filename={reference?.filename ?? comparison.title}
-          pageNumber={slot?.reference_page ?? null}
+          pageNumber={alignment?.reference_page ?? null}
           side="reference"
           changes={activePair?.changes ?? []}
           selectedGroupId={selectedGroupId}
-          unavailableMessage={referenceUnavailable}
+          unavailableMessage={t("comparison.noAlignment")}
           onSelectGroup={selectGroup}
         />
         <div className="comparison-switcher">

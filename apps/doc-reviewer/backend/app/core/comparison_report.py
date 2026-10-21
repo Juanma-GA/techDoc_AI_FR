@@ -16,7 +16,7 @@ from app.core.errors import AppError
 from app.core.security import safe_storage_join
 from app.db.comparison_models import DocumentComparison
 
-REPORT_SCHEMA_VERSION = 2
+REPORT_SCHEMA_VERSION = 5
 ChangeKind = Literal["added", "removed"]
 
 
@@ -32,10 +32,27 @@ def build_comparison_report(
     ]
     comparisons: list[dict[str, Any]] = []
     reference = extracted[reference_index]
+    reference_lines_by_page = _lines_by_page(reference.lines)
     for index, candidate in enumerate(extracted):
         if index == reference_index:
             continue
-        changes = _diff_lines(reference.lines, candidate.lines, index)
+        page_alignment = align_pages(reference.pages, candidate.pages, index)
+        candidate_lines_by_page = _lines_by_page(candidate.lines)
+        changes: list[dict[str, Any]] = []
+        for pair_index, page_match in enumerate(page_alignment):
+            if page_match["status"] not in {"aligned", "changed"}:
+                continue
+            reference_page = page_match["reference_page"]
+            comparison_page = page_match["comparison_page"]
+            if reference_page is None or comparison_page is None:
+                continue
+            changes.extend(
+                _diff_lines(
+                    reference_lines_by_page.get(reference_page, ()),
+                    candidate_lines_by_page.get(comparison_page, ()),
+                    f"document-{index}-pair-{pair_index}",
+                )
+            )
         comparisons.append(
             {
                 "document_index": index,
@@ -43,7 +60,7 @@ def build_comparison_report(
                 "added_count": sum(change["kind"] == "added" for change in changes),
                 "removed_count": sum(change["kind"] == "removed" for change in changes),
                 "changes": changes,
-                "page_alignment": align_pages(reference.pages, candidate.pages, index),
+                "page_alignment": page_alignment,
             }
         )
 
@@ -63,7 +80,7 @@ def build_comparison_report(
 def _diff_lines(
     reference: tuple[PdfTextLine, ...],
     candidate: tuple[PdfTextLine, ...],
-    document_index: int,
+    group_prefix: str,
 ) -> list[dict[str, Any]]:
     matcher = SequenceMatcher(
         a=[line.normalized for line in reference],
@@ -74,7 +91,7 @@ def _diff_lines(
     for operation, ref_start, ref_end, candidate_start, candidate_end in matcher.get_opcodes():
         if operation == "equal":
             continue
-        group_id = f"document-{document_index}-change-{change_number}"
+        group_id = f"{group_prefix}-change-{change_number}"
         change_number += 1
         if operation in {"delete", "replace"}:
             changes.extend(
@@ -86,6 +103,15 @@ def _diff_lines(
                 for line in candidate[candidate_start:candidate_end]
             )
     return changes
+
+
+def _lines_by_page(
+    lines: tuple[PdfTextLine, ...],
+) -> dict[int, tuple[PdfTextLine, ...]]:
+    pages: dict[int, list[PdfTextLine]] = {}
+    for line in lines:
+        pages.setdefault(line.page, []).append(line)
+    return {page: tuple(page_lines) for page, page_lines in pages.items()}
 
 
 def _change(kind: ChangeKind, line: PdfTextLine, group_id: str) -> dict[str, Any]:
@@ -160,5 +186,8 @@ def ensure_current_report(row: DocumentComparison, db: Session) -> dict[str, Any
 
     current_report = build_comparison_report(paths, filenames, row.reference_index)
     row.report_json = json.dumps(current_report, ensure_ascii=False)
+    row.ai_summary_json = None
+    row.ai_status = "pending"
+    row.ai_summary_truncated = False
     db.commit()
     return current_report

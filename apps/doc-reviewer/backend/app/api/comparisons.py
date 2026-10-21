@@ -63,13 +63,14 @@ def _summary(row: DocumentComparison) -> ComparisonSummary | None:
 
 
 def _to_detail(row: DocumentComparison, db: Session) -> ComparisonDetail:
+    report = ensure_current_report(row, db)
     return ComparisonDetail(
         id=row.id,
         title=row.title,
         created_at=row.created_at,
         file_count=row.file_count,
         ai_status=row.ai_status,
-        report=ensure_current_report(row, db),
+        report=report,
         ai_summary=_summary(row),
         ai_summary_truncated=row.ai_summary_truncated,
     )

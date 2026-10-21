@@ -20,6 +20,16 @@ def _pdf(*lines: str) -> bytes:
     return content
 
 
+def _multipage_pdf(pages: list[str]) -> bytes:
+    document = fitz.open()
+    for page_text in pages:
+        page = document.new_page(width=500, height=700)
+        page.insert_text((50, 70), page_text, fontsize=12)
+    content = document.tobytes()
+    document.close()
+    return content
+
+
 def _create_comparison(client: TestClient, docs: list[tuple[str, bytes]]) -> dict:
     response = client.post(
         "/api/v1/comparisons",
@@ -77,8 +87,8 @@ def test_export_single_pdf_and_comment_changes(client: TestClient) -> None:
     result = _create_comparison(
         client,
         [
-            ("reference.pdf", _pdf("Old line")),
-            ("revision.pdf", _pdf("New line")),
+            ("reference.pdf", _pdf("The pump assembly follows procedure version 1120.")),
+            ("revision.pdf", _pdf("The pump assembly follows procedure version 1180.")),
         ],
     )
 
@@ -155,3 +165,53 @@ def test_synthesis_is_persisted_and_disabled_state_is_explicit(
     assert unavailable.status_code == 200
     assert unavailable.json()["ai_status"] == "disabled"
     assert unavailable.json()["ai_summary"] is None
+
+
+def test_synthesis_prompt_lists_unmatched_pages_without_their_text(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    result = _create_comparison(
+        client,
+        [
+            (
+                "reference.pdf",
+                _multipage_pdf(
+                    ["Shared first page", "Reference-only private text", "Shared last page"]
+                ),
+            ),
+            (
+                "revision.pdf",
+                _multipage_pdf(
+                    ["Shared first page", "Shared last page", "Revision-only private text"]
+                ),
+            ),
+        ],
+    )
+    comparison = result["report"]["comparisons"][0]
+    assert comparison["changes"] == []
+    assert {row["status"] for row in comparison["page_alignment"]} >= {
+        "reference_only",
+        "comparison_only",
+    }
+
+    captured: dict[str, str] = {}
+
+    def capture_prompt(_db, system: str, prompt: str, **_kwargs) -> str:
+        captured["system"] = system
+        captured["prompt"] = prompt
+        return json.dumps(
+            {"summary": "Deux pages sont sans correspondance.", "key_changes": [], "impact": ""}
+        )
+
+    monkeypatch.setattr("app.api.comparison_synthesis.call_chat", capture_prompt)
+    synthesized = client.post(
+        f"/api/v1/comparisons/{result['id']}/synthesis",
+        json={"language": "fr"},
+    )
+    assert synthesized.status_code == 200, synthesized.text
+    assert "pages présentes dans la référence mais absentes de ce document : 2" in captured["prompt"]
+    assert "pages présentes dans ce document mais absentes de la référence : 3" in captured["prompt"]
+    assert "Reference-only private text" not in captured["prompt"]
+    assert "Revision-only private text" not in captured["prompt"]
+    assert "pages sans correspondance" in captured["system"]
