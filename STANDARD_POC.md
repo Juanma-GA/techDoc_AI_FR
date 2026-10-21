@@ -429,7 +429,7 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 Toggle dark/light dans l'app React :
 
 - **Rendu** : `App.tsx` avec un bouton sun/moon dans le sidebar (cf. §10), ou `<ThemeToggle />` de `@internal/ui`.
-- **Mode initial** : si `localStorage['theme']` est défini → respect ; à défaut → dark (continuité POC).
+- **Mode initial** : respecter une préférence `dark`/`light` explicitement sauvegardée ; sinon démarrer toujours en dark, indépendamment de `prefers-color-scheme`. Une valeur absente ou invalide signifie dark.
 - **Application** : classe `.dark` sur `<html>`. Le preset Tailwind est en `darkMode: "class"`.
 - **Persistance** : seules des préférences non sensibles (`theme` et éventuellement `language`) peuvent être conservées dans le navigateur. Jamais d'authentification, d'état métier ou de session dans `localStorage`/`sessionStorage`.
 
@@ -710,8 +710,7 @@ Pattern obligatoire dans `<head>` (anti-flash, applique le theme AVANT que le HT
 <script>
   (function () {
     var stored = localStorage.getItem("theme");
-    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (stored === "dark" || (!stored && prefersDark) || stored === null) {
+    if (stored !== "light") {
       document.documentElement.classList.add("dark");
     }
   })();
