@@ -33,6 +33,7 @@ from app.core.regex_safety import USER_REGEX_TIMEOUT_SECONDS, compile_user_regex
 from app.core.security import read_upload_bounded
 from app.core.versioning import sha256_of_bytes
 from app.db.models import Document, EditHistory, StandardVersion
+from app.db.preparation_models import DocumentPreparation
 from app.db.session import get_db
 from app.parsers.docx_parser import parse_docx
 from app.parsers.pdf_parser import parse_pdf
@@ -645,6 +646,11 @@ def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> No
     if doc is None:
         raise AppError("DOCUMENT_NOT_FOUND", "Document introuvable", status_code=404)
     storage_dir = doc.storage_dir
+    preparation = db.scalar(
+        select(DocumentPreparation).where(DocumentPreparation.document_id == doc.id)
+    )
+    if preparation is not None:
+        db.delete(preparation)
     db.delete(doc)
     db.commit()
     # Cleanup the snapshot folder on disk too — otherwise an admin

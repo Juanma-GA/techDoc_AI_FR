@@ -97,6 +97,16 @@ def test_dependency_hash_command_runs_in_cmd(name: str, tmp_path: Path) -> None:
     assert re.search(r"HASH=[0-9a-fA-F]{128}", result.stdout), result.stdout + result.stderr
 
 
+def test_env_settings_are_read_directly_from_file() -> None:
+    lines = _code_lines("_run.bat")
+    for setting in ("BIND_HOST", "ENCRYPTION_KEY"):
+        assert any(
+            f'in ("%ENV_FILE%") do if /i "%%A"=="{setting}"' in line
+            for line in lines
+        )
+    assert not any("in (`" in line for line in lines)
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="requires cmd.exe")
 def test_encryption_key_command_runs_in_cmd_with_spaced_temp_path(tmp_path: Path) -> None:
     command = next(

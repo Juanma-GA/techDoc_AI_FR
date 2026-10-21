@@ -177,8 +177,15 @@ limitations explicitement :
   l'apparence.
 - **PDFs signés numériquement** : refusés à l'upload (`PDF_HAS_SIGNATURE`)
   car toute modification invalide la signature.
-- **PDFs scannés (raster sans couche texte)** : aucune suggestion ne
-  peut être posée — pas d'OCR dans ce POC.
+- **PDFs scannés (raster sans couche texte)** : le flux Préparation peut
+  OCRiser les pages nécessaires pour classifier les pages et exécuter les
+  règles de préparation. Cela ne crée pas de couche texte dans le PDF et ne
+  rend pas les suggestions générales éditables sur une page raster.
+- **Pré-détection OCR** : le text layer natif est retenu si son texte
+  normalisé contient au moins 80 caractères, dont 40 caractères
+  alphanumériques et au moins 40 % de caractères alphanumériques lisibles,
+  sans caractère de remplacement ni caractère non imprimable. Sinon, la page
+  est proposée à l'OCR ; ce seuil est un heuristique conservateur.
 - **PDF/A** : la conformité n'est pas garantie après édition. À valider
   manuellement si besoin.
 - **Concurrent edits** : verrou applicatif simple via
