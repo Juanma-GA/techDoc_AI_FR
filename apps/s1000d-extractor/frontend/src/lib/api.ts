@@ -3,6 +3,26 @@
  * once the backend OpenAPI is stable.
  */
 
+import type { DmValidationResult, WizardState } from "./wizardTypes";
+export type {
+  Candidate,
+  DmPreview,
+  DmValidationResult,
+  DmValidationStatus,
+  DmValidationViolation,
+  DmrlMatchRank,
+  DmrlRow,
+  DmrlTypeIssue,
+  NodeRef,
+  Override,
+  PreviewSnippet,
+  TreeNode,
+  WizardDm,
+  WizardResources,
+  WizardState,
+  WizardStep,
+} from "./wizardTypes";
+
 // Surchargeable au build (VITE_API_BASE_URL) pour un deploiement en sous-chemin
 // IIS (ex. /app/s1000d-extractor/api/v1). Defaut relatif '/api/v1' en local.
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
@@ -66,6 +86,7 @@ export type SettingsDto = {
   chat_model: string;
   embed_model: string;
   llm_enabled: boolean;
+  demo_enabled: boolean;
 };
 export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
 
@@ -88,13 +109,14 @@ export const settingsApi = {
     chat_model?: string;
     embed_model?: string;
     llm_enabled?: boolean;
+    demo_enabled?: boolean;
   }) => api<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(body) }),
   test: () => api<TestConnectionDto>("/settings/test", { method: "POST" }),
 };
 
 // ----- Domain types ---------------------------------------------------------
 
-export type S1000dIssue = "4.1" | "4.2" | "5.0";
+export type S1000dIssue = "4.1" | "4.2";
 export type ContextHint = "mixed" | "descriptive" | "procedural";
 
 export type BrexProfile = {
@@ -103,24 +125,38 @@ export type BrexProfile = {
   s1000d_issue: string;
 };
 
-export type Candidate = { element: string; score?: number; rationale?: string };
+export type BrexObjectValue = {
+  value_allowed: string | null;
+  value_text: string;
+  value_form: string | null;
+  value_tailoring: string;
+};
 
-export type NodeRef = { kind: string; target?: string; target_kind?: string; text?: string };
+export type BrexRule = {
+  rule_id: string | null;
+  object_path: string;
+  allowed_flag: string;
+  object_use: string;
+  object_values: BrexObjectValue[];
+  rules_context: string | null;
+  context_id: string | null;
+  severity_level: string | null;
+  supported: boolean;
+  support_status: "automatic" | "contextual" | "unsupported";
+  support_reason: string | null;
+};
 
-export type TreeNode = {
-  id: string;
-  kind: string;
-  text: string;
-  context: string;
-  confidence: number | null;
-  candidates: Candidate[];
-  children: TreeNode[];
-  level?: number | null;
-  page?: number | null;
-  zone?: string;
-  table_header?: string[] | null;
-  icn?: string | null;
-  refs?: NodeRef[] | null;
+export type UnsupportedBrexRule = {
+  rule_type: string;
+  rule_id: string | null;
+  description: string;
+};
+
+export type BrexProfileDetail = BrexProfile & {
+  dmc: string;
+  dm_code: Record<string, string>;
+  rules: BrexRule[];
+  unsupported_rules: UnsupportedBrexRule[];
 };
 
 export type DocumentOut = {
@@ -143,6 +179,7 @@ export type PdfCutDetection = {
   selected_end_page: number | null;
   default_start_page: number;
   total_pages: number;
+  dmrl_titles: string[];
   candidates: PdfCutCandidate[];
 };
 
@@ -170,69 +207,25 @@ export const versioningApi = {
     }),
 };
 
-// ----- Wizard ---------------------------------------------------------------
-
-export type WizardStep = "dmrl" | "split" | "type" | "structure" | "generate";
-
-export type PreviewSnippet = {
-  text: string;
-  page: number | null;
-  kind: string;
-  zone?: string;
-};
-
-export type DmPreview = { head: PreviewSnippet[]; tail: PreviewSnippet[]; total: number };
-
-export type WizardDm = {
-  dm_id: string;
-  title: string;
-  dm_type: string;
-  node_count: number;
-  tree: TreeNode;
-  violation_count: number;
-  preview?: DmPreview;
-  missing_fields?: string[];
-  cir_unresolved?: string[];
-  is_orphan?: boolean;
-};
-
-export type WizardResources = {
-  dmrl_count: number;
-  has_cir: boolean;
-  has_brex_rules: boolean;
-  has_dm_header: boolean;
-  errors?: string[];
-};
-
-export type DmrlMatchRank = "exact" | "prefix" | "contains" | "";
-
-export type DmrlRow = {
-  index: number;
-  arbo: string;
-  dmc: string;
-  title: string;
-  dm_type: string;
-  icn: string;
-  matched: boolean;
-  match_rank: DmrlMatchRank;
-  page: number | null;
-  matched_text: string;
-};
-
-export type WizardState = {
-  step: WizardStep;
-  split_level: string;
-  steps?: WizardStep[];
-  dms: WizardDm[];
-  can_undo?: boolean;
-  resources?: WizardResources;
-  dmrl?: DmrlRow[];
-};
-
-export type Override = { dm_id: string; node_id: string; element: string };
-
 export const brexApi = {
   list: () => api<BrexProfile[]>("/brex"),
+  detail: (brexId: string) => api<BrexProfileDetail>(`/brex/${encodeURIComponent(brexId)}`),
+  upload: async (
+    file: File,
+    name: string,
+    issue: S1000dIssue,
+  ): Promise<BrexProfile> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("name", name);
+    fd.append("s1000d_issue", issue);
+    const res = await fetch(`${API_BASE}/brex`, { method: "POST", body: fd });
+    if (!res.ok) {
+      const e = (await res.json().catch(() => null)) as ApiError | null;
+      throw new Error(e?.message || res.statusText);
+    }
+    return (await res.json()) as BrexProfile;
+  },
 };
 
 export const documentsApi = {
@@ -264,8 +257,11 @@ export const documentsApi = {
 };
 
 export const pdfCutApi = {
-  detect: (docId: string) =>
-    api<PdfCutDetection>(`/documents/${docId}/pdf-cut/detect`, { method: "POST" }),
+  detect: (docId: string, title?: string) =>
+    api<PdfCutDetection>(`/documents/${docId}/pdf-cut/detect`, {
+      method: "POST",
+      body: JSON.stringify(title ? { title } : {}),
+    }),
   confirm: (docId: string, startPage: number, endPage: number) =>
     api<{ page: number; start_page: number; end_page: number; page_count: number; status: string }>(
       `/documents/${docId}/pdf-cut/confirm`,
@@ -279,7 +275,7 @@ export type ResourceKind = "dmrl" | "cir" | "brex_rules" | "dm_header";
 export type ResourceUploadDto = { kind: ResourceKind; count: number };
 export type MigrationInputKind = "document" | ResourceKind;
 export type MigrationInputMapping = {
-  issue: S1000dIssue;
+  issue: S1000dIssue | "5.0";
   context_hint: ContextHint;
   brex_id: string | null;
   files: Partial<Record<MigrationInputKind, { filename: string }>>;
@@ -326,14 +322,57 @@ export const wizardApi = {
     }),
   dmXmlUrl: (docId: string, dmId: string) =>
     `${API_BASE}/documents/${docId}/wizard/dm/${dmId}/xml`,
+  downloadDmFile: async (docId: string, dmId: string): Promise<File> => {
+    const response = await fetch(
+      `${API_BASE}/documents/${encodeURIComponent(docId)}/wizard/dm/${encodeURIComponent(dmId)}/xml`,
+    );
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as ApiError | null;
+      throw new Error(error?.message || response.statusText || "Erreur");
+    }
+    const disposition = response.headers.get("Content-Disposition");
+    const filename = disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? `${dmId}.xml`;
+    return new File([await response.blob()], filename, { type: "application/xml" });
+  },
   zipUrl: (docId: string) => `${API_BASE}/documents/${docId}/wizard/zip`,
   images: (docId: string) => api<string[]>(`/documents/${docId}/wizard/images`),
   imageUrl: (docId: string, name: string) =>
     `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}`,
 };
 
+export const validationApi = {
+  validate: async (
+    files: File[],
+    issueOverrides: Array<string | null> = [],
+    filenames: string[] = [],
+  ): Promise<{ results: DmValidationResult[] }> => {
+    const form = new FormData();
+    files.forEach((file, index) => {
+      form.append("files", file, filenames[index] || file.webkitRelativePath || file.name);
+    });
+    form.append("issue_overrides", JSON.stringify(issueOverrides));
+
+    const headers: Record<string, string> = {};
+    if (_currentRequestId) headers["X-Request-Id"] = _currentRequestId;
+    const response = await fetch(`${API_BASE}/validation/dms`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    const responseRequestId = response.headers.get("X-Request-Id");
+    if (responseRequestId) _currentRequestId = responseRequestId;
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as
+        | (ApiError & { detail?: string })
+        | null;
+      throw new Error(error?.message || error?.detail || response.statusText || "Erreur");
+    }
+    return (await response.json()) as { results: DmValidationResult[] };
+  },
+};
+
 /**
- * Lance le demarrage de l'assistant et consomme le flux SSE (fetch +
+ * Lance la generation et consomme le flux SSE (fetch +
  * ReadableStream ; EventSource ne sait pas POST). `onEvent(event, data)`.
  */
 export async function startWizardStream(

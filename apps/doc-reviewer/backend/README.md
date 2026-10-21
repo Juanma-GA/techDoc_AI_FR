@@ -90,6 +90,20 @@ pytest
 uvicorn app.main:app --reload --port 8003
 ```
 
+### OCR local facultatif
+
+Pour activer PaddleOCR dans le même environnement que le backend, installez
+l'extra dédié avant de démarrer l'application :
+
+```bash
+pip install -e ".[ocr]"
+```
+
+PaddleOCR télécharge les modèles au premier lancement et les conserve dans le
+cache utilisateur PaddleX. Pour réutiliser un environnement Python PaddleOCR
+existant, définissez `PADDLEOCR_PYTHON` dans `.env` avec le chemin de son
+interpréteur. Les poids ne sont pas ajoutés au dépôt.
+
 ### Logs de developpement
 
 Le niveau se regle avec `LOG_LEVEL` dans `.env` puis en redemarrant le backend.

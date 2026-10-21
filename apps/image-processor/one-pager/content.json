@@ -1,0 +1,56 @@
+{
+  "fr": {
+    "main_title": "REMPLACEMENT DE RÉFÉRENCES TECHNIQUES",
+    "section_title": "OCR, retouche guidée et export A4",
+    "application_name": "Image Processor",
+    "status": "POC LOCAL INTÉGRÉ",
+    "challenge": "Mettre à jour les références dans des images techniques implique de retrouver les occurrences, de choisir les bonnes valeurs et de produire un visuel exploitable.",
+    "solution": "Image Processor associe le texte détecté par OCR à des remplacements saisis ou importés d’Excel. L’utilisateur contrôle la retouche, annule les opérations et exporte l’image; les traitements restent locaux.",
+    "features": [
+      "Importer des images PNG, JPEG, WEBP, BMP, TIFF et des classeurs XLSX/XLSM",
+      "Détecter les références et sélectionner les paires à appliquer, par pièce ou saisie manuelle",
+      "Remplacer le texte en préservant l’orientation et une taille harmonisée",
+      "Retoucher avec LaMa local ou remplissage médian; zoom, annulation et historique restaurable",
+      "Exporter un JPEG A4 (2480 × 3508 px, 300 dpi) nommé par ICN"
+    ],
+    "callouts": [
+      "Remplacements pilotés par Excel ou saisie manuelle",
+      "Retouche, annulation et historique restaurable",
+      "Export JPEG A4 300 dpi nommé par ICN"
+    ],
+    "security": {
+      "local": "Usage local uniquement. Fichiers et traitements restent sur le poste; services sur 127.0.0.1, sans authentification. Le premier démarrage peut nécessiter Internet pour les dépendances ou modèles.",
+      "shared": "Pas de mode partagé/on-premise documenté. Sans authentification et lié à 127.0.0.1, le service est destiné à un usage local uniquement."
+    },
+    "footnote": "POC local : précision et latence OCR/LaMa et performances sur des images représentatives restent à valider."
+  },
+  "en": {
+    "main_title": "TECHNICAL IMAGE REFERENCE REPLACEMENT",
+    "section_title": "OCR, guided editing and A4 export",
+    "application_name": "Image Processor",
+    "status": "INTEGRATED LOCAL POC",
+    "challenge": "Updating references in technical images means locating each occurrence, choosing the right value and producing an image ready to use.",
+    "solution": "Image Processor matches OCR-detected text to replacement pairs entered manually or loaded from Excel. Users control edits, undo operations and export; processing stays local.",
+    "features": [
+      "Import PNG, JPEG, WEBP, BMP and TIFF images plus XLSX/XLSM workbooks",
+      "Detect references and select replacement pairs by part or manual entry",
+      "Replace text while preserving orientation and a harmonized font size",
+      "Edit with local LaMa or median-color fill; zoom, undo and restore history",
+      "Export an ICN-named A4 JPEG (2480 × 3508 px, 300 dpi)"
+    ],
+    "callouts": [
+      "Excel-driven or manually entered replacement pairs",
+      "Local editing, undo and restorable history",
+      "ICN-named A4 JPEG at 300 dpi"
+    ],
+    "security": {
+      "local": "Local-only use. Files and processing stay on the workstation; services bind to 127.0.0.1 with no authentication. First startup may require Internet for dependencies or models.",
+      "shared": "No shared/on-premise mode is documented. Services have no authentication and bind to 127.0.0.1, for local use only."
+    },
+    "footnote": "Local POC: OCR/LaMa accuracy, latency and performance on representative images remain to be validated."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

@@ -94,6 +94,12 @@ for (const desktop of [false, true]) {
     const pkg = JSON.parse(readFileSync(path.join(app, "frontend/package.json"), "utf8"));
     assert.equal(pkg.name, "@apps/synthetic-test-frontend");
     assert.equal(existsSync(path.join(app, "frontend/src-tauri/Cargo.toml")), desktop);
+    assert.equal(existsSync(path.join(app, "frontend/src/desktop-startup.html")), desktop);
+    assert.equal(existsSync(path.join(app, "frontend/src/desktop-startup.tsx")), desktop);
+    assert.equal(
+      existsSync(path.join(app, "frontend/src-tauri/runtime/.gitkeep")),
+      desktop,
+    );
     assert.equal(existsSync(path.join(app, "desktop")), false);
     assert.equal(readFileSync(path.join(app, "_run.bat"), "utf8").includes('set "PORT=8123"'), true);
     assert.equal(readFileSync(path.join(root, "scripts/package_synthetic-test.py"), "utf8")
@@ -101,10 +107,33 @@ for (const desktop of [false, true]) {
     const scripts = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).scripts;
     assert.equal(Boolean(scripts["desktop:dev:synthetic-test"]), desktop);
     if (desktop) {
+      assert.equal(
+        pkg.scripts["tauri:dev"],
+        "node scripts/prepare-desktop.mjs dev && tauri dev",
+      );
+      assert.equal(
+        pkg.scripts["tauri:build"],
+        "node scripts/prepare-desktop.mjs build && tauri build",
+      );
       const config = JSON.parse(readFileSync(path.join(app, "frontend/desktop.json"), "utf8"));
       assert.equal(config.slug, "synthetic-test");
       assert.match(readFileSync(path.join(app, "frontend/src-tauri/tauri.conf.json"), "utf8"),
         /com\.atexis\.synthetic-test/);
+      const tauriConfig = JSON.parse(readFileSync(
+        path.join(app, "frontend/src-tauri/tauri.conf.json"),
+        "utf8",
+      ));
+      assert.equal(tauriConfig.app.withGlobalTauri, true);
+      assert.match(readFileSync(path.join(app, "frontend/src/App.tsx"), "utf8"),
+        /getCurrentWindow\?\.\(\)/);
+      assert.match(readFileSync(path.join(app, "frontend/src/desktop-startup.html"), "utf8"),
+        /setTheme\(theme\)/);
+      const capability = JSON.parse(readFileSync(
+        path.join(app, "frontend/src-tauri/capabilities/default.json"),
+        "utf8",
+      ));
+      assert.deepEqual(capability.permissions, ["core:window:allow-set-theme"]);
+      assert.deepEqual(capability.remote.urls, ["http://127.0.0.1:*"]);
     }
     assert.throws(() => createPoc({ repo: root, slug: "synthetic-test" }), /already exists/);
   });

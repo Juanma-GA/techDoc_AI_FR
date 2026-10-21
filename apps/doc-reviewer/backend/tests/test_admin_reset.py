@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import fitz
@@ -27,7 +28,6 @@ def test_wipe_suggestions_clears_every_status(client: TestClient, sample_pdf_byt
     # (faster than triggering a real analyse pipeline).
     from app.db.models import Suggestion
     from app.db.session import SessionLocal
-    import uuid
 
     db = SessionLocal()
     try:
@@ -138,17 +138,43 @@ def test_reset_all_deletes_docs_and_storage(
     assert not orphan.exists()
 
 
-def test_delete_document_now_removes_storage(
+def test_delete_document_removes_storage_and_preparation_session(
     client: TestClient,
     sample_pdf_bytes: bytes,
 ) -> None:
-    """Single-doc DELETE also cleans the storage folder on disk."""
+    """Single-doc DELETE removes preparation state and its storage folder."""
+    from sqlalchemy import select
+
     from app.config import settings as _settings
+    from app.db.preparation_models import DocumentPreparation
+    from app.db.session import SessionLocal
 
     doc_id = _upload(client, sample_pdf_bytes)
     target = Path(_settings.storage_dir) / _storage_dir_for(doc_id)
     assert target.is_dir()
+    preparation = client.get(f"/api/v1/documents/{doc_id}/preparation")
+    assert preparation.status_code == 200, preparation.text
+
+    db = SessionLocal()
+    try:
+        assert db.scalar(
+            select(DocumentPreparation).where(
+                DocumentPreparation.document_id == uuid.UUID(doc_id)
+            )
+        ) is not None
+    finally:
+        db.close()
 
     delete_resp = client.delete(f"/api/v1/documents/{doc_id}")
     assert delete_resp.status_code == 204
     assert not target.exists()
+
+    db = SessionLocal()
+    try:
+        assert db.scalar(
+            select(DocumentPreparation).where(
+                DocumentPreparation.document_id == uuid.UUID(doc_id)
+            )
+        ) is None
+    finally:
+        db.close()

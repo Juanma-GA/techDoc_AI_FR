@@ -2,15 +2,30 @@
 
 from __future__ import annotations
 
+import json
+
 
 def _upload(client, data: bytes) -> str:
     r = client.post(
         "/api/v1/documents",
         files={"file": ("manual.pdf", data)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     assert r.status_code == 201, r.text
-    return r.json()["id"]
+    doc_id = r.json()["id"]
+    detection = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection.status_code == 200, detection.text
+    cut = detection.json()
+    if cut["validation_required"]:
+        confirmation = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": cut["selected_page"] or cut["default_start_page"],
+                "end_page": cut["selected_end_page"] or cut["total_pages"],
+            },
+        )
+        assert confirmation.status_code == 200, confirmation.text
+    return doc_id
 
 
 def test_slugify() -> None:
@@ -40,10 +55,11 @@ def test_rename_illustration_to_icn_png(tmp_path) -> None:
     assert (tmp_path / name).read_bytes().startswith(b"\x89PNG")
 
 
-def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path) -> None:
+def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path, monkeypatch) -> None:
+    import hashlib
     import fitz
 
-    from app.core.illustrations import _save_pixmap
+    from app.core.illustrations import _image_digest, _save_pixmap
 
     source_path = tmp_path / "source.jpg"
     source_pixmap = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 32, 24))
@@ -62,6 +78,12 @@ def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path) -> None:
     extracted = embedded.extract_image(xref)
     destination = tmp_path / "output.jpg"
 
+    def fail_if_decoded(*_args, **_kwargs):
+        raise AssertionError("An embedded JPEG should not be decoded to pixels.")
+
+    monkeypatch.setattr(fitz, "Pixmap", fail_if_decoded)
+
+    assert _image_digest(embedded, xref) == hashlib.sha256(extracted["image"]).hexdigest()
     assert _save_pixmap(embedded, xref, destination) is True
     assert extracted["ext"] in {"jpg", "jpeg"}
     assert destination.read_bytes() == extracted["image"]
@@ -191,7 +213,7 @@ def test_dmrl_icn_replaces_generated_figure_name(tmp_path) -> None:
 
     _apply_dmrl_icns(
         [unit],
-        [DmrlEntry(icn="ICN-WEG-AA0007-00001-A-02.jpg")],
+        [DmrlEntry(icn="ICN-WEG-AA0007-00001-A-02")],
         tmp_path,
     )
 
@@ -485,8 +507,19 @@ def test_images_extracted_and_served(client, pdf_bytes_image) -> None:
 
 def test_figure_icn_in_generated_xml(client, pdf_bytes_image) -> None:
     doc_id = _upload(client, pdf_bytes_image)
+    dmrl = [{
+        "Arbo": "1",
+        "DMC": "DMC-PUMP-A-00-00-00-00A-040A-D",
+        "Titre": "Description",
+        "Type": "Descriptif",
+    }]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
     client.post(f"/api/v1/documents/{doc_id}/wizard/start")
-    # split -> type -> structure -> generate
+    # dmrl -> split -> type -> structure -> generate
     client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
     client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"types": {}})
     client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []})

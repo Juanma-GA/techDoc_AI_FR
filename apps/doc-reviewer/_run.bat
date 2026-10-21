@@ -133,12 +133,12 @@ REM et refuse de demarrer sans elle -- une auto-provision serait dangereuse
 REM hors du poste local du developpeur.
 set "ENV_FILE=%BACKEND_DIR%\.env"
 set "BIND_HOST_VALUE="
-if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "BIND_HOST=" "%ENV_FILE%"`) do set "BIND_HOST_VALUE=%%B"
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in ("%ENV_FILE%") do if /i "%%A"=="BIND_HOST" set "BIND_HOST_VALUE=%%B"
 set "IS_LOCAL_BIND=1"
 if defined BIND_HOST_VALUE if /i not "%BIND_HOST_VALUE%"=="127.0.0.1" set "IS_LOCAL_BIND=0"
 
 set "ENCRYPTION_KEY_VALUE="
-if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in (`"%SYS32%\findstr.exe" /b /i "ENCRYPTION_KEY=" "%ENV_FILE%"`) do set "ENCRYPTION_KEY_VALUE=%%B"
+if exist "%ENV_FILE%" for /f "usebackq tokens=1,* delims==" %%A in ("%ENV_FILE%") do if /i "%%A"=="ENCRYPTION_KEY" set "ENCRYPTION_KEY_VALUE=%%B"
 
 if not "%IS_LOCAL_BIND%"=="1" goto :encryption_key_ready
 if defined ENCRYPTION_KEY_VALUE goto :encryption_key_ready

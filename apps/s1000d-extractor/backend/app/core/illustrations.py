@@ -1,10 +1,8 @@
-"""Extraction des illustrations d'un PDF -> fichiers JPG nommes.
+"""Extraction des figures et pictogrammes hors tableaux d'un PDF.
 
-On enregistre TOUTES les images du PDF (l'utilisateur veut pouvoir les
-recuperer), en les nommant d'apres la legende voisine ("Figure 3 ..." ->
-`figure-3-....jpg`) quand elle existe, sinon `illustration_<doc>_<n>.jpg`. Chaque
-figure de l'IR recoit alors son ICN (nom de fichier) que le serialiseur
-reference dans `<graphic infoEntityIdent=...>` au lieu du placeholder TODO.
+Les images associees a une legende de figure recoivent un nom derive de cette
+legende (`figure-3-....jpg`) et un ICN dans l'IR. Les autres images sont rangees
+a part comme pictogrammes (`picto_chapitre_....jpg`).
 
 PDF uniquement (via PyMuPDF). DOCX / OCR : no-op gracieux (aucune image extraite,
 les figures gardent leur placeholder ICN).
@@ -13,9 +11,13 @@ les figures gardent leur placeholder ICN).
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
+from time import perf_counter
+from typing import Any
 
 from app.core.ir import IRNode
 from app.core.pdf_overlays import large_red_cross_rects
@@ -26,6 +28,43 @@ _PICTOGRAM_MAX_PIXELS = 65
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 _JPEG_QUALITY = 100
 
+log = logging.getLogger("s1000d_extractor.illustrations")
+
+
+class _PageAnalysis:
+    def __init__(self, page: Any) -> None:
+        self.page = page
+        self._text_blocks: list | None = None
+        self._dict_blocks: list | None = None
+        self._drawings: list | None = None
+        self.text_blocks_ms = 0.0
+        self.dict_blocks_ms = 0.0
+        self.drawings_ms = 0.0
+
+    def text_blocks(self) -> list:
+        if self._text_blocks is None:
+            started = perf_counter()
+            self._text_blocks = self.page.get_text("blocks")
+            self.text_blocks_ms += (perf_counter() - started) * 1000
+        return self._text_blocks
+
+    def dict_blocks(self) -> list:
+        if self._dict_blocks is None:
+            import pymupdf as fitz
+
+            started = perf_counter()
+            flags = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+            self._dict_blocks = self.page.get_text("dict", flags=flags).get("blocks", [])
+            self.dict_blocks_ms += (perf_counter() - started) * 1000
+        return self._dict_blocks
+
+    def drawings(self) -> list:
+        if self._drawings is None:
+            started = perf_counter()
+            self._drawings = self.page.get_drawings()
+            self.drawings_ms += (perf_counter() - started) * 1000
+        return self._drawings
+
 
 def slugify(text: str, *, maxlen: int = 60) -> str:
     slug = _SLUG_RE.sub("-", text.lower()).strip("-")
@@ -34,50 +73,53 @@ def slugify(text: str, *, maxlen: int = 60) -> str:
 
 def _save_pixmap(doc, xref: int, dest: Path) -> bool:
     """Enregistre l'image `xref` en JPG. Convertit CMYK/alpha en RGB. Best-effort."""
-    import fitz
+    import pymupdf as fitz
 
     try:
-        pix = fitz.Pixmap(doc, xref)
-        # Preserve an embedded JPEG byte-for-byte when no conversion is needed.
         extracted = doc.extract_image(xref)
         if (
             extracted
             and extracted.get("ext", "").lower() in {"jpg", "jpeg"}
-            and pix.n < 5
-            and not pix.alpha
+            and not extracted.get("smask")
         ):
+            # JPEG has no alpha channel; copy its encoded bytes without rasterizing.
             dest.write_bytes(extracted["image"])
             return True
+        pix = fitz.Pixmap(doc, xref)
         if pix.n >= 5 or pix.alpha:            # CMYK ou canal alpha -> RGB
             pix = fitz.Pixmap(fitz.csRGB, pix)
+
         pix.save(str(dest), jpg_quality=_JPEG_QUALITY)
         return True
     except Exception:
         return False
 
 
-def _image_digest(doc, xref: int) -> str | None:
-    """Return a stable digest of the decoded image pixels."""
-    import fitz
 
+def _image_digest(doc, xref: int) -> str | None:
+    """Return a digest of the embedded bytes without decoding image pixels."""
     try:
-        pix = fitz.Pixmap(doc, xref)
-        if pix.n >= 5 or pix.alpha:
-            pix = fitz.Pixmap(fitz.csRGB, pix)
-        return hashlib.sha256(pix.samples).hexdigest()
+
+        image = doc.extract_image(xref).get("image")
+        return hashlib.sha256(image).hexdigest() if image else None
     except Exception:
         return None
+
 
 
 def _normalize_text(text: str) -> str:
     return " ".join(text.replace("\xa0", " ").split())
 
 
-def _caption_rect(page, caption: str):
-    import fitz
+def _caption_rect(
+    page, caption: str, page_analysis: _PageAnalysis | None = None
+):
+
+    import pymupdf as fitz
 
     wanted = _normalize_text(caption)
-    for block in page.get_text("blocks"):
+    blocks = page_analysis.text_blocks() if page_analysis else page.get_text("blocks")
+    for block in blocks:
         if len(block) < 5 or _normalize_text(str(block[4])) != wanted:
             continue
         return fitz.Rect(block[:4])
@@ -85,46 +127,126 @@ def _caption_rect(page, caption: str):
     return matches[0] if matches else None
 
 
-def _figure_caption_rect(page, caption: str):
+def _figure_caption_rect(
+    page, caption: str, page_analysis: _PageAnalysis | None = None
+):
     """Return the rectangle of this caption, not a merged text block."""
     matches = page.search_for(caption)
     if matches:
         return matches[0]
-    return _caption_rect(page, caption)
+    return _caption_rect(page, caption, page_analysis)
 
 
-def _image_records(page):
+def _table_bboxes(
+    page: Any,
+    page_number: int,
+) -> list[tuple[float, float, float, float]]:
+    try:
+        tables = getattr(page.find_tables(), "tables", []) or []
+    except Exception as exc:
+        log.warning(
+            "illustration_table_detection_failed page=%d error_type=%s",
+            page_number,
+            type(exc).__name__,
+        )
+        return []
+    bboxes = []
+    for table in tables:
+        x0, y0, x1, y1 = table.bbox
+        bboxes.append((float(x0), float(y0), float(x1), float(y1)))
+    return bboxes
+
+
+def _rect_center_in_table(
+    rect: Any | None,
+    table_bboxes: Sequence[tuple[float, float, float, float]],
+) -> bool:
+    if rect is None:
+        return False
+    center_x = (rect.x0 + rect.x1) / 2
+    center_y = (rect.y0 + rect.y1) / 2
+    return any(
+        x0 <= center_x <= x1 and y0 <= center_y <= y1
+        for x0, y0, x1, y1 in table_bboxes
+    )
+
+
+def _image_records(
+    page,
+    xref_digest_cache: dict[int, bytes] | None = None,
+    table_bboxes: Sequence[tuple[float, float, float, float]] = (),
+):
     """Return unique page image resources with their displayed rectangles."""
-    import fitz
+    import pymupdf as fitz
 
     records = []
     seen: set[int] = set()
     try:
-        infos = page.get_image_info(xrefs=True)
+        infos = page.get_image_info(hashes=True)
+        image_refs = page.get_images()
     except Exception:
         infos = []
-    for info in infos:
-        xref = int(info.get("xref", 0))
-        if not xref or xref in seen:
-            continue
-        seen.add(xref)
-        records.append((xref, fitz.Rect(info["bbox"])))
-    if records:
+        image_refs = []
+    table_only = bool(table_bboxes) and bool(infos) and all(
+        _rect_center_in_table(fitz.Rect(image["bbox"]), table_bboxes)
+        for image in infos
+    )
+    if infos:
+        xrefs_by_digest: dict[bytes, int] = {}
+        lookup_failed = False
+        for image in image_refs:
+            xref = int(image[0])
+            if not xref:
+                continue
+            digest = xref_digest_cache.get(xref) if xref_digest_cache is not None else None
+            if digest is None:
+                try:
+                    pixmap = fitz.Pixmap(page.parent, xref)
+                    digest = pixmap.digest
+                    del pixmap
+                except Exception:
+                    lookup_failed = True
+                    break
+                if xref_digest_cache is not None:
+                    xref_digest_cache[xref] = digest
+            xrefs_by_digest[digest] = xref
+        if not lookup_failed:
+            for info in infos:
+                image_rect = fitz.Rect(info["bbox"])
+                if _rect_center_in_table(image_rect, table_bboxes):
+                    continue
+                xref = xrefs_by_digest.get(info.get("digest"), 0)
+                if not xref or xref in seen:
+                    continue
+                seen.add(xref)
+                records.append((
+                    xref,
+                    image_rect,
+                    int(info.get("width", 0)),
+                    int(info.get("height", 0)),
+                ))
+    if records or table_only:
         return records
-    return [(int(img[0]), None) for img in page.get_images(full=True)]
+    return [
+        (int(img[0]), None, int(img[2]), int(img[3]))
+        for img in page.get_images(full=True)
+    ]
 
 
-def _looks_like_pictogram(doc, xref: int) -> bool:
-    """Detecte exclusivement les images dont les pixels source font au plus 65x65."""
-    import fitz
+def _is_pictogram(width: int, height: int) -> bool:
+    return 0 < width <= _PICTOGRAM_MAX_PIXELS and 0 < height <= _PICTOGRAM_MAX_PIXELS
 
-    try:
-        pix = fitz.Pixmap(doc, xref)
-        if pix.n != 3 or pix.alpha:
-            pix = fitz.Pixmap(fitz.csRGB, pix)
-        return pix.width <= _PICTOGRAM_MAX_PIXELS and pix.height <= _PICTOGRAM_MAX_PIXELS
-    except Exception:
-        return False
+
+def _text_dict_blocks(
+    page,
+    page_analysis: _PageAnalysis | None = None,
+) -> list[dict]:
+    if page_analysis is not None:
+        return page_analysis.dict_blocks()
+    import pymupdf as fitz
+
+    flags = fitz.TEXTFLAGS_DICT & ~fitz.TEXT_PRESERVE_IMAGES
+    return page.get_text("dict", flags=flags).get("blocks", [])
 
 
 def _chapter_key(dm_section: IRNode | None, page_number: int) -> str:
@@ -188,12 +310,46 @@ def _set_figure_icn(figure: IRNode, name: str) -> None:
         figure.icn = name
 
 
-def _vector_rects(page, caption_rect):
-    import fitz
+def _attach_pictogram(
+    root: IRNode,
+    dm_section: IRNode | None,
+    page_number: int,
+    xref: int,
+    chapter: str,
+    name: str,
+    figure: IRNode | None = None,
+) -> None:
+    if figure is not None and not figure.icn:
+        figure.text = f"Picto chapitre {chapter}"
+        figure.icn = name
+        figure.icns = [name]
+        figure.is_pictogram = True
+        return
+    pictogram = IRNode(
+        id=f"picto-{page_number}-{xref}",
+        kind="figure",
+        form="caption",
+        text=f"Picto chapitre {chapter}",
+        page=page_number,
+        icn=name,
+        icns=[name],
+        is_pictogram=True,
+    )
+    (dm_section or root).children.append(pictogram)
 
+
+def _vector_rects(
+    page,
+    caption_rect,
+    page_analysis: _PageAnalysis | None = None,
+    table_bboxes: Sequence[tuple[float, float, float, float]] = (),
+):
+    import pymupdf as fitz
+
+    blocks = page_analysis.text_blocks() if page_analysis else page.get_text("blocks")
     text_rects = [
         fitz.Rect(block[:4])
-        for block in page.get_text("blocks")
+        for block in blocks
         if len(block) >= 5 and str(block[4]).strip()
     ]
     previous_bottom = max(
@@ -215,9 +371,15 @@ def _vector_rects(page, caption_rect):
         for rect in text_rects
     )
     rects = []
-    for drawing in page.get_drawings():
+    drawings = page_analysis.drawings() if page_analysis else page.get_drawings()
+    for drawing in drawings:
         rect = fitz.Rect(drawing.get("rect", ()))
-        if rect.is_empty or rect.y0 < previous_bottom or rect.y1 > caption_rect.y0:
+        if (
+            rect.is_empty
+            or _rect_center_in_table(rect, table_bboxes)
+            or rect.y0 < previous_bottom
+            or rect.y1 > caption_rect.y0
+        ):
             continue
         rects.append(rect)
     if not rects:
@@ -250,13 +412,19 @@ def _vector_rects(page, caption_rect):
     ]
 
 
-def _save_vector_figure(page, caption: str, dest: Path) -> bool:
-    import fitz
+def _save_vector_figure(
+    page,
+    caption: str,
+    dest: Path,
+    page_analysis: _PageAnalysis | None = None,
+    table_bboxes: Sequence[tuple[float, float, float, float]] = (),
+) -> bool:
+    import pymupdf as fitz
 
-    caption_rect = _caption_rect(page, caption)
-    if caption_rect is None:
+    caption_rect = _caption_rect(page, caption, page_analysis)
+    if caption_rect is None or _rect_center_in_table(caption_rect, table_bboxes):
         return False
-    rects = _vector_rects(page, caption_rect)
+    rects = _vector_rects(page, caption_rect, page_analysis, table_bboxes)
     if not rects:
         return False
     bounds = rects[0]
@@ -283,16 +451,23 @@ def _is_composite_overlay_text(text: str) -> bool:
     )
 
 
-def _composite_bounds(page, image_rects):
-    import fitz
+def _composite_bounds(
+    page,
+    image_rects,
+    page_analysis: _PageAnalysis | None = None,
+):
+    import pymupdf as fitz
 
     image_bounds = image_rects[0]
     for rect in image_rects[1:]:
         image_bounds |= rect
     nearby = image_bounds + fitz.Rect(-20, -12, 20, 12)
     bounds = fitz.Rect(image_bounds)
+    text_blocks = page_analysis.text_blocks() if page_analysis else page.get_text("blocks")
+    dict_blocks = _text_dict_blocks(page, page_analysis)
+    drawings = page_analysis.drawings() if page_analysis else page.get_drawings()
 
-    for block in page.get_text("blocks"):
+    for block in text_blocks:
         if len(block) < 5 or _is_composite_overlay_text(str(block[4])):
             continue
         rect = fitz.Rect(block[:4])
@@ -301,12 +476,12 @@ def _composite_bounds(page, image_rects):
         if rect.y0 < image_bounds.y1 < rect.y1 and image_bounds.y1 - rect.y0 <= 12:
             bounds.y1 = min(bounds.y1, rect.y0 - 1)
 
-    for drawing in page.get_drawings():
+    for drawing in drawings:
         rect = fitz.Rect(drawing.get("rect", ()))
         if not rect.is_empty and rect.intersects(nearby):
             bounds |= rect
 
-    for block in page.get_text("blocks"):
+    for block in text_blocks:
         if len(block) < 5:
             continue
         text = _normalize_text(str(block[4]))
@@ -316,14 +491,14 @@ def _composite_bounds(page, image_rects):
         if rect.intersects(nearby):
             bounds |= rect
 
-    for rect in large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects):
+    for rect in large_red_cross_rects(dict_blocks, image_rects):
         bounds |= rect
 
     return bounds
 
 
 def _subtract_rect(rect, keep_rects):
-    import fitz
+    import pymupdf as fitz
 
     pieces = [rect]
     for keep in keep_rects:
@@ -345,20 +520,26 @@ def _subtract_rect(rect, keep_rects):
     return [piece for piece in pieces if not piece.is_empty]
 
 
-def _save_composite_figure(page, image_rects, dest: Path) -> bool:
+def _save_composite_figure(
+    page,
+    image_rects,
+    dest: Path,
+    page_analysis: _PageAnalysis | None = None,
+) -> bool:
     """Rasterise une figure composee et ses annotations vectorielles."""
-    import fitz
+    import pymupdf as fitz
 
     if not image_rects:
         return False
-    bounds = _composite_bounds(page, image_rects)
-    cross_rects = large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects)
+    bounds = _composite_bounds(page, image_rects, page_analysis)
+    cross_rects = large_red_cross_rects(_text_dict_blocks(page, page_analysis), image_rects)
     bounds &= page.rect
     if bounds.width < 10 or bounds.height < 10:
         return False
     try:
         pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=bounds, alpha=False)
-        for block in page.get_text("blocks"):
+        text_blocks = page_analysis.text_blocks() if page_analysis else page.get_text("blocks")
+        for block in text_blocks:
             if len(block) < 5 or _is_composite_overlay_text(str(block[4])):
                 continue
             text_rect = fitz.Rect(block[:4]) & bounds
@@ -380,8 +561,12 @@ def _save_composite_figure(page, image_rects, dest: Path) -> bool:
         return False
 
 
-def _has_figure_overlays(page, image_rects) -> bool:
-    import fitz
+def _has_figure_overlays(
+    page,
+    image_rects,
+    page_analysis: _PageAnalysis | None = None,
+) -> bool:
+    import pymupdf as fitz
 
     if not image_rects:
         return False
@@ -389,19 +574,21 @@ def _has_figure_overlays(page, image_rects) -> bool:
     for rect in image_rects[1:]:
         bounds |= rect
     nearby = bounds + fitz.Rect(-20, -12, 20, 12)
-    if large_red_cross_rects(page.get_text("dict").get("blocks", []), image_rects):
+    if large_red_cross_rects(_text_dict_blocks(page, page_analysis), image_rects):
         return True
+    text_blocks = page_analysis.text_blocks() if page_analysis else page.get_text("blocks")
     if any(
         len(block) >= 5
         and _is_composite_overlay_text(str(block[4]))
         and fitz.Rect(block[:4]).intersects(nearby)
-        for block in page.get_text("blocks")
+        for block in text_blocks
     ):
         return True
+    drawings = page_analysis.drawings() if page_analysis else page.get_drawings()
     return any(
         not (rect := fitz.Rect(drawing.get("rect", ()))).is_empty
         and rect.intersects(nearby)
-        for drawing in page.get_drawings()
+        for drawing in drawings
     )
 
 
@@ -413,19 +600,35 @@ def attach_illustrations(
     doc_id: str,
     dm_level: int | None = None,
 ) -> int:
-    """Extrait les images du PDF, les enregistre en JPG et pose l'ICN sur les
-    figures de l'IR (appariement par page + ordre de lecture). Les figures qui
-    contiennent plusieurs bitmaps sont rasterisees en une seule image afin de
-    conserver aussi les annotations vectorielles superposees. Renvoie le nombre
-    de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image."""
+    """Extrait les figures hors tableaux et range les images non associees comme pictogrammes.
+
+    Les figures contenant plusieurs bitmaps sont rasterisees en une seule image
+    afin de conserver aussi les annotations vectorielles superposees. Renvoie le
+    nombre de fichiers enregistres. No-op si PyMuPDF echoue ou s'il n'y a pas d'image.
+    """
     try:
-        import fitz
+        import pymupdf as fitz
     except Exception:
         return 0
     try:
         doc = fitz.open(pdf_path)
     except Exception:
         return 0
+
+    started = perf_counter()
+    timings = {
+        "caption_lookup_ms": 0.0,
+        "image_info_ms": 0.0,
+        "image_digest_ms": 0.0,
+        "image_processing_ms": 0.0,
+        "text_blocks_ms": 0.0,
+        "dict_blocks_ms": 0.0,
+        "drawings_ms": 0.0,
+    }
+    image_occurrence_count = 0
+    unique_xref_count = 0
+    composite_count = 0
+    vector_count = 0
 
     # Figures de l'IR par page (dans l'ordre), pour le nommage.
     figs_by_page: dict[int, list[IRNode]] = {}
@@ -444,18 +647,37 @@ def attach_illustrations(
     # qu'UNE fois, sinon le dossier se remplit de doublons.
     seen: set[int] = set()
     seen_digests: set[str] = set()
+    xref_digest_cache: dict[int, bytes] = {}
     try:
         for pidx, page in enumerate(doc, start=1):
+            page_analysis = _PageAnalysis(page)
+            table_bboxes = _table_bboxes(page, pidx)
             figs = list(figs_by_page.get(pidx, []))
+            stage_started = perf_counter()
             figure_anchors = [
-                (figure, _figure_caption_rect(page, figure.text))
+                (figure, _figure_caption_rect(page, figure.text, page_analysis))
                 for figure in figs
             ]
+            figures_in_tables = {
+                id(figure)
+                for figure, caption_rect in figure_anchors
+                if _rect_center_in_table(caption_rect, table_bboxes)
+            }
+            figure_anchors = [
+                (figure, caption_rect)
+                for figure, caption_rect in figure_anchors
+                if id(figure) not in figures_in_tables
+            ]
+            timings["caption_lookup_ms"] += (perf_counter() - stage_started) * 1000
+            stage_started = perf_counter()
+            image_records = _image_records(page, xref_digest_cache, table_bboxes)
+            timings["image_info_ms"] += (perf_counter() - stage_started) * 1000
+            image_occurrence_count += len(image_records)
             standard_matches = {
                 id(figure)
-                for xref, image_rect in _image_records(page)
+                for xref, image_rect, width, height in image_records
                 if image_rect is not None
-                and not _looks_like_pictogram(doc, xref)
+                and not _is_pictogram(width, height)
                 for figure in [_match_figure(
                     image_rect,
                     figure_anchors,
@@ -465,16 +687,20 @@ def attach_illustrations(
                 if figure is not None
             }
             composite_records: dict[int, tuple[IRNode, list[tuple[int, object]]]] = {}
-            for xref, image_rect in _image_records(page):
+            page_processing_started = perf_counter()
+            for xref, image_rect, width, height in image_records:
                 if xref in seen:
                     continue
                 seen.add(xref)
+                unique_xref_count += 1
+                stage_started = perf_counter()
                 digest = _image_digest(doc, xref)
+                timings["image_digest_ms"] += (perf_counter() - stage_started) * 1000
                 if digest is not None and digest in seen_digests:
                     continue
                 if digest is not None:
                     seen_digests.add(digest)
-                if _looks_like_pictogram(doc, xref):
+                if _is_pictogram(width, height):
                     figure = _match_figure(
                         image_rect,
                         figure_anchors,
@@ -490,23 +716,7 @@ def attach_illustrations(
                         saved += 1
                         if pictogram_callouts_by_page.get(pidx):
                             continue
-                        if figure is not None and not figure.icn:
-                            figure.text = f"Picto chapitre {chapter}"
-                            figure.icn = name
-                            figure.icns = [name]
-                            figure.is_pictogram = True
-                        else:
-                            pictogram = IRNode(
-                                id=f"picto-{pidx}-{xref}",
-                                kind="figure",
-                                form="caption",
-                                text=f"Picto chapitre {chapter}",
-                                page=pidx,
-                                icn=name,
-                                icns=[name],
-                                is_pictogram=True,
-                            )
-                            (dm_section or root).children.append(pictogram)
+                        _attach_pictogram(root, dm_section, pidx, xref, chapter, name, figure)
                     continue
                 fig = _match_figure(
                     image_rect,
@@ -518,19 +728,25 @@ def attach_illustrations(
                     record = composite_records.setdefault(id(fig), (fig, []))
                     record[1].append((xref, image_rect))
                     continue
-                base = slugify(fig.text) if fig and fig.text else f"illustration-{doc_id[:8]}-p{pidx}-{xref}"
-                name = _unique_name(out_dir, base)
+                dm_section = _dm_for_page(dm_sections, pidx)
+                chapter = _chapter_key(dm_section, pidx)
+                name = _unique_name(out_dir, f"picto_chapitre_{chapter}")
                 if _save_pixmap(doc, xref, out_dir / name):
                     saved += 1
-                    if fig is not None:
-                        _set_figure_icn(fig, name)
+                    if not pictogram_callouts_by_page.get(pidx):
+                        _attach_pictogram(root, dm_section, pidx, xref, chapter, name)
             for fig, records in composite_records.values():
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
                 image_rects = [image_rect for _, image_rect in records]
-                composite = len(records) > 1 or _has_figure_overlays(page, image_rects)
+                composite = len(records) > 1 or _has_figure_overlays(
+                    page, image_rects, page_analysis
+                )
                 if composite:
-                    success = _save_composite_figure(page, image_rects, out_dir / name)
+                    composite_count += 1
+                    success = _save_composite_figure(
+                        page, image_rects, out_dir / name, page_analysis
+                    )
                 else:
                     success = _save_pixmap(doc, records[0][0], out_dir / name)
                 if success:
@@ -543,13 +759,46 @@ def attach_illustrations(
                             saved += 1
                             _set_figure_icn(fig, fallback_name)
             for fig in figs:
-                if fig.icn:
+                if fig.icn or id(fig) in figures_in_tables:
                     continue
+                vector_count += 1
                 base = slugify(fig.text) if fig.text else f"illustration-{doc_id[:8]}-p{pidx}"
                 name = _unique_name(out_dir, base)
-                if _save_vector_figure(page, fig.text, out_dir / name):
+                if _save_vector_figure(
+                    page,
+                    fig.text,
+                    out_dir / name,
+                    page_analysis,
+                    table_bboxes,
+                ):
                     saved += 1
                     _set_figure_icn(fig, name)
+            timings["image_processing_ms"] += (perf_counter() - page_processing_started) * 1000
+            timings["text_blocks_ms"] += page_analysis.text_blocks_ms
+            timings["dict_blocks_ms"] += page_analysis.dict_blocks_ms
+            timings["drawings_ms"] += page_analysis.drawings_ms
+        log.info(
+            "illustration_breakdown duration_ms=%.1f page_count=%d figure_count=%d "
+            "image_occurrence_count=%d unique_xref_count=%d saved_count=%d "
+            "composite_count=%d vector_count=%d caption_lookup_ms=%.1f image_info_ms=%.1f "
+            "image_digest_ms=%.1f image_processing_ms=%.1f text_blocks_ms=%.1f "
+            "dict_blocks_ms=%.1f drawings_ms=%.1f",
+            (perf_counter() - started) * 1000,
+            doc.page_count,
+            sum(len(figures) for figures in figs_by_page.values()),
+            image_occurrence_count,
+            unique_xref_count,
+            saved,
+            composite_count,
+            vector_count,
+            timings["caption_lookup_ms"],
+            timings["image_info_ms"],
+            timings["image_digest_ms"],
+            timings["image_processing_ms"],
+            timings["text_blocks_ms"],
+            timings["dict_blocks_ms"],
+            timings["drawings_ms"],
+        )
         return saved
     finally:
         doc.close()
@@ -576,7 +825,7 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
         if current.suffix.lower() == target.suffix.lower():
             source.replace(destination)
         else:
-            import fitz
+            import pymupdf as fitz
 
             pixmap = fitz.Pixmap(str(source))
             if pixmap.n >= 5 or pixmap.alpha:

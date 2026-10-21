@@ -1,0 +1,23 @@
+{
+  "ocrHint": "Usable native text is kept. Only uncertain pages are sent to Mistral after you start OCR.",
+  "rulesTitle": "Preparation rules",
+  "rulesHint": "Rules run according to the detected page type. Each page shows evaluated rules; when an older type is not recognized, no targeted rule is applied.",
+  "savedImportedRules": "Previously imported rules still active: {{filename}} · {{count}}",
+  "noRules": "No preparation rules are configured.",
+  "nativeTextUsed": "Using native text",
+  "ocrRequired": "OCR required",
+  "ocrPending": "Run OCR on {{count}} pages to check",
+  "ocrPendingRunning": "Running OCR on pages…",
+  "analyzePages": "Analyze pages",
+  "runCurrentOcr": "Run OCR for this page",
+  "rerunCurrentOcr": "Rerun OCR for this page",
+  "ruleResults": "{{count}} rule result(s)",
+  "noApplicableRule": "No applicable rule: page type is not recognized or no rule targets it.",
+  "ruleStatus": {
+    "pass": "Passed",
+    "fail": "Failed",
+    "manual": "Review",
+    "inconclusive": "Inconclusive",
+    "unsupported": "Unsupported"
+  }
+}

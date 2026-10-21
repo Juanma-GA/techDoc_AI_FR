@@ -11,8 +11,10 @@
 
 - Certains warnings cautions ne sont pas détectés
 
+- Les inputs suivants sont ils utile (meme dans le futur ?): 
+    - "Nature dominante" (Hint)
+
 - Proced : 
 
     - Actuellement il fait chaque para en proceduralstep c'est pas bon, il faut que ce soit les procedural step qui soient des proceduralstep ducoup 
-    - 
 

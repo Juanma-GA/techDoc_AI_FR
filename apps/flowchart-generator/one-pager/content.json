@@ -1,0 +1,56 @@
+{
+  "fr": {
+    "main_title": "DIAGNOSTIC INDUSTRIEL EN LOGIGRAMMES",
+    "section_title": "Créer et valider des procédures",
+    "application_name": "Logigramme",
+    "status": "POC FONCTIONNEL",
+    "challenge": "Formaliser des diagnostics et procédures de maintenance prend du temps et complique la mise à jour des consignes.",
+    "solution": "Créez un logigramme depuis une description, un tableau ou un DSL, puis affinez-le avec un assistant conversationnel facultatif. La validation est requise avant export.",
+    "features": [
+      "Générer puis affiner un logigramme par conversation (assistant IA facultatif)",
+      "Importer Excel/CSV, JSON ou DSL; joindre des documents de référence",
+      "Décrire contrôles, réparations, consignes de sécurité et rôles",
+      "Exporter en 8 formats, dont PowerPoint éditable et BPMN",
+      "Enregistrer et retrouver les logigrammes en local"
+    ],
+    "callouts": [
+      "8 formats d’export",
+      "PowerPoint : formes et connecteurs éditables",
+      "Export après validation du logigramme"
+    ],
+    "security": {
+      "local": "Application locale liée à 127.0.0.1, sans authentification. Les logigrammes sont stockés dans une base SQLite locale.",
+      "shared": "Le déploiement partagé n’est pas inclus dans ce POC. Aucun mode multi-utilisateur ni authentification n’est validé."
+    },
+    "footnote": "S1000D non validé contre le schéma officiel/BREX. Pas d’OCR des PDF scannés ni d’édition graphique à la souris."
+  },
+  "en": {
+    "main_title": "INDUSTRIAL TROUBLESHOOTING FLOWCHARTS",
+    "section_title": "Create and validate procedures",
+    "application_name": "Logigramme",
+    "status": "FUNCTIONAL POC",
+    "challenge": "Documenting diagnostic and maintenance procedures takes time and makes instructions harder to update.",
+    "solution": "Create a flowchart from a description, table or DSL, then refine it with an optional conversational assistant. Validation is required before export.",
+    "features": [
+      "Generate and refine flowcharts through conversation (optional AI assistant)",
+      "Import Excel/CSV, JSON or DSL; attach reference documents",
+      "Define checks, repairs, safety instructions and roles",
+      "Export to 8 formats, including editable PowerPoint and BPMN",
+      "Save and retrieve flowcharts locally"
+    ],
+    "callouts": [
+      "8 export formats",
+      "PowerPoint shapes and connectors remain editable",
+      "Export after flowchart validation"
+    ],
+    "security": {
+      "local": "Local application bound to 127.0.0.1, without authentication. Flowcharts are stored in a local SQLite database.",
+      "shared": "Shared deployment is not included in this POC. No multi-user mode or authentication has been validated."
+    },
+    "footnote": "S1000D output is not validated against the official schema/BREX. No OCR for scanned PDFs or mouse-based graphical editing."
+  },
+  "screenshots": {
+    "top": "flowchart-generator-screenshot-editor-black.png",
+    "bottom": "flowchart-generator-screenshot-exports-black.png"
+  }
+}

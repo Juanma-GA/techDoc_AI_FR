@@ -17,6 +17,7 @@ Provide the required FastAPI and React/Vite foundation for a new local-first POC
 - React/Vite frontend served by FastAPI at `/`.
 - Windows and Unix launchers, conditional frontend rebuild, and Windows packaging wrappers.
 - Optional Tauri desktop shell, selected with `node scripts/new_poc.mjs <slug> [port] --desktop`.
+- Native desktop title bar follows the persisted dark/light app theme and its toggle.
 
 ## Auth
 
