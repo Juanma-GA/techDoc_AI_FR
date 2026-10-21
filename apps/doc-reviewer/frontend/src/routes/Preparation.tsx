@@ -1,9 +1,14 @@
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
+import { DocumentDeleteButton } from "../components/DocumentDeleteButton";
 import { PageHeader } from "../components/PageHeader";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
-import { useDocuments, useUploadDocument } from "../hooks/useDocuments";
+import {
+  useDeleteDocument,
+  useDocuments,
+  useUploadDocument,
+} from "../hooks/useDocuments";
 import { effectiveTarget, useFiltersStore } from "../stores/filtersStore";
 import type { Document } from "../types/domain";
 
@@ -12,6 +17,7 @@ export function Preparation() {
   const navigate = useNavigate();
   const documents = useDocuments();
   const upload = useUploadDocument();
+  const remove = useDeleteDocument();
   const targetUnits = useFiltersStore((state) => state.targetUnits);
 
   const handleUpload = (file: File): void => {
@@ -44,6 +50,13 @@ export function Preparation() {
       </section>
       <section className="card">
         <h2 className="card-title">{t("preparation.resumeTitle")}</h2>
+        {remove.isError ? (
+          <p className="error" role="alert">
+            {t("documents.deleteFailed", {
+              message: remove.error instanceof Error ? remove.error.message : "",
+            })}
+          </p>
+        ) : null}
         {documents.isLoading ? (
           <p className="empty-state">{t("common.loading")}</p>
         ) : documents.isError ? (
@@ -62,13 +75,22 @@ export function Preparation() {
                       {document.page_count} {t("documents.detail.meta.pages")}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="btn primary small"
-                    onClick={() => navigate(`/preparation/${document.id}`)}
-                  >
-                    {t("preparation.resume")}
-                  </button>
+                  <div className="item-actions">
+                    <button
+                      type="button"
+                      className="btn primary small"
+                      onClick={() => navigate(`/preparation/${document.id}`)}
+                    >
+                      {t("preparation.resume")}
+                    </button>
+                    <DocumentDeleteButton
+                      label={t("common.delete")}
+                      ariaLabel={t("documents.delete")}
+                      confirmLabel={t("documents.deleteConfirmAgain")}
+                      onConfirm={() => remove.mutate(document.id)}
+                      disabled={remove.isPending}
+                    />
+                  </div>
                 </div>
               ))}
           </div>
