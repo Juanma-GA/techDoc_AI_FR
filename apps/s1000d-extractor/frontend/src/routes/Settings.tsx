@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 
+import { DemoModeSettings } from "../components/DemoModeSettings";
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 
 export function Settings() {
@@ -76,6 +77,8 @@ export function Settings() {
         <h1>{t("settings.title")}</h1>
         <p>{t("settings.subtitle")}</p>
       </div>
+
+      <DemoModeSettings />
 
       <div className="card">
         <h2 className="card-title">{t("settings.aiTitle")}</h2>

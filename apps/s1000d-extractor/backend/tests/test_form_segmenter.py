@@ -74,6 +74,7 @@ def test_inline_numbered_actions_keep_intro_and_figure_references() -> None:
         root,
         issue="4.2",
         dm_type="procedural",
+        dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-520A-D"},
         reference_index=reference_index,
         reference_dm_id="procedure-dm",
     )
@@ -128,7 +129,12 @@ def test_numbered_actions_nest_under_titled_step_without_following_figure() -> N
     assert segment(root) == 1
     resolve(root)
 
-    xml = serialize(root, issue="4.2", dm_type="procedural")
+    xml = serialize(
+        root,
+        issue="4.2",
+        dm_type="procedural",
+        dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-520A-D"},
+    )
     violations = validate_xsd(
         xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
     )
@@ -179,7 +185,12 @@ def test_nested_procedure_section_keeps_actions_and_figures_in_its_parent_step()
     assert segment(root) == 1
     resolve(root)
 
-    xml = serialize(root, issue="4.2", dm_type="procedural")
+    xml = serialize(
+        root,
+        issue="4.2",
+        dm_type="procedural",
+        dm_metadata={"dmc": "DMC-WEG-A-00-00-00-00A-520A-D"},
+    )
     violations = validate_xsd(
         xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
     )

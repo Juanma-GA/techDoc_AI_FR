@@ -221,7 +221,9 @@ for (const desktop of [false, true]) {
         .app.title, "Synthetic Test");
       const scripts = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")).scripts;
       assert.equal(Boolean(scripts["desktop:dev:synthetic-test"]), desktop);
+      assert.equal(Boolean(scripts["dev:synthetic-test"]), true);
       assert.equal(Boolean(scripts["test:e2e:synthetic-test"]), true);
+      assert.equal(Boolean(scripts["openapi:gen:synthetic-test"]), true);
       if (hasLlm) {
         assert.match(readFileSync(path.join(app, "backend/app/config.py"), "utf8"),
           /mistral_chat_model: str = "mistral-medium-latest"/);
@@ -237,8 +239,19 @@ for (const desktop of [false, true]) {
         const tauri = JSON.parse(readFileSync(path.join(app, "frontend/src-tauri/tauri.conf.json"), "utf8"));
         assert.equal(tauri.productName, "Synthetic Test");
         assert.match(tauri.identifier, /com\.atexis\.synthetic-test/);
-        assert.match(readFileSync(path.join(app, "frontend/public/desktop-startup.html"), "utf8"),
-          /<h1>Synthetic Test<\/h1>/);
+        assert.equal(existsSync(path.join(app, "frontend/src/desktop-startup.tsx")), true);
+        assert.match(readFileSync(path.join(app, "frontend/src/desktop-startup.html"), "utf8"),
+          /<title>Synthetic Test<\/title>/);
+        assert.match(readFileSync(path.join(app, "frontend/src/App.tsx"), "utf8"),
+          /getCurrentWindow\?\.\(\)/);
+        assert.match(readFileSync(path.join(app, "frontend/src/desktop-startup.html"), "utf8"),
+          /setTheme\(theme\)/);
+        const capability = JSON.parse(readFileSync(
+          path.join(app, "frontend/src-tauri/capabilities/default.json"),
+          "utf8",
+        ));
+        assert.deepEqual(capability.permissions, ["core:window:allow-set-theme"]);
+        assert.deepEqual(capability.remote.urls, ["http://127.0.0.1:*"]);
       }
       assert.throws(() => createPoc({ repo: root, slug: "synthetic-test" }), /already exists/);
     });

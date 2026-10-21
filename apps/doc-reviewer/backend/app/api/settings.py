@@ -74,6 +74,7 @@ def _build_out(db: Session) -> MistralSettingsOut:
         base_url=s["base_url"],
         chat_model=s["chat_model"],
         vision_model=s.get("vision_model", "mistral-medium-3-5"),
+        ocr_model=s.get("ocr_model", "mistral-ocr-latest"),
         vision_enabled=get_vision_enabled(db),
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),

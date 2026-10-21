@@ -14,6 +14,7 @@ from app.db.session import Base  # noqa: F401  -- registers metadata
 
 try:  # noqa: SIM105
     from app.db import models  # type: ignore  # noqa: F401
+    from app.db import preparation_models  # type: ignore  # noqa: F401
 except ImportError:
     pass
 

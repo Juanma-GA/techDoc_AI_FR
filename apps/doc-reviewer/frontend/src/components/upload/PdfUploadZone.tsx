@@ -10,6 +10,7 @@ type Props = {
   onFile: (file: File) => void;
   disabled?: boolean;
   autoOpen?: boolean;
+  allowBatch?: boolean;
   // Import en cours : affiche un retour visuel immediat (spinner + texte). La
   // requete d'upload est SYNCHRONE cote serveur (conversion Word->PDF, portail
   // qualite) et peut prendre quelques secondes — sans ce retour, la dropzone
@@ -17,7 +18,13 @@ type Props = {
   uploading?: boolean;
 };
 
-export function PdfUploadZone({ onFile, disabled, uploading, autoOpen = false }: Props) {
+export function PdfUploadZone({
+  onFile,
+  disabled,
+  uploading,
+  autoOpen = false,
+  allowBatch = true,
+}: Props) {
   const { t } = useTranslation();
   const autoOpenHandled = useRef(false);
   const { mode, isReady } = useDemoMode();
@@ -44,7 +51,7 @@ export function PdfUploadZone({ onFile, disabled, uploading, autoOpen = false }:
       "application/pdf": [".pdf"],
       "application/msword": [".doc"],
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
-      "application/zip": [".zip"],
+      ...(allowBatch ? { "application/zip": [".zip"] } : {}),
     },
     multiple: false,
     disabled: disabled || isBusy,

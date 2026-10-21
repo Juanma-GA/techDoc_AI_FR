@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.core import xml_safe
 from lxml import etree
 from app.core.dmrl import DmrlEntry
 from app.core.ir import IRNode, InlineRun, from_dict, to_dict
 from app.core.resolver import resolve
 from app.core.s1000d_schema import validate_xsd
-from app.core.s1000d_serializer import build_reference_index, clean_title, serialize
+from app.core.s1000d_serializer import build_reference_index, clean_title, missing_data_fields, serialize
 from app.core.structure_heuristics import detect_refs
 
 
@@ -26,7 +28,22 @@ def _doc(dm_type: str = "descriptive") -> str:
     sec.children.append(lst)
     root.children = [sec]
     resolve(root)
-    return serialize(root, issue="5.0", dm_type=dm_type)
+    return serialize(root, issue="4.2", dm_type=dm_type)
+
+
+def _serialize_with_dmc(root: IRNode, issue: str, dm_type: str) -> str:
+    info_code = {"descriptive": "040", "procedural": "520", "ipd": "941"}[dm_type]
+    return serialize(
+        root,
+        issue=issue,
+        dm_type=dm_type,
+        dm_metadata={"dmc": f"DMC-WEG-A-00-00-00-00A-{info_code}A-D"},
+    )
+
+
+def test_issue_5_0_is_not_a_generation_target() -> None:
+    with pytest.raises(ValueError, match="Generation XSD non disponible"):
+        serialize(IRNode(id="root", kind="section"), issue="5.0", dm_type="descriptive")
 
 
 def _parse(xml: str):
@@ -50,11 +67,28 @@ def test_procedural_wraps_in_mainprocedure() -> None:
     assert "procedure" in tags and "mainProcedure" in tags
 
 
-def test_banner_and_todo_placeholders() -> None:
+def test_empty_main_procedure_gets_xsd_valid_replacement_step() -> None:
+    root = IRNode(id="root", kind="section", level=0)
+    xml = _serialize_with_dmc(root, "4.2", "procedural")
+
+    doc = _parse(xml)
+    main = doc.find("./content/procedure/mainProcedure")
+    assert main is not None
+    assert main.findtext("./proceduralStep/title") == "Etape a renseigner"
+    assert "Etape de procedure a completer a partir de la source." in "".join(main.itertext())
+    assert "A REMPLACER AVANT PUBLICATION" in xml
+    assert "TODO" not in xml
+    violations = validate_xsd(xml, "4.2", dm_type="procedural", allow_internal_dtd=True)
+    assert not [violation for violation in violations if violation["severity"] == "error"], violations
+
+
+def test_banner_and_missing_data_summary() -> None:
     xml = _doc()
-    assert "NON valide comme Data Module" in xml
+    assert "Squelette structurel best-effort" in xml
     assert "brexDmRef" in xml and "identAndStatusSection" in xml
-    assert "infoEntityIdent" not in xml or "ICN-TODO" in xml  # graphics: infoEntityIdent only
+    assert "A REMPLACER AVANT PUBLICATION" in xml
+    assert "TODO" not in xml
+    assert "infoEntityIdent" not in xml or "ICN-ZZZ-00000" in xml
 
 
 def test_output_is_wellformed() -> None:
@@ -76,7 +110,7 @@ def test_inline_bold_uses_normalized_emphasis_code() -> None:
         ),
     ])
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     doc = _parse(xml)
     emphasis = doc.find(".//para/emphasis")
 
@@ -94,7 +128,7 @@ def test_inline_bold_italic_uses_nested_emphasis_and_validates() -> None:
         inline_runs=[InlineRun("Remarque", bold=True, italic=True)],
     )])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    xml = _serialize_with_dmc(root, "4.2", "descriptive")
     doc = _parse(xml)
     outer = doc.find(".//para/emphasis")
 
@@ -119,7 +153,7 @@ def test_italic_colon_stays_inside_outer_bold_emphasis() -> None:
     )
     root = IRNode(id="r", kind="section", level=0, children=[note])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    xml = _serialize_with_dmc(root, "4.2", "descriptive")
     doc = _parse(xml)
     outer = doc.find(".//note/notePara/emphasis")
 
@@ -143,7 +177,7 @@ def test_ordered_note_items_use_s1000d_attention_list() -> None:
     )
     root = IRNode(id="r", kind="section", level=0, children=[note])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    xml = _serialize_with_dmc(root, "4.2", "descriptive")
     doc = _parse(xml)
     items = doc.findall(
         ".//note/attentionSequentialList/attentionSequentialListItem/attentionListItemPara"
@@ -179,7 +213,7 @@ def test_nested_lettered_list_serializes_inside_numbered_item() -> None:
     )
     root = IRNode(id="r", kind="section", level=0, children=[numbered])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="descriptive")
+    xml = _serialize_with_dmc(root, "4.2", "descriptive")
     doc = _parse(xml)
     nested_items = doc.findall(
         ".//sequentialList/listItem/para/randomList/listItem/para"
@@ -238,7 +272,7 @@ def test_table_header_becomes_thead_and_colspec() -> None:
         table_header=["Bolt", "Torque"],
     )]
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     doc = _parse(xml)
     tags = {el.tag for el in doc.iter()}
     assert "thead" in tags and "tbody" in tags and "colspec" in tags
@@ -253,9 +287,9 @@ def test_figure_icn_referenced() -> None:
     root.children = [IRNode(id="f", kind="figure", form="caption",
                             text="Figure 1", icn="figure-1-pump.jpg")]
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     assert 'infoEntityIdent="figure-1-pump"' in xml
-    assert "ICN-TODO" not in xml
+    assert "ICN-ZZZ-00000" not in xml
 
 
 def test_composite_figure_references_all_graphics() -> None:
@@ -273,7 +307,7 @@ def test_composite_figure_references_all_graphics() -> None:
         )],
     )
 
-    xml = serialize(root, issue="5.0", dm_type="description")
+    xml = serialize(root, issue="4.2", dm_type="description")
 
     assert xml.count("<graphic ") == 2
     assert 'infoEntityIdent="figure-5-4-composite"' in xml
@@ -290,7 +324,7 @@ def test_figures_and_tables_have_incremental_ids() -> None:
     ]
     xml = serialize(
         root,
-        issue="5.0",
+        issue="4.2",
         dm_type="descriptive",
         figure_offset=4,
         table_offset=7,
@@ -315,7 +349,7 @@ def test_final_titles_drop_editorial_numbering() -> None:
             )],
         ),
     ]
-    xml = serialize(root, issue="5.0", dm_type="descriptive", title="4.1. LEVAGE")
+    xml = serialize(root, issue="4.2", dm_type="descriptive", title="4.1. LEVAGE")
     doc = _parse(xml)
 
     assert clean_title("4.1. LEVAGE") == "LEVAGE"
@@ -331,7 +365,7 @@ def test_figure_icns_are_declared_in_doctype() -> None:
         IRNode(id="f2", kind="figure", form="caption", icn="ICN-TWO.png"),
     ]
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
 
     assert '<!DOCTYPE dmodule [' in xml
     assert '<!ENTITY ICN-ONE SYSTEM "ICN-ONE.JPG" NDATA jpg>' in xml
@@ -357,7 +391,7 @@ def test_internal_ref_emitted() -> None:
                "text": "Voir figure 3"}],
     ), IRNode(id="f", kind="figure", text="Figure 3 - Vue")]
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     assert "internalRef" in xml
     doc = _parse(xml)
     ref = doc.find(".//internalRef")
@@ -379,7 +413,7 @@ def test_detected_refs_resolve_inline_to_real_targets() -> None:
         ),
     ])
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     doc = _parse(xml)
 
     para = doc.find(".//content//para")
@@ -399,7 +433,7 @@ def test_uri_ref_is_emitted_as_external_pub_ref() -> None:
         IRNode(id="p", kind="paragraph", text=text, refs=detect_refs(text)),
     ])
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     doc = _parse(xml)
 
     external = doc.find(".//content//externalPubRef")
@@ -422,7 +456,7 @@ def test_adjacent_runs_with_same_emphasis_are_merged() -> None:
         ],
     )])
     resolve(root)
-    doc = _parse(serialize(root, issue="5.0", dm_type="descriptive"))
+    doc = _parse(serialize(root, issue="4.2", dm_type="descriptive"))
 
     note_para = doc.find(".//content//note/notePara")
     assert note_para is not None
@@ -447,7 +481,7 @@ def test_cross_dm_ref_uses_target_dmc() -> None:
     ])
     xml = serialize(
         source,
-        issue="5.0",
+        issue="4.2",
         dm_type="descriptive",
         reference_index=index,
         reference_dm_id="dm1",
@@ -478,7 +512,7 @@ def test_cross_dm_ref_emits_weg_dm_code():
     ])
     doc = _parse(serialize(
         source,
-        issue="5.0",
+        issue="4.2",
         dm_type="descriptive",
         reference_index=index,
         reference_dm_id="dm1",
@@ -500,7 +534,7 @@ def test_sections_use_sequential_par_ids() -> None:
         ]),
     ])
     resolve(root)
-    doc = _parse(serialize(root, issue="5.0", dm_type="descriptive"))
+    doc = _parse(serialize(root, issue="4.2", dm_type="descriptive"))
 
     sections = doc.findall(".//content//levelledPara")
     assert [section.get("id") for section in sections] == ["par-0001", "par-0002"]
@@ -517,7 +551,7 @@ def test_serializer_excludes_layout_noise_zones() -> None:
         ]),
     ])
     resolve(root)
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
 
     assert "www.example.test" not in xml
     assert "FRANCAIS" not in xml
@@ -543,7 +577,7 @@ def test_descriptive_output_respects_issue_4_1_content_model() -> None:
         ],
     )])
     resolve(root)
-    xml = serialize(root, issue="4.1", dm_type="descriptive")
+    xml = _serialize_with_dmc(root, "4.1", "descriptive")
     violations = validate_xsd(xml, "4.1", dm_type="descriptive", allow_internal_dtd=True)
 
     assert not [violation for violation in violations if violation["severity"] == "error"]
@@ -569,7 +603,7 @@ def test_warnings_precede_cautions_in_issue_4_1() -> None:
         ],
     )])
     resolve(root)
-    xml = serialize(root, issue="4.1", dm_type="descriptive")
+    xml = _serialize_with_dmc(root, "4.1", "descriptive")
     violations = validate_xsd(xml, "4.1", dm_type="descriptive", allow_internal_dtd=True)
 
     assert not [violation for violation in violations if violation["severity"] == "error"]
@@ -594,7 +628,7 @@ def test_procedural_output_respects_issue_4_1_content_model() -> None:
         ],
     )])
     resolve(root)
-    xml = serialize(root, issue="4.1", dm_type="procedural")
+    xml = _serialize_with_dmc(root, "4.1", "procedural")
     violations = validate_xsd(xml, "4.1", dm_type="procedural", allow_internal_dtd=True)
 
     assert not [violation for violation in violations if violation["severity"] == "error"]
@@ -667,7 +701,7 @@ def test_procedural_requirements_are_structured_before_main_steps() -> None:
         ),
     ])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="procedural")
+    xml = _serialize_with_dmc(root, "4.2", "procedural")
     violations = validate_xsd(
         xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
     )
@@ -684,8 +718,9 @@ def test_procedural_requirements_are_structured_before_main_steps() -> None:
     assert preliminary.findtext("./reqSafety/safetyRqmts/warning/warningAndCautionPara") == "Risque de projection."
     assert preliminary.findtext("./reqSafety/safetyRqmts/note/notePara") == "Porter des lunettes de protection."
     for quantity in preliminary.findall(".//reqQuantity"):
-        assert quantity.text == "TODO"
-        assert quantity.get("unitOfMeasure") == "TODO"
+        assert quantity.text == "A REMPLACER"
+        assert quantity.get("unitOfMeasure") == "A REMPLACER"
+    assert "TODO" not in xml
 
     main_steps = doc.find("./content/procedure/mainProcedure")
     assert main_steps is not None
@@ -717,7 +752,7 @@ def test_nested_preliminary_requirements_are_removed_from_main_procedure() -> No
         ),
     ])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="procedural")
+    xml = _serialize_with_dmc(root, "4.2", "procedural")
     violations = validate_xsd(
         xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
     )
@@ -739,7 +774,7 @@ def test_missing_preliminary_requirements_do_not_create_todo_values() -> None:
         id="step", kind="paragraph", text="Effectuer le contrôle.", context="procedural",
     )])
     resolve(root)
-    xml = serialize(root, issue="4.2", dm_type="procedural")
+    xml = _serialize_with_dmc(root, "4.2", "procedural")
     violations = validate_xsd(
         xml, "4.2", dm_type="procedural", allow_internal_dtd=True,
     )
@@ -754,4 +789,5 @@ def test_missing_preliminary_requirements_do_not_create_todo_values() -> None:
     assert preliminary.find("./reqSpares/noSpares") is not None
     assert preliminary.find("./reqSafety/noSafety") is not None
     assert preliminary.find("./reqPersons") is None
+    assert not any("preliminaryRqmts" in field for field in missing_data_fields(xml))
     assert "TODO" not in etree.tostring(preliminary, encoding="unicode")

@@ -119,8 +119,8 @@ export function createPoc({
       const manifest = path.join(app, "frontend", "package.json");
       const pkg = JSON.parse(readFileSync(manifest, "utf8"));
       Object.assign(pkg.scripts, {
-        "tauri:dev": "tauri dev",
-        "tauri:build": "tauri build",
+        "tauri:dev": "node scripts/prepare-desktop.mjs dev && tauri dev",
+        "tauri:build": "node scripts/prepare-desktop.mjs build && tauri build",
       });
       pkg.devDependencies["@tauri-apps/cli"] = "^2.12.2";
       writeFileSync(manifest, JSON.stringify(pkg, null, 2) + "\n");

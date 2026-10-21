@@ -22,6 +22,30 @@ def test_blocks_carry_geometry(pdf_bytes) -> None:
     assert geo, "aucun bloc ne porte de geometrie (bbox)"
 
 
+def test_parse_pdf_pages_reports_each_completed_page(tmp_path) -> None:
+    import fitz
+
+    from app.parsers.pdf_parser import parse_pdf_pages
+
+    pdf_path = tmp_path / "progress.pdf"
+    doc = fitz.open()
+    for page_number in range(1, 4):
+        page = doc.new_page()
+        if page_number != 2:
+            page.insert_text((72, 72), f"Searchable content on page {page_number}.")
+    doc.save(str(pdf_path))
+    doc.close()
+
+    progress: list[tuple[int, int]] = []
+    pages = parse_pdf_pages(
+        pdf_path,
+        progress_cb=lambda completed, total: progress.append((completed, total)),
+    )
+
+    assert progress == [(1, 3), (2, 3), (3, 3)]
+    assert [page.has_text for page in pages] == [True, False, True]
+
+
 def test_table_detected(pdf_bytes_table) -> None:
     from app.parsers.pdf_parser import parse_pdf_pages
 

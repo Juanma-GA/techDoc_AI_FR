@@ -17,8 +17,9 @@ import logging
 
 from lxml import etree
 
-from app.core import brex as brex_mod
+from app.core import brex_profile as brex_profile_mod
 from app.core import s1000d_schema, xml_safe
+from app.core.brex_validation import validate_brex
 
 log = logging.getLogger("s1000d_extractor.validator")
 
@@ -63,8 +64,20 @@ def validate_document(
     # 3. BREX projet (si fourni).
     if brex_xml:
         try:
-            rules = brex_mod.parse_brex(brex_xml)
-            violations.extend(brex_mod.validate_brex(xml, rules, allow_internal_dtd=True))
+            brex_profile = brex_profile_mod.inspect_brex(brex_xml)
+            violations.extend(
+                validate_brex(
+                    xml, brex_profile.rules, allow_internal_dtd=True
+                )
+            )
+            for rule in brex_profile.unsupported_rules:
+                violations.append(_v(
+                    "warning",
+                    "BREX_UNSUPPORTED",
+                    f"Regle BREX {rule.rule_type} non appliquee : "
+                    f"{rule.description or rule.rule_id or rule.rule_type}",
+                    f"BREX/{rule.rule_id or rule.rule_type}",
+                ))
         except Exception as exc:
             log.warning("BREX validation failed: %s", exc)
             violations.append(_v("warning", "BREX", f"Validation BREX NON EXECUTEE : {exc}"))
@@ -82,3 +95,11 @@ def validate_document(
             )
 
     return violations
+
+
+def xsd_is_valid(violations: list[dict]) -> bool:
+    """Return false unless the XML is well formed and its exact XSD check passed."""
+    return not any(
+        violation.get("rule") in {"XSD", "WELLFORMED"}
+        for violation in violations
+    )

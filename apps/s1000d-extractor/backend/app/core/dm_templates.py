@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from xml.sax.saxutils import escape
 
 from app.core.dmrl import normalize
@@ -80,6 +81,29 @@ def _missing(sections: list[dict]) -> list[str]:
     return [s["key"] for s in sections if s["required"] and not s["content"].strip()]
 
 
+def _heading_key(value: str) -> str:
+    normalized = normalize(value)
+    return re.sub(r"^(?:\d+\s+)+", "", normalized).strip()
+
+
+def _section_heading_keys(tree: dict | None) -> set[str]:
+    headings: set[str] = set()
+
+    def walk(node: dict) -> None:
+        if node.get("kind") == "section":
+            headings.update(
+                key for key in (_heading_key(line) for line in (node.get("text") or "").splitlines())
+                if key
+            )
+        for child in node.get("children") or []:
+            if isinstance(child, dict):
+                walk(child)
+
+    if isinstance(tree, dict):
+        walk(tree)
+    return headings
+
+
 def apply_template(dm: dict, template: dict) -> dict:
     """Applique un template a un DM : rubriques + metadonnees par defaut.
 
@@ -110,33 +134,62 @@ def _slice_for(dm: dict, document_text: str) -> str:
     return document_text
 
 
-def _dispatch(body: str, sections: list[dict]) -> None:
+def _dispatch(
+    body: str,
+    sections: list[dict],
+    *,
+    section_heading_keys: set[str] | None = None,
+) -> None:
     """Repartit les lignes du corps dans les rubriques du template.
 
-    Une ligne dont le titre normalise correspond a un `match` de rubrique ouvre
-    cette rubrique ; les lignes suivantes lui sont rattachees. Ce qui precede la
-    premiere rubrique va dans la premiere rubrique du template (rien n'est
-    jete).
+    Les numeros de titres sont ignores pendant la detection. Si le document ne
+    contient aucun titre reconnu, le texte est affecte a sa rubrique principale
+    obligatoire plutot qu'a une rubrique facultative vide.
     """
     if not sections:
         return
     buckets: dict[str, list[str]] = {s["key"]: [] for s in sections}
     current = sections[0]["key"]
+    matched_heading = False
     for line in body.splitlines():
-        norm = normalize(line)
+        heading = _heading_key(line)
         hit = next(
-            (s for s in sections if norm and any(m and norm.startswith(m) for m in s["match"])),
+            (
+                s for s in sections
+                if heading and any(
+                    m and (heading == m or heading.startswith(f"{m} "))
+                    and (section_heading_keys is None or heading in section_heading_keys)
+                    for m in s["match"]
+                )
+            ),
             None,
         )
         if hit is not None:
             current = hit["key"]
+            matched_heading = True
             continue
         buckets[current].append(line)
+    if not matched_heading:
+        fallback = next(
+            (section for section in sections
+             if section["required"] and section["key"] in {"description", "procedure"}),
+            None,
+        ) or next((section for section in sections if section["required"]), sections[0])
+        source_key = sections[0]["key"]
+        if fallback["key"] != source_key:
+            buckets[fallback["key"]].extend(buckets[source_key])
+            buckets[source_key] = []
     for sec in sections:
         sec["content"] = "\n".join(buckets[sec["key"]]).strip()
 
 
-def generate_dm(dm: dict, template: dict, document_text: str) -> dict:
+def generate_dm(
+    dm: dict,
+    template: dict,
+    document_text: str,
+    *,
+    section_heading_keys: set[str] | None = None,
+) -> dict:
     """Genere un DM complet : contenu du document reparti dans le template.
 
     - decoupe le texte source sur les bornes du DM (`start`/`end` issues de la
@@ -146,7 +199,7 @@ def generate_dm(dm: dict, template: dict, document_text: str) -> dict:
     """
     out = apply_template(dm, template)
     body = _slice_for(dm, document_text or "")
-    _dispatch(body, out["sections"])
+    _dispatch(body, out["sections"], section_heading_keys=section_heading_keys)
     for sec in out["sections"]:
         sec["html"] = parse_lists(sec["content"])
     out["content_html"] = "".join(

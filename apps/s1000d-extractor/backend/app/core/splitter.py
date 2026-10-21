@@ -196,6 +196,23 @@ def match_report(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[dict]:
     ]
 
 
+def _attach_section_hierarchy(section: IRNode, following_nodes: list[IRNode]) -> None:
+    """Rattache les noeuds aplatis sous leur section de niveau correspondant."""
+    base_level = section.level if section.level is not None else 0
+    stack: list[tuple[int, IRNode]] = [(base_level, section)]
+    for node in following_nodes:
+        if node.kind != "section":
+            stack[-1][1].children.append(node)
+            continue
+
+        level = node.level if node.level is not None else base_level + 1
+        level = max(level, base_level + 1)
+        while len(stack) > 1 and stack[-1][0] >= level:
+            stack.pop()
+        stack[-1][1].children.append(node)
+        stack.append((level, node))
+
+
 def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
     """Decoupe l'IR selon les DM attendus par la DMRL.
 
@@ -230,7 +247,11 @@ def split_by_dmrl(root: IRNode, dmrl_data: list[DmrlEntry]) -> list[DmUnit]:
         end = anchors[i + 1][0] if i + 1 < len(anchors) else len(nodes)
         dm_id = f"dm{len(dms) + 1}"
         section = nodes[idx]
-        section.children = list(nodes[idx + 1:end])
+        following_nodes = list(nodes[idx + 1:end])
+        if section.kind == "section":
+            _attach_section_hierarchy(section, following_nodes)
+        else:
+            section.children = following_nodes
         syn = IRNode(id=f"{dm_id}-root", kind="section", level=0, children=[section])
         dms.append(DmUnit(
             dm_id=dm_id, title=entry.title or f"Data Module {i + 1}",

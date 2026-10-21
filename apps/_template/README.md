@@ -17,6 +17,7 @@ Provide the required FastAPI and React/Vite foundation for a new local-first POC
 - Windows and Unix launchers, conditional frontend rebuild, and Windows packaging wrappers.
 - Optional profile overlays for LLM and file workflows.
 - Optional Tauri desktop shell, selected with `node scripts/new_poc.mjs <slug> [port] --desktop`.
+- Native desktop title bar follows the persisted dark/light app theme and its toggle.
 
 ## Auth
 

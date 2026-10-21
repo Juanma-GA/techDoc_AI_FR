@@ -21,6 +21,7 @@ Voir [`docs/index.md`](docs/index.md) pour la hiérarchie documentaire et
 | [`apps/xml-proofreader/`](apps/xml-proofreader/) | Relecture et correction XML | 8008 |
 | [`apps/ecm-automation/`](apps/ecm-automation/) | Préparation de dossiers ECM/ECN et mise à jour de tracker | 8009 |
 | [`apps/flowchart-generator/`](apps/flowchart-generator/) | Génération de logigrammes industriels | 8010 |
+| [`apps/image-processor/`](apps/image-processor/) | Détection OCR locale et remplacement de texte dans les images (PaddleOCR + LaMa) | 8010 |
 | [`apps/pdf-toolkit/`](apps/pdf-toolkit/) | Outils PDF Go, web et bureau Tauri optionnel | 8085 |
 | [`apps/_template/`](apps/_template/) | Squelette canonique à copier pour démarrer un nouveau POC | — |
 

@@ -20,6 +20,7 @@ from app.core import cir as cir_mod
 from app.core import dm_header as dm_header_mod
 from app.core import dm_templates
 from app.core.dmrl import DmrlEntry, entry_from_dict
+from app.core.dmrl_rules import data_module_entries, is_pm_title
 from app.db.models import Document
 
 log = logging.getLogger("s1000d_extractor.resources")
@@ -40,6 +41,18 @@ def dmrl_entries(doc: Document) -> list[DmrlEntry]:
     if not doc.dmrl_json:
         return []
     return [entry_from_dict(d) for d in json.loads(doc.dmrl_json)]
+
+
+def dmrl_data_module_entries(doc: Document) -> list[DmrlEntry]:
+    return data_module_entries(dmrl_entries(doc))
+
+
+def unresolved_dmrl_type_entries(doc: Document) -> list[DmrlEntry]:
+    return [
+        entry
+        for entry in dmrl_data_module_entries(doc)
+        if (entry.type_conflict or entry.type_issue) and not entry.dm_type
+    ]
 
 
 def save_dmrl(doc: Document, entries: list[DmrlEntry]) -> None:
@@ -112,7 +125,14 @@ def apply_resources(dm: dict, res: Resources, document_text: str = "") -> tuple[
         out = cir_mod.resolve_cir_references(out, res.cir)
     template = dm_templates.template_for(res.templates, out.get("dm_type", ""))
     if template:
-        out = dm_templates.generate_dm(out, template, document_text or _tree_text(out.get("tree")))
+        tree = out.get("tree")
+        from_tree = not document_text and isinstance(tree, dict)
+        out = dm_templates.generate_dm(
+            out,
+            template,
+            document_text or _tree_text(tree if isinstance(tree, dict) else None),
+            section_heading_keys=dm_templates._section_heading_keys(tree) if from_tree else None,
+        )
     violations: list[dict] = []
     if res.brex_rules:
         violations = brex_rules_mod.validate_dm_against_brex(out, res.brex_rules)
@@ -149,13 +169,45 @@ def pmc_xml(doc: Document) -> str:
 def dmrl_report(doc: Document) -> list[dict]:
     """Rapport d'appariement de la DMRL sur le document parse."""
     entries = dmrl_entries(doc)
-    if not entries or not doc.ir_json:
-        return [{**e.to_dict(), "index": i, "matched": False, "page": None, "matched_text": ""}
-                for i, e in enumerate(entries)]
-    from app.core import ir as ir_mod
-    from app.core import splitter
+    dmrl_indexes = [index for index, entry in enumerate(entries) if not is_pm_title(entry)]
+    dmrl_dms = [entries[index] for index in dmrl_indexes]
+    if doc.ir_json and dmrl_dms:
+        from app.core import ir as ir_mod
+        from app.core import splitter
 
-    return splitter.match_report(ir_mod.from_dict(json.loads(doc.ir_json)), entries)
+        dm_reports = splitter.match_report(ir_mod.from_dict(json.loads(doc.ir_json)), dmrl_dms)
+    else:
+        dm_reports = [
+            {
+                **entry.to_dict(),
+                "matched": False,
+                "match_rank": "",
+                "page": None,
+                "matched_text": "",
+            }
+            for entry in dmrl_dms
+        ]
+
+    reports_by_index = {}
+    for index, report in zip(dmrl_indexes, dm_reports, strict=True):
+        report["index"] = index
+        report["is_pm_title"] = False
+        reports_by_index[index] = report
+
+    return [
+        {
+            **entry.to_dict(),
+            "index": index,
+            "is_pm_title": True,
+            "matched": False,
+            "match_rank": "",
+            "page": None,
+            "matched_text": "",
+        }
+        if is_pm_title(entry)
+        else reports_by_index[index]
+        for index, entry in enumerate(entries)
+    ]
 
 
 def apply_dmrl_op(doc: Document, params: dict) -> None:

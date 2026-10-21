@@ -1,5 +1,6 @@
 /target/
-/runtime/
+/runtime/*
+!/runtime/.gitkeep
 /runtime.json
 /gen/
 /icons/

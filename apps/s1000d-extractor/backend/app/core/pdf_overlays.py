@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fitz
+import pymupdf as fitz
 
 _CROSS_SYMBOLS = {"x", "×", "✕", "✖", "✗"}
 _MIN_OVERLAY_CROSS_SIZE = 24.0

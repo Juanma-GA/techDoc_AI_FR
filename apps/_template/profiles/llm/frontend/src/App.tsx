@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import {
+  Ai4TechDocLogo,
   AppShell,
   DemoModeBadge,
   DemoModeProvider,
@@ -20,6 +21,18 @@ import { Settings } from "./routes/Settings";
 
 const LANGUAGES = ["fr", "en"] as const;
 
+declare global {
+  interface Window {
+    __TAURI__?: {
+      window?: {
+        getCurrentWindow?: () => {
+          setTheme: (theme: "dark" | "light") => Promise<void>;
+        };
+      };
+    };
+  }
+}
+
 const NAV_ITEMS = [
   { to: "/", key: "nav.home", icon: "home" },
   { to: "/data", key: "nav.data", icon: "data" },
@@ -27,6 +40,37 @@ const NAV_ITEMS = [
 ] as const;
 
 export function App() {
+  useEffect(() => {
+    const tauri = window.__TAURI__;
+    if (!tauri) {
+      if ("__TAURI_INTERNALS__" in window) {
+        console.error("Tauri window API is unavailable; check withGlobalTauri.");
+      }
+      return;
+    }
+
+    const nativeWindow = tauri.window?.getCurrentWindow?.();
+    if (!nativeWindow) {
+      console.error("Tauri window API is unavailable; check withGlobalTauri.");
+      return;
+    }
+
+    const syncTheme = () => {
+      const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+      void nativeWindow.setTheme(theme).catch((error: unknown) => {
+        console.error("Unable to synchronize desktop window theme:", error);
+      });
+    };
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    syncTheme();
+
+    return () => observer.disconnect();
+  }, []);
+
   const { t, i18n } = useTranslation();
   const appTitle = t("app.title");
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
@@ -49,6 +93,7 @@ export function App() {
     <AppShell
       title={appTitle}
       brandTitle={t("app.description")}
+      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
       collapseLabel={t("nav.collapse")}
       expandLabel={t("nav.expand")}

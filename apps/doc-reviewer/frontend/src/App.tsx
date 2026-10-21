@@ -24,6 +24,12 @@ const DocumentReviewer = lazy(async () => ({
 const DocumentsList = lazy(async () => ({
   default: (await import("./routes/DocumentsList")).DocumentsList,
 }));
+const Preparation = lazy(async () => ({
+  default: (await import("./routes/Preparation")).Preparation,
+}));
+const PreparationWorkspace = lazy(async () => ({
+  default: (await import("./routes/PreparationWorkspace")).PreparationWorkspace,
+}));
 const Settings = lazy(async () => ({
   default: (await import("./routes/Settings")).Settings,
 }));
@@ -46,10 +52,11 @@ function RouteFallback() {
 const navItems: ReadonlyArray<{
   to: string;
   labelKey: string;
-  icon: "home" | "files" | "review" | "rules" | "settings";
+  icon: "home" | "files" | "workflow" | "review" | "rules" | "settings";
   end?: boolean;
 }> = [
   { to: "/", labelKey: "nav.dashboard", icon: "home", end: true },
+  { to: "/preparation", labelKey: "nav.preparation", icon: "workflow" },
   { to: "/documents", labelKey: "nav.documents", icon: "files" },
   { to: "/rejections", labelKey: "nav.rejections", icon: "review" },
   { to: "/rules", labelKey: "nav.rules", icon: "rules" },
@@ -138,6 +145,8 @@ export function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/documents" element={<DocumentsList />} />
+              <Route path="/preparation" element={<Preparation />} />
+              <Route path="/preparation/:id" element={<PreparationWorkspace />} />
               <Route path="/rejections" element={<Rejections />} />
               <Route path="/rules" element={<Rules />} />
               <Route path="/settings" element={<Settings />} />

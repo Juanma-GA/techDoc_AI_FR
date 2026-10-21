@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Image Processor",
+  "version": "0.1.0",
+  "identifier": "com.atexis.image-processor",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      },
+      "nsis": {
+        "installerHooks": "installer-hooks.nsh"
+      }
+    },
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "resources": {
+      "runtime/": "runtime/"
+    }
+  }
+}
