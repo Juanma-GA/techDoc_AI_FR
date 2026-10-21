@@ -6,7 +6,7 @@
     {
       "key": "preliminary",
       "title": "Conditions preliminaires",
-      "required": true,
+      "required": false,
       "match": [
         "conditions prealables",
         "preliminaires",

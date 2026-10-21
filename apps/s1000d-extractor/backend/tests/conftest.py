@@ -208,7 +208,12 @@ def brex_xml() -> str:
     # BREX minimal : interdit l'element <emphasis> (allowedObjectFlag=0).
     return (
         '<?xml version="1.0"?>'
-        "<dmodule><content><brex><contextRules>"
+        '<dmodule><identAndStatusSection><dmAddress><dmIdent><dmCode '
+        'modelIdentCode="TST" systemDiffCode="A" systemCode="A" subSystemCode="0" '
+        'subSubSystemCode="0" assyCode="00" disassyCode="00" disassyCodeVariant="A" '
+        'infoCode="040" infoCodeVariant="A" itemLocationCode="A"/>'
+        "</dmIdent></dmAddress></identAndStatusSection>"
+        "<content><brex><contextRules>"
         "<structureObjectRuleGroup>"
         "<structureObjectRule>"
         '<objectPath allowedObjectFlag="0">//emphasis</objectPath>'

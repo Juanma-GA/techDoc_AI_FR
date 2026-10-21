@@ -1,11 +1,10 @@
-"""Serialiseur : IR resolu -> squelette XML S1000D (lxml).
+"""Serialiseur : IR resolu -> squelette XML contraint par les XSD locaux (lxml).
 
-ATTENTION (ecart assume) : la sortie est un SQUELETTE STRUCTUREL best-effort,
-PAS un Data Module valide. Les metadonnees non recuperables d'un PDF/Word
-(DMC, SNS, applicabilite, securite, ICN des graphics) sont des placeholders
-marques `<!-- TODO ... -->` a completer par un humain.
+Les donnees metier absentes utilisent des valeurs provisoires acceptees par le
+XSD et sont reprises dans le recapitulatif des champs a confirmer. Le XML reste
+telechargeable si du contenu source ne peut pas etre represente.
 
-Noms d'elements conformes Issue 4.1 / 4.2 / 5.0 (stables entre les trois) :
+Noms d'elements conformes aux XSD locaux Issue 4.1 / 4.2 :
 - bloc d'identification : `identAndStatusSection` (`dmAddress` + `dmStatus`,
   le `brexDmRef` vit dans `dmStatus`) ;
 - listes : `randomList`/`sequentialList` > `listItem` > `para` ;
@@ -18,23 +17,26 @@ Noms d'elements conformes Issue 4.1 / 4.2 / 5.0 (stables entre les trois) :
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 import re
 import unicodedata
 
 from lxml import etree
 
+from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
 from app.core.ir import IRNode, InlineRun
 from app.core.pmc import parse_dmc
 from app.core.s1000d_codes import emphasis_code_for_style, get_code
+from app.core.xsd_model import ConstraintReport, load_xsd_model
 
 _BANNER = (
     " Squelette structurel best-effort genere par s1000d extractor. "
-    "NON valide comme Data Module : DMC / SNS / applicabilite / securite / ICN "
-    "a completer manuellement (voir les commentaires TODO). "
+    "DMC / SNS / applicabilite / securite / ICN et contenu metier a confirmer "
+    "avant publication (voir le recapitulatif des champs manquants). "
 )
+_MISSING_DATA_COMMENT_PREFIX = "A REMPLACER AVANT PUBLICATION:"
 
 # Caracteres de controle interdits en XML 1.0 (le texte d'un PDF en contient
 # souvent : form feed, NUL...). lxml leve une ValueError -> 500 cote API. On les
@@ -65,17 +67,17 @@ _SCHEMA_NAMES = {
     "ipd": "ipd.xsd",
 }
 _DM_CODE_DEFAULTS = {
-    "assyCode": "00",
-    "disassyCode": "00",
-    "disassyCodeVariant": "A",
-    "infoCode": "040",
-    "infoCodeVariant": "A",
-    "itemLocationCode": "D",
-    "modelIdentCode": "TODO",
-    "subSubSystemCode": "0",
-    "subSystemCode": "0",
-    "systemCode": "00",
-    "systemDiffCode": "A",
+    "assyCode": "ZZ",
+    "disassyCode": "ZZ",
+    "disassyCodeVariant": "Z",
+    "infoCode": "ZZZ",
+    "infoCodeVariant": "Z",
+    "itemLocationCode": "T",
+    "modelIdentCode": "ZZ",
+    "subSubSystemCode": "Z",
+    "subSystemCode": "Z",
+    "systemCode": "ZZ",
+    "systemDiffCode": "Z",
 }
 _DM_FIELD_NAMES = {
     "modelIdentCode": "model_ident_code",
@@ -142,6 +144,12 @@ class ReferenceTarget:
     target_type: str
     dm_id: str = ""
     dmc: str = ""
+
+
+@dataclass
+class SerializationDiagnostics:
+    xsd_violations: list[dict] = field(default_factory=list)
+    provisional_fields: list[str] = field(default_factory=list)
 
 
 ReferenceIndex = dict[tuple[str, str], list[ReferenceTarget]]
@@ -316,11 +324,11 @@ def _figure_icns(node: IRNode) -> list[str]:
     return names
 
 
-def _doctype(root: IRNode) -> str:
+def _doctype(root: IRNode, dmodule: etree._Element | None = None) -> str:
     """Construit la DTD interne qui declare les fichiers graphiques du DM."""
     declarations: list[str] = []
     declared: set[str] = set()
-    placeholder_ident = "ICN-TODO-00000"
+    placeholder_ident = "ICN-ZZZ-00000"
     for node in root.walk():
         if node.kind != "figure":
             continue
@@ -340,6 +348,14 @@ def _doctype(root: IRNode) -> str:
             declarations.append(
                 f'<!ENTITY {ident} SYSTEM "{filename}" NDATA {notation}>'
             )
+    if dmodule is not None:
+        for graphic in dmodule.iter("graphic"):
+            ident = graphic.get("infoEntityIdent", "")
+            if ident and ident not in declared and _NCNAME.fullmatch(ident):
+                declarations.append(
+                    f'<!ENTITY {ident} SYSTEM "{ident}.jpg" NDATA jpg>'
+                )
+                declared.add(ident)
     declarations.append(
         '<!ENTITY % ISOEntities PUBLIC "ISO 8879-1986//ENTITIES ISO Character Entities 20030531//EN//XML" "ent/ISOEntities">'
     )
@@ -352,7 +368,7 @@ def _schema_location(issue: str, dm_type: str) -> str:
     return f"http://www.s1000d.org/S1000D_{issue_path}/xml_schema_flat/{schema_name}"
 
 
-def _dm_code(metadata: Mapping[str, object] | None, dm_type: str) -> dict[str, str]:
+def _dm_code(metadata: Mapping[str, object] | None) -> dict[str, str]:
     data = metadata or {}
     values = dict(_DM_CODE_DEFAULTS)
     parsed = parse_dmc(str(data.get("dmc") or ""))
@@ -362,9 +378,93 @@ def _dm_code(metadata: Mapping[str, object] | None, dm_type: str) -> dict[str, s
         value = data.get(field_name)
         if value:
             values[xml_name] = str(value).strip()
-    if not parsed and not data.get("info_code"):
-        values["infoCode"] = {"procedural": "520", "ipd": "941"}.get(dm_type, "040")
     return {key: xml_text(value) for key, value in values.items()}
+
+
+def _missing_dm_code_fields(metadata: Mapping[str, object] | None) -> list[str]:
+    data = metadata or {}
+    if parse_dmc(str(data.get("dmc") or "")):
+        return []
+    base_path = "/dmodule/identAndStatusSection/dmAddress/dmIdent/dmCode"
+    return [
+        f"{base_path}/@{xml_name} (DMC source a renseigner)"
+        for xml_name, field_name in _DM_FIELD_NAMES.items()
+        if not data.get(field_name)
+    ]
+
+
+def _header_provisional_fields(
+    template: Mapping[str, object] | None,
+    metadata: Mapping[str, object] | None,
+) -> list[str]:
+    data = template or DEFAULT_HEADER_TEMPLATE
+    dm_data = metadata or {}
+    fields = [
+        "/dmodule/identAndStatusSection/dmAddress/dmIdent/issueInfo/@inWork (valeur provisoire)",
+        "/dmodule/identAndStatusSection/dmAddress/dmIdent/issueInfo/@issueNumber (valeur provisoire)",
+    ]
+    for name in ("techName", "infoName"):
+        field_name = "tech_name" if name == "techName" else "info_name"
+        if not dm_data.get(field_name):
+            fields.append(
+                f"/dmodule/identAndStatusSection/dmAddress/dmAddressItems/dmTitle/{name} (valeur provisoire)"
+            )
+    security = data.get("security") or {}
+    if security.get("securityClassification") == DEFAULT_HEADER_TEMPLATE["security"]["securityClassification"]:
+        fields.append(
+            "/dmodule/identAndStatusSection/dmStatus/security/@securityClassification (valeur provisoire)"
+        )
+    language = data.get("language") or {}
+    if language.get("countryIsoCode") == "FR":
+        fields.append("/dmodule/identAndStatusSection/dmAddress/dmIdent/language/@countryIsoCode (valeur provisoire)")
+    if language.get("languageIsoCode") == "fr":
+        fields.append("/dmodule/identAndStatusSection/dmAddress/dmIdent/language/@languageIsoCode (valeur provisoire)")
+    return fields
+
+
+def _is_placeholder(value: str) -> bool:
+    normalized = value.strip().casefold()
+    return any(marker in normalized for marker in (
+        "a remplacer", "example organization", "unverified",
+    ))
+
+
+def _collect_missing_data_fields(
+    root: etree._Element,
+    extra_fields: Sequence[str] = (),
+) -> list[str]:
+    missing = [str(field).strip() for field in extra_fields if str(field).strip()]
+    tree = root.getroottree()
+    for node in root.iter():
+        if isinstance(node, etree._Comment):
+            text = (node.text or "").strip()
+            if text.startswith(_MISSING_DATA_COMMENT_PREFIX):
+                summary = text[len(_MISSING_DATA_COMMENT_PREFIX):].strip()
+                missing.extend(field.strip() for field in summary.split(";") if field.strip())
+                continue
+            if _is_placeholder(text):
+                missing.append(f"Commentaire XML: {text}")
+            continue
+        if not isinstance(node.tag, str):
+            continue
+        path = tree.getpath(node)
+        if etree.QName(node).localname == "unverified":
+            missing.append(f"{path} (assurance qualité à valider)")
+        for name, value in node.attrib.items():
+            local_name = etree.QName(name).localname
+            if _is_placeholder(value) or (local_name == "enterpriseCode" and value == "EX"):
+                missing.append(f"{path}/@{local_name}")
+        text = (node.text or "").strip()
+        if _is_placeholder(text):
+            missing.append(f"{path}/text()")
+        elif etree.QName(node).localname == "simplePara" and text.casefold() == "all" and "/applic" in path:
+            missing.append(f"{path}/text() (applicabilité à confirmer)")
+    return list(dict.fromkeys(missing))
+
+
+def missing_data_fields(xml: str, extra_fields: Sequence[str] = ()) -> list[str]:
+    root = xml_safe.fromstring(xml, allow_internal_dtd=True)
+    return _collect_missing_data_fields(root, extra_fields)
 
 
 def _text(value: object, fallback: str = "") -> str:
@@ -374,7 +474,7 @@ def _text(value: object, fallback: str = "") -> str:
 def _company(parent: etree._Element, name: str, data: Mapping[str, object]) -> None:
     company = etree.SubElement(parent, name, enterpriseCode=_text(data.get("enterpriseCode"), "EX"))
     etree.SubElement(company, "enterpriseName").text = _text(
-        data.get("enterpriseName"), "EXAMPLE ORGANIZATION"
+        data.get("enterpriseName"), "A REMPLACER"
     )
 
 
@@ -415,7 +515,7 @@ def _emit_dm_status(parent: etree._Element, template: Mapping[str, object]) -> N
     _company(status, "originator", template.get("originator") or {})
     applic = etree.SubElement(status, "applic")
     display = etree.SubElement(applic, "displayText")
-    etree.SubElement(display, "simplePara").text = _text(template.get("applicability"), "All")
+    etree.SubElement(display, "simplePara").text = _text(template.get("applicability"), "A REMPLACER")
 
     brex = etree.SubElement(status, "brexDmRef")
     dm_ref = etree.SubElement(brex, "dmRef")
@@ -445,7 +545,7 @@ def _emit_header(
     ident = etree.SubElement(dmodule, "identAndStatusSection")
     address = etree.SubElement(ident, "dmAddress")
     dm_ident = etree.SubElement(address, "dmIdent")
-    etree.SubElement(dm_ident, "dmCode", **_dm_code(metadata, dm_type))
+    etree.SubElement(dm_ident, "dmCode", **_dm_code(metadata))
     language = template.get("language") or {}
     etree.SubElement(dm_ident, "language", countryIsoCode=_text(language.get("countryIsoCode"), "FR"), languageIsoCode=_text(language.get("languageIsoCode"), "fr"))
     etree.SubElement(dm_ident, "issueInfo", inWork="00", issueNumber="001")
@@ -453,8 +553,9 @@ def _emit_header(
     now = created_at or datetime.now(UTC)
     etree.SubElement(items, "issueDate", day=f"{now.day:02d}", month=f"{now.month:02d}", year=str(now.year))
     dm_title = etree.SubElement(items, "dmTitle")
-    etree.SubElement(dm_title, "techName").text = _text(metadata.get("tech_name"), _text(title, "Data Module"))
-    etree.SubElement(dm_title, "infoName").text = _text(metadata.get("info_name"), _text(title, "Data Module"))
+    fallback_title = _text(title) or _text(metadata.get("title")) or "A REMPLACER"
+    etree.SubElement(dm_title, "techName").text = _text(metadata.get("tech_name")) or fallback_title
+    etree.SubElement(dm_title, "infoName").text = _text(metadata.get("info_name")) or fallback_title
     _emit_dm_status(ident, template)
 
 
@@ -630,7 +731,7 @@ def _emit_reference(
                 referredFragment=target.target_id,
             )
             ident = etree.SubElement(dm_ref, "dmRefIdent")
-            etree.SubElement(ident, "dmCode", **_dm_code({"dmc": target.dmc}, "descriptive"))
+            etree.SubElement(ident, "dmCode", **_dm_code({"dmc": target.dmc}))
             dm_ref.append(_comment(
                 f" cible {ref.get('text', '')} dans le DM {target.dmc} "
             ))
@@ -764,14 +865,14 @@ def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None
 def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> None:
     fig = etree.SubElement(parent, "figure", id=f"fig-{figure_number:04d}")
     title = etree.SubElement(fig, "title")
-    title.text = clean_title(node.text) or "Figure"
+    title.text = clean_title(node.text) or "A REMPLACER"
     if _figure_icns(node):
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
         for icn in _figure_icns(node):
             etree.SubElement(fig, "graphic", infoEntityIdent=_graphic_ident(icn))
     else:
-        fig.append(etree.Comment(" TODO: ICN du graphic a referencer (infoEntityIdent) "))
-        etree.SubElement(fig, "graphic", infoEntityIdent="ICN-TODO-00000")
+        fig.append(_comment("A REMPLACER: reference ICN de l'illustration."))
+        etree.SubElement(fig, "graphic", infoEntityIdent="ICN-ZZZ-00000")
 
 
 def _emit_admonition(
@@ -1002,11 +1103,12 @@ def _emit_material_requirements(
         item = etree.SubElement(group, item_tag)
         name = etree.SubElement(item, "name")
         name.text = xml_text(text)
+        item.append(_comment("A REMPLACER: code fabricant, quantite et unite de mesure."))
         ident_number = etree.SubElement(item, "identNumber")
         manufacturer = etree.SubElement(ident_number, "manufacturerCode")
-        manufacturer.text = "TODO"
-        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure="TODO")
-        quantity.text = "TODO"
+        manufacturer.text = "A REMPLACER"
+        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure="A REMPLACER")
+        quantity.text = "A REMPLACER"
 
 
 def _emit_safety_requirements(
@@ -1403,14 +1505,26 @@ def _build_content(
             reference_index=reference_index,
             current_dm_id=current_dm_id,
         )
+        if not any(isinstance(child.tag, str) for child in main):
+            counters["section"] += 1
+            placeholder_step = etree.SubElement(
+                main,
+                "proceduralStep",
+                id=f"par-{counters['section']:04d}",
+            )
+            placeholder_step.append(_comment(
+                "A REMPLACER: aucune etape de procedure n'a ete detectee dans la source."
+            ))
+            etree.SubElement(placeholder_step, "title").text = "Etape a renseigner"
+            etree.SubElement(placeholder_step, "para").text = (
+                "Etape de procedure a completer a partir de la source."
+            )
         close = etree.SubElement(proc, "closeRqmts")
         _emit_no_req_cond_group(close)
+    elif dm_type == "ipd":
+        etree.SubElement(content, "illustratedPartsCatalog")
     else:
         desc = etree.SubElement(content, "description")
-        if dm_type == "ipd":
-            desc.append(etree.Comment(
-                " TODO: catalogue de pieces (IPD/IPC) - structurer en catalogSeqNumber/itemSeqNumber "
-            ))
         _emit_children(
             desc,
             root.children,
@@ -1431,12 +1545,27 @@ def serialize(
     table_offset: int = 0,
     section_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
+    missing_fields: Sequence[str] = (),
     header_template: Mapping[str, object] | None = None,
     reference_index: ReferenceIndex | None = None,
     reference_dm_id: str = "",
     created_at: datetime | None = None,
+    diagnostics: SerializationDiagnostics | None = None,
 ) -> str:
-    """Construit le squelette XML S1000D complet (string UTF-8 indentee)."""
+    """Construit un squelette XML S1000D contraint par le XSD local (UTF-8 indente)."""
+    if issue not in {"4.1", "4.2"}:
+        raise ValueError(f"Generation XSD non disponible pour l'Issue {issue}.")
+    normalized_type = {
+        "descriptive": "descriptive",
+        "description": "descriptive",
+        "descript": "descriptive",
+        "procedural": "procedural",
+        "procedure": "procedural",
+        "proced": "procedural",
+        "ipd": "ipd",
+    }.get((dm_type or "").lower())
+    if normalized_type is None:
+        raise ValueError(f"Type de DM non pris en charge par le generateur XSD : {dm_type}.")
     if reference_index is None:
         reference_index = build_reference_index(
             [(reference_dm_id, root, dm_metadata)],
@@ -1456,7 +1585,7 @@ def serialize(
         "dc": _DC_NS,
     })
     dmodule.addprevious(etree.Comment(_BANNER))
-    dmodule.set(f"{{{_XSI_NS}}}noNamespaceSchemaLocation", _schema_location(issue, dm_type))
+    dmodule.set(f"{{{_XSI_NS}}}noNamespaceSchemaLocation", _schema_location(issue, normalized_type))
     _emit_header(
         dmodule,
         issue=issue,
@@ -1469,14 +1598,37 @@ def serialize(
 
     dmodule.append(_build_content(
         root,
-        dm_type,
+        normalized_type,
         counters,
         reference_index=reference_index,
         current_dm_id=reference_dm_id,
     ))
+    xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(dmodule)
+    if normalized_type == "ipd" and _content_nodes(root):
+        xsd_report.violations.append({
+            "severity": "error",
+            "rule": "XSD",
+            "message": (
+                "Aucun mapping IPD ne permet de representer les noeuds source "
+                "comme des references de pieces; ils n'ont pas ete emis."
+            ),
+            "path": "/dmodule/content/illustratedPartsCatalog",
+        })
+    missing = list(missing_fields)
+    missing.extend(_missing_dm_code_fields(dm_metadata))
+    missing.extend(_header_provisional_fields(header_template, dm_metadata))
+    missing.extend(xsd_report.provisional_fields)
+    missing = _collect_missing_data_fields(dmodule, missing)
+    if missing:
+        dmodule.append(_comment(
+            _MISSING_DATA_COMMENT_PREFIX + " " + "; ".join(missing)
+        ))
+    if diagnostics is not None:
+        diagnostics.xsd_violations.extend(xsd_report.violations)
+        diagnostics.provisional_fields.extend(xsd_report.provisional_fields)
 
     tree = dmodule.getroottree()
     return etree.tostring(
         tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",
-        doctype=_doctype(root),
+        doctype=_doctype(root, dmodule),
     ).decode("utf-8")

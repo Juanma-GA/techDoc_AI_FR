@@ -17,10 +17,18 @@ import csv
 import json
 import re
 import unicodedata
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.dmrl_rules import is_pm_title
 from app.core.errors import AppError
+from app.core.info_code_types import (
+    dm_type_for_schema,
+    load_info_code_schemas,
+    normalize_info_code,
+    normalize_schema,
+)
 from app.core.pmc import generate_pmc as _generate_pmc
 from app.core.pmc import parse_dmc
 
@@ -33,7 +41,9 @@ __all__ = [
 _ALIASES: dict[str, tuple[str, ...]] = {
     "arbo": ("arbo", "arborescence", "hierarchie", "niveau", "level", "position", "index"),
     "dmc": ("dmc", "data module code", "code dm", "dm code", "code"),
-    "title": ("title", "titre", "dmtitle", "titre dm", "libelle", "designation"),
+    "title": (
+        "title", "titre", "dmtitle", "titre dm", "titre noeud", "libelle", "designation",
+    ),
     "dm_type": (
         "dm type", "type dm", "type de dm", "type", "nature", "info type", "categorie",
     ),
@@ -44,20 +54,24 @@ _ALIASES: dict[str, tuple[str, ...]] = {
         "icn", "illustration code number", "illustration code no", "illustration code num",
         "icn illustration code number", "illustration code number icn",
     ),
-    "model_ident_code": ("mic", "model ident code", "modelidentcode"),
+    "model_ident_code": ("mic", "model ident code", "modelidentcode", "modelic"),
     "system_diff_code": ("sdc", "system diff code", "systemdiffcode"),
-    "system_code": ("sc", "system code", "systemcode"),
-    "sub_system_code": ("sub system code", "subsystemcode"),
-    "sub_sub_system_code": ("sssc", "sub sub system code", "subsubsystemcode"),
-    "assy_code": ("ac", "assy code", "assycode"),
-    "disassy_code": ("dc", "disassy code", "disassycode"),
-    "disassy_code_variant": ("dcv", "disassy code variant", "disassycodevariant"),
-    "info_code_variant": ("icv", "info code variant", "infocodevariant"),
-    "item_location_code": ("ilc", "item location code", "itemlocationcode"),
+    "system_code": ("sc", "system", "system code", "systemcode"),
+    "sub_system_code": ("sub system code", "subsystemcode", "ssystem"),
+    "sub_sub_system_code": (
+        "sssc", "sub sub system code", "subsubsystemcode", "sssystem",
+    ),
+    "assy_code": ("ac", "assy", "assy code", "assycode"),
+    "disassy_code": ("dc", "discode", "disassy code", "disassycode"),
+    "disassy_code_variant": (
+        "dcv", "discodev", "disassy code variant", "disassycodevariant",
+    ),
+    "info_code_variant": ("icv", "info code variant", "infocodevariant", "infocodev"),
+    "item_location_code": ("ilc", "item location code", "itemlocationcode", "itemloc"),
 }
 
 _ICN_RE = re.compile(
-    r"(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+\.(?:jpg|png))(?=$|[\s,;|)\]}])",
+    r"(?<![A-Za-z0-9_-])(ICN-[A-Za-z0-9_.-]+?)(\.(?:jpe?g|png))?(?=$|[\s,;|)\]}])",
     re.IGNORECASE,
 )
 
@@ -70,7 +84,12 @@ class DmrlEntry:
     dmc: str = ""
     title: str = ""
     dm_type: str = ""
+    dmrl_type: str = ""
     info_code: str = ""
+    info_code_schema: str = ""
+    info_code_dm_type: str = ""
+    type_conflict: bool = False
+    type_issue: str = ""
     tech_name: str = ""
     info_name: str = ""
     icn: str = ""
@@ -117,7 +136,10 @@ class DmrlEntry:
     def to_dict(self) -> dict:
         return {
             "arbo": self.arbo, "dmc": self.dmc, "title": self.title,
-            "dm_type": self.dm_type, "info_code": self.info_code,
+            "dm_type": self.dm_type, "dmrl_type": self.dmrl_type,
+            "info_code": self.info_code, "info_code_schema": self.info_code_schema,
+            "info_code_dm_type": self.info_code_dm_type,
+            "type_conflict": self.type_conflict, "type_issue": self.type_issue,
             "tech_name": self.tech_name, "info_name": self.info_name, "icn": self.icn,
             "model_ident_code": self.model_ident_code,
             "system_diff_code": self.system_diff_code,
@@ -133,12 +155,22 @@ class DmrlEntry:
 
 
 def entry_from_dict(data: dict) -> DmrlEntry:
-    return DmrlEntry(**{k: str(data.get(k) or "") for k in DmrlEntry().to_dict()})
+    values = {
+        key: str(data.get(key) or "")
+        for key in DmrlEntry().to_dict()
+        if key != "type_conflict"
+    }
+    raw_conflict = data.get("type_conflict")
+    type_conflict = raw_conflict is True or str(raw_conflict).lower() == "true"
+    return DmrlEntry(**values, type_conflict=type_conflict)
 
 
 def extract_icn_filenames(value: str | None) -> list[str]:
-    """Extrait les noms ICN valides d'une cellule DMRL, dans leur ordre."""
-    return [match.group(1) for match in _ICN_RE.finditer(value or "")]
+    """Extrait les ICN d'une cellule DMRL, en ajoutant .jpg si besoin."""
+    return [
+        f"{match.group(1)}{match.group(2) or '.jpg'}"
+        for match in _ICN_RE.finditer(value or "")
+    ]
 
 
 def normalize(text: str) -> str:
@@ -149,10 +181,15 @@ def normalize(text: str) -> str:
 
 
 def _norm_header(name: object) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(name or "").lower()).strip()
+    text = str(name or "").translate(str.maketrans({"œ": "oe", "Œ": "OE", "æ": "ae", "Æ": "AE"}))
+    return normalize(text)
 
 
-def _map_row(row: dict) -> DmrlEntry:
+def _map_row(
+    row: dict,
+    *,
+    info_code_schemas: Mapping[str, str] | None = None,
+) -> DmrlEntry:
     norm = {_norm_header(k): ("" if v is None else str(v).strip()) for k, v in row.items()}
     picked: dict[str, str] = {}
     for field_name, aliases in _ALIASES.items():
@@ -164,7 +201,42 @@ def _map_row(row: dict) -> DmrlEntry:
         picked["sub_system_code"] = ssc[0]
         picked["sub_sub_system_code"] = ssc[1] if len(ssc) > 1 else ""
     entry = DmrlEntry(**picked)
-    entry.dm_type = _canonical_type(entry.dm_type, entry.info_code or entry.dmc)
+    if info_code_schemas is None:
+        entry.dm_type = _canonical_type(entry.dm_type, entry.info_code or entry.dmc)
+    else:
+        entry.dmrl_type = entry.dm_type
+        code = normalize_info_code(entry.info_code)
+        schema = info_code_schemas.get(code, "") if code else ""
+        entry.info_code_schema = schema
+        mapped_type = dm_type_for_schema(schema) if schema else None
+        entry.info_code_dm_type = mapped_type or ""
+
+        if not code:
+            entry.type_issue = "missing_info_code"
+        elif not schema:
+            entry.type_issue = "unmapped_info_code"
+        elif mapped_type is None:
+            entry.type_issue = "unsupported_schema"
+
+        if entry.dmrl_type and schema:
+            declared_type = _canonical_type(entry.dmrl_type, "")
+            entry.type_conflict = (
+                declared_type != mapped_type
+                if mapped_type
+                else normalize_schema(entry.dmrl_type) != normalize_schema(schema)
+            )
+        entry.dm_type = (
+            mapped_type
+            if mapped_type and not entry.type_conflict
+            else ""
+        )
+        if (
+            not entry.dm_type
+            and not entry.dmrl_type
+            and entry.type_issue in {"missing_info_code", "unmapped_info_code"}
+            and not is_pm_title(entry)
+        ):
+            entry.dm_type = "descriptive"
     if not entry.title:
         entry.title = entry.tech_name or entry.dmc
     return entry
@@ -226,7 +298,7 @@ def _rows_from_json(path: Path) -> list[dict]:
     return [d for d in data if isinstance(d, dict)]
 
 
-def load_dmrl(file_path: str | Path) -> list[DmrlEntry]:
+def load_dmrl(file_path: str | Path, *, issue: str | None = None) -> list[DmrlEntry]:
     """Charge une DMRL (.xlsx/.xlsm, .csv, .json) -> liste d'entrees normalisees."""
     path = Path(file_path)
     if not path.exists():
@@ -240,7 +312,8 @@ def load_dmrl(file_path: str | Path) -> list[DmrlEntry]:
         rows = _rows_from_json(path)
     else:
         raise AppError("DMRL_FORMAT", f"Format DMRL non supporte : {suffix or '?'}", 422)
-    entries = [_map_row(r) for r in rows]
+    info_code_schemas = load_info_code_schemas() if issue == "4.1" else None
+    entries = [_map_row(r, info_code_schemas=info_code_schemas) for r in rows]
     entries = [e for e in entries if e.title or e.dmc]
     if not entries:
         raise AppError("DMRL_EMPTY", "Aucune entree exploitable dans la DMRL.", 422)

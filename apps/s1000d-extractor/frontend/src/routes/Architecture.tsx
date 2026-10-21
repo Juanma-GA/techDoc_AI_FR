@@ -1,8 +1,8 @@
 // Contenu FR (le preview source est FR-only).
 export function Architecture() {
   const workflow = [
-    "Paramètres → clé Mistral (active OCR scans + classification IA). BREX optionnel.",
-    "Charger → PDF/Word + version S1000D (4.2/5.0) + nature dominante + BREX → « Démarrer l'assistant ».",
+    "Paramètres → clé Mistral (active OCR scans + classification IA).",
+    "Charger → PDF/Word + version S1000D (4.1/4.2) + profil BREX optionnel → « Générer ».",
     "Découpage → choisir le niveau (chapitre/section/sous-section), revoir les Data Modules détectés.",
     "Types → corriger le type de chaque DM (descriptive / procedural / ipd).",
     "Structure → arbre par DM, trancher les nœuds ambigus (para ↔ proceduralStep).",
@@ -14,14 +14,14 @@ export function Architecture() {
     "découpage (étape 1) → 1 Data Module par section/chapitre/sous-section.",
     "typage par DM (étape 2) → descriptive / procedural / ipd (heuristique + IA Mistral).",
     "résolution (étape 3) → élément S1000D selon contexte × forme ; candidats multiples si ambigu.",
-    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD + BREX (porte).",
+    "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD + règles BREX prises en charge.",
   ];
 
   return (
     <>
       <div className="page-header">
         <h1>Architecture</h1>
-        <p>Pipeline générique, workflow assistant, et détail par étape.</p>
+        <p>Pipeline générique, workflow de génération et détail par étape.</p>
       </div>
 
       <div className="card">
@@ -38,16 +38,16 @@ export function Architecture() {
           <div className="arch-split">
             <div className="label accent-color">CE QUI VARIE PAR PROJET</div>
             <div>
-              La <strong>version S1000D</strong> (4.2 / 5.0 → jeu de schémas XSD) et le{" "}
-              <strong>BREX</strong> (règles projet) sont chargés en données, une fois par
-              projet. Le moteur de mapping, lui, ne change jamais.
+              La <strong>version S1000D</strong> (4.1 / 4.2 → schémas XSD locaux) et le
+              <strong> BREX utilisateur</strong> fournissent les contraintes du projet.
+              Le BREX guide et vérifie les DMs sans remplacer le moteur de mapping.
             </div>
           </div>
         </div>
       </div>
 
       <div className="card">
-        <h2 className="card-title">Workflow utilisateur — assistant guidé</h2>
+        <h2 className="card-title">Workflow utilisateur — génération guidée</h2>
         <p className="label">
           Étapes bloquantes : on valide chacune avant la suivante. L'IA dégrossit,
           l'humain tranche.
@@ -73,8 +73,10 @@ export function Architecture() {
           ))}
         </div>
         <div className="banner warn" style={{ marginTop: 12 }}>
-          Sortie = jeu de DMs, chacun un <strong>squelette best-effort</strong> : DMC /
-          applicabilité / ICN en placeholders <code>TODO</code>, à compléter par l'humain.
+          Sortie = jeu de DMs, chacun un <strong>squelette best-effort</strong> : DMC du
+          DM, applicabilité, SNS et ICN restent à confirmer par l'humain. Le
+          <code>brexDmRef</code> pointe vers le BREX sélectionné ; les règles non prises
+          en charge sont signalées séparément.
         </div>
       </div>
     </>

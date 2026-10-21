@@ -19,8 +19,8 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core import dmrl as dmrl_mod
 from app.core import dm_header as dm_header_mod
+from app.core import dmrl as dmrl_mod
 from app.core import migration_inputs
 from app.core import wizard_resources as wres
 from app.core.brex_rules import load_brex_rules
@@ -75,7 +75,7 @@ async def upload_resource(
     path = _store(doc.id, kind, suffix, raw)
 
     if kind == "dmrl":
-        entries = dmrl_mod.load_dmrl(path)      # valide le contenu (leve si invalide)
+        entries = dmrl_mod.load_dmrl(path, issue=doc.s1000d_issue)
         wres.save_dmrl(doc, entries)
         doc.dmrl_path = str(path)
         result = {"kind": kind, "count": len(entries)}
