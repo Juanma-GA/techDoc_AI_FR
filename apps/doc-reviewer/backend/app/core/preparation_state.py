@@ -6,12 +6,15 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
-import fitz
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
+from app.core.preparation_readability import (
+    READABILITY_VERSION,
+    analyze_pdf_pages,
+)
 from app.db.models import Document
 from app.db.preparation_models import DocumentPreparation, PreparationChecklist
 
@@ -26,21 +29,30 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
     record = get_record(db, document.id)
     if record is not None and record.source_version == document.current_version:
         pages = _load_json(record.page_metadata_json, "page_metadata_json")
-        needs_reset = False
-        for page in pages:
-            if not page.get("needs_ocr"):
-                page["needs_ocr"] = True
-                needs_reset = True
+        readability_changed = (
+            len(pages) != record.page_count
+            or any(page.get("readability_version") != READABILITY_VERSION for page in pages)
+        )
+        if readability_changed:
+            try:
+                page_metadata = analyze_pdf_pages(
+                    current_path(document.storage_dir, document.current_version).read_bytes()
+                )
+            except OSError as exc:
+                raise AppError(
+                    "PREPARATION_DOCUMENT_INVALID",
+                    "Le document PDF ne peut pas être lu pour la préparation.",
+                    status_code=400,
+                ) from exc
+            record.page_metadata_json = json.dumps(page_metadata)
+            record.page_decisions_json = "[]"
         provider_changed = record.selected_provider != "mistral"
-        if needs_reset:
-            record.page_metadata_json = json.dumps(pages)
-        if needs_reset or provider_changed:
+        if provider_changed:
             record.ocr_results_json = "{}"
             record.validated_pages_json = "{}"
             record.page_decisions_json = "[]"
-        if provider_changed:
             record.selected_provider = "mistral"
-        if needs_reset or provider_changed:
+        if readability_changed or provider_changed:
             record.updated_at = datetime.now(UTC)
             db.commit()
         return record
@@ -48,32 +60,14 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
     path = current_path(document.storage_dir, document.current_version)
     try:
         data = path.read_bytes()
-        with fitz.open(stream=data, filetype="pdf") as pdf:
-            if pdf.page_count < 1:
-                raise AppError(
-                    "PREPARATION_DOCUMENT_INVALID",
-                    "Le document ne contient aucune page.",
-                    status_code=400,
-                )
-            page_metadata = [
-                {
-                    "page": index,
-                    "native_text_chars": len((page.get_text("text") or "").strip()),
-                    "needs_ocr": True,
-                    "width": float(page.rect.width),
-                    "height": float(page.rect.height),
-                }
-                for index, page in enumerate(pdf, start=1)
-            ]
-            page_count = pdf.page_count
-    except AppError:
-        raise
-    except (fitz.FileDataError, OSError, RuntimeError, ValueError) as exc:
+        page_metadata = analyze_pdf_pages(data)
+    except OSError as exc:
         raise AppError(
             "PREPARATION_DOCUMENT_INVALID",
             "Le document PDF ne peut pas être lu pour la préparation.",
             status_code=400,
         ) from exc
+    page_count = len(page_metadata)
 
     if record is None:
         record = DocumentPreparation(
@@ -203,12 +197,12 @@ def validate_all_ocr_pages(
     page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
     ocr_results = _load_json(record.ocr_results_json, "ocr_results_json")
     mistral_results = ocr_results.get("mistral", {})
-    pages = [int(page["page"]) for page in page_metadata]
+    pages = [int(page["page"]) for page in page_metadata if page.get("needs_ocr")]
     missing = [page for page in pages if str(page) not in mistral_results]
     if missing:
         raise AppError(
             "OCR_RESULTS_INCOMPLETE",
-            "Lancez Mistral OCR sur tout le document avant de valider les pages.",
+            "Lancez Mistral OCR sur toutes les pages qui en ont besoin avant de valider.",
             status_code=409,
             detail={"pages": missing},
         )

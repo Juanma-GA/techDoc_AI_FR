@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useOcrPageResult } from "../../hooks/usePreparation";
+import {
+  useOcrPageResult,
+  usePreparationNativeText,
+} from "../../hooks/usePreparation";
 import { API_BASE_URL } from "../../lib/api";
 import type { PreparationState } from "../../types/preparation";
 import { PreparationOcrControls } from "./PreparationOcrControls";
@@ -17,6 +20,8 @@ type Props = {
   onValidateAllAndAnalyze: () => void;
   validatingAll: boolean;
   analyzing: boolean;
+  onRunOcrPage: (page: number) => void;
+  runningOcrPage: boolean;
 };
 
 export function PreparationOcrStep({
@@ -28,6 +33,8 @@ export function PreparationOcrStep({
   onValidateAllAndAnalyze,
   validatingAll,
   analyzing,
+  onRunOcrPage,
+  runningOcrPage,
 }: Props) {
   const { t } = useTranslation();
   const [pageNumber, setPageNumber] = useState(1);
@@ -36,14 +43,28 @@ export function PreparationOcrStep({
     (item) => item.provider === "mistral" && item.page === pageNumber,
   );
   const result = useOcrPageResult(documentId, pageNumber, "mistral", hasResult);
+  const nativeText = usePreparationNativeText(
+    documentId,
+    pageNumber,
+    Boolean(page && !page.needs_ocr),
+  );
   const ocrComplete =
     state.pages.length === state.page_count &&
     state.page_count > 0 &&
-    state.pages.every((item) =>
-      state.ocr_results_available.some(
+    state.pages.every(
+      (item) =>
+        !item.needs_ocr ||
+        state.ocr_results_available.some(
+          (entry) => entry.provider === "mistral" && entry.page === item.page,
+        ),
+    );
+  const pendingOcrCount = state.pages.filter(
+    (item) =>
+      item.needs_ocr &&
+      !state.ocr_results_available.some(
         (entry) => entry.provider === "mistral" && entry.page === item.page,
       ),
-    );
+  ).length;
   const pageLabel = t("preparation.ocrPage", {
     page: pageNumber,
     count: state.page_count,
@@ -51,40 +72,84 @@ export function PreparationOcrStep({
 
   return (
     <section className="card">
-      <div className="row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div className="preparation-ocr-header">
         <div>
           <h2 className="card-title">{t("preparation.ocrTitle")}</h2>
-          <p className="card-sub">{t("preparation.ocrHint")}</p>
+          <p className="card-sub">{t("preparationUi.ocrHint")}</p>
         </div>
-        <span className="badge info">
-          {t("preparation.sourceDocument", {
-            filename: state.source_filename,
-            count: state.page_count,
-          })}
-        </span>
+        <div className="preparation-ocr-actions">
+          {pendingOcrCount > 0 ? (
+            <button
+              type="button"
+              className="btn secondary small"
+              disabled={runningOcrAll || runningOcrPage || validatingAll || analyzing}
+              onClick={onRunOcrAll}
+            >
+              {runningOcrAll
+                ? t("preparationUi.ocrPendingRunning")
+                : t("preparationUi.ocrPending", { count: pendingOcrCount })}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn primary small"
+            disabled={
+              !ocrComplete ||
+              runningOcrAll ||
+              runningOcrPage ||
+              validatingAll ||
+              analyzing
+            }
+            onClick={onValidateAllAndAnalyze}
+          >
+            {validatingAll
+              ? t("preparation.validatingAll")
+              : analyzing
+                ? t("preparation.detectingPages")
+                : state.pages.some((item) => item.needs_ocr)
+                  ? t("preparation.validateAllAndAnalyze")
+                  : t("preparationUi.analyzePages")}
+          </button>
+        </div>
       </div>
+      <p className="preparation-source-document badge info">
+        {t("preparation.sourceDocument", {
+          filename: state.source_filename,
+          count: state.page_count,
+        })}
+      </p>
       {error ? <p className="error" role="alert">{error}</p> : null}
-      <div className="row" style={{ gap: 10, flexWrap: "wrap", margin: "12px 0" }}>
-        <span className="badge info">Mistral OCR</span>
-        <button
-          type="button"
-          className="btn primary small"
-          disabled={runningOcrAll}
-          onClick={onRunOcrAll}
-        >
-          {runningOcrAll
-            ? t("preparation.ocrRunning")
-            : ocrComplete
-              ? t("preparation.rerunOcrAll")
-              : t("preparation.runOcrAll")}
-        </button>
-      </div>
       <PreparationOcrControls
         state={state}
         pageNumber={pageNumber}
-        page={page}
         onPageChange={setPageNumber}
       />
+      {page ? (
+        <div className="preparation-ocr-page-state">
+          <span className={`badge ${page.needs_ocr ? "warn" : "ok"}`}>
+            {page.needs_ocr
+              ? t("preparationUi.ocrRequired")
+              : t("preparationUi.nativeTextUsed")}
+          </span>
+          <span className="label">
+            {t("preparation.ocrNativeChars", { count: page.native_text_chars })}
+          </span>
+          {page.needs_ocr && (
+            <button
+              type="button"
+              className="btn secondary small"
+              disabled={runningOcrAll || runningOcrPage || validatingAll || analyzing}
+              onClick={() => onRunOcrPage(pageNumber)}
+            >
+              {runningOcrPage
+                ? t("preparation.ocrRunning")
+                : hasResult
+                  ? t("preparationUi.rerunCurrentOcr")
+                  : t("preparationUi.runCurrentOcr")}
+            </button>
+          )}
+        </div>
+      ) : null}
       <div className="preparation-ocr-comparison">
         <section className="preparation-ocr-engine" aria-label="Mistral OCR">
           <PreparationOcrResult
@@ -94,24 +159,12 @@ export function PreparationOcrStep({
             data={result.data}
             isLoading={result.isLoading}
             error={result.isError ? result.error.message : null}
+            nativeText={nativeText.data?.text}
+            nativeTextLoading={nativeText.isLoading}
+            nativeTextError={nativeText.isError ? nativeText.error.message : null}
           />
         </section>
       </div>
-      {ocrComplete ? (
-        <button
-          type="button"
-          className="btn primary"
-          style={{ marginTop: 16 }}
-          disabled={runningOcrAll || validatingAll || analyzing}
-          onClick={onValidateAllAndAnalyze}
-        >
-          {validatingAll
-            ? t("preparation.validatingAll")
-            : analyzing
-              ? t("preparation.detectingPages")
-              : t("preparation.validateAllAndAnalyze")}
-        </button>
-      ) : null}
     </section>
   );
 }

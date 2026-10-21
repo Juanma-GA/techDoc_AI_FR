@@ -9,10 +9,10 @@ import { PageHeader } from "../components/PageHeader";
 import { useDocument } from "../hooks/useDocuments";
 import {
   useDetectPreparationPages,
-  useImportPreparationChecklist,
   usePatchPreparationDecision,
   usePreparationState,
   useRunOcrDocument,
+  useRunOcrPage,
   useValidateAllOcrPages,
 } from "../hooks/usePreparation";
 
@@ -29,8 +29,8 @@ export function PreparationWorkspace() {
   const document = useDocument(id);
   const preparation = usePreparationState(id);
   const runOcrDocument = useRunOcrDocument(id);
+  const runOcrPage = useRunOcrPage(id);
   const validateAllOcr = useValidateAllOcrPages(id);
-  const importChecklist = useImportPreparationChecklist(id);
   const detectPages = useDetectPreparationPages(id);
   const patchDecision = usePatchPreparationDecision(id);
   const [step, setStep] = useState<Step>(1);
@@ -40,14 +40,16 @@ export function PreparationWorkspace() {
     state &&
       state.page_count > 0 &&
       state.pages.length === state.page_count &&
-      state.pages.every((page) =>
-        state.ocr_results_available.some(
-          (result) => result.provider === "mistral" && result.page === page.page,
-        ),
+      state.pages.every(
+        (page) =>
+          !page.needs_ocr ||
+          state.ocr_results_available.some(
+            (result) => result.provider === "mistral" && result.page === page.page,
+          ),
       ),
   );
   const unvalidated = state?.pages.filter(
-    (page) => !state.validated_pages.includes(page.page),
+    (page) => page.needs_ocr && !state.validated_pages.includes(page.page),
   ) ?? [];
   const canContinueToChecklist = ocrComplete && unvalidated.length === 0;
   const decisions = state?.page_decisions ?? [];
@@ -78,13 +80,11 @@ export function PreparationWorkspace() {
     );
   }
 
-  const checklistError = importChecklist.isError
-    ? t("preparation.checklistFailed", { message: messageOf(importChecklist.error) })
-    : detectPages.isError
-      ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
-      : patchDecision.isError
-        ? messageOf(patchDecision.error)
-        : null;
+  const checklistError = detectPages.isError
+    ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
+    : patchDecision.isError
+      ? messageOf(patchDecision.error)
+      : null;
 
   return (
     <div>
@@ -128,12 +128,16 @@ export function PreparationWorkspace() {
           error={
             runOcrDocument.isError
               ? messageOf(runOcrDocument.error)
+              : runOcrPage.isError
+                ? messageOf(runOcrPage.error)
               : detectPages.isError
                 ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
                 : null
           }
           onRunOcrAll={() => runOcrDocument.mutate()}
           runningOcrAll={runOcrDocument.isPending}
+          onRunOcrPage={(page) => runOcrPage.mutate({ page, provider: "mistral" })}
+          runningOcrPage={runOcrPage.isPending}
           onValidateAllAndAnalyze={() =>
             validateAllOcr.mutate(undefined, {
               onSuccess: () => detectPages.mutate(undefined, { onSuccess: () => setStep(2) }),
@@ -148,18 +152,8 @@ export function PreparationWorkspace() {
         <PreparationChecklistStep
           state={state}
           error={checklistError}
-          importMessage={
-            importChecklist.data
-              ? t("preparation.checklistImported", {
-                  count: importChecklist.data.imported,
-                  unsupported: importChecklist.data.unsupported,
-                })
-              : null
-          }
-          importing={importChecklist.isPending}
           detecting={detectPages.isPending}
           savingDecision={patchDecision.isPending}
-          onImport={(file) => importChecklist.mutate(file)}
           onDetect={() => detectPages.mutate()}
           onDecision={(page, isModified) => patchDecision.mutate({ page, is_modified: isModified })}
           onContinue={() => setStep(3)}

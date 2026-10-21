@@ -1,20 +1,13 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type {
-  PreparationState,
-} from "../../types/preparation";
-import { API_BASE_URL } from "../../lib/api";
+import type { PreparationState } from "../../types/preparation";
 import { PreparationDecisionRow } from "./PreparationDecisionRow";
 
 type Props = {
   state: PreparationState;
   error: string | null;
-  importMessage: string | null;
-  importing: boolean;
   detecting: boolean;
   savingDecision: boolean;
-  onImport: (file: File) => void;
   onDetect: () => void;
   onDecision: (page: number, isModified: boolean) => void;
   onContinue: () => void;
@@ -23,28 +16,27 @@ type Props = {
 export function PreparationChecklistStep({
   state,
   error,
-  importMessage,
-  importing,
   detecting,
   savingDecision,
-  onImport,
   onDetect,
   onDecision,
   onContinue,
 }: Props) {
   const { t } = useTranslation();
-  const [file, setFile] = useState<File | null>(null);
   const decisions = state.page_decisions;
   const hasUnknown = decisions.some((decision) => decision.is_modified === null);
   const selectedPages = decisions.filter((decision) => decision.is_modified === true);
-  const unreadablePages = state.pages.filter((page) => page.needs_ocr);
-  const unvalidatedPages = unreadablePages.filter(
-    (page) => !state.validated_pages.includes(page.page),
+  const ocrResults = new Set(
+    state.ocr_results_available
+      .filter((result) => result.provider === "mistral")
+      .map((result) => result.page),
   );
-  const canDetect =
-    state.checklist_rule_count > 0 &&
-    (unreadablePages.length === 0 ||
-      (Boolean(state.selected_provider) && unvalidatedPages.length === 0));
+  const unvalidatedPages = state.pages.filter(
+    (page) =>
+      page.needs_ocr &&
+      (!ocrResults.has(page.page) || !state.validated_pages.includes(page.page)),
+  );
+  const canDetect = state.checklist_rule_count > 0 && unvalidatedPages.length === 0;
   const canContinue =
     decisions.length > 0 &&
     !hasUnknown &&
@@ -52,43 +44,26 @@ export function PreparationChecklistStep({
 
   return (
     <section className="card">
-      <h2 className="card-title">{t("preparation.checklistTitle")}</h2>
-      <p className="card-sub">{t("preparation.checklistHint")}</p>
-      <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <a className="btn ghost small" href={`${API_BASE_URL}/preparation/checklist/template`}>
-          {t("preparation.checklistTemplate")}
-        </a>
-        <input
-          type="file"
-          accept=".xlsx,.xlsm"
-          aria-label={t("preparation.checklistUpload")}
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          disabled={importing}
-        />
-        <button
-          type="button"
-          className="btn secondary small"
-          disabled={!file || importing}
-          onClick={() => file && onImport(file)}
-        >
-          {importing ? t("preparation.checklistImporting") : t("preparation.checklistUpload")}
-        </button>
-      </div>
+      <h2 className="card-title">{t("preparationUi.rulesTitle")}</h2>
+      <p className="card-sub">{t("preparationUi.rulesHint")}</p>
+      {state.preparation_rule_count > 0 ? (
+        <p className="hint" style={{ marginTop: 8 }}>
+          {t("preparation.builtinRules", { count: state.preparation_rule_count })}
+        </p>
+      ) : null}
       {state.checklist_source_filename ? (
         <p className="label" style={{ marginTop: 8 }}>
-          {t("preparation.checklistSource", {
+          {t("preparationUi.savedImportedRules", {
             filename: state.checklist_source_filename,
             count: state.checklist_imported_rule_count,
           })}
         </p>
-      ) : state.preparation_rule_count > 0 ? (
+      ) : null}
+      {state.checklist_rule_count === 0 ? (
         <p className="hint" style={{ marginTop: 8 }}>
-          {t("preparation.builtinRules", { count: state.preparation_rule_count })}
+          {t("preparationUi.noRules")}
         </p>
-      ) : (
-        <p className="hint" style={{ marginTop: 8 }}>{t("preparation.checklistMissing")}</p>
-      )}
-      {importMessage ? <p className="banner info">{importMessage}</p> : null}
+      ) : null}
       {error ? <p className="error" role="alert">{error}</p> : null}
       {state.checklist_rule_count > 0 ? (
         <>

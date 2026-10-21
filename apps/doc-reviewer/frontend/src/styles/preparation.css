@@ -5,6 +5,85 @@
   margin-bottom: 16px;
 }
 
+.preparation-ocr-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.preparation-ocr-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.preparation-source-document {
+  margin: 0 0 12px;
+}
+
+.preparation-page-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.preparation-page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preparation-page-nav .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  padding-inline: 0;
+}
+
+.preparation-page-select select {
+  min-width: 150px;
+}
+
+.preparation-ocr-page-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.preparation-rule-details summary {
+  cursor: pointer;
+  color: var(--brand);
+}
+
+.preparation-rule-results {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.preparation-rule-results li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.preparation-rule-results p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
 .preparation-step {
   flex: 1 1 180px;
   border: 1px solid var(--border);
@@ -114,6 +193,17 @@
 @media (max-width: 900px) {
   .preparation-ocr-content {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (max-width: 600px) {
+    .preparation-ocr-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    .preparation-page-select select {
+      min-width: 120px;
+    }
   }
 
   .preparation-ocr-lines {

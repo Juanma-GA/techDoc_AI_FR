@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -13,7 +14,7 @@ from app.core.pdf_versioning import current_path
 from app.core.preparation_state import _load_json, _load_validation_map, get_or_create_record
 from app.db.models import Document
 from app.db.preparation_models import PreparationChecklist
-from app.parsers.pdf_parser import parse_pdf
+from app.parsers.pdf_parser import ParsedPdf, PdfLine, Span, parse_pdf
 
 
 def detect_preparation_pages(
@@ -23,7 +24,7 @@ def detect_preparation_pages(
 ) -> list[dict]:
     record = get_or_create_record(db, document)
     page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
-    required_pages = [page["page"] for page in page_metadata]
+    required_pages = [page["page"] for page in page_metadata if page.get("needs_ocr")]
     if record.selected_provider != "mistral":
         raise AppError(
             "OCR_PROVIDER_NOT_SELECTED",
@@ -57,6 +58,8 @@ def detect_preparation_pages(
             status_code=409,
         )
     parsed = parse_pdf(current_path(document.storage_dir, document.current_version))
+    ocr_results = _load_json(record.ocr_results_json, "ocr_results_json").get("mistral", {})
+    _apply_ocr_text(parsed, page_metadata, ocr_results)
     decisions = detect_pages_to_modify(
         parsed,
         document,
@@ -68,3 +71,65 @@ def detect_preparation_pages(
     record.updated_at = datetime.now(UTC)
     db.commit()
     return decisions
+
+
+def _apply_ocr_text(
+    parsed: ParsedPdf,
+    page_metadata: list[dict[str, Any]],
+    results: dict[str, Any],
+) -> None:
+    metadata_by_page = {int(item["page"]): item for item in page_metadata}
+    for page in parsed.pages:
+        metadata = metadata_by_page.get(page.page)
+        if metadata is None or not metadata.get("needs_ocr"):
+            continue
+        result = results.get(str(page.page))
+        if not isinstance(result, dict) or not isinstance(result.get("text"), str):
+            raise AppError(
+                "OCR_RESULT_MISSING",
+                f"Le résultat OCR de la page {page.page} est indisponible.",
+                status_code=409,
+            )
+        page.text = result["text"]
+        page.has_text_layer = False
+        spans: list[Span] = []
+        lines: list[PdfLine] = []
+        for index, box in enumerate(result.get("boxes", [])):
+            if not isinstance(box, dict):
+                continue
+            coordinates = [box.get(key) for key in ("x0", "y0", "x1", "y1")]
+            text = box.get("text")
+            if (
+                not isinstance(text, str)
+                or not text.strip()
+                or any(
+                    isinstance(value, bool) or not isinstance(value, (int, float))
+                    for value in coordinates
+                )
+                or page.page_width <= 0
+                or page.page_height <= 0
+            ):
+                continue
+            x0, y0, x1, y1 = (float(value) for value in coordinates)
+            if not (0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1):
+                continue
+            bbox = (
+                x0 * page.page_width,
+                y0 * page.page_height,
+                x1 * page.page_width,
+                y1 * page.page_height,
+            )
+            spans.append(Span(text=text, bbox=bbox, page=page.page, font="", size=0.0))
+            lines.append(
+                PdfLine(
+                    text=text,
+                    bbox=bbox,
+                    block_index=index,
+                    line_index=0,
+                )
+            )
+        page.spans = spans
+        page.lines = lines
+    parsed.full_text = "\n".join(
+        f"[PAGE: {page.page}]\n{page.text}" for page in parsed.pages
+    )

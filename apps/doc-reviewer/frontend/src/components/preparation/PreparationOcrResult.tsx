@@ -10,6 +10,9 @@ type Props = {
   data: OcrPageResult | undefined;
   isLoading: boolean;
   error: string | null;
+  nativeText: string | undefined;
+  nativeTextLoading: boolean;
+  nativeTextError: string | null;
 };
 
 export function PreparationOcrResult({
@@ -19,8 +22,12 @@ export function PreparationOcrResult({
   data,
   isLoading,
   error,
+  nativeText,
+  nativeTextLoading,
+  nativeTextError,
 }: Props) {
   const { t } = useTranslation();
+  const hasNativeText = nativeText !== undefined || nativeTextLoading || nativeTextError !== null;
   return (
     <div className="preparation-ocr-content" style={{ marginTop: 16 }}>
       <OcrPagePreview
@@ -30,7 +37,20 @@ export function PreparationOcrResult({
       />
       <section style={{ marginTop: 16 }}>
         <h3 className="card-title">{t("preparation.ocrText")}</h3>
-        {isLoading ? (
+        {hasNativeText ? (
+          nativeTextLoading ? (
+            <p className="hint">{t("common.loading")}</p>
+          ) : nativeTextError ? (
+            <p className="error" role="alert">{nativeTextError}</p>
+          ) : (
+            <>
+              <p className="label">{t("preparationUi.nativeTextUsed")}</p>
+              <pre className="preparation-ocr-text">
+                {nativeText || t("preparation.ocrNoText")}
+              </pre>
+            </>
+          )
+        ) : isLoading ? (
           <p className="hint">{t("common.loading")}</p>
         ) : data ? (
           <>

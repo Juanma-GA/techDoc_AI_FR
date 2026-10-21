@@ -31,6 +31,7 @@ def detect_pages_to_modify(
                     "page_type": page.page_type,
                     "is_modified": None,
                     "decision_status": "no_applicable_rule",
+                    "rule_results": [],
                     "failures": [],
                     "review_reasons": [],
                 }
@@ -47,23 +48,42 @@ def detect_pages_to_modify(
             client_entities=bundle.mapping.entities,
         )
         rules_by_id = {rule.id: rule for rule in applicable}
+        rule_results: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
         review_reasons: list[dict[str, Any]] = []
         for result in results:
             rule = rules_by_id.get(result.rule_id)
+            status = result.status
+            if (
+                not page.has_text_layer
+                and rule is not None
+                and rule.checks
+                and all(check.operator == "font_size_equals" for check in rule.checks)
+                and status in {"PASS", "FAIL"}
+            ):
+                status = "INCONCLUSIVE"
+            message = (
+                rule.failure_message or rule.source_instruction or rule.topic
+                if rule is not None
+                else status
+            )
             reason = {
                 "rule_id": result.rule_id,
                 "title": rule.topic if rule is not None else result.rule_id,
-                "message": (
-                    rule.failure_message or rule.source_instruction or rule.topic
-                    if rule is not None
-                    else result.status
-                ),
-                "status": result.status,
+                "message": message,
+                "status": status,
             }
-            if result.status == "FAIL":
+            rule_results.append(
+                {
+                    "rule_id": result.rule_id,
+                    "title": reason["title"],
+                    "message": message,
+                    "status": status,
+                }
+            )
+            if status == "FAIL":
                 failures.append(reason)
-            elif result.status in {"MANUAL", "INCONCLUSIVE", "UNSUPPORTED"}:
+            elif status in {"MANUAL", "INCONCLUSIVE", "UNSUPPORTED"}:
                 review_reasons.append(reason)
 
         is_modified = True if failures else False if results and not review_reasons else None
@@ -79,6 +99,7 @@ def detect_pages_to_modify(
                 "page_type": page.page_type,
                 "is_modified": is_modified,
                 "decision_status": status,
+                "rule_results": rule_results,
                 "failures": failures,
                 "review_reasons": review_reasons,
             }

@@ -28,9 +28,17 @@ export type OcrPageResult = {
 export type PreparationPage = {
   page: number;
   native_text_chars: number;
+  native_text_usable: boolean;
   needs_ocr: boolean;
   width: number;
   height: number;
+};
+
+export type PreparationRuleResult = {
+  rule_id: string;
+  title: string;
+  message: string;
+  status: "PASS" | "FAIL" | "MANUAL" | "INCONCLUSIVE" | "UNSUPPORTED";
 };
 
 export type PreparationFailure = {
@@ -45,6 +53,7 @@ export type PreparationPageDecision = {
   page_type: string | null;
   is_modified: boolean | null;
   decision_status: "selected" | "not_selected" | "needs_review" | "no_applicable_rule";
+  rule_results: PreparationRuleResult[];
   failures: PreparationFailure[];
   review_reasons: PreparationFailure[];
   toc_page: number | null;
@@ -67,4 +76,9 @@ export type PreparationState = {
   preparation_rule_count: number;
   checklist_source_filename: string | null;
   page_decisions: PreparationPageDecision[];
+};
+
+export type PreparationPageText = {
+  page: number;
+  text: string;
 };

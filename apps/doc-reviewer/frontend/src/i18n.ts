@@ -6,14 +6,28 @@ import clientRulesEn from "./locales/client-rules.en.json";
 import clientRulesFr from "./locales/client-rules.fr.json";
 import en from "./locales/en.json";
 import fr from "./locales/fr.json";
+import preparationUiEn from "./locales/preparation-ui.en.json";
+import preparationUiFr from "./locales/preparation-ui.fr.json";
 
 void i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
-      fr: { translation: { ...fr, clientRuleCatalog: clientRulesFr } },
-      en: { translation: { ...en, clientRuleCatalog: clientRulesEn } },
+      fr: {
+        translation: {
+          ...fr,
+          clientRuleCatalog: clientRulesFr,
+          preparationUi: preparationUiFr,
+        },
+      },
+      en: {
+        translation: {
+          ...en,
+          clientRuleCatalog: clientRulesEn,
+          preparationUi: preparationUiEn,
+        },
+      },
     },
     fallbackLng: "fr",
     supportedLngs: ["fr", "en"],

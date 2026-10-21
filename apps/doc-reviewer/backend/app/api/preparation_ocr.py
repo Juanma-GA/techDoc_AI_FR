@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.api.preparation_common import get_preparation_context
 from app.core.errors import AppError
-from app.core.preparation_ocr_service import run_document_ocr, run_page_ocr
+from app.core.preparation_ocr_service import (
+    get_native_page_text,
+    run_document_ocr,
+    run_page_ocr,
+)
 from app.core.preparation_state import (
     get_or_create_record,
     get_page_ocr_result,
@@ -22,6 +26,7 @@ from app.preparation_schemas import (
     OcrResultOut,
     OcrRunIn,
     OcrValidationPatchIn,
+    PreparationPageTextOut,
 )
 
 router = APIRouter(tags=["preparation"])
@@ -39,6 +44,21 @@ def run_ocr_for_document(
     document, _config = get_preparation_context(request, document_id, db)
     record = get_or_create_record(db, document)
     return run_document_ocr(db, document, record)
+
+
+@router.get(
+    "/documents/{document_id}/preparation/text/pages/{page_number}",
+    response_model=PreparationPageTextOut,
+)
+def get_native_text_for_page(
+    document_id: uuid.UUID,
+    page_number: int,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    document, _config = get_preparation_context(request, document_id, db)
+    record = get_or_create_record(db, document)
+    return get_native_page_text(document, record, page_number)
 
 
 @router.post(

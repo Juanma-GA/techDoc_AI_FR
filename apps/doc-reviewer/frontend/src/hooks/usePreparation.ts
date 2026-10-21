@@ -5,6 +5,7 @@ import type {
   OcrPageResult,
   OcrProvider,
   OcrProviderInfo,
+  PreparationPageText,
   PreparationPageDecision,
   PreparationState,
 } from "../types/preparation";
@@ -38,6 +39,21 @@ export function useOcrPageResult(
         `/documents/${documentId}/preparation/ocr/pages/${page}?provider=${provider}`,
       ),
     enabled: Boolean(documentId && page && provider && available),
+  });
+}
+
+export function usePreparationNativeText(
+  documentId: string | undefined,
+  page: number | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["preparation", documentId, "native-text", page],
+    queryFn: () =>
+      api.get<PreparationPageText>(
+        `/documents/${documentId}/preparation/text/pages/${page}`,
+      ),
+    enabled: Boolean(documentId && page && enabled),
   });
 }
 
@@ -94,16 +110,16 @@ export function useRunOcrPage(documentId: string | undefined) {
 }
 
 export function useRunOcrDocument(documentId: string | undefined) {
-  return usePreparationMutation<
-    void,
-    { provider: "mistral"; page_count: number; elapsed_ms: number }
-  >(
-    documentId,
-    () =>
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
       api.post<{ provider: "mistral"; page_count: number; elapsed_ms: number }>(
         `/documents/${documentId}/preparation/ocr`,
       ),
-  );
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ["preparation", documentId] });
+    },
+  });
 }
 
 export function useValidateAllOcrPages(documentId: string | undefined) {
@@ -130,20 +146,6 @@ export function useValidateOcrPage(documentId: string | undefined) {
         `/documents/${documentId}/preparation/ocr/pages/${page}/validation`,
         { provider, validated },
       ),
-  );
-}
-
-export function useImportPreparationChecklist(documentId: string | undefined) {
-  return usePreparationMutation<File, { imported: number; unsupported: number }>(
-    documentId,
-    async (file) => {
-      const form = new FormData();
-      form.append("file", file);
-      return api.upload<{ imported: number; unsupported: number }>(
-        `/documents/${documentId}/preparation/checklist`,
-        form,
-      );
-    },
   );
 }
 

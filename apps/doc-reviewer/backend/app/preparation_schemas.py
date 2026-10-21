@@ -16,6 +16,7 @@ class OcrProviderOut(BaseModel):
 class PreparationPageOut(BaseModel):
     page: int
     native_text_chars: int
+    native_text_usable: bool
     needs_ocr: bool
 
 
@@ -41,6 +42,11 @@ class OcrResultOut(BaseModel):
     text: str
     boxes: list[dict[str, Any]] = Field(default_factory=list)
     elapsed_ms: int
+
+
+class PreparationPageTextOut(BaseModel):
+    page: int
+    text: str
 
 
 class OcrDocumentRunOut(BaseModel):
@@ -80,6 +86,7 @@ class PageDecisionOut(BaseModel):
     page_type: str | None
     is_modified: bool | None
     decision_status: Literal["selected", "not_selected", "needs_review", "no_applicable_rule"]
+    rule_results: list[dict[str, Any]] = Field(default_factory=list)
     failures: list[dict[str, Any]] = Field(default_factory=list)
     review_reasons: list[dict[str, Any]] = Field(default_factory=list)
     toc_page: int | None = None
