@@ -61,7 +61,7 @@ def test_unsupported_object_value_form_is_reported() -> None:
     brex = (
         "<dmodule><content><brex><contextRules><structureObjectRuleGroup>"
         '<structureObjectRule><objectPath>//item/@kind</objectPath>'
-        '<objectValue valueForm="pattern" valueAllowed="[A-Z]+"/>'
+        '<objectValue valueForm="range" valueAllowed="[A-Z]+"/>'
         "</structureObjectRule>"
         "</structureObjectRuleGroup></contextRules></brex></content></dmodule>"
     )

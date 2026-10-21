@@ -169,6 +169,7 @@
         "unsupported_flag": "Flag allowedObjectFlag non pris en charge.",
         "missing_object_path": "objectPath manquant.",
         "unsupported_value_form": "Forme ou tailoring de valeur non pris en charge.",
+        "invalid_value_pattern": "Motif de valeur BREX invalide.",
         "invalid_object_path": "XPath invalide ou non pris en charge.",
         "other": "Cette règle n'est pas appliquée automatiquement."
       },

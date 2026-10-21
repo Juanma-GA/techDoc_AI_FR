@@ -169,6 +169,7 @@
         "unsupported_flag": "Unsupported allowedObjectFlag.",
         "missing_object_path": "Missing objectPath.",
         "unsupported_value_form": "Unsupported objectValue form or tailoring.",
+        "invalid_value_pattern": "Invalid BREX value pattern.",
         "invalid_object_path": "Invalid or unsupported XPath.",
         "other": "This rule is not applied automatically."
       },

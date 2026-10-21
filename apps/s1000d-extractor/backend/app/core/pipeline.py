@@ -3,7 +3,8 @@
 Enchaine les etages independants du format et de la cible :
 
     parse (adapter) -> IR -> classification contexte -> segmentation forme
-        -> resolution candidats -> serialisation XML -> validation XSD + BREX
+        -> resolution candidats -> guidance BREX -> serialisation XML
+        -> validation XSD + BREX
 
 Chaque etage emet une progression via `progress_cb` (consommee par le SSE).
 """
@@ -17,9 +18,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.core import context_classifier, dm_header, form_segmenter, ingest, resolver, structure_infer
+from app.core.brex import parse_brex
+from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.ir import IRNode, to_dict
-from app.core.s1000d_serializer import SerializationDiagnostics, serialize
 
 ProgressCb = Callable[[str, int], None]
 
@@ -66,15 +68,15 @@ def run(
     resolver.resolve(root)
 
     progress_cb("serialize", 85)
-    serialization = SerializationDiagnostics()
     brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
-    xml = serialize(
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
+    xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
         root,
+        brex_rules,
         issue=issue,
         dm_type=dm_type,
         dm_metadata=dm_metadata,
         header_template=dm_header.with_brex_dm_code(header_template, brex_dm_code),
-        diagnostics=serialization,
     )
 
     progress_cb("validate", 95)

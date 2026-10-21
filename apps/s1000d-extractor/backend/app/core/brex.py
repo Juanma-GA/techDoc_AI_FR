@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from lxml import etree
 
 from app.core import xml_safe
+
+
+@lru_cache(maxsize=512)
+def _compile_value_pattern(pattern: str) -> re.Pattern[str]:
+    return re.compile(pattern)
 
 
 @dataclass(frozen=True)
@@ -15,6 +22,26 @@ class BrexObjectValue:
     value_text: str
     value_form: str | None = None
     value_tailoring: str = "closed"
+
+    @property
+    def support_reason(self) -> str | None:
+        if not self.value_allowed or self.value_tailoring != "closed":
+            return "unsupported_value_form"
+        if self.value_form not in {None, "single", "pattern"}:
+            return "unsupported_value_form"
+        if self.value_form == "pattern":
+            try:
+                _compile_value_pattern(self.value_allowed)
+            except re.error:
+                return "invalid_value_pattern"
+        return None
+
+    def allows(self, actual: str) -> bool:
+        if self.value_allowed is None:
+            return False
+        if self.value_form == "pattern":
+            return _compile_value_pattern(self.value_allowed).fullmatch(actual) is not None
+        return actual == self.value_allowed
 
 
 @dataclass
@@ -35,13 +62,10 @@ class BrexRule:
             return "unsupported_flag"
         if not self.object_path:
             return "missing_object_path"
-        if self.allowed_flag != "0" and any(
-            not value.value_allowed
-            or value.value_tailoring != "closed"
-            or value.value_form not in {None, "single"}
-            for value in self.object_values
-        ):
-            return "unsupported_value_form"
+        if self.allowed_flag != "0":
+            for value in self.object_values:
+                if value.support_reason is not None:
+                    return value.support_reason
         try:
             _compile_xpath(self.object_path, self.namespaces)
         except etree.XPathError:
@@ -114,7 +138,11 @@ def parse_brex_root(root: etree._Element) -> list[BrexRule]:
         ]
         rules.append(BrexRule(
             object_path=object_path,
-            allowed_flag=path_element.get("allowedObjectFlag") or "2",
+            allowed_flag=(
+                path_element.get("allowedObjectFlag") or "2"
+                if path_element is not None
+                else "2"
+            ),
             object_use=_text(_direct_child(rule_element, "objectUse")),
             object_values=values,
             rule_id=rule_element.get("id"),

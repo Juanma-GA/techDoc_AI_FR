@@ -2,8 +2,8 @@
 
 C'est le moteur generique, ecrit UNE fois, jamais reecrit par document. Le
 choix de la balise vient du *content-model S1000D* selon le CONTEXTE
-(descriptif vs procedural) - PAS du BREX. (Correction metier : le BREX est une
-porte de validation en aval, il ne genere pas les elements ; il les contraint.)
+(descriptif vs procedural). Une couche BREX en aval peut choisir entre ces
+candidats existants avant la serialisation, sans inventer de contenu source.
 
 Le coeur est une matrice (contexte x kind x forme) -> liste de candidats. Quand
 plusieurs balises sont legitimes (ex. une liste a puces : `para`/`randomList`

@@ -21,10 +21,12 @@ from app.core import dm_header as dm_header_mod
 from app.core import ir as ir_mod
 from app.core import migration_inputs, pipeline
 from app.core import wizard_resources as wres
+from app.core.brex import parse_brex
+from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
 from app.core.s1000d_schema import SELECTABLE_ISSUES
-from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields, serialize
+from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields
 from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import SessionLocal, get_db
@@ -206,6 +208,7 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
     brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
     brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
     serialization = SerializationDiagnostics()
     if doc.ir_json:
@@ -213,16 +216,17 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
         resources = wres.load_resources(doc)
         entries = wres.dmrl_data_module_entries(doc)
         metadata = entries[0].to_dict() if entries else None
-        xml = serialize(
+        xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
             root,
+            brex_rules,
             issue=doc.s1000d_issue,
             dm_type=doc.dm_type or "descriptive",
             dm_metadata=metadata,
             header_template=dm_header_mod.with_brex_dm_code(
                 resources.header_template, brex_dm_code
             ),
-            diagnostics=serialization,
         )
+        doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
         Path(doc.xml_path).write_text(xml, encoding="utf-8")
     violations = validate_document(
         xml,
@@ -271,20 +275,20 @@ def override_node(
     node.confidence = 1.0
 
     brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
     brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
     resources = wres.load_resources(doc)
     entries = wres.dmrl_data_module_entries(doc)
     metadata = entries[0].to_dict() if entries else None
-    serialization = SerializationDiagnostics()
-    xml = serialize(
+    xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
         root,
+        brex_rules,
         issue=doc.s1000d_issue,
         dm_type=doc.dm_type or "descriptive",
         dm_metadata=metadata,
         header_template=dm_header_mod.with_brex_dm_code(
             resources.header_template, brex_dm_code
         ),
-        diagnostics=serialization,
     )
     violations = validate_document(
         xml,

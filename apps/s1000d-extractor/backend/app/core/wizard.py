@@ -38,14 +38,14 @@ from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
+from app.core.brex import parse_brex
+from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
 from app.core.s1000d_serializer import (
-    SerializationDiagnostics,
     build_reference_index,
     content_node_count,
     missing_data_fields,
-    serialize,
 )
 from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, Document
@@ -449,6 +449,7 @@ def _generate_all(db: Session, doc: Document) -> None:
     dms = ws.load_dms(doc)
     brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
     brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
     res = wres.load_resources(doc)
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     log.info(
@@ -482,9 +483,9 @@ def _generate_all(db: Session, doc: Document) -> None:
             stage_started = perf_counter()
             root = ir_mod.from_dict(enriched["tree"])
             template_missing_fields = enriched.get("missing_fields") or []
-            serialization = SerializationDiagnostics()
-            xml = serialize(
+            xml, serialization, brex_guided_candidates = serialize_with_brex_guidance(
                 root,
+                brex_rules,
                 issue=doc.s1000d_issue,
                 dm_type=dm["dm_type"],
                 title=dm["title"],
@@ -498,7 +499,6 @@ def _generate_all(db: Session, doc: Document) -> None:
                 ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
-                diagnostics=serialization,
             )
             figure_offset += sum(1 for node in root.walk() if node.kind == "figure")
             table_offset += sum(1 for node in root.walk() if node.kind == "table")
@@ -509,6 +509,7 @@ def _generate_all(db: Session, doc: Document) -> None:
                 k: v for k, v in enriched.items()
                 if k not in ("xml", "violations", "content_html", "content_xml")
             })
+            dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
             dm["template_missing_fields"] = template_missing_fields
 
@@ -531,6 +532,7 @@ def _generate_all(db: Session, doc: Document) -> None:
                 icn_count=sum(1 for node in root.walk() if node.kind == "figure" and node.icn),
                 has_doctype="<!DOCTYPE dmodule [" in xml,
                 xml_length=len(xml),
+                brex_guided_candidates=brex_guided_candidates,
                 resources_ms=round(resources_ms, 1),
                 serialization_ms=round(serialization_ms, 1),
                 validation_ms=round(validation_ms, 1),
@@ -610,6 +612,7 @@ def dm_xml(doc: Document, dm_id: str, *, db: Session | None = None) -> str:
         raise AppError("BREX_SESSION_REQUIRED", "Session de base requise pour charger le BREX.", 500)
     brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue) if db else None
     brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     reference_index = build_reference_index([
         (
@@ -632,9 +635,10 @@ def dm_xml(doc: Document, dm_id: str, *, db: Session | None = None) -> str:
                 violation for violation in template_extra
                 if violation.get("rule") == "TEMPLATE"
             ]
-            serialization = SerializationDiagnostics()
-            xml = serialize(
-                ir_mod.from_dict(dm["tree"]),
+            root = ir_mod.from_dict(enriched["tree"])
+            xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
+                root,
+                brex_rules,
                 issue=doc.s1000d_issue,
                 dm_type=dm["dm_type"],
                 title=dm["title"],
@@ -648,8 +652,8 @@ def dm_xml(doc: Document, dm_id: str, *, db: Session | None = None) -> str:
                 ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
-                diagnostics=serialization,
             )
+            dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
             dm["template_missing_fields"] = template_missing_fields
             xsd_results = validate_document(
