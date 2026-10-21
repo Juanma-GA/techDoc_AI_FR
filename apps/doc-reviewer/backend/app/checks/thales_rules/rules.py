@@ -117,7 +117,7 @@ In particular, they shall not be used in the creation, manufacture, development 
 Should THALES AVS FRANCE SAS consent be given for reproduction in whole or in part, this notice and the notice set forth on each page of this document shall appear in any such reproduction in whole or in part.
 The recipient shall not use this document for any purpose other than the one stated in the relevant applicable License agreement under which it has been disclosed and it shall be returned to THALES AVS FRANCE SAS immediately upon request.
 TO BE CONSIDERED VALID FOR PART 145 REQUIREMENTS, ALL MAINTENANCE DOCUMENTATION HAS TO BE IDENTIFIED ON EACH PAGE WITH A WATERMARK AUTHORIZING ITS USE BY THE END USER COMPANY. SUCH WATERMARK MIGHT BE AS FOLLOWS:
-\u201cProvided to [USER_ID] for [COMPANY_NAME] only under license agreement [LICENSE_NUMBER] for year [YEAR] only.\u201d
+\u201cProvided to [USER_ID] for [COMPANY_NAME] only under license agreement [LICENSE_NUMBER] for year [YEAR] only\u201d
 Users are kindly requested to notify THALES AVS FRANCE SAS of any discrepancy, omission or error found in this manual.
 Please send your comments to:
 THALES AVS FRANCE SAS
@@ -244,6 +244,7 @@ def rule(
     valid_examples: list[RuleExample] | None = None,
     invalid_examples: list[RuleExample] | None = None,
     prerequisites: list[RulePrerequisite] | None = None,
+    preparation: bool = False,
     translations: dict[str, dict[str, str]] | None = None,
 ) -> ClientRuleDefinition:
     compiled_rule = CompiledRule(
@@ -268,6 +269,7 @@ def rule(
         message=message,
         kind=kind,
         presentation_severity=presentation_severity,
+        preparation=preparation,
         translations=translations or {},
     )
 
@@ -411,9 +413,9 @@ CUSTOM_TP1_REVISION_NUMBER = rule(
     description=(
         "Chaque page TP1 doit contenir dans son footer 'Revision No. 0X' "
         "au-dessus de 'First Issue', avec 0X egal au numero de revision "
-        "saisi dans le mapping (sans le prefixe 'Rev.'). La checklist demande "
-        "aussi que ce numero soit celui de la revision precedente + 1; cette "
-        "progression n'est pas calculee par cette regle."
+        "courant saisi dans le mapping (sans le prefixe 'Rev.'). Le numero "
+        "precedent est le mapping moins 1; cette egalite verifie donc aussi "
+        "la progression revision precedente + 1."
     ),
     message=(
         "Le numero de revision du footer TP1 est absent ou ne correspond "
@@ -437,9 +439,9 @@ CUSTOM_TP1_REVISION_NUMBER = rule(
         "en": {
             "description": (
                 "Each TP1 page must contain 'Revision No. 0X' above 'First Issue' "
-                "in its footer, with 0X equal to the revision number in the mapping. "
-                "The checklist also requires the previous revision number plus 1; "
-                "this rule does not calculate that progression."
+                "in its footer, with 0X equal to the current revision number in the mapping. "
+                "The previous revision is the mapped number minus 1, so this also "
+                "checks the previous revision plus 1 progression."
             ),
             "message": "The TP1 footer revision number is missing or does not match the mapping.",
         }
@@ -881,6 +883,7 @@ CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
     message="La barre de revision d'une page TP2/R est dans l'en-tete ou le pied de page.",
     kind="field_required",
     severity="error",
+    preparation=True,
     target=_TP2_TARGET,
     checks=[
         Check(
@@ -1766,6 +1769,7 @@ CUSTOM_TP1_THALES_ADDRESS = rule(
     message="L'adresse THALES de la page TP1 est absente ou incorrecte.",
     kind="field_required",
     severity="warning",
+    preparation=True,
     target=RuleTarget(page="all", region="full_page", page_type="TP1"),
     checks=[
         Check(

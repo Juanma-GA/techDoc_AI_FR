@@ -9,6 +9,7 @@ export type MistralSettings = {
   base_url: string;
   chat_model: string;
   vision_model: string;
+  ocr_model: string;
   vision_enabled: boolean;
   llm_enabled: boolean;
   llm_tested: boolean;
@@ -21,6 +22,7 @@ export type MistralSettingsInput = {
   base_url?: string;
   chat_model?: string;
   vision_model?: string;
+  ocr_model?: string;
   vision_enabled?: boolean;
   llm_enabled?: boolean;
   checklist_ai_scan?: boolean;

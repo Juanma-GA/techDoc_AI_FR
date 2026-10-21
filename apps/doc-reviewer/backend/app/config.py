@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Listes lues depuis l'environnement au format « a,b,c » (cf. .env.example) :
@@ -69,12 +69,19 @@ class Settings(BaseSettings):
     mistral_base_url: str = "https://api.mistral.ai"
     mistral_chat_model: str = "mistral-small-latest"
     mistral_vision_model: str = "mistral-medium-3-5"
+    mistral_ocr_model: str = "mistral-ocr-latest"
+    paddleocr_python: str = ""
+    paddleocr_cpu_threads: int = Field(default=10, ge=1)
+    indra_ocr_license_approved: bool = False
     # Points d'acces LLM autorises (https uniquement). La cle API n'est JAMAIS
     # envoyee a une URL hors de cette liste : une base_url modifiable depuis
     # l'UI permettait sinon d'exfiltrer la cle et le texte des documents vers
     # un hote arbitraire. L'IT etend la liste via .env si un endpoint prive
     # (compatible Mistral) est approuve.
-    mistral_allowed_base_urls: CsvList = ["https://api.mistral.ai"]
+    mistral_allowed_base_urls: CsvList = [
+        "https://api.mistral.ai",
+        "https://api.2a91ec1812a1.dc.mistral.ai",
+    ]
 
     # Moteur des conversions .doc/.docx/PDF. "auto" : Microsoft Word, puis
     # LibreOffice s'il est installe ; "word" ou "libreoffice" : ce moteur seul.
