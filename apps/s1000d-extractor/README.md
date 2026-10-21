@@ -87,6 +87,8 @@ The current rule engine applies `structureObjectRule` paths, `allowedObjectFlag`
 
 The completed generation view shows the selected XML BREX profile's coverage once, groups identical non-evaluation warnings across DMs, and keeps actual rule violations with their DM. A result with no violations means no violation was detected among automated and applicable rules; unsupported rules are explicitly identified as unchecked.
 
+BREX profiles can be deleted from the migration profile selector after double-click confirmation. Deletion is blocked while any document references the profile.
+
 ## Standard Deviations
 
 - Domain dependencies include PyMuPDF, python-docx, lxml, and openpyxl.

@@ -210,6 +210,11 @@ export const versioningApi = {
 export const brexApi = {
   list: () => api<BrexProfile[]>("/brex"),
   detail: (brexId: string) => api<BrexProfileDetail>(`/brex/${encodeURIComponent(brexId)}`),
+  delete: (brexId: string, confirmToken: string) =>
+    api<{ id: string; status: string }>(
+      `/brex/${encodeURIComponent(brexId)}?confirm_token=${encodeURIComponent(confirmToken)}`,
+      { method: "DELETE" },
+    ),
   upload: async (
     file: File,
     name: string,

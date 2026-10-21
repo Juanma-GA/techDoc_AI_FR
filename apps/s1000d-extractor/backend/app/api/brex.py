@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from lxml import etree
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from app.config import settings
 from app.core.brex_profile import inspect_brex, normalize_brex_upload
 from app.core.errors import AppError
 from app.core.s1000d_schema import SUPPORTED_ISSUES
-from app.db.models import BrexProfile
+from app.db.models import BrexProfile, Document
 from app.db.session import get_db
 from app.schemas import (
     BrexObjectValueOut,
@@ -103,6 +103,45 @@ def _to_detail(b: BrexProfile) -> BrexProfileDetailOut:
 def list_brex(db: Session = Depends(get_db)) -> list[BrexProfileOut]:
     rows = db.scalars(select(BrexProfile).order_by(BrexProfile.created_at.desc())).all()
     return [_to_out(b) for b in rows]
+
+
+@router.delete("/{brex_id}")
+def delete_brex(
+    brex_id: str,
+    confirm_token: str = Query(""),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    if len(confirm_token) < 10:
+        raise AppError(
+            "DELETE_NOT_CONFIRMED",
+            "Suppression non confirmée. Utilisez le double-clic de confirmation.",
+            422,
+        )
+    profile = db.get(BrexProfile, brex_id)
+    if profile is None:
+        raise AppError("BREX_NOT_FOUND", "Profil BREX inconnu.", 404)
+    document_id = db.scalar(
+        select(Document.id).where(Document.brex_id == brex_id).limit(1)
+    )
+    if document_id is not None:
+        raise AppError(
+            "BREX_IN_USE",
+            "Le profil BREX est utilisé par un document et ne peut pas être supprimé.",
+            409,
+        )
+
+    xml_path = Path(profile.xml_path)
+    db.delete(profile)
+    db.commit()
+    try:
+        xml_path.unlink(missing_ok=True)
+    except OSError as exc:
+        raise AppError(
+            "BREX_FILE_DELETE_FAILED",
+            "Le profil BREX a été supprimé, mais son fichier XML n'a pas pu être supprimé.",
+            500,
+        ) from exc
+    return {"id": brex_id, "status": "deleted"}
 
 
 @router.get("/{brex_id}", response_model=BrexProfileDetailOut)
