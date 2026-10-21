@@ -3,6 +3,9 @@ from fastapi import APIRouter
 from app.api import (
     admin,
     analyze,
+    comparison_exports,
+    comparison_synthesis,
+    comparisons,
     documents,
     health,
     metadata_suggestions,
@@ -10,14 +13,17 @@ from app.api import (
     preparation_ocr,
     preparation_rules,
     rules,
-    settings as settings_api,
     standards,
     suggestions,
 )
+from app.api import settings as settings_api
 
 api_v1 = APIRouter()
 for module in (
     health,
+    comparisons,
+    comparison_synthesis,
+    comparison_exports,
     documents,
     metadata_suggestions,
     analyze,

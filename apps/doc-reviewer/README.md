@@ -23,6 +23,8 @@ validation remain environment-dependent.
 - Apply deterministic technical-writing catalogs, unit checks, editable rules, and optional LLM checklist analysis.
 - Accept, edit, reject, and remember review decisions.
 - Review native DOCX blocks as well as PDF pages.
+- Compare 2–20 text-layer PDFs against a selected reference, save comparisons
+	in a separate library, review added/removed text, and export commented PDFs.
 - Export original, corrected, commented, and converted outputs when the local
 	converter supports them.
 - Show a degradation warning before PDF/Word format conversions.
@@ -91,7 +93,12 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
 ## Persistence
 
-SQLite stores document versions, findings, review decisions, rejection memory, and runtime configuration under `backend/data/`.
+SQLite stores document versions, findings, review decisions, rejection memory,
+saved comparison reports, and runtime configuration under `backend/data/`.
+Comparison source PDFs are stored separately under
+`backend/data/storage/comparisons/` and remain there until the comparison is
+deleted in the Comparison tab. The optional Mistral summary receives only
+changed text excerpts, not the complete PDF files.
 
 ## LLM Configuration
 

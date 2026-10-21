@@ -24,6 +24,9 @@ const DocumentReviewer = lazy(async () => ({
 const DocumentsList = lazy(async () => ({
   default: (await import("./routes/DocumentsList")).DocumentsList,
 }));
+const DocumentComparison = lazy(async () => ({
+  default: (await import("./routes/DocumentComparison")).DocumentComparison,
+}));
 const Preparation = lazy(async () => ({
   default: (await import("./routes/Preparation")).Preparation,
 }));
@@ -53,6 +56,7 @@ const navItems: ReadonlyArray<{ to: string; labelKey: string; end?: boolean }> =
   { to: "/", labelKey: "nav.dashboard", end: true },
   { to: "/preparation", labelKey: "nav.preparation" },
   { to: "/documents", labelKey: "nav.documents" },
+  { to: "/comparison", labelKey: "nav.comparison" },
   { to: "/rejections", labelKey: "nav.rejections" },
   { to: "/rules", labelKey: "nav.rules" },
   { to: "/settings", labelKey: "nav.settings" },
@@ -135,6 +139,7 @@ export function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/documents" element={<DocumentsList />} />
+              <Route path="/comparison" element={<DocumentComparison />} />
               <Route path="/preparation" element={<Preparation />} />
               <Route path="/preparation/:id" element={<PreparationWorkspace />} />
               <Route path="/rejections" element={<Rejections />} />
