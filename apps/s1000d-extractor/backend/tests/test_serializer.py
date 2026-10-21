@@ -314,7 +314,7 @@ def test_composite_figure_references_all_graphics() -> None:
     assert 'infoEntityIdent="figure-5-4-composite-2"' in xml
 
 
-def test_figures_and_tables_have_incremental_ids() -> None:
+def test_figures_and_tables_restart_ids_for_each_dm() -> None:
     root = IRNode(id="r", kind="section", level=0)
     root.children = [
         IRNode(id="f1", kind="figure", text="Figure 1 First"),
@@ -326,14 +326,12 @@ def test_figures_and_tables_have_incremental_ids() -> None:
         root,
         issue="4.2",
         dm_type="descriptive",
-        figure_offset=4,
-        table_offset=7,
     )
 
-    assert '<figure id="fig-0005">' in xml
-    assert '<figure id="fig-0006">' in xml
-    assert '<table id="tbl-0008">' in xml
-    assert '<table id="tbl-0009">' in xml
+    assert '<figure id="fig-0001">' in xml
+    assert '<figure id="fig-0002">' in xml
+    assert '<table id="tab-0001">' in xml
+    assert '<table id="tab-0002">' in xml
 
 
 def test_final_titles_drop_editorial_numbering() -> None:
@@ -421,7 +419,7 @@ def test_detected_refs_resolve_inline_to_real_targets() -> None:
     refs = para.findall("internalRef")
     assert [(ref.get("internalRefId"), ref.get("internalRefTargetType")) for ref in refs] == [
         ("fig-0001", "irtt01"),
-        ("tbl-0001", "irtt02"),
+        ("tab-0001", "irtt02"),
     ]
     assert "".join(para.itertext()) == text
     assert not doc.xpath('.//internalRef[starts-with(@internalRefId, "TODO-")]')

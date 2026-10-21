@@ -16,19 +16,20 @@ Noms d'elements conformes aux XSD locaux Issue 4.1 / 4.2 :
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-import re
-import unicodedata
 
 from lxml import etree
 
 from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
-from app.core.ir import IRNode, InlineRun
+from app.core.ir import InlineRun, IRNode
 from app.core.pmc import parse_dmc
 from app.core.s1000d_codes import emphasis_code_for_style, get_code
+from app.core.s1000d_ids import normalize_dm_ids
 from app.core.xsd_model import ConstraintReport, load_xsd_model
 
 _BANNER = (
@@ -46,6 +47,11 @@ _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
 _GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
 _GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
+_ICN_TITLE_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9_-])ICN-[A-Za-z0-9_.-]+?(?:\.(?:jpe?g|png))?"
+    r"(?=$|[\s,;|)\]}])",
+    re.IGNORECASE,
+)
 _FIGURE_TITLE_PREFIX = re.compile(
     r"^\s*(?:figure|fig\.?|illustration)\s+\d+(?:[.\-]\d+)*"
     r"(?:\s*[:.\-\u2013\u2014]\s*|\s+)",
@@ -65,6 +71,15 @@ _SCHEMA_NAMES = {
     "procedural": "proced.xsd",
     "procedure": "proced.xsd",
     "ipd": "ipd.xsd",
+}
+_DM_TYPE_ALIASES = {
+    "descriptive": "descriptive",
+    "description": "descriptive",
+    "descript": "descriptive",
+    "procedural": "procedural",
+    "procedure": "procedural",
+    "proced": "procedural",
+    "ipd": "ipd",
 }
 _DM_CODE_DEFAULTS = {
     "assyCode": "ZZ",
@@ -101,6 +116,12 @@ _INTERNAL_REF_CODES = {
     "graphic": "irtt09",
     "section": "irtt07",
 }
+_MIXED_CONTENT_TAGS = frozenset({
+    "para",
+    "notePara",
+    "warningAndCautionPara",
+    "attentionListItemPara",
+})
 _LAYOUT_NOISE_ZONES = frozenset({"header", "footer", "cover", "toc"})
 _FIGURE_LABEL_RE = re.compile(
     r"^\s*(?:figure|fig\.?|illustration)\s*(\d+(?:[.\-]\d+)*)\b",
@@ -125,6 +146,13 @@ _PROCEDURE_REQUIREMENT_HEADINGS = {
     "spares": re.compile(r"\b(?:spares?|spare parts|pieces? (?:de )?rechange)\b"),
     "safety": re.compile(r"\b(?:safety(?: requirements?)?|security requirements?|securite|precautions?)\b"),
 }
+
+
+def _normalize_dm_type(dm_type: str) -> str:
+    normalized = _DM_TYPE_ALIASES.get((dm_type or "").lower())
+    if normalized is None:
+        raise ValueError(f"Type de DM non pris en charge par le generateur XSD : {dm_type}.")
+    return normalized
 _PRELIMINARY_CONTAINER_TITLES = {
     "preliminary requirements",
     "preliminary requisites",
@@ -214,70 +242,91 @@ def content_node_count(root: IRNode, kind: str) -> int:
 
 def build_reference_index(
     documents: Sequence[tuple[str, IRNode, Mapping[str, object] | None]],
-    *,
-    figure_offset: int = 0,
-    table_offset: int = 0,
-    section_offset: int = 0,
 ) -> ReferenceIndex:
-    """Indexe les cibles visibles avec les IDs emis dans les DM.
-
-    `documents` respecte l'ordre de generation : les offsets produits ici
-    doivent donc rester synchronises avec ceux passes a `serialize`.
-    """
+    """Index visible reference targets with the IDs emitted in each DM."""
     index: ReferenceIndex = {}
     for dm_id, root, metadata in documents:
-        dmc = str((metadata or {}).get("dmc") or "")
+        metadata = metadata or {}
+        dmc = str(metadata.get("dmc") or "")
+        dm_type = _normalize_dm_type(str(metadata.get("dm_type") or "descriptive"))
+        issue = str(metadata.get("issue") or "4.2")
+        content = _build_content(
+            root,
+            dm_type,
+            {"figure": 0, "table": 0, "section": 0},
+            reference_index={},
+            current_dm_id=dm_id,
+        )
+        load_xsd_model(issue, dm_type).constrain(content)
+        normalize_dm_ids(content)
+
+        targets_by_kind = {
+            "figure": list(content.iter("figure")),
+            "table": list(content.iter("table")),
+            "section": [
+                element for element in content.iter()
+                if element.tag in {"proceduralStep", "levelledPara"}
+            ],
+        }
+        used_target_ids: set[str] = set()
         nodes = _content_nodes(root)
         for position, node in enumerate(nodes):
-            if node.kind == "section":
-                section_offset += 1
-                target = ReferenceTarget(
-                    kind="section",
-                    label="",
-                    target_id=f"par-{section_offset:04d}",
-                    target_type=_INTERNAL_REF_CODES["section"],
+            kind = node.kind if node.kind in {"section", "figure", "table"} else ""
+            if not kind:
+                continue
+            labels = _labels_for_text(kind, node.text)
+            if kind == "table" and not labels:
+                nearby_labels = [
+                    (
+                        abs(candidate_position - position),
+                        _labels_for_text("table", candidate.text),
+                    )
+                    for candidate_position, candidate in enumerate(
+                        nodes[max(0, position - 3):position + 4],
+                        start=max(0, position - 3),
+                    )
+                    if candidate is not node
+                    and candidate.page == node.page
+                    and _labels_for_text("table", candidate.text)
+                ]
+                if nearby_labels:
+                    labels = min(nearby_labels, key=lambda item: item[0])[1]
+            if not labels:
+                continue
+
+            expected_title = (
+                clean_figure_title(node.text) or "A REMPLACER"
+                if kind == "figure"
+                else clean_title(node.text) or None
+            )
+            target = next(
+                (
+                    element for element in targets_by_kind[kind]
+                    if element.get("id") not in used_target_ids
+                    and element.findtext("title") == expected_title
+                ),
+                None,
+            )
+            if target is None:
+                continue
+            target_id = target.get("id")
+            if not target_id:
+                continue
+            used_target_ids.add(target_id)
+            target_type = (
+                _INTERNAL_REF_CODES["step"]
+                if target.tag == "proceduralStep"
+                else _INTERNAL_REF_CODES[kind]
+            )
+            for label in labels:
+                _add_reference_target(index, ReferenceTarget(
+                    kind=kind,
+                    label=label,
+                    target_id=target_id,
+                    target_type=target_type,
                     dm_id=dm_id,
                     dmc=dmc,
-                )
-                for label in _labels_for_text("section", node.text):
-                    _add_reference_target(index, ReferenceTarget(
-                        kind=target.kind, label=label, target_id=target.target_id,
-                        target_type=target.target_type, dm_id=target.dm_id, dmc=target.dmc,
-                    ))
-            elif node.kind == "figure":
-                figure_offset += 1
-                target_id = f"fig-{figure_offset:04d}"
-                for label in _labels_for_text("figure", node.text):
-                    _add_reference_target(index, ReferenceTarget(
-                        kind="figure", label=label, target_id=target_id,
-                        target_type=_INTERNAL_REF_CODES["figure"], dm_id=dm_id, dmc=dmc,
-                    ))
-            elif node.kind == "table":
-                table_offset += 1
-                target_id = f"tbl-{table_offset:04d}"
-                labels = _labels_for_text("table", node.text)
-                if not labels:
-                    nearby = nodes[max(0, position - 3):position + 4]
-                    nearby_labels = [
-                        (
-                            abs(candidate_position - position),
-                            _labels_for_text("table", candidate.text),
-                        )
-                        for candidate_position, candidate in enumerate(
-                            nodes[max(0, position - 3):position + 4],
-                            start=max(0, position - 3),
-                        )
-                        if candidate is not node
-                        and candidate.page == node.page
-                        and _labels_for_text("table", candidate.text)
-                    ]
-                    if nearby_labels:
-                        labels = min(nearby_labels, key=lambda item: item[0])[1]
-                for label in labels:
-                    _add_reference_target(index, ReferenceTarget(
-                        kind="table", label=label, target_id=target_id,
-                        target_type=_INTERNAL_REF_CODES["table"], dm_id=dm_id, dmc=dmc,
-                    ))
+                ))
     return index
 
 
@@ -302,6 +351,13 @@ def clean_title(value: str | None) -> str:
     title = xml_text(value).strip()
     title = _FIGURE_TITLE_PREFIX.sub("", title)
     return _NUMBERED_TITLE_PREFIX.sub("", title).strip()
+
+
+def clean_figure_title(value: str | None) -> str:
+    title = _ICN_TITLE_TOKEN.sub("", clean_title(value))
+    title = re.sub(r"\(\s*\)|\[\s*\]", "", title)
+    title = re.sub(r"\s+([,.;:!?])", r"\1", title)
+    return re.sub(r"\s+", " ", title).strip(" \t\u00a0,;:\u2013\u2014-")
 
 
 def _safe_element(name: str, fallback: str) -> str:
@@ -848,7 +904,7 @@ def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None
     if header and rows and rows[0] == header:
         body_rows = rows[1:]          # evite de repeter l'entete dans le corps
     ncols = max([len(r) for r in rows] + ([len(header)] if header else []), default=1)
-    table = etree.SubElement(parent, "table", id=f"tbl-{table_number:04d}")
+    table = etree.SubElement(parent, "table", id=f"tab-{table_number:04d}")
     if node.text:
         etree.SubElement(table, "title").text = clean_title(node.text)
     tgroup = etree.SubElement(table, "tgroup", cols=str(ncols))
@@ -865,7 +921,7 @@ def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None
 def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> None:
     fig = etree.SubElement(parent, "figure", id=f"fig-{figure_number:04d}")
     title = etree.SubElement(fig, "title")
-    title.text = clean_title(node.text) or "A REMPLACER"
+    title.text = clean_figure_title(node.text) or "A REMPLACER"
     if _figure_icns(node):
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
         for icn in _figure_icns(node):
@@ -1158,6 +1214,21 @@ def _emit_preliminary_requirements(
     current_dm_id: str,
 ) -> None:
     preliminary = etree.SubElement(parent, "preliminaryRqmts")
+    production = etree.SubElement(preliminary, "productionMaintData")
+    threshold = etree.SubElement(
+        production,
+        "thresholdInterval",
+        thresholdUnitOfMeasure="th02",
+    )
+    threshold.text = "1"
+    etree.SubElement(
+        production,
+        "taskDuration",
+        closeupDuration="0",
+        procedureDuration="4",
+        startupDuration="0",
+        unitOfMeasure="h",
+    )
     _emit_condition_requirements(preliminary, requirements.get("conditions", []))
     _emit_personnel_requirements(preliminary, requirements.get("personnel", []))
     _emit_material_requirements(
@@ -1535,15 +1606,32 @@ def _build_content(
     return content
 
 
+def _indent_element_only(element: etree._Element, level: int = 0) -> None:
+    children = list(element)
+    if not children:
+        return
+    mixed_content = (
+        element.tag in _MIXED_CONTENT_TAGS
+        or bool(element.text and element.text.strip())
+        or any(child.tail and child.tail.strip() for child in children)
+    )
+    if mixed_content:
+        return
+    if not (element.text and element.text.strip()):
+        element.text = "\n" + "  " * (level + 1)
+    for child in children:
+        if isinstance(child.tag, str):
+            _indent_element_only(child, level + 1)
+        if not (child.tail and child.tail.strip()):
+            child.tail = "\n" + "  " * level
+
+
 def serialize(
     root: IRNode,
     *,
     issue: str,
     dm_type: str,
     title: str = "",
-    figure_offset: int = 0,
-    table_offset: int = 0,
-    section_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
     missing_fields: Sequence[str] = (),
     header_template: Mapping[str, object] | None = None,
@@ -1555,28 +1643,17 @@ def serialize(
     """Construit un squelette XML S1000D contraint par le XSD local (UTF-8 indente)."""
     if issue not in {"4.1", "4.2"}:
         raise ValueError(f"Generation XSD non disponible pour l'Issue {issue}.")
-    normalized_type = {
-        "descriptive": "descriptive",
-        "description": "descriptive",
-        "descript": "descriptive",
-        "procedural": "procedural",
-        "procedure": "procedural",
-        "proced": "procedural",
-        "ipd": "ipd",
-    }.get((dm_type or "").lower())
-    if normalized_type is None:
-        raise ValueError(f"Type de DM non pris en charge par le generateur XSD : {dm_type}.")
+    normalized_type = _normalize_dm_type(dm_type)
     if reference_index is None:
+        reference_metadata = dict(dm_metadata or {})
+        reference_metadata.update({"dm_type": normalized_type, "issue": issue})
         reference_index = build_reference_index(
-            [(reference_dm_id, root, dm_metadata)],
-            figure_offset=figure_offset,
-            table_offset=table_offset,
-            section_offset=section_offset,
+            [(reference_dm_id, root, reference_metadata)],
         )
     counters = {
-        "figure": figure_offset,
-        "table": table_offset,
-        "section": section_offset,
+        "figure": 0,
+        "table": 0,
+        "section": 0,
     }
     dmodule = etree.Element("dmodule", nsmap={
         "xsi": _XSI_NS,
@@ -1604,6 +1681,7 @@ def serialize(
         current_dm_id=reference_dm_id,
     ))
     xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(dmodule)
+    normalize_dm_ids(dmodule)
     if normalized_type == "ipd" and _content_nodes(root):
         xsd_report.violations.append({
             "severity": "error",
@@ -1627,6 +1705,7 @@ def serialize(
         diagnostics.xsd_violations.extend(xsd_report.violations)
         diagnostics.provisional_fields.extend(xsd_report.provisional_fields)
 
+    _indent_element_only(dmodule)
     tree = dmodule.getroottree()
     return etree.tostring(
         tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",

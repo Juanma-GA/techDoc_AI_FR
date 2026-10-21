@@ -12,6 +12,7 @@ from app.core.ir import IRNode
 from app.core.s1000d_serializer import (
     ReferenceIndex,
     SerializationDiagnostics,
+    build_reference_index,
     serialize,
 )
 
@@ -106,9 +107,6 @@ def serialize_with_brex_guidance(
     issue: str,
     dm_type: str,
     title: str = "",
-    figure_offset: int = 0,
-    table_offset: int = 0,
-    section_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
     missing_fields: Sequence[str] = (),
     header_template: Mapping[str, object] | None = None,
@@ -116,15 +114,22 @@ def serialize_with_brex_guidance(
     reference_dm_id: str = "",
     created_at: datetime | None = None,
 ) -> tuple[str, SerializationDiagnostics, int]:
+    if reference_index is None:
+        reference_metadata = dict(dm_metadata or {})
+        reference_metadata.update({
+            "dm_type": dm_type,
+            "issue": issue,
+        })
+        reference_index = build_reference_index([
+            (reference_dm_id, root, reference_metadata)
+        ])
+
     def render(diagnostics: SerializationDiagnostics) -> str:
         return serialize(
             root,
             issue=issue,
             dm_type=dm_type,
             title=title,
-            figure_offset=figure_offset,
-            table_offset=table_offset,
-            section_offset=section_offset,
             dm_metadata=dm_metadata,
             missing_fields=missing_fields,
             header_template=header_template,

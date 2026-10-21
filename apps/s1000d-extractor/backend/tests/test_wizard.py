@@ -268,8 +268,8 @@ def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
     assert 'id="fig-0001"' in first.text
-    assert 'id="fig-0002"' in second.text
-    assert 'id="tbl-0001"' in second.text
+    assert 'id="fig-0001"' in second.text
+    assert 'id="tab-0001"' in second.text
 
 
 def test_dm_xml_recomputes_stale_template_warning_from_current_tree() -> None:

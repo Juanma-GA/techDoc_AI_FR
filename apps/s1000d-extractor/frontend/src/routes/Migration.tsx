@@ -11,6 +11,8 @@ import { DmPreview } from "../components/DmPreview";
 import { DM_TYPES, DmrlReview } from "../components/DmrlReview";
 import { BrexProfileControl } from "../components/BrexProfileControl";
 import { PdfCutStartSelector } from "../components/PdfCutStartSelector";
+import { WizardStepBackButton } from "../components/WizardStepBackButton";
+import { WizardZipDownloadButton } from "../components/WizardZipDownloadButton";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
   documentsApi,
@@ -921,8 +923,15 @@ export function Migration() {
                     {t("migration.split.dmrlDriven", { count: wiz.dmrl_dm_count })}
                   </p>
                 ) : null}
-                <details className="migration-split-review">
-                  <summary>{t("migration.split.review", { count: wiz.dms.length })}</summary>
+                <div className="row" style={{ marginBottom: 10 }}>
+                  <WizardStepBackButton
+                    steps={wiz.steps ?? []}
+                    step={wiz.step}
+                    disabled={busy}
+                    onBack={() => void wizAction("back")}
+                  />
+                  <details className="migration-split-review grow">
+                    <summary>{t("migration.split.review", { count: wiz.dms.length })}</summary>
                   <div className="migration-split-review-content">
                 <div className="row" style={{ marginBottom: 10 }}>
                   <label>
@@ -1045,6 +1054,7 @@ export function Migration() {
                 </div>
                   </div>
                 </details>
+                </div>
                 <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
                   <button
                     type="button"
@@ -1204,6 +1214,12 @@ export function Migration() {
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>
                 <div className="row" style={{ marginBottom: 12 }}>
+                  <WizardStepBackButton
+                    steps={wiz.steps ?? []}
+                    step={wiz.step}
+                    disabled={busy}
+                    onBack={() => void wizAction("back")}
+                  />
                   {wiz.resources?.dmrl_count && docId ? (
                     <a className="btn secondary" href={resourcesApi.pmcUrl(docId)}>
                       {t("migration.generate.pmc")}
@@ -1225,10 +1241,8 @@ export function Migration() {
                       <ShieldCheck aria-hidden="true" size={15} /> {t("migration.generate.validate")}
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className="btn primary"
-                    style={{ marginLeft: "auto" }}
+                  <WizardZipDownloadButton
+                    docId={docId}
                     disabled={
                       busy ||
                       !docId ||
@@ -1240,12 +1254,7 @@ export function Migration() {
                         ? t("migration.generate.generationPending")
                         : undefined
                     }
-                    onClick={() => {
-                      if (docId) window.location.assign(wizardApi.zipUrl(docId));
-                    }}
-                  >
-                    {t("migration.generate.zip")}
-                  </button>
+                  />
                 </div>
                 <BrexAnalysisSummary
                   hasProfile={wiz.has_brex_profile === true}

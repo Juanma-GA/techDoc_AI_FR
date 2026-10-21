@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from lxml import etree
 
+from app.core.errors import AppError
+
 if TYPE_CHECKING:  # pragma: no cover - import de typage seulement
     from app.core.dmrl import DmrlEntry
 
@@ -22,12 +24,12 @@ if TYPE_CHECKING:  # pragma: no cover - import de typage seulement
 _DMC_RE = re.compile(
     r"^(?:DMC-)?"
     r"(?P<mic>[A-Z0-9]+)-"
-    r"(?P<sdc>[A-Z0-9]{1,2})-"
+    r"(?P<sdc>[A-Z0-9]{1,4})-"
     r"(?P<sc>[A-Z0-9]{2,3})-"
     r"(?P<ssc>[A-Z0-9])(?P<sssc>[A-Z0-9])-"
     r"(?P<ac>[A-Z0-9]{2,4})-"
-    r"(?P<dc>[0-9]{2})(?P<dcv>[A-Z])-"
-    r"(?P<ic>[0-9]{3})(?P<icv>[A-Z])-"
+    r"(?P<dc>[0-9]{2})(?P<dcv>[A-Z0-9]{1,3})-"
+    r"(?P<ic>[A-Z0-9]{3})(?P<icv>[A-Z0-9])-"
     r"(?P<ilc>[A-Z])$",
     re.IGNORECASE,
 )
@@ -54,6 +56,58 @@ def parse_dmc(dmc: str) -> dict[str, str] | None:
     }
 
 
+def pmc_filename(source_filename: str) -> str:
+    basename = source_filename.replace("\\", "/").rsplit("/", 1)[-1]
+    stem = basename.rsplit(".", 1)[0] if "." in basename else basename
+    stem = re.sub(r"[\x00-\x1f<>:\"/\\|?*]+", "-", stem).strip(" .-")
+    return f"PMC-{stem or 'document'}.xml"
+
+
+def _dm_code_attributes(entry: DmrlEntry) -> dict[str, str]:
+    parsed = parse_dmc(entry.dmc) or {}
+    fields = {
+        "modelIdentCode": entry.model_ident_code,
+        "systemDiffCode": entry.system_diff_code,
+        "systemCode": entry.system_code,
+        "subSystemCode": entry.sub_system_code,
+        "subSubSystemCode": entry.sub_sub_system_code,
+        "assyCode": entry.assy_code,
+        "disassyCode": entry.disassy_code,
+        "disassyCodeVariant": entry.disassy_code_variant,
+        "infoCode": entry.info_code,
+        "infoCodeVariant": entry.info_code_variant,
+        "itemLocationCode": entry.item_location_code,
+    }
+    values = {
+        name: str(value or parsed.get(name) or "").strip().upper()
+        for name, value in fields.items()
+    }
+    if not all(values.values()):
+        raise AppError(
+            "PMC_INVALID_DMC",
+            f"Le DMC « {entry.dmc or 'absent'} » de l'entrée "
+            f"« {entry.title or 'sans titre'} » ne peut pas être décomposé.",
+            422,
+            detail={"title": entry.title, "dmc": entry.dmc, "components": values},
+        )
+    canonical_dmc = (
+        f"DMC-{values['modelIdentCode']}-{values['systemDiffCode']}-"
+        f"{values['systemCode']}-{values['subSystemCode']}{values['subSubSystemCode']}-"
+        f"{values['assyCode']}-{values['disassyCode']}{values['disassyCodeVariant']}-"
+        f"{values['infoCode']}{values['infoCodeVariant']}-{values['itemLocationCode']}"
+    )
+    attributes = parse_dmc(canonical_dmc)
+    if attributes is None:
+        raise AppError(
+            "PMC_INVALID_DMC",
+            f"Le DMC « {entry.dmc or canonical_dmc} » de l'entrée "
+            f"« {entry.title or 'sans titre'} » n'est pas conforme au format S1000D.",
+            422,
+            detail={"title": entry.title, "dmc": entry.dmc, "components": values},
+        )
+    return attributes
+
+
 def _arbo_parts(arbo: str) -> list[str]:
     return [p for p in re.split(r"[.\-/]", (arbo or "").strip()) if p]
 
@@ -63,12 +117,7 @@ def _emit_dm_ref(parent: etree._Element, entry: DmrlEntry) -> None:
         return
     ref = etree.SubElement(parent, "dmRef")
     ident = etree.SubElement(ref, "dmRefIdent")
-    parsed = parse_dmc(entry.dmc)
-    if parsed:
-        etree.SubElement(ident, "dmCode", **parsed)
-    else:
-        ident.append(etree.Comment(f" DMC non standard (a corriger) : {entry.dmc} "))
-        etree.SubElement(ident, "dmCode", dmCodeValue=entry.dmc)
+    etree.SubElement(ident, "dmCode", **_dm_code_attributes(entry))
     items = etree.SubElement(ref, "dmRefAddressItems")
     title = etree.SubElement(items, "dmTitle")
     etree.SubElement(title, "techName").text = entry.tech_name or entry.title

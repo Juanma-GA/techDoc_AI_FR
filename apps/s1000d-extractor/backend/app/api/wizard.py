@@ -22,6 +22,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.core import wizard
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
+from app.core.wizard_zip_export import generate_zip_dm_xmls
 from app.db.models import Document
 from app.db.session import SessionLocal, get_db
 
@@ -216,10 +217,12 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
             "Export ZIP impossible : certains DMs n'ont pas pu etre generes.",
             409,
         )
-    xml_by_dm = {
-        dm["dm_id"]: wizard.dm_xml(doc, dm["dm_id"], db=db)
-        for dm in ready
-    }
+    xml_by_dm = generate_zip_dm_xmls(
+        doc,
+        [dm["dm_id"] for dm in ready],
+        db=db,
+        dm_xml_generator=wizard.dm_xml,
+    )
     db.commit()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
