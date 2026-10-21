@@ -147,7 +147,7 @@ def create_app() -> FastAPI:
 
     register_error_handlers(app)
 
-    app.include_router(api_v1)
+    app.include_router(api_v1, prefix="/api/v1")
 
     _sync_standard_catalogs(client_configuration, demo_client_configuration)
     _mount_frontend(app)

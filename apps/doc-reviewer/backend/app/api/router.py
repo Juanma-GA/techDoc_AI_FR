@@ -15,7 +15,7 @@ from app.api import (
     suggestions,
 )
 
-api_v1 = APIRouter(prefix="/api/v1")
+api_v1 = APIRouter()
 for module in (
     health,
     documents,

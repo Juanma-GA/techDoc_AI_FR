@@ -134,7 +134,7 @@ def test_paddle_adapter_uses_supported_tiny_models_and_json_output(
     command = captured["command"]
     assert isinstance(command, list)
     assert command[0] == str(executable)
-    assert command[1].endswith("app\\paddleocr_worker.py")
+    assert Path(command[1]).parts[-2:] == ("app", "paddleocr_worker.py")
     assert text == "ATA 32"
     assert len(boxes) == 1
 
