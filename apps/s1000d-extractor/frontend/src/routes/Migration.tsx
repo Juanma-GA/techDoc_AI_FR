@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useDemoMode } from "@internal/ui";
 
+import { BrexAnalysisSummary } from "../components/BrexAnalysisSummary";
+import { BrexViolationsPanel } from "../components/BrexViolationsPanel";
 import { DmPreview } from "../components/DmPreview";
 import { DM_TYPES, DmrlReview } from "../components/DmrlReview";
 import { BrexProfileControl } from "../components/BrexProfileControl";
@@ -1245,6 +1247,11 @@ export function Migration() {
                     {t("migration.generate.zip")}
                   </button>
                 </div>
+                <BrexAnalysisSummary
+                  hasProfile={wiz.has_brex_profile === true}
+                  profileId={brexId}
+                  dms={wiz.dms}
+                />
                 {commonMissingFields.length ? (
                   <div className="banner warn" role="status" style={{ marginBottom: 12 }}>
                     <strong>{t("migration.generate.commonMissingFields")}</strong>
@@ -1332,6 +1339,11 @@ export function Migration() {
                             ) : null}
                           </div>
                         ) : null}
+                        <BrexViolationsPanel
+                          hasProfile={wiz.has_brex_profile === true}
+                          isComplete={dm.has_xml === true}
+                          violations={dm.brex_violations ?? []}
+                        />
                         {dmMissingFields.length ? (
                           <details style={{ marginTop: 8 }}>
                             <summary>

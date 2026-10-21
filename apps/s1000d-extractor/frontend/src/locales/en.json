@@ -298,7 +298,26 @@
       "xsdNoDetails": "The schema could not be run or returned no details.",
       "missingDataWarning": "The XSD passes, but some business data still needs confirmation.",
       "commonMissingFields": "Information to review or complete in every DM.",
-      "missingFields": "{{count}} item(s) to complete"
+      "missingFields": "{{count}} item(s) to complete",
+      "brexCheckTitle": "BREX violations for this DM",
+      "brexViolations": "BREX violations ({{count}})",
+      "brexAnalysisTitle": "BREX check summary",
+      "brexAnalysisPending": "BREX check pending: {{completed}}/{{total}} DMs generated.",
+      "brexCoverageLoading": "Loading BREX profile coverage…",
+      "brexCoverageError": "Could not load BREX profile coverage: {{message}}",
+      "brexProfileIdMissing": "The BREX profile associated with this analysis is unavailable.",
+      "brexViolationsFound": "{{count}} BREX violation(s) found in {{dmCount}} DM(s).",
+      "brexNoViolations": "No violations detected among automated and applicable rules.",
+      "brexPartialStatus": "This is not a complete conformance result: some rules were not checked automatically.",
+      "brexWarningGroupCount": "Warnings for rules not fully checked ({{count}} groups)",
+      "brexAffectedDms": "Affected DMs: {{count}} of {{total}}",
+      "brexRuleId": "BREX rule",
+      "brexSeverityLevel": "Severity level declared by the BREX",
+      "brexSeverity": {
+        "error": "Error",
+        "warning": "Warning",
+        "info": "Information"
+      }
     }
   },
   "validation": {

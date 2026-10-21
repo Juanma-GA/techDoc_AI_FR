@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
+import { getBrexRuleCoverage } from "../lib/brexCoverage";
 import type { BrexProfileDetail, BrexRule } from "../lib/api";
 
 function flagLabel(flag: string, t: TFunction) {
@@ -78,33 +79,24 @@ function RuleItem({ rule }: { rule: BrexRule }) {
 
 export function BrexRulesPreview({ profile }: { profile: BrexProfileDetail }) {
   const { t } = useTranslation();
-  const ruleCount = profile.rules.length + profile.unsupported_rules.length;
-  const automaticCount = profile.rules.filter(
-    (rule) => rule.support_status === "automatic",
-  ).length;
-  const contextualCount = profile.rules.filter(
-    (rule) => rule.support_status === "contextual",
-  ).length;
-  const unsupportedCount = profile.rules.filter(
-    (rule) => rule.support_status === "unsupported",
-  ).length + profile.unsupported_rules.length;
+  const coverage = getBrexRuleCoverage(profile);
   return (
     <div className="brex-rules-preview">
       <div className="label">
         {profile.dmc} — {t("migration.upload.issueValue", { issue: profile.s1000d_issue })}
       </div>
       <details>
-        <summary>{t("migration.brex.rulesSummary", { count: ruleCount })}</summary>
+        <summary>{t("migration.brex.rulesSummary", { count: coverage.total })}</summary>
         <div className="brex-rule-list">
           <div className="row" role="status">
             <span className="badge ok">
-              {t("migration.brex.coverageAutomatic", { count: automaticCount })}
+              {t("migration.brex.coverageAutomatic", { count: coverage.automatic })}
             </span>
             <span className="badge info">
-              {t("migration.brex.coverageContextual", { count: contextualCount })}
+              {t("migration.brex.coverageContextual", { count: coverage.contextual })}
             </span>
-            <span className="badge warn">
-              {t("migration.brex.coverageUnsupported", { count: unsupportedCount })}
+            <span className={`badge ${coverage.unsupported ? "warn" : "ok"}`}>
+              {t("migration.brex.coverageUnsupported", { count: coverage.unsupported })}
             </span>
           </div>
           {profile.rules.length ? (

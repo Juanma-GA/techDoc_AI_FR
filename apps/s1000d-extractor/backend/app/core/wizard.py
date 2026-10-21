@@ -32,6 +32,7 @@ from app.core import (
     resolver,
     splitter,
     structure_infer,
+    wizard_response,
 )
 from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
@@ -570,37 +571,14 @@ def state(doc: Document) -> dict:
     dms = ws.load_dms(doc)
     steps = steps_for(doc)
     step = doc.wizard_step or steps[0]
-    out_dms = []
-    for dm in dms:
-        entry = {
-            "dm_id": dm["dm_id"],
-            "dmc": dm.get("dmc", ""),
-            "title": dm["title"],
-            "dm_type": dm["dm_type"],
-            "is_orphan": bool(dm.get("is_orphan")),
-            "node_count": ws.node_count(dm["tree"]),
-        }
-        if step == "split":
-            entry["preview"] = ws.dm_preview(dm["tree"])
-        if step == "structure":
-            entry["tree"] = dm["tree"]
-        if step == "generate":
-            entry["violation_count"] = len(dm.get("violations") or [])
-            entry["has_xml"] = bool(dm.get("xml"))
-            entry["missing_fields"] = dm.get("missing_fields") or []
-            entry["xsd_valid"] = dm.get("xsd_valid") is True
-            entry["xsd_violations"] = [
-                violation for violation in dm.get("violations") or []
-                if violation.get("rule") in {"XSD", "WELLFORMED"}
-            ]
-            entry["cir_unresolved"] = dm.get("cir_unresolved") or []
-        out_dms.append(entry)
+    out_dms = [wizard_response.project_dm_state(dm, step) for dm in dms]
     out = {
         "step": step,
         "split_level": doc.split_level or _DEFAULT_LEVEL,
         "dmrl_dm_count": len(wres.dmrl_data_module_entries(doc)),
         "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
+        "has_brex_profile": bool(doc.brex_id),
         "resources": _resources_state(doc),
         "dms": out_dms,
     }

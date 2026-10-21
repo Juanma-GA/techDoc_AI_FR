@@ -298,7 +298,26 @@
       "xsdNoDetails": "Le schéma n’a pas pu être exécuté ou n’a retourné aucun détail.",
       "missingDataWarning": "Le XSD passe, mais des données métier restent à confirmer.",
       "commonMissingFields": "Informations à vérifier ou compléter dans tous les DMs.",
-      "missingFields": "{{count}} information(s) à compléter"
+      "missingFields": "{{count}} information(s) à compléter",
+      "brexCheckTitle": "Violations BREX de ce DM",
+      "brexViolations": "Violations du BREX ({{count}})",
+      "brexAnalysisTitle": "Synthèse du contrôle BREX",
+      "brexAnalysisPending": "Contrôle BREX en attente : {{completed}}/{{total}} DM généré(s).",
+      "brexCoverageLoading": "Chargement de la couverture du profil BREX…",
+      "brexCoverageError": "Impossible de charger la couverture du profil BREX : {{message}}",
+      "brexProfileIdMissing": "Le profil BREX associé à l’analyse est indisponible.",
+      "brexViolationsFound": "{{count}} violation(s) BREX détectée(s) dans {{dmCount}} DM(s).",
+      "brexNoViolations": "Aucune violation détectée parmi les règles automatisées et applicables.",
+      "brexPartialStatus": "Ce résultat n’est pas une conformité complète : certaines règles n’ont pas été vérifiées automatiquement.",
+      "brexWarningGroupCount": "Avertissements de règles non vérifiées ({{count}} groupes)",
+      "brexAffectedDms": "DM concernés : {{count}} sur {{total}}",
+      "brexRuleId": "Règle BREX",
+      "brexSeverityLevel": "Niveau de gravité indiqué par le BREX",
+      "brexSeverity": {
+        "error": "Erreur",
+        "warning": "Avertissement",
+        "info": "Information"
+      }
     }
   },
   "validation": {

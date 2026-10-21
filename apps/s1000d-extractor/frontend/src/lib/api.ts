@@ -3,8 +3,25 @@
  * once the backend OpenAPI is stable.
  */
 
-import type { DmrlRow } from "./wizardTypes";
-export type { DmrlMatchRank, DmrlRow, DmrlTypeIssue } from "./wizardTypes";
+import type { DmValidationResult, WizardState } from "./wizardTypes";
+export type {
+  Candidate,
+  DmPreview,
+  DmValidationResult,
+  DmValidationStatus,
+  DmValidationViolation,
+  DmrlMatchRank,
+  DmrlRow,
+  DmrlTypeIssue,
+  NodeRef,
+  Override,
+  PreviewSnippet,
+  TreeNode,
+  WizardDm,
+  WizardResources,
+  WizardState,
+  WizardStep,
+} from "./wizardTypes";
 
 // Surchargeable au build (VITE_API_BASE_URL) pour un deploiement en sous-chemin
 // IIS (ex. /app/s1000d-extractor/api/v1). Defaut relatif '/api/v1' en local.
@@ -142,26 +159,6 @@ export type BrexProfileDetail = BrexProfile & {
   unsupported_rules: UnsupportedBrexRule[];
 };
 
-export type Candidate = { element: string; score?: number; rationale?: string };
-
-export type NodeRef = { kind: string; target?: string; target_kind?: string; text?: string };
-
-export type TreeNode = {
-  id: string;
-  kind: string;
-  text: string;
-  context: string;
-  confidence: number | null;
-  candidates: Candidate[];
-  children: TreeNode[];
-  level?: number | null;
-  page?: number | null;
-  zone?: string;
-  table_header?: string[] | null;
-  icn?: string | null;
-  refs?: NodeRef[] | null;
-};
-
 export type DocumentOut = {
   id: string;
   filename: string;
@@ -209,79 +206,6 @@ export const versioningApi = {
       method: "POST",
     }),
 };
-
-// ----- Wizard ---------------------------------------------------------------
-
-export type WizardStep = "dmrl" | "split" | "type" | "structure" | "generate";
-
-export type PreviewSnippet = {
-  text: string;
-  page: number | null;
-  kind: string;
-  zone?: string;
-};
-
-export type DmPreview = { head: PreviewSnippet[]; tail: PreviewSnippet[]; total: number };
-
-export type WizardDm = {
-  dm_id: string;
-  dmc?: string;
-  title: string;
-  dm_type: string;
-  node_count: number;
-  tree: TreeNode;
-  violation_count: number;
-  has_xml?: boolean;
-  preview?: DmPreview;
-  missing_fields?: string[];
-  xsd_valid?: boolean;
-  xsd_violations?: DmValidationViolation[];
-  cir_unresolved?: string[];
-  is_orphan?: boolean;
-};
-
-export type DmValidationStatus = "valid" | "invalid" | "needs_issue" | "unverifiable";
-
-export type DmValidationViolation = {
-  severity: "error" | "warning" | "info";
-  rule: string;
-  message: string;
-  path: string;
-  line?: number | null;
-  column?: number | null;
-};
-
-export type DmValidationResult = {
-  filename: string;
-  dmc: string;
-  issue: string | null;
-  schema: string | null;
-  status: DmValidationStatus;
-  error_count: number;
-  violations: DmValidationViolation[];
-  message?: string;
-};
-
-export type WizardResources = {
-  dmrl_count: number;
-  has_cir: boolean;
-  has_brex_rules: boolean;
-  has_dm_header: boolean;
-  errors?: string[];
-};
-
-export type WizardState = {
-  step: WizardStep;
-  split_level: string;
-  dmrl_dm_count?: number;
-  steps?: WizardStep[];
-  dms: WizardDm[];
-  can_undo?: boolean;
-  resources?: WizardResources;
-  dmrl?: DmrlRow[];
-};
-
-export type Override = { dm_id: string; node_id: string; element: string };
 
 export const brexApi = {
   list: () => api<BrexProfile[]>("/brex"),

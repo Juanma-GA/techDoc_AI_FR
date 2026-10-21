@@ -85,6 +85,8 @@ BREX uploads are parsed according to the XML encoding declaration and normalized
 
 The current rule engine applies `structureObjectRule` paths, `allowedObjectFlag` values 0/1/2, closed single-value restrictions, and `contextRules` whose `rulesContext` schema URI exactly matches the generated DM's schema URI. The BREX preview classifies parsed rules as directly interpretable, schema-contextual, or not automatically evaluated. Non-context, notation, and SNS rule families are shown as detected but not automatically evaluated. Unsupported value forms and unevaluable object paths are reported as unverifiable rather than treated as passing.
 
+The completed generation view shows the selected XML BREX profile's coverage once, groups identical non-evaluation warnings across DMs, and keeps actual rule violations with their DM. A result with no violations means no violation was detected among automated and applicable rules; unsupported rules are explicitly identified as unchecked.
+
 ## Standard Deviations
 
 - Domain dependencies include PyMuPDF, python-docx, lxml, and openpyxl.
