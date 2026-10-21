@@ -32,6 +32,7 @@ import {
 } from "../lib/api";
 import { loadDemoMigrationFiles } from "../lib/demoMigrationFiles";
 import { needsDmrlReview } from "../lib/wizardReview";
+import { splitImageNames } from "../lib/imageClassification";
 
 export { hasUnmatchedDmrlDms } from "../lib/wizardReview";
 
@@ -612,6 +613,19 @@ export function Migration() {
 
   const docs = docsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
+  const { illustrations, pictograms } = splitImageNames(images);
+  const imageGroups = [
+    {
+      names: illustrations,
+      title: "migration.generate.images",
+      alt: "migration.generate.imageAlt",
+    },
+    {
+      names: pictograms,
+      title: "migration.generate.pictograms",
+      alt: "migration.generate.pictogramAlt",
+    },
+  ];
   const generationDms = wiz?.step === "generate" ? wiz.dms : [];
   const commonMissingFields = getCommonMissingFields(generationDms);
   const commonMissingFieldSet = new Set(commonMissingFields);
@@ -1213,7 +1227,10 @@ export function Migration() {
                 <h2 className="card-title">
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>
-                <div className="row" style={{ marginBottom: 12 }}>
+                <div
+                  className="row"
+                  style={{ marginBottom: 12, alignItems: "flex-end" }}
+                >
                   <WizardStepBackButton
                     steps={wiz.steps ?? []}
                     step={wiz.step}
@@ -1373,13 +1390,13 @@ export function Migration() {
                     );
                   })}
                 </div>
-                {images.length ? (
-                  <div style={{ marginTop: 16 }}>
+                {imageGroups.map((group) => group.names.length ? (
+                  <div key={group.title} style={{ marginTop: 16 }}>
                     <h3 className="label">
-                      {t("migration.generate.images", { count: images.length })}
+                      {t(group.title, { count: group.names.length })}
                     </h3>
                     <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
-                      {images.map((name, i) => (
+                      {group.names.map((name, i) => (
                         <a
                           key={name}
                           href={docId ? wizardApi.imageUrl(docId, name) : "#"}
@@ -1390,7 +1407,7 @@ export function Migration() {
                         >
                           <img
                             src={docId ? wizardApi.imageUrl(docId, name) : undefined}
-                            alt={t("migration.generate.imageAlt", { index: i + 1 })}
+                            alt={t(group.alt, { index: i + 1 })}
                             style={{
                               width: 96,
                               height: 72,
@@ -1409,7 +1426,7 @@ export function Migration() {
                       ))}
                     </div>
                   </div>
-                ) : null}
+                ) : null)}
               </div>
             ) : null}
           </>

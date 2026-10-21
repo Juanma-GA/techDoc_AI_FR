@@ -20,6 +20,7 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Generate data-module and publication-module skeletons.
 - Assign content IDs locally per DM, emit indented XML, and include default production-maintenance data in procedural preliminary requirements.
 - Download the PMC as `PMC-<source-name>.xml` and emit DMC components as `dmCode` attributes.
+- Configure the maximum exported image dimension and choose original, JPEG, or PNG format; ZIP pictograms are kept in `pictograms/` and are not emitted as DM figures.
 - Build issue/type-specific content models from the local XSDs and constrain generated elements, order, cardinality, attributes, and values.
 - Collect XSD/mapping errors separately from provisional business fields that need confirmation.
 - Keep XML and ZIP downloads available when generation reports XSD or mapping problems.

@@ -209,7 +209,10 @@ def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
     ).json()
     assert state["step"] == "generate"
 
-    archive_response = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+    archive_response = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/zip",
+        params={"max_dimension": "64", "image_format": "png"},
+    )
     assert archive_response.status_code == 200, archive_response.text
     pmc_path = f"PMC/{doc_id}_pmc.xml"
     with ZipFile(BytesIO(archive_response.content)) as archive:

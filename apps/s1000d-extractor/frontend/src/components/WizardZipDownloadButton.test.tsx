@@ -8,7 +8,25 @@ import { wizardApi } from "../lib/api";
 import { WizardZipDownloadButton } from "./WizardZipDownloadButton";
 
 vi.mock("../lib/api", () => ({
-  wizardApi: { zipUrl: (docId: string) => `/api/v1/documents/${docId}/wizard/zip` },
+  wizardApi: {
+    zipUrl: (
+      docId: string,
+      options: {
+        maxDimension?: number;
+        format?: "original" | "jpeg" | "png";
+      } = {},
+    ) => {
+      const query = new URLSearchParams();
+      if (options.maxDimension !== undefined) {
+        query.set("max_dimension", String(options.maxDimension));
+      }
+      if (options.format && options.format !== "original") {
+        query.set("image_format", options.format);
+      }
+      const suffix = query.toString();
+      return `/api/v1/documents/${docId}/wizard/zip${suffix ? `?${suffix}` : ""}`;
+    },
+  },
 }));
 
 vi.mock("react-i18next", () => ({
@@ -119,6 +137,67 @@ describe("wizard ZIP download button", () => {
     );
     expect(clickAnchor).toHaveBeenCalledOnce();
     expect(button?.textContent).toBe("migration.generate.zip");
+  });
+
+  it("sends the selected size and image format with the ZIP request", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => null },
+      json: async () => ({}),
+      blob: async () => new Blob(["synthetic zip"]),
+      statusText: "OK",
+    } satisfies ResponseStub));
+    vi.stubGlobal("URL", {
+      createObjectURL: vi.fn(() => "blob:synthetic"),
+      revokeObjectURL: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const button = mount();
+    const sizeInput = container?.querySelector<HTMLInputElement>('input[type="number"]');
+    const formatSelect = container?.querySelector<HTMLSelectElement>("select");
+
+    await act(async () => {
+      if (sizeInput && formatSelect) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+          ?.set?.call(sizeInput, "640");
+        sizeInput.dispatchEvent(new Event("input", { bubbles: true }));
+        formatSelect.value = "png";
+        formatSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    await act(async () => {
+      button?.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const expectedUrl =
+      "/api/v1/documents/synthetic-document/wizard/zip?max_dimension=640&image_format=png";
+    expect(wizardApi.zipUrl("synthetic-document", {
+      maxDimension: 640,
+      format: "png",
+    })).toBe(expectedUrl);
+    expect(fetch).toHaveBeenCalledWith(expectedUrl);
+  });
+
+  it("blocks a non-positive image size", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const button = mount();
+    const sizeInput = container?.querySelector<HTMLInputElement>('input[type="number"]');
+
+    await act(async () => {
+      if (sizeInput) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")
+          ?.set?.call(sizeInput, "0");
+        sizeInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    expect(button?.disabled).toBe(true);
+    expect(container?.querySelector('[role="alert"]')?.textContent).toBe(
+      "migration.generate.imageSizeInvalid",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not request an archive while disabled", async () => {

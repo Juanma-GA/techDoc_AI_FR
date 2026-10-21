@@ -227,7 +227,9 @@ def _content_nodes(root: IRNode) -> list[IRNode]:
 
     def walk(node: IRNode) -> None:
         for child in node.children:
-            if child.zone in _LAYOUT_NOISE_ZONES:
+            if child.zone in _LAYOUT_NOISE_ZONES or (
+                child.kind == "figure" and child.is_pictogram
+            ):
                 continue
             nodes.append(child)
             walk(child)
@@ -386,7 +388,7 @@ def _doctype(root: IRNode, dmodule: etree._Element | None = None) -> str:
     declared: set[str] = set()
     placeholder_ident = "ICN-ZZZ-00000"
     for node in root.walk():
-        if node.kind != "figure":
+        if node.kind != "figure" or node.is_pictogram:
             continue
         if not _figure_icns(node) and placeholder_ident not in declared:
             declarations.append(
@@ -1071,6 +1073,7 @@ def _is_classified_safety_section(section: IRNode) -> bool:
     content = [
         node for node in section.walk()[1:]
         if node.kind in {"paragraph", "item", "admonition", "figure", "table"}
+        and not (node.kind == "figure" and node.is_pictogram)
     ]
     if not content:
         return True
@@ -1317,7 +1320,10 @@ def _emit_children(
 def _has_figure_after_procedural_step(children: Sequence[IRNode]) -> bool:
     has_step = False
     for child in children:
-        if child.kind in {"figure", "table"} and has_step:
+        if (
+            child.kind == "table"
+            or (child.kind == "figure" and not child.is_pictogram)
+        ) and has_step:
             return True
         if child.kind == "section" and _top_element(child, "levelledPara") == "proceduralStep":
             has_step = True
@@ -1443,6 +1449,8 @@ def _emit_node(
     current_dm_id: str,
 ) -> etree._Element | None:
     if node.zone in _LAYOUT_NOISE_ZONES:
+        return None
+    if node.kind == "figure" and node.is_pictogram:
         return None
     alt = _alt_comment(node)
     if alt:

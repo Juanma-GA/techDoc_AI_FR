@@ -14,7 +14,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -22,7 +22,12 @@ from sse_starlette.sse import EventSourceResponse
 from app.core import wizard
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
-from app.core.wizard_zip_export import generate_zip_dm_xmls
+from app.core.wizard_zip_export import (
+    ImageFormat,
+    generate_zip_dm_xmls,
+    pictogram_image_names,
+    prepare_zip_images,
+)
 from app.db.models import Document
 from app.db.session import SessionLocal, get_db
 
@@ -203,7 +208,12 @@ def wizard_image(doc_id: str, name: str, db: Session = Depends(get_db)) -> Respo
 
 
 @router.get("/{doc_id}/wizard/zip")
-def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
+def wizard_zip(
+    doc_id: str,
+    max_dimension: int | None = Query(default=None, ge=1),
+    image_format: ImageFormat = "original",
+    db: Session = Depends(get_db),
+) -> Response:
     import json as _json
 
     doc = _require(db, doc_id)
@@ -217,11 +227,18 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
             "Export ZIP impossible : certains DMs n'ont pas pu etre generes.",
             409,
         )
+    images, image_name_map = prepare_zip_images(
+        _image_paths(doc_id),
+        pictogram_names=pictogram_image_names(doc),
+        max_dimension=max_dimension,
+        image_format=image_format,
+    )
     xml_by_dm = generate_zip_dm_xmls(
         doc,
         [dm["dm_id"] for dm in ready],
         db=db,
         dm_xml_generator=wizard.dm_xml,
+        image_name_map=image_name_map,
     )
     db.commit()
     buf = io.BytesIO()
@@ -231,8 +248,8 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
         pmc = wres.pmc_xml(doc)
         if pmc:
             zf.writestr(f"PMC/{doc.id}_pmc.xml", pmc)
-        for img in _image_paths(doc_id):
-            zf.write(img, f"illustrations/{img.name}")
+        for image in images:
+            zf.writestr(image.archive_path, image.content)
     db.commit()
     return Response(
         content=buf.getvalue(), media_type="application/zip",

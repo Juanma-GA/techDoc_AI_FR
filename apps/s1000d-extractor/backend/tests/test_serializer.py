@@ -292,6 +292,36 @@ def test_figure_icn_referenced() -> None:
     assert "ICN-ZZZ-00000" not in xml
 
 
+def test_pictograms_are_not_serialized_as_dm_figures() -> None:
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[
+            IRNode(
+                id="pictogram",
+                kind="figure",
+                text="Picto chapitre 1",
+                icn="picto_chapitre_1.jpg",
+                is_pictogram=True,
+            ),
+            IRNode(
+                id="illustration",
+                kind="figure",
+                text="Figure 1 - Vue generale",
+                icn="figure-1-vue-generale.jpg",
+            ),
+        ],
+    )
+    resolve(root)
+
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
+
+    assert 'id="fig-0001"' in xml
+    assert "Picto chapitre 1" not in xml
+    assert "picto_chapitre_1" not in xml
+    assert "figure-1-vue-generale" in xml
+
+
 def test_composite_figure_references_all_graphics() -> None:
     from app.core.ir import IRNode
     from app.core.s1000d_serializer import serialize

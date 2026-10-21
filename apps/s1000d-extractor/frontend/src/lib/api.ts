@@ -339,7 +339,23 @@ export const wizardApi = {
     const filename = disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? `${dmId}.xml`;
     return new File([await response.blob()], filename, { type: "application/xml" });
   },
-  zipUrl: (docId: string) => `${API_BASE}/documents/${docId}/wizard/zip`,
+  zipUrl: (
+    docId: string,
+    options: {
+      maxDimension?: number;
+      format?: "original" | "jpeg" | "png";
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (options.maxDimension !== undefined) {
+      params.set("max_dimension", String(options.maxDimension));
+    }
+    if (options.format && options.format !== "original") {
+      params.set("image_format", options.format);
+    }
+    const query = params.toString();
+    return `${API_BASE}/documents/${docId}/wizard/zip${query ? `?${query}` : ""}`;
+  },
   images: (docId: string) => api<string[]>(`/documents/${docId}/wizard/images`),
   imageUrl: (docId: string, name: string) =>
     `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}`,
