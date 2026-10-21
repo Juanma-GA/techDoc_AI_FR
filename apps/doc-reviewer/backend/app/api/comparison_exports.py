@@ -13,11 +13,12 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.comparison_export import build_commented_pdf
+from app.core.comparison_report import ensure_current_report
 from app.core.errors import AppError
 from app.core.security import safe_filename, safe_storage_join
 from app.db.session import get_db
 
-from .comparisons import comparison_dir, comparison_root, get_comparison, load_report
+from .comparisons import comparison_dir, comparison_root, get_comparison
 
 router = APIRouter(prefix="/comparisons", tags=["comparisons"])
 
@@ -74,7 +75,7 @@ def export_comparison(
     db: Session = Depends(get_db),
 ) -> Response:
     row = get_comparison(comparison_id, db)
-    report = load_report(row)
+    report = ensure_current_report(row, db)
     indices = [item["document_index"] for item in report["comparisons"]]
     if len(indices) == 1:
         content, filename = _commented_pdf(
@@ -104,7 +105,7 @@ def export_comparison_document(
     db: Session = Depends(get_db),
 ) -> Response:
     row = get_comparison(comparison_id, db)
-    report = load_report(row)
+    report = ensure_current_report(row, db)
     content, filename = _commented_pdf(
         row.id, row.reference_index, report, document_index, language
     )

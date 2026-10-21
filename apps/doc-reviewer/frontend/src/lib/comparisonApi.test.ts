@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { comparisonApi } from "./api";
+import { comparisonApi } from "./comparisonApi";
 
 describe("comparison multipart upload", () => {
   afterEach(() => {

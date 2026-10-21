@@ -23,8 +23,11 @@ validation remain environment-dependent.
 - Apply deterministic technical-writing catalogs, unit checks, editable rules, and optional LLM checklist analysis.
 - Accept, edit, reject, and remember review decisions.
 - Review native DOCX blocks as well as PDF pages.
-- Compare 2–20 text-layer PDFs against a selected reference, save comparisons
-	in a separate library, review added/removed text, and export commented PDFs.
+- Compare 2–20 text-layer PDFs against a selected reference in a synchronized
+	side-by-side viewer. Matching page text anchors align versions; missing or
+	changed page runs are signalled, and linked difference boxes reveal removed
+	and added text. Saved comparisons remain in a separate library and export as
+	commented PDFs.
 - Export original, corrected, commented, and converted outputs when the local
 	converter supports them.
 - Show a degradation warning before PDF/Word format conversions.
@@ -99,6 +102,8 @@ Comparison source PDFs are stored separately under
 `backend/data/storage/comparisons/` and remain there until the comparison is
 deleted in the Comparison tab. The optional Mistral summary receives only
 changed text excerpts, not the complete PDF files.
+Older saved reports are reprocessed from their locally stored source PDFs the
+first time they are opened in the visual comparison viewer.
 
 ## LLM Configuration
 

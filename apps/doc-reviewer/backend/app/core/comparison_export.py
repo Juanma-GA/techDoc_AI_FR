@@ -39,9 +39,17 @@ def build_commented_pdf(
                 continue
             page_number = int(change["page"])
             bbox = change["bbox"]
-            if page_number < 1 or page_number > document.page_count or len(bbox) != 4:
+            if page_number < 1 or page_number > document.page_count:
                 continue
-            rect = fitz.Rect(*bbox)
+            if isinstance(bbox, dict):
+                coordinates = tuple(bbox.get(key) for key in ("x0", "y0", "x1", "y1"))
+            elif isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+                coordinates = tuple(bbox)
+            else:
+                continue
+            if any(not isinstance(value, (int, float)) for value in coordinates):
+                continue
+            rect = fitz.Rect(*(float(value) for value in coordinates))
             if rect.is_empty or rect.is_infinite:
                 continue
             page = document.load_page(page_number - 1)

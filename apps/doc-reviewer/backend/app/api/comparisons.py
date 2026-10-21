@@ -7,7 +7,6 @@ import shutil
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import ValidationError
@@ -15,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.document_comparison import build_comparison_report
+from app.core.comparison_report import build_comparison_report, ensure_current_report
 from app.core.errors import AppError
 from app.core.security import (
     read_upload_limited,
@@ -43,24 +42,6 @@ def comparison_dir(comparison_id: uuid.UUID) -> Path:
     return safe_storage_join(comparison_root(), comparison_id.hex)
 
 
-def load_report(row: DocumentComparison) -> dict[str, Any]:
-    try:
-        report = json.loads(row.report_json)
-    except json.JSONDecodeError as exc:
-        raise AppError(
-            "COMPARISON_DATA_INVALID",
-            "Les résultats enregistrés de cette comparaison sont illisibles.",
-            status_code=500,
-        ) from exc
-    if not isinstance(report, dict):
-        raise AppError(
-            "COMPARISON_DATA_INVALID",
-            "Les résultats enregistrés de cette comparaison sont invalides.",
-            status_code=500,
-        )
-    return report
-
-
 def get_comparison(comparison_id: uuid.UUID, db: Session) -> DocumentComparison:
     row = db.get(DocumentComparison, comparison_id)
     if row is None:
@@ -81,14 +62,14 @@ def _summary(row: DocumentComparison) -> ComparisonSummary | None:
         ) from exc
 
 
-def _to_detail(row: DocumentComparison) -> ComparisonDetail:
+def _to_detail(row: DocumentComparison, db: Session) -> ComparisonDetail:
     return ComparisonDetail(
         id=row.id,
         title=row.title,
         created_at=row.created_at,
         file_count=row.file_count,
         ai_status=row.ai_status,
-        report=load_report(row),
+        report=ensure_current_report(row, db),
         ai_summary=_summary(row),
         ai_summary_truncated=row.ai_summary_truncated,
     )
@@ -155,7 +136,7 @@ def create_comparison(
         db.add(row)
         db.commit()
         persisted = True
-        return _to_detail(row)
+        return _to_detail(row, db)
     finally:
         if moved and not persisted and final_dir.exists():
             shutil.rmtree(final_dir)
@@ -184,4 +165,4 @@ def get_comparison_detail(
     comparison_id: uuid.UUID,
     db: Session = Depends(get_db),
 ) -> ComparisonDetail:
-    return _to_detail(get_comparison(comparison_id, db))
+    return _to_detail(get_comparison(comparison_id, db), db)

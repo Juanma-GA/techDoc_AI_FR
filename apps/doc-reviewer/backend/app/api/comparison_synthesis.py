@@ -8,12 +8,13 @@ from fastapi import APIRouter, Depends
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.core.comparison_report import ensure_current_report
 from app.core.errors import AppError
 from app.core.llm_suggester import call_chat
 from app.db.session import get_db
 
 from .comparison_schemas import ComparisonSummary, SynthesisIn, SynthesisOut
-from .comparisons import get_comparison, load_report
+from .comparisons import get_comparison
 
 router = APIRouter(prefix="/comparisons", tags=["comparisons"])
 MAX_SUMMARY_INPUT_CHARS = 100_000
@@ -26,7 +27,7 @@ def synthesize_comparison(
     db: Session = Depends(get_db),
 ) -> SynthesisOut:
     row = get_comparison(comparison_id, db)
-    report = load_report(row)
+    report = ensure_current_report(row, db)
     change_lines: list[str] = []
     used_chars = 0
     truncated = False

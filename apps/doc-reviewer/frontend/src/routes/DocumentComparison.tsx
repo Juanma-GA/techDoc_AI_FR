@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ComparisonResults } from "../components/comparison/ComparisonResults";
 import { ComparisonSetupCard } from "../components/comparison/ComparisonSetupCard";
 import { PageHeader } from "../components/PageHeader";
-import { comparisonApi, type ComparisonDetail } from "../lib/api";
+import { comparisonApi, type ComparisonDetail } from "../lib/comparisonApi";
 import i18n from "../i18n";
 
 const errorMessage = (error: unknown): string =>

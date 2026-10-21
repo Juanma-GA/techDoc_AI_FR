@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
   comparisonApi,
+  type ComparisonChange,
   type ComparisonDetail,
-} from "../../lib/api";
+} from "../../lib/comparisonApi";
+import { ComparisonWorkspace } from "./ComparisonWorkspace";
 
 export function ComparisonResults({
   comparison,
@@ -19,7 +22,19 @@ export function ComparisonResults({
   onRetrySummary: () => void;
 }) {
   const { t } = useTranslation();
+  const [selection, setSelection] = useState<{ documentIndex: number; groupId: string } | null>(null);
   const reference = comparison.report.documents[comparison.report.reference_index];
+  const selectedPair = comparison.report.comparisons.find(
+    (pair) => pair.document_index === selection?.documentIndex,
+  );
+  const selectedChanges = selectedPair?.changes.filter(
+    (change) => change.group_id === selection?.groupId,
+  ) ?? [];
+  const removed = selectedChanges.filter((change) => change.kind === "removed");
+  const added = selectedChanges.filter((change) => change.kind === "added");
+
+  useEffect(() => setSelection(null), [comparison.id]);
+
   return (
     <section className="card" aria-labelledby="comparison-results-title">
       <h2 id="comparison-results-title" className="card-title">{t("comparison.resultsTitle")}</h2>
@@ -31,33 +46,30 @@ export function ComparisonResults({
             {t(comparison.file_count > 2 ? "comparison.exportAll" : "comparison.exportOne")}
           </a>
         </div>
-        <div className="space-y-4">
-          {comparison.report.comparisons.map((pair) => (
-            <details key={pair.document_index} className="space-y-4 rounded-lg border border-md p-4">
-              <summary className="cursor-pointer font-medium">
-                {pair.filename} · {t("comparison.addedCount", { count: pair.added_count })} · {t("comparison.removedCount", { count: pair.removed_count })}
-              </summary>
-              {comparison.file_count > 2 ? (
-                <a className="btn ghost small" href={comparisonApi.exportDocumentUrl(comparison.id, pair.document_index, language)} download>
-                  {t("comparison.exportOne")}
-                </a>
-              ) : null}
-              {pair.changes.length ? (
-                <ul className="mt-4 space-y-3">
-                  {pair.changes.map((change, index) => (
-                    <li key={`${change.kind}-${change.page}-${index}`} className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                      <span className={`badge ${change.kind === "added" ? "ok" : "danger"}`}>
-                        {change.kind === "added" ? t("comparison.added") : t("comparison.removed")}
-                      </span>
-                      <span className="label shrink-0">{t("comparison.page", { page: change.page })}</span>
-                      <pre className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-sm">{change.text}</pre>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="empty-state">{t("comparison.noChanges")}</p>}
-            </details>
-          ))}
-        </div>
+        <ComparisonWorkspace
+          comparison={comparison}
+          language={language}
+          onSelectDifference={setSelection}
+        />
+        <section className="comparison-difference-detail" aria-labelledby="comparison-selected-difference">
+          <h3 id="comparison-selected-difference">{t("comparison.selectedDifference")}</h3>
+          {selection ? (
+            <div className="comparison-difference-columns">
+              <DifferenceText
+                filename={reference?.filename ?? comparison.title}
+                changes={removed}
+                emptyLabel={t("comparison.noRemovedText")}
+                pageLabel={(page) => t("comparison.page", { page })}
+              />
+              <DifferenceText
+                filename={selectedPair?.filename ?? t("comparison.candidate")}
+                changes={added}
+                emptyLabel={t("comparison.noAddedText")}
+                pageLabel={(page) => t("comparison.page", { page })}
+              />
+            </div>
+          ) : <p className="hint">{t("comparison.selectDifferenceHint")}</p>}
+        </section>
         <section className="space-y-4 border-t border-md pt-5" aria-labelledby="comparison-ai-title">
           <h3 id="comparison-ai-title" className="card-title">{t("comparison.aiTitle")}</h3>
           {isSummarizing ? <p role="status">{t("comparison.aiPending")}</p> : null}
@@ -84,5 +96,33 @@ export function ComparisonResults({
         </section>
       </div>
     </section>
+  );
+}
+
+function DifferenceText({
+  filename,
+  changes,
+  emptyLabel,
+  pageLabel,
+}: {
+  filename: string;
+  changes: ComparisonChange[];
+  emptyLabel: string;
+  pageLabel: (page: number) => string;
+}) {
+  return (
+    <div>
+      <h4>{filename}</h4>
+      {changes.length ? (
+        <ul>
+          {changes.map((change, index) => (
+            <li key={`${change.group_id}-${change.page}-${index}`}>
+              <span className="label">{pageLabel(change.page)}</span>
+              <pre>{change.text}</pre>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="hint">{emptyLabel}</p>}
+    </div>
   );
 }
