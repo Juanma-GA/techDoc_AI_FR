@@ -80,12 +80,6 @@ bash scripts/check_standard.sh
 
 For application changes, also run the applicable backend tests, frontend build, typecheck, lint, Vitest, Playwright smoke test, and packaging validation. Record checks that were executed separately from checks that remain recommended.
 
-GitHub Actions runs the repository quality checks and a matrix generated from
-[`scripts/apps.json`](scripts/apps.json). Adding an app to the registry includes
-its frontend and backend in CI; a per-app workflow is not required. CI validates
-code and does not deploy or publish POCs. See
-[`docs/standards/profiles-and-ci.md`](docs/standards/profiles-and-ci.md).
-
 Never read or commit user databases, uploaded files, generated user content, secrets, or files under application data and storage directories.
 
 ## Commits

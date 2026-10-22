@@ -170,7 +170,7 @@ class MistralClient:
    - Note any deviations from expected behavior
    - Screenshot proof of successful launch (for audit trail)
 
-### For Continuous Integration (Post-Testing)
+### Post-testing follow-up
 
 Once local testing is complete and validated:
 
@@ -180,13 +180,7 @@ Once local testing is complete and validated:
    git commit -m "test: all 6 POCs AACF compliant (manual verification completed)"
    ```
 
-2. **Create CI pipeline** (if desired):
-   - Add GitHub Actions workflow to run startup tests
-   - Verify MistralClient imports on every PR
-   - Check Tailwind CSS compilation succeeds
-   - Lint i18n keys (no missing translations)
-
-3. **Deploy to cloud** (out of scope for POC, but prepared):
+2. **Deploy to cloud** (out of scope for POC, but prepared):
    - Platform Landing Zone ready (from prior AACF audit)
    - Tier2 (cloud) deployment would require auth + 0.0.0.0 binding
    - Mistral API key secure storage (Azure Key Vault)

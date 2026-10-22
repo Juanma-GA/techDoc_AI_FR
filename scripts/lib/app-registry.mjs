@@ -127,18 +127,6 @@ export function generatedRootScripts(registry) {
   return scripts;
 }
 
-export function appCiMatrix(registry) {
-  return {
-    frontends: registry.apps.map(({ slug, e2e }) => ({ slug, e2e })),
-    fastapiBackends: registry.apps
-      .filter((app) => app.backend === "fastapi")
-      .map(({ slug }) => slug),
-    goBackends: registry.apps
-      .filter((app) => app.backend === "go")
-      .map(({ slug }) => slug),
-  };
-}
-
 function putPortSurface(artifacts, file, transform) {
   if (!existsSync(file)) return;
   const current = readFileSync(file, "utf8");

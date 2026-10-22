@@ -85,14 +85,9 @@ pnpm new:poc mon-app-fichiers --profile files
 
 Sans option `--profile`, le scaffold crée une app `local-first` sans LLM. Les
 profils `llm` et `files` sont opt-in et peuvent être combinés. Le registre
-actualise les ports, les commandes et la matrice CI automatiquement. Voir
-[`docs/standards/profiles-and-ci.md`](docs/standards/profiles-and-ci.md).
-
-## CI
-
-GitHub Actions découvre toutes les apps depuis `scripts/apps.json` et lance les
-validations frontend/backend selon leur stack. Le CI ne déploie ni ne publie
-les POCs.
+actualise automatiquement les ports, les commandes de développement et les
+raccourcis de tests locaux. Voir
+[`docs/standards/profiles-and-registry.md`](docs/standards/profiles-and-registry.md).
 
 ## Si le frontend n'est pas buildé
 

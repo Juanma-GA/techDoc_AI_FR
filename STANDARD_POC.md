@@ -4,9 +4,9 @@ Référence technique des règles de développement. Lue par les humains et par 
 
 **Hiérarchie** : l'AACF live est normative. Ce document définit le profil local-first de ce monorepo ; [`CLAUDE.md`](./CLAUDE.md) en est le résumé opératoire. Une exception locale doit être documentée, bornée et ne peut pas affaiblir une règle AACF.
 
-Les règles complémentaires relatives au registre des apps, aux profils et au CI sont définies dans [`docs/standards/profiles-and-ci.md`](./docs/standards/profiles-and-ci.md).
+Les règles complémentaires relatives au registre des apps et aux profils sont définies dans [`docs/standards/profiles-and-registry.md`](./docs/standards/profiles-and-registry.md).
 
-**Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker ni de déploiement dans le périmètre du standard. Le CI du dépôt est limité aux contrôles de qualité et ne déploie ni ne publie les apps. Si un POC sort de ce périmètre local, il bascule vers un autre standard (hors scope ici).
+**Posture générale** : POC **local-first stricte**. Le mode par défaut et seul supporté est l'exécution locale sur le PC du dev. Pas de Docker ni de déploiement dans le périmètre du standard. Si un POC sort de ce périmètre local, il bascule vers un autre standard (hors scope ici).
 
 ### Profils d'application
 
@@ -758,7 +758,7 @@ Le script Node `scripts/new_poc.mjs` (wrapper Bash `new_poc.sh` conservé) autom
 - Choisit automatiquement le prochain port cible non attribué depuis `scripts/apps.json` si le port est omis, ou refuse un port déjà réservé.
 - Copie `apps/_template/` → `apps/<slug>/`, superpose uniquement les profils demandés, puis substitue les marqueurs `TEMPLATE` / port / `'template'` dans les fichiers concernés.
 - Génère `scripts/package_<slug>.py` depuis `package_TEMPLATE.py` avec les bons `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX`.
-- Met à jour `scripts/apps.json`; les commandes, inventaires et matrices CI dérivent de ce registre, sans workflow dédié par app.
+- Met à jour `scripts/apps.json`; les commandes de développement, raccourcis de tests et inventaires dérivent de ce registre.
 - Écrase `apps/<slug>/README.md` par un stub avec bannière **« À RÉÉCRIRE »** + section `## Auth` palier 1.
 - Exécute `scripts/check_standard.sh` pour valider l'instanciation. Rollback automatique du scaffold et des artefacts synchronisés en cas d'échec. Si Bash est absent, le check est signalé comme ignoré et doit être exécuté manuellement avant usage.
 
@@ -781,7 +781,7 @@ Les validations restent à exécuter après génération. En fallback manuel :
 2. Renommer dans `apps/<slug>/backend/pyproject.toml` (`name = "<slug>-backend"`), `apps/<slug>/backend/app/config.py` (`app_name`, `database_url`), `apps/<slug>/backend/alembic.ini` (`sqlalchemy.url`), `apps/<slug>/backend/.env.example` (`APP_NAME`, `DATABASE_URL`), `apps/<slug>/frontend/package.json` (`@apps/<slug>-frontend`), `apps/<slug>/frontend/index.html` (`<title>`), `apps/<slug>/frontend/src/locales/{fr,en}.json` (`app.title`), `apps/<slug>/backend/README.md` (titre), `apps/<slug>/backend/app/db/models.py` (docstring), `apps/<slug>/frontend/src/App.tsx` (`<span>` brand), `apps/<slug>/frontend/tests/e2e/home.spec.ts` (matcher).
 3. Réserver un port unique dans `scripts/apps.json` et le synchroniser dans `set "PORT=80XX"` (`_run.bat`), `PORT="${PORT:-80XX}"` (`start.sh`), le proxy (`vite.config.ts`), `openapi:gen` (`frontend/package.json`) et `cors_origins` (`config.py`).
 4. `cp scripts/package_TEMPLATE.py scripts/package_<slug>.py` puis adapter `APP_NAME` / `APP_SLUG` / `EMBED_PREFIX` en tête. Mettre à jour `_package.bat` pour appeler le nouveau script.
-5. Ajouter l'app à `scripts/apps.json`, puis synchroniser les commandes et inventaires avec `node scripts/sync_app_registry.mjs`. Le CI est découvert depuis le même registre.
+5. Ajouter l'app à `scripts/apps.json`, puis synchroniser les commandes et inventaires avec `node scripts/sync_app_registry.mjs`.
 6. Vérifier `bash scripts/check_standard.sh` exit 0 — les checks 8 à 13 valident l'instanciation (nom `pyproject`, README réécrit, DB renommée, section Auth, scripts racine, bind 127.0.0.1).
 7. Premier commit : `feat(<slug>): bootstrap from template`.
 

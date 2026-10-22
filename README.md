@@ -32,8 +32,8 @@ libre suivant si le port cible est occupé. Voir
 
 > **Principe directeur** : ces apps sont des **POC local-first stricts**
 > — ils tournent localement sur le PC du dev. Pas de Docker ni de déploiement.
-> Le CI du dépôt vérifie la qualité sans déployer ni publier (voir
-> [`docs/standards/profiles-and-ci.md`](docs/standards/profiles-and-ci.md)).
+> Les commandes de build et de validation s'exécutent localement; voir
+> [`QUICK_START.md`](QUICK_START.md).
 
 ## Démarrage
 
@@ -97,8 +97,8 @@ le packaging Tauri optionnel.
 │   ├── standards/              # modèles et contrats partagés
 │   ├── history/                # rapports datés non normatifs
 │   └── adr/                    # Architecture Decision Records
-├── scripts/                    # apps.json, scaffold, CI matrix, checker, packagers
-├── .github/workflows/           # CI qualité réutilisable par stack
+├── scripts/                    # apps.json, scaffold, checker, packagers
+├── .github/                    # skills et adaptateurs d'agents
 ├── tools/                      # binaires optionnels (ex. installeur Python silencieux)
 ├── STANDARD_POC.md             # référence technique du standard
 ├── CLAUDE.md                   # méthode et sécurité locales

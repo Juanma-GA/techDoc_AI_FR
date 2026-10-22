@@ -4,7 +4,7 @@ Ce fichier est lu automatiquement par Claude Code à l'ouverture du repo. Il fix
 
 ## Contexte
 
-Monorepo pnpm hébergeant des POCs FastAPI + React **développés dans un tronc commun** et lancés **localement** sur le PC du dev. Posture **local-first stricte** : pas de Docker ni de déploiement. Le CI du dépôt exécute uniquement les validations de qualité et ne déploie ni ne publie les apps; voir [`docs/standards/profiles-and-ci.md`](./docs/standards/profiles-and-ci.md). Chaque POC est démarrable via `apps/<poc>/start.bat` (Windows) ou `start.sh` (Unix), et packagé via `apps/<poc>/package.bat`.
+Monorepo pnpm hébergeant des POCs FastAPI + React **développés dans un tronc commun** et lancés **localement** sur le PC du dev. Posture **local-first stricte** : pas de Docker ni de déploiement. Les profils et le registre des apps sont détaillés dans [`docs/standards/profiles-and-registry.md`](./docs/standards/profiles-and-registry.md). Chaque POC est démarrable via `apps/<poc>/start.bat` (Windows) ou `start.sh` (Unix), et packagé via `apps/<poc>/package.bat`.
 
 ```
 internal-poc-monorepo/

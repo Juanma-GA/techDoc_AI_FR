@@ -154,7 +154,7 @@ else
 fi
 
 # F-03 (hardening) : ne JAMAIS echo la cle de chiffrement dans le terminal (scrollback,
-# logs CI, historique shell = fuite). Elle est deja injectee comme secret
+# journaux d'execution, historique shell = fuite). Elle est deja injectee comme secret
 # Container Apps ('encryption-key') ; on l'ecrit aussi dans un fichier local
 # ignore par git (meme regle que containerapp.generated.yaml) pour permettre
 # un backup manuel hors-terminal, puis on invite a le deplacer/supprimer.

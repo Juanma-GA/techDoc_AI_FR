@@ -6,7 +6,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFrontend, needsBuild } from "../lib/frontend-build.mjs";
 import {
-  appCiMatrix,
   expectedAppArtifacts,
   readAppRegistry,
   validateAppRegistry,
@@ -111,21 +110,6 @@ test("app registry enforces unique ports, supported profiles and a single templa
     /Unsupported profile/,
   );
   assert.equal(readAppRegistry(repo).schemaVersion, 1);
-});
-
-test("CI matrices cover every registered frontend and backend stack", () => {
-  const registry = readAppRegistry(repo);
-  const matrix = appCiMatrix(registry);
-
-  assert.deepEqual(matrix.frontends.map(({ slug }) => slug), registry.apps.map(({ slug }) => slug));
-  assert.deepEqual(
-    matrix.fastapiBackends,
-    registry.apps.filter(({ backend }) => backend === "fastapi").map(({ slug }) => slug),
-  );
-  assert.deepEqual(
-    matrix.goBackends,
-    registry.apps.filter(({ backend }) => backend === "go").map(({ slug }) => slug),
-  );
 });
 
 test("registry synchronization preserves CRLF in generated documentation", (t) => {
