@@ -292,7 +292,6 @@ Cette phase ne modifie pas :
 - les scripts de packaging
 - les UI / design-tokens
 - les ports
-- la CI
 - les bases
 - les uploads
 - les données utilisateur

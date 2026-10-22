@@ -73,8 +73,7 @@ OCR quality depends on source documents and optional local tooling.
 - Checklist analysis has no deterministic finding fallback because business rules remain editable and LLM-driven.
 - App-specific page styling remains in the preview skin; the shared shell,
   navigation, theme/language controls, and LLM status use `@internal/ui`.
-- Deployment-oriented hardening remains outside the local-first profile; repository
-  CI runs quality checks only and does not deploy.
+- Deployment-oriented hardening remains outside the local-first profile.
 
 ## Technical References
 

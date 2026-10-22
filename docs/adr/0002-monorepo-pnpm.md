@@ -18,7 +18,7 @@ POC IA internes vont vivre côte à côte, chacun ayant besoin de :
   ChartCard, Toast, Dialog) — sinon dérive visuelle garantie ;
 - la **même configuration TypeScript stricte** ;
 - une **même façon de versionner** ces deux artefacts pour qu'une
-  régression sur l'un casse la CI de tous les consommateurs.
+  régression sur l'un puisse affecter tous les consommateurs.
 
 Sur Legacy POC 5.0 et FTM v1 ces ressources étaient dupliquées par
 copier-coller. Coût constaté : un fix CSS dans l'un n'arrivait jamais
@@ -36,7 +36,7 @@ Repo unique organisé en **monorepo pnpm workspace** :
 │   └── ui/                            # @internal/ui — composants partagés
 ├── design-tokens/                     # @internal/design-tokens
 ├── docs/adr/                          # Architecture Decision Records
-├── scripts/                           # check_standard.sh + outils CI
+├── scripts/                           # check_standard.sh + outils de validation locale
 └── legacy/                            # code legacy en lecture seule
 ```
 

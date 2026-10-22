@@ -6,7 +6,7 @@ A lancer sur un poste Windows avec Word (Microsoft 365) :
     set WORD_SENSITIVITY_LABEL_ID=<GUID de l'etiquette choisie par l'IT>
     python -m pytest tests/test_word_real.py -v
 
-Hors de ce cadre (CI, poste sans Word), les tests sont ignores.
+Hors de ce cadre (poste sans Word), les tests sont ignores.
 """
 
 from __future__ import annotations

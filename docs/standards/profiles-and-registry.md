@@ -1,7 +1,7 @@
-# Profils, registre des apps et CI
+# Profils et registre des apps
 
 Ce document complète le [STANDARD_POC.md](../../STANDARD_POC.md) pour les
-profils, le registre machine-readable et l'automatisation qualité. Il ne remplace
+profils, le registre machine-readable et les validations locales. Il ne remplace
 pas l'AACF live et n'autorise ni déploiement ni publication.
 
 ## Profils d'application
@@ -60,24 +60,6 @@ Les primitives communes, notamment `ThemeToggle`, `LanguageSwitcher`,
 consommées par toutes les apps. Les composants métier propres à une app restent
 dans cette app. Le contrôle du registre refuse les copies locales des contrôles
 de shell.
-
-## CI de qualité
-
-[`ci.yml`](../../.github/workflows/ci.yml) génère ses matrices depuis
-`apps.json` via `scripts/ci_matrix.mjs`. Les workflows réutilisables par stack
-exécutent :
-
-- frontend : typecheck, lint si configuré, tests Vitest, build et Playwright
-  lorsque `e2e` est activé dans le registre;
-- FastAPI : installation des dépendances de développement et `pytest -q`;
-- Go : `go test ./...`;
-- dépôt et package partagé : `check_standard.sh`, tests du tooling, lint et tests
-  de `@internal/ui`.
-
-Une app ajoutée au registre rejoint automatiquement la matrice; aucun workflow
-par app n'est nécessaire. Le workflow dédié à Doc Reviewer conserve son contrôle
-de contenu. Ces workflows valident le code uniquement : ils ne déploient, ne
-packagent et ne publient pas d'app.
 
 ## Guides actuels et archives
 

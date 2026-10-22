@@ -280,14 +280,14 @@ fi
 # ------------------------------------------------------------------
 # 16. Registry, profiles, ports and shared UI stay synchronized.
 # ------------------------------------------------------------------
-step 16 "App registry, CI, ports et UI partagee"
+step 16 "App registry, profils, ports et UI partagee"
 NODE_BIN="$(command -v node || command -v node.exe || true)"
 if [[ -z "$NODE_BIN" ]]; then
-  fail "Node.js 20+ doit etre sur le PATH du shell courant pour valider le registre et la matrice CI."
+  fail "Node.js 20+ doit etre sur le PATH du shell courant pour valider le registre et les surfaces synchronisees."
 elif ! "$NODE_BIN" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' >/dev/null 2>&1; then
-  fail "Node.js 20+ est requis pour valider le registre et la matrice CI."
-elif "$NODE_BIN" scripts/sync_app_registry.mjs --check > /dev/null && "$NODE_BIN" scripts/ci_matrix.mjs > /dev/null; then pass; else
-  fail "Le registre, les README, les ports, les commandes racine, le shell @internal/ui et la matrice CI doivent rester synchronises."
+  fail "Node.js 20+ est requis pour valider le registre et les surfaces synchronisees."
+elif "$NODE_BIN" scripts/sync_app_registry.mjs --check > /dev/null; then pass; else
+  fail "Le registre, les README, les ports, les commandes racine et le shell @internal/ui doivent rester synchronises."
 fi
 
 # ------------------------------------------------------------------

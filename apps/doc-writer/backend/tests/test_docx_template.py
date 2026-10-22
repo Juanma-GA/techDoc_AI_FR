@@ -4,7 +4,7 @@
 Tests deterministes (pas de Mistral) : detection des zones regex/cadres,
 remplissage en place avec preservation du style typographique, et selection du
 moteur par format. La conversion PDF -> Word (pdf2docx) est testee si la lib est
-installee (POC local-first : pas de CI, donc skip propre sinon).
+installee (pdf2docx est optionnelle et le test est ignore si elle manque).
 """
 
 from __future__ import annotations

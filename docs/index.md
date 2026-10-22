@@ -24,7 +24,7 @@ When live AACF content cannot be fetched, report `AACF NON VERIFIABLE`. Local do
 ## Standards And Procedures
 
 - [Local audit report protocol](../PROMPT_AUDIT_STANDARD.md)
-- [Profiles, registry, and CI rules](standards/profiles-and-ci.md)
+- [Profiles and app registry](standards/profiles-and-registry.md)
 - [Application README template](standards/app-readme-template.md)
 - [Demo mode and shared identity integration](standards/demo-mode-integration.md)
 - [Backend stacks and optional Tauri desktop](standards/desktop-and-stacks.md)
