@@ -23,6 +23,7 @@ import { Settings } from "./routes/Settings";
 const navItems = [
   { to: "/", labelKey: "nav.generate", icon: "home" },
   { to: "/documents", labelKey: "nav.documents", icon: "files" },
+  { to: "/sessions", labelKey: "nav.sessions", icon: "chat" },
   { to: "/data", labelKey: "nav.data", icon: "data" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;

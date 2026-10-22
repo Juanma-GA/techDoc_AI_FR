@@ -52,8 +52,12 @@ jobs:
         run: pnpm --dir "$FRONTEND_DIR" run build
 
       - name: Install Playwright Chromium
-        if: ${{ inputs.e2e }}
+        if: ${{ inputs.e2e && inputs.app != 'doc-reviewer' }}
         run: pnpm --dir "$FRONTEND_DIR" exec playwright install --with-deps chromium
+
+      - name: Install Doc Reviewer Playwright browsers
+        if: ${{ inputs.e2e && inputs.app == 'doc-reviewer' }}
+        run: pnpm --dir "$FRONTEND_DIR" exec playwright install --with-deps chromium webkit
 
       - name: Run Playwright smoke tests
         if: ${{ inputs.e2e }}
