@@ -116,7 +116,7 @@ func (p *PDFCPU) stampText(
 		return fmt.Errorf("PDF page dimensions are invalid")
 	}
 
-	description := signatureTextStampDescription(pageDim, stamp.Position)
+	description := signatureTextStampDescription(pageDim, stamp.Position, stamp.FontSize)
 	if err := api.AddTextWatermarksFile(
 		input,
 		input,
@@ -131,9 +131,14 @@ func (p *PDFCPU) stampText(
 	return ctx.Err()
 }
 
-func signatureTextStampDescription(pageDim types.Dim, position services.StampPosition) string {
+func signatureTextStampDescription(
+	pageDim types.Dim,
+	position services.StampPosition,
+	fontSize int,
+) string {
 	return fmt.Sprintf(
-		"fontname:Helvetica, points:14, color:0 0 0, position:tl, offset:%f %f, rotation:0, scalefactor:1 abs, maxwidth:%f",
+		"fontname:Helvetica, points:%d, color:0 0 0, position:tl, offset:%f %f, rotation:0, scalefactor:1 abs, maxwidth:%f",
+		fontSize,
 		position.X*pageDim.Width,
 		-position.Y*pageDim.Height,
 		pageDim.Width*0.8,

@@ -91,6 +91,7 @@ export function PdfSignaturePreview({
             <TextOverlay
               text={nameText}
               label={t("signature.nameOverlayLabel")}
+              resizeLabel={t("signature.resizeName")}
               pageRef={pageRef}
               pageViewportWidth={pageSize.width}
               placement={namePlacement}
@@ -102,6 +103,7 @@ export function PdfSignaturePreview({
             <TextOverlay
               text={dateText}
               label={t("signature.dateOverlayLabel")}
+              resizeLabel={t("signature.resizeDate")}
               pageRef={pageRef}
               pageViewportWidth={pageSize.width}
               placement={datePlacement}

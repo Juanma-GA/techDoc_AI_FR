@@ -34,10 +34,12 @@ func TestStampSignatureAffectsOnlySelectedPage(t *testing.T) {
 		Name: &services.SignatureTextStamp{
 			Text:     "Élodie D'Aubigné",
 			Position: services.StampPosition{X: 0.1, Y: 0.86},
+			FontSize: 14,
 		},
 		Date: &services.SignatureTextStamp{
 			Text:     "22/10/2026",
 			Position: services.StampPosition{X: 0.1, Y: 0.92},
+			FontSize: 14,
 		},
 	}
 	if err := processor.StampSignature(context.Background(), input, signature, output, options); err != nil {
@@ -162,6 +164,7 @@ func TestSignatureTextStampDescriptionKeepsFourteenPointSize(t *testing.T) {
 	description := signatureTextStampDescription(
 		types.Dim{Width: 792, Height: 612},
 		services.StampPosition{X: 0.12, Y: 0.86},
+		14,
 	)
 	watermark, err := api.TextWatermark("Élodie D'Aubigné", description, true, false, types.POINTS)
 	if err != nil {

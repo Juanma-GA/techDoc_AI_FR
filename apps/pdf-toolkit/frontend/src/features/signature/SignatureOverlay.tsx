@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 
 import {
   clampSignaturePlacement,
+  resizeSignaturePlacement,
   signatureHeight,
   type SignaturePlacement,
 } from "./placement";
+import { SignatureResizeHandles } from "./SignatureResizeHandles";
 
 type SignatureOverlayProps = {
   file: File;
@@ -32,6 +34,7 @@ export function SignatureOverlay({
   onPlacementChange,
 }: SignatureOverlayProps) {
   const { t } = useTranslation();
+  const overlayRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [imageAspectRatio, setImageAspectRatio] = useState(3.2);
@@ -63,7 +66,9 @@ export function SignatureOverlay({
       startY: event.clientY,
       placement,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (typeof event.currentTarget.setPointerCapture === "function") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
   };
 
   const moveSignature = (event: PointerEvent<HTMLButtonElement>) => {
@@ -86,7 +91,10 @@ export function SignatureOverlay({
   const endDrag = (event: PointerEvent<HTMLButtonElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (
+      typeof event.currentTarget.hasPointerCapture === "function" &&
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
@@ -111,54 +119,57 @@ export function SignatureOverlay({
     );
   };
 
-  const resizeSignature = (value: string) => {
-    onPlacementChange(
-      clampSignaturePlacement(
-        { ...placement, width: Number(value) },
-        pageAspectRatio,
-        imageAspectRatio,
-      ),
-    );
-  };
-
   const height = signatureHeight(placement, pageAspectRatio, imageAspectRatio);
-  const maxWidth = Math.max(0.02, Math.min(0.65, (0.92 * imageAspectRatio) / pageAspectRatio));
+  const maxWidth = Math.max(0.02, Math.min(0.65, imageAspectRatio / pageAspectRatio));
   const minWidth = Math.min(0.06, maxWidth);
 
   return (
     <>
       {imageUrl ? (
-        <button
-          type="button"
-          className="signature-overlay"
+        <div
+          ref={overlayRef}
+          className="signature-image-overlay"
           style={{
             left: `${placement.x * 100}%`,
             top: `${placement.y * 100}%`,
             width: `${placement.width * 100}%`,
             height: `${height * 100}%`,
           }}
-          aria-label={t("signature.ready")}
-          disabled={disabled}
-          onPointerDown={beginDrag}
-          onPointerMove={moveSignature}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onKeyDown={moveWithKeyboard}
         >
-          <img
-            src={imageUrl}
-            alt=""
-            draggable={false}
-            onLoad={(event) => {
-              const { naturalWidth, naturalHeight } = event.currentTarget;
-              if (naturalWidth > 0 && naturalHeight > 0) {
-                const aspect = naturalWidth / naturalHeight;
-                setImageAspectRatio(aspect);
-                onPlacementChange(clampSignaturePlacement(placement, pageAspectRatio, aspect));
-              }
-            }}
+          <button
+            type="button"
+            className="signature-image-drag-surface"
+            aria-label={t("signature.ready")}
+            disabled={disabled}
+            onPointerDown={beginDrag}
+            onPointerMove={moveSignature}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            onKeyDown={moveWithKeyboard}
+          >
+            <img
+              src={imageUrl}
+              alt=""
+              draggable={false}
+              onLoad={(event) => {
+                const { naturalWidth, naturalHeight } = event.currentTarget;
+                if (naturalWidth > 0 && naturalHeight > 0) {
+                  const aspect = naturalWidth / naturalHeight;
+                  setImageAspectRatio(aspect);
+                  onPlacementChange(clampSignaturePlacement(placement, pageAspectRatio, aspect));
+                }
+              }}
+            />
+          </button>
+          <SignatureResizeHandles
+            overlayRef={overlayRef}
+            placement={placement}
+            pageAspectRatio={pageAspectRatio}
+            imageAspectRatio={imageAspectRatio}
+            disabled={disabled}
+            onPlacementChange={onPlacementChange}
           />
-        </button>
+        </div>
       ) : null}
       {imageUrl ? (
         <label className="signature-size-control">
@@ -170,7 +181,17 @@ export function SignatureOverlay({
             step="0.01"
             value={Math.min(placement.width, maxWidth)}
             disabled={disabled}
-            onChange={(event) => resizeSignature(event.currentTarget.value)}
+            onChange={(event) => {
+              onPlacementChange(
+                resizeSignaturePlacement(
+                  placement,
+                  Number(event.currentTarget.value),
+                  "bottomRight",
+                  pageAspectRatio,
+                  imageAspectRatio,
+                ),
+              );
+            }}
           />
         </label>
       ) : null}

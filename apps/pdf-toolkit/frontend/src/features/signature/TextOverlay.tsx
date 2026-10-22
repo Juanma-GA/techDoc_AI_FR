@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import { clampTextPlacement, type TextPlacement } from "./placement";
+import { TextResizeHandles } from "./TextResizeHandles";
 
 type TextOverlayProps = {
   text: string;
   label: string;
+  resizeLabel: string;
   pageRef: React.RefObject<HTMLDivElement | null>;
   pageViewportWidth: number;
   placement: TextPlacement;
@@ -19,18 +21,17 @@ type DragState = {
   placement: TextPlacement;
 };
 
-const fontSizePoints = 14;
-
 export function TextOverlay({
   text,
   label,
+  resizeLabel,
   pageRef,
   pageViewportWidth,
   placement,
   disabled,
   onPlacementChange,
 }: TextOverlayProps) {
-  const overlayRef = useRef<HTMLButtonElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const [pageCssWidth, setPageCssWidth] = useState(0);
 
@@ -49,7 +50,6 @@ export function TextOverlay({
     const pageBounds = pageRef.current?.getBoundingClientRect();
     const overlayBounds = overlayRef.current?.getBoundingClientRect();
     if (!pageBounds || !overlayBounds || pageBounds.width === 0 || pageBounds.height === 0) return;
-
     const clamped = clampTextPlacement(
       placement,
       overlayBounds.width / pageBounds.width,
@@ -69,18 +69,20 @@ export function TextOverlay({
       startY: event.clientY,
       placement,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (typeof event.currentTarget.setPointerCapture === "function") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
   };
 
   const moveOverlay = (event: PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
     const pageBounds = pageRef.current?.getBoundingClientRect();
-    const overlayBounds = event.currentTarget.getBoundingClientRect();
-    if (!drag || drag.pointerId !== event.pointerId || !pageBounds || pageBounds.width === 0) return;
-
+    const overlayBounds = overlayRef.current?.getBoundingClientRect();
+    if (!drag || drag.pointerId !== event.pointerId || !pageBounds || !overlayBounds) return;
     onPlacementChange(
       clampTextPlacement(
         {
+          ...drag.placement,
           x: drag.placement.x + (event.clientX - drag.startX) / pageBounds.width,
           y: drag.placement.y + (event.clientY - drag.startY) / pageBounds.height,
         },
@@ -93,7 +95,10 @@ export function TextOverlay({
   const endDrag = (event: PointerEvent<HTMLButtonElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) return;
     dragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (
+      typeof event.currentTarget.hasPointerCapture === "function" &&
+      event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
@@ -113,36 +118,49 @@ export function TextOverlay({
     event.preventDefault();
     onPlacementChange(
       clampTextPlacement(
-        { x: placement.x + offset[0], y: placement.y + offset[1] },
+        { ...placement, x: placement.x + offset[0], y: placement.y + offset[1] },
         overlayBounds.width / pageBounds.width,
         overlayBounds.height / pageBounds.height,
       ),
     );
   };
 
+  const fontSizePx =
+    pageCssWidth > 0 && pageViewportWidth > 0
+      ? (placement.fontSize * 4 * pageCssWidth) / (3 * pageViewportWidth)
+      : placement.fontSize;
+
   return (
-    <button
+    <div
       ref={overlayRef}
-      type="button"
       className="signature-text-overlay"
       style={{
         left: `${placement.x * 100}%`,
         top: `${placement.y * 100}%`,
-        fontSize: `${
-          pageCssWidth > 0 && pageViewportWidth > 0
-            ? (fontSizePoints * 4 * pageCssWidth) / (3 * pageViewportWidth)
-            : fontSizePoints
-        }px`,
+        fontSize: `${fontSizePx}px`,
       }}
-      aria-label={`${label}: ${text}`}
-      disabled={disabled}
-      onPointerDown={beginDrag}
-      onPointerMove={moveOverlay}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onKeyDown={moveWithKeyboard}
     >
-      {text}
-    </button>
+      <button
+        type="button"
+        className="signature-text-content"
+        aria-label={`${label}: ${text}`}
+        disabled={disabled}
+        onPointerDown={beginDrag}
+        onPointerMove={moveOverlay}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onKeyDown={moveWithKeyboard}
+      >
+        {text}
+      </button>
+      <TextResizeHandles
+        boxLabel={resizeLabel}
+        overlayRef={overlayRef}
+        pageRef={pageRef}
+        placement={placement}
+        disabled={disabled}
+        onPlacementChange={onPlacementChange}
+      />
+    </div>
   );
 }

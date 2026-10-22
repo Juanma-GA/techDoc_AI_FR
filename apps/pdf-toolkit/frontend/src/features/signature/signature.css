@@ -122,24 +122,31 @@
   height: 100%;
 }
 
-.signature-overlay {
+.signature-image-overlay {
   position: absolute;
-  display: grid;
   min-width: 0;
-  place-items: center;
-  overflow: hidden;
+  overflow: visible;
   border: 1px dashed var(--brand);
   background: color-mix(in srgb, var(--color-brand-blue) 8%, transparent);
+}
+
+.signature-image-drag-surface {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border: 0;
+  background: transparent;
   padding: 0;
   cursor: move;
   touch-action: none;
 }
 
-.signature-overlay:disabled {
+.signature-image-drag-surface:disabled {
   cursor: default;
 }
 
-.signature-overlay img {
+.signature-image-drag-surface img {
   display: block;
   width: 100%;
   height: 100%;
@@ -150,10 +157,20 @@
 .signature-text-overlay {
   position: absolute;
   display: block;
+  width: max-content;
   max-width: 80%;
   border: 1px dashed var(--brand);
   border-radius: var(--radius-sm);
   background: white;
+  color: black;
+}
+
+.signature-text-content {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
   padding: 2px 4px;
   color: black;
   font-family: "Inter", sans-serif;
@@ -165,8 +182,55 @@
   touch-action: none;
 }
 
-.signature-text-overlay:disabled {
+.signature-text-content:disabled {
   cursor: default;
+}
+
+.signature-resize-handle {
+  position: absolute !important;
+  z-index: 3;
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  border: 1px solid var(--brand) !important;
+  border-radius: 50% !important;
+  background: white !important;
+  padding: 0 !important;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.signature-resize-handle span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.signature-resize-handle-topLeft {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+
+.signature-resize-handle-topRight {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+
+.signature-resize-handle-bottomLeft {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+
+.signature-resize-handle-bottomRight {
+  right: -6px;
+  bottom: -6px;
+  cursor: nwse-resize;
 }
 
 .signature-size-control {

@@ -28,16 +28,18 @@ func TestSignatureRouteStreamsNewPDFAndCleansTemporaryFiles(t *testing.T) {
 	router := testRouter(handler)
 
 	request := signatureMultipartRequest(t, map[string]string{
-		"page":      "2",
-		"x":         "0.2",
-		"y":         "0.6",
-		"width":     "0.3",
-		"name_text": "Ada Lovelace",
-		"name_x":    "0.1",
-		"name_y":    "0.86",
-		"date_text": "22/10/2026",
-		"date_x":    "0.1",
-		"date_y":    "0.92",
+		"page":           "2",
+		"x":              "0.2",
+		"y":              "0.6",
+		"width":          "0.3",
+		"name_text":      "Ada Lovelace",
+		"name_x":         "0.1",
+		"name_y":         "0.86",
+		"name_font_size": "14",
+		"date_text":      "22/10/2026",
+		"date_x":         "0.1",
+		"date_y":         "0.92",
+		"date_font_size": "14",
 	})
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)

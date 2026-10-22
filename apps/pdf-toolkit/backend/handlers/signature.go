@@ -58,20 +58,18 @@ func (h *PDFHandler) Signature(c *gin.Context) {
 		ImageWidth:    signatureWidth,
 	}
 	if nameText != "" {
-		position, err := parseSignatureTextPosition(upload.fields, "name")
+		options.Name, err = parseSignatureTextStamp(upload.fields, "name", nameText)
 		if err != nil {
 			writeError(c, http.StatusBadRequest, "Vérifiez les options et le PDF sélectionnés.")
 			return
 		}
-		options.Name = &services.SignatureTextStamp{Text: nameText, Position: position}
 	}
 	if dateText != "" {
-		position, err := parseSignatureTextPosition(upload.fields, "date")
+		options.Date, err = parseSignatureTextStamp(upload.fields, "date", dateText)
 		if err != nil {
 			writeError(c, http.StatusBadRequest, "Vérifiez les options et le PDF sélectionnés.")
 			return
 		}
-		options.Date = &services.SignatureTextStamp{Text: dateText, Position: position}
 	}
 
 	output := filepath.Join(tempDir, "signed.pdf")
@@ -86,6 +84,25 @@ func (h *PDFHandler) Signature(c *gin.Context) {
 		return
 	}
 	h.sendPDF(c, output, "signed.pdf")
+}
+
+func parseSignatureTextStamp(
+	fields map[string][]string,
+	prefix, text string,
+) (*services.SignatureTextStamp, error) {
+	position, err := parseSignatureTextPosition(fields, prefix)
+	if err != nil {
+		return nil, err
+	}
+	rawFontSize, err := singleField(fields, prefix+"_font_size")
+	if err != nil {
+		return nil, err
+	}
+	fontSize, err := strconv.Atoi(rawFontSize)
+	if err != nil {
+		return nil, fmt.Errorf("signature %s font size is invalid", prefix)
+	}
+	return &services.SignatureTextStamp{Text: text, Position: position, FontSize: fontSize}, nil
 }
 
 func parseSignatureTextPosition(fields map[string][]string, prefix string) (services.StampPosition, error) {

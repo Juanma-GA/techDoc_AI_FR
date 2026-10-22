@@ -19,6 +19,7 @@ type StampPosition struct {
 type SignatureTextStamp struct {
 	Text     string
 	Position StampPosition
+	FontSize int
 }
 
 type SignatureStampOptions struct {
@@ -73,7 +74,8 @@ func isValidTextStamp(stamp *SignatureTextStamp, maxRunes int) bool {
 	}
 	text := strings.TrimSpace(stamp.Text)
 	if text == "" || utf8.RuneCountInString(text) > maxRunes ||
-		strings.ContainsAny(text, "\r\n\x00") {
+		strings.ContainsAny(text, "\r\n\x00") ||
+		stamp.FontSize < 6 || stamp.FontSize > 48 {
 		return false
 	}
 	return isUnitCoordinate(stamp.Position.X) &&

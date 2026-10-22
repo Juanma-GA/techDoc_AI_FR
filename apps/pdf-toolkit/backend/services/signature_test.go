@@ -27,10 +27,12 @@ func TestApplySignatureValidatesPageAndPlacement(t *testing.T) {
 		Name: &SignatureTextStamp{
 			Text:     "Ada Lovelace",
 			Position: StampPosition{X: 0.1, Y: 0.86},
+			FontSize: 14,
 		},
 		Date: &SignatureTextStamp{
 			Text:     "22/10/2026",
 			Position: StampPosition{X: 0.1, Y: 0.92},
+			FontSize: 14,
 		},
 	}
 
@@ -82,6 +84,7 @@ func TestApplySignatureValidatesPageAndPlacement(t *testing.T) {
 				Name: &SignatureTextStamp{
 					Text:     "Ada Lovelace",
 					Position: StampPosition{X: 0.1, Y: 0.96},
+					FontSize: 14,
 				},
 			},
 		},
@@ -94,6 +97,20 @@ func TestApplySignatureValidatesPageAndPlacement(t *testing.T) {
 				Date: &SignatureTextStamp{
 					Text:     strings.Repeat("x", 41),
 					Position: StampPosition{X: 0.1, Y: 0.92},
+					FontSize: 14,
+				},
+			},
+		},
+		{
+			name: "text font size outside range",
+			options: SignatureStampOptions{
+				Page:          1,
+				ImagePosition: StampPosition{X: 0.2, Y: 0.6},
+				ImageWidth:    0.3,
+				Date: &SignatureTextStamp{
+					Text:     "22/10/2026",
+					Position: StampPosition{X: 0.1, Y: 0.92},
+					FontSize: 49,
 				},
 			},
 		},
@@ -128,6 +145,7 @@ func TestApplySignatureRejectsTextUnsupportedByCorePDFFont(t *testing.T) {
 			Name: &SignatureTextStamp{
 				Text:     "张伟",
 				Position: StampPosition{X: 0.1, Y: 0.86},
+				FontSize: 14,
 			},
 		},
 	)

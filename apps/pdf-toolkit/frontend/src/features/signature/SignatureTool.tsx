@@ -85,11 +85,13 @@ export function SignatureTool() {
       data.append("name_text", nameText);
       data.append("name_x", namePlacement.x.toFixed(6));
       data.append("name_y", namePlacement.y.toFixed(6));
+      data.append("name_font_size", String(namePlacement.fontSize));
     }
     if (dateText) {
       data.append("date_text", dateText);
       data.append("date_x", datePlacement.x.toFixed(6));
       data.append("date_y", datePlacement.y.toFixed(6));
+      data.append("date_font_size", String(datePlacement.fontSize));
     }
     try {
       await processPDF("signature", data, "signed.pdf", t);
