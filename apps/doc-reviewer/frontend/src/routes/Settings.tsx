@@ -58,6 +58,7 @@ export function Settings() {
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
   const [modelDraft, setModelDraft] = useState("");
   const [visionModelDraft, setVisionModelDraft] = useState("");
+  const [ocrModelDraft, setOcrModelDraft] = useState("");
   const [resetDialog, setResetDialog] = useState<"sugs" | "all" | null>(null);
   const [resetFeedback, setResetFeedback] = useState<string | null>(null);
   const [resetBusy, setResetBusy] = useState(false);
@@ -69,6 +70,7 @@ export function Settings() {
         base_url: baseUrlDraft || undefined,
         chat_model: modelDraft || undefined,
         vision_model: visionModelDraft || undefined,
+        ocr_model: ocrModelDraft || undefined,
       },
       {
         onSuccess: () => {
@@ -76,6 +78,7 @@ export function Settings() {
           setBaseUrlDraft("");
           setModelDraft("");
           setVisionModelDraft("");
+          setOcrModelDraft("");
         },
       },
     );
@@ -87,6 +90,10 @@ export function Settings() {
   const pickModel = (id: string): void => {
     updateMistral.mutate({ chat_model: id });
   };
+  const pickOcrModel = (id: string): void => {
+    updateMistral.mutate({ ocr_model: id }, { onSuccess: () => setOcrModelDraft("") });
+  };
+  const ocrModels = (testMistral.data?.models ?? []).filter((id) => /ocr/i.test(id));
 
   return (
     <div>
@@ -97,14 +104,9 @@ export function Settings() {
 
         {/* 0. Configuration LLM (Mistral) — EN TETE, pliee par defaut. */}
         <Collapsible title={t("settings.llmSection")}>
-          <p id="mistral-settings-notice" className="banner warn" role="note">
-            {t("settings.mistral.developmentNotice")}
-          </p>
           <Card
             title={t("settings.mistral.title")}
             description={t("settings.mistral.description")}
-            disabled
-            disabledDescriptionId="mistral-settings-notice"
           >
             {mistral.isLoading ? (
               <p className="hint">{t("common.loading")}</p>
@@ -193,6 +195,18 @@ export function Settings() {
                     className="input mono"
                   />
                 </Field>
+                <Field label={t("settings.mistral.ocrModel")}>
+                  <input
+                    list="mistral-ocr-models"
+                    placeholder="mistral-ocr-latest"
+                    value={ocrModelDraft || mistral.data?.ocr_model || "mistral-ocr-latest"}
+                    onChange={(e) => setOcrModelDraft(e.target.value)}
+                    className="input mono"
+                  />
+                  <datalist id="mistral-ocr-models">
+                    {ocrModels.map((id) => <option key={id} value={id} />)}
+                  </datalist>
+                </Field>
                 <label className="checkbox" style={{ gap: 8 }}>
                   <input
                     type="checkbox"
@@ -238,6 +252,25 @@ export function Settings() {
                           title={t("settings.mistral.useThisModel")}
                           disabled={updateMistral.isPending}
                           onClick={() => pickModel(id)}
+                        >
+                          {id}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {testMistral.data?.ok && ocrModels.length > 0 ? (
+                  <div className="form" style={{ gap: 6 }}>
+                    <span className="label">{t("settings.mistral.ocrModelsFound")}</span>
+                    <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+                      {ocrModels.map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className="btn ghost small mono"
+                          title={t("settings.mistral.useThisOcrModel")}
+                          disabled={updateMistral.isPending}
+                          onClick={() => pickOcrModel(id)}
                         >
                           {id}
                         </button>

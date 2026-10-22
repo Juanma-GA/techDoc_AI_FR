@@ -107,9 +107,20 @@ aside.sidebar { width: var(--sidebar-w); flex: 0 0 auto; background: var(--bg-2)
 .kpi-value.info { color: var(--info); }
 
 .form { display: flex; flex-direction: column; gap: 10px; }
+.migration-split-review { margin-top: 12px; border-top: 1px solid var(--border); }
+.migration-split-review summary { padding: 10px 0; color: var(--fg); cursor: pointer; font-weight: 600; }
+.migration-split-review[open] summary { margin-bottom: 8px; }
+.migration-split-review-content { display: flex; flex-direction: column; gap: 8px; }
 .input, .dw select, .dw textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
 .dw textarea { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
 .input:focus, .dw select:focus, .dw textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
+.input:disabled { color: var(--fg-muted); opacity: 0.55; cursor: not-allowed; }
+.migration-upload-label { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 4px; }
+.migration-upload-label .label { margin: 0; }
+.migration-upload-status { color: var(--fg-muted); font-family: "Inter", sans-serif; font-size: 0.68rem; }
+.migration-upload-help { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--fg-muted); cursor: help; }
+.migration-upload-help:hover { color: var(--fg); }
+.migration-upload-help:focus-visible { outline: 2px solid var(--brand-light); outline-offset: 2px; }
 .checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
 .checkbox input { accent-color: var(--brand); }
 
@@ -250,9 +261,17 @@ table.data-table tr:hover td { background: var(--bg-2); }
 .msg-role { font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 1px; font-size: 0.6rem; color: var(--fg-dim); margin-bottom: 6px; }
 .msg-citations { margin-top: 8px; font-size: 0.8rem; color: var(--fg-dim); font-family: "JetBrains Mono", monospace; }
 
-/* --- s1000d-extractor : assistant (barre de progression + arbre) --- */
+/* --- s1000d-extractor : generation (barre de progression + arbre) --- */
 .progress { height: 6px; background: var(--bg-2); border-radius: 3px; overflow: hidden; margin: 10px 0; }
 .progress > span { display: block; height: 100%; background: var(--brand); transition: width 0.2s; }
+.progress.indeterminate > span { width: 35%; animation: progress-indeterminate 1.5s ease-in-out infinite; }
+@keyframes progress-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(286%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress.indeterminate > span { animation: none; }
+}
 .tree { font-size: 0.85rem; }
 .tree ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px solid var(--border); }
 .tree > ul { padding-left: 0; border-left: none; }

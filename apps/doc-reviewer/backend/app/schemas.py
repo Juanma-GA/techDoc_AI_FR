@@ -434,6 +434,7 @@ class MistralSettingsIn(BaseModel):
     base_url: str = "https://api.mistral.ai"
     chat_model: str = "mistral-small-latest"
     vision_model: str = "mistral-medium-3-5"
+    ocr_model: str = "mistral-ocr-latest"
     vision_enabled: Optional[bool] = None
     llm_enabled: Optional[bool] = None
     checklist_ai_scan: Optional[bool] = None
@@ -451,6 +452,7 @@ class MistralSettingsOut(BaseModel):
     base_url: str
     chat_model: str
     vision_model: str = "mistral-medium-3-5"
+    ocr_model: str = "mistral-ocr-latest"
     vision_enabled: bool = False
     llm_enabled: bool = True
     llm_tested: bool = False

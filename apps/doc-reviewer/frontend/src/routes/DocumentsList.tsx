@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Trash2 } from "lucide-react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
+import { DocumentDeleteButton } from "../components/DocumentDeleteButton";
 import { QualityBadge } from "../components/QualityBadge";
 import { PdfUploadZone } from "../components/upload/PdfUploadZone";
 import { DemoPdfImportButton } from "../components/upload/DemoPdfImportButton";
@@ -133,6 +133,13 @@ export function DocumentsList() {
       {/* Carte 2 : liste des documents importes (bien dissociee de l'import). */}
       <section className="card">
         <h2 className="card-title">{t("documents.listTitle")}</h2>
+        {remove.isError ? (
+          <p className="error" role="alert">
+            {t("documents.deleteFailed", {
+              message: remove.error instanceof Error ? remove.error.message : "",
+            })}
+          </p>
+        ) : null}
         {docs.isLoading ? (
           <p className="empty-state">{t("common.loading")}</p>
         ) : docs.data && docs.data.length > 0 ? (
@@ -143,6 +150,7 @@ export function DocumentsList() {
                 doc={doc}
                 onOpen={() => navigate(`/documents/${doc.id}`)}
                 onDelete={() => remove.mutate(doc.id)}
+                deleting={remove.isPending}
               />
             ))}
           </div>
@@ -163,10 +171,12 @@ function DocRow({
   doc,
   onOpen,
   onDelete,
+  deleting,
 }: {
   doc: Document;
   onOpen: () => void;
   onDelete: () => void;
+  deleting: boolean;
 }): JSX.Element {
   const { t } = useTranslation();
   const analyze = useAnalyze(doc.id, doc);
@@ -219,14 +229,13 @@ function DocRow({
         <button type="button" onClick={onOpen} className="btn small primary">
           {t("documents.open")}
         </button>
-        <button
-          type="button"
-          aria-label={t("documents.delete")}
-          onClick={onDelete}
-          className="btn small danger"
-        >
-          <Trash2 size={14} />
-        </button>
+        <DocumentDeleteButton
+          label={t("common.delete")}
+          ariaLabel={t("documents.delete")}
+          confirmLabel={t("documents.deleteConfirmAgain")}
+          onConfirm={onDelete}
+          disabled={deleting}
+        />
       </div>
     </div>
   );

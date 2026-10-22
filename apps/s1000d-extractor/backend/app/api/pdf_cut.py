@@ -23,9 +23,16 @@ def _require(db: Session, doc_id: str) -> Document:
 
 
 @router.post("/{doc_id}/pdf-cut/detect")
-def detect_pdf_start(doc_id: str, db: Session = Depends(get_db)) -> dict:
+def detect_pdf_start(
+    doc_id: str,
+    params: dict = Body(default={}),
+    db: Session = Depends(get_db),
+) -> dict:
     doc = _require(db, doc_id)
-    candidates = pdf_cut.detect_start_pages(doc)
+    title = params.get("title")
+    if title is not None and not isinstance(title, str):
+        raise AppError("PDF_DM_TITLE_INVALID", "Le titre selectionne doit etre du texte.", 422)
+    candidates = pdf_cut.detect_start_pages(doc, title)
     total_pages = pdf_cut.total_pages(doc)
     return {
         "validation_required": settings.pdf_cut_requires_validation,
@@ -33,6 +40,7 @@ def detect_pdf_start(doc_id: str, db: Session = Depends(get_db)) -> dict:
         "selected_end_page": doc.pdf_cut_end_page,
         "default_start_page": candidates[0]["page"] if candidates else 1,
         "total_pages": total_pages,
+        "dmrl_titles": pdf_cut.dmrl_data_module_titles(doc.dmrl_json),
         "candidates": candidates[:10],
     }
 

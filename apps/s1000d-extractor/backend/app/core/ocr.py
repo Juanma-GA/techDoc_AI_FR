@@ -39,14 +39,38 @@ def ocr_available(db: Session | None) -> bool:
     )
 
 
-def run_ocr(path: str | Path, db: Session) -> list[str]:
+def run_ocr(
+    path: str | Path,
+    db: Session,
+    *,
+    page_numbers: list[int] | None = None,
+) -> list[str]:
     """OCR le PDF via Mistral et renvoie le markdown, une entree par page.
 
+    `page_numbers` utilise des numeros de page 1-indexes pour limiter l'OCR.
     Leve `OCR_FAILED` si l'appel echoue (message explicite cote UI).
     """
+    if page_numbers is not None and not page_numbers:
+        return []
     try:
         client = MistralClient.from_db(db)
-        return client.ocr_pdf(Path(path).read_bytes())
+        if page_numbers is None:
+            pdf_bytes = Path(path).read_bytes()
+        else:
+            import pymupdf as fitz
+
+            source = fitz.open(str(path))
+            selected = fitz.open()
+            try:
+                for page_number in page_numbers:
+                    if not 1 <= page_number <= source.page_count:
+                        raise ValueError(f"Numero de page invalide pour l'OCR : {page_number}")
+                    selected.insert_pdf(source, from_page=page_number - 1, to_page=page_number - 1)
+                pdf_bytes = selected.tobytes()
+            finally:
+                selected.close()
+                source.close()
+        return client.ocr_pdf(pdf_bytes)
     except MistralError as exc:
         raise AppError("OCR_FAILED", f"OCR Mistral indisponible : {exc}", status_code=502) from exc
     except Exception as exc:

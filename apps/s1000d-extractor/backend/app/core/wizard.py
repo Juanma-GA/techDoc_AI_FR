@@ -19,18 +19,35 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from time import perf_counter
 
 import structlog
 from sqlalchemy.orm import Session
 
-from app.core import context_classifier, form_segmenter, ingest, resolver, splitter, structure_infer
+from app.core import (
+    context_classifier,
+    dm_header,
+    form_segmenter,
+    ingest,
+    resolver,
+    splitter,
+    structure_infer,
+    wizard_response,
+)
 from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
+from app.core.brex import parse_brex
+from app.core.brex_generation import serialize_with_brex_guidance
+from app.core.brex_profile import extract_brex_dm_code
 from app.core.errors import AppError
-from app.core.s1000d_serializer import build_reference_index, content_node_count, serialize
-from app.core.validator import validate_document
+from app.core.s1000d_serializer import (
+    build_reference_index,
+    content_node_count,
+    missing_data_fields,
+)
+from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, Document
 
 STEPS = ("split", "type", "structure", "generate")
@@ -48,13 +65,27 @@ def steps_for(doc: Document) -> tuple[str, ...]:
 
 # --- helpers d'etat ----------------------------------------------------------
 
-def _brex_xml(db: Session, brex_id: str | None) -> str | None:
+def _brex_xml(
+    db: Session, brex_id: str | None, issue: str | None = None
+) -> str | None:
     if not brex_id:
         return None
     b = db.get(BrexProfile, brex_id)
-    if b and Path(b.xml_path).exists():
-        return Path(b.xml_path).read_text(encoding="utf-8")
-    return None
+    if b is None:
+        raise AppError("BREX_NOT_FOUND", "Profil BREX inconnu.", 404)
+    if issue is not None and b.s1000d_issue != issue:
+        raise AppError(
+            "BREX_ISSUE_MISMATCH",
+            f"Issue BREX {b.s1000d_issue} differente de l'Issue DM {issue}.",
+            422,
+        )
+    path = Path(b.xml_path)
+    if not path.is_file():
+        raise AppError("BREX_FILE_NOT_FOUND", "Le fichier du profil BREX est introuvable.", 404)
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
 def images_dir(doc_id: str) -> Path:
@@ -63,7 +94,7 @@ def images_dir(doc_id: str) -> Path:
     return Path(settings.storage_dir) / f"document_{doc_id}_images"
 
 
-def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
+def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> int:
     """Extrait les images du PDF en JPG et pose l'ICN sur les figures (no-op si
     echec / pas d'image). Le dossier est purge d'abord : relancer l'assistant ne
     doit pas empiler des doublons d'illustrations."""
@@ -74,15 +105,16 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> None:
             for old in out_dir.iterdir():
                 if old.is_file() and old.suffix.lower() in {".jpg", ".jpeg", ".png"}:
                     old.unlink(missing_ok=True)
-        illustrations.attach_illustrations(
+        return illustrations.attach_illustrations(
             root,
             pdf_path=doc.pdf_cut_path or doc.storage_path,
             out_dir=out_dir,
             doc_id=doc.id,
             dm_level=splitter.level_of(_DEFAULT_LEVEL),
         )
-    except Exception:  # jamais bloquant : le squelette reste generable sans images
-        pass
+    except Exception as exc:  # jamais bloquant : le squelette reste generable sans images
+        log.warning("wizard_illustrations_failed", error_type=type(exc).__name__)
+        return 0
 
 
 def _apply_dmrl_icns(
@@ -134,6 +166,7 @@ def start(
     """
     from app.core.pdf_cut import prepare_source
 
+    total_started = perf_counter()
     previous_dm_count = len(ws.load_dms(doc))
     doc.dms_json = "[]"
     doc.dms_history_json = None
@@ -147,6 +180,7 @@ def start(
         start_page=start_page,
         end_page=end_page,
     )
+    stage_started = perf_counter()
     source_path = prepare_source(
         doc,
         db,
@@ -154,9 +188,23 @@ def start(
         start_page=start_page,
         end_page=end_page,
     )
+    log.info(
+        "wizard_stage_timing",
+        stage="source_preparation",
+        duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+        source_format=doc.source_format,
+        page_count=doc.page_count,
+    )
     progress_cb("parse", 10)
+    stage_started = perf_counter()
     blocks = ingest.extract_blocks(
         source_path, fmt=doc.source_format, db=db, progress_cb=progress_cb
+    )
+    log.info(
+        "wizard_stage_timing",
+        stage="document_ingest",
+        duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+        block_count=len(blocks),
     )
     log.info(
         "wizard_source_parsed",
@@ -165,9 +213,23 @@ def start(
         block_count=len(blocks),
     )
     progress_cb("infer", 40)
+    stage_started = perf_counter()
     root = structure_infer.build_ir(blocks)
+    log.info(
+        "wizard_stage_timing",
+        stage="structure_inference",
+        duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+        block_count=len(blocks),
+    )
     if doc.source_format == "pdf":
-        _extract_illustrations(doc, root)
+        stage_started = perf_counter()
+        illustration_count = _extract_illustrations(doc, root)
+        log.info(
+            "wizard_stage_timing",
+            stage="illustration_extraction",
+            duration_ms=round((perf_counter() - stage_started) * 1000, 1),
+            image_count=illustration_count,
+        )
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.split_level = _DEFAULT_LEVEL
     ws.reset_history(doc)                      # nouvel assistant -> pile undo vide
@@ -191,6 +253,12 @@ def start(
     )
     progress_cb("done", 100)
     db.commit()
+    log.info(
+        "wizard_stage_timing",
+        stage="wizard_total",
+        duration_ms=round((perf_counter() - total_started) * 1000, 1),
+        dm_count=len(rebuilt_dms),
+    )
     return state(doc)
 
 
@@ -201,21 +269,36 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     liste des DM attendus par le client.
     """
     progress_cb("split", 60)
+    split_started = perf_counter()
     root = ir_mod.from_dict(json.loads(doc.ir_json))
-    entries = wres.dmrl_entries(doc)
+    entries = wres.dmrl_data_module_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     if entries:
         _apply_dmrl_icns(units, entries, images_dir(doc.id))
         doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
+    log.info(
+        "wizard_stage_timing",
+        stage="dm_split",
+        duration_ms=round((perf_counter() - split_started) * 1000, 1),
+        dm_count=len(units),
+        dmrl_entry_count=len(entries),
+    )
     progress_cb("classify", 80)
+    classify_started = perf_counter()
     types = context_classifier.classify_dms(units, hint=doc.context_hint, db=db)
+    log.info(
+        "wizard_stage_timing",
+        stage="dm_classification",
+        duration_ms=round((perf_counter() - classify_started) * 1000, 1),
+        dm_count=len(units),
+    )
     dmrl_types = {e.dmc: e.dm_type for e in entries if e.dmc and e.dm_type}
     dms = [
         {
             "dm_id": u.dm_id,
             "dmc": u.dmc,
             "title": u.title,
-            # Le type declare dans la DMRL fait foi quand il existe.
+            # Les types InfoCode 4.1 (ou les choix manuels) priment la classification du contenu.
             "dm_type": dmrl_types.get(u.dmc) or types[u.dm_id],
             "is_orphan": u.is_orphan,
             "tree": ir_mod.to_dict(u.root),
@@ -259,6 +342,21 @@ def update(db: Session, doc: Document, params: dict) -> dict:
 def advance(db: Session, doc: Document, params: dict) -> dict:
     step = doc.wizard_step
     if step == "dmrl":
+        unresolved_types = wres.unresolved_dmrl_type_entries(doc)
+        if unresolved_types:
+            raise AppError(
+                "DMRL_TYPE_REVIEW_REQUIRED",
+                "Choisissez le type a utiliser pour chaque DM en conflit avant de continuer.",
+                409,
+                detail=[
+                    {
+                        "dmc": entry.dmc,
+                        "title": entry.title,
+                        "info_code": entry.info_code,
+                    }
+                    for entry in unresolved_types
+                ],
+            )
         # La DMRL validee (eventuellement editee) pilote le decoupage.
         _resplit(db, doc, doc.split_level or _DEFAULT_LEVEL)
         doc.wizard_step = "split"
@@ -278,7 +376,16 @@ def advance(db: Session, doc: Document, params: dict) -> dict:
         _apply_overrides(doc, params.get("overrides") or [])
         _generate_all(db, doc)
         doc.wizard_step = "generate"
-        doc.status = "extracted"
+        doc.status = (
+            "incomplete"
+            if any(
+                dm.get("xsd_valid") is not True
+                or dm.get("missing_fields")
+                or any(v.get("severity") == "error" for v in dm.get("violations") or [])
+                for dm in ws.load_dms(doc)
+            )
+            else "extracted"
+        )
     elif step == "generate":
         return state(doc)
     db.commit()
@@ -340,7 +447,9 @@ def _generate_all(db: Session, doc: Document) -> None:
     Un DM qui echoue ne casse plus toute l'etape : il porte sa propre violation.
     """
     dms = ws.load_dms(doc)
-    brex_xml = _brex_xml(db, doc.brex_id)
+    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
+    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
     res = wres.load_resources(doc)
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     log.info(
@@ -359,12 +468,24 @@ def _generate_all(db: Session, doc: Document) -> None:
         )
         for dm in dms
     ])
-    for dm in dms:
+    for dm_index, dm in enumerate(dms, start=1):
+        dm_started = perf_counter()
+        resources_ms = 0.0
+        serialization_ms = 0.0
+        validation_ms = 0.0
+        stage = "resources"
+        stage_started = dm_started
         try:
             enriched, extra = wres.apply_resources(dm, res)
+            resources_ms = (perf_counter() - stage_started) * 1000
+
+            stage = "serialization"
+            stage_started = perf_counter()
             root = ir_mod.from_dict(enriched["tree"])
-            xml = serialize(
+            template_missing_fields = enriched.get("missing_fields") or []
+            xml, serialization, brex_guided_candidates = serialize_with_brex_guidance(
                 root,
+                brex_rules,
                 issue=doc.s1000d_issue,
                 dm_type=dm["dm_type"],
                 title=dm["title"],
@@ -372,7 +493,10 @@ def _generate_all(db: Session, doc: Document) -> None:
                 table_offset=table_offset,
                 section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
-                header_template=res.header_template,
+                missing_fields=template_missing_fields,
+                header_template=dm_header.with_brex_dm_code(
+                    res.header_template, brex_dm_code
+                ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
             )
@@ -385,26 +509,61 @@ def _generate_all(db: Session, doc: Document) -> None:
                 k: v for k, v in enriched.items()
                 if k not in ("xml", "violations", "content_html", "content_xml")
             })
+            dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
+            dm["template_missing_fields"] = template_missing_fields
+
+            serialization_ms = (perf_counter() - stage_started) * 1000
+            stage = "validation"
+            stage_started = perf_counter()
+            dm["missing_fields"] = missing_data_fields(xml, template_missing_fields)
             dm["violations"] = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"], brex_xml=brex_xml,
                 brex_rules=res.brex_rules, dm=enriched,
-            ) + extra
+            ) + serialization.xsd_violations + extra
+            dm["xsd_valid"] = xsd_is_valid(dm["violations"])
+            validation_ms = (perf_counter() - stage_started) * 1000
             log.info(
                 "dm_generated",
                 document_id=doc.id,
                 dm_id=dm["dm_id"],
+                dm_index=dm_index,
+                dm_count=len(dms),
                 icn_count=sum(1 for node in root.walk() if node.kind == "figure" and node.icn),
                 has_doctype="<!DOCTYPE dmodule [" in xml,
                 xml_length=len(xml),
+                brex_guided_candidates=brex_guided_candidates,
+                resources_ms=round(resources_ms, 1),
+                serialization_ms=round(serialization_ms, 1),
+                validation_ms=round(validation_ms, 1),
+                total_ms=round((perf_counter() - dm_started) * 1000, 1),
             )
         except Exception as exc:
-            log.exception("dm_generation_failed", document_id=doc.id, dm_id=dm.get("dm_id"))
+            failed_phase_ms = (perf_counter() - stage_started) * 1000
+            if stage == "resources":
+                resources_ms = failed_phase_ms
+            elif stage == "serialization":
+                serialization_ms = failed_phase_ms
+            else:
+                validation_ms = failed_phase_ms
+            log.exception(
+                "dm_generation_failed",
+                document_id=doc.id,
+                dm_id=dm.get("dm_id"),
+                dm_index=dm_index,
+                dm_count=len(dms),
+                failed_stage=stage,
+                resources_ms=round(resources_ms, 1),
+                serialization_ms=round(serialization_ms, 1),
+                validation_ms=round(validation_ms, 1),
+                total_ms=round((perf_counter() - dm_started) * 1000, 1),
+            )
             dm["xml"] = None
             dm["violations"] = [{
                 "severity": "error", "rule": "GENERATE",
                 "message": f"Generation impossible pour ce DM : {exc}", "path": "/",
             }]
+            dm["xsd_valid"] = False
     ws.save_dms(doc, dms)
 
 
@@ -414,31 +573,14 @@ def state(doc: Document) -> dict:
     dms = ws.load_dms(doc)
     steps = steps_for(doc)
     step = doc.wizard_step or steps[0]
-    out_dms = []
-    for dm in dms:
-        entry = {
-            "dm_id": dm["dm_id"],
-            "dmc": dm.get("dmc", ""),
-            "title": dm["title"],
-            "dm_type": dm["dm_type"],
-            "is_orphan": bool(dm.get("is_orphan")),
-            "node_count": ws.node_count(dm["tree"]),
-        }
-        if step == "split":
-            entry["preview"] = ws.dm_preview(dm["tree"])
-        if step == "structure":
-            entry["tree"] = dm["tree"]
-        if step == "generate":
-            entry["violation_count"] = len(dm.get("violations") or [])
-            entry["has_xml"] = bool(dm.get("xml"))
-            entry["missing_fields"] = dm.get("missing_fields") or []
-            entry["cir_unresolved"] = dm.get("cir_unresolved") or []
-        out_dms.append(entry)
+    out_dms = [wizard_response.project_dm_state(dm, step) for dm in dms]
     out = {
         "step": step,
         "split_level": doc.split_level or _DEFAULT_LEVEL,
+        "dmrl_dm_count": len(wres.dmrl_data_module_entries(doc)),
         "steps": list(steps),
         "can_undo": step == "split" and ws.can_undo(doc),
+        "has_brex_profile": bool(doc.brex_id),
         "resources": _resources_state(doc),
         "dms": out_dms,
     }
@@ -460,12 +602,17 @@ def _resources_state(doc: Document) -> dict:
     }
 
 
-def dm_xml(doc: Document, dm_id: str) -> str:
+def dm_xml(doc: Document, dm_id: str, *, db: Session | None = None) -> str:
     dms = ws.load_dms(doc)
     figure_offset = 0
     table_offset = 0
     section_offset = 0
     res = wres.load_resources(doc)
+    if doc.brex_id and db is None:
+        raise AppError("BREX_SESSION_REQUIRED", "Session de base requise pour charger le BREX.", 500)
+    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue) if db else None
+    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
+    brex_rules = parse_brex(brex_xml) if brex_xml else []
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     reference_index = build_reference_index([
         (
@@ -482,8 +629,16 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 raise AppError("NO_XML", "XML non genere : termine l'etape Generation.", 409)
             # Le tree est la source de verite : un XML persiste peut provenir
             # d'une generation precedente ou d'un serializer ancien.
-            xml = serialize(
-                ir_mod.from_dict(dm["tree"]),
+            enriched, template_extra = wres.apply_resources(dm, res)
+            template_missing_fields = enriched.get("missing_fields") or []
+            template_violations = [
+                violation for violation in template_extra
+                if violation.get("rule") == "TEMPLATE"
+            ]
+            root = ir_mod.from_dict(enriched["tree"])
+            xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
+                root,
+                brex_rules,
                 issue=doc.s1000d_issue,
                 dm_type=dm["dm_type"],
                 title=dm["title"],
@@ -491,11 +646,44 @@ def dm_xml(doc: Document, dm_id: str) -> str:
                 table_offset=table_offset,
                 section_offset=section_offset,
                 dm_metadata=dmrl_by_dmc.get(dm.get("dmc"), {"title": dm.get("title", "")}),
-                header_template=res.header_template,
+                missing_fields=template_missing_fields,
+                header_template=dm_header.with_brex_dm_code(
+                    res.header_template, brex_dm_code
+                ),
                 reference_index=reference_index,
                 reference_dm_id=dm["dm_id"],
             )
+            dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
+            dm["template_missing_fields"] = template_missing_fields
+            xsd_results = validate_document(
+                xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"],
+                brex_xml=brex_xml,
+                brex_rules=res.brex_rules,
+                dm=enriched,
+            )
+            xsd_results.extend(serialization.xsd_violations)
+            dm["violations"] = [
+                violation for violation in dm.get("violations") or []
+                if violation.get("rule") not in {"XSD", "WELLFORMED", "TEMPLATE"}
+            ] + xsd_results + template_violations
+            dm["xsd_valid"] = xsd_is_valid(xsd_results)
+            dm["missing_fields"] = missing_data_fields(
+                xml, template_missing_fields,
+            )
+            doc.status = (
+                "incomplete"
+                if any(
+                    item.get("xsd_valid") is not True
+                    or item.get("missing_fields")
+                    or any(
+                        violation.get("severity") == "error"
+                        for violation in item.get("violations") or []
+                    )
+                    for item in dms
+                )
+                else "extracted"
+            )
             ws.save_dms(doc, dms)
             return xml
         root = ir_mod.from_dict(dm["tree"]) if dm.get("tree") else None
