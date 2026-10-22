@@ -54,11 +54,11 @@ Stack : Go 1.25, Gin 1.11, pdfcpu 0.15, React 18, Vite 5, PDF.js 4 et dnd-kit po
 
 Prérequis :
 
-- Go 1.25.x
+- Go 1.25 ou plus récent (installation proposée via winget si absent)
 - Node.js 20 ou plus récent
 - pnpm 9 ou plus récent
 
-Double-cliquez sur [`start.bat`](./start.bat). Le script ouvre une console persistante, construit le frontend si nécessaire, choisit un port libre à partir de `8085`, puis démarre l'application sur `127.0.0.1`. Au premier démarrage, Go et pnpm téléchargent les dépendances de build et la compilation Go peut prendre un moment; la console affiche les paquets compilés et les logs HTTP. Le navigateur s'ouvre automatiquement une fois le serveur démarré, plutôt qu'avant la fin de la compilation.
+Double-cliquez sur [`start.bat`](./start.bat). Si Go est absent, le lanceur demande confirmation puis tente `winget install --id GoLang.Go --exact`; si winget est absent ou échoue, installez Go manuellement depuis [go.dev/dl](https://go.dev/dl/). L'installation peut nécessiter une connexion Internet et une autorisation Windows. Le script ouvre une console persistante, construit le frontend si nécessaire, choisit un port libre à partir de `8085`, puis démarre l'application sur `127.0.0.1`. Au premier démarrage, Go et pnpm téléchargent les dépendances de build et la compilation Go peut prendre un moment; la console affiche les paquets compilés et les logs HTTP. Le navigateur s'ouvre automatiquement une fois le serveur démarré, plutôt qu'avant la fin de la compilation.
 
 Le rebuild surveille aussi `packages/ui`, `design-tokens`, les assets publics et le lockfile racine.
 Les dépendances pnpm ne sont installées que si `frontend/node_modules` est absent.
