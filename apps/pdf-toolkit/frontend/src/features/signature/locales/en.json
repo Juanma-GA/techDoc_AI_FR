@@ -1,6 +1,6 @@
 {
   "app": {
-    "metaDescription": "Merge, convert, extract, delete, reorder, compress, rotate, and visually sign PDFs locally."
+    "metaDescription": "Merge, convert, extract, delete, reorder, compress, rotate, and visually sign PDFs with optional name and date."
   },
   "tools": {
     "signature": {
@@ -14,7 +14,15 @@
     "stepFileDescription": "Choose the document and page to sign.",
     "stepDraw": "Draw signature",
     "stepDrawDescription": "Draw in the box, then save it to place it.",
-    "privacy": "The signature stays in memory during this operation and is not retained after closing.",
+    "stepDetails": "Add name and date (optional)",
+    "detailsDescription": "The text will be added to the PDF and can be moved separately.",
+    "firstNameLabel": "First name",
+    "lastNameLabel": "Last name",
+    "dateLabel": "Date",
+    "nameOverlayLabel": "Name, move",
+    "dateOverlayLabel": "Date, move",
+    "unsupportedText": "The name or date contains a character that this PDF cannot display.",
+    "privacy": "The signature, name, and date stay in memory during this operation and are not retained after closing.",
     "canvasLabel": "Signature drawing area",
     "clear": "Clear",
     "save": "Save drawing",
@@ -25,7 +33,7 @@
     "ready": "Signature ready. Drag it onto the page.",
     "clearSaved": "Remove saved signature",
     "stepPlace": "Place signature",
-    "stepPlaceDescription": "Move the signature on the preview. Use the arrow keys to adjust its position.",
+    "stepPlaceDescription": "Move the signature, name, and date separately on the preview. Use the arrow keys to adjust their positions.",
     "pageLabel": "Page to sign",
     "pageOption": "Page {{page}}",
     "sizeLabel": "Signature size",
@@ -37,7 +45,7 @@
     "selectPdf": "Select a PDF file.",
     "drawFirst": "Draw or import a signature before continuing.",
     "canvasExportFailed": "Could not save the drawing. Please try again.",
-    "outputDescription": "PDF with visual signature",
+    "outputDescription": "PDF with visual signature, name, and date",
     "action": "Apply and download",
     "working": "Adding signature…",
     "success": "{{fileName}} has been downloaded.",

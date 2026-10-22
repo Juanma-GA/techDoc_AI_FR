@@ -27,7 +27,7 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Supprimer des pages selon la même syntaxe vers `trimmed.pdf` (au moins une page doit rester).
 - Réorganiser toutes les pages par glisser-déposer de miniatures vers `reordered.pdf`.
 - Faire pivoter toutes les pages ou une sélection vers `rotated.pdf`, de 90°, 180° ou 270° dans le sens horaire.
-- Dessiner ou importer une signature PNG/JPEG (10 Mo maximum), la déplacer et la redimensionner sur une page, puis exporter `signed.pdf`. La signature est visuelle, gardée en mémoire uniquement pendant l'opération et n'a pas de validation cryptographique.
+- Dessiner ou importer une signature PNG/JPEG (10 Mo maximum), ajouter facultativement un prénom, un nom et une date dans des cadres déplaçables, puis exporter `signed.pdf`. Ces éléments sont visuels, gardés en mémoire uniquement pendant l'opération et n'ont pas de validation cryptographique. Les caractères hors Latin-1 sont refusés par la police PDF standard.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
 - Shell et thème visuel repris de `apps/_template` et `packages/ui` : huit onglets, modes clair/sombre et interface française/anglaise.
 

@@ -88,6 +88,7 @@ function translateApiError(message: string, t: TFunction): string {
     "Le traitement du PDF a échoué.": "apiErrors.processingFailed",
     "Impossible de préparer les fichiers PDF.": "apiErrors.prepareFailed",
     "L'image de signature dépasse la limite de 10 Mo.": "signature.apiImageTooLarge",
+    "Le nom ou la date contient un caractère que le PDF ne peut pas afficher.": "signature.unsupportedText",
   };
   const key = messageKeys[message];
   if (key) {

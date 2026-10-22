@@ -30,6 +30,8 @@ func parseSignatureMultipart(request *http.Request, tempDir string) (signatureUp
 	seenFiles := make(map[string]bool)
 	allowedFields := map[string]struct{}{
 		"page": {}, "x": {}, "y": {}, "width": {},
+		"name_text": {}, "name_x": {}, "name_y": {},
+		"date_text": {}, "date_x": {}, "date_y": {},
 	}
 	for {
 		part, err := reader.NextPart()

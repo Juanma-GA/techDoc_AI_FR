@@ -1,6 +1,6 @@
 {
   "app": {
-    "metaDescription": "Fusionnez, convertissez, extrayez, supprimez, réorganisez, compressez, faites pivoter et signez visuellement des PDF localement."
+    "metaDescription": "Fusionnez, convertissez, extrayez, supprimez, réorganisez, compressez, faites pivoter et signez visuellement des PDF avec nom et date facultatifs."
   },
   "tools": {
     "signature": {
@@ -14,7 +14,15 @@
     "stepFileDescription": "Choisissez le document et la page à signer.",
     "stepDraw": "Dessiner la signature",
     "stepDrawDescription": "Dessinez dans le cadre, puis enregistrez-la pour la placer.",
-    "privacy": "La signature reste en mémoire pendant cette opération et n’est pas enregistrée après fermeture.",
+    "stepDetails": "Ajouter un nom et une date (facultatif)",
+    "detailsDescription": "Les textes seront ajoutés au PDF et pourront être déplacés séparément.",
+    "firstNameLabel": "Prénom",
+    "lastNameLabel": "Nom",
+    "dateLabel": "Date",
+    "nameOverlayLabel": "Nom et prénom, déplacer",
+    "dateOverlayLabel": "Date, déplacer",
+    "unsupportedText": "Le nom ou la date contient un caractère non pris en charge par le PDF.",
+    "privacy": "La signature, le nom et la date restent en mémoire pendant cette opération et ne sont pas conservés après fermeture.",
     "canvasLabel": "Cadre de dessin de la signature",
     "clear": "Effacer",
     "save": "Enregistrer le dessin",
@@ -25,7 +33,7 @@
     "ready": "Signature prête. Faites-la glisser sur la page.",
     "clearSaved": "Supprimer la signature enregistrée",
     "stepPlace": "Placer la signature",
-    "stepPlaceDescription": "Déplacez la signature sur l’aperçu. Utilisez les flèches du clavier pour ajuster sa position.",
+    "stepPlaceDescription": "Déplacez séparément la signature, le nom et la date sur l’aperçu. Utilisez les flèches du clavier pour ajuster leur position.",
     "pageLabel": "Page à signer",
     "pageOption": "Page {{page}}",
     "sizeLabel": "Taille de la signature",
@@ -37,7 +45,7 @@
     "selectPdf": "Sélectionnez un PDF.",
     "drawFirst": "Dessinez ou importez une signature avant de continuer.",
     "canvasExportFailed": "Impossible d’enregistrer le dessin. Réessayez.",
-    "outputDescription": "PDF avec signature visuelle",
+    "outputDescription": "PDF avec signature, nom et date visuels",
     "action": "Appliquer et télécharger",
     "working": "Ajout de la signature…",
     "success": "Le fichier {{fileName}} a été téléchargé.",

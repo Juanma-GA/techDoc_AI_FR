@@ -1,12 +1,17 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { FileText, PenTool } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button, Card, Spinner } from "@internal/ui";
 import { formatOperationError, processPDF } from "../../shared/api";
-import { PdfSignaturePreview } from "./PdfSignaturePreview";
+import { SignaturePlacementPanel } from "./SignaturePlacementPanel";
 import { SignatureSourcePanel } from "./SignatureSourcePanel";
-import { defaultSignaturePlacement, type SignaturePlacement } from "./placement";
+import { formatSignatureDate } from "./formatDate";
+import {
+  defaultDatePlacement,
+  defaultNamePlacement,
+  defaultSignaturePlacement,
+  type SignaturePlacement,
+  type TextPlacement,
+} from "./placement";
 import "./signature.css";
 
 export function SignatureTool() {
@@ -14,19 +19,28 @@ export function SignatureTool() {
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dateValue, setDateValue] = useState("");
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [placement, setPlacement] = useState<SignaturePlacement>(defaultSignaturePlacement);
+  const [namePlacement, setNamePlacement] = useState<TextPlacement>(defaultNamePlacement);
+  const [datePlacement, setDatePlacement] = useState<TextPlacement>(defaultDatePlacement);
   const [previewReady, setPreviewReady] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
+  const nameText = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+  const dateText = formatSignatureDate(dateValue, language);
 
   useEffect(() => {
     setPageNumber(1);
     setPageCount(0);
     setPreviewReady(false);
     setPlacement(defaultSignaturePlacement);
+    setNamePlacement(defaultNamePlacement);
+    setDatePlacement(defaultDatePlacement);
   }, [pdfFile]);
 
   const saveSignature = (file: File) => {
@@ -67,6 +81,16 @@ export function SignatureTool() {
     data.append("x", placement.x.toFixed(6));
     data.append("y", placement.y.toFixed(6));
     data.append("width", placement.width.toFixed(6));
+    if (nameText) {
+      data.append("name_text", nameText);
+      data.append("name_x", namePlacement.x.toFixed(6));
+      data.append("name_y", namePlacement.y.toFixed(6));
+    }
+    if (dateText) {
+      data.append("date_text", dateText);
+      data.append("date_x", datePlacement.x.toFixed(6));
+      data.append("date_y", datePlacement.y.toFixed(6));
+    }
     try {
       await processPDF("signature", data, "signed.pdf", t);
       setSuccess(true);
@@ -82,92 +106,54 @@ export function SignatureTool() {
       <SignatureSourcePanel
         pdfFile={pdfFile}
         signatureFile={signatureFile}
+        firstName={firstName}
+        lastName={lastName}
+        dateValue={dateValue}
         language={language}
         disabled={working}
         onPdfFiles={(incoming) => {
-            setPdfFile(incoming[0] ?? null);
-            setError("");
-            setSuccess(false);
-          }}
+          setPdfFile(incoming[0] ?? null);
+          setError("");
+          setSuccess(false);
+        }}
         onError={setError}
         onRemovePdf={() => {
           setPdfFile(null);
           setError("");
           setSuccess(false);
         }}
+        onFirstNameChange={setFirstName}
+        onLastNameChange={setLastName}
+        onDateChange={setDateValue}
         onSaveSignature={saveSignature}
         onClearSignature={clearSignature}
       />
 
-      <Card className="panel signature-placement-panel">
-        <div className="panel-heading">
-          <span className="step-number">03</span>
-          <div>
-            <h2>{t("signature.stepPlace")}</h2>
-            <p>{t("signature.stepPlaceDescription")}</p>
-          </div>
-        </div>
-        {pageCount > 0 ? (
-          <label className="signature-page-select">
-            <span>{t("signature.pageLabel")}</span>
-            <select
-              value={pageNumber}
-              disabled={working}
-              onChange={(event) => {
-                setPageNumber(Number(event.currentTarget.value));
-                setPreviewReady(false);
-              }}
-            >
-              {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
-                <option key={page} value={page}>
-                  {t("signature.pageOption", { page })}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <PdfSignaturePreview
-          file={pdfFile}
-          signature={signatureFile}
-          pageNumber={pageNumber}
-          placement={placement}
-          disabled={working}
-          onPageCount={setPageCount}
-          onReady={setPreviewReady}
-          onPlacementChange={setPlacement}
-        />
-        <div className="signature-submit">
-          <div className="output-preview">
-            <span className="output-icon">
-              <FileText size={21} aria-hidden="true" />
-            </span>
-            <span>
-              <strong>signed.pdf</strong>
-              <small>{t("signature.outputDescription")}</small>
-            </span>
-          </div>
-          <Button
-            type="submit"
-            disabled={working || !pdfFile || !signatureFile || !previewReady}
-            className="action-button"
-          >
-            {working ? <Spinner aria-label={t("common.loading")} /> : <PenTool size={18} />}
-            {working ? t("signature.working") : t("signature.action")}
-          </Button>
-          <div className="feedback-slot">
-            {error ? (
-              <p className="feedback feedback-error" role="alert">
-                {error}
-              </p>
-            ) : null}
-            {success ? (
-              <p className="feedback feedback-success" role="status">
-                {t("signature.success", { fileName: "signed.pdf" })}
-              </p>
-            ) : null}
-          </div>
-        </div>
-      </Card>
+      <SignaturePlacementPanel
+        file={pdfFile}
+        signature={signatureFile}
+        nameText={nameText}
+        dateText={dateText}
+        pageNumber={pageNumber}
+        pageCount={pageCount}
+        placement={placement}
+        namePlacement={namePlacement}
+        datePlacement={datePlacement}
+        disabled={working}
+        working={working}
+        previewReady={previewReady}
+        error={error}
+        success={success}
+        onPageCount={setPageCount}
+        onPageChange={(page) => {
+          setPageNumber(page);
+          setPreviewReady(false);
+        }}
+        onReady={setPreviewReady}
+        onPlacementChange={setPlacement}
+        onNamePlacementChange={setNamePlacement}
+        onDatePlacementChange={setDatePlacement}
+      />
     </form>
   );
 }

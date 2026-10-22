@@ -300,6 +300,10 @@ func (h *PDFHandler) writeServiceError(c *gin.Context, err error) {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return
 	}
+	if errors.Is(err, services.ErrUnsupportedSignatureText) {
+		writeError(c, http.StatusBadRequest, "Le nom ou la date contient un caractère que le PDF ne peut pas afficher.")
+		return
+	}
 	if errors.Is(err, services.ErrInvalidInput) {
 		writeError(c, http.StatusBadRequest, "Vérifiez les options et le PDF sélectionnés.")
 		return

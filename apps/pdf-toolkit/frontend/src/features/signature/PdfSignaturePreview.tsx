@@ -2,30 +2,43 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Spinner } from "@internal/ui";
-import type { SignaturePlacement } from "./placement";
+import type { SignaturePlacement, TextPlacement } from "./placement";
 import { SignatureOverlay } from "./SignatureOverlay";
+import { TextOverlay } from "./TextOverlay";
 import { useSignaturePdf } from "./useSignaturePdf";
 
 type PdfSignaturePreviewProps = {
   file: File | null;
   signature: File | null;
+  nameText: string;
+  dateText: string;
   pageNumber: number;
   placement: SignaturePlacement;
+  namePlacement: TextPlacement;
+  datePlacement: TextPlacement;
   disabled: boolean;
   onPageCount: (count: number) => void;
   onReady: (ready: boolean) => void;
   onPlacementChange: (placement: SignaturePlacement) => void;
+  onNamePlacementChange: (placement: TextPlacement) => void;
+  onDatePlacementChange: (placement: TextPlacement) => void;
 };
 
 export function PdfSignaturePreview({
   file,
   signature,
+  nameText,
+  dateText,
   pageNumber,
   placement,
+  namePlacement,
+  datePlacement,
   disabled,
   onPageCount,
   onReady,
   onPlacementChange,
+  onNamePlacementChange,
+  onDatePlacementChange,
 }: PdfSignaturePreviewProps) {
   const { t } = useTranslation();
   const pageRef = useRef<HTMLDivElement>(null);
@@ -72,6 +85,28 @@ export function PdfSignaturePreview({
               placement={placement}
               disabled={disabled}
               onPlacementChange={onPlacementChange}
+            />
+          ) : null}
+          {nameText && status === "ready" ? (
+            <TextOverlay
+              text={nameText}
+              label={t("signature.nameOverlayLabel")}
+              pageRef={pageRef}
+              pageViewportWidth={pageSize.width}
+              placement={namePlacement}
+              disabled={disabled}
+              onPlacementChange={onNamePlacementChange}
+            />
+          ) : null}
+          {dateText && status === "ready" ? (
+            <TextOverlay
+              text={dateText}
+              label={t("signature.dateOverlayLabel")}
+              pageRef={pageRef}
+              pageViewportWidth={pageSize.width}
+              placement={datePlacement}
+              disabled={disabled}
+              onPlacementChange={onDatePlacementChange}
             />
           ) : null}
         </div>

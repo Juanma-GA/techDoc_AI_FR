@@ -12,9 +12,11 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+
+	"pdf-toolkit/services"
 )
 
-func TestStampImageAffectsOnlySelectedPage(t *testing.T) {
+func TestStampSignatureAffectsOnlySelectedPage(t *testing.T) {
 	tempDir := t.TempDir()
 	input := filepath.Join(tempDir, "input.pdf")
 	signature := filepath.Join(tempDir, "signature.png")
@@ -25,8 +27,21 @@ func TestStampImageAffectsOnlySelectedPage(t *testing.T) {
 	writeTestPNG(t, signature)
 
 	processor := NewPDFCPU()
-	if err := processor.StampImage(context.Background(), input, signature, output, 2, 0.2, 0.6, 0.3); err != nil {
-		t.Fatalf("StampImage() error = %v", err)
+	options := services.SignatureStampOptions{
+		Page:          2,
+		ImagePosition: services.StampPosition{X: 0.2, Y: 0.6},
+		ImageWidth:    0.3,
+		Name: &services.SignatureTextStamp{
+			Text:     "Élodie D'Aubigné",
+			Position: services.StampPosition{X: 0.1, Y: 0.86},
+		},
+		Date: &services.SignatureTextStamp{
+			Text:     "22/10/2026",
+			Position: services.StampPosition{X: 0.1, Y: 0.92},
+		},
+	}
+	if err := processor.StampSignature(context.Background(), input, signature, output, options); err != nil {
+		t.Fatalf("StampSignature() error = %v", err)
 	}
 	assertPageCount(t, processor, output, 3)
 
@@ -56,7 +71,7 @@ func TestStampImageAffectsOnlySelectedPage(t *testing.T) {
 	}
 }
 
-func TestStampImageRejectsPlacementOutsidePage(t *testing.T) {
+func TestStampSignatureRejectsPlacementOutsidePage(t *testing.T) {
 	tempDir := t.TempDir()
 	input := filepath.Join(tempDir, "input.pdf")
 	signature := filepath.Join(tempDir, "signature.png")
@@ -66,16 +81,20 @@ func TestStampImageRejectsPlacementOutsidePage(t *testing.T) {
 	}
 	writeTestPNG(t, signature)
 
-	err := NewPDFCPU().StampImage(context.Background(), input, signature, output, 1, 0.2, 0.9, 0.3)
+	err := NewPDFCPU().StampSignature(context.Background(), input, signature, output, services.SignatureStampOptions{
+		Page:          1,
+		ImagePosition: services.StampPosition{X: 0.2, Y: 0.9},
+		ImageWidth:    0.3,
+	})
 	if err == nil {
-		t.Fatal("StampImage() error = nil, want placement error")
+		t.Fatal("StampSignature() error = nil, want placement error")
 	}
 	if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
 		t.Fatalf("output PDF exists after rejected placement: %v", statErr)
 	}
 }
 
-func TestStampImageSupportsRotatedPage(t *testing.T) {
+func TestStampSignatureSupportsRotatedPage(t *testing.T) {
 	tempDir := t.TempDir()
 	input := filepath.Join(tempDir, "input.pdf")
 	rotated := filepath.Join(tempDir, "rotated.pdf")
@@ -89,8 +108,12 @@ func TestStampImageSupportsRotatedPage(t *testing.T) {
 		t.Fatalf("RotateFile() error = %v", err)
 	}
 
-	if err := NewPDFCPU().StampImage(context.Background(), rotated, signature, output, 1, 0.2, 0.6, 0.3); err != nil {
-		t.Fatalf("StampImage() on rotated page error = %v", err)
+	if err := NewPDFCPU().StampSignature(context.Background(), rotated, signature, output, services.SignatureStampOptions{
+		Page:          1,
+		ImagePosition: services.StampPosition{X: 0.2, Y: 0.6},
+		ImageWidth:    0.3,
+	}); err != nil {
+		t.Fatalf("StampSignature() on rotated page error = %v", err)
 	}
 	assertPageCount(t, NewPDFCPU(), output, 1)
 
@@ -132,5 +155,26 @@ func TestSignatureStampDescriptionDisablesDefaultDiagonal(t *testing.T) {
 	}
 	if watermark.Rotation != 0 || watermark.Diagonal != model.NoDiagonal {
 		t.Fatalf("watermark rotation = %v, diagonal = %d, want upright image", watermark.Rotation, watermark.Diagonal)
+	}
+}
+
+func TestSignatureTextStampDescriptionKeepsFourteenPointSize(t *testing.T) {
+	description := signatureTextStampDescription(
+		types.Dim{Width: 792, Height: 612},
+		services.StampPosition{X: 0.12, Y: 0.86},
+	)
+	watermark, err := api.TextWatermark("Élodie D'Aubigné", description, true, false, types.POINTS)
+	if err != nil {
+		t.Fatalf("TextWatermark() error = %v", err)
+	}
+	if watermark.FontSize != 14 || watermark.Scale != 1 || !watermark.ScaleAbs ||
+		watermark.Rotation != 0 || watermark.Diagonal != model.NoDiagonal {
+		t.Fatalf("unexpected text watermark config: points=%d scale=%v absolute=%t rotation=%v diagonal=%d",
+			watermark.FontSize,
+			watermark.Scale,
+			watermark.ScaleAbs,
+			watermark.Rotation,
+			watermark.Diagonal,
+		)
 	}
 }

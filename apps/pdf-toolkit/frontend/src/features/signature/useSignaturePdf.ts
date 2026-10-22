@@ -87,7 +87,7 @@ export function useSignaturePdf(
         }
         canvas.width = Math.max(1, Math.ceil(viewport.width));
         canvas.height = Math.max(1, Math.ceil(viewport.height));
-        setPageSize({ width: viewport.width, height: viewport.height });
+        setPageSize({ width: naturalSize.width, height: naturalSize.height });
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         if (active) {

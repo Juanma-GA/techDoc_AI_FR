@@ -9,11 +9,17 @@ import { SignaturePad } from "./SignaturePad";
 type SignatureSourcePanelProps = {
   pdfFile: File | null;
   signatureFile: File | null;
+  firstName: string;
+  lastName: string;
+  dateValue: string;
   language: string;
   disabled: boolean;
   onPdfFiles: (files: File[]) => void;
   onError: (message: string) => void;
   onRemovePdf: () => void;
+  onFirstNameChange: (value: string) => void;
+  onLastNameChange: (value: string) => void;
+  onDateChange: (value: string) => void;
   onSaveSignature: (file: File) => void;
   onClearSignature: () => void;
 };
@@ -21,11 +27,17 @@ type SignatureSourcePanelProps = {
 export function SignatureSourcePanel({
   pdfFile,
   signatureFile,
+  firstName,
+  lastName,
+  dateValue,
   language,
   disabled,
   onPdfFiles,
   onError,
   onRemovePdf,
+  onFirstNameChange,
+  onLastNameChange,
+  onDateChange,
   onSaveSignature,
   onClearSignature,
 }: SignatureSourcePanelProps) {
@@ -62,9 +74,51 @@ export function SignatureSourcePanel({
           </Button>
         </div>
       ) : null}
-      <div className="signature-draw-section">
+      <div className="signature-details-section">
         <div className="panel-heading signature-subheading">
           <span className="step-number">02</span>
+          <div>
+            <h2>{t("signature.stepDetails")}</h2>
+            <p>{t("signature.detailsDescription")}</p>
+          </div>
+        </div>
+        <div className="signature-details-grid">
+          <label>
+            <span>{t("signature.firstNameLabel")}</span>
+            <input
+              type="text"
+              autoComplete="given-name"
+              maxLength={100}
+              value={firstName}
+              disabled={disabled}
+              onChange={(event) => onFirstNameChange(event.currentTarget.value)}
+            />
+          </label>
+          <label>
+            <span>{t("signature.lastNameLabel")}</span>
+            <input
+              type="text"
+              autoComplete="family-name"
+              maxLength={100}
+              value={lastName}
+              disabled={disabled}
+              onChange={(event) => onLastNameChange(event.currentTarget.value)}
+            />
+          </label>
+          <label>
+            <span>{t("signature.dateLabel")}</span>
+            <input
+              type="date"
+              value={dateValue}
+              disabled={disabled}
+              onChange={(event) => onDateChange(event.currentTarget.value)}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="signature-draw-section">
+        <div className="panel-heading signature-subheading">
+          <span className="step-number">03</span>
           <div>
             <h2>{t("signature.stepDraw")}</h2>
             <p>{t("signature.stepDrawDescription")}</p>

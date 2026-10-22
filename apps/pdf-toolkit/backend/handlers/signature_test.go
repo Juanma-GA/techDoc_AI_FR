@@ -13,11 +13,10 @@ import (
 	"pdf-toolkit/services"
 )
 
-func (p *routeProcessor) StampImage(
+func (p *routeProcessor) StampSignature(
 	_ context.Context,
 	input, _, output string,
-	_ int,
-	_, _, _ float64,
+	_ services.SignatureStampOptions,
 ) error {
 	p.inputPath = input
 	return writeRoutePDF(output)
@@ -29,10 +28,16 @@ func TestSignatureRouteStreamsNewPDFAndCleansTemporaryFiles(t *testing.T) {
 	router := testRouter(handler)
 
 	request := signatureMultipartRequest(t, map[string]string{
-		"page":  "2",
-		"x":     "0.2",
-		"y":     "0.6",
-		"width": "0.3",
+		"page":      "2",
+		"x":         "0.2",
+		"y":         "0.6",
+		"width":     "0.3",
+		"name_text": "Ada Lovelace",
+		"name_x":    "0.1",
+		"name_y":    "0.86",
+		"date_text": "22/10/2026",
+		"date_x":    "0.1",
+		"date_y":    "0.92",
 	})
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -48,6 +53,24 @@ func TestSignatureRouteStreamsNewPDFAndCleansTemporaryFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(processor.inputPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("temporary PDF still exists after response: %v", err)
+	}
+}
+
+func TestSignatureRouteRejectsTextWithoutPlacement(t *testing.T) {
+	handler := NewPDFHandler(services.NewPDFService(&routeProcessor{pageCount: 3}))
+	router := testRouter(handler)
+	request := signatureMultipartRequest(t, map[string]string{
+		"page":      "1",
+		"x":         "0.2",
+		"y":         "0.6",
+		"width":     "0.3",
+		"name_text": "Ada Lovelace",
+	})
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
 	}
 }
 
