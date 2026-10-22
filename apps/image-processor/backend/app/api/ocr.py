@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from collections import Counter
 from io import BytesIO
 from time import perf_counter
 
@@ -90,6 +91,7 @@ async def run_ocr(
         raise HTTPException(status_code=422, detail="Sélectionne l'onglet, les colonnes et la pièce Excel.")
 
     output_icn: str | None = None
+    broadcast_references: set[str] = set()
     if workbook is not None:
         workbook_bytes = await read_excel_upload(workbook)
         with open_excel_workbook(workbook_bytes, workbook.filename) as excel_workbook:
@@ -108,6 +110,19 @@ async def run_ocr(
                     skip_empty_references=True,
                 )
 
+        manual_references = {
+            normalize_reference(pair["reference"]) for pair in replacement_list
+        }
+        excel_reference_counts = Counter(
+            normalize_reference(pair["reference"])
+            for pair in excel_replacements
+            if pair["reference"]
+        )
+        broadcast_references = {
+            reference
+            for reference, count in excel_reference_counts.items()
+            if count == 1 and reference not in manual_references
+        }
         for pair in excel_replacements:
             if not pair["reference"]:
                 continue
@@ -158,7 +173,11 @@ async def run_ocr(
             [point[0] * scale_x + offset_x, point[1] * scale_y + offset_y] for point in line["box"]
         ]
     output_image, applied_counts, font_size = apply_replacements(
-        output_image, lines, replacement_list, replacement_font_size,
+        output_image,
+        lines,
+        replacement_list,
+        replacement_font_size,
+        broadcast_references=broadcast_references,
     )
     for match, pair, applied_count in zip(matches, replacement_list, applied_counts, strict=False):
         match["replacement"] = pair["replacement"]

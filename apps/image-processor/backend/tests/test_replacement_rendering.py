@@ -19,15 +19,15 @@ def _ink(image):
 @pytest.mark.parametrize(
     ("angle", "expected"),
     [
-        (0, 0), (-6.99, 0), (6.99, 0), (7, 7), (7.01, 7.01), (17, 17),
-        (83.01, 90), (96.99, 90), (175, 180), (-91, -90),
+        (0, 0), (-9.99, 0), (9.99, 0), (-10, 0), (10, 0), (10.01, 10.01), (17, 17),
+        (80, 90), (100, 90), (175, 180), (-91, -90),
     ],
 )
-def test_only_angles_less_than_seven_degrees_from_an_axis_are_snapped(angle, expected):
+def test_angles_within_ten_degrees_of_an_axis_are_snapped(angle, expected):
     assert snapped_angle(angle) == pytest.approx(expected)
 
 
-@pytest.mark.parametrize(("angle", "axis"), [(4.9, 0), (-4.9, 0), (91, 90), (176, 180), (-89, -90)])
+@pytest.mark.parametrize(("angle", "axis"), [(9.9, 0), (-9.9, 0), (91, 90), (176, 180), (-89, -90)])
 def test_rendered_text_has_no_spurious_small_slant(typography_sample, angle, axis):
     _, polygon, _ = typography_sample(text="R123456789", size=32, angle=angle)
     result = Image.new("RGB", (400, 300), "white")

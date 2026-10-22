@@ -24,6 +24,7 @@ Find text references in technical images and replace selected references with su
 - Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed and can be edited or removed before OCR.
 - Add manual replacement pairs; these are combined with the edited Excel pairs.
 - Check or uncheck individual manual/Excel pairs to apply only selected references.
+- A reference entered once in the selected Excel pairs, with no manual pair for the same reference, is replaced at every detected occurrence. Repeated Excel references and manual pairs remain assigned one occurrence at a time. Replacement masks are inset and have rounded corners to preserve nearby strokes.
 - Standardize replacement font size from visible character heights and the mean
   of the most common group among selected references; only shrink over-wide replacements.
 - Preserve detected reading orientation, snapping angles within 5 degrees of an axis.
