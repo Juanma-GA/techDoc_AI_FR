@@ -46,13 +46,14 @@ The main API and React UI use default port `8010`; the internal LaMa service use
 
 ## Prerequisites
 
-- Python 3.13 for the PaddleOCR API and Python 3.11 for the LaMa service.
+- Python 3.11 for the PaddleOCR API and the LaMa service. Each service uses a separate environment.
 - Node 20 and pnpm 9 for frontend development and builds.
-- Windows: `py` launcher and `curl.exe`. The launcher can install Python 3.11 from the repository installer; Python 3.13 must already be installed unless using a package with embedded runtimes.
-- Unix: `python3.13`, `python3.11`, `lsof`, and `curl`.
-- ZIP package users do not need a system Python; the Windows ZIP includes separate Python 3.13 and 3.11 runtimes.
+- Windows: `py` launcher and `curl.exe`. The launcher can install Python 3.11 from the repository installer if it is not already available.
+- Unix: `python3.11`, `lsof`, and `curl`.
+- ZIP package users do not need a system Python; the Windows ZIP includes separate Python 3.11 runtimes for the API and LaMa service.
+- If an existing checkout has an OCR environment created with another Python version, remove `backend/.venv` once; the launcher will recreate it with Python 3.11.
 
-Dependencies install on first launch. The Windows launcher installs build tools in its embedded Python runtimes before installing app dependencies. In the web launchers and ZIP package, PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
+Dependencies install on first launch. The Windows launcher can install Python 3.11 from the repository installer, then installs app dependencies in separate environments. In the web launchers and ZIP package, PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
 
 Text-line orientation uses `PP-LCNet_x1_0_textline_ori` (approximately 6.5 MB of
 model weights). Web and ZIP launches may download this model on first OCR.
@@ -88,7 +89,7 @@ Its startup screen remains visible while migrations run and the OCR and LaMa
 models load; desktop startup is therefore longer than web/ZIP startup.
 
 For development, run `pnpm desktop:dev:image-processor` from the repository root.
-The first run creates the Python 3.13 and 3.11 development environments and
+The first run creates separate Python 3.11 development environments for the API and LaMa service and
 installs their dependencies. On a fresh checkout, run `pnpm install` at the
 repository root first to install the Tauri CLI and frontend dependencies.
 
