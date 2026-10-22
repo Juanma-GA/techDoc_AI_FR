@@ -68,6 +68,26 @@ def test_replacement_segment_reduces_horizontal_width_by_one_more_pixel() -> Non
     assert polygon[1][0] == 68.5
 
 
+def test_replacement_mask_snaps_to_horizontal_when_text_does() -> None:
+    polygon = image_replacement._fit_segment_to_visible_ink(
+        [[10, 10], [70, 19], [67, 39], [7, 30]],
+        (2, 18),
+    )
+
+    assert image_replacement.text_frame(polygon).angle == 0
+    assert polygon[0][1] == polygon[1][1]
+    assert polygon[2][1] == polygon[3][1]
+
+
+def test_replacement_mask_keeps_angles_outside_snap_range() -> None:
+    polygon = image_replacement._fit_segment_to_visible_ink(
+        [[10, 10], [70, 23], [67, 43], [7, 30]],
+        (2, 18),
+    )
+
+    assert image_replacement.text_frame(polygon).angle > 10
+
+
 def test_replacement_uses_local_background_instead_of_white_rectangle() -> None:
     background = (215, 220, 225)
     source = Image.new("RGB", (80, 40), background)

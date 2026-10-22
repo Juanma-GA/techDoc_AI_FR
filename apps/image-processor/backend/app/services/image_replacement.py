@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import ceil, floor, hypot
+from math import ceil, cos, floor, hypot, radians, sin
 from typing import TypedDict
 
 import structlog
@@ -14,7 +14,7 @@ from app.services.replacement_typography import (
     font_size_for_height,
     measure_character_bounds,
 )
-from app.services.text_geometry import _box_points, text_frame
+from app.services.text_geometry import _box_points, snapped_angle, text_frame
 
 log = structlog.get_logger(__name__)
 REPLACEMENT_SIDE_INSET = 1.5
@@ -181,7 +181,29 @@ def _fit_segment_to_visible_ink(
     top_right = _interpolate_point(polygon[1], polygon[2], top_ratio)
     bottom_right = _interpolate_point(polygon[1], polygon[2], bottom_ratio)
     bottom_left = _interpolate_point(polygon[0], polygon[3], bottom_ratio)
-    return [top_left, top_right, bottom_right, bottom_left]
+    return _snap_polygon_to_text_angle([top_left, top_right, bottom_right, bottom_left])
+
+
+def _snap_polygon_to_text_angle(polygon: list[list[float]]) -> list[list[float]]:
+    frame = text_frame(polygon)
+    angle = snapped_angle(frame.angle)
+    if angle == frame.angle:
+        return polygon
+
+    angle_radians = radians(angle)
+    cosine, sine = cos(angle_radians), sin(angle_radians)
+
+    def corner(horizontal: float, vertical: float) -> list[float]:
+        return [
+            frame.center[0]
+            + horizontal * frame.width * cosine / 2
+            - vertical * frame.height * sine / 2,
+            frame.center[1]
+            + horizontal * frame.width * sine / 2
+            + vertical * frame.height * cosine / 2,
+        ]
+
+    return [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)]
 
 
 def _map_text_point_to_image(
