@@ -1,0 +1,64 @@
+{
+  "app": {
+    "metaDescription": "Merge, convert, extract, delete, reorder, compress, rotate, and visually sign PDFs with optional name and date."
+  },
+  "tools": {
+    "signature": {
+      "tab": "Signature",
+      "title": "Sign a PDF",
+      "description": "Draw your signature, place it on a page, and export the PDF."
+    }
+  },
+  "signature": {
+    "stepFile": "Load PDF",
+    "stepFileDescription": "Choose the document and page to sign.",
+    "stepDraw": "Draw signature",
+    "stepDrawDescription": "Draw in the box, then save it to place it.",
+    "stepDetails": "Add name and date (optional)",
+    "detailsDescription": "The text will be added to the PDF and can be moved separately.",
+    "firstNameLabel": "First name",
+    "lastNameLabel": "Last name",
+    "dateLabel": "Date",
+    "nameOverlayLabel": "Name, move",
+    "dateOverlayLabel": "Date, move",
+    "resizeHandle": "Resize {{box}} from the {{corner}} corner",
+    "resizeSignature": "signature",
+    "resizeName": "name",
+    "resizeDate": "date",
+    "corner": {
+      "topLeft": "top left",
+      "topRight": "top right",
+      "bottomLeft": "bottom left",
+      "bottomRight": "bottom right"
+    },
+    "unsupportedText": "The name or date contains a character that this PDF cannot display.",
+    "privacy": "The signature, name, and date stay in memory during this operation and are not retained after closing.",
+    "canvasLabel": "Signature drawing area",
+    "clear": "Clear",
+    "save": "Save drawing",
+    "import": "Import an image",
+    "importHelp": "PNG or JPEG · 10 MB maximum",
+    "imageTooLarge": "“{{name}}” exceeds the 10 MB limit.",
+    "apiImageTooLarge": "The signature image exceeds the 10 MB limit.",
+    "ready": "Signature ready. Drag it onto the page.",
+    "clearSaved": "Remove saved signature",
+    "stepPlace": "Place signature",
+    "stepPlaceDescription": "Move the signature, name, and date separately; drag a dotted corner to resize each box.",
+    "pageLabel": "Page to sign",
+    "pageOption": "Page {{page}}",
+    "sizeLabel": "Signature size",
+    "previewEmpty": "Load a PDF to show its preview.",
+    "previewLoading": "Loading PDF preview…",
+    "previewFailed": "Could not display this PDF page.",
+    "emptyDocument": "The PDF contains no pages.",
+    "canvasUnavailable": "This browser cannot create the preview.",
+    "selectPdf": "Select a PDF file.",
+    "drawFirst": "Draw or import a signature before continuing.",
+    "canvasExportFailed": "Could not save the drawing. Please try again.",
+    "outputDescription": "PDF with visual signature, name, and date",
+    "action": "Apply and download",
+    "working": "Adding signature…",
+    "success": "{{fileName}} has been downloaded.",
+    "operationFailed": "Adding the signature failed."
+  }
+}
