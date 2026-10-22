@@ -1,0 +1,46 @@
+{
+  "app": {
+    "metaDescription": "Fusionnez, convertissez, extrayez, supprimez, réorganisez, compressez, faites pivoter et signez visuellement des PDF localement."
+  },
+  "tools": {
+    "signature": {
+      "tab": "Signature",
+      "title": "Signer un PDF",
+      "description": "Dessinez votre signature, placez-la sur une page et exportez le PDF."
+    }
+  },
+  "signature": {
+    "stepFile": "Charger le PDF",
+    "stepFileDescription": "Choisissez le document et la page à signer.",
+    "stepDraw": "Dessiner la signature",
+    "stepDrawDescription": "Dessinez dans le cadre, puis enregistrez-la pour la placer.",
+    "privacy": "La signature reste en mémoire pendant cette opération et n’est pas enregistrée après fermeture.",
+    "canvasLabel": "Cadre de dessin de la signature",
+    "clear": "Effacer",
+    "save": "Enregistrer le dessin",
+    "import": "Importer une image",
+    "importHelp": "PNG ou JPEG · 10 Mo maximum",
+    "imageTooLarge": "« {{name}} » dépasse la limite de 10 Mo.",
+    "apiImageTooLarge": "L’image de signature dépasse la limite de 10 Mo.",
+    "ready": "Signature prête. Faites-la glisser sur la page.",
+    "clearSaved": "Supprimer la signature enregistrée",
+    "stepPlace": "Placer la signature",
+    "stepPlaceDescription": "Déplacez la signature sur l’aperçu. Utilisez les flèches du clavier pour ajuster sa position.",
+    "pageLabel": "Page à signer",
+    "pageOption": "Page {{page}}",
+    "sizeLabel": "Taille de la signature",
+    "previewEmpty": "Chargez un PDF pour afficher son aperçu.",
+    "previewLoading": "Chargement de l’aperçu PDF…",
+    "previewFailed": "Impossible d’afficher cette page du PDF.",
+    "emptyDocument": "Le PDF ne contient aucune page.",
+    "canvasUnavailable": "Impossible de créer l’aperçu dans ce navigateur.",
+    "selectPdf": "Sélectionnez un PDF.",
+    "drawFirst": "Dessinez ou importez une signature avant de continuer.",
+    "canvasExportFailed": "Impossible d’enregistrer le dessin. Réessayez.",
+    "outputDescription": "PDF avec signature visuelle",
+    "action": "Appliquer et télécharger",
+    "working": "Ajout de la signature…",
+    "success": "Le fichier {{fileName}} a été téléchargé.",
+    "operationFailed": "L’ajout de la signature a échoué."
+  }
+}

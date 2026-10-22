@@ -37,6 +37,7 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/delete", h.Delete)
 	router.POST("/reorder", h.Reorder)
 	router.POST("/rotate", h.Rotate)
+	router.POST("/signature", h.Signature)
 }
 
 func (h *PDFHandler) Health(c *gin.Context) {

@@ -35,8 +35,9 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
-	handlers.NewPDFHandler(services.NewPDFService(pdfadapter.NewPDFCPU())).
-		RegisterRoutes(router.Group("/api/v1"))
+	pdfHandler := handlers.NewPDFHandler(services.NewPDFService(pdfadapter.NewPDFCPU()))
+	apiRoutes := router.Group("/api/v1")
+	pdfHandler.RegisterRoutes(apiRoutes)
 	if err := web.RegisterRoutes(router, staticFiles); err != nil {
 		log.Fatalf("register frontend: %v", err)
 	}

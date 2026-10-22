@@ -1,0 +1,172 @@
+.workflow-grid.signature-workflow {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(340px, 1.35fr);
+}
+
+.signature-draw-section {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border-base);
+}
+
+.signature-subheading {
+  margin-bottom: 14px;
+}
+
+.signature-pad-section {
+  display: grid;
+  gap: 10px;
+}
+
+.signature-pad {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--color-border-md);
+  border-radius: var(--radius-sm);
+  background: white;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.signature-pad-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.signature-pad-actions button {
+  min-height: 36px;
+}
+
+.signature-placement-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.signature-page-select,
+.signature-size-control {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+  color: var(--color-text-dim);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.signature-page-select select {
+  width: min(100%, 220px);
+  min-height: 38px;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-base);
+  padding: 7px 10px;
+  color: var(--color-text-base);
+}
+
+.signature-preview {
+  min-width: 0;
+}
+
+.signature-preview-page {
+  position: relative;
+  width: min(100%, 820px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  background: white;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+.signature-preview-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.signature-overlay {
+  position: absolute;
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  overflow: hidden;
+  border: 1px dashed var(--brand);
+  background: color-mix(in srgb, var(--color-brand-blue) 8%, transparent);
+  padding: 0;
+  cursor: move;
+  touch-action: none;
+}
+
+.signature-overlay:disabled {
+  cursor: default;
+}
+
+.signature-overlay img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.signature-size-control {
+  grid-template-columns: auto minmax(100px, 1fr);
+  align-items: center;
+  margin: 14px 0 0;
+}
+
+.signature-size-control input {
+  width: 100%;
+  accent-color: var(--brand);
+}
+
+.signature-submit {
+  display: grid;
+  grid-template-columns: 1fr minmax(190px, 270px);
+  align-items: center;
+  gap: 12px;
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid var(--color-border-base);
+}
+
+.signature-submit .output-preview,
+.signature-submit .feedback-slot {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.signature-submit .action-button {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.signature-submit .output-preview {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.signature-draw-section .feedback-success {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+@media (max-width: 960px) {
+  .workflow-grid.signature-workflow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .signature-submit {
+    grid-template-columns: 1fr;
+  }
+
+  .signature-submit .action-button,
+  .signature-submit .output-preview {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

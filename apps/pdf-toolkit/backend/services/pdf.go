@@ -21,6 +21,7 @@ type PDFProcessor interface {
 	Delete(ctx context.Context, input, output string, pages []int) error
 	Reorder(ctx context.Context, input, output string, pages []int) error
 	Rotate(ctx context.Context, input, output string, pages []int, rotation int) error
+	StampImage(ctx context.Context, input, image, output string, page int, x, y, width float64) error
 }
 
 type PDFService struct {
