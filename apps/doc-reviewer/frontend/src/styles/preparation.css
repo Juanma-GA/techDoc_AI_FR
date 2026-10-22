@@ -169,25 +169,25 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 34%);
   min-height: 65dvh;
-  max-height: 78dvh;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--border);
   border-radius: var(--radius-md, 8px);
 }
 
 .preparation-review .reviewer-viewer {
   min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 .preparation-review .reviewer-canvas {
+  flex: none;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 .preparation-review .reviewer-panel {
   min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 @media (max-width: 900px) {
@@ -213,14 +213,14 @@
   .preparation-review {
     grid-template-columns: minmax(0, 1fr);
     max-height: none;
-    overflow: auto;
+    overflow: visible;
   }
 
   .preparation-review .reviewer-viewer {
-    min-height: 55dvh;
+    min-height: 0;
   }
 
   .preparation-review .reviewer-panel {
-    min-height: 45dvh;
+    min-height: 0;
   }
 }
