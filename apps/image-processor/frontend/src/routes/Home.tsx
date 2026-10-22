@@ -37,6 +37,9 @@ export function Home() {
     selectionRequestId.current += 1;
     setLineSelectionRequest({ lineIndex, requestId: selectionRequestId.current });
   }, []);
+  const selectReplacementBox = useCallback((lineIndex: number) => {
+    setSelectedLineIndex(lineIndex);
+  }, []);
   const handleLineSelection = useCallback((requestId: number) => {
     setLineSelectionRequest((current) => current?.requestId === requestId ? null : current);
   }, []);
@@ -120,6 +123,7 @@ export function Home() {
             onImageEdited={workflow.applyBrush}
             onInpaintingChange={workflow.setRetouching}
             onSelectLine={selectRecognizedLine}
+            onSelectBox={selectReplacementBox}
             selectedLineIndex={selectedLineIndex}
             reapplyBlocked={reapplyBlocked}
             onUpdateLineOffsets={updatePendingOffsets}

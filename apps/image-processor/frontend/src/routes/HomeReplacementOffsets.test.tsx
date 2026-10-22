@@ -7,6 +7,22 @@ import { imageReplaceApi, type OcrResultDto } from "../lib/api";
 import { Home } from "./Home";
 import { imageData, mockWorkspaceApi, renderWorkflow } from "../test/workflow";
 
+function dispatchPointer(
+  element: Element,
+  type: string,
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+) {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperties(event, {
+    pointerId: { value: pointerId },
+    clientX: { value: clientX },
+    clientY: { value: clientY },
+  });
+  fireEvent(element, event);
+}
+
 describe("Home replacement box offsets", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("fr");
@@ -60,15 +76,22 @@ describe("Home replacement box offsets", () => {
     await user.click(screen.getByRole("button", { name: "Lancer l’OCR sur CPU" }));
     await waitFor(() => expect(container.querySelector("polygon[role='button']")).not.toBeNull());
 
-    const box = container.querySelector("polygon[role='button']");
+    const box = container.querySelector<SVGPolygonElement>("polygon[role='button']");
     if (!box) throw new Error("Expected the OCR box.");
+    const svg = box.ownerSVGElement;
+    if (!svg) throw new Error("Expected the OCR overlay.");
+    vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, right: 500, bottom: 700, width: 500, height: 700,
+      toJSON: () => ({}),
+    });
+    dispatchPointer(box, "pointerdown", 1, 100, 100);
+    dispatchPointer(box, "pointermove", 1, 120, 120);
+    dispatchPointer(box, "pointerup", 1, 120, 120);
     fireEvent.click(box);
-    fireEvent.change(screen.getByRole("slider", { name: "Décalage horizontal" }), {
-      target: { value: "8" },
-    });
-    fireEvent.change(screen.getByRole("slider", { name: "Décalage vertical" }), {
-      target: { value: "-4" },
-    });
+    expect(screen.queryByRole("group", { name: "Nouveau texte pour R-001" })).not.toBeInTheDocument();
+    fireEvent.click(box);
+    expect(await screen.findByRole("group", { name: "Nouveau texte pour R-001" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Annuler" }));
     await user.click(screen.getByRole("button", { name: "Appliquer à tous les cadres remplacés" }));
     await user.click(screen.getByRole("button", { name: "Recalculer les remplacements" }));
 
@@ -77,7 +100,7 @@ describe("Home replacement box offsets", () => {
     expect(form?.get("image")).toMatchObject({ name: "source.png" });
     expect(JSON.parse(String(form?.get("lines_json")))).toEqual([{
       text: "R-001",
-      box: [[108, 96], [208, 96], [208, 126], [108, 126]],
+      box: [[125, 125], [225, 125], [225, 155], [125, 155]],
     }]);
   });
 });
