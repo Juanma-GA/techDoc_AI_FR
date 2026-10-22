@@ -47,8 +47,8 @@ ignorée, design dérivant). Coût marginal par projet trop élevé.
 ### Positives
 
 - **Une seule stack à maintenir** sur tous les POC. Une faille de
-  sécurité corrigée dans `@internal/ui` se propage à tous les
-  consommateurs via la CI.
+  sécurité corrigée dans `@internal/ui` profite à tous les
+  consommateurs via la dépendance partagée.
 - **Contrats API auto-documentés** (OpenAPI Pydantic) consommables par
   d'autres fronts ou par n8n / Power Automate.
 - **Industrialisation possible dès le POC** : Vite + TS strict +

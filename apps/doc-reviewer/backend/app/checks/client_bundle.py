@@ -135,6 +135,7 @@ class ClientRuleDefinition(_StrictModel):
     message: str = Field(min_length=1, max_length=2000)
     kind: str = Field(min_length=1, max_length=80)
     presentation_severity: Literal["info", "warning", "error"] | None = None
+    preparation: bool = False
     translations: dict[str, dict[str, str]] = Field(default_factory=dict)
     bundle_code: str = Field(default="client", min_length=1, max_length=80)
     bundle_label: str = Field(default="Client rules", min_length=1, max_length=200)

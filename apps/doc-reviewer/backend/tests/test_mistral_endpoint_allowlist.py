@@ -71,6 +71,29 @@ def test_base_url_outside_allowlist_is_rejected(client: TestClient, clean_mistra
         assert response.status_code == 422, bad
 
 
+def test_private_mistral_endpoint_is_allowed_and_ocr_model_persists(
+    client: TestClient,
+    clean_mistral_config: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    private_url = "https://api.2a91ec1812a1.dc.mistral.ai"
+    monkeypatch.setattr(settings, "encryption_key", Fernet.generate_key().decode("ascii"))
+
+    response = client.post(
+        "/api/v1/settings/mistral",
+        json={
+            "api_key": "SYNTHETIC-MISTRAL-KEY",
+            "base_url": private_url,
+            "ocr_model": "mistral-ocr-private",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["base_url"] == private_url
+    assert response.json()["ocr_model"] == "mistral-ocr-private"
+    assert client.get("/api/v1/settings/mistral").json()["ocr_model"] == "mistral-ocr-private"
+
+
 def test_changing_base_url_requires_reentering_the_key(
     client: TestClient, clean_mistral_config: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

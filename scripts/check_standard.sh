@@ -25,7 +25,7 @@ for d in "${EXCLUDE_DIRS[@]}"; do
   exclude_args+=(--exclude-dir="$d")
 done
 
-step()  { printf "[%d/16] %-38s" "$1" "$2"; }
+step()  { printf "[%d/18] %-38s" "$1" "$2"; }
 pass()  { printf " \033[32mok\033[0m\n"; }
 fail()  { printf " \033[31mFAIL\033[0m\n"; violations=$((violations + 1)); printf '%b\n' "$1" | sed 's/^/    /'; }
 
@@ -278,9 +278,43 @@ if [[ -z "$missing" ]]; then pass; else
 fi
 
 # ------------------------------------------------------------------
-# 16. Summary
+# 16. Registry, profiles, ports and shared UI stay synchronized.
 # ------------------------------------------------------------------
-step 16 "Summary"
+step 16 "App registry, profils, ports et UI partagee"
+NODE_BIN="$(command -v node || command -v node.exe || true)"
+if [[ -z "$NODE_BIN" ]]; then
+  fail "Node.js 20+ doit etre sur le PATH du shell courant pour valider le registre et les surfaces synchronisees."
+elif ! "$NODE_BIN" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' >/dev/null 2>&1; then
+  fail "Node.js 20+ est requis pour valider le registre et les surfaces synchronisees."
+elif "$NODE_BIN" scripts/sync_app_registry.mjs --check > /dev/null; then pass; else
+  fail "Le registre, les README, les ports, les commandes racine et le shell @internal/ui doivent rester synchronises."
+fi
+
+# ------------------------------------------------------------------
+# 17. Every frontend defaults to dark, honoring an explicit saved light theme.
+# ------------------------------------------------------------------
+step 17 "Theme sombre par defaut"
+missing=""
+if [[ -n "$NODE_BIN" ]]; then
+  while IFS= read -r app_slug; do
+    theme_html="apps/$app_slug/frontend/index.html"
+    [[ -f "$theme_html" ]] || continue
+    if ! grep -Fq 'var stored = localStorage.getItem("theme");' "$theme_html" ||
+      ! grep -Fq 'if (stored !== "light") {' "$theme_html" ||
+      ! grep -Fq 'document.documentElement.classList.add("dark");' "$theme_html" ||
+      grep -q 'prefers-color-scheme' "$theme_html"; then
+      missing+="$theme_html — doit demarrer en sombre sauf preference light explicite\n"
+    fi
+  done < <("$NODE_BIN" -e 'const registry = JSON.parse(require("node:fs").readFileSync("scripts/apps.json", "utf8")); for (const app of registry.apps) console.log(app.slug);')
+fi
+if [[ -z "$missing" ]]; then pass; else
+  fail "Chaque frontend doit appliquer le mode sombre par defaut dans son anti-flash :\n$missing"
+fi
+
+# ------------------------------------------------------------------
+# 18. Summary
+# ------------------------------------------------------------------
+step 18 "Summary"
 if [[ $violations -gt 0 ]]; then
   printf " \033[31m%d violation(s)\033[0m\n" "$violations"
   exit 1

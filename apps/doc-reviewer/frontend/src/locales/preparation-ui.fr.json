@@ -1,0 +1,23 @@
+{
+  "ocrHint": "Le texte natif exploitable est conservé. Seules les pages douteuses sont envoyées à Mistral après votre action.",
+  "rulesTitle": "Règles de préparation",
+  "rulesHint": "Les règles sont exécutées selon le type de page détecté. Chaque page détaille les règles évaluées ; si un ancien type n'est pas reconnu, aucune règle ciblée ne sera appliquée.",
+  "savedImportedRules": "Règles importées toujours actives : {{filename}} · {{count}}",
+  "noRules": "Aucune règle de préparation n'est configurée.",
+  "nativeTextUsed": "Texte natif utilisé",
+  "ocrRequired": "OCR requis",
+  "ocrPending": "OCRiser les {{count}} pages à vérifier",
+  "ocrPendingRunning": "OCR des pages en cours…",
+  "analyzePages": "Analyser les pages",
+  "runCurrentOcr": "OCRiser cette page",
+  "rerunCurrentOcr": "Relancer l'OCR de cette page",
+  "ruleResults": "{{count}} résultat(s) de règle",
+  "noApplicableRule": "Aucune règle applicable : type non reconnu ou aucune règle ciblée.",
+  "ruleStatus": {
+    "pass": "Réussite",
+    "fail": "Échec",
+    "manual": "À vérifier",
+    "inconclusive": "Incertain",
+    "unsupported": "Non pris en charge"
+  }
+}

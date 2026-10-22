@@ -405,13 +405,21 @@ def test_create_folders_copies_pdf_without_updating_tracker(client, tmp_path) ->
     assert expected_folder.is_dir()
     assert (expected_folder / pdf_path.name).read_bytes() == original_pdf
     assert pdf_path.read_bytes() == original_pdf
-    assert result == {"created_folders": [str(expected_folder)], "existing_folders": []}
+    assert result == {
+        "created_folders": [str(expected_folder)],
+        "existing_folders": [],
+        "renamed_folders": [],
+    }
     assert tracker_path.read_bytes() == tracker_before
 
     repeated_response = client.post("/api/v1/ecm-automation/folders", json=request)
 
     assert repeated_response.status_code == 200
-    assert repeated_response.json() == {"created_folders": [], "existing_folders": [str(expected_folder)]}
+    assert repeated_response.json() == {
+        "created_folders": [],
+        "existing_folders": [str(expected_folder)],
+        "renamed_folders": [],
+    }
     assert (expected_folder / pdf_path.name).read_bytes() == original_pdf
 
 

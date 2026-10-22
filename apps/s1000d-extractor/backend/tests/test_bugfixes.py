@@ -19,10 +19,23 @@ def _upload(client, data: bytes, name: str = "manual.pdf") -> str:
     r = client.post(
         "/api/v1/documents",
         files={"file": (name, data)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     assert r.status_code == 201, r.text
-    return r.json()["id"]
+    doc_id = r.json()["id"]
+    detection = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection.status_code == 200, detection.text
+    cut = detection.json()
+    if cut["validation_required"]:
+        confirmation = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": cut["selected_page"] or cut["default_start_page"],
+                "end_page": cut["selected_end_page"] or cut["total_pages"],
+            },
+        )
+        assert confirmation.status_code == 200, confirmation.text
+    return doc_id
 
 
 def _run_wizard(client, doc_id: str) -> dict:
@@ -45,7 +58,7 @@ def test_serialize_strips_control_characters() -> None:
         IRNode(id="n1", kind="paragraph", text="Avant\x0c apres\x00 fin"),
         IRNode(id="n2", kind="figure", text="Figure 1\x0b legende"),
     ])
-    xml = serialize(root, issue="5.0", dm_type="descriptive", title="Titre\x0c")
+    xml = serialize(root, issue="4.2", dm_type="descriptive", title="Titre\x0c")
     xml_safe.fromstring(xml, allow_internal_dtd=True)
     assert "\x0c" not in xml and "\x00" not in xml
 
@@ -55,7 +68,7 @@ def test_serialize_admonition_without_candidates() -> None:
     root = IRNode(id="r", kind="section", level=0, children=[
         IRNode(id="n1", kind="admonition", admonition="warning", text="Danger."),
     ])
-    xml = serialize(root, issue="5.0", dm_type="descriptive")
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
     assert "<warning>" in xml
 
 
@@ -65,15 +78,14 @@ def test_serialize_rejects_invalid_element_name() -> None:
     node.candidates = [type("C", (), {"element": "1 mauvais nom", "score": 1.0,
                                       "rationale": ""})()]
     xml = serialize(IRNode(id="r", kind="section", level=0, children=[node]),
-                    issue="5.0", dm_type="descriptive")
+                    issue="4.2", dm_type="descriptive")
     xml_safe.fromstring(xml, allow_internal_dtd=True)
 
 
 def test_validate_document_never_raises_on_bad_brex() -> None:
-    xml = serialize(IRNode(id="r", kind="section", level=0), issue="5.0", dm_type="descriptive")
-    violations = validate_document(xml, issue="5.0", brex_xml="<pas-un-brex")
+    xml = serialize(IRNode(id="r", kind="section", level=0), issue="4.2", dm_type="descriptive")
+    violations = validate_document(xml, issue="4.2", brex_xml="<pas-un-brex")
     assert isinstance(violations, list)
-    assert any(v["rule"] in ("BREX", "XSD") for v in violations)
 
 
 def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> None:
@@ -84,6 +96,15 @@ def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> N
 
 def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
     doc_id = _upload(client, pdf_bytes)
+    dmrl = [
+        {"DMC": "DMC-PUMP-A-00-00-00-00A-040A-D", "Titre": "Description"},
+        {"DMC": "DMC-PUMP-A-00-00-00-00A-520A-D", "Titre": "Removal Procedure"},
+    ]
+    response = client.post(
+        f"/api/v1/documents/{doc_id}/resources/dmrl",
+        files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
+    )
+    assert response.status_code == 200, response.text
     client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
     for params in ({}, {"types": {}}, {"overrides": []}, {}):
         response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=params)

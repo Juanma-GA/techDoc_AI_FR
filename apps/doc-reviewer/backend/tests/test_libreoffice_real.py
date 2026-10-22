@@ -6,7 +6,7 @@ A lancer sur un poste avec LibreOffice (installe, ou portable via DR_SOFFICE_PAT
     set DR_TEST_REAL_LIBREOFFICE=1
     python -m pytest tests/test_libreoffice_real.py -v
 
-Hors de ce cadre (CI, poste sans LibreOffice), les tests sont ignores.
+Hors de ce cadre (poste sans LibreOffice), les tests sont ignores.
 """
 
 from __future__ import annotations

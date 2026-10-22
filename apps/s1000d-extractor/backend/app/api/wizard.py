@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core import wizard
+from app.core import wizard_resources as wres
 from app.core.errors import AppError
 from app.db.models import Document
 from app.db.session import SessionLocal, get_db
@@ -171,7 +172,7 @@ def wizard_back(doc_id: str, db: Session = Depends(get_db)) -> dict:
 @router.get("/{doc_id}/wizard/dm/{dm_id}/xml")
 def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Response:
     doc = _require(db, doc_id)
-    xml = wizard.dm_xml(doc, dm_id)
+    xml = wizard.dm_xml(doc, dm_id, db=db)
     db.commit()
     dms = json.loads(doc.dms_json) if doc.dms_json else []
     dm = next((item for item in dms if item.get("dm_id") == dm_id), {"dm_id": dm_id})
@@ -209,10 +210,24 @@ def wizard_zip(doc_id: str, db: Session = Depends(get_db)) -> Response:
     ready = [d for d in dms if d.get("xml")]
     if not ready:
         raise AppError("NO_XML", "Aucun XML genere : termine l'etape Generation.", 409)
+    if len(ready) != len(dms):
+        raise AppError(
+            "DM_INCOMPLETE",
+            "Export ZIP impossible : certains DMs n'ont pas pu etre generes.",
+            409,
+        )
+    xml_by_dm = {
+        dm["dm_id"]: wizard.dm_xml(doc, dm["dm_id"], db=db)
+        for dm in ready
+    }
+    db.commit()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for d in ready:
-            zf.writestr(_dm_filename(d), wizard.dm_xml(doc, d["dm_id"]))
+            zf.writestr(_dm_filename(d), xml_by_dm[d["dm_id"]])
+        pmc = wres.pmc_xml(doc)
+        if pmc:
+            zf.writestr(f"PMC/{doc.id}_pmc.xml", pmc)
         for img in _image_paths(doc_id):
             zf.write(img, f"illustrations/{img.name}")
     db.commit()

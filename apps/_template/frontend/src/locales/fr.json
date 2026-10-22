@@ -1,24 +1,17 @@
 {
   "app": {
     "title": "TEMPLATE",
-    "version": "0.1.0",
     "description": "Squelette de démarrage pour les POCs ATEXIS."
   },
   "nav": {
     "ariaLabel": "Navigation principale",
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu",
     "home": "Accueil",
     "data": "Données",
     "settings": "Paramètres"
-  },
-  "llm": {
-    "label": "LLM",
-    "title": "État du LLM (voir Paramètres)",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "À TESTER",
-    "noKey": "NO KEY"
   },
   "demo": {
     "badge": "MODE DÉMO",
@@ -60,7 +53,7 @@
     "messages": "Messages",
     "storage": "Stockage",
     "resetTitle": "Réinitialisation",
-    "resetHint": "Les paramètres et la configuration LLM sont conservés.",
+    "resetHint": "Les paramètres de l’application sont conservés.",
     "resetButton": "Tout supprimer",
     "resetDone": "Réinitialisation terminée ({{count}} éléments supprimés)."
   },
@@ -69,21 +62,6 @@
     "demo.hint": "Le mode normal est sélectionné par défaut. Le choix est enregistré dans la configuration locale de l’application.",
     "demo.normal": "Mode normal",
     "demo.demo": "Mode démo",
-    "demo.saveError": "Impossible d'enregistrer le mode.",
-    "ai.title": "Intelligence artificielle",
-    "ai.toggleLabel": "LLM actif",
-    "ai.toggleHint": "Désactiver saute les tâches confiées à l'IA. La clé Mistral est conservée.",
-    "mistral.title": "Configuration Mistral",
-    "mistral.configured": "CONFIGURÉE",
-    "mistral.notConfigured": "NON CONFIGURÉE",
-    "mistral.apiKeyLabel": "Clé API Mistral",
-    "mistral.apiKeyHint": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
-    "mistral.baseUrlLabel": "Base URL",
-    "mistral.chatModelLabel": "Modèle chat",
-    "mistral.embedModelLabel": "Modèle embeddings",
-    "mistral.test": "Tester la connexion",
-    "mistral.saveSuccess": "Paramètres enregistrés.",
-    "mistral.testSuccess": "Connexion OK ({{count}} modèles disponibles).",
-    "mistral.testError": "Échec : {{message}}"
+    "demo.saveError": "Impossible d'enregistrer le mode."
   }
 }

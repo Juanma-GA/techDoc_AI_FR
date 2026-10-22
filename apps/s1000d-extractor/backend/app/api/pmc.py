@@ -6,10 +6,11 @@ import asyncio
 import json
 
 from fastapi import APIRouter, Depends
-from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 
 from app.core import dmrl as dmrl_mod
+from app.core.dmrl_rules import is_pm_title
 from app.core.errors import AppError
 from app.core.pmc import generate_pmc
 from app.db.models import Document
@@ -60,7 +61,7 @@ async def validate_and_generate_pmc(
                     if not isinstance(raw_entry, dict):
                         raise AppError("DMRL_PARSE_ERROR", f"Ligne DMRL invalide : {index}.", 422)
                     entry = dmrl_mod.entry_from_dict(raw_entry)
-                    if not entry.dmc:
+                    if not is_pm_title(entry) and not entry.dmc:
                         raise AppError("DMRL_MISSING_DMC", f"DMC manquant à la ligne {index}.", 422)
                     entries.append(entry)
                     step("validated", index, total)

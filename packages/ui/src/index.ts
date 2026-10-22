@@ -1,5 +1,12 @@
 // Atoms
-export { AppShell, sidebarNavItemClass, type AppShellProps } from "./components/AppShell";
+export {
+  AppShell,
+  SidebarNavContent,
+  sidebarNavItemClass,
+  type AppShellProps,
+  type SidebarNavIconName,
+  type SidebarNavContentProps,
+} from "./components/AppShell";
 export {
   Ai4TechDocLogo,
   setAi4TechDocFavicon,

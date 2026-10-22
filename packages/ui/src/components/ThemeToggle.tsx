@@ -2,6 +2,7 @@ import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { cn } from "../lib/utils";
+import "./theme-toggle.css";
 
 /**
  * Toggle between dark and light themes. Adds/removes `.dark` class on
@@ -50,12 +51,7 @@ export function ThemeToggle({ className, ...rest }: ThemeToggleProps) {
         applyTheme(next);
         setTheme(next);
       }}
-      className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-sm",
-        "text-fg-dim transition-colors hover:bg-card-hover hover:text-fg",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-light",
-        className,
-      )}
+      className={cn("ui-theme-toggle", className)}
     >
       <Icon size={16} aria-hidden="true" />
     </button>

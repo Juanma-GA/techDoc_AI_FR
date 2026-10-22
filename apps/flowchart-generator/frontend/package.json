@@ -9,7 +9,7 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/e2e/** --passWithNoTests",
     "test:e2e": "playwright test",
     "openapi:gen": "openapi-typescript http://127.0.0.1:8010/api/v1/openapi.json -o src/types/api.ts"
   },

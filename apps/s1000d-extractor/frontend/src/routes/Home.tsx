@@ -30,9 +30,10 @@ export function Home() {
           contexte, propose le mapping et signale les cas ambigus pour revue humaine.
         </p>
         <div className="banner warn">
-          <strong>Best-effort.</strong> La sortie n'est PAS un Data Module valide : DMC,
-          BREX, applicabilité, SNS et ICN ne sont pas récupérables d'un PDF et restent à
-          compléter par un humain.
+          <strong>Best-effort.</strong> La sortie reste un squelette. Le BREX utilisateur
+          est fourni séparément et ses règles prises en charge sont appliquées ; le DMC du
+          DM, l'applicabilité, SNS et ICN ne sont pas récupérables d'un PDF et restent à
+          confirmer par un humain.
         </div>
         <div className="banner">
           Statut backend :{" "}

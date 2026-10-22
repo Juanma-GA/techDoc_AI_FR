@@ -13,6 +13,8 @@ validation remain environment-dependent.
 ## Features
 
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
+- Prepare PDFs using the native text layer where it is legible and Mistral OCR
+  only for pages that need it; preparation rule results are shown per page.
 - Use Airbus and English as initial mapping defaults for new imports; saved
   mapping values continue to be reused.
 - Offer a no-OCR mapping suggestion from the first four pages of a PDF CMM.
@@ -29,14 +31,21 @@ validation remain environment-dependent.
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
-## CI And Repository Content
 
-The dedicated GitHub Actions workflow is an intentional exception to the
-local-first standard's CI scope. Its content-policy job rejects tracked `.pdf`,
-`.doc`, and `.docx` files under `apps/doc-reviewer/`, except that a `.pdf` is
-allowed when its filename contains `anonyme` (case-insensitively). It checks
-file paths only and does not read document contents. This applies to committed
-files, not documents imported locally while using the app.
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
+## Repository Content Policy
+
+Before committing files, keep `apps/doc-reviewer/` free of `.doc` and `.docx`
+files. A committed `.pdf` is allowed only when its filename contains `anonyme`
+(case-insensitively). This policy concerns file paths only; it does not inspect
+document contents or restrict documents imported locally while using the app.
 
 ## Demo Mode
 

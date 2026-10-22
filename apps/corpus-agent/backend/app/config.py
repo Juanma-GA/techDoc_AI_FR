@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://localhost:8000",
+        "http://localhost:8001",
     ]
     max_upload_size_mb: int = 50
 
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     #
     # Bind host/port — 127.0.0.1 en local ; l'IT surcharge en prod via .env.
     bind_host: str = "127.0.0.1"
-    bind_port: int = 8000
+    bind_port: int = 8001
 
     # Rate limiting (slowapi) — requetes par minute, par IP.
     rate_limit_enabled: bool = True

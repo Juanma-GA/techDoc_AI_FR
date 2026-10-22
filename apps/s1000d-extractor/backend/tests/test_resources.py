@@ -33,10 +33,23 @@ def _upload_doc(client, data: bytes) -> str:
     r = client.post(
         "/api/v1/documents",
         files={"file": ("manual.pdf", data)},
-        data={"s1000d_issue": "5.0", "context_hint": "mixed"},
+        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
     )
     assert r.status_code == 201, r.text
-    return r.json()["id"]
+    doc_id = r.json()["id"]
+    detection = client.post(f"/api/v1/documents/{doc_id}/pdf-cut/detect")
+    assert detection.status_code == 200, detection.text
+    cut = detection.json()
+    if cut["validation_required"]:
+        confirmation = client.post(
+            f"/api/v1/documents/{doc_id}/pdf-cut/confirm",
+            json={
+                "start_page": cut["selected_page"] or cut["default_start_page"],
+                "end_page": cut["selected_end_page"] or cut["total_pages"],
+            },
+        )
+        assert confirmation.status_code == 200, confirmation.text
+    return doc_id
 
 
 def _upload_resource(client, doc_id: str, kind: str, name: str, payload: bytes):
@@ -86,7 +99,7 @@ def test_migration_input_mapping_persists_last_files(client, pdf_bytes) -> None:
     mapping = client.get("/api/v1/migration-inputs")
     assert mapping.status_code == 200, mapping.text
     body = mapping.json()
-    assert body["issue"] == "5.0"
+    assert body["issue"] == "4.2"
     assert body["context_hint"] == "mixed"
     assert body["files"]["document"]["filename"] == "manual.pdf"
     assert body["files"]["dmrl"]["filename"] == "client-dmrl.json"
@@ -133,6 +146,10 @@ def test_existing_dm_without_doctype_is_upgraded_on_download(client, pdf_bytes_i
     from app.db.session import SessionLocal
 
     doc_id = _upload_doc(client, pdf_bytes_image)
+    response = _upload_resource(
+        client, doc_id, "dmrl", "DMRL.json", json.dumps(_DMRL_WITH_ICN).encode()
+    )
+    assert response.status_code == 200, response.text
     client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"start_page": 1})
     for payload in ({}, {"types": {}}, {"overrides": []}, {}):
         state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=payload).json()
@@ -254,6 +271,10 @@ def test_client_dm_header_template_is_applied(client, pdf_bytes) -> None:
     }
     response = _upload_resource(
         client, doc_id, "dm_header", "header.json", json.dumps(template).encode()
+    )
+    assert response.status_code == 200, response.text
+    response = _upload_resource(
+        client, doc_id, "dmrl", "DMRL.json", json.dumps(_DMRL).encode()
     )
     assert response.status_code == 200, response.text
     state = client.post(

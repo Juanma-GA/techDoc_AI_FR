@@ -21,6 +21,7 @@ class SettingsIn(BaseModel):
     chat_model: str | None = None
     embed_model: str | None = None
     llm_enabled: bool | None = None
+    demo_enabled: bool | None = None
 
 
 class SettingsOut(BaseModel):
@@ -30,6 +31,7 @@ class SettingsOut(BaseModel):
     embed_model: str
     llm_enabled: bool
     llm_tested: bool = False
+    demo_enabled: bool = False
 
 
 class TestConnectionOut(BaseModel):
@@ -68,6 +70,40 @@ class BrexProfileOut(BaseModel):
     name: str
     s1000d_issue: str
     created_at: str
+
+
+class BrexObjectValueOut(BaseModel):
+    value_allowed: str | None = None
+    value_text: str
+    value_form: str | None = None
+    value_tailoring: str
+
+
+class BrexRuleOut(BaseModel):
+    rule_id: str | None = None
+    object_path: str
+    allowed_flag: str
+    object_use: str
+    object_values: list[BrexObjectValueOut]
+    rules_context: str | None = None
+    context_id: str | None = None
+    severity_level: str | None = None
+    supported: bool
+    support_status: str
+    support_reason: str | None = None
+
+
+class UnsupportedBrexRuleOut(BaseModel):
+    rule_type: str
+    rule_id: str | None = None
+    description: str
+
+
+class BrexProfileDetailOut(BrexProfileOut):
+    dmc: str
+    dm_code: dict[str, str]
+    rules: list[BrexRuleOut]
+    unsupported_rules: list[UnsupportedBrexRuleOut]
 
 
 class DocumentOut(BaseModel):

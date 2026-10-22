@@ -21,7 +21,7 @@ If execution permission is absent, remain in planning mode.
 
 1. `STANDARD_POC.md` defines required local checks.
 2. `CLAUDE.md` defines safety and mandatory validation behavior.
-3. `AACF_TESTING_GUIDE.md` is an operational aid only, not a normative source.
+3. `docs/history/AACF_TESTING_GUIDE.md` is archived historical material, not a current operational or normative source.
 4. Application README files and manifests define app-specific commands.
 
 ## Procedure
