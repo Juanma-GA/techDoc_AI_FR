@@ -21,7 +21,7 @@ type Props = {
 };
 
 const XXX_MARKER = /(?<![A-Za-z0-9])[Xx]{3,}(?![A-Za-z0-9])/;
-const PLACEHOLDER_MARKER = /\{\{\s*[A-Za-z0-9_.\-]+\s*\}\}/;
+const PLACEHOLDER_MARKER = /\{\{\s*[A-Za-z0-9_.-]+\s*\}\}/;
 type Status = "filled" | "empty" | "skipped";
 
 // Modale d'apercu / edition PPTX, pixel-identique au preview (openPptxPreviewModal).

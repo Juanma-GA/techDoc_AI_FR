@@ -1,141 +1,107 @@
-# 🚀 LANCER LES APPS — GUIDE RAPIDE
+# Démarrage rapide des POCs
 
-Chaque POC est **100% AACF conforme** et prêt à être testé en local.
+Les applications listées ci-dessous utilisent chacune un port cible unique,
+défini dans [`scripts/apps.json`](scripts/apps.json). Le launcher choisit le
+prochain port libre si le port cible est occupé; lis le port effectivement
+affiché par le launcher.
 
----
+## Apps disponibles
 
-## 📌 Résumé des ports
+<!-- APP_REGISTRY_START -->
+| App | Port cible | Windows | Unix |
+|---|---:|---|---|
+| [Corpus Agent](apps/corpus-agent/README.md) | 8001 | `apps\corpus-agent\start.bat` | `bash apps/corpus-agent/start.sh` |
+| [Doc Writer](apps/doc-writer/README.md) | 8002 | `apps\doc-writer\start.bat` | `bash apps/doc-writer/start.sh` |
+| [Doc Reviewer](apps/doc-reviewer/README.md) | 8003 | `apps\doc-reviewer\start.bat` | `bash apps/doc-reviewer/start.sh` |
+| [CATIA Toolbox](apps/catia-toolbox/README.md) | 8004 | `apps\catia-toolbox\start.bat` | `bash apps/catia-toolbox/start.sh` |
+| [OCR Vision](apps/ocr-vision/README.md) | 8005 | `apps\ocr-vision\start.bat` | `bash apps/ocr-vision/start.sh` |
+| [S1000D Extractor](apps/s1000d-extractor/README.md) | 8006 | `apps\s1000d-extractor\start.bat` | `bash apps/s1000d-extractor/start.sh` |
+| [ECM Automation](apps/ecm-automation/README.md) | 8009 | `apps\ecm-automation\start.bat` | `bash apps/ecm-automation/start.sh` |
+| [Flowchart Generator](apps/flowchart-generator/README.md) | 8010 | `apps\flowchart-generator\start.bat` | `bash apps/flowchart-generator/start.sh` |
+| [PDF Toolkit](apps/pdf-toolkit/README.md) | 8085 | `apps\pdf-toolkit\start.bat` | `bash apps/pdf-toolkit/start.sh` |
+<!-- APP_REGISTRY_END -->
 
-| POC | Port | Lancer |
-|---|---|---|
-| **Corpus Agent** | 8001 | `apps/corpus-agent/start.bat` |
-| **Doc Writer** | 8002 | `apps/doc-writer/start.bat` |
-| **Doc Reviewer** | 8003 | `apps/doc-reviewer/start.bat` |
-| **Catia Toolbox** | 8004 | `apps/catia-toolbox/start.bat` |
-| **OCR Vision** | 8005 | `apps/ocr-vision/start.bat` |
-| **S1000D Extractor** | 8006 | `apps/s1000d-extractor/start.bat` |
+## Lancer une app
 
----
+### Windows
 
-## 🎬 LANCER UNE APP (Windows)
-
-### Étape 1 : Ouvrir PowerShell/CMD
-
-```powershell
-cd ATEXIS_POCS
-```
-
-### Étape 2 : Lancer l'app
+Depuis la racine du dépôt, lance le `start.bat` de l'app choisie. Exemple :
 
 ```powershell
 apps\corpus-agent\start.bat
 ```
 
-**Résultat attendu :**
-- Une fenêtre cmd s'ouvre et affiche :
-```
-[setup] Installation des deps Python - 1 a 3 min...
-[setup] Migrations Alembic...
-[run] Backend sur http://127.0.0.1:8001/
-      Ctrl+C ici pour arreter.
-```
-- Le navigateur ouvre automatiquement http://127.0.0.1:8001
+Le launcher prépare le backend et le frontend si nécessaire, démarre l'app sur
+`127.0.0.1`, puis indique l'URL locale. Garde la fenêtre ouverte pendant
+l'utilisation; `Ctrl+C` arrête l'app.
 
-### Étape 3 : Tester dans le navigateur
+### Unix
 
-Une fois la page ouverte :
-- ✅ Theme toggle (sun/moon) dans le sidebar
-- ✅ Langue FR/EN dans le sidebar
-- ✅ Navigation propre à l'application ; l'onglet Données peut être absent
-- ✅ Pas de console error (F12)
+Depuis la racine du dépôt :
 
-### Étape 4 : Arrêter l'app
-
-Dans la fenêtre cmd : `Ctrl+C`
-
----
-
-## 🧪 CHECKLIST DE TEST RAPIDE
-
-Après avoir lancé **au moins une app**, valide ces points :
-
-### Backend OK ?
 ```bash
-curl http://127.0.0.1:8001/api/v1/health
-# Résultat attendu:
-# {"status":"ok","llm":"not_configured|untested|ok|disabled",...}
+bash apps/corpus-agent/start.sh
 ```
 
-### Frontend OK ?
-- Ouvre http://127.0.0.1:8001
-- Page charge sans erreur
-- Onglets visibles
-- Pas de console error (F12)
+Le launcher Unix applique le même port cible et le même fallback que Windows.
 
-### Thème & i18n OK ?
-- Clic sun/moon → thème bascule dark/light
-- Clic FR/EN → UI en FR ou EN
-- Rechargement F5 → langue/thème persisté (localStorage)
+## Développement et validation
 
----
+Prérequis selon l'app : Python 3.11+ pour FastAPI; Go pour le développement de
+PDF Toolkit; Node 20+ et pnpm 9 pour développer/build le frontend.
 
-## ⚠️ ERREURS COURANTES & SOLUTIONS
-
-### ❌ Port déjà utilisé
-```
-error: port 8001 is already in use
-```
-**Solution :**
-```powershell
-netstat -ano | findstr :8001
-taskkill /PID <PID> /F
-```
-Ou relancer l'app (elle bascule auto au port suivant si 8001 occupé).
-
-### ❌ Python pas trouvé
-```
-ModuleNotFoundError: No module named 'fastapi'
-```
-**Solution :**
-```powershell
-cd apps\<poc>\backend
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
+```bash
+pnpm dev:<slug>
+pnpm --filter @apps/<slug>-frontend typecheck
+pnpm --filter @apps/<slug>-frontend test
+pnpm --filter @apps/<slug>-frontend build
 ```
 
-### ❌ Alembic migrations fail
-```
-sqlalchemy.exc.OperationalError
-```
-**Solution :**
-```powershell
-cd apps\<poc>\backend
-python -m alembic upgrade head
-```
+Pour un backend FastAPI, exécute `pytest -q` depuis `apps/<slug>/backend/`.
+Pour PDF Toolkit, exécute `go test ./...` depuis `apps/pdf-toolkit/backend/`.
+Les smoke tests navigateur sont exécutés avec
+`pnpm --filter @apps/<slug>-frontend test:e2e`.
 
-### ❌ Frontend dist manquant
-```
-GET /index.html → 503 frontend not built
-```
-**Solution :**
-```powershell
-cd apps\<poc>\frontend
-pnpm install
-pnpm build
+Le checker local est :
+
+```bash
+bash scripts/check_standard.sh
 ```
 
----
+Il valide des règles structurelles; il ne remplace pas les tests, le build, les
+smoke tests ni une vérification contre l'AACF live. Les apps qui déclarent le
+profil `llm` demandent une clé Mistral runtime dans Paramètres; une app créée
+avec le seul profil `local-first` n'intègre pas le LLM.
 
-## 📞 PROCHAINES ÉTAPES
+## Créer une nouvelle app
 
-1. **Lancer les 6 POCs** un par un via leurs `start.bat`
-2. **Valider** que chaque POC démarre et s'affiche
-3. **Tester** theme toggle + i18n FR/EN sur chaque
-4. **Documenter** les résultats dans [TEST_GUIDE.md](./TEST_GUIDE.md)
-5. **Signaler** les bugs sur [#issues](issues/)
+Depuis la racine du dépôt :
 
----
+```bash
+pnpm new:poc mon-app
+pnpm new:poc mon-app-avec-llm --profile llm
+pnpm new:poc mon-app-fichiers --profile files
+```
 
-**Status:** ✅ All POCs 100% AACF compliant, ready for testing  
-**Ready to launch? Let's go! 🚀**
+Sans option `--profile`, le scaffold crée une app `local-first` sans LLM. Les
+profils `llm` et `files` sont opt-in et peuvent être combinés. Le registre
+actualise les ports, les commandes et la matrice CI automatiquement. Voir
+[`docs/standards/profiles-and-ci.md`](docs/standards/profiles-and-ci.md).
+
+## CI
+
+GitHub Actions découvre toutes les apps depuis `scripts/apps.json` et lance les
+validations frontend/backend selon leur stack. Le CI ne déploie ni ne publie
+les POCs.
+
+## Si le frontend n'est pas buildé
+
+La racine de l'app sert `frontend/dist/`. En développement, utiliser `pnpm dev`
+permet le hot reload. Pour un build de production :
+
+```bash
+pnpm --filter @apps/<slug>-frontend build
+```
+
+Ne supprime pas `dist/` pour forcer un rebuild : les launchers reconstruisent le
+frontend quand il est absent ou périmé.

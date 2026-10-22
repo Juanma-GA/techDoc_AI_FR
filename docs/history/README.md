@@ -8,5 +8,7 @@ The removed `legacy/ftm-v1` material remains recoverable from Git commits `a4a1b
 - `ANALISIS_TECNICO_EJECUTIVO.md`: dated executive technical analysis based on an older repository state.
 - `REGISTRO_FUNCIONAMIENTO_PRUEBAS.md`: dated operational test record for earlier POC names and ports.
 - `Plan_reorg.md`: completed documentation and portable-skills reorganization plan.
+- `TEST_GUIDE.md`: archived checklist for six earlier POCs; not a current procedure or AACF evidence.
+- `AACF_TESTING_GUIDE.md`: archived operational checklist with outdated inventory and validation claims.
 
 Use the [documentation index](../index.md), [application inventory](../apps/README.md), and current application README files for the present repository state.

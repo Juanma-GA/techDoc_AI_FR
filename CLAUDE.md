@@ -4,7 +4,7 @@ Ce fichier est lu automatiquement par Claude Code à l'ouverture du repo. Il fix
 
 ## Contexte
 
-Monorepo pnpm hébergeant des POCs FastAPI + React **développés dans un tronc commun** et lancés **localement** sur le PC du dev. Posture **local-first stricte** : pas de Docker, pas de CI, pas de déploiement dans le périmètre du standard. Chaque POC est démarrable via `apps/<poc>/start.bat` (Windows) ou `start.sh` (Unix), et packagé via `apps/<poc>/package.bat`.
+Monorepo pnpm hébergeant des POCs FastAPI + React **développés dans un tronc commun** et lancés **localement** sur le PC du dev. Posture **local-first stricte** : pas de Docker ni de déploiement. Le CI du dépôt exécute uniquement les validations de qualité et ne déploie ni ne publie les apps; voir [`docs/standards/profiles-and-ci.md`](./docs/standards/profiles-and-ci.md). Chaque POC est démarrable via `apps/<poc>/start.bat` (Windows) ou `start.sh` (Unix), et packagé via `apps/<poc>/package.bat`.
 
 ```
 internal-poc-monorepo/
@@ -20,8 +20,8 @@ internal-poc-monorepo/
 
 1. **Stack du template**. Backend par défaut = FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic + structlog. Les backends Go existants restent Go, avec tests/build/packaging natifs, sans obligation d'ajouter Python. Les autres stacks exigent un adaptateur explicite et les écarts sont documentés dans le README de l'app. Frontend = React 18 + TS strict + Vite + Tailwind + React Hook Form + Zod + i18next + Zustand + TanStack Query. Voir `docs/standards/desktop-and-stacks.md`.
 2. **Bannis absolus**. Flask, Streamlit, Babel/React/Tailwind via CDN, LangChain, SDK Mistral, MUI/AntD, Docker, `alert()`, `confirm()`, icônes Unicode, `ignoreBuildErrors: true`, hex en dur dans le code, `console.log`/`print()`/`debug=True` committés.
-3. **Composants UI uniquement via `@internal/ui`**. Pas de réinvention dans `apps/<poc>/components/`. Toute primitive nouvelle se crée dans `packages/ui/` puis se consomme.
-4. **Tokens design uniques, dual-theme**. Couleurs, typo, dimensions viennent de `design-tokens/tokens.json` (palette dark à plat sous `color.*`, overrides light sous `themes.light.color.*`) via le preset Tailwind partagé qui consomme `theme.css`. Aucun hex écrit en dur. Tout POC supporte le toggle dark/light via `ThemeToggle`.
+3. **Composants UI uniquement via `@internal/ui`**. Pas de réinvention dans `apps/<poc>/components/`. Toute primitive nouvelle se crée dans `packages/ui/` puis se consomme. Les apps évitent de surcharger les styles des composants partagés (notamment par des sélecteurs globaux `button`, `input` ou des sélecteurs ciblant leurs classes) : leur apparence reste définie par `packages/ui/`. Une dérogation métier doit être limitée et documentée dans le README de l'app.
+4. **Tokens design uniques, dual-theme**. Couleurs, typo, dimensions viennent de `design-tokens/tokens.json` (palette dark à plat sous `color.*`, overrides light sous `themes.light.color.*`) via le preset Tailwind partagé qui consomme `theme.css`. Aucun hex écrit en dur. Tout POC supporte le toggle dark/light via `ThemeToggle`; le dark est le défaut au premier lancement et seul un choix `light` déjà mémorisé démarre en clair.
 5. **API REST**. Préfixe `/api/v1/` obligatoire, IDs UUID v4, format d'erreur unifié `{code, message, detail, request_id}`, validation Pydantic systématique (jamais `request.json()` brut).
 6. **LLM (profil `llm` uniquement)**. Ces obligations concernent seulement les apps qui déclarent `llm` dans la section `## Profiles` de leur README. Mistral API + `httpx` async + SSE (`sse-starlette`). Pas de SDK Mistral. Pas de LangChain. **Désactivable globalement** via la clé `AppConfig` `llm_enabled` (défaut `true`) : quand OFF, chaque route qui appelle Mistral **saute la tâche confiée à l'IA** (fallback gracieux — HTTP 200 + résultat déterministe/vide, jamais 5xx) et la clé Mistral est **conservée**. Helpers standards `get_llm_enabled(db)` / `set_llm_enabled(db, bool)` dans `core/mistral_client.py`, à appeler **avant** tout `MistralClient.from_db(db)`. Une app déterministe sans IA ne déclare pas `llm` et n'a pas à fournir ces mécanismes.
 7. **Persistance**. Le profil `local-first` utilise SQLite dans `apps/<poc>/backend/data/<poc>.db` (gitignoré). Alembic dès J1. PostgreSQL est réservé aux profils multi-utilisateurs ou production et doit être activé via `DATABASE_URL`.
@@ -43,12 +43,14 @@ internal-poc-monorepo/
     - **Navigation standard** : Home et Données sont optionnels ; Paramètres est obligatoire pour le profil `llm`. Le POC ajoute ses onglets métier.
     - **Standard visuel** : fonts `Inter` (sans-serif) / `JetBrains Mono` (label, code) / `Orbitron` (brand, titres) ; dual-theme dark/light via la classe `.dark` sur `<html>` et les tokens. Les préférences de thème et de langue peuvent être conservées côté navigateur ; aucune donnée d'authentification, métier ou session ne doit l'être.
     - **Indicateur + switch LLM (profil `llm` uniquement)** : badge d'état LLM dans le sidebar, alimenté par `GET /api/v1/health`. Le vert n'est PAS gratuit : `ON`/vert **uniquement** si clé configurée ET test de connexion réussi ET interrupteur ON (`llm:"ok"`) ; `A TESTER`/orange si clé présente mais aucun test réussi (`llm:"untested"`) ; `NO KEY`/orange si aucune clé effective (`llm:"not_configured"`) ; `OFF`/gris si interrupteur OFF (`llm:"disabled"`). Après un test réussi (ou un save de clé) en Paramètres, **invalider la query `health`** (TanStack Query) pour rafraîchir le badge immédiatement. Un `.switch` « LLM activé » en Paramètres `POST /settings {llm_enabled}` — pas une action destructrice → pas de double-clic, bascule immédiate.
-    - **Theme toggle** : bouton sun/moon dans le sidebar. Classe `.dark` sur `<html>`. La persistance navigateur est limitée aux préférences non sensibles de thème et de langue ; jamais à l'authentification, à l'état métier ou aux sessions. Script anti-flash en `<head>` si la préférence de thème est persistée.
+    - **Theme toggle** : bouton sun/moon dans le sidebar. Classe `.dark` sur `<html>`. Sans préférence mémorisée, le thème initial est toujours sombre, indépendamment du thème système; le choix explicite `light` reste respecté. La persistance navigateur est limitée aux préférences non sensibles de thème et de langue ; jamais à l'authentification, à l'état métier ou aux sessions. Script anti-flash en `<head>` appliquant cette même règle.
+    - **Titre de fenêtre** : `<title>` initial, `document.title` React et titre Tauri doivent rester égaux au `app.title` affiché dans le sidebar. Le générateur de POC utilise le même nom lisible pour l'application desktop. Ne pas afficher la version (`vX.Y.Z`) dans le sidebar.
     - **i18n** : `i18next` FR + EN minimum, clés sémantiques (`diagnostic.title`), jamais la chaîne FR comme clé ; switch de langue FR/EN dans le sidebar.
     - **Confirmation actions destructrices** : pattern double-clic (1er clic arme le bouton « Cliquer encore pour confirmer », 2e clic dans les 3 secondes exécute). Jamais `alert()` ni `confirm()` (règle #2).
 14. **Endpoints standards**. Au-delà de `/api/v1/health`, tout POC déclarant le profil `llm` expose :
     - `GET /api/v1/admin/stats` + `POST /api/v1/admin/reset/all` (et `/reset/<scope>` par scope métier) — disponibles même sans onglet Données ; ils peuvent alimenter un onglet Données optionnel ou un autre écran d'administration.
-    - `GET /api/v1/settings` + `POST /api/v1/settings` + `POST /api/v1/settings/test` — config Mistral runtime, persistée dans la table `AppConfig` (key/value). La clé Mistral n'est jamais committée. Le champ booléen `llm_enabled` est exposé en GET et accepté en POST (interrupteur LLM). `/settings/test` renvoie `{ok:false, error:"LLM desactive"}` quand OFF.
+    - `GET /api/v1/settings` + `POST /api/v1/settings` — config Mistral runtime dans `AppConfig` (key/value). La clé n'est jamais committée. `mistral-medium-latest` est le modèle chat par défaut ; `embed_model` peut être vide pour le mode chat-only. Tout changement effectif de clé, base URL ou modèle invalide `llm_tested`. Le champ `llm_enabled` est exposé en GET et accepté en POST.
+    - `POST /api/v1/settings/test` vérifie réellement `chat_model` par une complétion minimale puis `embed_model` par une entrée synthétique s'il est renseigné ; `ok:true` uniquement si tous les modèles configurés répondent, et `models` liste les modèles vérifiés. Renvoie `{ok:false, error:"LLM desactive"}` quand OFF.
     - `GET /api/v1/health` retourne `llm: "ok" | "untested" | "not_configured" | "disabled"`. `ok` = clé effective présente (DB ou `.env`, via `get_effective_settings`) ET dernier test réussi (`get_llm_tested`) ET `llm_enabled` ; `untested` = clé présente mais pas de test réussi ; `not_configured` = aucune clé effective ; `disabled` = `llm_enabled=false`. NE PAS calculer l'état avec `settings.llm_configured` (ne lit que le `.env`, ignore la clé saisie en Paramètres). Helpers standards `get_llm_tested(db)` / `set_llm_tested(db, bool)` dans `core/mistral_client.py`, posés par `/settings/test`.
     - SSE streaming (quand applicable, ex. chat / génération) : events `session` (init avec `{session_id, title}`) → `token*` (deltas successifs) → `done` (succès) ou `error` (avec `{message}`). Endpoint **POST** uniquement (l'`EventSource` natif refuse POST → côté client utiliser `fetch + ReadableStream`).
     - **`AppConfig`** (table `app_config`, key:str PK / value:text) est obligatoire pour tout POC déclarant le profil `llm`. Elle sert à stocker la clé Mistral et toute config runtime, et est préservée par convention lors d'un reset admin. La migration `0001_initial.py` est créée par défaut dans le `_template`.
@@ -56,7 +58,7 @@ internal-poc-monorepo/
 ## Règles de méthode
 
 - **Avant tout changement structurant** (ajout de dépendance, nouveau dossier, refacto multi-fichiers, modification de `packages/ui/` ou `design-tokens/`) : annonce le plan en 5 lignes max et attends validation.
-- **Fichier > 200 lignes** : signale-le et propose un découpage avant de continuer à l'étendre.
+- **Fichier > 400 lignes** : signale-le et propose un découpage avant de continuer à l'étendre.
 - **Code legacy** (dossier `legacy/` ou marqué tel quel) : lecture seule. Ne le modifie pas, sauf demande explicite.
 - **`scripts/check_standard.sh`** : doit retourner exit 0 avant chaque commit. Si rouge, corrige les violations avant de proposer le commit.
 - **Chaque POC est indépendant**. N'introduis jamais de dépendance runtime entre `apps/<poc-a>/` et `apps/<poc-b>/`. Le partage passe uniquement par `packages/ui/` et `design-tokens/`.
@@ -76,7 +78,7 @@ internal-poc-monorepo/
 
 ## Format de réponse attendu
 
-Pour chaque tâche de code, structure ta réponse ainsi :
+Pour chaque tâche de code, structure ta réponse ainsi (Si la question est en français répond en français) :
 
 1. **Vérification standard** (1-3 lignes) : conforme parce que… / non conforme à cause de…
 2. **Code** : le diff ou les fichiers à créer/modifier.

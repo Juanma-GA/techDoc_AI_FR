@@ -13,7 +13,14 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { CompressTool } from "./features/compress/CompressTool";
-import { AppShell, LanguageSwitcher, Spinner, sidebarNavItemClass, useMediaQuery } from "@internal/ui";
+import {
+  AppShell,
+  LanguageSwitcher,
+  SidebarNavContent,
+  Spinner,
+  sidebarNavItemClass,
+  useMediaQuery,
+} from "@internal/ui";
 import { DeleteTool } from "./features/delete/DeleteTool";
 import { ExtractTool } from "./features/extract/ExtractTool";
 import { MergeTool } from "./features/merge/MergeTool";
@@ -81,9 +88,10 @@ export function App() {
       className="pdf-toolkit-shell"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
       navigationLabel={t("nav.ariaLabel")}
       themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       navigation={
         <div
           className="ui-tool-tabs"
@@ -100,12 +108,13 @@ export function App() {
               aria-controls="tool-panel"
               aria-selected={activeTool === id}
               tabIndex={activeTool === id ? 0 : -1}
+              aria-label={t(`tools.${id}.tab`)}
+              title={t(`tools.${id}.tab`)}
               className={sidebarNavItemClass(activeTool === id)}
               onClick={() => setActiveTool(id)}
               onKeyDown={(event) => handleTabKeyDown(event, id)}
             >
-              <Icon size={16} aria-hidden="true" />
-              <span>{t(`tools.${id}.tab`)}</span>
+              <SidebarNavContent icon={Icon} label={t(`tools.${id}.tab`)} />
             </button>
           ))}
         </div>

@@ -10,7 +10,12 @@
     "architecture": "Architecture",
     "data": "Données",
     "settings": "Paramètres",
-    "versioning": "Versions"
+    "versioning": "Versions",
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "llm": {
     "label": "LLM",

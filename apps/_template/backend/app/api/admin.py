@@ -2,7 +2,7 @@
 
 Version generique : compte uniquement `AppConfig`. Chaque POC doit
 remplacer le contenu de `stats()` et `reset_all()` pour ses propres tables.
-La table app_config est preservee par convention (cle Mistral et mode demo).
+La table app_config est preservee par convention (reglages runtime).
 """
 
 from __future__ import annotations

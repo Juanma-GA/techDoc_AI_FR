@@ -8,6 +8,4 @@ def test_health_ok(client) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert "version" in body
-    assert "db" in body
-    assert "llm" in body
+    assert set(body) == {"status", "version", "db"}

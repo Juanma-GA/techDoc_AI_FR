@@ -1,6 +1,7 @@
-# Operational POC Validation Guide
+# Archived Operational POC Validation Guide
 
-**Status**: historical operational procedure being refreshed for 8 active POCs.
+**Status**: archived historical procedure. Its inventory and results are outdated
+and must not be treated as current validation or AACF evidence.
 
 This guide organizes manual validation. It is not an AACF or local normative source and does not prove compliance. When live AACF content is unavailable, the AACF verdict is `AACF NON VERIFIABLE`.
 
@@ -18,14 +19,12 @@ All POCs have passed pre-launch validation:
 | catia-toolbox | 8004 | ✅ | ✅ built | ✅ | Ready |
 | ocr-vision | 8005 | ✅ | ✅ built | ✅ | Ready |
 | s1000d-extractor | 8006 | ✅ | ✅ built | ✅ | Ready |
-| brdp-manager | 8007 | Not revalidated | Not revalidated | Not revalidated | Pending |
-| xml-proofreader | 8008 | Not revalidated | Not revalidated | Not revalidated | Pending |
 
 ## How to Test
 
 ### Step 1: Launch POCs
 
-Open one separate command window per POC under test. The commands below are the previously validated six-app sequence; `brdp-manager` and `xml-proofreader` still require an updated operational pass.
+Open one separate command window per POC under test. The commands below are the previously validated six-app sequence.
 
 ```batch
 # Terminal 1: corpus-agent

@@ -72,7 +72,10 @@ function errorTypes(item: ValidationItem, t: (key: string) => string): string {
   return "—";
 }
 
-function locationLabel(violation: DmValidationViolation, t: (key: string, options?: object) => string) {
+function locationLabel(
+  violation: DmValidationViolation,
+  t: ReturnType<typeof useTranslation>["t"],
+) {
   if (violation.line == null) return violation.path || "/";
   const line = t("validation.line", { line: violation.line });
   return violation.column == null ? line : `${line}:${violation.column}`;
@@ -82,7 +85,7 @@ export function Validation() {
   const { t } = useTranslation();
   const location = useLocation();
   const fileInput = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement | null>(null);
   const importedGenerated = useRef<string | null>(null);
   const [items, setItems] = useState<ValidationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);

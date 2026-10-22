@@ -31,6 +31,15 @@ validation remain environment-dependent.
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## CI And Repository Content
 
 The dedicated GitHub Actions workflow is an intentional exception to the

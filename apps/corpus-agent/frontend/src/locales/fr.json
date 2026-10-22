@@ -24,5 +24,10 @@
   "llm.noKey": "NO KEY",
   "errors.boundary.title": "Quelque chose a mal tourné",
   "errors.boundary.description": "L'interface a rencontré une erreur. Vous pouvez recharger la page pour réessayer.",
-  "errors.boundary.reload": "Recharger la page"
+  "errors.boundary.reload": "Recharger la page",
+  "nav.ariaLabel": "Navigation principale",
+  "nav.themeToggle": "Changer de thème",
+  "nav.languageSwitcher": "Langue",
+  "nav.collapse": "Replier le menu",
+  "nav.expand": "Déplier le menu"
 }

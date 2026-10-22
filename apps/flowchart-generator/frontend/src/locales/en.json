@@ -4,6 +4,9 @@
     "description": "Multi-format industrial flowchart generator (diagnostics, troubleshooting, procedures)"
   },
   "nav": {
+    "ariaLabel": "Main navigation",
+    "themeToggle": "Switch theme",
+    "languageSwitcher": "Language",
     "editor": "Editor",
     "data": "Data",
     "settings": "Settings",

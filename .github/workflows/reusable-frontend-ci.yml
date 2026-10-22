@@ -1,0 +1,60 @@
+name: Reusable frontend CI
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: Registered application slug
+        required: true
+        type: string
+      e2e:
+        description: Whether the app has a Playwright smoke suite
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: ${{ inputs.app }} frontend
+    runs-on: ubuntu-latest
+    env:
+      FRONTEND_DIR: apps/${{ inputs.app }}/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck frontend
+        run: pnpm --dir "$FRONTEND_DIR" run typecheck
+
+      - name: Lint frontend when configured
+        run: pnpm --dir "$FRONTEND_DIR" run --if-present lint
+
+      - name: Test frontend
+        run: pnpm --dir "$FRONTEND_DIR" run test
+
+      - name: Build frontend
+        run: pnpm --dir "$FRONTEND_DIR" run build
+
+      - name: Install Playwright Chromium
+        if: ${{ inputs.e2e }}
+        run: pnpm --dir "$FRONTEND_DIR" exec playwright install --with-deps chromium
+
+      - name: Run Playwright smoke tests
+        if: ${{ inputs.e2e }}
+        run: pnpm --dir "$FRONTEND_DIR" run test:e2e

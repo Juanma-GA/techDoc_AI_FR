@@ -2,6 +2,7 @@ import {
   AppShell,
   ErrorBoundary,
   LanguageSwitcher,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { useState } from "react";
@@ -25,15 +26,28 @@ export function App() {
       className="ecm"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
-      navigationLabel={t("app.navigation")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       navigation={
         <>
-          <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.home")}
+          <NavLink
+            to="/"
+            end
+            title={t("nav.home")}
+            aria-label={t("nav.home")}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon="home" label={t("nav.home")} />
           </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.settings")}
+          <NavLink
+            to="/settings"
+            title={t("nav.settings")}
+            aria-label={t("nav.settings")}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon="settings" label={t("nav.settings")} />
           </NavLink>
         </>
       }

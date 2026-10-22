@@ -96,24 +96,28 @@ def _write_config(db: Session, key: str, value: str) -> None:
 def get_effective_settings(db: Session) -> dict[str, str]:
     from app.config import settings as defaults
 
+    embed_model_row = db.get(AppConfig, CONFIG_KEYS["embed_model"])
     return {
         "api_key": _read_config(db, CONFIG_KEYS["api_key"], defaults.mistral_api_key),
         "base_url": _read_config(db, CONFIG_KEYS["base_url"], defaults.mistral_base_url),
         "chat_model": _read_config(db, CONFIG_KEYS["chat_model"], defaults.mistral_chat_model),
-        "embed_model": _read_config(
-            db, CONFIG_KEYS["embed_model"], getattr(defaults, "mistral_embed_model", "mistral-embed")
+        "embed_model": (
+            embed_model_row.value
+            if embed_model_row is not None and embed_model_row.value is not None
+            else getattr(defaults, "mistral_embed_model", "mistral-embed")
         ),
     }
 
 
 def save_settings(db: Session, data: dict[str, Any]) -> None:
+    current_settings = get_effective_settings(db)
     invalidate_test = False
     for k, v in data.items():
         if k in CONFIG_KEYS and v is not None:
-            _write_config(db, CONFIG_KEYS[k], str(v))
-            if k in {"api_key", "base_url"}:
+            value = str(v)
+            _write_config(db, CONFIG_KEYS[k], value)
+            if current_settings[k] != value:
                 invalidate_test = True
-    # Changer la cle ou l'endpoint invalide le dernier test reussi.
     if invalidate_test:
         _write_config(db, LLM_TESTED_KEY, "false")
     db.commit()
@@ -185,7 +189,47 @@ class MistralClient:
             data = r.json()
             return [m.get("id", "") for m in data.get("data", [])]
 
+    def test_chat_model(self) -> None:
+        if not self.chat_model.strip():
+            raise MistralError("Chat model is not configured.")
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                r = client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    headers=self._headers(),
+                    json={
+                        "model": self.chat_model,
+                        "messages": [{"role": "user", "content": "Reply OK."}],
+                        "max_tokens": 1,
+                    },
+                )
+                r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise MistralError(
+                f"Chat model {self.chat_model!r} is unavailable: {exc}"
+            ) from exc
+
+    def test_embedding_model(self) -> None:
+        if not self.embed_model.strip():
+            raise MistralError("Embedding model is not configured.")
+        try:
+            embeddings = self.embed(["Mistral connection check."])
+        except httpx.HTTPError as exc:
+            raise MistralError(
+                f"Embedding model {self.embed_model!r} is unavailable: {exc}"
+            ) from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise MistralError(
+                f"Invalid response from embedding model {self.embed_model!r}: {exc}"
+            ) from exc
+        if not embeddings or not embeddings[0]:
+            raise MistralError(
+                f"Embedding model {self.embed_model!r} returned no embedding."
+            )
+
     def embed(self, inputs: list[str]) -> list[list[float]]:
+        if not self.embed_model.strip():
+            raise MistralError("Embedding model is not configured.")
         with httpx.Client(timeout=120.0) as client:
             r = client.post(
                 f"{self.base_url}/v1/embeddings",
