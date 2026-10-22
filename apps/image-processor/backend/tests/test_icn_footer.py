@@ -8,8 +8,6 @@ from openpyxl import Workbook
 from PIL import Image
 
 from app.services.constants import A4_HEIGHT, A4_WIDTH
-from app.services.image_layout import ICN_FOOTER_HEIGHT
-
 BASE = "/api/v1/image-processor/ocr"
 
 
@@ -26,7 +24,7 @@ def _workbook_bytes() -> bytes:
     return contents.getvalue()
 
 
-def test_ocr_renders_selected_icn_centered_in_black_footer(client, monkeypatch):
+def test_ocr_keeps_selected_icn_in_filename_without_writing_it_on_image(client, monkeypatch):
     source = BytesIO()
     Image.new("RGB", (120, 60), "white").save(source, format="PNG")
     monkeypatch.setattr(
@@ -57,9 +55,4 @@ def test_ocr_renders_selected_icn_centered_in_black_footer(client, monkeypatch):
     image_bytes = BytesIO(base64.b64decode(payload["edited_image"].split(",", 1)[1]))
     with Image.open(image_bytes) as result:
         assert result.size == (A4_WIDTH, A4_HEIGHT)
-        footer = result.crop((0, A4_HEIGHT - ICN_FOOTER_HEIGHT, A4_WIDTH, A4_HEIGHT)).convert("L")
-        dark_ink = footer.point([255 if value < 128 else 0 for value in range(256)])
-        bounds = dark_ink.getbbox()
-        assert bounds is not None
-        assert abs((bounds[0] + bounds[2]) / 2 - A4_WIDTH / 2) <= 4
-        assert bounds[3] - bounds[1] >= 32
+        assert result.convert("L").getextrema() == (255, 255)

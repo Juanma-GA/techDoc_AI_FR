@@ -24,6 +24,7 @@ Find text references in technical images and replace selected references with su
 - Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed and can be edited or removed before OCR.
 - Add manual replacement pairs; these are combined with the edited Excel pairs.
 - Check or uncheck individual manual/Excel pairs to apply only selected references.
+- A reference entered once in the selected Excel pairs, with no manual pair for the same reference, is replaced at every detected occurrence. Repeated Excel references and manual pairs remain assigned one occurrence at a time. Replacement masks are inset and have rounded corners to preserve nearby strokes.
 - Standardize replacement font size from visible character heights and the mean
   of the most common group among selected references; only shrink over-wide replacements.
 - Preserve detected reading orientation, snapping angles within 5 degrees of an axis.
@@ -45,13 +46,14 @@ The main API and React UI use default port `8010`; the internal LaMa service use
 
 ## Prerequisites
 
-- Python 3.13 for the PaddleOCR API and Python 3.11 for the LaMa service.
+- Python 3.11 for the PaddleOCR API and the LaMa service. Each service uses a separate environment.
 - Node 20 and pnpm 9 for frontend development and builds.
-- Windows: `py` launcher and `curl.exe`. The launcher can install Python 3.11 from the repository installer; Python 3.13 must already be installed unless using a package with embedded runtimes.
-- Unix: `python3.13`, `python3.11`, `lsof`, and `curl`.
-- ZIP package users do not need a system Python; the Windows ZIP includes separate Python 3.13 and 3.11 runtimes.
+- Windows: `py` launcher and `curl.exe`. The launcher can install Python 3.11 from the repository installer if it is not already available.
+- Unix: `python3.11`, `lsof`, and `curl`.
+- ZIP package users do not need a system Python; the Windows ZIP includes separate Python 3.11 runtimes for the API and LaMa service.
+- If an existing checkout has an OCR environment created with another Python version, remove `backend/.venv` once; the launcher will recreate it with Python 3.11.
 
-Dependencies install on first launch. The Windows launcher installs build tools in its embedded Python runtimes before installing app dependencies. In the web launchers and ZIP package, PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
+Dependencies install on first launch. The Windows launcher can install Python 3.11 from the repository installer, then installs app dependencies in separate environments. In the web launchers and ZIP package, PaddleOCR model files may download on first OCR, and LaMa model files may download on first inpainting. After setup, model inference runs locally on CPU.
 
 Text-line orientation uses `PP-LCNet_x1_0_textline_ori` (approximately 6.5 MB of
 model weights). Web and ZIP launches may download this model on first OCR.
@@ -87,7 +89,7 @@ Its startup screen remains visible while migrations run and the OCR and LaMa
 models load; desktop startup is therefore longer than web/ZIP startup.
 
 For development, run `pnpm desktop:dev:image-processor` from the repository root.
-The first run creates the Python 3.13 and 3.11 development environments and
+The first run creates separate Python 3.11 development environments for the API and LaMa service and
 installs their dependencies. On a fresh checkout, run `pnpm install` at the
 repository root first to install the Tauri CLI and frontend dependencies.
 
