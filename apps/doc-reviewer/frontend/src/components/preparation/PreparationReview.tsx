@@ -9,9 +9,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import { PdfViewer } from "../reviewer/PdfViewer";
-import { SuggestionPanel } from "../reviewer/SuggestionPanel";
 import { ExportSelector } from "../reviewer/ExportSelector";
+import { PreparationMetadataPanel } from "./PreparationMetadataPanel";
+import { PreparationReviewPane } from "./PreparationReviewPane";
+import { useClientConfig } from "../../hooks/useClientConfig";
 import { useAnalyze } from "../../hooks/useAnalyze";
 import {
   useApplySuggestion,
@@ -25,7 +26,7 @@ import {
 import { useSyncPreparationAnnotations } from "../../hooks/usePreparation";
 import { API_BASE_URL } from "../../lib/api";
 import { useViewerStore } from "../../stores/viewerStore";
-import type { Document } from "../../types/domain";
+import { missingDocumentContext, type Document } from "../../types/domain";
 import type { PreparationState } from "../../types/preparation";
 
 type Props = {
@@ -36,6 +37,7 @@ type Props = {
 export function PreparationReview({ document, preparation }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const clientConfig = useClientConfig();
   const analyze = useAnalyze(document.id, document);
   const suggestions = useSuggestions(document.id);
   const apply = useApplySuggestion(document.id);
@@ -73,6 +75,22 @@ export function PreparationReview({ document, preparation }: Props) {
   const hasUndecidedPages = preparation.page_decisions.some(
     (decision) => decision.is_modified === null,
   );
+  const preparationMetadata = useMemo(() => {
+    const metadata = { ...preparation.preparation_mapping };
+    for (const [name, field] of Object.entries(clientConfig.data?.mapping.fields ?? {})) {
+      if (!Object.prototype.hasOwnProperty.call(metadata, name)) {
+        metadata[name] = field.default;
+      }
+    }
+    return metadata;
+  }, [clientConfig.data, preparation.preparation_mapping]);
+  const requiredContextFields = clientConfig.data
+    ? Object.entries(clientConfig.data.mapping.fields)
+        .filter(([, field]) => field.required)
+        .map(([name]) => name)
+    : [];
+  const preparationContextReady = Boolean(clientConfig.data) &&
+    missingDocumentContext(document, requiredContextFields, preparationMetadata).length === 0;
 
   useEffect(() => {
     setPdfVersion(document.current_version);
@@ -184,12 +202,14 @@ export function PreparationReview({ document, preparation }: Props) {
             analyze.status === "running" ||
             selectedPages.size === 0 ||
             hasUndecidedPages ||
-            !analyze.contextReady
+            !preparationContextReady
           }
-          title={!analyze.contextReady ? t("reviewer.meta.required") : undefined}
+          title={!preparationContextReady ? t("reviewer.meta.required") : undefined}
           onClick={() =>
             void analyze.start({
               modifiedOnly: true,
+              preparationContext: true,
+              contextReadyOverride: preparationContextReady,
               pageOverrides,
             })
           }
@@ -201,40 +221,31 @@ export function PreparationReview({ document, preparation }: Props) {
         <ExportSelector documentId={document.id} />
       </div>
       {hasUndecidedPages ? <p className="hint">{t("preparation.resolvePages")}</p> : null}
-      <div className="preparation-review">
-        <div className="reviewer-viewer">
-          <div className="reviewer-canvas reviewer-canvas-stack">
-            <PdfViewer
-              pageImageUrl={pageImageUrl}
-              pageNumber={currentPage}
-              zoom={zoom}
-              suggestions={suggestions.data ?? []}
-              selectedSuggestionId={selectedId}
-              onSuggestionClick={(id) => {
-                setSelected(id);
-                setSuggestionFocusRequest((request) => request + 1);
-              }}
-            />
-          </div>
-        </div>
-        <SuggestionPanel
-          suggestions={suggestions.data ?? []}
-          selectedId={selectedId}
-          focusRequest={suggestionFocusRequest}
-          onSelect={(id) => {
-            setSelected(id);
-            const suggestion = suggestions.data?.find((item) => item.id === id);
-            if (suggestion) setCurrentPage(suggestion.page);
-          }}
-          onAccept={accept}
-          onReject={reject}
-          onRejectAll={(ids) => bulkStatus.mutate({ ids, status: "rejected" })}
-          onSaveEdit={saveEdit}
-          onSaveFeedback={saveFeedback}
-          onUnreject={unreject}
-          onUndo={(id) => revert.mutate(id)}
-        />
-      </div>
+      <PreparationMetadataPanel document={document} />
+      <PreparationReviewPane
+        pageImageUrl={pageImageUrl}
+        pageNumber={currentPage}
+        zoom={zoom}
+        suggestions={suggestions.data ?? []}
+        selectedId={selectedId}
+        focusRequest={suggestionFocusRequest}
+        onSuggestionClick={(id) => {
+          setSelected(id);
+          setSuggestionFocusRequest((request) => request + 1);
+        }}
+        onSelect={(id) => {
+          setSelected(id);
+          const suggestion = suggestions.data?.find((item) => item.id === id);
+          if (suggestion) setCurrentPage(suggestion.page);
+        }}
+        onAccept={accept}
+        onReject={reject}
+        onRejectAll={(ids) => bulkStatus.mutate({ ids, status: "rejected" })}
+        onSaveEdit={saveEdit}
+        onSaveFeedback={saveFeedback}
+        onUnreject={unreject}
+        onUndo={(id) => revert.mutate(id)}
+      />
     </section>
   );
 }

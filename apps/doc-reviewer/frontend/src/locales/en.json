@@ -282,6 +282,8 @@
     "noPagesSelected": "No pages are marked to modify.",
     "reviewTitle": "Verification of selected pages",
     "reviewHint": "The existing verification runs only on pages marked “To modify”. Suggestions stay in this tab.",
+    "mappingTitle": "Preparation-only mapping",
+    "mappingSubtitle": "These values are saved for this preparation only and do not change the Verification mapping.",
     "runVerification": "Run verification",
     "runningVerification": "Verification running…",
     "analysisError": "Verification failed: {{message}}",

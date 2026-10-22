@@ -170,6 +170,20 @@ export function usePatchPreparationDecision(documentId: string | undefined) {
   );
 }
 
+export function usePatchPreparationMapping(documentId: string | undefined) {
+  return usePreparationMutation<
+    { mapping: Record<string, unknown> },
+    { preparation_mapping: Record<string, unknown> }
+  >(
+    documentId,
+    ({ mapping }) =>
+      api.patch<{ preparation_mapping: Record<string, unknown> }>(
+        `/documents/${documentId}/preparation/mapping`,
+        { mapping },
+      ),
+  );
+}
+
 export function useSyncPreparationAnnotations(documentId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({

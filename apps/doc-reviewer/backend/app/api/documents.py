@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.checks.client_bundle import ClientMapping, ClientMappingField
+from app.checks.client_bundle import ClientMapping
 from app.checks.client_registry import (
     LoadedClientConfiguration,
     active_standard_versions,
@@ -19,6 +19,7 @@ from app.checks.client_registry import (
 from app.checks.mode_registry import get_request_client_configuration
 from app.config import settings
 from app.core import doc_convert, docx_pipeline, docx_versioning, ingest
+from app.core.client_metadata import validate_client_metadata_patch
 from app.core.demo_mode import get_demo_enabled
 from app.core.demo_scope import documents_in_current_mode, get_document_in_current_mode
 from app.core.document_context import (
@@ -51,70 +52,6 @@ def _legacy_metadata_value(value: Any) -> str | None:
     if isinstance(value, list):
         return ", ".join(str(item).strip() for item in value if str(item).strip()) or None
     return str(value).strip()
-
-
-def _validate_client_metadata_patch(
-    values: dict[str, Any],
-    field_definitions: dict[str, ClientMappingField],
-) -> None:
-    for key, value in values.items():
-        definition = field_definitions.get(key)
-        if definition is None:
-            raise AppError(
-                "CLIENT_METADATA_INVALID",
-                f"Le champ de métadonnées '{key}' n'est pas déclaré par le client actif.",
-                detail={"field": key, "reason": "undeclared"},
-                status_code=422,
-            )
-        if value is None:
-            continue
-
-        if definition.type in {"string", "enum"}:
-            value_is_valid = isinstance(value, str)
-        elif definition.type == "string_list":
-            value_is_valid = isinstance(value, list) and all(
-                isinstance(item, str) for item in value
-            )
-        elif definition.type == "integer":
-            value_is_valid = type(value) is int
-        elif definition.type == "number":
-            value_is_valid = isinstance(value, (int, float)) and not isinstance(value, bool)
-        else:
-            value_is_valid = type(value) is bool
-
-        if not value_is_valid:
-            raise AppError(
-                "CLIENT_METADATA_INVALID",
-                f"Valeur invalide pour le champ de métadonnées '{key}'.",
-                detail={"field": key, "expected": definition.type},
-                status_code=422,
-            )
-        if definition.max_length is not None and len(value) > definition.max_length:
-            value_is_valid = False
-        if definition.max_items is not None and len(value) > definition.max_items:
-            value_is_valid = False
-        if definition.allowed_values is not None:
-            candidates = value if definition.type == "string_list" else [value]
-            if any(item not in definition.allowed_values for item in candidates):
-                value_is_valid = False
-        if definition.pattern is not None and value_is_valid:
-            candidates = value if definition.type == "string_list" else [value]
-            pattern = compile_user_regex(definition.pattern)
-            try:
-                if any(
-                    pattern.fullmatch(item, timeout=USER_REGEX_TIMEOUT_SECONDS) is None
-                    for item in candidates
-                ):
-                    value_is_valid = False
-            except TimeoutError:
-                value_is_valid = False
-        if not value_is_valid:
-            raise AppError(
-                "CLIENT_METADATA_INVALID",
-                f"Valeur invalide pour le champ de métadonnées '{key}'.",
-                detail={"field": key, "expected": definition.type},
-                status_code=422,
-            )
 
 
 def _resolve_standard_versions(
@@ -599,7 +536,7 @@ def patch_document_meta(
     patch = body.model_dump(exclude_unset=True)
     client_metadata_patch = patch.pop("client_metadata", {})
     client_mapping = get_request_client_configuration(request, db).mapping
-    _validate_client_metadata_patch(
+    validate_client_metadata_patch(
         client_metadata_patch,
         client_mapping.fields,
     )

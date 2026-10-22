@@ -282,6 +282,8 @@
     "noPagesSelected": "Aucune page n'est marquée à modifier.",
     "reviewTitle": "Vérification des pages sélectionnées",
     "reviewHint": "La vérification actuelle est lancée uniquement sur les pages marquées « À modifier ». Les suggestions restent dans cet onglet.",
+    "mappingTitle": "Mapping propre à la préparation",
+    "mappingSubtitle": "Ces valeurs sont enregistrées pour cette préparation uniquement et ne modifient pas le mapping de Vérification.",
     "runVerification": "Lancer la vérification",
     "runningVerification": "Vérification en cours…",
     "analysisError": "La vérification a échoué : {{message}}",

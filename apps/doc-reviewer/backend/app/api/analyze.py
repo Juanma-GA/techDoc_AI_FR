@@ -20,6 +20,7 @@ from app.checks.mode_registry import (
     get_request_client_configuration,
 )
 from app.config import settings
+from app.core.client_metadata import validate_client_metadata_patch
 from app.core.compiled_rules import RuleResult
 from app.core.demo_scope import get_document_in_current_mode
 from app.core.document_context import missing_document_context
@@ -32,9 +33,11 @@ from app.core.page_range import (
     select_pdf_page_numbers,
 )
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
+from app.core.preparation_state import load_preparation_mapping
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.core.security import read_upload_bounded
 from app.db.models import AnalysisRun, Document, StandardVersion, Suggestion
+from app.db.preparation_models import DocumentPreparation
 from app.db.session import SessionLocal, get_db
 from app.parsers.pdf_parser import parse_pdf
 from app.schemas import SuggestionOut
@@ -143,6 +146,10 @@ def clear_pending_page_suggestions(
 def analyze_stream(
     document_id: uuid.UUID,
     request: Request,
+    preparation_context: bool = Query(
+        default=False,
+        description="Utiliser le mapping indépendant de l'étape Préparation.",
+    ),
     vision: Optional[bool] = Query(
         default=None,
         description=(
@@ -227,6 +234,40 @@ def analyze_stream(
     )
     client_configuration = get_request_client_configuration(request, db)
     client_bundle = client_configuration.bundle
+    analysis_metadata = dict(doc.client_metadata or {})
+    if preparation_context:
+        if (
+            doc.working_format != "pdf"
+            or client_configuration.manifest.client_code != "THALES"
+        ):
+            raise AppError(
+                "PREPARATION_CONTEXT_UNSUPPORTED",
+                "Le mapping de préparation est réservé aux PDF THALES.",
+                status_code=422,
+            )
+        preparation = db.scalar(
+            select(DocumentPreparation).where(
+                DocumentPreparation.document_id == document_id
+            )
+        )
+        if preparation is None:
+            raise AppError(
+                "PREPARATION_CONTEXT_MISSING",
+                "L'état de préparation de ce document est indisponible.",
+                status_code=409,
+            )
+        saved_preparation_mapping = load_preparation_mapping(preparation)
+        analysis_metadata = {
+            name: saved_preparation_mapping[name]
+            for name in client_configuration.mapping.fields
+            if name in saved_preparation_mapping
+        }
+        validate_client_metadata_patch(
+            analysis_metadata,
+            client_configuration.mapping.fields,
+        )
+        for name, definition in client_configuration.mapping.fields.items():
+            analysis_metadata.setdefault(name, definition.default)
     previous_run = db.scalar(
         select(AnalysisRun)
         .where(AnalysisRun.document_id == document_id, AnalysisRun.status == "done")
@@ -244,7 +285,11 @@ def analyze_stream(
         previous_bundle_hash is not None
         and previous_bundle_hash != client_configuration.bundle_hash
     )
-    missing_context = missing_document_context(doc, client_configuration.mapping)
+    missing_context = missing_document_context(
+        doc,
+        client_configuration.mapping,
+        metadata_override=analysis_metadata if preparation_context else None,
+    )
     if missing_context:
         raise AppError(
             "DOCUMENT_CONTEXT_INCOMPLETE",
@@ -377,6 +422,48 @@ def analyze_stream(
             sv_id = uuid.UUID(str(sv_ids_list[0]))
         except (ValueError, TypeError):
             pass
+    analysis_meta_fields = {
+        "meta_revision_date": (
+            analysis_metadata.get("meta_revision_date")
+            if preparation_context
+            else doc.meta_revision_date
+        ),
+        "meta_cmm_number": (
+            analysis_metadata.get("meta_cmm_number")
+            if preparation_context
+            else doc.meta_cmm_number
+        ),
+        "meta_first_issue_date": (
+            analysis_metadata.get("meta_first_issue_date")
+            if preparation_context
+            else doc.meta_first_issue_date
+        ),
+        "meta_last_issue_date": (
+            analysis_metadata.get("meta_last_issue_date")
+            if preparation_context
+            else doc.meta_last_issue_date
+        ),
+        "meta_revision_number": (
+            analysis_metadata.get("meta_revision_number")
+            if preparation_context
+            else doc.meta_revision_number
+        ),
+        "meta_pnr_number": (
+            analysis_metadata.get("meta_pnr_number")
+            if preparation_context
+            else doc.meta_pnr_number
+        ),
+        "meta_manufacturer": (
+            analysis_metadata.get("meta_manufacturer")
+            if preparation_context
+            else doc.meta_manufacturer
+        ),
+        "document_language": (
+            analysis_metadata.get("document_language")
+            if preparation_context
+            else doc.document_language
+        ),
+    }
     context_snapshot = json.dumps(
         {
             "client_bundle": {
@@ -410,15 +497,10 @@ def analyze_stream(
                 else None
             ),
             "metadata": {
-                "client_metadata": doc.client_metadata or {},
-                "meta_cmm_number": doc.meta_cmm_number,
-                "meta_revision_date": doc.meta_revision_date,
-                "meta_first_issue_date": doc.meta_first_issue_date,
-                "meta_last_issue_date": doc.meta_last_issue_date,
-                "meta_revision_number": doc.meta_revision_number,
-                "meta_manufacturer": doc.meta_manufacturer,
-                "document_language": doc.document_language,
-            }
+                "source": "preparation" if preparation_context else "verification",
+                "client_metadata": analysis_metadata,
+                **analysis_meta_fields,
+            },
         },
         ensure_ascii=True,
         sort_keys=True,
@@ -458,15 +540,15 @@ def analyze_stream(
     is_docx_value = is_docx  # pipeline Word natif vs PDF
     # Mapping manuel du document (cf. rules_engine._doc_meta_block) — capture
     # avant d'entrer dans le worker thread (pas de reutilisation de session ORM).
-    meta_revision_date_value = doc.meta_revision_date
-    meta_cmm_number_value = doc.meta_cmm_number
-    meta_first_issue_date_value = doc.meta_first_issue_date
-    meta_last_issue_date_value = doc.meta_last_issue_date
-    meta_revision_number_value = doc.meta_revision_number
-    meta_pnr_number_value = doc.meta_pnr_number
-    meta_manufacturer_value = doc.meta_manufacturer
-    document_language_value = doc.document_language
-    client_metadata_value = dict(doc.client_metadata or {})
+    meta_revision_date_value = analysis_meta_fields["meta_revision_date"]
+    meta_cmm_number_value = analysis_meta_fields["meta_cmm_number"]
+    meta_first_issue_date_value = analysis_meta_fields["meta_first_issue_date"]
+    meta_last_issue_date_value = analysis_meta_fields["meta_last_issue_date"]
+    meta_revision_number_value = analysis_meta_fields["meta_revision_number"]
+    meta_pnr_number_value = analysis_meta_fields["meta_pnr_number"]
+    meta_manufacturer_value = analysis_meta_fields["meta_manufacturer"]
+    document_language_value = analysis_meta_fields["document_language"]
+    client_metadata_value = analysis_metadata
     first_page_value = resolved_first_page
     last_page_value = resolved_last_page
     partial_page_range_value = partial_page_range

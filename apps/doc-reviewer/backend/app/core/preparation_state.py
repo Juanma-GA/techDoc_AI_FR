@@ -108,6 +108,7 @@ def state_payload(
     if record is None:
         pages = []
         filename = source_sha256 = provider = None
+        preparation_mapping = {}
         page_count = 0
         validated: list[int] = []
         available_results: list[dict[str, Any]] = []
@@ -117,6 +118,7 @@ def state_payload(
         filename = record.source_filename
         source_sha256 = record.source_sha256
         provider = record.selected_provider
+        preparation_mapping = load_preparation_mapping(record)
         page_count = record.page_count
         validated_by_provider = _load_validation_map(record)
         validated = validated_by_provider.get(provider, []) if provider else []
@@ -142,7 +144,29 @@ def state_payload(
         "preparation_rule_count": preparation_rule_count,
         "checklist_source_filename": checklist.source_filename if checklist else None,
         "page_decisions": decisions,
+        "preparation_mapping": preparation_mapping,
     }
+
+
+def load_preparation_mapping(record: DocumentPreparation) -> dict[str, Any]:
+    mapping = _load_json(record.preparation_mapping_json, "preparation_mapping_json")
+    if not isinstance(mapping, dict):
+        raise AppError(
+            "PREPARATION_MAPPING_INVALID",
+            "Le mapping de préparation enregistré est invalide.",
+            status_code=500,
+        )
+    return mapping
+
+
+def update_preparation_mapping(
+    db: Session,
+    record: DocumentPreparation,
+    mapping: dict[str, Any],
+) -> None:
+    record.preparation_mapping_json = json.dumps(mapping, ensure_ascii=False)
+    record.updated_at = datetime.now(UTC)
+    db.commit()
 
 
 def update_readability(

@@ -6,7 +6,6 @@ import { PreparationChecklistStep } from "../components/preparation/PreparationC
 import { PreparationOcrStep } from "../components/preparation/PreparationOcrStep";
 import { PreparationReview } from "../components/preparation/PreparationReview";
 import { PageHeader } from "../components/PageHeader";
-import { DocumentMetaPanel } from "../components/reviewer/DocumentMetaPanel";
 import { useDocument } from "../hooks/useDocuments";
 import {
   useDetectPreparationPages,
@@ -162,10 +161,7 @@ export function PreparationWorkspace() {
       ) : null}
 
       {step === 3 ? (
-        <>
-          <DocumentMetaPanel document={document.data} />
-          <PreparationReview document={document.data} preparation={state} />
-        </>
+        <PreparationReview document={document.data} preparation={state} />
       ) : null}
     </div>
   );

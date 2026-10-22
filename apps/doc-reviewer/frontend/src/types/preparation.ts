@@ -76,6 +76,7 @@ export type PreparationState = {
   preparation_rule_count: number;
   checklist_source_filename: string | null;
   page_decisions: PreparationPageDecision[];
+  preparation_mapping: Record<string, unknown>;
 };
 
 export type PreparationPageText = {

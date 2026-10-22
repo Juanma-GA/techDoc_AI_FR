@@ -77,6 +77,53 @@ def test_preparation_initializes_from_uploaded_document_without_reference_upload
     assert body["checklist_imported_rule_count"] == 0
 
 
+def test_preparation_mapping_is_independent_from_verification_mapping(
+    client: TestClient,
+    sample_pdf_bytes: bytes,
+) -> None:
+    document_id = _upload_document(client, sample_pdf_bytes)
+    verification_mapping = {
+        "meta_revision_date": "JUL 27/26",
+        "meta_cmm_number": "79-30-02",
+        "meta_first_issue_date": "JUL 1966",
+        "meta_revision_number": "01",
+        "meta_pnr_number": ["1-900-SB"],
+        "meta_manufacturer": "Airbus",
+        "document_language": "en",
+    }
+    document_patch = client.patch(
+        f"/api/v1/documents/{document_id}",
+        json={"client_metadata": verification_mapping},
+    )
+    assert document_patch.status_code == 200, document_patch.text
+
+    preparation = client.get(f"/api/v1/documents/{document_id}/preparation")
+    assert preparation.status_code == 200, preparation.text
+    preparation_mapping = {"meta_cmm_number": "80-80-01"}
+    mapping_patch = client.patch(
+        f"/api/v1/documents/{document_id}/preparation/mapping",
+        json={"mapping": preparation_mapping},
+    )
+    assert mapping_patch.status_code == 200, mapping_patch.text
+
+    state = client.get(f"/api/v1/documents/{document_id}/preparation")
+    document = client.get(f"/api/v1/documents/{document_id}")
+    assert state.json()["preparation_mapping"] == preparation_mapping
+    assert document.json()["client_metadata"] == verification_mapping
+
+    blocked = client.post(
+        f"/api/v1/documents/{document_id}/analyze?preparation_context=true"
+    )
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "DOCUMENT_CONTEXT_INCOMPLETE"
+    assert set(blocked.json()["detail"]["fields"]) == {
+        "meta_revision_date",
+        "meta_first_issue_date",
+        "meta_revision_number",
+        "meta_pnr_number",
+    }
+
+
 def test_detection_requires_ocr_for_short_native_text(
     client: TestClient,
     sample_pdf_bytes: bytes,

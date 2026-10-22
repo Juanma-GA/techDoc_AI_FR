@@ -34,6 +34,7 @@ class PreparationStateOut(BaseModel):
     preparation_rule_count: int = 0
     checklist_source_filename: str | None
     page_decisions: list[dict[str, Any]] = Field(default_factory=list)
+    preparation_mapping: dict[str, Any] = Field(default_factory=dict)
 
 
 class OcrResultOut(BaseModel):
@@ -79,6 +80,10 @@ class OcrValidationPatchIn(BaseModel):
 
 class PageDecisionPatchIn(BaseModel):
     is_modified: bool
+
+
+class PreparationMappingPatchIn(BaseModel):
+    mapping: dict[str, Any] = Field(default_factory=dict)
 
 
 class PageDecisionOut(BaseModel):
