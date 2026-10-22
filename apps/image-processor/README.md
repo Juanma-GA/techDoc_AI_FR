@@ -31,8 +31,9 @@ Find text references in technical images and replace selected references with su
   The common A4 font size survives reruns, brushes, undo, and history restoration.
   See [replacement typography](./backend/README.md#replacement-typography).
 - Run PaddleOCR on CPU, inspect recognized text and matches, and download the replacement image as a 2480 × 3508 px A4 JPEG at 300 dpi.
+- Select an OCR box and shift its replacement region horizontally or vertically by up to 30 px. Apply the selected offsets to every replaced box, then recalculate from the original image; offsets are kept in workspace history.
 - Zoom and pan the result, then paint a mask to remove an area with local LaMa inpainting or local median-color fill.
-- Every successful replacement or brush edit becomes the source for the next operation. Undo restores the previous image and analysis, one operation at a time.
+- Successful replacements and brush edits become the source for the next operation. Box-offset recalculation is an exception: it starts from the original image to avoid accumulating old erase marks. Undo restores the previous image and analysis, one operation at a time.
 - On startup, restore the last Excel workbook, sheet, and column mapping, but leave the image and selected part empty.
 - History lists each image and restores its complete last workspace: source/current images, undo stack, Excel workbook, selected part, edited/selected pairs, OCR output, and operation log.
 - The selected Excel ICN names the image in History and its download: `<ICN>.jpg`,

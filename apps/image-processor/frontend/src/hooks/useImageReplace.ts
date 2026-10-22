@@ -1,7 +1,7 @@
 import type { TFunction } from "i18next";
 import { useState, type FormEvent } from "react";
 
-import { imageReplaceApi } from "../lib/api";
+import { imageReplaceApi, type OcrResultDto } from "../lib/api";
 import { analysisForm } from "../lib/analysis-form";
 import { requestError, workspaceApi, type ReplacementPair } from "../lib/workspace-api";
 import { useExcelMapping } from "./useExcelMapping";
@@ -109,6 +109,66 @@ export function useImageReplace(t: TFunction) {
     }
   }
 
+  async function reapplyReplacements(resultOverride?: OcrResultDto): Promise<boolean> {
+    const result = resultOverride ?? image.result;
+    if (!image.imageFile || !result || loading || restoring || retouching) return false;
+
+    const references = result.references
+      .map((reference, index) => ({ reference, index }))
+      .filter(({ reference }) => reference.replacement);
+    if (references.length === 0) return false;
+
+    setLoading(true);
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("image", image.imageFile, image.imageFile.name);
+      form.append(
+        "lines_json",
+        JSON.stringify(result.lines.map(({ text, box }) => ({ text, box }))),
+      );
+      form.append(
+        "replacement_pairs_json",
+        JSON.stringify(references.map(({ reference }) => ({
+          reference: reference.reference,
+          replacement: reference.replacement,
+        }))),
+      );
+      form.append(
+        "broadcast_references_json",
+        JSON.stringify(references
+          .filter(({ reference }) => (reference.replacement_count ?? 0) > 1)
+          .map(({ reference }) => reference.reference)),
+      );
+      if (result.replacement_font_size != null) {
+        form.append("replacement_font_size", String(result.replacement_font_size));
+      }
+      const rendered = await imageReplaceApi.reapplyReplacements(form);
+      const referencesWithCounts = result.references.map((reference, index) => {
+        const renderedIndex = references.findIndex((item) => item.index === index);
+        const replacementCount = renderedIndex < 0
+          ? reference.replacement_count
+          : rendered.replacement_counts[renderedIndex];
+        return {
+          ...reference,
+          ...(replacementCount === undefined ? {} : { replacement_count: replacementCount }),
+        };
+      });
+      image.applyTextReplacement({
+        ...result,
+        edited_image: rendered.edited_image,
+        references: referencesWithCounts,
+        replacement_font_size: rendered.replacement_font_size,
+      });
+      return true;
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("image.errorGeneric")));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function openHistory(id: string) {
     setRestoring(true);
     setError("");
@@ -141,7 +201,7 @@ export function useImageReplace(t: TFunction) {
     downloading: download.downloading, savingAs: download.savingAs, restoring, retouching,
     setRetouching,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
-    replaceRecognizedLine, undoRecognizedLine, openHistory,
+    replaceRecognizedLine, undoRecognizedLine, reapplyReplacements, openHistory,
     downloadImage: download.downloadImage,
     downloadImageAs: download.downloadImageAs,
     retrySave,

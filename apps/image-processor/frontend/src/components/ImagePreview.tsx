@@ -6,6 +6,8 @@ import type { OcrResultDto } from "../lib/api";
 import { useImageEditor } from "../hooks/useImageEditor";
 import { BrushControls } from "./BrushControls";
 import { ImageToolbar } from "./ImageToolbar";
+import { ReplacementBoxControls } from "./ReplacementBoxControls";
+import type { LineBoxOffset } from "../lib/replacement-box-offsets";
 
 type ImagePreviewProps = {
   imageFile: File | null;
@@ -22,6 +24,11 @@ type ImagePreviewProps = {
   onImageEdited: (image: string, mode: "lama" | "color") => void;
   onInpaintingChange: (busy: boolean) => void;
   onSelectLine: (lineIndex: number) => void;
+  selectedLineIndex: number | null;
+  reapplyBlocked: boolean;
+  onUpdateLineOffsets: (offsets: LineBoxOffset[]) => void;
+  onApplyOffsetsToAll: () => void;
+  onReapplyReplacements: () => void;
   t: TFunction;
 };
 
@@ -40,6 +47,11 @@ export function ImagePreview({
   onImageEdited,
   onInpaintingChange,
   onSelectLine,
+  selectedLineIndex,
+  reapplyBlocked,
+  onUpdateLineOffsets,
+  onApplyOffsetsToAll,
+  onReapplyReplacements,
   t,
 }: ImagePreviewProps) {
   const editor = useImageEditor({
@@ -117,15 +129,21 @@ export function ImagePreview({
                       points={line.box.map(([x, y]) => `${x},${y}`).join(" ")}
                       className={`pointer-events-auto cursor-pointer focus-visible:stroke-brand focus-visible:stroke-2 ${
                         replaced
-                          ? "fill-danger stroke-danger"
-                          : "fill-transparent stroke-brand-blue-light"
+                          ? selectedLineIndex === index
+                            ? "fill-danger stroke-brand stroke-2"
+                            : "fill-danger stroke-danger"
+                          : selectedLineIndex === index
+                            ? "fill-transparent stroke-brand stroke-2"
+                            : "fill-transparent stroke-brand-blue-light"
                       }`}
-                      fillOpacity={replaced ? 0.15 : undefined}
+                      fillOpacity={replaced ? 0.06 : undefined}
+                      strokeOpacity={replaced ? 0.06 : undefined}
                       strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
                       role="button"
                       tabIndex={canSelect ? 0 : -1}
                       aria-disabled={!canSelect}
+                      aria-pressed={selectedLineIndex === index}
                       aria-label={t(
                         reference ? "image.editRecognizedReplacement" : "image.replaceRecognizedLine",
                         { reference: reference?.reference ?? line.text },
@@ -160,6 +178,16 @@ export function ImagePreview({
             />
           </div>
         </div>
+        <ReplacementBoxControls
+          result={result}
+          selectedLineIndex={selectedLineIndex}
+          disabled={disabled}
+          reapplyBlocked={reapplyBlocked}
+          onUpdateOffsets={onUpdateLineOffsets}
+          onApplyToAll={onApplyOffsetsToAll}
+          onReapply={onReapplyReplacements}
+          t={t}
+        />
         <BrushControls editor={editor} disabled={disabled} t={t} />
         {result ? (
           <p className="text-xs text-fg-dim">
