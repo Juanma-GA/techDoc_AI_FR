@@ -81,7 +81,7 @@ export function Preparation() {
                       className="btn primary small"
                       onClick={() => navigate(`/preparation/${document.id}`)}
                     >
-                      {t("preparation.resume")}
+                      {t("documents.open")}
                     </button>
                     <DocumentDeleteButton
                       label={t("common.delete")}

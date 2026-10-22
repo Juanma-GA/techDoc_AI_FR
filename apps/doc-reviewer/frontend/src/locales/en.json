@@ -446,6 +446,13 @@
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "rules",
+      "scopeSelector": "Rule category",
+      "scope": {
+        "verification": "Verification",
+        "preparation": "Preparation"
+      },
+      "scopeEmpty": "No rules are available in this category.",
+      "searchEmpty": "No rules match your search.",
       "enableAll": "Enable all",
       "disableAll": "Disable all",
       "loadFailed": "Could not load the active client catalog.",

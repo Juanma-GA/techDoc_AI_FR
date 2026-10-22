@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 
@@ -20,11 +20,20 @@ export function ClientRules() {
   const patchClientRule = usePatchClientRule();
   const patchClientRuleBundle = usePatchClientRuleBundle();
   const [search, setSearch] = useState("");
+  const [activeScope, setActiveScope] = useState<ClientRule["scope"]>("verification");
   const targetRuleCode = searchParams.get("rule");
   const query = search.trim().toLocaleLowerCase();
   const numberQuery = query.startsWith("#") ? query.slice(1) : query;
   const locale = i18n.language.toLowerCase().startsWith("en") ? "en" : "fr";
   const allRules = clientRules.data ?? [];
+  const scopedRules = useMemo(
+    () => allRules.filter((rule) => rule.scope === activeScope),
+    [activeScope, allRules],
+  );
+  useEffect(() => {
+    const target = allRules.find((rule) => rule.code === targetRuleCode);
+    if (target) setActiveScope(target.scope);
+  }, [allRules, targetRuleCode]);
   const localizeRule = useCallback(
     (rule: ClientRule, field: "name" | "description") => {
       const catalogTranslation = t(`clientRuleCatalog.${rule.code}.${field}`, {
@@ -36,12 +45,12 @@ export function ClientRules() {
   );
   const filtered = useMemo(
     () =>
-      allRules.filter((rule) =>
+      scopedRules.filter((rule) =>
         [rule.code, rule.name, localizeRule(rule, "name"), localizeRule(rule, "description")].some(
           (value) => value.toLocaleLowerCase().includes(query),
         ) || String(rule.rule_number).includes(numberQuery),
       ),
-    [allRules, localizeRule, numberQuery, query],
+    [localizeRule, numberQuery, query, scopedRules],
   );
   if (config.isLoading || clientRules.isLoading) {
     return <p className="empty-state">{t("common.loading")}</p>;
@@ -88,20 +97,51 @@ export function ClientRules() {
         <span className="label">{filtered.length} {t("rules.client.ruleCount")}</span>
       </div>
 
+      <div
+        className="row"
+        role="group"
+        aria-label={t("rules.client.scopeSelector")}
+        style={{ gap: 8, flexWrap: "wrap", marginBottom: 16 }}
+      >
+        {(["verification", "preparation"] as const).map((scope) => {
+          const selected = activeScope === scope;
+          const count = allRules.filter((rule) => rule.scope === scope).length;
+          return (
+            <button
+              key={scope}
+              type="button"
+              className={`btn small ${selected ? "primary" : "secondary"}`}
+              aria-pressed={selected}
+              onClick={() => setActiveScope(scope)}
+            >
+              {t(`rules.client.scope.${scope}`)} <span className="badge default">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {patchClientRule.isError ? <p className="banner warn">{t("rules.client.saveFailed")}</p> : null}
       {patchClientRuleBundle.isError ? (
         <p className="banner warn">{t("rules.client.bulkSaveFailed")}</p>
       ) : null}
-      <ClientRuleBundles
-        rules={filtered}
-        allRules={allRules}
-        targetRuleCode={targetRuleCode}
-        localizeRule={localizeRule}
-        bulkUpdatePending={patchClientRuleBundle.isPending || patchClientRule.isPending}
-        ruleUpdatePending={patchClientRuleBundle.isPending}
-        onToggleRule={(code, active) => patchClientRule.mutate({ code, active })}
-        onToggleBundle={(rules, active) => patchClientRuleBundle.mutate({ rules, active })}
-      />
+      {filtered.length > 0 ? (
+        <ClientRuleBundles
+          rules={filtered}
+          allRules={scopedRules}
+          targetRuleCode={targetRuleCode}
+          localizeRule={localizeRule}
+          bulkUpdatePending={patchClientRuleBundle.isPending || patchClientRule.isPending}
+          ruleUpdatePending={patchClientRuleBundle.isPending}
+          onToggleRule={(code, active) => patchClientRule.mutate({ code, active })}
+          onToggleBundle={(rules, active) => patchClientRuleBundle.mutate({ rules, active })}
+        />
+      ) : (
+        <p className="empty-state">
+          {scopedRules.length === 0
+            ? t("rules.client.scopeEmpty")
+            : t("rules.client.searchEmpty")}
+        </p>
+      )}
     </section>
   );
 }

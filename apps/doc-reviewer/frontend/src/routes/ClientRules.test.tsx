@@ -32,6 +32,7 @@ const rules: ClientRule[] = [
     message: "Thales message",
     rule_number: 1,
     kind: "content",
+    scope: "verification",
     severity: "warning",
     execution: "deterministic",
     active: true,
@@ -48,6 +49,7 @@ const rules: ClientRule[] = [
     message: "STE message",
     rule_number: 2,
     kind: "regex_flag",
+    scope: "verification",
     severity: "info",
     execution: "deterministic",
     active: true,
@@ -106,17 +108,17 @@ describe("ClientRuleBundles", () => {
       "THALES",
       "ASD-STE100",
     ]);
-    expect([...panels].every((panel) => panel.open)).toBe(true);
+    expect([...panels].every((panel) => !panel.open)).toBe(true);
     const firstPanel = panels.item(0);
 
     await act(async () => {
-      firstPanel.open = false;
+      firstPanel.open = true;
       firstPanel.dispatchEvent(new Event("toggle"));
     });
 
     const updatedPanels = container.querySelectorAll<HTMLDetailsElement>("details.collapsible");
-    expect(updatedPanels.item(0).open).toBe(false);
-    expect(updatedPanels.item(1).open).toBe(true);
+    expect(updatedPanels.item(0).open).toBe(true);
+    expect(updatedPanels.item(1).open).toBe(false);
   });
 
   it("bulk toggles every rule in the bundle, including rules hidden by search", async () => {
@@ -201,7 +203,15 @@ describe("ClientRuleBundles", () => {
     mockClientHooks.useClientRules.mockReturnValue({
       isLoading: false,
       isError: false,
-      data: [rules[0]],
+      data: [
+        rules[0],
+        {
+          ...rules[0],
+          code: "PREPARATION_RULE",
+          name: "Preparation rule",
+          scope: "preparation",
+        },
+      ],
       refetch: vi.fn(),
     });
 
@@ -213,6 +223,16 @@ describe("ClientRuleBundles", () => {
       );
     });
     expect(container.textContent).toContain("THALES");
+    expect(container.textContent).toContain("THALES_RULE");
+    expect(container.textContent).not.toContain("PREPARATION_RULE");
+
+    const preparationButton = [...container.querySelectorAll<HTMLButtonElement>('[role="group"] button')]
+      .find((button) => button.textContent?.includes("rules.client.scope.preparation"));
+    expect(preparationButton).toBeDefined();
+    await act(async () => preparationButton?.click());
+
+    expect(container.textContent).toContain("PREPARATION_RULE");
+    expect(container.textContent).not.toContain("THALES_RULE");
   });
 
   it("renders the demo bundle label without exposing the normal client name", async () => {
@@ -225,6 +245,7 @@ describe("ClientRuleBundles", () => {
       message: "Adresse DEMO absente.",
       rule_number: 1,
       kind: "field_required",
+      scope: "verification",
       severity: "warning",
       execution: "deterministic",
       active: true,

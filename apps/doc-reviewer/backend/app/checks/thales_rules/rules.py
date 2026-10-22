@@ -423,6 +423,7 @@ CUSTOM_TP1_REVISION_NUMBER = rule(
     ),
     kind="field_required",
     severity="error",
+    preparation=True,
     target=_TP1_REVISION_TARGET,
     checks=[
         Check(
@@ -883,7 +884,6 @@ CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
     message="La barre de revision d'une page TP2/R est dans l'en-tete ou le pied de page.",
     kind="field_required",
     severity="error",
-    preparation=True,
     target=_TP2_TARGET,
     checks=[
         Check(
@@ -1837,6 +1837,7 @@ CUSTOM_TP2_IMPORTANT_NOTICE = rule(
     message="L'Important Notice de la page TP2 n'est pas conforme au modele ATA100.",
     kind="field_required",
     severity="error",
+    preparation=True,
     target=_TP2_TARGET,
     checks=[
         Check(

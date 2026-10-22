@@ -31,6 +31,18 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
     assert config["catalogs"][1]["code"] == "ASD-STE100"
     assert len(rules) == 79
     assert [rule["rule_number"] for rule in rules] == list(range(1, 80))
+    preparation_rule_codes = {
+        "CUSTOM_TP2_REVISION_BAR_BODY_ONLY",
+        "CUSTOM_TP1_THALES_ADDRESS",
+    }
+    assert {
+        rule["code"] for rule in rules if rule["scope"] == "preparation"
+    } == preparation_rule_codes
+    assert all(
+        rule["scope"] == "verification"
+        for rule in rules
+        if rule["code"] not in preparation_rule_codes
+    )
     thales_rules = [rule for rule in rules if rule["bundle_code"] == "thales_rules"]
     ste_rules = [rule for rule in rules if rule["bundle_code"] == "ste100_rules"]
     assert all(rule["active"] for rule in thales_rules)
@@ -60,6 +72,7 @@ def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -
     assert disabled.status_code == 200, disabled.text
     assert disabled.json()["active"] is False
     assert disabled.json()["rule_number"] == rule_number
+    assert disabled.json()["scope"] == "verification"
 
     with SessionLocal() as session:
         version = session.get(StandardVersion, version_id)
@@ -80,6 +93,7 @@ def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -
     assert enabled.status_code == 200, enabled.text
     assert enabled.json()["active"] is True
     assert enabled.json()["rule_number"] == rule_number
+    assert enabled.json()["scope"] == "verification"
 
 
 def test_client_rule_toggle_rejects_unknown_codes(client: TestClient) -> None:

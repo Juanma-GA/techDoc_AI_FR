@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -8,8 +9,11 @@ from app.checks.client_bundle import ClientBundle
 from app.checks.thales_rules.preparation_toc import map_preparation_pages_to_toc
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
+from app.core.logging import get_logger
 from app.core.page_range import filter_pdf_pages
 from app.parsers.pdf_parser import ParsedPdf
+
+_logger = get_logger(__name__)
 
 
 def detect_pages_to_modify(
@@ -22,9 +26,13 @@ def detect_pages_to_modify(
     if bundle.page_classifier is not None:
         bundle.page_classifier(parsed, document)
     decisions: list[dict[str, Any]] = []
+    pages_without_rules: list[dict[str, int | str | None]] = []
     for page in parsed.pages:
         applicable = [rule for rule in rules if _rule_targets_page(rule, page.page_type)]
         if not applicable:
+            pages_without_rules.append(
+                {"page": page.page, "page_type": page.page_type}
+            )
             decisions.append(
                 {
                     "page": page.page,
@@ -105,6 +113,26 @@ def detect_pages_to_modify(
             }
         )
     map_preparation_pages_to_toc(parsed, decisions)
+    _logger.info(
+        "preparation_page_rules_resolved",
+        page_count=len(parsed.pages),
+        page_type_counts=dict(
+            Counter(page.page_type or "unclassified" for page in parsed.pages)
+        ),
+        rule_target_page_types=sorted(
+            {
+                page_type
+                for rule in rules
+                for page_type in (
+                    rule.target.page_type,
+                    *(rule.target.page_types or ()),
+                )
+                if page_type is not None
+            }
+        ),
+        no_applicable_rule_count=len(pages_without_rules),
+        no_applicable_rule_pages=pages_without_rules[:20],
+    )
     return decisions
 
 

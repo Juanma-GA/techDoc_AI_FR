@@ -47,6 +47,7 @@ export type ClientRule = {
   message: string;
   rule_number: number;
   kind: string;
+  scope: "verification" | "preparation";
   severity: "info" | "warning" | "error";
   execution: "deterministic" | "semantic" | "manual" | "unsupported";
   active: boolean;
