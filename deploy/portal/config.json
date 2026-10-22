@@ -1,8 +1,8 @@
 {
   "title": "AI4TECHDOC",
   "subtitle": {
-    "fr": "Applications de preuve de concept",
-    "en": "Proof-of-concept applications"
+    "fr": "Notre écosystème innovant pour la documentation",
+    "en": "Our innovative documentation ecosystem"
   },
   "footer": {
     "fr": "Hébergé sur l'espace de la plateforme IA Atexis.",
@@ -116,126 +116,6 @@
       "desc": {
         "fr": "Traduction contextuelle assistée par IA.",
         "en": "AI-assisted context-aware translation."
-      }
-    },
-    {
-      "slug": "doc-reviewer",
-      "name": "Doc Reviewer",
-      "category": "quality",
-      "stage": "validation",
-      "desc": {
-        "fr": "Relecture de documents PDF ou Word avec détection des anomalies et génération d'un PDF commenté.",
-        "en": "PDF or Word document review with issue detection and an annotated PDF output."
-      }
-    },
-    {
-      "slug": "xml-proofreader",
-      "name": "XML Proofreader",
-      "category": "quality",
-      "stage": "validation",
-      "status": "validation",
-      "desc": {
-        "fr": "Extraction des règles depuis des documents legacy, BRDP ou fichiers Excel, puis conversion en BREX DM S1000D/DITA et en Schematron pour les règles lexicales.",
-        "en": "Extract rules from legacy documents, BRDPs and Excel files, then convert them into auto-generated S1000D/DITA BREX DM and Schematron for lexical rules."
-      }
-    },
-    {
-      "slug": "airbus-civil-td-chatbot",
-      "name": "TD Chatbot",
-      "category": "assistants",
-      "stage": "validation",
-      "status": "planned",
-      "desc": {
-        "fr": "Chatbot IA permettant de retrouver rapidement des informations dans des guides utilisateurs par requêtes en langage naturel, avec réponses, références, codes NC et numéros de page.",
-        "en": "AI-powered chatbot for quickly retrieving information from user guides through natural-language queries, with relevant answers, references, NC codes and page numbers."
-      }
-    },
-    {
-      "slug": "auto-tracing-cgm-exports",
-      "name": "Auto Tracing CGM Exports",
-      "category": "illustration",
-      "stage": "illustration",
-      "status": "planned",
-      "desc": {
-        "fr": "Solution IA générant automatiquement des illustrations techniques depuis des modèles 3D par traçage d'exports CGM, pour améliorer la cohérence et la précision tout en réduisant l'effort manuel.",
-        "en": "AI-powered solution that automatically generates technical illustrations from 3D models using CGM export tracing, ensuring consistency, improving accuracy and reducing manual illustration effort."
-      }
-    },
-    {
-      "slug": "creation-of-3d-simplified-components",
-      "name": "Creation of 3D Simplified Components",
-      "category": "illustration",
-      "stage": "illustration",
-      "status": "planned",
-      "desc": {
-        "fr": "Extension Blender alimentée par IA qui génère une topologie propre à base de quadrilatères depuis des maillages complexes, afin de faciliter l'édition, l'animation et l'optimisation.",
-        "en": "AI-powered Blender add-on that generates clean quad-based topology from complex meshes, enabling easier editing, animation and optimization."
-      }
-    },
-    {
-      "slug": "elecgraph",
-      "name": "ElecGraph",
-      "category": "structuring",
-      "stage": "structuring",
-      "status": "planned",
-      "desc": {
-        "fr": "Automatisation de la lecture des données de routage électrique depuis Excel et génération d'un graphe ou arbre interactif avec des rapports structurés.",
-        "en": "Automation to read electrical routing data from Excel and generate an interactive graph or tree visualizer with structured reports."
-      }
-    },
-    {
-      "slug": "kleampy",
-      "name": "KleamPy",
-      "category": "assistants",
-      "stage": "validation",
-      "status": "planned",
-      "desc": {
-        "fr": "Assistant documentaire basé sur des agents et MCP pour charger des documents techniques, notamment plans, fichiers Excel et CDS, puis répondre aux questions sur leur contenu.",
-        "en": "Agentic, MCP-powered document assistant for uploading technical documents, including drawings, Excel files and CDS, and answering content-related questions."
-      }
-    },
-    {
-      "slug": "plm-docsync",
-      "name": "PLM·DocSync",
-      "category": "lifecycle",
-      "stage": "publishing",
-      "status": "planned",
-      "desc": {
-        "fr": "Connexion au PLM et extraction des différences entre plusieurs versions de documents.",
-        "en": "Connect to PLM and extract differences between document versions."
-      }
-    },
-    {
-      "slug": "smart-cms",
-      "name": "Smart CMS",
-      "category": "lifecycle",
-      "stage": "publishing",
-      "status": "planned",
-      "desc": {
-        "fr": "Système de gestion de contenu ATEXIS avec gestion des versions, check-in/check-out, gestion des utilisateurs, comparaison XML et validation de schéma.",
-        "en": "ATEXIS content management system with version control, check-in/check-out, user management, XML diff and schema validation."
-      }
-    },
-    {
-      "slug": "ste-checker",
-      "name": "STE Checker",
-      "category": "quality",
-      "stage": "validation",
-      "status": "planned",
-      "desc": {
-        "fr": "Application web aidant les auteurs techniques à respecter le Simplified Technical English en identifiant les problèmes de grammaire, de terminologie et de style.",
-        "en": "Web application that assists technical authors in ensuring compliance with Simplified Technical English standards by identifying grammar, terminology and style issues."
-      }
-    },
-    {
-      "slug": "svg-checker",
-      "name": "SVG Checker",
-      "category": "quality",
-      "stage": "validation",
-      "status": "planned",
-      "desc": {
-        "fr": "Outil de validation des hotspots et fichiers SVG conforme au schéma BRDP S1000D, fusionnable avec le POC XML Proofreader.",
-        "en": "Illustration validation tool for hotspots and SVG files, compliant with the S1000D BRDP schema and mergeable with the XML Proofreader POC."
       }
     }
   ]
