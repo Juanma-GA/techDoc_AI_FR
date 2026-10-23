@@ -66,6 +66,29 @@ def _pdf(text: str) -> ParsedPdf:
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
+def _two_row_table_pdf(rows: list[tuple[str, str]]) -> ParsedPdf:
+    lines: list[str] = []
+    spans: list[Span] = []
+    for row_index, (left, right) in enumerate(rows):
+        y = 200.0 + row_index * 20.0
+        lines.append(f"{left} {right}")
+        spans.extend(
+            [
+                Span(left, (40.0, y, 220.0, y + 12.0), 1, "Arial", 10.0),
+                Span(right, (280.0, y, 500.0, y + 12.0), 1, "Arial", 10.0),
+            ]
+        )
+    text = "\n".join(lines)
+    page = ParsedPage(
+        page=1,
+        text=text,
+        spans=spans,
+        is_modified=True,
+        page_height=792.0,
+    )
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
 def test_letter_digit_confusion_rule_flags_words_not_identifiers() -> None:
     rule = _rule("CUSTOM_LETTER_DIGIT_CONFUSION")
     suspicious = _pdf(
@@ -651,10 +674,27 @@ def test_sentence_punctuation_ignores_figure_titles_and_column_labels() -> None:
         "List\n"
         "- 1st column: Figure Item - Figure and Item number\n\n"
         "Figure 12: Pump assembly\n\n"
-        "Fig. 13: Pump assembly"
+        "Fig. 13: Pump assembly\n\n"
+        "Figure 301A Schematic without terminal punctuation\n\n"
+        "Figure X: Detail without terminal punctuation"
     )
 
     assert sentence_punctuation_issues(text) == []
+
+
+def test_sentence_punctuation_ignores_two_row_tables() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    parsed = _two_row_table_pdf(
+        [
+            ("A sentence without its final punctuation", "Column value one"),
+            ("Another sentence without its final punctuation", "Column value two"),
+        ]
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [rule])
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -2562,6 +2602,65 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     assert len(illustrated_missing_suggestions) == 1
 
 
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Environmental condition and minor technical correction.",
+        "Environmentel conditions and minor technical correction.",
+    ],
+)
+def test_highlights_description_checks_environmental_conditions_spelling(
+    description: str,
+) -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS")
+    valid, valid_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Page 601", "R", "Environmental conditions and correction.")]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf([("Page 601", "N", description)]),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == description.split(" and ")[0]
+    assert invalid_suggestions[0].proposed == "Environmental conditions"
+    assert invalid_suggestions[0].bbox is not None
+
+
+def test_unit_conversion_rules_ignore_two_row_tables() -> None:
+    cases = [
+        (
+            "CUSTOM_PASCAL_INHG_CONVERSION",
+            [
+                ("101.325 kPa", "No conversion"),
+                ("202.65 kPa", "No conversion"),
+            ],
+        ),
+        (
+            "CUSTOM_TEMPERATURE_FAHRENHEIT",
+            [
+                ("Temperature: 15 deg. C", "No conversion"),
+                ("Temperature: 20 deg. C", "No conversion"),
+            ],
+        ),
+    ]
+
+    for rule_code, rows in cases:
+        results, suggestions = execute_pdf_rules(
+            _two_row_table_pdf(rows),
+            [_rule(rule_code)],
+        )
+
+        assert results[0].status == "PASS", rule_code
+        assert suggestions == [], rule_code
+
+
 def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> None:
     rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
     valid, valid_suggestions = execute_pdf_rules(
@@ -2586,6 +2685,46 @@ def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> No
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].page == 2
     assert invalid_suggestions[0].proposed == "2. LEAK TESTS"
+
+
+def test_chapter_sequence_counts_unformatted_heading_on_previous_page() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    full_document = _numbered_chapter_pdf(
+        [
+            ("300", ["1. General", "A. Checks before Disassembly"]),
+            ("301", ["2. Procedure"]),
+        ]
+    )
+    full_document.pages[0].is_modified = False
+    full_document.pages[1].is_modified = True
+
+    results, suggestions = execute_pdf_rules(
+        filter_pdf_pages(full_document, [2]),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_chapter_sequence_recognizes_heading_without_extracted_span_space() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    full_document = _numbered_chapter_pdf(
+        [
+            ("300", ["1.General"]),
+            ("301", ["2. Procedure"]),
+        ]
+    )
+    full_document.pages[0].is_modified = False
+    full_document.pages[1].is_modified = True
+
+    results, suggestions = execute_pdf_rules(
+        filter_pdf_pages(full_document, [2]),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_chapter_number_sequence_accepts_sentence_case_and_figure_titles() -> None:

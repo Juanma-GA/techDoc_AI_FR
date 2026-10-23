@@ -1491,6 +1491,7 @@ def test_highlights_page_row_without_designation_is_reported() -> None:
         "Cleaning",
         "Description and Operation",
         "Disassembly",
+        "Environmental conditions",
         "Fault Isolation",
         "Illustrated Parts List",
         "Introduction",
@@ -1499,16 +1500,19 @@ def test_highlights_page_row_without_designation_is_reported() -> None:
         "List of Materials",
         "Record of Revisions",
         "Record of Temporary Revisions",
+        "Removal Procedure and Special",
         "Repair",
         "Service Bulletin List",
         "Special Tools, Fixtures and Equipment",
         "Special Tools, Fixtures, Equipment and Consumables",
         "Special Tools, Fixtures and Equipment - List of Special Materials",
+        "Storage - Packaging - Conditioning",
         "Storage",
         "Table of Contents",
         "Testing",
         "Testing and Fault Isolation",
         "Testing and Trouble Shooting",
+        "Test Run",
         "Title Page",
         "Vendor Code List",
         "Illustrated Part Lis",
@@ -1545,7 +1549,15 @@ def test_highlights_chapter_rule_accepts_catalog_titles(chapter: str) -> None:
     assert suggestions == []
 
 
-@pytest.mark.parametrize("chapter", ["Avionics", "Warranty Conditions"])
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Avionics",
+        "Warranty Conditions",
+        "Environmental condition",
+        "Environmentel conditions",
+    ],
+)
 def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell(chapter: str) -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(

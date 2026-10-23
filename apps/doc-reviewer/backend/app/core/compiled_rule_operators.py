@@ -205,7 +205,9 @@ _PAGE_LABEL_RE = re.compile(
     r"(?:PAGE\s+)?\d+\s*$"
 )
 _HEADING_RE = re.compile(r"^\s*(?:\d+\.\s+|[A-Z]\.\s+)[A-Z].*$")
-_FIGURE_CAPTION_RE = re.compile(r"(?i)^\s*(?:table|figure|fig\.?)\s+\d+\b")
+_FIGURE_CAPTION_RE = re.compile(
+    r"(?i)^\s*(?:table|figure|fig\.?)\s+(?:\d+(?:[-.]\d+)*[a-z]?|x)\b"
+)
 _COLUMN_LABEL_RE = re.compile(
     r"(?i)^\s*[-*]\s*\d+(?:st|nd|rd|th)\s+column\s*:"
 )
@@ -275,7 +277,7 @@ def _table_row_span_ranges(
             > 40.0
         ):
             candidate_rows.append((center, nearby))
-    if len(candidate_rows) < 3:
+    if len(candidate_rows) < 2:
         return ()
     table_rows: list[tuple[float, list[_SpanRange]]] = []
     for row in candidate_rows:
@@ -292,7 +294,7 @@ def _table_row_span_ranges(
                 )
             )
         ]
-        if len(aligned_rows) >= 3:
+        if len(aligned_rows) >= 2:
             for candidate in aligned_rows:
                 if candidate not in table_rows:
                     table_rows.append(candidate)

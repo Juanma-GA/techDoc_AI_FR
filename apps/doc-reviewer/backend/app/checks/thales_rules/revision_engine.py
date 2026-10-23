@@ -51,6 +51,7 @@ _HIGHLIGHTS_CHAPTERS = (
     "Cleaning",
     "Description and Operation",
     "Disassembly",
+    "Environmental conditions",
     "Fault Isolation",
     "Illustrated Parts List",
     "Introduction",
@@ -60,15 +61,18 @@ _HIGHLIGHTS_CHAPTERS = (
     "List of Approved Repairs",
     "Record of Revisions",
     "Record of Temporary Revisions",
+    "Removal Procedure and Special",
     "Repair",
     "Service Bulletin List",
     "Special Equipment and Tooling",
     "Special Tools, Fixtures and Equipment",
     "Special Tools, Fixtures, Equipment and Consumables",
     "Special Tools, Fixtures and Equipment - List of Special Materials",
+    "Storage - Packaging - Conditioning",
     "Storage",
     "Storage Instructions",
     "Table of Contents",
+    "Test Run",
     "Testing",
     "Testing and Fault Isolation",
     "Testing and Trouble Shooting",
@@ -79,6 +83,7 @@ _HIGHLIGHTS_CHAPTER_BY_KEY = {
     re.sub(r"[^a-z0-9]", "", chapter.casefold()): chapter
     for chapter in _HIGHLIGHTS_CHAPTERS
 }
+_ENVIRONMENTAL_CONDITIONS_KEY = "environmentalconditions"
 
 _MONTHS = (
     "JAN",
@@ -667,6 +672,11 @@ def match_highlights_chapter(subject: str) -> str | None:
         _HIGHLIGHTS_CHAPTER_BY_KEY,
         key=lambda candidate: SequenceMatcher(None, normalized, candidate).ratio(),
     )
+    if (
+        closest == _ENVIRONMENTAL_CONDITIONS_KEY
+        and normalized != _ENVIRONMENTAL_CONDITIONS_KEY
+    ):
+        return None
     threshold = 0.85 if len(normalized) >= 10 else 0.8
     if SequenceMatcher(None, normalized, closest).ratio() < threshold:
         return None

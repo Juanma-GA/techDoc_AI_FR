@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from itertools import pairwise
 from statistics import median
 from typing import Any, cast
 
@@ -111,7 +112,10 @@ _PARAGRAPH_LIST_ITEM_MARKER = re.compile(
 )
 _PARAGRAPH_TABLE_HEADER_MARKER = re.compile(r"^\s*[A-Z][A-Z0-9 /&()_\-]{1,}\s*$")
 _TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
-_CHAPTER_HEADING_RE = re.compile(r"^\s*(?P<number>\d+)\.\s+(?P<title>.+?)\s*$")
+_CHAPTER_HEADING_RE = re.compile(
+    r"^\s*(?P<number>\d+)\.\s*(?P<title>[^\W\d_].*?)\s*$",
+    re.UNICODE,
+)
 _CHAPTER_TITLE_CONNECTORS = frozenset(
     {
         "a", "an", "and", "as", "at", "by", "de", "des", "du", "et",
@@ -120,6 +124,8 @@ _CHAPTER_TITLE_CONNECTORS = frozenset(
     }
 )
 _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
+_ENVIRONMENTAL_CONDITIONS = "environmental conditions"
+_ENVIRONMENTAL_CONDITIONS_COMPACT = "environmentalconditions"
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
 _FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
@@ -1304,6 +1310,81 @@ def _highlights_description_findings(
     return findings, len(entries)
 
 
+def _environmental_conditions_typos(
+    description: str,
+) -> list[tuple[int, int, str]]:
+    words = list(re.finditer(r"[^\W\d_]+", description, flags=re.UNICODE))
+    typos: list[tuple[int, int, str]] = []
+    for first, second in pairwise(words):
+        candidate = f"{first.group().casefold()}{second.group().casefold()}"
+        if (
+            candidate != _ENVIRONMENTAL_CONDITIONS_COMPACT
+            and SequenceMatcher(
+                None,
+                candidate,
+                _ENVIRONMENTAL_CONDITIONS_COMPACT,
+            ).ratio()
+            >= 0.9
+        ):
+            start, end = first.start(), second.end()
+            typos.append((start, end, description[start:end]))
+    return typos
+
+
+def _highlights_environmental_conditions_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    text_by_page = {target.raw_page: target.text for target in targets}
+    entries = [
+        entry
+        for page in parsed_pdf.pages
+        if not target_pages or page.page in target_pages
+        for entry in revision.extract_highlights(page)
+    ]
+    findings: list[OperationResult] = []
+    for entry in entries:
+        descriptions = [
+            (entry.description, entry.description_bbox),
+            (entry.subject_description, entry.subject_description_bbox),
+        ]
+        seen_descriptions: set[str] = set()
+        for description, bbox in descriptions:
+            if not description or description.casefold() in seen_descriptions:
+                continue
+            seen_descriptions.add(description.casefold())
+            description_start = text_by_page.get(entry.page, "").find(description)
+            for start, end, original in _environmental_conditions_typos(description):
+                span = (
+                    (description_start + start, description_start + end)
+                    if description_start >= 0
+                    else (0, 0)
+                )
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=original,
+                        expected="Environmental conditions",
+                        message=(
+                            "La description des Highlights doit respecter "
+                            "l'orthographe « Environmental conditions »."
+                        ),
+                        original=original,
+                        proposed="Environmental conditions",
+                        span=span,
+                        page=entry.page,
+                        bbox=bbox,
+                    )
+                )
+    return findings, len(entries)
+
+
 def _list_materials_code_findings(
     context: Any,
     control: str,
@@ -2385,6 +2466,9 @@ def _document_structure_findings(
             if control == "highlights_deleted_description"
             else "Une description de modification"
         )
+    elif control == "highlights_environmental_conditions":
+        findings, checked = _highlights_environmental_conditions_findings(context)
+        expected = "Environmental conditions (orthographe exacte)"
     elif control in {
         "list_materials_code_parentheses",
         "list_materials_code_lowercase",

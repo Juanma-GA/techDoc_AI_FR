@@ -587,6 +587,39 @@ CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION = rule(
     },
 )
 
+CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS = rule(
+    code="CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS",
+    name="Orthographe d'Environmental conditions dans les Highlights",
+    description=(
+        "Dans les descriptions des Highlights, toute formulation correspondant "
+        "a au moins 90 % a « Environmental conditions » doit respecter "
+        "l'orthographe exacte de ces deux mots."
+    ),
+    message="L'orthographe de « Environmental conditions » est incorrecte.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_environmental_conditions"},
+        )
+    ],
+    failure_message="Orthographe incorrecte d'Environmental conditions dans les Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "In Highlights descriptions, any wording at least 90% similar "
+                "to 'Environmental conditions' must use the exact spelling of "
+                "both words."
+            ),
+            "message": "The spelling of 'Environmental conditions' is incorrect.",
+        }
+    },
+)
+
 CUSTOM_CHAPTER_NUMBER_SEQUENCE = rule(
     code="CUSTOM_CHAPTER_NUMBER_SEQUENCE",
     name="Ordre des chapitres numerotes",
@@ -1377,7 +1410,8 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
         "Sur les pages modifiees, chaque phrase doit se terminer par un point et "
         "chaque enumeration doit suivre le signe terminal majoritaire (point, "
         "point-virgule, virgule ou absence de signe). En cas d'egalite, les "
-        "elements intermediaires prennent une virgule et le dernier un point."
+        "elements intermediaires prennent une virgule et le dernier un point. "
+        "Les legendes de figures et le contenu des tableaux sont exclus."
     ),
     message="Une ponctuation obligatoire est absente.",
     kind="field_required",
@@ -1397,7 +1431,8 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
                 "On modified pages, every sentence must end with a full stop and "
                 "every enumeration must follow its most common terminal mark "
                 "(full stop, semicolon, comma, or no mark). Ties use commas for "
-                "intermediate items and a full stop for the last."
+                "intermediate items and a full stop for the last. Figure captions "
+                "and table contents are excluded."
             ),
             "message": "A required punctuation mark is missing.",
         }
@@ -1410,7 +1445,8 @@ CUSTOM_ENUMERATION_PUNCTUATION_SWAP = rule(
     description=(
         "Sur les pages modifiees, signale a titre informatif un point a la place "
         "d'une virgule dans un element intermediaire, ou une virgule a la place "
-        "du point final d'une enumeration."
+        "du point final d'une enumeration. Les legendes de figures et le contenu "
+        "des tableaux sont exclus."
     ),
     message="Un point et une virgule semblent intervertis dans cette enumeration.",
     kind="field_required",
@@ -1429,7 +1465,8 @@ CUSTOM_ENUMERATION_PUNCTUATION_SWAP = rule(
             "description": (
                 "On modified pages, informationally flags a full stop instead of "
                 "a comma on an intermediate enumeration item, or a comma instead "
-                "of the final full stop."
+                "of the final full stop. Figure captions and table contents are "
+                "excluded."
             ),
             "message": "A full stop and comma appear to be swapped in this enumeration.",
         }
@@ -1480,7 +1517,7 @@ CUSTOM_BAR_PSI_CONVERSION = rule(
     name="Pression en bar accompagnee de sa conversion en p.s.i.",
     description=(
         "Toute pression exprimee en bar doit etre suivie entre parentheses "
-        "de sa conversion numerique en p.s.i."
+        "de sa conversion numerique en p.s.i. hors des tableaux."
     ),
     message="La pression en bar doit etre suivie de sa conversion en p.s.i.",
     kind="field_required",
@@ -1500,7 +1537,7 @@ CUSTOM_BAR_PSI_CONVERSION = rule(
         "en": {
             "description": (
                 "Every pressure expressed in bar must be followed in parentheses "
-                "by its numeric conversion in p.s.i."
+                "by its numeric conversion in p.s.i., outside tables."
             ),
             "message": "A pressure in bar must be followed by its p.s.i. conversion.",
         }
@@ -1512,7 +1549,7 @@ CUSTOM_PASCAL_INHG_CONVERSION = rule(
     name="Pression en pascals accompagnee de sa conversion en inHg",
     description=(
         "Toute pression exprimee en Pa, hPa, kPa, MPa ou GPa doit etre suivie "
-        "de sa conversion numerique en inHg entre parentheses."
+        "de sa conversion numerique en inHg entre parentheses, hors des tableaux."
     ),
     message="La pression en pascals doit etre suivie de sa conversion en inHg.",
     kind="field_required",
@@ -1530,7 +1567,8 @@ CUSTOM_PASCAL_INHG_CONVERSION = rule(
         "en": {
             "description": (
                 "Every pressure expressed in Pa, hPa, kPa, MPa, or GPa must be "
-                "followed by its numeric conversion in inHg in parentheses."
+                "followed by its numeric conversion in inHg in parentheses, "
+                "outside tables."
             ),
             "message": "A pressure in pascals must be followed by its inHg conversion.",
         }
@@ -1542,7 +1580,7 @@ CUSTOM_METRIC_LENGTH_INCH_CONVERSION = rule(
     name="Longueur metrique accompagnee de sa conversion en pouces",
     description=(
         "Toute longueur exprimee en mm, cm, m ou km doit etre suivie de sa "
-        "conversion numerique en in. entre parentheses."
+        "conversion numerique en in. entre parentheses, hors des tableaux."
     ),
     message="La longueur metrique doit etre suivie de sa conversion en in.",
     kind="field_required",
@@ -1560,7 +1598,7 @@ CUSTOM_METRIC_LENGTH_INCH_CONVERSION = rule(
         "en": {
             "description": (
                 "Every length expressed in mm, cm, m, or km must be followed by "
-                "its numeric conversion in inches in parentheses."
+                "its numeric conversion in inches in parentheses, outside tables."
             ),
             "message": "A metric length must be followed by its inch conversion.",
         }
@@ -1572,7 +1610,7 @@ CUSTOM_METRIC_MASS_LBF_CONVERSION = rule(
     name="Masse metrique accompagnee de sa conversion en lb",
     description=(
         "Toute masse exprimee en mg, g, kg ou tonne doit etre suivie entre "
-        "parentheses de sa conversion numerique en lb."
+        "parentheses de sa conversion numerique en lb, hors des tableaux."
     ),
     message="La masse metrique doit etre suivie de sa conversion en lb.",
     kind="field_required",
@@ -1590,7 +1628,7 @@ CUSTOM_METRIC_MASS_LBF_CONVERSION = rule(
         "en": {
             "description": (
                 "Every mass expressed in mg, g, kg, or tonnes must be followed by "
-                "its numeric conversion in lb in parentheses."
+                "its numeric conversion in lb in parentheses, outside tables."
             ),
             "message": "A metric mass must be followed by its conversion in lb.",
         }
@@ -1602,7 +1640,7 @@ CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION = rule(
     name="Couple metrique accompagne de sa conversion en lbf.in",
     description=(
         "Tout couple exprime en N.m, daN.m ou kN.m doit etre suivi de sa "
-        "conversion numerique en lbf.in entre parentheses."
+        "conversion numerique en lbf.in entre parentheses, hors des tableaux."
     ),
     message="Le couple metrique doit etre suivi de sa conversion en lbf.in.",
     kind="field_required",
@@ -1620,7 +1658,7 @@ CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION = rule(
         "en": {
             "description": (
                 "Every torque expressed in N.m, daN.m, or kN.m must be followed "
-                "by its numeric conversion in lbf.in in parentheses."
+                "by its numeric conversion in lbf.in in parentheses, outside tables."
             ),
             "message": "A metric torque must be followed by its lbf.in conversion.",
         }
@@ -2088,7 +2126,7 @@ CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
     name="Temperature en deg. C accompagnee de sa conversion en deg. F",
     description=(
         "Toute temperature exprimee en deg. C doit etre suivie de sa "
-        "conversion numerique en deg. F entre parentheses."
+        "conversion numerique en deg. F entre parentheses, hors des tableaux."
     ),
     message="La temperature en deg. C doit etre suivie de sa conversion en deg. F.",
     kind="regex_flag",
@@ -2107,7 +2145,7 @@ CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
         "en": {
             "description": (
                 "Every temperature expressed in deg. C must be followed by "
-                "its numeric conversion in deg. F in parentheses."
+                "its numeric conversion in deg. F in parentheses, outside tables."
             ),
             "message": "A temperature in deg. C must be followed by its conversion in deg. F.",
         }
@@ -2375,7 +2413,8 @@ CUSTOM_HIGHLIGHTS_CHAPTER = rule(
     name="Intitule de chapitre autorise dans les Highlights",
     description=(
         "Chaque chapitre ou section des Highlights doit utiliser l'un des "
-        "intitules autorises du catalogue THALES."
+        "intitules autorises du catalogue THALES. « Environmental conditions » "
+        "doit conserver cette orthographe exacte."
     ),
     message="Un chapitre des Highlights n'est pas autorise.",
     kind="field_required",
@@ -2395,7 +2434,8 @@ CUSTOM_HIGHLIGHTS_CHAPTER = rule(
         "en": {
             "description": (
                 "Every chapter or section in Highlights must use one of the "
-                "chapter titles authorized by the THALES catalog."
+                "chapter titles authorized by the THALES catalog. "
+                "'Environmental conditions' must use this exact spelling."
             ),
             "message": "A Highlights chapter title is not authorized.",
         }
@@ -2764,6 +2804,7 @@ RULE_DEFINITIONS = (
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
     CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION,
     CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION,
+    CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS,
     CUSTOM_CHAPTER_NUMBER_SEQUENCE,
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
