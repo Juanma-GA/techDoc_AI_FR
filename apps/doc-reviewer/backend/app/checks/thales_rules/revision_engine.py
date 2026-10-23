@@ -122,7 +122,7 @@ _TITLE_PAGE_ANCHOR_RE = re.compile(
 )
 _LEP_HEADER_CELLS = ("SUBJECT", "PAGE", "DATE")
 
-_COPYRIGHT_ANCHOR_RE = re.compile(r"(?i)THALES\s+AVS\s+FRANCE")
+_COPYRIGHT_ANCHOR_RE = re.compile(r"(?i)THALES\s+(?:AVS\s+FRANCE|AVIONICS\s+SAS)\b")
 HIGHLIGHTS_KEY_PREFIX = "HIGHLIGHTS"
 _PAGE_KEY_RE = re.compile(
     r"(?i)^(?:(?P<prefix>.+?)\s+)?(?P<number>\d+(?:-\d+)?)$"

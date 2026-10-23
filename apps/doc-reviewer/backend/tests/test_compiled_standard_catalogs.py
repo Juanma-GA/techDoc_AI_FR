@@ -2707,6 +2707,31 @@ def test_chapter_sequence_counts_unformatted_heading_on_previous_page() -> None:
     assert suggestions == []
 
 
+@pytest.mark.parametrize("current_heading, expected_status", [("2. Procedure", "PASS"), ("3. Procedure", "FAIL")])
+def test_chapter_sequence_counts_previous_page_with_legacy_copyright(
+    current_heading: str, expected_status: str,
+) -> None:
+    full_document = _numbered_chapter_pdf(
+        [("301", ["1. General"]), ("302", [current_heading])]
+    )
+    previous_page = full_document.pages[0]
+    previous_page.spans[-3].text = (
+        "\u00a9THALES AVIONICS SAS. This document and any data included"
+    )
+    previous_page.is_modified = False
+    full_document.pages[1].is_modified = True
+
+    results, suggestions = execute_pdf_rules(
+        filter_pdf_pages(full_document, [2]),
+        [_rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")],
+    )
+
+    assert results[0].status == expected_status
+    assert [suggestion.proposed for suggestion in suggestions] == (
+        [] if expected_status == "PASS" else ["2. Procedure"]
+    )
+
+
 def test_chapter_sequence_recognizes_heading_without_extracted_span_space() -> None:
     rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
     full_document = _numbered_chapter_pdf(
