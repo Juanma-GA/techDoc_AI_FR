@@ -247,6 +247,14 @@ class MistralSettingsOut(BaseModel):
     llm_tested: bool = False
 
 
+class SettingsIn(BaseModel):
+    demo_enabled: Optional[bool] = None
+
+
+class SettingsOut(BaseModel):
+    demo_enabled: bool
+
+
 class TestConnectionOut(BaseModel):
     ok: bool
     message: str

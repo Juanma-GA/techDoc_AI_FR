@@ -23,6 +23,7 @@ from app.core.prompt_sanitizer import sanitize_prompt
 from app.db.models import ChatMessage, ChatSession, Project
 from app.db.session import SessionLocal, get_db
 from app.schemas import ChatAskIn, ChatMessageOut, ChatSessionOut
+from app.core.plain_text import strip_markdown
 
 
 log = logging.getLogger("corpus-agent.chat")
@@ -37,12 +38,19 @@ def list_sessions(db: Session = Depends(get_db)) -> list[ChatSession]:
 
 
 @router.get("/sessions/{session_id}/messages", response_model=list[ChatMessageOut])
-def list_messages(session_id: uuid.UUID, db: Session = Depends(get_db)) -> list[ChatMessage]:
+def list_messages(session_id: uuid.UUID, db: Session = Depends(get_db)) -> list[ChatMessageOut]:
     s = db.get(ChatSession, session_id)
     if s is None:
         raise AppError("CHAT_SESSION_NOT_FOUND", "Session introuvable",
                        status_code=404, detail={"id": str(session_id)})
-    return list(s.messages)
+    out: list[ChatMessageOut] = []
+    for m in s.messages:
+        item = ChatMessageOut.model_validate(m)
+        # Anciennes reponses enregistrees avec du Markdown : affichees en texte brut
+        if item.role == "assistant":
+            item = item.model_copy(update={"content": strip_markdown(item.content)})
+        out.append(item)
+    return out
 
 
 @router.delete("/sessions/{session_id}", status_code=204, response_class=Response)

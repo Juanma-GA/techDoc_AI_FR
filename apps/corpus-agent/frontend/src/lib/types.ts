@@ -135,6 +135,8 @@ export type RejectionsSummaryOut = {
   items: RejectionItem[];
   synthese: string;
   llm_used: boolean;
+  cached: boolean;
+  generated_at: string;
 };
 
 export type AnomalyOut = {
@@ -218,6 +220,9 @@ export type MistralSettingsOut = {
   llm_enabled: boolean;
   llm_tested: boolean;
 };
+
+export type AppSettingsIn = { demo_enabled?: boolean };
+export type AppSettingsOut = { demo_enabled: boolean };
 
 export type MistralSettingsIn = {
   api_key?: string;

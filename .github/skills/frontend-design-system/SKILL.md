@@ -49,6 +49,8 @@ Any new shared path or dependency requires a new approved batch.
 - Components come from `@internal/ui`; new primitives live there only with shared-change approval.
 - Colors, typography, spacing, and dimensions use approved tokens.
 - Dark and light themes, FR and EN, keyboard use, focus, loading, error, empty, disabled, and optimistic states are covered when applicable.
+- The shared AI4TECHDOC logo must also appear as the browser tab icon: call `setAi4TechDocFavicon()` from `@internal/ui` once in the frontend entry point (`src/main.tsx`) and do not leave the default Vite icon. Use `Ai4TechDocLogo` rather than copying the asset; see `docs/standards/demo-mode-integration.md`.
+- For apps with the `llm` profile, the LLM settings (key, base URL, models, connection test) must sit in a collapsible section of Settings, collapsed by default once configured, with an accessible toggle (`aria-expanded`) and FR/EN labels. The models available from the provider (returned by the connection test, `models` field of `POST /api/v1/settings/test`) must be listed and selectable for the chat, embedding and vision model fields rather than typed blind; free text stays possible when the list is empty.
 - No hardcoded hex, raw machine tokens, prohibited UI libraries, browser alerts, or Unicode icons are introduced.
 - Frontend build, typecheck, lint, Vitest, and Playwright status is recorded as executed or recommended.
 
