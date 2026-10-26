@@ -4,7 +4,7 @@
   "private": true,
   "description": "Monorepo interne — apps POC + packages partagés conformes à STANDARD_POC.md.",
   "engines": {
-    "node": ">=20",
+    "node": ">=24.22.1 <25",
     "pnpm": ">=12.15"
   },
   "packageManager": "pnpm@12.15.0",
