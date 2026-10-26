@@ -51,14 +51,16 @@ export function Data() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl">{t("data.title")}</h1>
+      <div className="page-header">
+        <h1>{t("data.title")}</h1>
+      </div>
       <div className="grid gap-3 sm:grid-cols-3">
         <KpiCard label={t("data.kpi.flows")} value={stats.data?.flows ?? "-"} />
         <KpiCard label={t("data.kpi.nodes")} value={stats.data?.nodes ?? "-"} />
         <KpiCard label={t("data.kpi.edges")} value={stats.data?.edges ?? "-"} />
       </div>
       {error && (
-        <div className="text-sm text-danger" role="alert">
+        <div className="text-danger" role="alert">
           {error}
         </div>
       )}
@@ -67,7 +69,7 @@ export function Data() {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>{t("data.flowsTitle")}</CardTitle>
           <div className="flex items-center gap-2">
-            <span className="label">{t("data.exportFormat")}</span>
+            <span>{t("data.exportFormat")}</span>
             <Select
               size="sm"
               value={fmt}
@@ -80,7 +82,7 @@ export function Data() {
           {flows.data && flows.data.length === 0 ? (
             <EmptyState title={t("data.emptyTitle")} description={t("data.emptyHelp")} />
           ) : (
-            <table className="w-full text-left text-sm" data-testid="flows-table">
+            <table className="w-full text-left" data-testid="flows-table">
               <thead className="text-fg-dim">
                 <tr>
                   <th className="py-1">{t("data.col.name")}</th>
@@ -121,7 +123,7 @@ export function Data() {
           <CardTitle>{t("data.resetTitle")}</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-2">
-          <p className="text-sm text-fg-dim">{t("data.resetHelp")}</p>
+          <p className="text-fg-dim">{t("data.resetHelp")}</p>
           <Button variant="danger" disabled={reset.isPending} onClick={() => trigger("reset-all", () => reset.mutate())}>
             {confirmLabel("reset-all", t("data.resetAll"))}
           </Button>

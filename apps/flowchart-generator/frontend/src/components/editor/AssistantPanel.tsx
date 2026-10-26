@@ -79,7 +79,7 @@ export function AssistantPanel() {
         data-testid="assistant-messages"
         aria-live="polite"
       >
-        {messages.length === 0 && <p className="text-sm text-fg-dim">{t("editor.assistant.welcome")}</p>}
+        {messages.length === 0 && <p className="text-fg-dim">{t("editor.assistant.welcome")}</p>}
         {messages.map((m, i) => (
           <div key={i} className={cn("flex gap-2", m.role === "user" ? "flex-row-reverse text-right" : "")}>
             <span className="mt-1 shrink-0 text-fg-dim">
@@ -87,7 +87,7 @@ export function AssistantPanel() {
             </span>
             <div
               className={cn(
-                "max-w-[85%] whitespace-pre-wrap rounded px-3 py-2 text-sm",
+                "max-w-[85%] whitespace-pre-wrap rounded px-3 py-2",
                 m.role === "user" ? "bg-card text-fg" : "bg-bg-2 text-fg",
               )}
             >
@@ -96,7 +96,7 @@ export function AssistantPanel() {
           </div>
         ))}
         {busy && (
-          <div className="flex items-center gap-2 text-sm text-fg-dim">
+          <div className="flex items-center gap-2 text-fg-dim">
             <Spinner size="sm" /> {uploading ? t("editor.assistant.uploading") : t("editor.assistant.thinking")}
           </div>
         )}
@@ -124,7 +124,7 @@ export function AssistantPanel() {
         <div className="flex items-center gap-2">
           <AttachButton disabled={chat.isPending} pending={uploading} onFiles={attachFiles} />
           {demoActive && <DemoButton open={demoOpen} disabled={busy} onToggle={() => setDemoOpen((o) => !o)} />}
-          <span className="text-xs text-fg-dim">{t("editor.assistant.hint")}</span>
+          <span className="text-fg-dim">{t("editor.assistant.hint")}</span>
         </div>
         <Button disabled={busy || !draft.trim()} onClick={() => send(draft)}>
           <Send size={14} aria-hidden /> {t("editor.assistant.send")}
@@ -132,7 +132,7 @@ export function AssistantPanel() {
       </div>
 
       {error && (
-        <div className="text-sm text-danger" role="alert">
+        <div className="text-danger" role="alert">
           {error}
         </div>
       )}
