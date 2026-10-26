@@ -20,6 +20,20 @@ export async function processPDF(
   downloadName: string,
   t: TFunction,
 ): Promise<void> {
+  await downloadFromApi(endpoint, data, downloadName, "application/pdf", t);
+}
+
+export async function processSplit(data: FormData, downloadName: string, t: TFunction): Promise<void> {
+  await downloadFromApi("split", data, downloadName, "application/zip", t);
+}
+
+async function downloadFromApi(
+  endpoint: string,
+  data: FormData,
+  downloadName: string,
+  expectedType: string,
+  t: TFunction,
+): Promise<void> {
   const response = await fetch(`${API_BASE}/${endpoint}`, {
     method: "POST",
     body: data,
@@ -32,7 +46,7 @@ export async function processPDF(
   }
 
   const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/pdf")) {
+  if (!contentType.includes(expectedType)) {
     throw new Error(t("apiErrors.invalidResponse"));
   }
 
@@ -89,6 +103,8 @@ function translateApiError(message: string, t: TFunction): string {
     "Impossible de préparer les fichiers PDF.": "apiErrors.prepareFailed",
     "L'image de signature dépasse la limite de 10 Mo.": "signature.apiImageTooLarge",
     "Le nom ou la date contient un caractère que le PDF ne peut pas afficher.": "signature.unsupportedText",
+    "La liste des documents à générer est invalide.": "split.apiInvalidGroups",
+    "Le découpage dépasse le nombre maximal de documents.": "split.apiTooManyGroups",
   };
   const key = messageKeys[message];
   if (key) {
