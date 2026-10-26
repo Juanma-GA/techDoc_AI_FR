@@ -6,6 +6,8 @@ import en from "./locales/en.json";
 import fr from "./locales/fr.json";
 import signatureEn from "./features/signature/locales/en.json";
 import signatureFr from "./features/signature/locales/fr.json";
+import splitEn from "./features/split/locales/en.json";
+import splitFr from "./features/split/locales/fr.json";
 
 void i18n
   .use(LanguageDetector)
@@ -16,16 +18,18 @@ void i18n
         translation: {
           ...fr,
           app: { ...fr.app, ...signatureFr.app },
-          tools: { ...fr.tools, ...signatureFr.tools },
+          tools: { ...fr.tools, ...signatureFr.tools, ...splitFr.tools },
           signature: signatureFr.signature,
+          split: splitFr.split,
         },
       },
       en: {
         translation: {
           ...en,
           app: { ...en.app, ...signatureEn.app },
-          tools: { ...en.tools, ...signatureEn.tools },
+          tools: { ...en.tools, ...signatureEn.tools, ...splitEn.tools },
           signature: signatureEn.signature,
+          split: splitEn.split,
         },
       },
     },
