@@ -37,7 +37,7 @@ export function SavePanel({ graph }: { graph: FlowGraph }) {
   const error = form.formState.errors.name;
   return (
     <form className="flex flex-col gap-2" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
-      <label className="label" htmlFor="flow-name">
+      <label htmlFor="flow-name">
         {t("editor.save.name")}
       </label>
       <div className="flex flex-wrap gap-2">
@@ -51,10 +51,10 @@ export function SavePanel({ graph }: { graph: FlowGraph }) {
           {currentFlowId ? t("editor.save.update") : t("editor.save.create")}
         </Button>
       </div>
-      {error && <span className="text-xs text-danger">{t("editor.save.nameInvalid")}</span>}
-      {save.isSuccess && <span className="text-xs text-success">{t("editor.save.done")}</span>}
+      {error && <span className="text-danger">{t("editor.save.nameInvalid")}</span>}
+      {save.isSuccess && <span className="text-success">{t("editor.save.done")}</span>}
       {save.isError && (
-        <span className="text-xs text-danger" role="alert">
+        <span className="text-danger" role="alert">
           {errorText(save.error)}
         </span>
       )}

@@ -15,7 +15,7 @@ export function NodeTable({ graph }: { graph: FlowGraph }) {
 
   return (
     <div className="overflow-auto rounded border">
-      <table className="w-full text-left text-xs">
+      <table className="w-full text-left">
         <thead className="bg-bg-2 text-fg-dim">
           <tr>
             <th className="px-2 py-1">{t("editor.nodes.id")}</th>
@@ -33,11 +33,11 @@ export function NodeTable({ graph }: { graph: FlowGraph }) {
         <tbody>
           {graph.nodes.map((node) => (
             <tr key={node.id} className="border-t align-top">
-              <td className="px-2 py-1 font-mono">{node.id}</td>
+              <td className="px-2 py-1">{node.id}</td>
               <td className="px-2 py-1">{t(`nodeTypes.${node.type}`)}</td>
               <td className="px-2 py-1">{node.label}</td>
               <td className="px-2 py-1">{node.lane ? (lanes.get(node.lane) ?? node.lane) : ""}</td>
-              <td className="px-2 py-1 font-mono">{outgoing(node.id)}</td>
+              <td className="px-2 py-1">{outgoing(node.id)}</td>
               {DETAILS.map((key) => (
                 <td key={key} className={key === "warning" ? "px-2 py-1 text-warning" : "px-2 py-1"}>
                   {node[key] ?? ""}
