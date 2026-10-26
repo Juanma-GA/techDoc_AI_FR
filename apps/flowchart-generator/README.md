@@ -64,6 +64,15 @@ Une ligne par etape. Colonnes reconnues (alias FR/EN) : `id`, `libelle`, `type`,
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## Port
 
 Port cible `8010`. Les launchers basculent sur le premier port libre suivant si occupe. Voir l'[inventaire des applications](../../docs/apps/README.md).

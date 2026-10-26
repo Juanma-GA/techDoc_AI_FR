@@ -151,6 +151,84 @@ def test_ocr_applies_each_excel_marker_to_its_matching_occurrence(
     ] == [("L104223", "12", 1), ("L104223", "13", 1)]
 
 
+def test_ocr_applies_single_excel_marker_to_every_matching_occurrence(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    marker_pairs = [{"reference": "L104223", "replacement": "12"}]
+    monkeypatch.setattr(
+        "app.api.ocr.run_ocr_on_image",
+        lambda image_bytes, timings=None: _prediction("L104223 L104223 L104223"),
+    )
+
+    response = client.post(
+        "/api/v1/image-processor/ocr",
+        files={
+            "image": ("source.png", _image_bytes(), "image/png"),
+            "workbook": (
+                "mapping.xlsx",
+                _workbook_bytes("L104223", ("12", "13")),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+        data={
+            "replacement_pairs": "[]",
+            "excel_sheet": "Repères",
+            "excel_reference_column": "1",
+            "excel_replacement_column": "3",
+            "excel_icn_column": "4",
+            "excel_piece_column": "5",
+            "excel_piece_row": "2",
+            "excel_replacement_pairs": json.dumps(marker_pairs),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert [
+        (item["reference"], item["replacement"], item["replacement_count"])
+        for item in response.json()["references"]
+    ] == [("L104223", "12", 3)]
+
+
+def test_ocr_keeps_single_excel_marker_one_to_one_when_manual_pair_has_same_reference(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    marker_pairs = [{"reference": "L104223", "replacement": "12"}]
+    monkeypatch.setattr(
+        "app.api.ocr.run_ocr_on_image",
+        lambda image_bytes, timings=None: _prediction("L104223 L104223 L104223"),
+    )
+
+    response = client.post(
+        "/api/v1/image-processor/ocr",
+        files={
+            "image": ("source.png", _image_bytes(), "image/png"),
+            "workbook": (
+                "mapping.xlsx",
+                _workbook_bytes("L104223", ("12", "13")),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+        data={
+            "replacement_pairs": '[{"reference":"L104223","replacement":"M-000"}]',
+            "excel_sheet": "Repères",
+            "excel_reference_column": "1",
+            "excel_replacement_column": "3",
+            "excel_icn_column": "4",
+            "excel_piece_column": "5",
+            "excel_piece_row": "2",
+            "excel_replacement_pairs": json.dumps(marker_pairs),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert [
+        (item["reference"], item["replacement"], item["replacement_count"])
+        for item in response.json()["references"]
+    ] == [("L104223", "M-000", 1), ("L104223", "12", 1)]
+
+
 def test_ocr_does_not_reuse_one_occurrence_for_multiple_excel_markers(
     client: TestClient,
     monkeypatch,

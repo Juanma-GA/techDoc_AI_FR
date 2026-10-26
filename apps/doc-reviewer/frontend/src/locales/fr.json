@@ -31,7 +31,9 @@
     "architecture": "Architecture",
     "data": "Données",
     "comparison": "Comparaison",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "dashboard": {
     "title": "Tableau de bord",

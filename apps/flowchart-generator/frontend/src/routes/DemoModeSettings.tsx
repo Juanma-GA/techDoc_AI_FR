@@ -19,7 +19,7 @@ export function DemoModeSettings() {
         <CardTitle>{t("settings.demo.title")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <p className="text-sm text-fg-dim">{t("settings.demo.hint")}</p>
+        <p className="text-fg-dim">{t("settings.demo.hint")}</p>
         <DemoModeSelector
           mode={mode}
           labels={{ normal: t("settings.demo.normal"), demo: t("settings.demo.demo") }}

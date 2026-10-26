@@ -91,15 +91,10 @@ def excel_column_options(worksheet: Worksheet) -> list[dict[str, object]]:
     return columns
 
 
-def _is_piece_marker_00(value: object, number_format: str) -> bool:
+def _is_piece_marker_zero(value: object) -> bool:
     if isinstance(value, str):
-        return value.strip() == "00"
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value != 0:
-        return False
-
-    number_formats = number_format.split(";")
-    zero_format = number_formats[2] if len(number_formats) >= 3 else number_formats[0]
-    return zero_format.strip() == "00"
+        return value.strip() in {"0", "00"}
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and value == 0
 
 
 def _is_piece_header(
@@ -107,11 +102,10 @@ def _is_piece_header(
     reference_column: int,
     piece_column: int,
     marker_value: object,
-    marker_format: str,
 ) -> bool:
     return (
         not excel_row_value(row, reference_column)
-        and _is_piece_marker_00(marker_value, marker_format)
+        and _is_piece_marker_zero(marker_value)
         and bool(excel_row_value(row, piece_column))
     )
 
@@ -146,7 +140,7 @@ def excel_piece_options(
         row = tuple(cell.value for cell in cells)
         marker_cell = cells[replacement_column - 1]
         if _is_piece_header(
-            row, reference_column, piece_column, marker_cell.value, marker_cell.number_format
+            row, reference_column, piece_column, marker_cell.value
         ):
             options.append({"row": row_number, "name": excel_row_value(row, piece_column)})
     return options
@@ -182,9 +176,7 @@ def extract_excel_replacements(
     ):
         row = tuple(cell.value for cell in cells)
         marker_cell = cells[replacement_column - 1]
-        is_header = _is_piece_header(
-            row, reference_column, piece_column, marker_cell.value, marker_cell.number_format
-        )
+        is_header = _is_piece_header(row, reference_column, piece_column, marker_cell.value)
         if row_number == piece_row:
             if not is_header:
                 raise HTTPException(

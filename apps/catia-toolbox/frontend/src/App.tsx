@@ -1,9 +1,10 @@
 import {
-  Ai4TechDocLogo,
   AppShell,
   ErrorBoundary,
   LanguageSwitcher,
+  SidebarNavContent,
   sidebarNavItemClass,
+  type SidebarNavIconName,
 } from "@internal/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
@@ -26,7 +27,7 @@ import { SmgxmlRename } from "./routes/SmgxmlRename";
 import { TreeOptimization } from "./routes/TreeOptimization";
 import { useWorkspace } from "./stores/workspace";
 
-type NavLeaf = { to: string; labelKey: string; end?: boolean };
+type NavLeaf = { to: string; labelKey: string; icon: SidebarNavIconName; end?: boolean };
 type NavGroup = { groupKey: string; items: NavLeaf[] };
 type NavEntry = NavLeaf | NavGroup;
 
@@ -37,38 +38,38 @@ const NAV: NavEntry[] = [
   {
     groupKey: "nav.groups.identification",
     items: [
-      { to: "/identification", labelKey: "nav.identification" },
-      { to: "/diff", labelKey: "nav.diff" },
+      { to: "/identification", labelKey: "nav.identification", icon: "file" },
+      { to: "/diff", labelKey: "nav.diff", icon: "compare" },
     ],
   },
   {
     groupKey: "nav.groups.preparation",
-    items: [{ to: "/conversion", labelKey: "nav.conversion" }],
+    items: [{ to: "/conversion", labelKey: "nav.conversion", icon: "convert" }],
   },
   {
     groupKey: "nav.groups.traitement",
     items: [
-      { to: "/tree", labelKey: "nav.optimizationTree" },
-      { to: "/colorization", labelKey: "nav.colorization" },
+      { to: "/tree", labelKey: "nav.optimizationTree", icon: "tree" },
+      { to: "/colorization", labelKey: "nav.colorization", icon: "color" },
     ],
   },
   {
     groupKey: "nav.groups.integration",
     items: [
-      { to: "/smgxml-rename", labelKey: "nav.smgxmlRename" },
-      { to: "/replacement", labelKey: "nav.replacement" },
+      { to: "/smgxml-rename", labelKey: "nav.smgxmlRename", icon: "rename" },
+      { to: "/replacement", labelKey: "nav.replacement", icon: "replacement" },
     ],
   },
   {
     groupKey: "nav.groups.controle",
     items: [
-      { to: "/qc", labelKey: "nav.qc" },
-      { to: "/checks", labelKey: "nav.checks" },
+      { to: "/qc", labelKey: "nav.qc", icon: "quality" },
+      { to: "/checks", labelKey: "nav.checks", icon: "rules" },
     ],
   },
   {
     groupKey: "nav.groups.outils",
-    items: [{ to: "/settings", labelKey: "nav.settings" }],
+    items: [{ to: "/settings", labelKey: "nav.settings", icon: "settings" }],
   },
 ];
 
@@ -148,22 +149,40 @@ export function App() {
       className="ct"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
-      headerStart={<Ai4TechDocLogo alt="" />}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       llmStatus={<LlmBadge />}
       navigation={NAV.map((entry) =>
         isGroup(entry) ? (
-          <div key={entry.groupKey} className="nav-group">
-            <div className="nav-group-title">{t(entry.groupKey)}</div>
-            {entry.items.map((it) => (
-              <NavLink key={it.to} to={it.to} className={navItemClass}>
-                {t(it.labelKey)}
-              </NavLink>
-            ))}
+          <div key={entry.groupKey} className="ui-nav-group">
+            <div className="ui-nav-group-title">{t(entry.groupKey)}</div>
+            {entry.items.map(({ to, labelKey, icon }) => {
+              const label = t(labelKey);
+              return (
+                <NavLink
+                  key={to}
+                  to={to}
+                  title={label}
+                  aria-label={label}
+                  className={navItemClass}
+                >
+                  <SidebarNavContent icon={icon} label={label} />
+                </NavLink>
+              );
+            })}
           </div>
         ) : (
-          <NavLink key={entry.to} to={entry.to} end={entry.end} className={navItemClass}>
-            {t(entry.labelKey)}
+          <NavLink
+            key={entry.to}
+            to={entry.to}
+            end={entry.end}
+            title={t(entry.labelKey)}
+            aria-label={t(entry.labelKey)}
+            className={navItemClass}
+          >
+            <SidebarNavContent icon={entry.icon} label={t(entry.labelKey)} />
           </NavLink>
         ),
       )}

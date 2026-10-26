@@ -40,14 +40,21 @@ validation remain environment-dependent.
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
-## CI And Repository Content
 
-The dedicated GitHub Actions workflow is an intentional exception to the
-local-first standard's CI scope. Its content-policy job rejects tracked `.pdf`,
-`.doc`, and `.docx` files under `apps/doc-reviewer/`, except that a `.pdf` is
-allowed when its filename contains `anonyme` (case-insensitively). It checks
-file paths only and does not read document contents. This applies to committed
-files, not documents imported locally while using the app.
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
+## Repository Content Policy
+
+Before committing files, keep `apps/doc-reviewer/` free of `.doc` and `.docx`
+files. A committed `.pdf` is allowed only when its filename contains `anonyme`
+(case-insensitively). This policy concerns file paths only; it does not inspect
+document contents or restrict documents imported locally while using the app.
 
 ## Demo Mode
 

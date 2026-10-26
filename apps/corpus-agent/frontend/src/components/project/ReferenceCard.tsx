@@ -68,7 +68,6 @@ export function ReferenceCard({ pid }: { pid: string }) {
       void loadPreview(s);
       void loadColumns(s);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ref, headerRows]);
 
   // BASL : même éditeur de mapping que le référentiel. On hydrate le registre
@@ -90,7 +89,6 @@ export function ReferenceCard({ pid }: { pid: string }) {
       void loadBaslPreview(s);
       void loadBaslColumns(s);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basl, baslHeaderRows]);
 
   const upload = useMutation({

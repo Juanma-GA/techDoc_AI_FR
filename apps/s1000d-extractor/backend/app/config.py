@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "http://localhost:8004",
+        "http://localhost:8006",
     ]
     max_upload_size_mb: int = 50
     pdf_cut_requires_validation: bool = True

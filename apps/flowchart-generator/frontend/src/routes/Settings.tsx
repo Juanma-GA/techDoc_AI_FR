@@ -78,8 +78,8 @@ export function Settings() {
         <CardContent>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="label">{t("settings.llmEnabled")}</div>
-              <p className="text-sm text-fg-dim">
+              <div>{t("settings.llmEnabled")}</div>
+              <p className="text-fg-dim">
                 {t("settings.llmHelp")}
               </p>
             </div>
@@ -104,7 +104,7 @@ export function Settings() {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="label">{t("settings.apiKey")}</span>
+            <span>{t("settings.apiKey")}</span>
             <Input
               type="password"
               autoComplete="off"
@@ -113,22 +113,22 @@ export function Settings() {
               onChange={(e) => setApiKey(e.target.value)}
             />
             {apiKeySet && (
-              <span className="text-sm text-fg-dim">
+              <span className="text-fg-dim">
                 {t("settings.apiKeyKept")}
               </span>
             )}
           </label>
           <label className="flex flex-col gap-1">
-            <span className="label">{t("settings.baseUrl")}</span>
+            <span>{t("settings.baseUrl")}</span>
             <Input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
           </label>
           <div className="flex gap-3">
             <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("settings.chatModel")}</span>
+              <span>{t("settings.chatModel")}</span>
               <Input value={chatModel} onChange={(e) => setChatModel(e.target.value)} />
             </label>
             <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("settings.embedModel")}</span>
+              <span>{t("settings.embedModel")}</span>
               <Input value={embedModel} onChange={(e) => setEmbedModel(e.target.value)} />
             </label>
           </div>

@@ -4,6 +4,9 @@
     "description": "Generateur de logigrammes industriels (diagnostic, depannage, procedures) multi-formats"
   },
   "nav": {
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
     "editor": "Editeur",
     "data": "Données",
     "settings": "Paramètres",

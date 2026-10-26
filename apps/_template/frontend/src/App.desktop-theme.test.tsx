@@ -11,25 +11,29 @@ const setTheme = vi.fn().mockResolvedValue(undefined);
 
 describe("desktop window theme", () => {
   beforeEach(() => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
     setTheme.mockClear();
     document.documentElement.classList.add("dark");
     window.__TAURI__ = {
       window: { getCurrentWindow: () => ({ setTheme }) },
     };
     vi.spyOn(settingsApi, "read").mockResolvedValue({
-      api_key_set: false,
-      base_url: "",
-      chat_model: "",
-      embed_model: "",
-      llm_enabled: true,
       demo_enabled: false,
-      llm_tested: false,
     });
   });
 
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     delete window.__TAURI__;
     document.documentElement.classList.remove("dark");
   });

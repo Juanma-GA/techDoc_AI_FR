@@ -24,6 +24,15 @@ Generate technical content from selected source documents with retrieval-augment
 
 **MFA pilot (R1, `settings.auth_enabled`) :** an auth path now exists, delegating login + MFA entirely to the corporate MS365 identity MCP service (same service consumed by KleamPy) and authorizing against a dedicated `docwriter_users` PostgreSQL table (own role mapping, no shared state with other apps). See `MFA_PILOT_CHECKLIST_DOC-WRITER_2026-09-14.md` (repo root) for full scope, status, and the infra prerequisites (a reachable Postgres instance, the internal CA bundle) still pending before this can be exercised end-to-end. Disabled by default (`auth_enabled=False`) — tier1 local behavior is completely unaffected until explicitly turned on via `.env`.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## Port
 
 The target default port is `8002`, followed by the next free port when needed.

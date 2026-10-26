@@ -44,8 +44,9 @@ export function validatePDFFile(
 export function validateImageFile(
   file: PDFFileMetadata,
   messages: ImageValidationMessages,
+  maxSize = MAX_FILE_SIZE,
 ): string | null {
-  if (file.size > MAX_FILE_SIZE) {
+  if (file.size > maxSize) {
     return messages.tooLarge(file.name);
   }
   const extension = file.name.toLowerCase().slice(file.name.lastIndexOf("."));

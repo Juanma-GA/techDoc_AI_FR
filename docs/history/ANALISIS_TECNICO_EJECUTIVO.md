@@ -25,7 +25,7 @@ El monorepo `ATEXIS_POCS` es una infraestructura de pruebas de concepto (POC) qu
 - **Tipo**: Monorepo pnpm multi-aplicación
 - **Estándar**: Documentación exhaustiva en `CLAUDE.md` y `STANDARD_POC.md` (88+ reglas no negociables)
 - **ADRs**: 4 decisiones arquitecturales documentadas
-- **Modelo**: Local-first estricto (sin Docker, sin CI/CD, sin despliegue cloud)
+- **Modelo**: Local-first estricto (sin Docker, sin despliegue cloud)
 
 ### 1.2 Aplicaciones Activas
 
@@ -407,7 +407,6 @@ def parse_pdf(file_path: Path) -> ParsedDocument:
 
 **Faltante**:
 
-- ❌ Pipeline CI/CD (GitHub Actions, GitLab CI)
 - ❌ Linting automático (ruff, eslint configurados pero sin pre-commit hook)
 - ❌ Tests automáticos antes de merge
 - ❌ Code review obligatorio (no hay CODEOWNERS detectado)
@@ -428,7 +427,7 @@ def parse_pdf(file_path: Path) -> ParsedDocument:
 - README por POC + README backend dedicado
 
 **Problema**: 🟡 Documentación perfecta **SI** lectura exhaustiva obligatoria.  
-→ Risque: Junior dev skip doc → viole standard → casse CI.
+→ Risque: Junior dev skip doc → viole standard → introduit des regressions.
 
 **Recommandation**: Checklist onboarding interactive + formation obligatoire 2h.
 
@@ -575,13 +574,7 @@ def parse_pdf(file_path: Path) -> ParsedDocument:
    - [ ] Tests e2e Playwright completos (1 por feature clave)
    - [ ] Integrar `pytest-cov` + fallar si <80%
 
-3. **CI/CD mínimo**
-   - [ ] GitHub Actions: lint + test + build
-   - [ ] Pre-commit hooks (ruff, eslint, prettier)
-   - [ ] Dependabot para Python + Node
-   - [ ] Semantic versioning automático
-
-4. **Backup y recuperación**
+3. **Backup y recuperación**
    - [ ] Script de backup SQLite diario
    - [ ] Procedimiento de restauración documentado
    - [ ] Tests DR (disaster recovery)
@@ -719,7 +712,6 @@ def parse_pdf(file_path: Path) -> ParsedDocument:
 2. **Tests automatisés complets** (80%+ couverture) — **BLOQUANT**
 3. **Résolution licence PyMuPDF** (AGPLv3) — **LÉGAL**
 4. **Knowledge transfer** (bus factor = 1) — **RISQUE ORG**
-5. **CI/CD minimal** (lint + test + build) — **QUALITÉ**
 
 ### 🟡 Décisions Stratégiques à Prendre
 
@@ -740,7 +732,6 @@ def parse_pdf(file_path: Path) -> ParsedDocument:
 - [ ] Auditoría de seguridad externa OWASP validada
 - [ ] Tests automatizados ≥80% cobertura
 - [ ] Licencia PyMuPDF resuelta (alternativa o compra)
-- [ ] CI/CD operacional (GitHub Actions)
 - [ ] Backup automático configurado (diario + tests de restauración)
 - [ ] Monitoreo básico (logs centralizados + alerting)
 - [ ] Documentación de onboarding probada en nuevo integrante

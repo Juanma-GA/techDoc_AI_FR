@@ -10,99 +10,6 @@
   line-height: 1.5;
 }
 
-.ui-sidebar {
-  display: flex;
-  min-height: 0;
-  flex: 0 0 auto;
-  flex-direction: column;
-  border-right: 1px solid var(--color-border-base);
-  background: var(--color-bg-2);
-}
-
-.ui-sidebar-header {
-  display: flex;
-  min-height: 60px;
-  flex: 0 0 auto;
-  align-items: baseline;
-  gap: 8px;
-  padding: 16px;
-  border-bottom: 1px solid var(--color-border-base);
-}
-
-.ui-sidebar-heading {
-  display: flex;
-  min-width: 0;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.ui-sidebar-brand {
-  overflow: hidden;
-  color: var(--color-brand-blue-light);
-  font-family: "Orbitron", sans-serif;
-  font-size: 1.15rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ui-sidebar-version {
-  flex: 0 0 auto;
-  color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.6rem;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.ui-sidebar-theme-toggle {
-  flex: 0 0 28px;
-  margin-left: auto;
-  padding: 0;
-}
-
-.ui-sidebar-theme-toggle svg {
-  width: 14px;
-  height: 14px;
-}
-
-.ui-sidebar-nav {
-  display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.ui-nav-item {
-  display: flex;
-  width: 100%;
-  flex: 0 0 auto;
-  align-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 8px 12px;
-  color: var(--color-text-dim);
-  text-align: left;
-  text-decoration: none;
-  transition: background 0.15s, color 0.15s;
-}
-
-.ui-nav-item:hover {
-  background: var(--color-card-hover);
-  color: var(--color-text-base);
-}
-
-.ui-nav-item-active {
-  background: var(--color-brand-blue);
-  color: var(--color-text-base);
-}
-
-.ui-nav-item:focus-visible,
 .ui-language-button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--color-brand-blue-light);
@@ -124,7 +31,6 @@
   padding: 6px;
   color: var(--color-text-dim);
   font: inherit;
-  font-size: 0.75rem;
   cursor: pointer;
 }
 
@@ -249,7 +155,7 @@
     padding: 8px 12px;
   }
 
-  .ui-sidebar-nav > .nav-group {
+  .ui-sidebar-nav > .ui-nav-group {
     display: flex;
     flex: 1 0 100%;
     flex-direction: row;
@@ -257,7 +163,7 @@
     gap: 2px;
   }
 
-  .ui-sidebar-nav .nav-group-title {
+  .ui-sidebar-nav .ui-nav-group-title {
     flex: 0 0 100%;
   }
 

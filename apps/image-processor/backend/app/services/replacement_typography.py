@@ -64,9 +64,9 @@ def _ink_components(mask: Image.Image) -> list[tuple[int, tuple[int, int, int, i
     return components
 
 
-def measure_character_height(
+def measure_character_bounds(
     image: Image.Image, polygon: list[list[float]], background: tuple[int, int, int],
-) -> float | None:
+) -> tuple[int, int] | None:
     frame = text_frame(polygon)
     size = (max(1, ceil(frame.width)), max(1, ceil(frame.height)))
     # Pillow QUAD order is TL, BL, BR, TR, unlike the OCR reading-order polygon.
@@ -81,6 +81,16 @@ def measure_character_height(
     threshold = max(24, ceil(contrast * 0.25))
     mask = difference.point([255 if value >= threshold else 0 for value in range(256)])
     components = _ink_components(mask)
+    thin_horizontal_rules = [
+        (area, box) for area, box in components
+        if box[3] - box[1] <= max(2, ceil(size[1] * 0.12))
+        and box[2] - box[0] >= max(4, size[0] * 0.25)
+    ]
+    text_components = [component for component in components if component not in thin_horizontal_rules]
+    if text_components:
+        components = text_components
+    elif thin_horizontal_rules:
+        return None
     interior = [
         (area, box) for area, box in components
         if not (
@@ -95,7 +105,16 @@ def measure_character_height(
         return None
     typical = dominant_height([float(box[3] - box[1]) for _, box in components])
     letters = [box for _, box in components if typical * 0.6 <= box[3] - box[1] <= typical * 1.7]
-    return float(max(box[3] for box in letters) - min(box[1] for box in letters))
+    if not letters:
+        return None
+    return min(box[1] for box in letters), max(box[3] for box in letters)
+
+
+def measure_character_height(
+    image: Image.Image, polygon: list[list[float]], background: tuple[int, int, int],
+) -> float | None:
+    bounds = measure_character_bounds(image, polygon, background)
+    return float(bounds[1] - bounds[0]) if bounds is not None else None
 
 
 def font_size_for_height(height: float) -> int:

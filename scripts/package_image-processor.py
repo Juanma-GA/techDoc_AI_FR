@@ -12,7 +12,7 @@ Layout of the produced archive (with `--embed-python`, default ON):
     ├── apps/<poc>/             # full app (backend + frontend sources, no node_modules / .venv / data)
     │   └── frontend/dist/      # built React UI (only if pnpm + node are available distributor-side)
     ├── design-tokens/          # design-token assets used by the React build
-    ├── python-embed/           # bundled Python 3.13 for PaddleOCR
+    ├── python-embed/           # bundled Python 3.11 for PaddleOCR
     └── python-embed-lama/      # bundled Python 3.11 for LaMa
 
 Usage:
@@ -38,7 +38,7 @@ from image_processor_package_runtime import prepare_embedded_python
 APP_NAME = "Image Processor"
 APP_SLUG = "image-processor"      # nom du dossier sous apps/
 EMBED_PREFIX = "image_processor"
-_OCR_PYTHON_VERSION = "3.13.15"
+_OCR_PYTHON_VERSION = "3.11.9"
 _LAMA_PYTHON_VERSION = "3.11.9"
 # =====================================================================
 

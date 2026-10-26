@@ -9,14 +9,42 @@ set /a PORT_MAX=PORT+20
 if exist "%REPO_ROOT%\go-embed\bin\go.exe" goto :embedded_go
 if not exist "%REPO_ROOT%\scripts\build_pdf_toolkit.mjs" goto :runtime
 where node >nul 2>nul
+if errorlevel 1 if exist "C:\PROJETS\AI4TECHDOC\node.exe" (
+    set "PATH=C:\PROJETS\AI4TECHDOC;%PATH%"
+)
+where node >nul 2>nul
 if errorlevel 1 (
     echo [error] Node.js 20+ is required to build the app from source.
     exit /b 1
 )
 where go >nul 2>nul
 if errorlevel 1 (
-    echo [error] Go 1.25+ is required to build the backend from source.
-    exit /b 1
+    where winget >nul 2>nul
+    if errorlevel 1 (
+        echo [error] Go 1.25+ is required, but neither Go nor winget was found.
+        echo [info] Install Go from https://go.dev/dl/ and run start.bat again.
+        exit /b 1
+    )
+    echo [info] Go is missing. The official Go package can be installed with winget.
+    choice /C YN /N /M "Install Go using winget now? [Y/N] "
+    if errorlevel 2 (
+        echo [error] Go is required to build the backend.
+        echo [info] Install Go from https://go.dev/dl/ and run start.bat again.
+        exit /b 1
+    )
+    winget install --id GoLang.Go --exact
+    if errorlevel 1 (
+        echo [error] Go installation with winget failed.
+        echo [info] Install Go from https://go.dev/dl/ and run start.bat again.
+        exit /b 1
+    )
+    if exist "%ProgramFiles%\Go\bin\go.exe" set "PATH=%ProgramFiles%\Go\bin;%PATH%"
+    where go >nul 2>nul
+    if errorlevel 1 (
+        echo [error] Go was installed but is not available in this console.
+        echo [info] Close this window, open a new one, and run start.bat again.
+        exit /b 1
+    )
 )
 node "%REPO_ROOT%\scripts\build_pdf_toolkit.mjs" --allow-stale
 if errorlevel 1 exit /b 1

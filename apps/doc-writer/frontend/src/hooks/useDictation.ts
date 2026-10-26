@@ -7,7 +7,7 @@ export type DictationState = "idle" | "recording" | "transcribing";
 function pcm16ToBase64(input: Float32Array): string {
   const pcm = new Int16Array(input.length);
   for (let index = 0; index < input.length; index += 1) {
-    const sample = Math.max(-1, Math.min(1, input[index]));
+    const sample = Math.max(-1, Math.min(1, input[index] ?? 0));
     pcm[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
   const bytes = new Uint8Array(pcm.buffer);
