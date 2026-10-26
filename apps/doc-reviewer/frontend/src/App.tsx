@@ -55,12 +55,13 @@ function RouteFallback() {
 const navItems: ReadonlyArray<{
   to: string;
   labelKey: string;
-  icon: "home" | "files" | "workflow" | "review" | "rules" | "settings";
+  icon: "home" | "files" | "workflow" | "review" | "rules" | "settings" | "compare";
   end?: boolean;
 }> = [
   { to: "/", labelKey: "nav.dashboard", icon: "home", end: true },
   { to: "/preparation", labelKey: "nav.preparation", icon: "workflow" },
   { to: "/documents", labelKey: "nav.documents", icon: "files" },
+  { to: "/comparison", labelKey: "nav.comparison", icon: "compare" },
   { to: "/rejections", labelKey: "nav.rejections", icon: "review" },
   { to: "/rules", labelKey: "nav.rules", icon: "rules" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
