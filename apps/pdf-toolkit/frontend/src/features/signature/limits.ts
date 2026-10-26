@@ -1,0 +1,1 @@
+export const MAX_SIGNATURE_IMAGE_SIZE = 10 * 1024 * 1024;
