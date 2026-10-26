@@ -54,10 +54,10 @@ export function DemoPicker({ disabled, onLoad }: Props) {
 
   return (
     <div className="flex max-h-[55%] min-h-0 shrink-0 flex-col gap-3 overflow-y-auto rounded border border-dashed bg-card p-3" data-testid="demo-picker">
-      <p className="font-label text-xs uppercase text-fg">{t("demo.pickerTitle")}</p>
-      <p className="text-xs text-fg-dim">{t("demo.pickerHint")}</p>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-label text-xs uppercase text-fg-dim">{t("demo.scenarioLabel")}</span>
+      <p className="text-fg">{t("demo.pickerTitle")}</p>
+      <p className="text-fg-dim">{t("demo.pickerHint")}</p>
+      <label className="flex flex-col gap-1">
+        <span className="text-fg-dim">{t("demo.scenarioLabel")}</span>
         <Select
           size="sm"
           value={scenarioId}
@@ -65,20 +65,20 @@ export function DemoPicker({ disabled, onLoad }: Props) {
           options={SCENARIOS.map((s) => ({ value: s.id, label: t(`demo.${s.id}.title`) }))}
         />
       </label>
-      <fieldset className="flex flex-col gap-1 text-sm">
-        <legend className="mb-1 font-label text-xs uppercase text-fg-dim">{t("demo.sampleFiles")}</legend>
+      <fieldset className="flex flex-col gap-1">
+        <legend className="mb-1 text-fg-dim">{t("demo.sampleFiles")}</legend>
         {scenario.files.map((f) => (
           <div key={f.id} className="flex min-w-0 items-center gap-2">
             <Checkbox id={`demo-${f.id}`} checked={checked.has(f.id)} onCheckedChange={() => toggle(f.id)} />
             <label htmlFor={`demo-${f.id}`} className="min-w-0 flex-1 truncate" title={f.name}>
               {f.name}
             </label>
-            <span className="shrink-0 whitespace-nowrap text-xs text-fg-dim">{Math.round(sampleSize(f) / 1024)} Ko</span>
+            <span className="shrink-0 whitespace-nowrap text-fg-dim">{Math.round(sampleSize(f) / 1024)} Ko</span>
           </div>
         ))}
       </fieldset>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-label text-xs uppercase text-fg-dim">{t("demo.promptLabel")}</span>
+      <label className="flex flex-col gap-1">
+        <span className="text-fg-dim">{t("demo.promptLabel")}</span>
         <Textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
       </label>
       <div className="flex justify-end">

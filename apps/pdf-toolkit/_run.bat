@@ -9,6 +9,10 @@ set /a PORT_MAX=PORT+20
 if exist "%REPO_ROOT%\go-embed\bin\go.exe" goto :embedded_go
 if not exist "%REPO_ROOT%\scripts\build_pdf_toolkit.mjs" goto :runtime
 where node >nul 2>nul
+if errorlevel 1 if exist "C:\PROJETS\AI4TECHDOC\node.exe" (
+    set "PATH=C:\PROJETS\AI4TECHDOC;%PATH%"
+)
+where node >nul 2>nul
 if errorlevel 1 (
     echo [error] Node.js 20+ is required to build the app from source.
     exit /b 1

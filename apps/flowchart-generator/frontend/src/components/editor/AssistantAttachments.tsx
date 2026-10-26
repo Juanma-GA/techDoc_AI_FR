@@ -87,15 +87,17 @@ export function DocumentChips() {
         <Badge key={d.name} variant="info" className="normal-case">
           <FileText size={12} aria-hidden />
           <span className="max-w-[12rem] truncate">{d.name}</span>
-          <button
+          <Button
             type="button"
-            className="hover:text-fg"
+            variant="ghost"
+            size="sm"
+            className="h-5 w-5 p-0"
             aria-label={t("editor.assistant.removeDocument", { name: d.name })}
             title={t("editor.assistant.removeDocument", { name: d.name })}
             onClick={() => removeDocument(d.name)}
           >
             <X size={12} aria-hidden />
-          </button>
+          </Button>
         </Badge>
       ))}
     </div>

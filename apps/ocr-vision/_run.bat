@@ -111,6 +111,10 @@ if errorlevel 1 (
 
 REM ---- Rebuild frontend si dist absent ou perime ---------------------------
 set "FRONTEND_DIR=%APP_DIR%frontend"
+where node >nul 2>nul
+if errorlevel 1 if exist "C:\PROJETS\AI4TECHDOC\node.exe" (
+    set "PATH=C:\PROJETS\AI4TECHDOC;%PATH%"
+)
 where pnpm >nul 2>nul
 if errorlevel 1 goto :front_ready
 

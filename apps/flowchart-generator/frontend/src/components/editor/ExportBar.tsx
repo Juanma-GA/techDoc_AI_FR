@@ -45,7 +45,7 @@ export function ExportBar({ graph }: { graph: FlowGraph }) {
         ))}
       </div>
       {error && (
-        <div className="text-sm text-danger" role="alert">
+        <div className="text-danger" role="alert">
           {error}
         </div>
       )}
