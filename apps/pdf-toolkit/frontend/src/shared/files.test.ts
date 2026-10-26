@@ -78,4 +78,10 @@ describe("validateImageFile", () => {
       validateImageFile({ name: "large.png", type: "image/png", size: MAX_FILE_SIZE + 1 }, messages),
     ).toBe("too large: large.png");
   });
+
+  it("supports a lower image limit for signatures", () => {
+    expect(
+      validateImageFile({ name: "signature.png", type: "image/png", size: 11 }, messages, 10),
+    ).toBe("too large: signature.png");
+  });
 });

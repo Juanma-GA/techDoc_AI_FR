@@ -26,6 +26,15 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## Port
 
 The target default port is `8006`, followed by the next free port when needed. Current Windows and Unix launchers still use `8004`, which also collides with another target assignment.
@@ -91,7 +100,6 @@ The completed generation view shows the selected XML BREX profile's coverage onc
 
 - Domain dependencies include PyMuPDF, python-docx, lxml, and openpyxl.
 - Theme and language preferences may use browser storage; no authentication or business state may be stored there.
-- Launcher defaults do not yet match the target application port.
 
 ## Technical References
 

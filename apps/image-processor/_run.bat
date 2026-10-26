@@ -13,20 +13,37 @@ echo  image-processor - Local launch
 echo ============================================================
 set "MAIN_PY=%REPO_ROOT%\python-embed\python.exe"
 set "MAIN_MARK=%REPO_ROOT%\python-embed\.image-processor-installed"
-if not exist "%MAIN_PY%" (
-    set "MAIN_BASE_PY="
-    where py >nul 2>nul
-    if errorlevel 1 goto :python313_missing
-    for /f "delims=" %%P in ('py -3.13 -c "import sys; print(sys.executable)" 2^>nul') do set "MAIN_BASE_PY=%%P"
-    if not defined MAIN_BASE_PY goto :python313_missing
-    if not exist "%BACKEND_DIR%\.venv\Scripts\python.exe" (
-        echo [setup] Creating Python 3.13 environment...
-        py -3.13 -m venv "%BACKEND_DIR%\.venv"
-        if errorlevel 1 goto :setup_error
-    )
+if not exist "%MAIN_PY%" if exist "%BACKEND_DIR%\.venv\Scripts\python.exe" (
     set "MAIN_PY=%BACKEND_DIR%\.venv\Scripts\python.exe"
     set "MAIN_MARK=%BACKEND_DIR%\.venv\.image-processor-installed"
 )
+if not exist "%MAIN_PY%" (
+    set "MAIN_BASE_PY="
+    where py >nul 2>nul
+    if not errorlevel 1 (
+        for /f "delims=" %%P in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul') do set "MAIN_BASE_PY=%%P"
+    )
+    if not defined MAIN_BASE_PY if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" set "MAIN_BASE_PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+    if not defined MAIN_BASE_PY (
+        if not exist "%REPO_ROOT%\tools\python-installer.exe" goto :python311_missing
+        echo [setup] Installing Python 3.11 for the application...
+        "%REPO_ROOT%\tools\python-installer.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_test=0 SimpleInstall=1
+        if errorlevel 1 goto :setup_error
+        where py >nul 2>nul
+        if not errorlevel 1 (
+            for /f "delims=" %%P in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul') do set "MAIN_BASE_PY=%%P"
+        )
+        if not defined MAIN_BASE_PY if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" set "MAIN_BASE_PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+        if not defined MAIN_BASE_PY goto :python311_missing
+    )
+    echo [setup] Creating Python 3.11 environment...
+    "!MAIN_BASE_PY!" -m venv "%BACKEND_DIR%\.venv"
+    if errorlevel 1 goto :setup_error
+    set "MAIN_PY=%BACKEND_DIR%\.venv\Scripts\python.exe"
+    set "MAIN_MARK=%BACKEND_DIR%\.venv\.image-processor-installed"
+)
+"%MAIN_PY%" --version 2>&1 | findstr /b /c:"Python 3.11" >nul
+if errorlevel 1 goto :main_python_version_error
 if not exist "%MAIN_MARK%" (
     echo [setup] Installing PaddleOCR backend dependencies...
     "%MAIN_PY%" -m pip install --upgrade pip setuptools wheel
@@ -43,6 +60,7 @@ if not exist "%LAMA_PY%" (
     if not errorlevel 1 (
         for /f "delims=" %%P in ('py -3.11 -c "import sys; print(sys.executable)" 2^>nul') do set "LAMA_BASE_PY=%%P"
     )
+    if not defined LAMA_BASE_PY if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" set "LAMA_BASE_PY=%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
     if not defined LAMA_BASE_PY (
         if not exist "%REPO_ROOT%\tools\python-installer.exe" goto :python311_missing
         echo [setup] Installing Python 3.11 for the local LaMa service...
@@ -128,6 +146,10 @@ set "LAMA_SERVICE_PORT=%LAMA_PORT%"
 set "NODE_DIR="
 for /d %%D in ("%LOCALAPPDATA%\node-portable\node-v*-win-x64") do set "NODE_DIR=%%D"
 if defined NODE_DIR set "PATH=%NODE_DIR%;%PATH%"
+where node >nul 2>nul
+if errorlevel 1 if exist "C:\PROJETS\AI4TECHDOC\node.exe" (
+    set "PATH=C:\PROJETS\AI4TECHDOC;%PATH%"
+)
 where pnpm >nul 2>nul
 if not errorlevel 1 (
     set "NEED_BUILD=0"
@@ -165,12 +187,14 @@ echo.
 echo [info] API server stopped.
 pause
 exit /b 0
-:python313_missing
-echo [error] Python 3.13 is required. Install it or use the packaged Python runtime.
+:main_python_version_error
+echo [error] The selected OCR runtime is not Python 3.11.
+echo [info] For a source checkout, remove backend\.venv and relaunch.
+echo [info] For a ZIP, extract a package built with Python 3.11.
 pause
 exit /b 1
 :python311_missing
-echo [error] Python 3.11 is required for LaMa. Install it and relaunch.
+echo [error] Python 3.11 could not be found or installed. Install it and relaunch.
 pause
 exit /b 1
 :no_port

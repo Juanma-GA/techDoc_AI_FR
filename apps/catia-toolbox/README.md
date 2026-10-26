@@ -30,6 +30,15 @@ Identify and compare CATIA delivery data, validate imported structures, and run 
 
 **Tier:** 1 - local only, bound to `127.0.0.1`, with no authentication.
 
+
+## Profiles
+
+<!-- APP_PROFILES_START -->
+- `local-first`
+- `llm`
+- `files`
+<!-- APP_PROFILES_END -->
+
 ## Port
 
 The target default port is `8004`, followed by the next free port when needed. The current Unix launcher uses a different default.

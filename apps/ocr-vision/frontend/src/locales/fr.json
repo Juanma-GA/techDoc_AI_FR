@@ -11,7 +11,12 @@
     "home": "Accueil",
     "architecture": "Architecture",
     "data": "Données",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "llm": {
     "label": "LLM",

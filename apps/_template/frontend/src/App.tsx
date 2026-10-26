@@ -1,19 +1,18 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Ai4TechDocLogo,
   AppShell,
   DemoModeBadge,
   DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
-  LlmStatus,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
-import { healthApi, settingsApi, type HealthDto, type SettingsDto } from "./lib/api";
+import { settingsApi, type SettingsDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Home } from "./routes/Home";
 import { Settings } from "./routes/Settings";
@@ -31,6 +30,12 @@ declare global {
     };
   }
 }
+
+const NAV_ITEMS = [
+  { to: "/", key: "nav.home", icon: "home" },
+  { to: "/data", key: "nav.data", icon: "data" },
+  { to: "/settings", key: "nav.settings", icon: "settings" },
+] as const;
 
 export function App() {
   useEffect(() => {
@@ -65,25 +70,25 @@ export function App() {
   }, []);
 
   const { t, i18n } = useTranslation();
+  const appTitle = t("app.title");
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
-  const healthQuery = useQuery<HealthDto>({
-    queryKey: ["health"],
-    queryFn: healthApi.read,
-    refetchInterval: 15_000,
-  });
   const settingsQuery = useQuery<SettingsDto>({
     queryKey: ["settings"],
     queryFn: settingsApi.read,
   });
   const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
+  useEffect(() => {
+    document.title = appTitle;
+  }, [appTitle]);
+
   return (
     <AppShell
-      title={t("app.title")}
+      title={appTitle}
       brandTitle={t("app.description")}
-      version={t("app.version")}
-      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       themeToggleLabel={t("nav.themeToggle")}
       sidebarTop={
         demoEnabled ? (
@@ -94,29 +99,23 @@ export function App() {
       }
       navigation={
         <>
-          <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.home")}
-          </NavLink>
-          <NavLink to="/data" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.data")}
-          </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.settings")}
-          </NavLink>
+          {NAV_ITEMS.map(({ to, key, icon }) => {
+            const label = t(key);
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                title={label}
+                aria-label={label}
+                className={({ isActive }) => sidebarNavItemClass(isActive)}
+              >
+                <SidebarNavContent icon={icon} label={label} />
+              </NavLink>
+            );
+          })}
         </>
-      }
-      llmStatus={
-        <LlmStatus
-          status={healthQuery.data?.llm}
-          labels={{
-            label: t("llm.label"),
-            title: t("llm.title"),
-            on: t("llm.on"),
-            off: t("llm.off"),
-            untested: t("llm.untested"),
-            noKey: t("llm.noKey"),
-          }}
-        />
       }
       languageSwitcher={
         <LanguageSwitcher

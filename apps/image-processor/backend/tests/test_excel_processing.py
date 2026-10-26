@@ -188,7 +188,7 @@ def test_selected_piece_extracts_pairs_until_next_section() -> None:
     ]
 
 
-def test_excel_piece_options_require_empty_reference_and_00_marker() -> None:
+def test_excel_piece_options_require_empty_reference_and_zero_marker() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
@@ -197,22 +197,28 @@ def test_excel_piece_options_require_empty_reference_and_00_marker() -> None:
     sheet.append(["R-002", "non vide", None, None, "Pas une pièce"])
     sheet.append([None, "section", None, "ICN-B", "Sans marqueur"])
     sheet.append(["R-003", "section", "00", "ICN-C", "Référence non vide"])
+    sheet.append([None, "section", "0", "ICN-D", "Pompe D"])
 
     assert excel_piece_options(sheet, reference_column=1, replacement_column=3, piece_column=5) == [
-        {"row": 2, "name": "Pompe A"}
+        {"row": 2, "name": "Pompe A"},
+        {"row": 7, "name": "Pompe D"},
     ]
 
 
-def test_excel_piece_options_accepts_numeric_zero_formatted_as_00() -> None:
+def test_excel_piece_options_accepts_numeric_zero_with_any_number_format() -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
     sheet.append([None, "section", 0, "ICN-A", "Pompe A"])
     sheet["C2"].number_format = "00"
-    sheet.append([None, "section", 0, "ICN-B", "Sans format 00"])
+    sheet.append([None, "section", 0, "ICN-B", "Pompe B"])
+    sheet.append([None, "section", 0, "ICN-C", "Pompe C"])
+    sheet["C4"].number_format = "0"
 
     assert excel_piece_options(sheet, reference_column=1, replacement_column=3, piece_column=5) == [
-        {"row": 2, "name": "Pompe A"}
+        {"row": 2, "name": "Pompe A"},
+        {"row": 3, "name": "Pompe B"},
+        {"row": 4, "name": "Pompe C"},
     ]
 
 

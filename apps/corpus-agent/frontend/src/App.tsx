@@ -3,6 +3,7 @@ import {
   ErrorBoundary,
   LanguageSwitcher,
   PortalLink,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { lazy, Suspense, useEffect, useState } from "react";
@@ -33,12 +34,12 @@ const Settings = lazy(() => import("./routes/Settings").then((m) => ({ default: 
 // Coquille pixel-identique au preview.html (.layout / .sidebar / .nav-item /
 // .lang-switch dans styles/preview-skin.css). Pas de logos sur les onglets.
 const navItems = [
-  { to: "/", labelKey: "nav.manager" },
-  { to: "/projects", labelKey: "nav.projects" },
-  { to: "/redacteur", labelKey: "nav.redacteur" },
-  { to: "/chatbot", labelKey: "nav.chatbot" },
-  { to: "/data", labelKey: "nav.data" },
-  { to: "/settings", labelKey: "nav.settings" },
+  { to: "/", labelKey: "nav.manager", icon: "home" },
+  { to: "/projects", labelKey: "nav.projects", icon: "project" },
+  { to: "/redacteur", labelKey: "nav.redacteur", icon: "file" },
+  { to: "/chatbot", labelKey: "nav.chatbot", icon: "chat" },
+  { to: "/data", labelKey: "nav.data", icon: "data" },
+  { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;
@@ -87,22 +88,30 @@ export function App() {
   return (
     <AppShell
       className="ca"
-      headerStart={<PortalLink className="sidebar-home" label={t("nav.portal")} />}
       title={t("app.title")}
       brandTitle={t("app.titleTooltip")}
-      version={t("app.version")}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
+      sidebarTop={<PortalLink className="sidebar-home" label={t("nav.portal")} />}
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={to === "/"}
-          className={({ isActive }) => sidebarNavItemClass(isActive)}
-          onClick={handleNavClick(to)}
-        >
-          {t(labelKey)}
-        </NavLink>
-      ))}
+      navigation={navItems.map(({ to, labelKey, icon }) => {
+        const label = t(labelKey);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            end={to === "/"}
+            title={label}
+            aria-label={label}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+            onClick={handleNavClick(to)}
+          >
+            <SidebarNavContent icon={icon} label={label} />
+          </NavLink>
+        );
+      })}
       sidebarBottom={
         pendingTo ? (
           <div className="banner warn" style={{ margin: "8px 12px" }}>

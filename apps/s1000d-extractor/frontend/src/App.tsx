@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  Ai4TechDocLogo,
   AppShell,
   DemoModeBadge,
   DemoModeProvider,
   LanguageSwitcher,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { useTranslation } from "react-i18next";
@@ -19,11 +19,11 @@ import { Validation } from "./routes/Validation";
 import { Versioning } from "./routes/Versioning";
 
 const navItems = [
-  { to: "/migration", labelKey: "nav.migration" },
-  { to: "/validation", labelKey: "nav.validation" },
-  { to: "/data", labelKey: "nav.data" },
-  { to: "/settings", labelKey: "nav.settings" },
-  { to: "/versioning", labelKey: "nav.versioning" },
+  { to: "/migration", labelKey: "nav.migration", icon: "migration" },
+  { to: "/validation", labelKey: "nav.validation", icon: "quality" },
+  { to: "/data", labelKey: "nav.data", icon: "data" },
+  { to: "/settings", labelKey: "nav.settings", icon: "settings" },
+  { to: "/versioning", labelKey: "nav.versioning", icon: "versioning" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;
@@ -44,7 +44,10 @@ export function App() {
       className="dw"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      headerStart={<Ai4TechDocLogo alt="" />}
+      navigationLabel={t("nav.ariaLabel")}
+      themeToggleLabel={t("nav.themeToggle")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       sidebarTop={
         demoEnabled ? (
           <div className="border-b border-md px-4 py-2">
@@ -53,15 +56,20 @@ export function App() {
         ) : null
       }
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey }) => (
-        <NavLink
-          key={to}
-          to={to}
-          className={({ isActive }) => sidebarNavItemClass(isActive)}
-        >
-          {t(labelKey)}
-        </NavLink>
-      ))}
+      navigation={navItems.map(({ to, labelKey, icon }) => {
+        const label = t(labelKey);
+        return (
+          <NavLink
+            key={to}
+            to={to}
+            title={label}
+            aria-label={label}
+            className={({ isActive }) => sidebarNavItemClass(isActive)}
+          >
+            <SidebarNavContent icon={icon} label={label} />
+          </NavLink>
+        );
+      })}
       languageSwitcher={
         <LanguageSwitcher
           languages={LANGS}
