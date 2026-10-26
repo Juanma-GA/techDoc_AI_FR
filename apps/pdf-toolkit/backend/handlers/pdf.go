@@ -37,6 +37,7 @@ func (h *PDFHandler) RegisterRoutes(router gin.IRoutes) {
 	router.POST("/delete", h.Delete)
 	router.POST("/reorder", h.Reorder)
 	router.POST("/rotate", h.Rotate)
+	router.POST("/signature", h.Signature)
 }
 
 func (h *PDFHandler) Health(c *gin.Context) {
@@ -297,6 +298,10 @@ func (h *PDFHandler) sendPDF(c *gin.Context, filePath, downloadName string) {
 
 func (h *PDFHandler) writeServiceError(c *gin.Context, err error) {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return
+	}
+	if errors.Is(err, services.ErrUnsupportedSignatureText) {
+		writeError(c, http.StatusBadRequest, "Le nom ou la date contient un caractère que le PDF ne peut pas afficher.")
 		return
 	}
 	if errors.Is(err, services.ErrInvalidInput) {

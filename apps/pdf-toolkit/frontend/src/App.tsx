@@ -5,6 +5,7 @@ import {
   Image,
   ImagePlus,
   Minimize2,
+  PenTool,
   RotateCw,
   Scissors,
   ShieldCheck,
@@ -27,6 +28,7 @@ import { MergeTool } from "./features/merge/MergeTool";
 import { ImagesToPdfTool } from "./features/images-to-pdf/ImagesToPdfTool";
 import { PdfToImagesTool } from "./features/pdf-to-images/PdfToImagesTool";
 import { RotateTool } from "./features/rotate/RotateTool";
+import { SignatureTool } from "./features/signature/SignatureTool";
 
 const ReorderTool = lazy(() =>
   import("./features/reorder/ReorderTool").then((module) => ({ default: module.ReorderTool })),
@@ -39,6 +41,7 @@ const tools = [
   { id: "reorder", icon: Grip },
   { id: "compress", icon: Minimize2 },
   { id: "rotate", icon: RotateCw },
+  { id: "signature", icon: PenTool },
   { id: "imagesToPdf", icon: ImagePlus },
   { id: "pdfToImages", icon: Image },
 ] as const;
@@ -152,6 +155,7 @@ export function App() {
           {activeTool === "delete" ? <DeleteTool /> : null}
           {activeTool === "compress" ? <CompressTool /> : null}
           {activeTool === "rotate" ? <RotateTool /> : null}
+          {activeTool === "signature" ? <SignatureTool /> : null}
           {activeTool === "imagesToPdf" ? <ImagesToPdfTool /> : null}
           {activeTool === "pdfToImages" ? <PdfToImagesTool /> : null}
           {activeTool === "reorder" ? (

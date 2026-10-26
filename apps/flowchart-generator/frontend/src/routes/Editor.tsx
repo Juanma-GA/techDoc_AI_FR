@@ -16,11 +16,13 @@ export function Editor() {
 
   return (
     <div className="flex flex-col gap-4 lg:h-full lg:min-h-0">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="font-display text-xl">{t("editor.title")}</h1>
-        <Button variant="ghost" size="sm" onClick={clear}>
-          {currentFlowId ? t("editor.newFlow") : t("editor.reset")}
-        </Button>
+      <div className="page-header">
+        <h1>{t("editor.title")}</h1>
+        <div className="page-header-actions">
+          <Button variant="ghost" size="sm" onClick={clear}>
+            {currentFlowId ? t("editor.newFlow") : t("editor.reset")}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -40,7 +42,7 @@ export function Editor() {
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {graph && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-fg-dim">
+                <div className="flex flex-wrap items-center gap-2 text-fg-dim">
                   {graph.system && <Badge>{graph.system}</Badge>}
                   {graph.fault_code && <Badge variant="info">{graph.fault_code}</Badge>}
                   <span>{t("editor.counts", { nodes: graph.nodes.length, edges: graph.edges.length })}</span>
@@ -48,7 +50,7 @@ export function Editor() {
                 </div>
               )}
               {warnings.length > 0 && (
-                <ul className="list-disc pl-5 text-xs text-warning" data-testid="parse-warnings">
+                <ul className="list-disc pl-5 text-warning" data-testid="parse-warnings">
                   {warnings.map((w) => (
                     <li key={w}>{w}</li>
                   ))}
@@ -57,7 +59,7 @@ export function Editor() {
               <PreviewPanel graph={graph} />
               {graph && !validated && (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded border p-3">
-                  <span className="text-sm text-fg-dim">{t("editor.validateHelp")}</span>
+                  <span className="text-fg-dim">{t("editor.validateHelp")}</span>
                   <Button onClick={() => setValidated(true)} data-testid="validate-flow">
                     <CheckCircle2 size={14} aria-hidden /> {t("editor.validate")}
                   </Button>
