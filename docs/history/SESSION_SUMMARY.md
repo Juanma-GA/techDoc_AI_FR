@@ -133,9 +133,9 @@ class MistralClient:
 
 | File | Purpose | Size |
 |---|---|---|
-| [AACF_TESTING_GUIDE.md](../../AACF_TESTING_GUIDE.md) | Step-by-step testing instructions (6 POCs, portal, all HR rules) | 8.2 KB |
+| [AACF_TESTING_GUIDE.md](AACF_TESTING_GUIDE.md) | Step-by-step testing instructions (6 POCs, portal, all HR rules) | 8.2 KB |
 | [QUICK_START.md](../../QUICK_START.md) | 3-minute launcher guide (existing) | 3.2 KB |
-| [TEST_GUIDE.md](../../TEST_GUIDE.md) | Detailed checklist per POC (existing) | 8.2 KB |
+| [TEST_GUIDE.md](TEST_GUIDE.md) | Detailed checklist per POC (existing) | 8.2 KB |
 
 ---
 
@@ -170,7 +170,7 @@ class MistralClient:
    - Note any deviations from expected behavior
    - Screenshot proof of successful launch (for audit trail)
 
-### For Continuous Integration (Post-Testing)
+### Post-testing follow-up
 
 Once local testing is complete and validated:
 
@@ -180,13 +180,7 @@ Once local testing is complete and validated:
    git commit -m "test: all 6 POCs AACF compliant (manual verification completed)"
    ```
 
-2. **Create CI pipeline** (if desired):
-   - Add GitHub Actions workflow to run startup tests
-   - Verify MistralClient imports on every PR
-   - Check Tailwind CSS compilation succeeds
-   - Lint i18n keys (no missing translations)
-
-3. **Deploy to cloud** (out of scope for POC, but prepared):
+2. **Deploy to cloud** (out of scope for POC, but prepared):
    - Platform Landing Zone ready (from prior AACF audit)
    - Tier2 (cloud) deployment would require auth + 0.0.0.0 binding
    - Mistral API key secure storage (Azure Key Vault)
@@ -228,7 +222,7 @@ Before declaring "ready to use", confirm:
 
 ### Immediate (User's Task)
 
-1. **Run the 6 POCs** following [AACF_TESTING_GUIDE.md](../../AACF_TESTING_GUIDE.md)
+1. **Run the 6 POCs** following [AACF_TESTING_GUIDE.md](AACF_TESTING_GUIDE.md)
 2. **Verify portal loads** and all 6 POCs are clickable
 3. **Test theme/language toggles** on portal and each POC
 4. **Check Settings pages** for LLM configuration and health badge
@@ -236,7 +230,7 @@ Before declaring "ready to use", confirm:
 
 ### Follow-Up (If Issues Arise)
 
-- Consult [AACF_TESTING_GUIDE.md](../../AACF_TESTING_GUIDE.md) "Troubleshooting" section
+- Consult [AACF_TESTING_GUIDE.md](AACF_TESTING_GUIDE.md) "Troubleshooting" section
 - Check backend terminal for error messages (ImportError, SyntaxError, Traceback)
 - Verify port availability: `netstat -ano | findstr :<PORT>`
 - Clear browser cache if theme/language toggles don't work
@@ -275,7 +269,7 @@ All artifacts preserved in `session-state/files/`:
 
 ---
 
-**Next Action**: Follow [AACF_TESTING_GUIDE.md](../../AACF_TESTING_GUIDE.md) to launch and test the 6 POCs locally.
+**Next Action**: Follow [AACF_TESTING_GUIDE.md](AACF_TESTING_GUIDE.md) to launch and test the 6 POCs locally.
 
 **Confidence Level**: ⭐⭐⭐⭐⭐ (Very High — all pre-conditions verified, no remaining blockers)
 

@@ -2,3 +2,6 @@ packages:
   - "apps/*/frontend"
   - "packages/*"
   - "design-tokens"
+allowBuilds:
+  canvas: false
+  esbuild: true

@@ -3,6 +3,7 @@ import { Component } from "react";
 import type { ErrorInfo, PropsWithChildren, ReactNode } from "react";
 
 import { cn } from "../lib/utils";
+import "./error-boundary.css";
 
 export type ErrorBoundaryProps = PropsWithChildren<{
   /** Optional class name for the container. */
@@ -53,31 +54,31 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <div
           className={cn(
-            "flex min-h-screen items-center justify-center bg-background p-4",
+            "ui-error-boundary",
             this.props.className
           )}
         >
-          <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/5 p-6 shadow-sm">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-1 h-5 w-5 flex-shrink-0 text-destructive" />
-              <div className="space-y-2">
-                <h2 className="font-semibold text-foreground">Application Error</h2>
-                <p className="text-sm text-muted-foreground">
+          <div className="ui-error-card">
+            <div className="ui-error-content">
+              <AlertCircle className="ui-error-icon" aria-hidden="true" />
+              <div className="ui-error-copy">
+                <h2 className="ui-error-title">Application Error</h2>
+                <p className="ui-error-message">
                   An unexpected error occurred. Please refresh the page or contact support.
                 </p>
                 {process.env.NODE_ENV === "development" && this.state.error && (
-                  <details className="mt-3 space-y-2">
-                    <summary className="cursor-pointer text-xs font-mono text-muted-foreground hover:text-foreground">
+                  <details className="ui-error-details">
+                    <summary>
                       Error details (dev only)
                     </summary>
-                    <pre className="overflow-auto rounded bg-muted p-2 text-xs">
+                    <pre>
                       {this.state.error.toString()}
                     </pre>
                   </details>
                 )}
                 <button
                   onClick={() => window.location.reload()}
-                  className="mt-4 rounded bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                  className="ui-error-refresh"
                 >
                   Refresh Page
                 </button>

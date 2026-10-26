@@ -11,7 +11,12 @@
     "sessions": "Sessions",
     "architecture": "Architecture",
     "data": "Données",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "llm": {
     "label": "LLM",
@@ -317,14 +322,21 @@
       "metaHint": "Le label et la consigne sont enregistrés sur le template et relus à la régénération.",
       "noZones": "Aucune zone.",
       "content": "Contenu",
-      "status": { "filled": "Rempli", "empty": "Vide", "skipped": "Ignoré" },
+      "status": {
+        "filled": "Rempli",
+        "empty": "Vide",
+        "skipped": "Ignoré"
+      },
       "skip": "Ignorer",
       "reintegrate": "Réintégrer",
       "zoneIa": "IA",
       "zoneIaHint": "Régénérer cette zone via l'IA",
       "deleteZone": "Suppr.",
       "deleteZoneHint": "Supprimer cette zone",
-      "popover": { "edit": "Voir en édition", "delete": "Supprimer" },
+      "popover": {
+        "edit": "Voir en édition",
+        "delete": "Supprimer"
+      },
       "refill": "Remplir",
       "force": "Forcer",
       "skipSel": "Ignorer",

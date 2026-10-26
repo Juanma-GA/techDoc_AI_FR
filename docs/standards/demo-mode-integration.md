@@ -42,7 +42,7 @@ Pass the list and translated panel labels to `DemoScenarioPanel`. It keeps edits
 
 Runners must be deterministic and local: no `fetch`, API client, LLM, or external service, and no forwarding demo inputs/files into the normal application request path. Keep normal business data and demo scenario state in separate code paths. Do not persist demo inputs, outputs, or files. The mode preference itself is not demo data.
 
-Register only synthetic, app-specific examples. Keep file content inline or generate it in memory where practical. If an app needs tracked fixtures, follow that app's CI/content policy; do not add client documents or binaries prohibited by that policy. This shared package intentionally supplies no business sample dataset.
+Register only synthetic, app-specific examples. Keep file content inline or generate it in memory where practical. If an app needs tracked fixtures, follow the app's documented repository content policy; do not add client documents or binaries prohibited by that policy. This shared package intentionally supplies no business sample dataset.
 
 ## Persist The Mode
 

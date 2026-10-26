@@ -88,4 +88,6 @@ L'extraction est déterministe et locale : l'application n'utilise aucun modèle
 
 ## Profiles
 
+<!-- APP_PROFILES_START -->
 - `local-first`
+<!-- APP_PROFILES_END -->

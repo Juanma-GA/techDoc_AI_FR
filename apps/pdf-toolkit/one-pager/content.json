@@ -1,0 +1,56 @@
+{
+  "fr": {
+    "main_title": "PDF PLUS SIMPLES, EN LOCAL",
+    "section_title": "UNE APP. HUIT OUTILS.",
+    "application_name": "PDF Toolkit",
+    "status": "POC LOCAL",
+    "challenge": "Traiter les PDF courants sans transmettre les documents à un service cloud.",
+    "solution": "Une application web locale bilingue réunissant huit opérations. Selon l’outil, le traitement se fait dans le navigateur ou sur le serveur local; les fichiers temporaires serveur sont supprimés après chaque opération.",
+    "features": [
+      "Fusion et compression sans perte (gain variable)",
+      "Extraction, suppression et réorganisation de pages",
+      "Rotation de toutes les pages ou d’une sélection",
+      "Conversion d’images PNG/JPEG en PDF",
+      "Export des pages PDF en PNG/JPEG dans un ZIP"
+    ],
+    "callouts": [
+      "8 opérations PDF",
+      "250 Mo maximum par fichier",
+      "FR/EN • thèmes clair/sombre"
+    ],
+    "security": {
+      "local": "Écoute par défaut sur 127.0.0.1, sans authentification. Aucun service cloud; les fichiers temporaires côté serveur sont supprimés après chaque requête. Ne pas exposer au réseau.",
+      "shared": "Pas de mode multi-utilisateur documenté : usage prévu sur un seul poste, sans compte ni contrôle d’accès réseau."
+    },
+    "footnote": "La compression sans perte peut réduire la taille selon le contenu; limite de 250 Mo par fichier."
+  },
+  "en": {
+    "main_title": "PDF TOOLS, KEPT LOCAL",
+    "section_title": "ONE APP. EIGHT TOOLS.",
+    "application_name": "PDF Toolkit",
+    "status": "LOCAL POC",
+    "challenge": "Handle everyday PDF tasks without sending documents to a cloud service.",
+    "solution": "A bilingual local web app combining eight operations. Processing runs in the browser or on the local server depending on the tool; server-side temporary files are removed after each operation.",
+    "features": [
+      "Merge and lossless compression (size reduction varies)",
+      "Extract, delete and reorder pages",
+      "Rotate all pages or a selection",
+      "Convert PNG/JPEG images to PDF",
+      "Export PDF pages as PNG/JPEG in a ZIP"
+    ],
+    "callouts": [
+      "8 PDF operations",
+      "250 MB maximum per file",
+      "FR/EN • light/dark themes"
+    ],
+    "security": {
+      "local": "Binds to 127.0.0.1 by default, without authentication. No cloud service is used; server-side temporary files are removed after each request. Do not expose to a network.",
+      "shared": "No documented multi-user mode: intended for one local workstation, without accounts or network access controls."
+    },
+    "footnote": "Lossless compression may reduce file size depending on the document; 250 MB per-file limit."
+  },
+  "screenshots": {
+    "top": "",
+    "bottom": ""
+  }
+}

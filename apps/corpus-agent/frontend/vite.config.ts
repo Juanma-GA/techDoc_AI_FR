@@ -22,14 +22,14 @@ export default defineConfig(({ command }) => ({
   base: command === "build" ? (process.env.VITE_BASE ?? "/") : "/",
   server: {
     // Bind explicite en IPv4 : `localhost` résout en `::1` (IPv6) sous Windows,
-    // or start.bat ouvre http://127.0.0.1:5173 (IPv4) → sinon "connexion refusée".
+    // or start.bat ouvre http://127.0.0.1:8001 (IPv4) → sinon "connexion refusée".
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
     proxy: {
       // Cible 127.0.0.1 (et non localhost/::1) : uvicorn bind 127.0.0.1.
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: "http://127.0.0.1:8001",
         changeOrigin: true,
       },
     },

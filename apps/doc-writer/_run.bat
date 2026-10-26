@@ -150,6 +150,10 @@ set "FRONTEND_DIR=%APP_DIR%frontend"
 set "NODE_DIR="
 for /d %%D in ("%LOCALAPPDATA%\node-portable\node-v*-win-x64") do set "NODE_DIR=%%D"
 if defined NODE_DIR set "PATH=%NODE_DIR%;%PATH%"
+where node >nul 2>nul
+if errorlevel 1 if exist "C:\PROJETS\AI4TECHDOC\node.exe" (
+    set "PATH=C:\PROJETS\AI4TECHDOC;%PATH%"
+)
 
 where pnpm >nul 2>nul
 if errorlevel 1 goto :front_ready

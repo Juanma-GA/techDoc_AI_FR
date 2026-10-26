@@ -9,6 +9,7 @@ from app.services.replacement_typography import (
     dominant_height,
     font_size_for_height,
     load_replacement_font,
+    measure_character_bounds,
     measure_character_height,
 )
 
@@ -31,6 +32,21 @@ def test_measurement_discards_specks_and_a_thin_border_line(typography_sample):
     measured = measure_character_height(image, polygon, (255, 255, 255))
     assert measured is not None
     assert abs(measured - expected) <= 1
+
+
+def test_character_bounds_ignore_a_horizontal_rule_below_text(typography_sample):
+    image, polygon, expected = typography_sample(text="R1", padding=20)
+    line_y = round(polygon[3][1]) - 4
+    ImageDraw.Draw(image).line(
+        (round(polygon[0][0]) + 1, line_y, round(polygon[1][0]) - 1, line_y),
+        fill="black",
+    )
+
+    bounds = measure_character_bounds(image, polygon, (255, 255, 255))
+
+    assert bounds is not None
+    assert abs(bounds[1] - bounds[0] - expected) <= 1
+    assert bounds[1] < line_y - round(polygon[0][1])
 
 
 def test_no_ink_is_not_reported_as_a_valid_character_height(typography_sample):

@@ -15,7 +15,7 @@ def test_table_illustration_is_not_exported_or_attached(
     pdf_path = tmp_path / "table-illustration.pdf"
     doc = fitz.open()
     page = doc.new_page()
-    x0, y0, cell_width, row_height, columns, rows = 72, 90, 120, 70, 2, 2
+    x0, y0, cell_width, row_height, columns, rows = 72, 90, 120, 70, 3, 3
     for row in range(rows + 1):
         page.draw_line(
             (x0, y0 + row * row_height),
@@ -32,15 +32,15 @@ def test_table_illustration_is_not_exported_or_attached(
     image_rect = fitz.Rect(x0 + 12, y0 + 12, x0 + 100, y0 + 58)
     image_xref = page.insert_image(image_rect, pixmap=image)
     if reuse_image_outside_table:
-        page.insert_image(fitz.Rect(72, 248, 160, 294), xref=image_xref)
-    page.insert_text((x0 + cell_width + 8, y0 + 35), "Part number", fontsize=10)
+        page.insert_image(fitz.Rect(72, 318, 160, 364), xref=image_xref)
+    for row, label in enumerate(("Part number", "Description", "Quantity")):
+        page.insert_text(
+            (x0 + cell_width + 8, y0 + row * row_height + 35),
+            label,
+            fontsize=10,
+        )
     page.insert_text(
-        (x0 + cell_width + 8, y0 + row_height + 35),
-        "Description",
-        fontsize=10,
-    )
-    page.insert_text(
-        (72, 330 if reuse_image_outside_table else y0 + rows * row_height + 35),
+        (72, 390 if reuse_image_outside_table else y0 + rows * row_height + 35),
         "Figure 7.1 Separate illustration",
         fontsize=11,
     )

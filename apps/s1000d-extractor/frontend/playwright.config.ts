@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec vite --host 127.0.0.1 --port ${e2ePort}`,
     url: `http://127.0.0.1:${e2ePort}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     timeout: 30_000,
   },
 });

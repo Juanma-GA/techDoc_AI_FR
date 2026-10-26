@@ -119,4 +119,4 @@ def reading_order_boxes(
 
 def snapped_angle(angle: float) -> float:
     nearest_axis = round(angle / 90) * 90
-    return float(nearest_axis) if abs(angle - nearest_axis) <= 5 + 1e-9 else angle
+    return float(nearest_axis) if abs(angle - nearest_axis) <= 10 else angle

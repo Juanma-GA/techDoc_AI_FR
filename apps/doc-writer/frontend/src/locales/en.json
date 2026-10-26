@@ -11,7 +11,12 @@
     "sessions": "Sessions",
     "architecture": "Architecture",
     "data": "Data",
-    "settings": "Settings"
+    "settings": "Settings",
+    "ariaLabel": "Main navigation",
+    "themeToggle": "Switch theme",
+    "languageSwitcher": "Language",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu"
   },
   "llm": {
     "label": "LLM",
@@ -317,14 +322,21 @@
       "metaHint": "Label and instruction are saved on the template and re-read on regeneration.",
       "noZones": "No zones.",
       "content": "Content",
-      "status": { "filled": "Filled", "empty": "Empty", "skipped": "Skipped" },
+      "status": {
+        "filled": "Filled",
+        "empty": "Empty",
+        "skipped": "Skipped"
+      },
       "skip": "Skip",
       "reintegrate": "Reintegrate",
       "zoneIa": "AI",
       "zoneIaHint": "Regenerate this zone with the AI",
       "deleteZone": "Delete",
       "deleteZoneHint": "Delete this zone",
-      "popover": { "edit": "View in editor", "delete": "Delete" },
+      "popover": {
+        "edit": "View in editor",
+        "delete": "Delete"
+      },
       "refill": "Fill",
       "force": "Force",
       "skipSel": "Skip",

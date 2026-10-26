@@ -31,20 +31,58 @@
       "integration": "4 - Intégration",
       "controle": "5 - Contrôle",
       "outils": "Outils"
-    }
+    },
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "page": {
-    "identification": { "title": "1 - Identification", "sub": "Lire la nomenclature (.xlsm) et les données d'entrée (.zip) pour identifier les CATPart à traiter." },
-    "import": { "title": "Import", "sub": "Scanner un dossier local ou importer un listing CSV / JSON." },
-    "diff": { "title": "Comparaison", "sub": "Détecter les pièces ajoutées / supprimées / modifiées entre deux imports." },
-    "conversion": { "title": "Conversion", "sub": "Plan de conversion CATIA 3D vers Composer (dry-run)." },
-    "colorization": { "title": "Colorisation", "sub": "" },
-    "optimizationTree": { "title": "Optimisation arbo", "sub": "Nettoyer les XML Composer d'un dossier de pièces." },
-    "smgxmlRename": { "title": "4 - SMGXML : renommage", "sub": "Remplacer le nom de l'ancienne pièce par la nouvelle dans le SMGXML (dry-run par défaut)." },
-    "replacement": { "title": "Remplacement", "sub": "Plan de remplacement de pièces à partir d'un mapping." },
-    "qc": { "title": "5 - Contrôle Qualité", "sub": "Checklist de vérification des pièces dans l'assemblage." },
-    "checks": { "title": "Vérifications", "sub": "Lancer des vérifications configurables sur l'import courant." },
-    "settings": { "title": "Paramètres", "sub": "Clé API Mistral et modèles utilisés." }
+    "identification": {
+      "title": "1 - Identification",
+      "sub": "Lire la nomenclature (.xlsm) et les données d'entrée (.zip) pour identifier les CATPart à traiter."
+    },
+    "import": {
+      "title": "Import",
+      "sub": "Scanner un dossier local ou importer un listing CSV / JSON."
+    },
+    "diff": {
+      "title": "Comparaison",
+      "sub": "Détecter les pièces ajoutées / supprimées / modifiées entre deux imports."
+    },
+    "conversion": {
+      "title": "Conversion",
+      "sub": "Plan de conversion CATIA 3D vers Composer (dry-run)."
+    },
+    "colorization": {
+      "title": "Colorisation",
+      "sub": ""
+    },
+    "optimizationTree": {
+      "title": "Optimisation arbo",
+      "sub": "Nettoyer les XML Composer d'un dossier de pièces."
+    },
+    "smgxmlRename": {
+      "title": "4 - SMGXML : renommage",
+      "sub": "Remplacer le nom de l'ancienne pièce par la nouvelle dans le SMGXML (dry-run par défaut)."
+    },
+    "replacement": {
+      "title": "Remplacement",
+      "sub": "Plan de remplacement de pièces à partir d'un mapping."
+    },
+    "qc": {
+      "title": "5 - Contrôle Qualité",
+      "sub": "Checklist de vérification des pièces dans l'assemblage."
+    },
+    "checks": {
+      "title": "Vérifications",
+      "sub": "Lancer des vérifications configurables sur l'import courant."
+    },
+    "settings": {
+      "title": "Paramètres",
+      "sub": "Clé API Mistral et modèles utilisés."
+    }
   },
   "common": {
     "delete": "Suppr.",

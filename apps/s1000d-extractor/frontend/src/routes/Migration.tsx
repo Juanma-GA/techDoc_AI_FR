@@ -49,8 +49,9 @@ export function generationFile(inputFile: File | null, stateFile: File | null): 
 export function getCommonMissingFields(
   dms: readonly Pick<WizardDm, "missing_fields">[],
 ): string[] {
-  if (dms.length < 2) return [];
-  const firstFields = [...new Set(dms[0].missing_fields ?? [])];
+  const firstDm = dms[0];
+  if (dms.length < 2 || !firstDm) return [];
+  const firstFields = [...new Set(firstDm.missing_fields ?? [])];
   return firstFields.filter((field) => dms.every((dm) => dm.missing_fields?.includes(field)));
 }
 

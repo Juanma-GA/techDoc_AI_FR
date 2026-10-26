@@ -29,7 +29,7 @@ function prepareDevelopmentEnvironment(project, version, markerName) {
   const [major, minor] = version.split(".");
   run(
     python,
-    ["-c", `import sys; assert sys.version_info[:2] == (${major}, ${minor}), "Python ${version} is required"`],
+    ["-c", `import sys; assert sys.version_info[:2] == (${major}, ${minor}), "Python ${version} is required; recreate this virtual environment"`],
     project,
   );
 
@@ -45,7 +45,7 @@ export function prepareDevelopmentRuntime(frontend) {
   const backend = path.resolve(frontend, "../backend");
   prepareDevelopmentEnvironment(
     backend,
-    "3.13",
+    "3.11",
     ".image-processor-installed",
   );
   prepareDevelopmentEnvironment(

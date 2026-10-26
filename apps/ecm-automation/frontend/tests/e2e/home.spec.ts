@@ -153,7 +153,7 @@ test("ECM Automation workspace renders", async ({ page }) => {
   await page.getByRole("button", { name: /Ajouter les lignes au tracker|Add rows to tracker/ }).click();
   await expect(page.getByRole("button", { name: /Ajouté|Added/ })).toBeDisabled();
 
-  await page.getByRole("button", { name: "EN" }).click();
+  await page.getByRole("button", { name: "EN", exact: true }).click();
   await page.getByRole("link", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await expect(page.getByText(/LLM|Mistral/i)).toHaveCount(0);

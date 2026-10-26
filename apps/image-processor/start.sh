@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# image-processor local launcher: PaddleOCR on Python 3.13 and LaMa on 3.11.
+# image-processor local launcher: PaddleOCR and LaMa on Python 3.11.
 
 set -euo pipefail
 
@@ -14,13 +14,13 @@ echo "============================================================"
 echo " image-processor - Local launch"
 echo "============================================================"
 
-if command -v python3.13 >/dev/null 2>&1; then
-    MAIN_BASE_PYTHON="$(command -v python3.13)"
+if command -v python3.11 >/dev/null 2>&1; then
+    MAIN_BASE_PYTHON="$(command -v python3.11)"
 elif command -v python3 >/dev/null 2>&1 && \
-    python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 13))'; then
+    python3 -c 'import sys; raise SystemExit(sys.version_info[:2] != (3, 11))'; then
     MAIN_BASE_PYTHON="$(command -v python3)"
 else
-    echo "[error] Python 3.13 is required for PaddleOCR."
+    echo "[error] Python 3.11 is required for PaddleOCR."
     exit 1
 fi
 
@@ -36,10 +36,15 @@ fi
 cd "${BACKEND_DIR}"
 mkdir -p data/storage
 if [[ ! -x .venv/bin/python ]]; then
-    echo "[setup] Creating Python 3.13 OCR environment..."
+    echo "[setup] Creating Python 3.11 OCR environment..."
     "${MAIN_BASE_PYTHON}" -m venv .venv
 fi
 MAIN_PYTHON="${BACKEND_DIR}/.venv/bin/python"
+if ! "${MAIN_PYTHON}" -c 'import sys; raise SystemExit(sys.version_info[:2] != (3, 11))'; then
+    echo "[error] Existing OCR environment is not Python 3.11."
+    echo "[info] Remove backend/.venv and relaunch to recreate it."
+    exit 1
+fi
 if [[ ! -f .venv/.image-processor-installed ]]; then
     echo "[setup] Installing PaddleOCR backend dependencies..."
     "${MAIN_PYTHON}" -m pip install --upgrade pip setuptools wheel

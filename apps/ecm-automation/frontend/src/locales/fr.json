@@ -8,7 +8,12 @@
   },
   "nav": {
     "home": "Accueil",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "ariaLabel": "Navigation principale",
+    "themeToggle": "Changer de thème",
+    "languageSwitcher": "Langue",
+    "collapse": "Replier le menu",
+    "expand": "Déplier le menu"
   },
   "home": {
     "title": "Préparer les ECM",
