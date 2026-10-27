@@ -1,6 +1,6 @@
 {
   "preliminary": {
-    "title": "Revoir les exigences préliminaires",
+    "title": "Revoir le DM de procédure",
     "localOnly": "Wizard strictement local : aucun contenu transmis à un service d'IA. Les règles proposent ; vous décidez.",
     "progress": "Procédure {{current}} sur {{total}}",
     "procedure": "Procédure",
@@ -29,15 +29,20 @@
     "page": "Page source {{page}}",
     "readingPage": "Page de lecture {{page}}",
     "pdfPage": "Page PDF source {{page}}",
-    "pdfHelp": "Défilez librement entre les pages PDF et les extraits structurés. Les numéros correspondent au document original, avant découpe.",
+    "pdfHelp": "Défilez dans le PDF original. « Voir la source » surligne le passage directement dans la page. Les numéros correspondent au document avant découpe.",
     "wordHelp": "Pagination de lecture du texte Word extrait, et non pagination du document original.",
     "loading": "Chargement des pages…",
     "readerError": "Impossible de charger le lecteur",
     "imageError": "Impossible de charger l'image source.",
     "anchorError": "Impossible de localiser les passages dans le PDF",
-    "textAnchorOnly": "Aucun emplacement PDF exact n'a été retrouvé. Le passage est surligné dans l'extrait texte ci-dessous ; la position sur l'image reste à vérifier.",
+    "missingPdfAnchor": "Le passage n'a pas pu être localisé précisément sur cette page PDF. Vérifiez sa position dans le document ; aucun surlignage approximatif n'est affiché.",
+    "sourcePageUnavailable": "La page PDF de ce passage n'est pas déterminée ou n'est pas disponible dans ce DM.",
+    "noPdfPages": "Aucune page PDF disponible pour ce DM.",
     "noPassages": "Aucun passage exploitable détecté. Vérifiez tout de même la source avant de confirmer l'absence d'exigences.",
     "proposed": "Proposition : {{category}}",
+    "proposedPending": "{{category}} — à confirmer",
+    "confirmationHelp": "Les catégories proposées attendent votre confirmation. Les compteurs et les filtres par catégorie portent uniquement sur les décisions confirmées.",
+    "structureHelp": "{{count}} titre(s), repère(s), légende(s) ou en-tête(s) conservé(s) dans la source, hors classement des exigences. Les chiffres techniques et les lignes de données restent à examiner.",
     "destination": "Décision de classement",
     "accept": "Accepter la proposition",
     "editSplit": "Corriger ou scinder le passage",
@@ -47,7 +52,7 @@
     "splitPosition": "Position de scission",
     "split": "Scinder le passage source",
     "status": {
-      "pending": "À vérifier",
+      "pending": "Revue en cours",
       "reviewed": "Vérifié",
       "stale": "Revue obsolète"
     },
@@ -58,9 +63,11 @@
       "supplies": "Consommables",
       "spares": "Pièces de rechange",
       "safety": "Sécurité",
+      "common": "Informations générales",
+      "closing": "Conditions de clôture",
       "body": "Reste dans la procédure",
       "discard": "Écarté explicitement",
-      "review": "À vérifier",
+      "review": "À trancher",
       "all": "Tous les passages",
       "pending": "Sans décision"
     },
@@ -68,7 +75,13 @@
       "keywords": "Repérage par mots-clés locaux",
       "heading": "Repérage par titre de section",
       "multiple": "Plusieurs catégories possibles ; scission à envisager",
-      "unmatched": "Aucune règle correspondante ; décision humaine requise"
+      "unmatched": "Aucun contexte concluant ; décision humaine requise",
+      "main": "Contenu de la procédure : conserver l'action ou l'avertissement avec son étape",
+      "closing": "Contenu d'une section de clôture ; confirmer l'état final requis",
+      "common": "Informations générales de la procédure",
+      "action": "Action opératoire, et non simple mention d'une ressource",
+      "structure": "Structure éditoriale de la source, pas une exigence",
+      "admonition": "Avertissement général repéré hors des étapes opératoires"
     }
   },
   "app": {
@@ -291,7 +304,7 @@
       "split": "Découpage",
       "type": "Types",
       "structure": "Structure",
-      "preliminary": "Exigences préliminaires",
+      "preliminary": "Revue de la procédure",
       "generate": "Génération"
     },
     "dm": {

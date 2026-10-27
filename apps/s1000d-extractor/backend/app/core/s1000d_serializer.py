@@ -28,6 +28,9 @@ from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
 from app.core.ir import InlineRun, IRNode
 from app.core.pmc import parse_dmc
+from app.core.procedure_semantics import EXTRA_DESTINATIONS, heading_scope, heading_text, resource_rows
+from app.core.procedure_structure import common_information_nodes, procedure_steps
+from app.core.procedure_structure import is_numbered_procedure_group as _is_numbered_procedure_group
 from app.core.s1000d_codes import emphasis_code_for_style, get_code
 from app.core.s1000d_ids import normalize_dm_ids
 from app.core.xsd_model import ConstraintReport, load_xsd_model
@@ -132,20 +135,6 @@ _TABLE_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 _SECTION_LABEL_RE = re.compile(r"^\s*(\d+(?:[.\-]\d+)*)\b")
-_PROCEDURE_REQUIREMENT_HEADINGS = {
-    "conditions": re.compile(
-        r"\b(?:preconditions?|prerequisites?|required conditions?|"
-        r"conditions? (?:prealables?|requises?|a respecter))\b"
-    ),
-    "personnel": re.compile(r"\b(?:required personnel|personnel(?: requis| necessaire)?|manpower)\b"),
-    "support": re.compile(
-        r"\b(?:support equipment|special tools?|tools?|tooling|outillage|"
-        r"outils?(?: necessaires?| requis?)?)\b"
-    ),
-    "supplies": re.compile(r"\b(?:supplies|consumables?|fournitures?|consommables?)\b"),
-    "spares": re.compile(r"\b(?:spares?|spare parts|pieces? (?:de )?rechange)\b"),
-    "safety": re.compile(r"\b(?:safety(?: requirements?)?|security requirements?|securite|precautions?)\b"),
-}
 
 
 def _normalize_dm_type(dm_type: str) -> str:
@@ -153,11 +142,6 @@ def _normalize_dm_type(dm_type: str) -> str:
     if normalized is None:
         raise ValueError(f"Type de DM non pris en charge par le generateur XSD : {dm_type}.")
     return normalized
-_PRELIMINARY_CONTAINER_TITLES = {
-    "preliminary requirements",
-    "preliminary requisites",
-    "exigences preliminaires",
-}
 _NO_REQUIREMENT_RE = re.compile(
     r"^(?:no\b|none\b|not required\b|not applicable\b|"
     r"aucun(?:e|s|es)?\b|pas de\b|sans\b)"
@@ -1045,24 +1029,17 @@ def _normalized_requirement_heading(value: str) -> str:
 def _procedure_requirement_category(node: IRNode) -> str | None:
     if node.kind != "section":
         return None
-    heading = _normalized_requirement_heading(node.text)
-    for category, pattern in _PROCEDURE_REQUIREMENT_HEADINGS.items():
-        if pattern.search(heading):
-            return category
-    return None
+    phase, category = heading_scope(node.text)
+    return category if phase == "preliminary" else None
 
 
 def _is_preliminary_container(node: IRNode) -> bool:
-    return _normalized_requirement_heading(node.text) in _PRELIMINARY_CONTAINER_TITLES
+    phase, category = heading_scope(node.text)
+    return phase == "preliminary" and category is None
 
 
 def _requirement_texts(sections: Sequence[IRNode]) -> list[str]:
-    texts: list[str] = []
-    for section in sections:
-        for node in section.walk()[1:]:
-            if node.kind in {"paragraph", "item"} and node.text.strip():
-                texts.append(node.text.strip())
-    return texts
+    return [row.text for row in resource_rows(sections)]
 
 
 def _explicitly_no_requirement(text: str) -> bool:
@@ -1087,6 +1064,10 @@ def _partition_preliminary_sections(
     requirements: dict[str, list[IRNode]] = {}
 
     for child in children:
+        phase, _category = heading_scope(child.text) if child.kind == "section" else ("unknown", None)
+        if phase in EXTRA_DESTINATIONS:
+            requirements.setdefault(phase, []).append(child)
+            continue
         category = _procedure_requirement_category(child)
         if category == "safety" and not _is_classified_safety_section(child):
             category = None
@@ -1127,18 +1108,17 @@ def _emit_personnel_requirements(
     parent: etree._Element,
     sections: Sequence[IRNode],
 ) -> None:
-    texts = [
-        text for text in _requirement_texts(sections)
-        if not _explicitly_no_requirement(text)
-    ]
-    if not texts:
+    people = [row for row in resource_rows(sections) if not _explicitly_no_requirement(row.text)]
+    if not people:
         return
 
     required_persons = etree.SubElement(parent, "reqPersons")
-    for text in texts:
+    for person in people:
         personnel = etree.SubElement(required_persons, "personnel")
+        if person.quantity and re.fullmatch(r"\d+", person.quantity):
+            personnel.set("numRequired", person.quantity)
         trade = etree.SubElement(personnel, "trade")
-        trade.text = xml_text(text)
+        trade.text = xml_text(person.text)
 
 
 def _emit_material_requirements(
@@ -1151,23 +1131,29 @@ def _emit_material_requirements(
     sections: Sequence[IRNode],
 ) -> None:
     container = etree.SubElement(parent, container_tag)
-    texts = _requirement_texts(sections)
-    materials = [text for text in texts if not _explicitly_no_requirement(text)]
+    materials = [row for row in resource_rows(sections) if not _explicitly_no_requirement(row.text)]
     if not materials:
         etree.SubElement(container, no_tag)
         return
 
     group = etree.SubElement(container, group_tag)
-    for text in materials:
+    for material in materials:
         item = etree.SubElement(group, item_tag)
         name = etree.SubElement(item, "name")
-        name.text = xml_text(text)
-        item.append(_comment("A REMPLACER: code fabricant, quantite et unite de mesure."))
+        name.text = xml_text(material.name)
+        if not all((material.manufacturer, material.quantity, material.unit)):
+            item.append(_comment("A REMPLACER: champs fabricant, quantite ou unite absents de la source."))
         ident_number = etree.SubElement(item, "identNumber")
         manufacturer = etree.SubElement(ident_number, "manufacturerCode")
-        manufacturer.text = "A REMPLACER"
-        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure="A REMPLACER")
-        quantity.text = "A REMPLACER"
+        manufacturer.text = xml_text(material.manufacturer or "A REMPLACER")
+        if material.part_number:
+            part = etree.SubElement(ident_number, "partAndSerialNumber")
+            etree.SubElement(part, "partNumber").text = xml_text(material.part_number)
+        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure=xml_text(material.unit or "A REMPLACER"))
+        quantity.text = xml_text(material.quantity or "A REMPLACER")
+        if material.remarks:
+            remarks = etree.SubElement(item, "remarks")
+            etree.SubElement(remarks, "simplePara").text = xml_text(material.remarks)
 
 
 def _emit_safety_requirements(
@@ -1217,21 +1203,6 @@ def _emit_preliminary_requirements(
     current_dm_id: str,
 ) -> None:
     preliminary = etree.SubElement(parent, "preliminaryRqmts")
-    production = etree.SubElement(preliminary, "productionMaintData")
-    threshold = etree.SubElement(
-        production,
-        "thresholdInterval",
-        thresholdUnitOfMeasure="th02",
-    )
-    threshold.text = "1"
-    etree.SubElement(
-        production,
-        "taskDuration",
-        closeupDuration="0",
-        procedureDuration="4",
-        startupDuration="0",
-        unitOfMeasure="h",
-    )
     _emit_condition_requirements(preliminary, requirements.get("conditions", []))
     _emit_personnel_requirements(preliminary, requirements.get("personnel", []))
     _emit_material_requirements(
@@ -1332,21 +1303,6 @@ def _has_figure_after_procedural_step(children: Sequence[IRNode]) -> bool:
         elif child.kind == "item-sequence" and _top_element(child, "randomList") == "proceduralStep":
             has_step = True
     return False
-
-
-def _is_numbered_procedure_group(node: IRNode) -> bool:
-    if node.kind != "section" or node.text or node.context != "procedural":
-        return False
-    if len(node.children) != 2:
-        return False
-    introduction, sequence = node.children
-    return (
-        introduction.kind == "paragraph"
-        and introduction.text.rstrip().endswith(":")
-        and sequence.kind == "item-sequence"
-        and sequence.form == "ordered"
-        and bool(sequence.children)
-    )
 
 
 def _has_numbered_procedure_group(children: Sequence[IRNode]) -> bool:
@@ -1531,7 +1487,7 @@ def _emit_node(
             )
             if node.text:
                 title = etree.SubElement(procedure_step, "title")
-                title.text = clean_title(node.text)
+                title.text = heading_text(node.text)
             _emit_procedural_step_children(
                 procedure_step,
                 node.children,
@@ -1546,7 +1502,7 @@ def _emit_node(
         sect = etree.SubElement(parent, top, id=f"par-{counters['section']:04d}")
         if node.text:
             title = etree.SubElement(sect, "title")
-            title.text = clean_title(node.text)
+            title.text = heading_text(node.text) if top == "proceduralStep" else clean_title(node.text)
         _emit_children(
             sect,
             node.children,
@@ -1573,6 +1529,14 @@ def _build_content(
             main_children, requirements = root.children, root.reviewed_requirements
         else:
             main_children, requirements = _partition_preliminary_sections(root.children)
+        if requirements.get("common"):
+            common = etree.SubElement(proc, "commonInfo")
+            for section in requirements["common"]:
+                paragraph = etree.SubElement(common, "commonInfoDescrPara")
+                _emit_children(
+                    paragraph, common_information_nodes(section.children), counters,
+                    reference_index=reference_index, current_dm_id=current_dm_id,
+                )
         _emit_preliminary_requirements(
             proc,
             requirements,
@@ -1582,7 +1546,7 @@ def _build_content(
         main = etree.SubElement(proc, "mainProcedure")
         _emit_children(
             main,
-            main_children,
+            procedure_steps(main_children),
             counters,
             reference_index=reference_index,
             current_dm_id=current_dm_id,
@@ -1602,7 +1566,7 @@ def _build_content(
                 "Etape de procedure a completer a partir de la source."
             )
         close = etree.SubElement(proc, "closeRqmts")
-        _emit_no_req_cond_group(close)
+        _emit_condition_requirements(close, requirements.get("closing", []))
     elif dm_type == "ipd":
         etree.SubElement(content, "illustratedPartsCatalog")
     else:

@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.core.ir import IRNode, from_dict, to_dict
-from app.core.preliminary_detection import CATEGORIES
+from app.core.preliminary_detection import CATEGORIES, is_reviewable
 from app.core.preliminary_review import load, require_complete
+from app.core.procedure_semantics import EXTRA_DESTINATIONS, heading_scope, table_heading
 from app.db.models import Document
 
 
@@ -26,15 +27,32 @@ def reviewed_root(doc: Document, dm: dict, root: IRNode) -> IRNode:
     copy = from_dict(to_dict(root))
     nodes = {node.id: node for node in copy.walk()}
     grouped: dict[tuple[str, int | None], list[dict]] = {}
-    requirements: dict[str, list[IRNode]] = {key: [] for key in CATEGORIES}
+    requirements: dict[str, list[IRNode]] = {key: [] for key in (*CATEGORIES, *EXTRA_DESTINATIONS)}
+    structural = {
+        passage["node_id"]: passage["role"]
+        for passage in review["passages"]
+        if not is_reviewable(passage) and passage["row"] is None
+    }
     for passage in review["passages"]:
+        if not is_reviewable(passage):
+            continue
         grouped.setdefault((passage["node_id"], passage["row"]), []).append(passage)
-        if passage["decision"] in CATEGORIES:
+        if passage["decision"] in requirements:
             original = nodes.get(passage["node_id"])
             content = IRNode(
                 id=f"review-{passage['id']}", kind="paragraph", text=passage["text"].strip(),
             )
-            if original and original.kind == "admonition" and passage["decision"] == "safety":
+            if original and passage["row"] is not None:
+                row = original.table_rows[passage["row"]]
+                header = table_heading({
+                    "table_header": original.table_header, "table_rows": original.table_rows,
+                })
+                cells = row if passage["text"] == passage["source_text"] else passage["text"].split(" | ")
+                if passage["source_text"] == " | ".join(row) and (not header or len(cells) == len(header)):
+                    content = IRNode(
+                        id=content.id, kind="table", table_rows=[cells], table_header=header,
+                    )
+            if original and original.kind == "admonition" and passage["decision"] in {"safety", "common"}:
                 content.kind = "admonition"
                 content.admonition = original.admonition or "warning"
             requirements[passage["decision"]].append(IRNode(
@@ -48,10 +66,16 @@ def reviewed_root(doc: Document, dm: dict, root: IRNode) -> IRNode:
         )
 
     def prune(node: IRNode, *, is_root: bool = False) -> list[IRNode]:
+        had_children = bool(node.children)
         node.children = [item for child in node.children for item in prune(child)]
+        if structural.get(node.id) in {"marker", "layout"}:
+            return []
         if node.table_rows:
+            header = table_heading({"table_header": node.table_header, "table_rows": node.table_rows})
             rows = []
             for index, row in enumerate(node.table_rows):
+                if index == 0 and row == header:
+                    continue
                 parts = grouped.get((node.id, index))
                 if not parts:
                     rows.append(row)
@@ -61,6 +85,7 @@ def reviewed_root(doc: Document, dm: dict, root: IRNode) -> IRNode:
                 elif any(part["decision"] == "body" for part in parts):
                     rows.append([body(parts)])
             node.table_rows = rows
+            node.table_header = header or None
             if not rows:
                 return node.children
         parts = grouped.get((node.id, None))
@@ -71,6 +96,10 @@ def reviewed_root(doc: Document, dm: dict, root: IRNode) -> IRNode:
                 node.inline_runs = []
                 node.refs = None
             if not text.strip() and node.kind != "figure":
+                return node.children
+        if not is_root and node.kind == "section":
+            phase, _category = heading_scope(node.text)
+            if phase in {"preliminary", "closing", "common"} or (had_children and not node.children):
                 return node.children
         if not is_root and not node.text.strip() and not node.children and node.kind not in {"table", "figure"}:
             return []

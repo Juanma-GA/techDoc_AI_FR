@@ -23,6 +23,9 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
   const base = { dm_id: dmId, passage_id: passage.id };
   const decide = (destination: ReviewAction["destination"]) =>
     onAction({ ...base, op: "decide", destination });
+  const pendingLabel = passage.suggested === "review"
+    ? t("preliminary.category.review")
+    : t("preliminary.proposedPending", { category: t(`preliminary.category.${passage.suggested}`) });
   return (
     <article className={`rounded-sm border p-3 space-y-3 ${selected ? "border-bright bg-bg-3" : "bg-card"}`}>
       <Button variant="ghost" size="sm" onClick={onSelect} aria-pressed={selected}>
@@ -40,7 +43,7 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
           value={passage.decision ?? ""}
           disabled={disabled}
           options={[
-            { value: "", label: t("preliminary.category.review") },
+            { value: "", label: pendingLabel },
             ...reviewDestinations.map((value) => ({ value, label: t(`preliminary.category.${value}`) })),
           ]}
           onChange={(event) => {

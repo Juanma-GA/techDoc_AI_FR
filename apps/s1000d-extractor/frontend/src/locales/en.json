@@ -1,6 +1,6 @@
 {
   "preliminary": {
-    "title": "Review preliminary requirements",
+    "title": "Review the procedural DM",
     "localOnly": "Strictly local wizard: no content sent to an AI service. Rules propose; you decide.",
     "progress": "Procedure {{current}} of {{total}}",
     "procedure": "Procedure",
@@ -29,15 +29,20 @@
     "page": "Source page {{page}}",
     "readingPage": "Reading page {{page}}",
     "pdfPage": "Source PDF page {{page}}",
-    "pdfHelp": "Scroll freely through PDF pages and structured excerpts. Page numbers refer to the original document, before cutting.",
+    "pdfHelp": "Scroll through the original PDF. “Show source” highlights the passage directly on the page. Page numbers refer to the document before cutting.",
     "wordHelp": "Reading pagination of extracted Word text, not the original document's pagination.",
     "loading": "Loading pages…",
     "readerError": "Unable to load the reader",
     "imageError": "Unable to load the source image.",
     "anchorError": "Unable to locate passages in the PDF",
-    "textAnchorOnly": "No exact PDF position was found. The text excerpt below is highlighted; its position on the image still needs checking.",
+    "missingPdfAnchor": "The passage could not be located precisely on this PDF page. Check its position in the document; no approximate highlight is shown.",
+    "sourcePageUnavailable": "The PDF page for this passage is unknown or unavailable in this DM.",
+    "noPdfPages": "No PDF pages available for this DM.",
     "noPassages": "No usable passage detected. Check the source before confirming that no requirements exist.",
     "proposed": "Proposed: {{category}}",
+    "proposedPending": "{{category}} — awaiting confirmation",
+    "confirmationHelp": "Proposed categories await your confirmation. Counts and category filters include confirmed decisions only.",
+    "structureHelp": "{{count}} heading(s), marker(s), caption(s) or table header(s) retained in the source, outside requirement classification. Technical numbers and data rows still need review.",
     "destination": "Classification decision",
     "accept": "Accept proposal",
     "editSplit": "Edit or split passage",
@@ -47,7 +52,7 @@
     "splitPosition": "Split position",
     "split": "Split source passage",
     "status": {
-      "pending": "To review",
+      "pending": "Review in progress",
       "reviewed": "Reviewed",
       "stale": "Outdated review"
     },
@@ -58,9 +63,11 @@
       "supplies": "Consumables",
       "spares": "Spare parts",
       "safety": "Safety",
+      "common": "Common information",
+      "closing": "Closing conditions",
       "body": "Keep in procedure",
       "discard": "Explicitly discarded",
-      "review": "To review",
+      "review": "Decision needed",
       "all": "All passages",
       "pending": "Without a decision"
     },
@@ -68,7 +75,13 @@
       "keywords": "Local keyword rule",
       "heading": "Section heading rule",
       "multiple": "Several possible categories; consider splitting",
-      "unmatched": "No matching rule; human decision required"
+      "unmatched": "No conclusive context; human decision required",
+      "main": "Procedure content: keep the action or warning with its step",
+      "closing": "Closing section content; confirm the required final condition",
+      "common": "General information about the procedure",
+      "action": "An operating action, not merely a resource mention",
+      "structure": "Editorial source structure, not a requirement",
+      "admonition": "General warning identified outside operating steps"
     }
   },
   "app": {
@@ -291,7 +304,7 @@
       "split": "Split",
       "type": "Types",
       "structure": "Structure",
-      "preliminary": "Preliminary requirements",
+      "preliminary": "Procedure review",
       "generate": "Generation"
     },
     "dm": {

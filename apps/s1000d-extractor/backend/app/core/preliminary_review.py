@@ -19,7 +19,8 @@ from app.core.wizard_split import load_dms
 from app.db.models import Document
 
 Destination = Literal[
-    "conditions", "personnel", "support", "supplies", "spares", "safety", "body", "discard",
+    "conditions", "personnel", "support", "supplies", "spares", "safety",
+    "common", "closing", "body", "discard",
 ]
 
 
@@ -133,7 +134,8 @@ def require_complete(doc: Document, dm_id: str | None = None) -> None:
         if dm_id is not None and key != dm_id:
             continue
         if review["status"] != "reviewed" or any(
-            item["decision"] not in detection.DESTINATIONS for item in review["passages"]
+            item["decision"] not in detection.DESTINATIONS
+            for item in review["passages"] if detection.is_reviewable(item)
         ):
             raise AppError(
                 "PRELIMINARY_REVIEW_REQUIRED",
@@ -162,6 +164,12 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
         item = next((p for p in review["passages"] if p["id"] == action.passage_id), None)
         if item is None:
             raise AppError("REVIEW_PASSAGE_NOT_FOUND", "Passage inconnu.", 404)
+        if not detection.is_reviewable(item):
+            raise AppError(
+                "REVIEW_STRUCTURE_ONLY",
+                "Ce titre, repere ou en-tete appartient a la structure source, pas aux exigences.",
+                422,
+            )
         if action.op == "decide":
             if action.text is not None and not action.text.strip():
                 raise AppError("REVIEW_TEXT_INVALID", "Le passage ne peut pas etre vide.", 422)
@@ -180,7 +188,9 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
             parts = []
             for start, end in ((0, at), (at, len(item["source_text"]))):
                 text = item["source_text"][start:end]
-                suggested, rule = detection.suggestion(text, None)
+                suggested, rule = detection.suggestion(
+                    text, item.get("category_hint"), item.get("phase", "unknown"), item.get("admonition"),
+                )
                 parts.append({
                     **item, "id": str(uuid4()), "start": item["start"] + start,
                     "end": item["start"] + end, "source_text": text, "text": text,
@@ -192,7 +202,8 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
         review["status"] = "pending"
     elif action.op == "complete":
         if not action.confirm_empty or any(
-            item["decision"] not in detection.DESTINATIONS for item in review["passages"]
+            item["decision"] not in detection.DESTINATIONS
+            for item in review["passages"] if detection.is_reviewable(item)
         ):
             raise AppError(
                 "REVIEW_UNDECIDED", "Decidez de chaque passage et confirmez la verification du DM entier.",

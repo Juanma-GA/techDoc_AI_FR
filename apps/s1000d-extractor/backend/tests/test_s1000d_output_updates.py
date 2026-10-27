@@ -91,18 +91,7 @@ def test_procedural_preliminary_data_and_all_content_ids_are_complete() -> None:
     document = _parse_dm(xml)
     preliminary = document.find("./content/procedure/preliminaryRqmts")
     assert preliminary is not None
-    assert preliminary.findtext("./productionMaintData/thresholdInterval") == "1"
-    assert preliminary.find("./productionMaintData/thresholdInterval").get(
-        "thresholdUnitOfMeasure"
-    ) == "th02"
-    task_duration = preliminary.find("./productionMaintData/taskDuration")
-    assert task_duration is not None
-    assert task_duration.attrib == {
-        "closeupDuration": "0",
-        "procedureDuration": "4",
-        "startupDuration": "0",
-        "unitOfMeasure": "h",
-    }
+    assert preliminary.find("./productionMaintData") is None
     assert [
         step.get("id")
         for step in document.findall("./content/procedure/mainProcedure/proceduralStep")
@@ -122,7 +111,7 @@ def test_procedural_preliminary_data_and_all_content_ids_are_complete() -> None:
         "infoEntityIdent"
     ) == "ICN-WEG-AA0004-00001-A-02"
     assert "\n  <identAndStatusSection>" in xml
-    assert "\n        <productionMaintData>" in xml
+    assert "\n        <reqCondGroup>" in xml
     errors = [
         violation for violation in validate_xsd(
             xml, "4.2", dm_type="procedural", allow_internal_dtd=True

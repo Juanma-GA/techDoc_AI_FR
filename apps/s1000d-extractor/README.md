@@ -18,7 +18,7 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Flag expected Data Modules that are missing from the source before the split, with a row-level exclusion action.
 - For Issue 4.1, use `S1000D_4.1_info_codes.xlsx` as the InfoCode-to-schema reference; DMRL type conflicts require an explicit user choice before splitting. If the InfoCode is missing or unmapped and the DMRL has no type, default to descriptive; unsupported schemas remain flagged for manual selection. Only descriptive, procedural, and IPD types are generated.
 - Generate data-module and publication-module skeletons.
-- Assign content IDs locally per DM, emit indented XML, and include default production-maintenance data in procedural preliminary requirements.
+- Assign content IDs locally per DM and emit indented XML. Do not invent procedural maintenance intervals or task durations when source-backed structured values are unavailable.
 - Download the PMC as `PMC-<source-name>.xml` and emit DMC components as `dmCode` attributes.
 - Configure the maximum exported image dimension and choose original, JPEG, or PNG format; ZIP pictograms are kept in `pictograms/` and are not emitted as DM figures.
 - Build issue/type-specific content models from the local XSDs and constrain generated elements, order, cardinality, attributes, and values.
@@ -76,7 +76,7 @@ SQLite stores projects, source metadata, intermediate structures, mappings, outp
 ## Procedural Review
 
 The migration wizard now requires explicit type and structure confirmation. Only
-procedural DMs then enter **Review preliminary requirements**, before generation.
+procedural DMs then enter **Review the procedural DM**, before generation.
 **Resume** restores the saved step without automatically advancing it.
 
 - The entire wizard is deterministic and local, including initial DM typing.
@@ -86,23 +86,41 @@ procedural DMs then enter **Review preliminary requirements**, before generation
 - PDF pages requiring OCR are rejected explicitly in the local wizard, including
   mixed text/scanned PDFs; no scanned page is silently skipped. Supply a PDF
   whose OCR was performed locally. Truly blank pages do not require OCR.
-- Keyword and inherited-heading rules inspect extracted headings, paragraphs,
-  list items, admonitions, captions and individual table rows. Every extracted
-  text passage needs an explicit decision, including unmatched passages. Rule
-  explanations and original source text remain visible.
+- Source roles distinguish editorial headings, chapter markers, captions,
+  layout noise and table headers from requirement content. These source anchors
+  remain available to the reader but do not become resource names or decisions
+  to confirm. Bare numeric text is not discarded merely for looking like a
+  number: technical quantities, measurements and references remain reviewable.
+- Context takes precedence over isolated keywords. Requirement section headings
+  scope their content; an action mentioning a tool, spare or lubricant is not
+  automatically moved out of the main procedure. Warnings/cautions belonging
+  to operating steps stay with those steps, rather than becoming general safety
+  requirements. Unmatched content still needs an explicit decision.
+  Rule explanations and original source text remain visible in the proposal panel.
+  Clear suggestions show their category as awaiting confirmation; only
+  ambiguous suggestions show "Decision needed". Neither label records a human
+  decision automatically.
 - Classify into conditions, personnel, equipment/tools, consumables, spares or
-  safety; alternatively keep a passage in the procedure or explicitly discard
-  it. Corrected text autosaves after a short pause. Split an unedited passage at
-  a character boundary to classify its parts independently.
+  safety; alternatively select common information, closing conditions, procedure
+  body or explicit discard. Common information precedes preliminary requirements;
+  closing conditions populate `closeRqmts`, independently of initial conditions.
+  Resource tables preserve recognized names, part numbers, manufacturer codes,
+  quantities and units; additional columns remain remarks instead of disappearing.
+  Missing required resource fields remain explicitly provisional, never inferred.
+  Corrected text autosaves after a short pause. Split an unedited passage at a
+  character boundary to classify its parts independently; its section context
+  is retained.
 - The PDF reader scrolls continuously, lazily loading page images and anchors.
   It uses original page numbers, including after PDF cutting. Exact text matches
-  are highlighted on the image; unavailable image anchors are explicitly flagged
-  and the extracted-text highlight remains available. Repeated matching text can
-  highlight multiple locations and still needs human checking.
+  are highlighted on the image when "Show source" is selected. The PDF reader
+  never duplicates page content as extracted text, even when a page image or
+  anchor fails to load. Unavailable image anchors and unknown source pages are
+  explicitly flagged instead. Repeated matching text can highlight multiple
+  locations and still needs human checking.
 - Word uses extracted structure with approximate reading pagination, **not**
   original Word page numbers. Tables, lists and warning blocks remain
   distinguishable.
-- A procedure is reviewed only after all passages have decisions **and** the
+- A procedure is reviewed only after all content passages have decisions **and** the
   reviewer confirms checking the whole DM, including empty categories. No
   detection is not equivalent to a verified absence.
 - Decisions, corrections, split source ranges, current procedure, selected
@@ -115,6 +133,9 @@ procedural DMs then enter **Review preliminary requirements**, before generation
   prevent unnoticed stale reviews or concurrent-tab overwrites. An obsolete
   review must be restarted explicitly, with double-click confirmation. Going
   back without changing the source preserves decisions.
+  The procedural-rule version participates in the fingerprint: reviews made
+  before the source-role/context change become stale and require an explicit
+  restart, without silently migrating or discarding their saved decisions.
 - Human decisions, not heading heuristics, drive reviewed procedural XML in both
   individual and ZIP exports. The original source tree is not rewritten.
   BREX-guided mapping choices remain persisted. Incomplete/stale procedural
@@ -128,7 +149,18 @@ after updating; no migration of an existing user database is performed by tests.
 Existing generated procedural wizard documents without a review are returned to
 the review step when resumed.
 
-Synthetic reference procedures cover all six requirement categories, splitting,
+The implementation targets the bundled official Issue 4.1/4.2 `proced.xsd`
+content models: optional common information, preliminary requirements, nested
+operating steps and closing conditions. See the [official S1000D download portal](https://users.s1000d.org/Default.aspx)
+for the specification and its terms. XSD validity alone is not proof of correct
+technical authoring or project BREX compliance. Section recognition remains
+deterministic FR/EN heuristics, not semantic understanding of arbitrary manuals.
+No default `productionMaintData` block, maintenance threshold or four-hour task
+duration is generated without source-backed structured input. The current review
+does not provide a structured maintenance-duration editor.
+
+Synthetic reference procedures cover all six requirement categories, source
+roles, common/closing information, local warning placement, structured resources, splitting,
 source offsets, omissions among extracted passages, resume, concurrent saves and
 Issue 4.1/4.2 XML/ZIP consistency. These are engineering checks, **not** measured
 precision/recall or review-time guarantees on real manuals. User trials still

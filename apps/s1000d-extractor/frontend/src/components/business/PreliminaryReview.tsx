@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { WizardDm } from "../../lib/api";
-import { requirementCategories, type PreliminaryState } from "../../lib/preliminaryTypes";
+import { isReviewable, procedureCategories, reviewDestinations, type PreliminaryState } from "../../lib/preliminaryTypes";
 import { usePreliminaryReview } from "../../lib/usePreliminaryReview";
 import { PreliminaryPassage } from "./PreliminaryPassage";
 import { ProcedureReader } from "./ProcedureReader";
@@ -41,7 +41,8 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   const index = procedures.findIndex((dm) => dm.dm_id === active);
   const disabled = busy || review.saving || Boolean(review.error);
   const stale = current.status === "stale";
-  const undecided = current.passages.filter((item) => !item.decision).length;
+  const passages = current.passages.filter(isReviewable);
+  const undecided = passages.filter((item) => !item.decision).length;
   const complete = Object.values(review.state.reviews).every((item) => item.status === "reviewed");
 
   const changeProcedure = async (id: string) => {
@@ -127,9 +128,11 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
         ) : (
           <>
             <div className="flex flex-wrap gap-3 text-sm text-fg-dim">
-              {requirementCategories.map((category) => (
+              <p className="w-full">{t("preliminary.confirmationHelp")}</p>
+              <p className="w-full">{t("preliminary.structureHelp", { count: current.passages.length - passages.length })}</p>
+              {procedureCategories.map((category) => (
                 <span key={category}>{t(`preliminary.category.${category}`)}:{" "}
-                  {current.passages.filter((p) => p.decision === category).length}</span>
+                  {passages.filter((p) => p.decision === category).length}</span>
               ))}
             </div>
             <div className="grid gap-4 lg:grid-cols-2 min-w-0">
@@ -140,13 +143,13 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                 <label className="block">
                   <span>{t("preliminary.filter")}</span>
                   <Select aria-label={t("preliminary.filter")} value={filter}
-                    options={["all", "pending", ...requirementCategories, "body", "discard"].map((value) => ({
+                    options={["all", "pending", ...reviewDestinations].map((value) => ({
                       value, label: t(`preliminary.category.${value}`),
                     }))} onChange={(event) => setFilter(event.target.value)} />
                 </label>
-                <p>{t("preliminary.remaining", { count: undecided, total: current.passages.length })}</p>
+                <p>{t("preliminary.remaining", { count: undecided, total: passages.length })}</p>
                 <div className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
-                  {current.passages.filter((p) => filter === "all" || (filter === "pending" ? !p.decision : p.decision === filter))
+                  {passages.filter((p) => filter === "all" || (filter === "pending" ? !p.decision : p.decision === filter))
                     .map((passage) => (
                       <PreliminaryPassage key={passage.id} dmId={active} passage={passage}
                         text={review.edits[passage.id] ?? passage.text}
@@ -158,7 +161,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                           return saved;
                         }} onEdit={review.edit} />
                     ))}
-                  {!current.passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
+                  {!passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
                 </div>
                 <div className="flex gap-3 items-start">
                   <Checkbox checked={confirmed} disabled={disabled}

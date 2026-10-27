@@ -77,6 +77,8 @@ def complete_preliminary(client):
         preliminary = state["preliminary"]
         for dm_id, procedure in preliminary["reviews"].items():
             for passage in procedure["passages"]:
+                if passage.get("role", "content") != "content":
+                    continue
                 response = client.post(
                     f"/api/v1/documents/{doc_id}/wizard/preliminary",
                     json={"revision": preliminary["revision"], "dm_id": dm_id,

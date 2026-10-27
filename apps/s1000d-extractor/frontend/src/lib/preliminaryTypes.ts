@@ -1,7 +1,8 @@
 export const requirementCategories = [
   "conditions", "personnel", "support", "supplies", "spares", "safety",
 ] as const;
-export const reviewDestinations = [...requirementCategories, "body", "discard"] as const;
+export const procedureCategories = [...requirementCategories, "common", "closing"] as const;
+export const reviewDestinations = [...procedureCategories, "body", "discard"] as const;
 export type ReviewDestination = (typeof reviewDestinations)[number];
 
 export type ReviewPassage = {
@@ -14,10 +15,16 @@ export type ReviewPassage = {
   text: string;
   page: number | null;
   kind: string;
+  role?: "content" | "heading" | "table-header" | "marker" | "layout" | "caption";
+  phase?: "unknown" | "preliminary" | "main" | "common" | "closing";
   suggested: ReviewDestination | "review";
-  rule: "keywords" | "heading" | "multiple" | "unmatched";
+  rule: "keywords" | "heading" | "multiple" | "unmatched" | "main" | "closing" | "common" | "action" | "structure" | "admonition";
   decision: ReviewDestination | null;
 };
+
+export function isReviewable(passage: ReviewPassage): boolean {
+  return passage.role === undefined || passage.role === "content";
+}
 
 export type ReaderPosition = {
   page: number;

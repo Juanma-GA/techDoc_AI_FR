@@ -63,11 +63,11 @@ function PdfSourcePage({ docId, dmId, page, passages, selectedId, container, jum
   });
   const boxes = selectedId ? anchors.data?.anchors[selectedId] ?? [] : [];
   useEffect(() => {
-    if (!jump || !selectedId || !anchors.data?.anchors[selectedId]?.length) return;
+    if (!jump || !selectedId || imageError || !anchors.data?.anchors[selectedId]?.length) return;
     element.current?.querySelector("[data-source-anchor]")?.scrollIntoView({
       behavior: "smooth", block: "center",
     });
-  }, [jump, selectedId, anchors.data]);
+  }, [jump, selectedId, imageError, anchors.data]);
   return (
     <div ref={element}>
       <div className="relative w-full bg-bg-2" style={{ aspectRatio: page.width / page.height }}>
@@ -76,11 +76,11 @@ function PdfSourcePage({ docId, dmId, page, passages, selectedId, container, jum
             src={`${pdfCutApi.previewUrl(docId, page.page)}?attempt=${attempt}`} loading="lazy"
             onError={() => setImageError(true)} />
         ) : null}
-        {boxes.map(([x0, y0, x1, y1], index) => (
-          <div key={index} data-source-anchor aria-hidden="true" className="absolute pointer-events-none border border-warning bg-warning opacity-20"
+        {!imageError ? boxes.map(([x0, y0, x1, y1], index) => (
+          <div key={index} data-source-anchor data-source-passage={selectedId} aria-hidden="true" className="absolute pointer-events-none border border-warning bg-warning opacity-20"
             style={{ left: `${x0 * 100}%`, top: `${y0 * 100}%`,
               width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` }} />
-        ))}
+        )) : null}
       </div>
       {imageError ? (
         <div role="alert" className="p-3 text-danger">
@@ -97,7 +97,7 @@ function PdfSourcePage({ docId, dmId, page, passages, selectedId, container, jum
         </div>
       ) : null}
       {selectedId && passages.some((p) => p.id === selectedId) && anchors.data && !boxes.length ? (
-        <p className="text-warning">{t("preliminary.textAnchorOnly")}</p>
+        <p role="status" className="text-warning">{t("preliminary.missingPdfAnchor")}</p>
       ) : null}
     </div>
   );
@@ -122,9 +122,12 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
     const page = passage.page ?? 0;
     grouped.set(page, [...(grouped.get(page) ?? []), passage]);
   }
-  const pageNumbers = [...new Set([...(manifest.data ?? []).map((p) => p.page), ...grouped.keys()])]
+  const pageNumbers = (pdf ? (manifest.data ?? []).map((page) => page.page) : [...grouped.keys()])
     .sort((a, b) => a - b);
   const ready = !pdf || manifest.isSuccess;
+  const selectedPassage = review.passages.find((passage) => passage.id === selectedId);
+  const sourcePageUnavailable = pdf && ready && selectedPassage
+    && !manifest.data?.some((page) => page.page === selectedPassage.page);
 
   useEffect(() => {
     if (!ready || restored.current || !container.current) return;
@@ -137,13 +140,19 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
 
   useEffect(() => {
     if (!jump || !selectedId || !ready || !container.current) return;
-    const target = Array.from(container.current.querySelectorAll<HTMLElement>("[data-passage]"))
-      .find((element) => element.dataset.passage === selectedId);
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
-    target?.focus({ preventScroll: true });
     const element = container.current;
+    const selectedPage = review.passages.find((passage) => passage.id === selectedId)?.page;
+    const page = Array.from(element.querySelectorAll<HTMLElement>("[data-page]"))
+      .find((entry) => Number(entry.dataset.page) === selectedPage);
+    const target = pdf
+      ? Array.from(element.querySelectorAll<HTMLElement>("[data-source-passage]"))
+        .find((entry) => entry.dataset.sourcePassage === selectedId) ?? page
+      : Array.from(element.querySelectorAll<HTMLElement>("[data-passage]"))
+        .find((entry) => entry.dataset.passage === selectedId);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    (pdf ? page ?? element : target)?.focus({ preventScroll: true });
     onPosition({
-      page: review.passages.find((p) => p.id === selectedId)?.page ?? initialPosition.current.page,
+      page: selectedPage ?? initialPosition.current.page,
       scroll_top: element.scrollTop, selected_id: selectedId,
     });
   // Autosave responses must not reposition reading.
@@ -170,6 +179,7 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
         </div>
       ) : null}
       {!ready && !manifest.error ? <p role="status">{t("preliminary.loading")}</p> : null}
+      {sourcePageUnavailable ? <p role="status" className="text-warning">{t("preliminary.sourcePageUnavailable")}</p> : null}
       <div ref={container} data-testid="procedure-reader" tabIndex={0} role="region"
         aria-label={t("preliminary.reader")} onScroll={capture}
         className="h-96 lg:h-[70vh] overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 p-3 space-y-4">
@@ -177,20 +187,22 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
           const items = grouped.get(pageNumber) ?? [];
           const page = manifest.data?.find((p) => p.page === pageNumber);
           return (
-            <section key={pageNumber} data-page={pageNumber || initialPosition.current.page} className="bg-card">
+            <section key={pageNumber} data-page={pageNumber || initialPosition.current.page}
+              tabIndex={pdf ? -1 : undefined} aria-label={t(pdf ? "preliminary.page" : "preliminary.readingPage", { page: pageNumber })}
+              className="bg-card">
               <h3 className="sticky top-0 z-10 bg-card border-b p-2 font-mono">
                 {pageNumber ? t(pdf ? "preliminary.page" : "preliminary.readingPage", { page: pageNumber })
                   : t("preliminary.unlocated")}
               </h3>
               {pdf && page ? <PdfSourcePage docId={docId} dmId={dmId} page={page}
                 passages={items} selectedId={selectedId} container={container} jump={jump} /> : null}
-              <div className="p-3">
+              {!pdf ? <div className="p-3">
                 {items.map((item) => <SourceExcerpt key={item.id} item={item} selected={item.id === selectedId} />)}
-              </div>
+              </div> : null}
             </section>
           );
         }) : null}
-        {ready && !review.passages.length ? <p>{t("preliminary.noPassages")}</p> : null}
+        {ready && !pageNumbers.length ? <p>{t(pdf ? "preliminary.noPdfPages" : "preliminary.noPassages")}</p> : null}
       </div>
     </section>
   );

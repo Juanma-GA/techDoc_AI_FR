@@ -77,6 +77,8 @@ def _action(client, doc_id, **kwargs):
 def _finish(client, doc_id):
     state = client.get(f"/api/v1/documents/{doc_id}/wizard").json()["preliminary"]
     for passage in state["reviews"]["proc"]["passages"]:
+        if passage.get("role", "content") != "content":
+            continue
         response = _action(
             client, doc_id, op="decide", passage_id=passage["id"],
             destination=passage["suggested"] if passage["suggested"] != "review" else "body",
@@ -98,9 +100,10 @@ def test_reference_rules_cover_all_categories_and_every_source_passage(procedure
     }
     assert [p["suggested"] for p in items] == [
         "conditions", "personnel", "support", "supplies", "spares", "safety",
-        "body", "support", "support",
+        "body", "body", "support",
     ]
     assert all(p["decision"] is None for p in items)
+    assert items[7]["role"] == "table-header"
     assert items[0]["page"] == 2  # Original PDF page, not cut-page number.
     assert all(p["source_text"] == p["text"] for p in items)
     assert all(p["end"] - p["start"] == len(p["source_text"]) for p in items)
