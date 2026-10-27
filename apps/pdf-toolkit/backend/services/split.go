@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	MaxSplitGroups       = 1000
+	MaxSplitGroups       = 5000
 	maxSplitNameRunes    = 150
 	defaultSplitBaseName = "document"
 )

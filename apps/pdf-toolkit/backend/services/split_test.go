@@ -40,12 +40,30 @@ func TestSplitExtractsEveryGroupWithUniqueNames(t *testing.T) {
 	}
 }
 
+func TestSplitAcceptsMaximumNumberOfGroups(t *testing.T) {
+	processor := &splitProcessor{fakeProcessor: fakeProcessor{pageCount: 1}}
+	service := NewPDFService(processor)
+	groups := make([]SplitGroup, MaxSplitGroups)
+	for index := range groups {
+		groups[index] = SplitGroup{Name: "document", Pages: "1"}
+	}
+
+	outputs, err := service.Split(context.Background(), "input.pdf", t.TempDir(), groups)
+	if err != nil {
+		t.Fatalf("Split() error = %v", err)
+	}
+	if len(outputs) != MaxSplitGroups || len(processor.extracted) != MaxSplitGroups {
+		t.Fatalf("Split() generated %d outputs and extracted %d groups, want %d", len(outputs), len(processor.extracted), MaxSplitGroups)
+	}
+}
+
 func TestSplitRejectsInvalidGroups(t *testing.T) {
 	service := NewPDFService(&splitProcessor{fakeProcessor: fakeProcessor{pageCount: 3}})
 	tests := map[string][]SplitGroup{
 		"no group":          nil,
 		"page out of range": {{Name: "a", Pages: "2-4"}},
 		"empty pages":       {{Name: "a", Pages: ""}},
+		"too many groups":   make([]SplitGroup, MaxSplitGroups+1),
 	}
 	for name, groups := range tests {
 		t.Run(name, func(t *testing.T) {

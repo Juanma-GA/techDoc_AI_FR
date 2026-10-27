@@ -107,8 +107,8 @@
     "simpleMode": "Mode de découpage",
     "rangesLabel": "Plages personnalisées",
     "rangesHelp": "Un PDF par plage, séparée par un point-virgule ou un retour à la ligne. Exemple : 1-4 ; 5-8 ; 9-12. Une virgule réunit des pages dans un même PDF : 1-3,5.",
-    "rangesInvalid": "Vérifiez les plages : pages existantes, bornes croissantes et au maximum 1000 documents.",
-    "simpleInvalid": "Saisissez un nombre entier positif et limitez l'export à 1000 documents.",
+    "rangesInvalid": "Vérifiez les plages : pages existantes, bornes croissantes et au maximum 5000 documents.",
+    "simpleInvalid": "Saisissez un nombre entier positif et limitez l'export à 5000 documents.",
     "simpleHelp": "Les fichiers sont numérotés : nom_01.pdf, nom_02.pdf…",
     "advancedNeedsFile": "Chargez d'abord un PDF à l'étape 01."
   }

@@ -181,7 +181,7 @@ Toutes les réponses de traitement réussies sont des téléchargements `applica
 | `POST` | `/api/v1/images-to-pdf` | `images` répété, PNG ou JPEG | `images.pdf` |
 | `POST` | `/api/v1/compress` | `file` | `compressed.pdf` |
 | `POST` | `/api/v1/extract` | `file`, `pages` | `extract.pdf` |
-| `POST` | `/api/v1/split` | `file`, `groups` (tableau JSON `[{name, pages}]`, 1000 maximum), `folder` (facultatif) | `<folder>.zip` contenant `<folder>/<name>.pdf` |
+| `POST` | `/api/v1/split` | `file`, `groups` (tableau JSON `[{name, pages}]`, 5000 maximum), `folder` (facultatif) | `<folder>.zip` contenant `<folder>/<name>.pdf` |
 | `POST` | `/api/v1/delete` | `file`, `pages` | `trimmed.pdf` |
 | `POST` | `/api/v1/reorder` | `file`, `order` (tableau JSON de pages 1-based) | `reordered.pdf` |
 | `POST` | `/api/v1/rotate` | `file`, `rotation` (90, 180 ou 270), `pages` (facultatif; vide pour toutes les pages) | `rotated.pdf` |
