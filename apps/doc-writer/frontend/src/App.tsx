@@ -1,5 +1,7 @@
 import {
   AppShell,
+  DemoModeBadge,
+  DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
   PortalLink,
@@ -11,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import { NavLink, Route, Routes } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
-import { authApi, type AuthSessionDto } from "./lib/api";
+import { authApi, settingsApi, type AuthSessionDto, type SettingsDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Documents } from "./routes/Documents";
 import { Generate } from "./routes/Generate";
@@ -24,7 +26,6 @@ const navItems = [
   { to: "/", labelKey: "nav.generate", icon: "home" },
   { to: "/documents", labelKey: "nav.documents", icon: "files" },
   { to: "/sessions", labelKey: "nav.sessions", icon: "chat" },
-  { to: "/data", labelKey: "nav.data", icon: "data" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
 ] as const;
 
@@ -44,6 +45,11 @@ export function App() {
     staleTime: 60_000,
   });
   const session = sessionQuery.data;
+  const settingsQuery = useQuery<SettingsDto>({
+    queryKey: ["settings"],
+    queryFn: settingsApi.read,
+  });
+  const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
 
   const logout = async () => {
     await authApi.logout();
@@ -81,6 +87,11 @@ export function App() {
       sidebarTop={
         <>
           <PortalLink className="sidebar-home" label={t("nav.portal")} />
+          {demoEnabled ? (
+            <div className="px-4 py-2">
+              <DemoModeBadge label={t("demo.badge")} />
+            </div>
+          ) : null}
           {session?.enabled && session.authenticated ? (
             <div className="current-user-badge">
               {session.display_name || session.email}
@@ -116,15 +127,20 @@ export function App() {
         />
       }
     >
-      <ErrorBoundary>
-        <Routes>
-          <Route path="/" element={<Generate />} />
-          <Route path="/documents" element={<Documents />} />
-          <Route path="/sessions" element={<Sessions />} />
-          <Route path="/data" element={<Data />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </ErrorBoundary>
+      <DemoModeProvider
+        mode={demoEnabled ? "demo" : "normal"}
+        isReady={settingsQuery.isSuccess}
+      >
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Generate />} />
+            <Route path="/documents" element={<Documents />} />
+            <Route path="/sessions" element={<Sessions />} />
+            <Route path="/data" element={<Data />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </ErrorBoundary>
+      </DemoModeProvider>
     </AppShell>
   );
 }

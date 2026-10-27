@@ -222,6 +222,7 @@ export type SettingsDto = {
   voxtral_base_url: string;
   // Interrupteur LLM global (false = les taches IA sont sautees).
   llm_enabled: boolean;
+  demo_enabled: boolean;
 };
 
 // Resultat du test d'UNE API appelee (Mistral principale ou Voxtral dediee).
@@ -563,6 +564,7 @@ export const settingsApi = {
     voxtral_api_key?: string;
     voxtral_base_url?: string;
     llm_enabled?: boolean;
+    demo_enabled?: boolean;
   }) =>
     request<SettingsDto>("/settings", {
       method: "POST",

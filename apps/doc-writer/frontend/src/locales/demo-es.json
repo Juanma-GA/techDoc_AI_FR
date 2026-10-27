@@ -1,0 +1,71 @@
+{
+  "demo": {
+    "badge": "MODO DEMO",
+    "panelTitle": "Demo — mantenimiento industrial",
+    "panelDescription": "Explora órdenes de trabajo totalmente ficticias. La simulación es local: no se suben documentos ni se llama a ningún servicio de IA.",
+    "scenarioLabel": "Escenario de mantenimiento",
+    "sampleFiles": "Documentos ficticios de ejemplo",
+    "briefLabel": "Instrucciones de redacción",
+    "run": "Simular redacción",
+    "reset": "Restablecer",
+    "result": "Resultado de la simulación",
+    "empty": "No hay escenarios disponibles.",
+    "error": "No se pudo ejecutar la simulación.",
+    "outputRequest": "Brief",
+    "outputTitle": "Informe de mantenimiento — borrador",
+    "sourceDocument": "Orden de trabajo de origen (ficticia)",
+    "disclaimer": "Simulación local. El personal cualificado debe validar este borrador antes de cualquier uso operativo.",
+    "documentsHint": "Modo demo: solo se muestran órdenes de trabajo ficticias. La carga y eliminación están desactivadas.",
+    "readOnlyExamples": "Ejemplos ficticios de solo lectura: no se suben ni modifican archivos.",
+    "generated": "Informe ficticio generado localmente.",
+    "noFilesSelected": "Selecciona al menos un documento de demostración.",
+    "templates": {
+      "title": "Plantillas de demostración",
+      "serviceReport": {
+        "name": "Plantilla de informe de mantenimiento (DOCX ficticio)"
+      },
+      "inspectionChecklist": {
+        "name": "Plantilla de lista de inspección (DOCX ficticio)"
+      },
+      "inspection-checklist": {
+        "steps": "Puntos de inspección",
+        "stepIsolation": "Bloquear y aislar el equipo según el procedimiento del centro.",
+        "stepInspection": "Completar las comprobaciones de la orden y registrar medidas.",
+        "stepApproval": "Obtener la validación antes de volver a poner el equipo en servicio."
+      }
+    },
+    "styles": {
+      "title": "Documentos de estilo de demostración",
+      "documentName": "Guía de estilo — informes de mantenimiento ficticios.md",
+      "documentContent": "Usa títulos breves y datos verificables. Separa los hallazgos de las acciones previstas. No presentes una hipótesis como una reparación confirmada. Termina con comprobaciones de seguridad y la validación de una persona autorizada.",
+      "applied": "Criterios de estilo aplicados"
+    },
+    "scenarios": {
+      "conveyor": {
+        "title": "Preventivo — transportador CV-204",
+        "description": "Preparar un informe a partir de una orden preventiva ficticia.",
+        "fileName": "OT-preventivo-CV-204.txt",
+        "fileContent": "OT FICTICIA — Taller Orion\nEquipo: Transportador CV-204\nFecha: 18/06/2026\nMotivo: ligera vibración en el rodamiento de accionamiento.\nInstrucción: inspeccionar tras el aislamiento según el procedimiento del centro.",
+        "brief": "Redacta un informe breve de la intervención preventiva.",
+        "output": "Transportador CV-204 — Taller Orion\nHallazgo: confirmar con medición la ligera vibración tras el aislamiento.\nSeguimiento: revisar rodamiento y lubricación según la tarea aprobada; registrar medidas y señalar valores fuera de tolerancia.\nCierre: una persona autorizada aprueba la puesta en servicio."
+      },
+      "pump": {
+        "title": "Correctivo — bomba P-118",
+        "description": "Estructurar un borrador de informe a partir de un aviso ficticio de fuga.",
+        "fileName": "OT-correctivo-P-118.txt",
+        "fileContent": "OT FICTICIA — Unidad Delta\nEquipo: Bomba de circulación P-118\nAviso: 02/03/2026\nMotivo: fluido cerca del prensaestopas; fuga pendiente de caracterizar.\nInstrucción: detener y aislar según el procedimiento local antes del diagnóstico.",
+        "brief": "Prepara un borrador de informe y enumera las comprobaciones de cierre.",
+        "output": "Bomba P-118 — Unidad Delta\nHallazgo: falta caracterizar la fuga; no se confirma ninguna reparación.\nSeguimiento: detener y aislar según el procedimiento local y solicitar diagnóstico de un técnico autorizado. Seguir la documentación del fabricante.\nCierre: registrar medidas, verificar que no hay fugas y obtener autorización para la puesta en servicio."
+      }
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Modo de demostración",
+      "hint": "Usa órdenes de mantenimiento ficticias y una simulación local, sin subir documentos ni contactar con la IA.",
+      "normal": "Modo normal",
+      "demo": "Modo demo",
+      "saveError": "No se pudo guardar el modo de demostración."
+    }
+  }
+}

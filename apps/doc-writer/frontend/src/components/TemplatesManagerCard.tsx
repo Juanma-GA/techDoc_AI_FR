@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDemoMode } from "@internal/ui";
 
 import { ApiClientError, documentsApi, type DocumentDto } from "../lib/api";
+import { createMaintenanceDemoTemplates } from "../lib/maintenanceDemo";
 import { PreviewDropzone } from "./PreviewDropzone";
 import { ZonesManagerPanel } from "./ZonesManagerPanel";
 
@@ -23,6 +25,8 @@ function formatDate(iso: string): string {
 // preview. Le panneau de zones s'ouvre inline sous la liste.
 export function TemplatesManagerCard() {
   const { t } = useTranslation();
+  const { mode } = useDemoMode();
+  const demoMode = mode === "demo";
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -33,6 +37,7 @@ export function TemplatesManagerCard() {
   const templatesQuery = useQuery<DocumentDto[], ApiClientError>({
     queryKey: ["documents", "template"],
     queryFn: () => documentsApi.list("template"),
+    enabled: !demoMode,
   });
 
   const invalidate = () => {
@@ -69,7 +74,13 @@ export function TemplatesManagerCard() {
   // seul reste une action a confirmer.
   const [reanalyseArmed, setReanalyseArmed] = useState<string | null>(null);
 
-  const templates = templatesQuery.data ?? [];
+  const demoTemplates = demoMode
+    ? createMaintenanceDemoTemplates({
+        "service-report": t("demo.templates.serviceReport.name"),
+        "inspection-checklist": t("demo.templates.inspectionChecklist.name"),
+      })
+    : [];
+  const templates = demoMode ? demoTemplates : templatesQuery.data ?? [];
 
   return (
     <div className="card">
@@ -78,20 +89,26 @@ export function TemplatesManagerCard() {
         {t("settings.templateDocsHint")}
       </p>
 
-      <PreviewDropzone
-        accept=".pptx,.docx,.pdf"
-        multiple
-        disabled={uploadMutation.isPending}
-        title={t("settings.docsUploadLabel")}
-        hint=".pptx, .docx, .pdf"
-        onFiles={(files) => uploadMutation.mutate(files)}
-      />
-      {uploadMutation.isPending ? (
-        <div className="success">{t("documents.uploading")}</div>
-      ) : null}
-      {reanalyseMutation.isPending ? (
-        <div className="success">{t("settings.reanalyseRunning")}</div>
-      ) : null}
+      {demoMode ? (
+        <div className="banner">{t("demo.readOnlyExamples")}</div>
+      ) : (
+        <>
+          <PreviewDropzone
+            accept=".pptx,.docx,.pdf"
+            multiple
+            disabled={uploadMutation.isPending}
+            title={t("settings.docsUploadLabel")}
+            hint=".pptx, .docx, .pdf"
+            onFiles={(files) => uploadMutation.mutate(files)}
+          />
+          {uploadMutation.isPending ? (
+            <div className="success">{t("documents.uploading")}</div>
+          ) : null}
+          {reanalyseMutation.isPending ? (
+            <div className="success">{t("settings.reanalyseRunning")}</div>
+          ) : null}
+        </>
+      )}
       {notice ? <div className="success">{notice}</div> : null}
       {error ? <div className="error">{error}</div> : null}
 
@@ -104,7 +121,9 @@ export function TemplatesManagerCard() {
               <th>{t("documents.columnFilename")}</th>
               <th>{t("documents.columnSize")}</th>
               <th>{t("documents.columnDate")}</th>
-              <th style={{ textAlign: "right" }}>{t("documents.columnActions")}</th>
+              {!demoMode ? (
+                <th style={{ textAlign: "right" }}>{t("documents.columnActions")}</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -121,8 +140,9 @@ export function TemplatesManagerCard() {
                   <td className="file-name">{doc.filename}</td>
                   <td className="file-meta">{formatSize(doc.size)}</td>
                   <td className="file-meta">{formatDate(doc.uploaded_at)}</td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    {canManageZones ? (
+                  {!demoMode ? (
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {canManageZones ? (
                       <>
                         <button
                           type="button"
@@ -157,16 +177,17 @@ export function TemplatesManagerCard() {
                           {t("settings.manageZones")}
                         </button>
                       </>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="btn ghost small"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(doc.id)}
-                    >
-                      {t("documents.delete")}
-                    </button>
-                  </td>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(doc.id)}
+                      >
+                        {t("documents.delete")}
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
@@ -174,7 +195,7 @@ export function TemplatesManagerCard() {
         </table>
       )}
 
-      {managed ? (
+      {!demoMode && managed ? (
         <div style={{ marginTop: 12 }}>
           <ZonesManagerPanel
             docId={managed.id}

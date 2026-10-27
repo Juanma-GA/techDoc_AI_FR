@@ -1,0 +1,71 @@
+{
+  "demo": {
+    "badge": "DEMO MODE",
+    "panelTitle": "Demo — industrial maintenance",
+    "panelDescription": "Explore fully fictional work orders. The simulation stays local: no documents are uploaded and no AI service is called.",
+    "scenarioLabel": "Maintenance scenario",
+    "sampleFiles": "Fictional sample documents",
+    "briefLabel": "Writing brief",
+    "run": "Simulate writing",
+    "reset": "Reset",
+    "result": "Simulation result",
+    "empty": "No scenarios available.",
+    "error": "The simulation could not be run.",
+    "outputRequest": "Brief",
+    "outputTitle": "Maintenance report — draft",
+    "sourceDocument": "Source work order (fictional)",
+    "disclaimer": "Local simulation only. A qualified person must validate this draft before operational use.",
+    "documentsHint": "Demo mode: only fictional work orders are shown. Upload and deletion are disabled.",
+    "readOnlyExamples": "Fictional, read-only examples: no file is uploaded or changed.",
+    "generated": "Fictional report generated locally.",
+    "noFilesSelected": "Select at least one demo document.",
+    "templates": {
+      "title": "Demo templates",
+      "serviceReport": {
+        "name": "Maintenance service report template (fictional DOCX)"
+      },
+      "inspectionChecklist": {
+        "name": "Inspection checklist template (fictional DOCX)"
+      },
+      "inspection-checklist": {
+        "steps": "Inspection checks",
+        "stepIsolation": "Lock out and isolate the equipment under site procedure.",
+        "stepInspection": "Complete the work-order checks and record measurements.",
+        "stepApproval": "Have the results approved before returning equipment to service."
+      }
+    },
+    "styles": {
+      "title": "Demo style documents",
+      "documentName": "Style guide — fictional maintenance reports.md",
+      "documentContent": "Use short headings and verifiable facts. Separate findings from planned actions. Never present a hypothesis as a confirmed repair. End with safety checks and approval by an authorized person.",
+      "applied": "Applied style guidance"
+    },
+    "scenarios": {
+      "conveyor": {
+        "title": "Preventive — conveyor CV-204",
+        "description": "Draft a report from a fictional preventive work order.",
+        "fileName": "WO-preventive-CV-204.txt",
+        "fileContent": "FICTIONAL WO — Orion Workshop\nEquipment: Conveyor CV-204\nDate: 2026-06-18\nReason: Slight drive-side bearing vibration.\nInstruction: Inspect after isolation under the site procedure.",
+        "brief": "Write a concise report for the preventive maintenance visit.",
+        "output": "Conveyor CV-204 — Orion Workshop\nFinding: Confirm slight vibration by measurement after isolation.\nFollow-up: Check bearing and lubrication against the approved task; record measurements and flag any out-of-range result.\nClose-out: An authorized supervisor approves return to service."
+      },
+      "pump": {
+        "title": "Corrective — pump P-118",
+        "description": "Structure a draft report from a fictional leak notification.",
+        "fileName": "WO-corrective-P-118.txt",
+        "fileContent": "FICTIONAL WO — Delta Unit\nEquipment: Circulation pump P-118\nReported: 2026-03-02\nReason: Fluid near gland packing; leak rate unknown.\nInstruction: Stop and isolate under local procedure before diagnosis.",
+        "brief": "Prepare a draft report and list the close-out checks.",
+        "output": "Circulation pump P-118 — Delta Unit\nFinding: Leak needs characterization; no repair is confirmed.\nFollow-up: Stop and isolate under local procedure, then request an authorized technician's diagnosis. Follow manufacturer documentation.\nClose-out: Record measurements, verify no leak, and obtain approval before return to service."
+      }
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Demo mode",
+      "hint": "Use fictional maintenance work orders and a local simulation, without uploading documents or contacting AI.",
+      "normal": "Normal mode",
+      "demo": "Demo mode",
+      "saveError": "Could not save the demo mode setting."
+    }
+  }
+}
