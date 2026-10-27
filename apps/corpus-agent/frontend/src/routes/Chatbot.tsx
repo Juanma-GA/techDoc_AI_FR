@@ -8,12 +8,15 @@ import { chatApi, projectsApi } from "../lib/api";
 import { useChatStore } from "../stores/useChatStore";
 import type { ChatSessionOut, ProjectOut } from "../lib/types";
 
+const SUGGESTION_KEYS = ["chatbot.suggestion1", "chatbot.suggestion2", "chatbot.suggestion3"] as const;
+
 export function Chatbot() {
   const { t, i18n } = useTranslation();
   const lang = (i18n.language || "fr").slice(0, 2);
   const qc = useQueryClient();
   const [question, setQuestion] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { scopeProjectIds, currentSessionId, pendingNew, messages, streaming } = useChatStore();
   const store = useChatStore();
@@ -27,6 +30,13 @@ export function Chatbot() {
   useEffect(() => {
     if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [question]);
 
   const scopeLabel = () => {
     if (scopeProjectIds.length === 0) return t("chatbot.scopeAll");
@@ -75,13 +85,6 @@ export function Chatbot() {
         <p>{t("page.chatbot")}</p>
       </div>
 
-      <div className="card">
-        <div className="card-title" style={{ margin: 0 }}>{t("chatbot.selectProject")}</div>
-        <div className="label" style={{ marginBottom: 8 }}>{t("common.slicerHint")}</div>
-        <ProjectSlicer projects={projects} value={scopeProjectIds} onChange={store.setScope} />
-        <div className="label" style={{ marginTop: 8 }}>{scopeLabel()}</div>
-      </div>
-
       <div className="chat-layout">
         <div className="card chat-sessions">
           <div className="row" style={{ justifyContent: "space-between" }}>
@@ -103,7 +106,7 @@ export function Chatbot() {
                   <div className="session-row-title">{s.title}</div>
                   <div className="session-row-badges">{scopeBadge(s.scope_project_ids)}</div>
                 </div>
-                <button type="button" className="btn ghost small" title={t("common.delete")} onClick={(e) => { e.stopPropagation(); void deleteSession(s.id); }}>×</button>
+                <button type="button" className="btn ghost small" title={t("common.delete")} aria-label={t("common.delete")} onClick={(e) => { e.stopPropagation(); void deleteSession(s.id); }}>×</button>
               </div>
             ))}
             {!sessions.length && !pendingNew && <div className="empty-state">—</div>}
@@ -111,28 +114,59 @@ export function Chatbot() {
         </div>
 
         <div className="card chat-thread">
-          <div className="chat-messages" ref={messagesRef}>
-            {messages.map((m, i) => (
-              <div className={`chat-msg ${m.role}`} key={i}>
-                {m.role === "assistant" && streaming && i === messages.length - 1 && m.content === ""
-                  ? t("chatbot.thinking")
-                  : m.content}
-              </div>
-            ))}
+          <div className="chat-scope-bar">
+            <span className="label">{t("chatbot.selectProject")}</span>
+            <ProjectSlicer projects={projects} value={scopeProjectIds} onChange={store.setScope} />
+            <span className="label">{scopeLabel()}</span>
           </div>
-          <div className="chat-input">
-            <textarea
-              value={question}
-              placeholder={t("chatbot.placeholder")}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  onSend();
-                }
-              }}
-            />
-            <button type="button" className="btn primary" onClick={onSend} disabled={streaming}>{t("chatbot.send")}</button>
+          <div className="chat-messages" ref={messagesRef} aria-live="polite">
+            {messages.length === 0 && (
+              <div className="chat-empty">
+                <div className="chat-empty-title">{t("chatbot.emptyTitle")}</div>
+                <div className="label">{t("chatbot.emptyHint")}</div>
+                <div className="chat-suggestions">
+                  {SUGGESTION_KEYS.map((key) => (
+                    <button key={key} type="button" className="chat-suggestion" disabled={streaming} onClick={() => send(t(key), scopeProjectIds, lang)}>
+                      {t(key)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {messages.map((m, i) => {
+              const waiting = m.role === "assistant" && streaming && i === messages.length - 1 && m.content === "";
+              return (
+                <div className={`chat-msg-wrap ${m.role}`} key={i}>
+                  <span className="label">{m.role === "user" ? t("chatbot.you") : t("chatbot.assistant")}</span>
+                  <div className={`chat-msg ${m.role}`}>
+                    {waiting ? (
+                      <span className="chat-typing" role="status" aria-label={t("chatbot.thinking")}><span /><span /><span /></span>
+                    ) : (
+                      m.content
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="chat-composer">
+            <div className="chat-input">
+              <textarea
+                ref={inputRef}
+                rows={1}
+                value={question}
+                placeholder={t("chatbot.placeholder")}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!streaming) onSend();
+                  }
+                }}
+              />
+              <button type="button" className="btn primary" onClick={onSend} disabled={streaming || !question.trim()}>{t("chatbot.send")}</button>
+            </div>
+            <div className="label chat-hint">{t("chatbot.inputHint")}</div>
           </div>
         </div>
       </div>
