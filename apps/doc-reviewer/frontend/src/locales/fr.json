@@ -452,7 +452,7 @@
       "ruleCount": "règles",
       "scopeSelector": "Catégorie de règles",
       "scope": {
-        "verification": "Vérification",
+        "verification": "Contrôle",
         "preparation": "Préparation"
       },
       "scopeEmpty": "Aucune règle n’est disponible dans cette catégorie.",

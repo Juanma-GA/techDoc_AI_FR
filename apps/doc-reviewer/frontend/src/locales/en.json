@@ -452,7 +452,7 @@
       "ruleCount": "rules",
       "scopeSelector": "Rule category",
       "scope": {
-        "verification": "Verification",
+        "verification": "Control",
         "preparation": "Preparation"
       },
       "scopeEmpty": "No rules are available in this category.",
