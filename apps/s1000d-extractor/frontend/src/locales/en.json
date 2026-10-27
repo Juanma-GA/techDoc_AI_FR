@@ -1,4 +1,76 @@
 {
+  "preliminary": {
+    "title": "Review preliminary requirements",
+    "localOnly": "Strictly local wizard: no content sent to an AI service. Rules propose; you decide.",
+    "progress": "Procedure {{current}} of {{total}}",
+    "procedure": "Procedure",
+    "previous": "Previous procedure",
+    "next": "Next procedure",
+    "notReviewed": "Not yet checked",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "saveFailed": "Save failed",
+    "retry": "Retry",
+    "reload": "Reload and discard unsaved changes",
+    "confirmAgain": "Click again to confirm",
+    "sourceChanged": "An analysis or source change made an earlier review obsolete. Its decisions are not reused automatically.",
+    "staleHelp": "This procedure's source changed. Restarting replaces its previous decisions and anchors.",
+    "restart": "Restart this review",
+    "unavailable": "Review unavailable. Reload the document.",
+    "reader": "Continuous DM reader",
+    "classification": "Passage classification",
+    "filter": "Show passages",
+    "remaining": "{{count}} passage(s) without a decision out of {{total}}",
+    "confirmWhole": "I checked the entire DM, including empty categories and passages not detected by the rules.",
+    "complete": "Mark this procedure as reviewed",
+    "generate": "Generate and validate XML",
+    "sourceAt": "Show source — page {{page}}",
+    "unlocated": "Source page unknown",
+    "page": "Source page {{page}}",
+    "readingPage": "Reading page {{page}}",
+    "pdfPage": "Source PDF page {{page}}",
+    "pdfHelp": "Scroll freely through PDF pages and structured excerpts. Page numbers refer to the original document, before cutting.",
+    "wordHelp": "Reading pagination of extracted Word text, not the original document's pagination.",
+    "loading": "Loading pages…",
+    "readerError": "Unable to load the reader",
+    "imageError": "Unable to load the source image.",
+    "anchorError": "Unable to locate passages in the PDF",
+    "textAnchorOnly": "No exact PDF position was found. The text excerpt below is highlighted; its position on the image still needs checking.",
+    "noPassages": "No usable passage detected. Check the source before confirming that no requirements exist.",
+    "proposed": "Proposed: {{category}}",
+    "destination": "Classification decision",
+    "accept": "Accept proposal",
+    "editSplit": "Edit or split passage",
+    "correctedText": "Corrected text",
+    "autosave": "Edits save automatically after a short pause. Split before editing the text.",
+    "splitAt": "Split after character (of {{count}} source characters)",
+    "splitPosition": "Split position",
+    "split": "Split source passage",
+    "status": {
+      "pending": "To review",
+      "reviewed": "Reviewed",
+      "stale": "Outdated review"
+    },
+    "category": {
+      "conditions": "Conditions",
+      "personnel": "Personnel",
+      "support": "Equipment and tools",
+      "supplies": "Consumables",
+      "spares": "Spare parts",
+      "safety": "Safety",
+      "body": "Keep in procedure",
+      "discard": "Explicitly discarded",
+      "review": "To review",
+      "all": "All passages",
+      "pending": "Without a decision"
+    },
+    "rule": {
+      "keywords": "Local keyword rule",
+      "heading": "Section heading rule",
+      "multiple": "Several possible categories; consider splitting",
+      "unmatched": "No matching rule; human decision required"
+    }
+  },
   "app": {
     "title": "S1000D Extractor",
     "description": "Extract and version technical data in the S1000D format."
@@ -193,7 +265,7 @@
     "docs": {
       "title": "Documents",
       "empty": "No document yet. Upload a PDF/Word file above.",
-      "open": "Resume generation",
+      "open": "Resume",
       "delete": "Delete"
     },
     "start": {
@@ -219,6 +291,7 @@
       "split": "Split",
       "type": "Types",
       "structure": "Structure",
+      "preliminary": "Preliminary requirements",
       "generate": "Generation"
     },
     "dm": {
@@ -278,7 +351,7 @@
     },
     "analysis": {
       "help": "Review or edit the proposed split, or validate it now to generate the Data Modules.",
-      "validate": "Validate and generate Data Modules",
+      "validate": "Validate the split and review types",
       "processing": "Generating…"
     },
     "type": {

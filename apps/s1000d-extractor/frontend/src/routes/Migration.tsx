@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useDemoMode } from "@internal/ui";
 
 import { BrexAnalysisSummary } from "../components/BrexAnalysisSummary";
+import { PreliminaryReview } from "../components/business/PreliminaryReview";
 import { BrexViolationsPanel } from "../components/BrexViolationsPanel";
 import { DmPreview } from "../components/DmPreview";
 import { DM_TYPES, DmrlReview } from "../components/DmrlReview";
@@ -16,6 +17,7 @@ import { WizardZipDownloadButton } from "../components/WizardZipDownloadButton";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
   documentsApi,
+  ApiRequestError,
   migrationInputsApi,
   pdfCutApi,
   resourcesApi,
@@ -214,6 +216,7 @@ export function Migration() {
   const [splitLevel, setSplitLevel] = useState("section");
   const [splitMsg, setSplitMsg] = useState<string | null>(null);
   const wizRef = useRef<HTMLDivElement>(null);
+  const preliminaryFlush = useRef<(() => Promise<boolean>) | null>(null);
   const inputRefs = useRef<Partial<Record<MigrationInputKind, HTMLInputElement | null>>>({});
   const mappingTouched = useRef(false);
   const demoSeededInputs = useRef<Set<MigrationInputKind>>(new Set());
@@ -374,10 +377,6 @@ export function Migration() {
       if (!includeSplit) return state;
       state = await wizardApi.action(id, "advance", {});
     }
-    if (state.step === "type") state = await wizardApi.action(id, "advance", { types: {} });
-    if (state.step === "structure") {
-      state = await wizardApi.action(id, "advance", { overrides: [] });
-    }
     return state;
   };
 
@@ -450,6 +449,7 @@ export function Migration() {
   };
 
   const doStart = async () => {
+    if (preliminaryFlush.current && !await preliminaryFlush.current()) return;
     const selectedFile = generationFile(inputRefs.current.document?.files?.[0] ?? null, file);
     if (!selectedFile) {
       setLoadError(t("migration.upload.noFile"));
@@ -480,13 +480,18 @@ export function Migration() {
   };
 
   const openWizard = async (id: string) => {
+    if (preliminaryFlush.current && !await preliminaryFlush.current()) return;
     setDocId(id);
     setWiz(null);
     setWizError(null);
     let state: WizardState;
     try {
       state = await wizardApi.get(id);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof ApiRequestError) || error.code !== "WIZARD_NOT_STARTED") {
+        setWizError(error instanceof Error ? error.message : String(error));
+        return;
+      }
       try {
         const doc = await documentsApi.get(id);
         await startDocument(id, doc.source_format);
@@ -497,7 +502,7 @@ export function Migration() {
       return;
     }
     try {
-      setWiz(await normalizeWizard(id, state));
+      setWiz(state);
     } catch (e) {
       setWizError(e instanceof Error ? e.message : String(e));
     }
@@ -564,6 +569,7 @@ export function Migration() {
 
   const wizAction = async (action: string, params?: Record<string, unknown>) => {
     if (!docId) return;
+    if (preliminaryFlush.current && !await preliminaryFlush.current()) return;
     setBusy(true);
     setWizError(null);
     try {
@@ -1221,6 +1227,13 @@ export function Migration() {
                   </div>
                 </div>
               </>
+            ) : null}
+
+            {wiz.step === "preliminary" && wiz.preliminary && docId ? (
+              <PreliminaryReview key={docId} docId={docId} initial={wiz.preliminary} dms={wiz.dms}
+                busy={busy} onBack={() => void wizAction("back")}
+                onGenerate={() => void wizAction("advance", {})}
+                onFlushReady={(flush) => { preliminaryFlush.current = flush; }} />
             ) : null}
 
             {wiz.step === "generate" ? (

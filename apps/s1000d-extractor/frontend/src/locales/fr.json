@@ -1,4 +1,76 @@
 {
+  "preliminary": {
+    "title": "Revoir les exigences préliminaires",
+    "localOnly": "Wizard strictement local : aucun contenu transmis à un service d'IA. Les règles proposent ; vous décidez.",
+    "progress": "Procédure {{current}} sur {{total}}",
+    "procedure": "Procédure",
+    "previous": "Procédure précédente",
+    "next": "Procédure suivante",
+    "notReviewed": "Pas encore vérifié",
+    "saving": "Enregistrement…",
+    "saved": "Enregistré",
+    "saveFailed": "Échec de sauvegarde",
+    "retry": "Réessayer",
+    "reload": "Recharger et abandonner les modifications non enregistrées",
+    "confirmAgain": "Cliquer encore pour confirmer",
+    "sourceChanged": "Une analyse ou une modification a rendu une revue précédente obsolète. Ses décisions ne sont pas réutilisées automatiquement.",
+    "staleHelp": "La source de cette procédure a changé. Recommencer remplace ses anciennes décisions et ses ancrages.",
+    "restart": "Recommencer cette revue",
+    "unavailable": "La revue est indisponible. Rechargez le document.",
+    "reader": "Lecteur continu du DM",
+    "classification": "Classement des passages",
+    "filter": "Afficher les passages",
+    "remaining": "{{count}} passage(s) sans décision sur {{total}}",
+    "confirmWhole": "J'ai vérifié le DM entier, y compris les catégories vides et les passages non repérés par les règles.",
+    "complete": "Marquer cette procédure comme vérifiée",
+    "generate": "Générer et valider le XML",
+    "sourceAt": "Voir la source — page {{page}}",
+    "unlocated": "Page source non déterminée",
+    "page": "Page source {{page}}",
+    "readingPage": "Page de lecture {{page}}",
+    "pdfPage": "Page PDF source {{page}}",
+    "pdfHelp": "Défilez librement entre les pages PDF et les extraits structurés. Les numéros correspondent au document original, avant découpe.",
+    "wordHelp": "Pagination de lecture du texte Word extrait, et non pagination du document original.",
+    "loading": "Chargement des pages…",
+    "readerError": "Impossible de charger le lecteur",
+    "imageError": "Impossible de charger l'image source.",
+    "anchorError": "Impossible de localiser les passages dans le PDF",
+    "textAnchorOnly": "Aucun emplacement PDF exact n'a été retrouvé. Le passage est surligné dans l'extrait texte ci-dessous ; la position sur l'image reste à vérifier.",
+    "noPassages": "Aucun passage exploitable détecté. Vérifiez tout de même la source avant de confirmer l'absence d'exigences.",
+    "proposed": "Proposition : {{category}}",
+    "destination": "Décision de classement",
+    "accept": "Accepter la proposition",
+    "editSplit": "Corriger ou scinder le passage",
+    "correctedText": "Texte corrigé",
+    "autosave": "Corrections enregistrées automatiquement après une courte pause. Scindez avant de corriger le texte.",
+    "splitAt": "Scinder après le caractère (sur {{count}} caractères source)",
+    "splitPosition": "Position de scission",
+    "split": "Scinder le passage source",
+    "status": {
+      "pending": "À vérifier",
+      "reviewed": "Vérifié",
+      "stale": "Revue obsolète"
+    },
+    "category": {
+      "conditions": "Conditions",
+      "personnel": "Personnel",
+      "support": "Équipements et outillage",
+      "supplies": "Consommables",
+      "spares": "Pièces de rechange",
+      "safety": "Sécurité",
+      "body": "Reste dans la procédure",
+      "discard": "Écarté explicitement",
+      "review": "À vérifier",
+      "all": "Tous les passages",
+      "pending": "Sans décision"
+    },
+    "rule": {
+      "keywords": "Repérage par mots-clés locaux",
+      "heading": "Repérage par titre de section",
+      "multiple": "Plusieurs catégories possibles ; scission à envisager",
+      "unmatched": "Aucune règle correspondante ; décision humaine requise"
+    }
+  },
   "app": {
     "title": "S1000D Extractor",
     "description": "Extraction et versionnement de données techniques au format S1000D."
@@ -193,7 +265,7 @@
     "docs": {
       "title": "Documents",
       "empty": "Aucun document. Charge un PDF/Word ci-dessus.",
-      "open": "Reprendre la génération",
+      "open": "Reprendre",
       "delete": "Supprimer"
     },
     "start": {
@@ -219,6 +291,7 @@
       "split": "Découpage",
       "type": "Types",
       "structure": "Structure",
+      "preliminary": "Exigences préliminaires",
       "generate": "Génération"
     },
     "dm": {
@@ -278,7 +351,7 @@
     },
     "analysis": {
       "help": "Tu peux examiner ou modifier le découpage proposé, ou valider directement pour générer les Data Modules.",
-      "validate": "Valider et générer les Data Modules",
+      "validate": "Valider le découpage et revoir les types",
       "processing": "Génération en cours…"
     },
     "type": {

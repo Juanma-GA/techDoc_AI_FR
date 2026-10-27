@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     admin, brex, dm_versions, extract, health, migration_inputs, pdf_cut, pmc, resources,
-    validation, wizard,
+    validation, wizard, preliminary,
 )
 from app.api import settings as settings_route
 from app.config import settings
@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(dm_versions.router)
     api_v1.include_router(pmc.router)
     api_v1.include_router(wizard.router)
+    api_v1.include_router(preliminary.router)
     api_v1.include_router(validation.router)
     app.include_router(api_v1)
 

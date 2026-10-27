@@ -1569,7 +1569,10 @@ def _build_content(
     content = etree.Element("content")
     if dm_type == "procedural":
         proc = etree.SubElement(content, "procedure")
-        main_children, requirements = _partition_preliminary_sections(root.children)
+        if root.reviewed_requirements is not None:
+            main_children, requirements = root.children, root.reviewed_requirements
+        else:
+            main_children, requirements = _partition_preliminary_sections(root.children)
         _emit_preliminary_requirements(
             proc,
             requirements,

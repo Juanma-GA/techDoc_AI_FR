@@ -73,6 +73,69 @@ the migration.
 
 SQLite stores projects, source metadata, intermediate structures, mappings, outputs, findings, and runtime configuration under `backend/data/`.
 
+## Procedural Review
+
+The migration wizard now requires explicit type and structure confirmation. Only
+procedural DMs then enter **Review preliminary requirements**, before generation.
+**Resume** restores the saved step without automatically advancing it.
+
+- The entire wizard is deterministic and local, including initial DM typing.
+  It does not consult the Mistral configuration or send source content to an AI
+  service, even when the global LLM switch is on. Other, non-wizard features
+  retain their existing LLM settings.
+- PDF pages requiring OCR are rejected explicitly in the local wizard, including
+  mixed text/scanned PDFs; no scanned page is silently skipped. Supply a PDF
+  whose OCR was performed locally. Truly blank pages do not require OCR.
+- Keyword and inherited-heading rules inspect extracted headings, paragraphs,
+  list items, admonitions, captions and individual table rows. Every extracted
+  text passage needs an explicit decision, including unmatched passages. Rule
+  explanations and original source text remain visible.
+- Classify into conditions, personnel, equipment/tools, consumables, spares or
+  safety; alternatively keep a passage in the procedure or explicitly discard
+  it. Corrected text autosaves after a short pause. Split an unedited passage at
+  a character boundary to classify its parts independently.
+- The PDF reader scrolls continuously, lazily loading page images and anchors.
+  It uses original page numbers, including after PDF cutting. Exact text matches
+  are highlighted on the image; unavailable image anchors are explicitly flagged
+  and the extracted-text highlight remains available. Repeated matching text can
+  highlight multiple locations and still needs human checking.
+- Word uses extracted structure with approximate reading pagination, **not**
+  original Word page numbers. Tables, lists and warning blocks remain
+  distinguishable.
+- A procedure is reviewed only after all passages have decisions **and** the
+  reviewer confirms checking the whole DM, including empty categories. No
+  detection is not equivalent to a verified absence.
+- Decisions, corrections, split source ranges, current procedure, selected
+  passage, page and scroll position persist in SQLite, not browser storage.
+  Saving failures remain visible and block leaving via wizard controls.
+  Unsaved work triggers the browser's unload protection; queued requests use
+  keepalive on navigation, but a failed or interrupted save is never guaranteed.
+  Wait for **Saved** before closing.
+- Source fingerprints, analysis generations and compare-and-swap revisions
+  prevent unnoticed stale reviews or concurrent-tab overwrites. An obsolete
+  review must be restarted explicitly, with double-click confirmation. Going
+  back without changing the source preserves decisions.
+- Human decisions, not heading heuristics, drive reviewed procedural XML in both
+  individual and ZIP exports. The original source tree is not rewritten.
+  BREX-guided mapping choices remain persisted. Incomplete/stale procedural
+  reviews block generation and export. Single-document extraction/override/XML
+  APIs reject wizard documents rather than bypassing this workflow.
+
+The new nullable `preliminary_review_json` column is introduced by
+[migration 0011](backend/alembic/versions/0011_preliminary_review.py).
+Existing launchers apply Alembic migrations on startup. Restart the application
+after updating; no migration of an existing user database is performed by tests.
+Existing generated procedural wizard documents without a review are returned to
+the review step when resumed.
+
+Synthetic reference procedures cover all six requirement categories, splitting,
+source offsets, omissions among extracted passages, resume, concurrent saves and
+Issue 4.1/4.2 XML/ZIP consistency. These are engineering checks, **not** measured
+precision/recall or review-time guarantees on real manuals. User trials still
+need annotated representative procedures, agreed omission thresholds, median/
+tail review time and action-count measurements. Do not copy real user documents
+into test fixtures.
+
 ## LLM Configuration
 
 Mistral supports context classification. Behavior with LLM disabled is not sufficiently documented and remains to be confirmed.
@@ -81,9 +144,45 @@ Mistral supports context classification. Behavior with LLM disabled is not suffi
 
 Use synthetic fixtures with the backend pytest suite and the frontend scripts declared in `frontend/package.json`. The repository declares `test:e2e:s1000d-extractor`.
 
+From `backend`, run `.\.venv\Scripts\python.exe -m pytest` on Windows.
+From `frontend`, run `pnpm typecheck`, `pnpm test`, `pnpm lint`, `pnpm build`
+and `pnpm test:e2e -- preliminary.spec.ts`.
+If bundled Chromium is unavailable, an already installed Edge can run the
+browser tests without downloading a browser:
+
+```powershell
+$env:E2E_PORT = '5186'
+$env:E2E_BROWSER_CHANNEL = 'msedge'
+pnpm test:e2e -- preliminary.spec.ts
+```
+
+Browser tests intercept every API request with synthetic responses; they do not
+open a user database or existing uploads. Screenshots are written to
+`frontend/test-results/`. The backend suite uses its own temporary database and
+storage directory and disables real provider keys.
+
 ## Validation Note (2026-10-14)
 
 `bash scripts/check_standard.sh` could not run in the available Windows Bash environment: CRLF line endings caused shell parsing errors before the checks started. Standard compliance remains unverified for this change.
+
+## Procedural Review Validation (2026-10-27)
+
+- Repository `check_standard.sh`: all 18 checks passed with the installed Git Bash.
+- Frontend typecheck, lint and production build: passed; the served bundle was rebuilt.
+- Vitest: 40 tests passed.
+- Playwright: 4 synthetic review scenarios passed using installed Edge, covering
+  scrolling and resume, save failure/retry, PDF highlighting, dark/light layouts,
+  FR/EN, keyboard confirmation and explicitly reviewed empty procedures.
+- Backend: 332 tests passed; the existing
+  `test_large_descriptive_levelled_para_has_bounded_match_states` failed with
+  60,796 pruning calls against a limit of 50,000. The same failure was reproduced
+  with the serializer from `HEAD`, without changing working-tree files.
+- The new Alembic migration is tested only on temporary synthetic databases;
+  no existing user database was read or migrated.
+
+The backend suite is therefore **not fully green**. External AACF compliance is
+not verified. Browser checks use mocked synthetic APIs; real-manual review-time
+and omission measurements remain to be performed by users.
 
 ## Limitations
 

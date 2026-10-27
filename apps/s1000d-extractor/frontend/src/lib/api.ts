@@ -41,6 +41,13 @@ export type ApiError = {
   request_id: string;
 };
 
+export class ApiRequestError extends Error {
+  constructor(public readonly status: number, public readonly code: string, message: string) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // Include X-Request-Id in outgoing request (if we have one from a previous response)
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -61,7 +68,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as ApiError | null;
-    throw new Error(error?.message || response.statusText || "Erreur");
+    throw new ApiRequestError(
+      response.status, error?.code ?? "HTTP_ERROR", error?.message || response.statusText || "Erreur",
+    );
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;

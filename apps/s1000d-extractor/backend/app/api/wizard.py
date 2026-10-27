@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core import wizard
+from app.core import preliminary_review as preliminary
 from app.core import wizard_resources as wres
 from app.core.errors import AppError
 from app.core.wizard_zip_export import (
@@ -157,6 +158,12 @@ def wizard_state(doc_id: str, db: Session = Depends(get_db)) -> dict:
     doc = _require(db, doc_id)
     if not doc.wizard_step:
         raise AppError("WIZARD_NOT_STARTED", "Lance d'abord /wizard/start.", 409)
+    if doc.wizard_step == "generate" and "preliminary" in wizard.steps_for(doc):
+        if any(item["status"] != "reviewed" for item in preliminary.view(doc)["reviews"].values()):
+            preliminary.prepare(doc)
+            doc.wizard_step = "preliminary"
+            doc.status = "wizard"
+            db.commit()
     return wizard.state(doc)
 
 

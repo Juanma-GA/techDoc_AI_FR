@@ -15,13 +15,14 @@ from pathlib import Path
 
 import pytest
 
-_TMP = Path(tempfile.gettempdir())
+_TEST_DIRECTORY = tempfile.TemporaryDirectory(prefix="s1000d-extractor-tests-")
+_TMP = Path(_TEST_DIRECTORY.name)
 _DB = _TMP / "s1000d_extractor_test.db"
 _STORAGE = _TMP / "s1000d_extractor_test_storage"
 
 os.environ["DATABASE_URL"] = f"sqlite:///{_DB}"
 os.environ["STORAGE_DIR"] = str(_STORAGE)
-os.environ.setdefault("MISTRAL_API_KEY", "")  # pas de cle => pipeline heuristique
+os.environ["MISTRAL_API_KEY"] = ""  # Synthetic tests must never use a real provider key.
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -34,6 +35,8 @@ def _schema():
 
     Base.metadata.create_all(engine)
     yield
+    engine.dispose()
+    _TEST_DIRECTORY.cleanup()
 
 
 @pytest.fixture(autouse=True)
@@ -64,6 +67,34 @@ def client(app):
     from fastapi.testclient import TestClient
 
     return TestClient(app)
+
+
+@pytest.fixture
+def complete_preliminary(client):
+    """Simulate explicit human decisions for existing synthetic wizard flows."""
+    def finish(doc_id, state):
+        assert state["step"] == "preliminary"
+        preliminary = state["preliminary"]
+        for dm_id, procedure in preliminary["reviews"].items():
+            for passage in procedure["passages"]:
+                response = client.post(
+                    f"/api/v1/documents/{doc_id}/wizard/preliminary",
+                    json={"revision": preliminary["revision"], "dm_id": dm_id,
+                          "op": "decide", "passage_id": passage["id"], "destination": "body"},
+                )
+                assert response.status_code == 200, response.text
+                preliminary = response.json()
+            response = client.post(
+                f"/api/v1/documents/{doc_id}/wizard/preliminary",
+                json={"revision": preliminary["revision"], "dm_id": dm_id,
+                      "op": "complete", "confirm_empty": True},
+            )
+            assert response.status_code == 200, response.text
+            preliminary = response.json()
+        response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+        assert response.status_code == 200, response.text
+        return response.json()
+    return finish
 
 
 @pytest.fixture
