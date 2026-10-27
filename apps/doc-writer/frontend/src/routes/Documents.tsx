@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDemoMode } from "@internal/ui";
 
 import { PreviewDropzone } from "../components/PreviewDropzone";
 import { ApiClientError, documentsApi, type DocumentDto } from "../lib/api";
+import {
+  createMaintenanceDemoFiles,
+  createMaintenanceDemoStyles,
+  createMaintenanceDemoTemplates,
+} from "../lib/maintenanceDemo";
 
 const ACCEPT = ".pdf,.docx,.pptx,.xlsx,.xlsm,.txt,.md";
 
@@ -24,12 +30,15 @@ function formatDate(iso: string): string {
 // liste + suppression).
 export function Documents() {
   const { t } = useTranslation();
+  const { mode } = useDemoMode();
+  const demoMode = mode === "demo";
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
   const docsQuery = useQuery<DocumentDto[], ApiClientError>({
     queryKey: ["documents", "source"],
     queryFn: () => documentsApi.list("source"),
+    enabled: !demoMode,
   });
 
   const uploadMutation = useMutation({
@@ -46,7 +55,32 @@ export function Documents() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
   });
 
-  const documents = docsQuery.data ?? [];
+  const documents = demoMode
+    ? createMaintenanceDemoFiles({
+        conveyor: {
+          fileName: t("demo.scenarios.conveyor.fileName"),
+          fileContent: t("demo.scenarios.conveyor.fileContent"),
+          output: t("demo.scenarios.conveyor.output"),
+        },
+        pump: {
+          fileName: t("demo.scenarios.pump.fileName"),
+          fileContent: t("demo.scenarios.pump.fileContent"),
+          output: t("demo.scenarios.pump.output"),
+        },
+      })
+    : docsQuery.data ?? [];
+  const demoTemplates = demoMode
+    ? createMaintenanceDemoTemplates({
+        "service-report": t("demo.templates.serviceReport.name"),
+        "inspection-checklist": t("demo.templates.inspectionChecklist.name"),
+      })
+    : [];
+  const demoStyles = demoMode
+    ? createMaintenanceDemoStyles(
+        t("demo.styles.documentName"),
+        t("demo.styles.documentContent"),
+      )
+    : [];
 
   return (
     <>
@@ -56,24 +90,32 @@ export function Documents() {
       </div>
 
       <div className="banner">
-        <strong>{t("documents.sourcesOnly")}</strong> {t("documents.sourcesHint")}
+        {demoMode ? (
+          <>{t("demo.documentsHint")}</>
+        ) : (
+          <>
+            <strong>{t("documents.sourcesOnly")}</strong> {t("documents.sourcesHint")}
+          </>
+        )}
       </div>
 
-      <div className="card">
-        <h2 className="card-title">{t("documents.uploadLabel")}</h2>
-        <PreviewDropzone
-          accept={ACCEPT}
-          multiple
-          disabled={uploadMutation.isPending}
-          title={t("documents.uploadLabel")}
-          hint={t("documents.uploadDescription")}
-          onFiles={(files) => uploadMutation.mutate(files)}
-        />
-        {uploadMutation.isPending ? (
-          <div className="success">{t("documents.uploading")}</div>
-        ) : null}
-        {error ? <div className="error">{error}</div> : null}
-      </div>
+      {demoMode ? null : (
+        <div className="card">
+          <h2 className="card-title">{t("documents.uploadLabel")}</h2>
+          <PreviewDropzone
+            accept={ACCEPT}
+            multiple
+            disabled={uploadMutation.isPending}
+            title={t("documents.uploadLabel")}
+            hint={t("documents.uploadDescription")}
+            onFiles={(files) => uploadMutation.mutate(files)}
+          />
+          {uploadMutation.isPending ? (
+            <div className="success">{t("documents.uploading")}</div>
+          ) : null}
+          {error ? <div className="error">{error}</div> : null}
+        </div>
+      )}
 
       <div className="card">
         <h2 className="card-title">{t("documents.title")}</h2>
@@ -87,9 +129,11 @@ export function Documents() {
                 <th>{t("documents.columnSize")}</th>
                 <th>{t("documents.columnChunks")}</th>
                 <th>{t("documents.columnDate")}</th>
-                <th style={{ textAlign: "right" }}>
-                  {t("documents.columnActions")}
-                </th>
+                {!demoMode ? (
+                  <th style={{ textAlign: "right" }}>
+                    {t("documents.columnActions")}
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -107,22 +151,44 @@ export function Documents() {
                     )}
                   </td>
                   <td className="file-meta">{formatDate(doc.uploaded_at)}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <button
-                      type="button"
-                      className="btn ghost small"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(doc.id)}
-                    >
-                      {t("documents.delete")}
-                    </button>
-                  </td>
+                  {!demoMode ? (
+                    <td style={{ textAlign: "right" }}>
+                      <button
+                        type="button"
+                        className="btn ghost small"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(doc.id)}
+                      >
+                        {t("documents.delete")}
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+      {demoMode ? (
+        <>
+          <div className="card">
+            <h2 className="card-title">{t("demo.templates.title")}</h2>
+            <ul className="doc-checklist">
+              {demoTemplates.map((template) => (
+                <li key={template.id}>{template.filename}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="card">
+            <h2 className="card-title">{t("demo.styles.title")}</h2>
+            <ul className="doc-checklist">
+              {demoStyles.map((style) => (
+                <li key={style.id}>{style.filename}</li>
+              ))}
+            </ul>
+          </div>
+        </>
+      ) : null}
     </>
   );
 }
