@@ -256,6 +256,31 @@ def test_highlights_page_range_keeps_spans_past_the_header_boundary() -> None:
     assert entry.page_keys == ("INTRO 1", "INTRO 2")
 
 
+def test_highlights_header_uses_word_geometry_when_column_titles_are_merged() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation Description of Change", 254.6, 100.0, 1),
+            _span("Page 701", 90.7, 120.0, 1),
+            _span("R", 285.4, 120.0, 1),
+            _span("Consumable and minor corrections", 329.0, 120.0, 1),
+        ],
+    )
+    page.words = [
+        _word("Designation", 254.6, 100.0, 0),
+        _word("Description", 329.2, 100.0, 1),
+        _word("of", 401.2, 100.0, 2),
+        _word("Change", 419.2, 100.0, 3),
+    ]
+
+    entries = revision.extract_highlights(page)
+
+    assert len(entries) == 1
+    assert entries[0].page_keys == ("701",)
+    assert entries[0].status == "R"
+
+
 def test_highlights_extracts_row_and_illustrated_parts_list_descriptions() -> None:
     page = _page(
         1,

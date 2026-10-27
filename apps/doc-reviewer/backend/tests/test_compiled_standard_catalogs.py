@@ -1599,7 +1599,7 @@ def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> 
     assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
 
 
-def test_highlights_pnr_header_requires_all_mapping_values() -> None:
+def test_highlights_pnr_header_accepts_all_values_or_only_the_first_mapping_value() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(
         client_metadata={"meta_pnr_number": ["33140-02", "33140-03"]}
@@ -1627,18 +1627,40 @@ def test_highlights_pnr_header_requires_all_mapping_values() -> None:
     valid, valid_suggestions = execute_pdf_rules(
         build_page("33140 - 02 and 33140 - 03"), [rule], document=document
     )
-    incomplete, incomplete_suggestions = execute_pdf_rules(
+    first_only, first_only_suggestions = execute_pdf_rules(
         build_page("33140 - 02"), [rule], document=document
+    )
+    incomplete, incomplete_suggestions = execute_pdf_rules(
+        build_page("33140 - 03"), [rule], document=document
     )
 
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
+    assert first_only[0].status == "PASS"
+    assert first_only_suggestions == []
     assert incomplete[0].status == "FAIL"
     assert [
         (item.original, item.proposed) for item in incomplete_suggestions
     ] == [
-        ("33140 - 02", "33140-02 and 33140-03")
+        ("33140 - 03", "33140-02 and 33140-03")
     ]
+
+
+def test_highlights_pnr_header_accepts_unseparated_first_mapping_value() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    page = _document_type_header_page("C12438", page_type=HIGHLIGHTS_PAGE_TYPE)
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(
+            client_metadata={"meta_pnr_number": ["C12438", "C12438AB01"]}
+        ),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_highlights_pnr_header_accepts_shared_series_for_multiple_mapping_values() -> None:

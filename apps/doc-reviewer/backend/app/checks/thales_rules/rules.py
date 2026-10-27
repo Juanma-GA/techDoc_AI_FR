@@ -1057,8 +1057,8 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     code="CUSTOM_HIGHLIGHTS_PNR_HEADER",
     name="Numeros PNR presents et conformes dans l'en-tete Highlights",
     description=(
-        "L'en-tete de chaque page Highlights doit contenir tous les numeros "
-        "PNR renseignes dans le mapping du document."
+        "L'en-tete de chaque page Highlights doit contenir les numeros PNR "
+        "renseignes dans le mapping du document, ou uniquement le premier."
     ),
     message="Un ou plusieurs numeros PNR de l'en-tete Highlights sont absents ou incorrects.",
     kind="field_required",
@@ -1076,7 +1076,7 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     only_if=Condition(field="meta_pnr_number", state="present"),
     translations={
         "en": {
-            "description": "The header of every Highlights page must contain all PNR numbers in the document mapping.",
+            "description": "The header of every Highlights page must contain the PNR numbers in the document mapping, or only the first one.",
             "message": "One or more Highlights header PNR numbers are missing or incorrect.",
         }
     },

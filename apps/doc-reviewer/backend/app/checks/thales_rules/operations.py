@@ -979,7 +979,7 @@ def _pnr_value_pattern(value: str) -> re.Pattern[str] | None:
         pattern.append(re.escape(token))
         previous_is_word = is_word
     return re.compile(
-        rf"(?i)(?<![A-Z0-9]){''.join(pattern)}(?![A-Z0-9])"
+        rf"(?i)(?<![A-Z0-9])(?P<value>{''.join(pattern)})(?![A-Z0-9])"
     )
 
 
@@ -1054,21 +1054,32 @@ def _format_pnr_values(values: list[str]) -> str:
     return f"{', '.join(values[:-1])} and {values[-1]}"
 
 
-def _pnr_header_matches(text: str) -> list[re.Match[str]]:
+def _pnr_header_matches(
+    text: str,
+    expected_values: list[str] | None = None,
+) -> list[re.Match[str]]:
     labels = list(_PNR_HEADER_LABEL_RE.finditer(text))
     if not labels:
-        return list(_PNR_HEADER_TOKEN_RE.finditer(text))
+        matches = list(_PNR_HEADER_TOKEN_RE.finditer(text))
+    else:
+        matches = []
+        for index, label in enumerate(labels):
+            end = labels[index + 1].start() if index + 1 < len(labels) else len(text)
+            cursor = label.end()
+            for match in _PNR_HEADER_TOKEN_RE.finditer(text, cursor, end):
+                if not _PNR_HEADER_SEPARATOR_RE.fullmatch(text[cursor : match.start()]):
+                    break
+                matches.append(match)
+                cursor = match.end()
 
-    matches: list[re.Match[str]] = []
-    for index, label in enumerate(labels):
-        end = labels[index + 1].start() if index + 1 < len(labels) else len(text)
-        cursor = label.end()
-        for match in _PNR_HEADER_TOKEN_RE.finditer(text, cursor, end):
-            if not _PNR_HEADER_SEPARATOR_RE.fullmatch(text[cursor : match.start()]):
-                break
-            matches.append(match)
-            cursor = match.end()
-    return matches
+    matches_by_span = {(match.start(), match.end()): match for match in matches}
+    for value in expected_values or []:
+        pattern = _pnr_value_pattern(value)
+        if pattern is None:
+            continue
+        for match in pattern.finditer(text):
+            matches_by_span.setdefault((match.start(), match.end()), match)
+    return sorted(matches_by_span.values(), key=lambda match: match.start())
 
 
 def _tp1_pnr_page_value_findings(
@@ -1163,6 +1174,15 @@ def _highlights_pnr_header_findings(
     for target in targets:
         if series_pattern is not None and series_pattern.search(target.text):
             continue
+        matches = _pnr_header_matches(target.text, pnr_values)
+        first_pattern = expected_patterns[0][1]
+        if (
+            len(pnr_values) > 1
+            and len(matches) == 1
+            and first_pattern is not None
+            and first_pattern.fullmatch(matches[0].group("value"))
+        ):
+            continue
         missing = [
             value
             for value, pattern in expected_patterns
@@ -1171,7 +1191,6 @@ def _highlights_pnr_header_findings(
         if not missing:
             continue
 
-        matches = _pnr_header_matches(target.text)
         if len(pnr_values) == 1 and expected_patterns[0][1] is not None:
             invalid_matches = [
                 match
