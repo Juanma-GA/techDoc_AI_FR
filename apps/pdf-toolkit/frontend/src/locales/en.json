@@ -16,6 +16,13 @@
     "collapse": "Collapse menu",
     "expand": "Expand menu"
   },
+  "exportProgress": {
+    "uploading": "Uploading to server",
+    "processing": "Processing on server",
+    "downloading": "Downloading result",
+    "preparing": "Preparing PDF",
+    "pages": "Converting pages: {{completed}} / {{total}}"
+  },
   "tools": {
     "merge": {
       "tab": "Merge",

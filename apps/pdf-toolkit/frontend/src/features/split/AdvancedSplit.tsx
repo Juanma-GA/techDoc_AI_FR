@@ -4,10 +4,15 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useTranslation } from "react-i18next";
 
 import { Button, Card, Input, Spinner } from "@internal/ui";
-import { formatOperationError, processSplit } from "../../shared/api";
+import {
+  formatOperationError,
+  processSplit,
+  type ExportProgressState,
+} from "../../shared/api";
 import { SplitTable } from "./SplitTable";
 import { SplitValuesPanel, type SplitMode, type ZoneSettings } from "./SplitValuesPanel";
 import { ZonePreview } from "./ZonePreview";
+import { ExportProgress } from "../shared/ExportProgress";
 import {
   applyNamePattern,
   buildValuePattern,
@@ -50,6 +55,10 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
   const [folder, setFolder] = useState(() => (file ? sourceBaseName(file.name) : ""));
   const [documentProxy, setDocumentProxy] = useState<PDFDocumentProxy | null>(null);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
@@ -142,6 +151,7 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
     }
     const names = buildFileNames(target);
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
@@ -152,7 +162,7 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
     );
     data.append("folder", folderName);
     try {
-      await processSplit(data, `${folderName}.zip`, t);
+      await processSplit(data, `${folderName}.zip`, t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "split.failed"));
@@ -321,6 +331,7 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
             <small>{t("split.outputSummary", { count: rows.length, folder: folderName })}</small>
           </span>
         </div>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={busy || !canSubmit} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Split size={18} />}
           {working ? t("split.working") : t("split.action")}

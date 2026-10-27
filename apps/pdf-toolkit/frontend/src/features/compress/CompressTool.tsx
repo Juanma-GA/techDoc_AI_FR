@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import { FileText, Minimize2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
+import { formatOperationError, processPDF, type ExportProgressState } from "../../shared/api";
 import { Button, Card, Spinner } from "@internal/ui";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 
@@ -14,6 +15,10 @@ export function CompressTool() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -23,12 +28,13 @@ export function CompressTool() {
     }
 
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
     data.append("file", file, file.name);
     try {
-      await processPDF("compress", data, "compressed.pdf", t);
+      await processPDF("compress", data, "compressed.pdf", t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.compressionFailed"));
@@ -100,6 +106,7 @@ export function CompressTool() {
             <small>{t("compress.outputDescription")}</small>
           </span>
         </div>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || !file} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Minimize2 size={18} />}
           {working ? t("compress.working") : t("compress.action")}

@@ -3,6 +3,8 @@ import { FileText, Image } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button, Card, Select, Spinner } from "@internal/ui";
+import type { ExportProgressState } from "../../shared/api";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { renderPdfImages, type RasterFormat } from "./renderPdfImages";
 
@@ -13,7 +15,10 @@ export function PdfToImagesTool() {
   const formatSelectId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [format, setFormat] = useState<RasterFormat>("png");
-  const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "preparing",
+    percentage: null,
+  });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
@@ -36,14 +41,20 @@ export function PdfToImagesTool() {
     const controller = new AbortController();
     controllerRef.current = controller;
     setWorking(true);
-    setProgress({ completed: 0, total: 0 });
+    setExportProgress({ phase: "preparing", percentage: null });
     setError("");
     setSuccess(false);
     try {
       const archive = await renderPdfImages(
         file,
         format,
-        (completed, total) => setProgress({ completed, total }),
+        (completed, total) =>
+          setExportProgress({
+            phase: "pages",
+            percentage: Math.round((completed / total) * 100),
+            completed,
+            total,
+          }),
         controller.signal,
         {
           emptyDocument: t("pdfToImages.emptyDocument"),
@@ -137,12 +148,7 @@ export function PdfToImagesTool() {
             <small>{t("pdfToImages.stepOutputDescription")}</small>
           </span>
         </div>
-        {working && progress.total > 0 ? (
-          <p className="preview-status" role="status">
-            <Spinner aria-label={t("common.loading")} />
-            {t("pdfToImages.progress", progress)}
-          </p>
-        ) : null}
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || !file} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Image size={18} />}
           {working ? t("pdfToImages.working") : t("pdfToImages.action")}

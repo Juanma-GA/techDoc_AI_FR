@@ -6,6 +6,15 @@ type ErrorPayload = {
   error?: unknown;
 };
 
+export type ExportProgressState = {
+  phase: "uploading" | "processing" | "downloading" | "preparing" | "pages";
+  percentage: number | null;
+  completed?: number;
+  total?: number;
+};
+
+export type ExportProgressHandler = (progress: ExportProgressState) => void;
+
 export async function processPDF(
   endpoint:
     | "merge"
@@ -19,42 +28,107 @@ export async function processPDF(
   data: FormData,
   downloadName: string,
   t: TFunction,
+  onProgress?: ExportProgressHandler,
 ): Promise<void> {
-  await downloadFromApi(endpoint, data, downloadName, "application/pdf", t);
+  await downloadFromApi(endpoint, data, downloadName, "application/pdf", t, onProgress);
 }
 
-export async function processSplit(data: FormData, downloadName: string, t: TFunction): Promise<void> {
-  await downloadFromApi("split", data, downloadName, "application/zip", t);
+export async function processSplit(
+  data: FormData,
+  downloadName: string,
+  t: TFunction,
+  onProgress?: ExportProgressHandler,
+): Promise<void> {
+  await downloadFromApi("split", data, downloadName, "application/zip", t, onProgress);
 }
 
-async function downloadFromApi(
+function downloadFromApi(
   endpoint: string,
   data: FormData,
   downloadName: string,
   expectedType: string,
   t: TFunction,
+  onProgress?: ExportProgressHandler,
 ): Promise<void> {
-  const response = await fetch(`${API_BASE}/${endpoint}`, {
-    method: "POST",
-    body: data,
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${API_BASE}/${endpoint}`);
+    request.responseType = "blob";
+    onProgress?.({ phase: "uploading", percentage: 0 });
+
+    request.upload.onprogress = (event) => {
+      onProgress?.({
+        phase: "uploading",
+        percentage: event.lengthComputable ? progressPercentage(event.loaded, event.total) : null,
+      });
+    };
+    request.upload.onload = () => {
+      onProgress?.({ phase: "processing", percentage: null });
+    };
+    request.onreadystatechange = () => {
+      if (request.readyState === XMLHttpRequest.HEADERS_RECEIVED && request.status >= 200 && request.status < 300) {
+        const contentType = request.getResponseHeader("content-type") ?? "";
+        if (contentType.includes(expectedType)) {
+          onProgress?.({ phase: "downloading", percentage: 0 });
+        }
+      }
+    };
+    request.onprogress = (event) => {
+      const contentType = request.getResponseHeader("content-type") ?? "";
+      if (request.status >= 200 && request.status < 300 && contentType.includes(expectedType)) {
+        onProgress?.({
+          phase: "downloading",
+          percentage: event.lengthComputable ? progressPercentage(event.loaded, event.total) : null,
+        });
+      }
+    };
+    request.onload = () => {
+      void handleResponse().catch(reject);
+    };
+    request.onerror = () => reject(new TypeError("Network request failed"));
+    request.onabort = () => reject(new Error(t("apiErrors.requestFailed", { status: request.status })));
+
+    async function handleResponse(): Promise<void> {
+      const blob = request.response;
+      if (!(blob instanceof Blob)) {
+        reject(new Error(t("apiErrors.invalidResponse")));
+        return;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        const message = await responseError(blob, request.getResponseHeader("content-type") ?? "");
+        reject(
+          new Error(
+            message
+              ? translateApiError(message, t)
+              : t("apiErrors.requestFailed", { status: request.status }),
+          ),
+        );
+        return;
+      }
+
+      const contentType = request.getResponseHeader("content-type") ?? "";
+      if (!contentType.includes(expectedType)) {
+        reject(new Error(t("apiErrors.invalidResponse")));
+        return;
+      }
+      if (blob.size === 0) {
+        reject(new Error(t("apiErrors.emptyPdf")));
+        return;
+      }
+
+      downloadBlob(blob, downloadName);
+      resolve();
+    }
+
+    request.send(data);
   });
-  if (!response.ok) {
-    const message = await responseError(response);
-    throw new Error(
-      message ? translateApiError(message, t) : t("apiErrors.requestFailed", { status: response.status }),
-    );
-  }
+}
 
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes(expectedType)) {
-    throw new Error(t("apiErrors.invalidResponse"));
-  }
+function progressPercentage(loaded: number, total: number): number {
+  return total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+}
 
-  const blob = await response.blob();
-  if (blob.size === 0) {
-    throw new Error(t("apiErrors.emptyPdf"));
-  }
-
+function downloadBlob(blob: Blob, downloadName: string): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -129,12 +203,12 @@ function translateApiError(message: string, t: TFunction): string {
   return message;
 }
 
-async function responseError(response: Response): Promise<string | null> {
-  const body = await response.text();
+async function responseError(blob: Blob, contentType: string): Promise<string | null> {
+  const body = await blob.text();
   if (!body) {
     return null;
   }
-  if (!response.headers.get("content-type")?.includes("application/json")) {
+  if (!contentType.includes("application/json")) {
     return body;
   }
 

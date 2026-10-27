@@ -5,9 +5,14 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useTranslation } from "react-i18next";
 
 import { Button, Card, Input, Select, Spinner, Textarea } from "@internal/ui";
-import { formatOperationError, processSplit } from "../../shared/api";
+import {
+  formatOperationError,
+  processSplit,
+  type ExportProgressState,
+} from "../../shared/api";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
+import { ExportProgress } from "../shared/ExportProgress";
 import { AdvancedSplit } from "./AdvancedSplit";
 import { chunkRows, maxSplitGroups, parseSplitRanges, sourceBaseName, uniqueFileNames } from "./splitModel";
 import "./split.css";
@@ -59,6 +64,10 @@ export function SplitTool() {
   const [rangesText, setRangesText] = useState("");
   const [advanced, setAdvanced] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const pageCount = usePageCount(file);
@@ -102,10 +111,11 @@ export function SplitTool() {
     data.append("groups", JSON.stringify(rows.map((row, index) => ({ name: names[index], pages: row.pages }))));
     data.append("folder", folderName);
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     try {
-      await processSplit(data, `${folderName}.zip`, t);
+      await processSplit(data, `${folderName}.zip`, t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "split.failed"));
@@ -224,6 +234,7 @@ export function SplitTool() {
               <small>{t("split.outputSummary", { count: documentCount, folder: folderName })}</small>
             </span>
           </div>
+          {working ? <ExportProgress progress={exportProgress} /> : null}
           <Button type="submit" disabled={working || !canSubmit} className="action-button">
             {working ? <Spinner aria-label={t("common.loading")} /> : <Split size={18} />}
             {working ? t("split.working") : t("split.action")}

@@ -19,8 +19,13 @@ import { CSS } from "@dnd-kit/utilities";
 import { FileText, Grip, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
+import {
+  formatOperationError,
+  processPDF,
+  type ExportProgressState,
+} from "../../shared/api";
 import { Button, Card, Spinner } from "@internal/ui";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { renderPdfThumbnails, type PageThumbnail } from "./pdfPreview";
@@ -37,6 +42,10 @@ export function ReorderTool() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -107,13 +116,14 @@ export function ReorderTool() {
     }
 
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
     data.append("file", file, file.name);
     data.append("order", JSON.stringify(order));
     try {
-      await processPDF("reorder", data, "reordered.pdf", t);
+      await processPDF("reorder", data, "reordered.pdf", t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.reorderFailed"));
@@ -231,6 +241,7 @@ export function ReorderTool() {
               <small>{t("reorder.outputDescription")}</small>
             </span>
           </div>
+          {working ? <ExportProgress progress={exportProgress} /> : null}
           <Button
             type="submit"
             disabled={working || previewLoading || order.length === 0}

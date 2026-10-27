@@ -2,8 +2,9 @@ import { useId, useState, type FormEvent } from "react";
 import { FileText, RotateCw, Scissors, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
+import { formatOperationError, processPDF, type ExportProgressState } from "../../shared/api";
 import { Button, Card, Input, Select, Spinner } from "@internal/ui";
+import { ExportProgress } from "./ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 
@@ -56,6 +57,10 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -69,6 +74,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
     }
 
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
@@ -78,7 +84,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
       data.append("rotation", rotation);
     }
     try {
-      await processPDF(config.endpoint, data, config.outputName, t);
+      await processPDF(config.endpoint, data, config.outputName, t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(
@@ -199,6 +205,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             <small>{t(config.outputKey)}</small>
           </span>
         </div>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button
           type="submit"
           disabled={working || !file || (mode !== "rotate" && !selection.trim())}

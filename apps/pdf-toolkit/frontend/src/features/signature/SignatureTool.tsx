@@ -1,7 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
+import {
+  formatOperationError,
+  processPDF,
+  type ExportProgressState,
+} from "../../shared/api";
 import { SignaturePlacementPanel } from "./SignaturePlacementPanel";
 import { SignatureSourcePanel } from "./SignatureSourcePanel";
 import { formatSignatureDate } from "./formatDate";
@@ -31,6 +35,10 @@ export function SignatureTool() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
   const nameText = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
   const dateText = formatSignatureDate(dateValue, language);
 
@@ -72,6 +80,7 @@ export function SignatureTool() {
     }
 
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
@@ -94,7 +103,7 @@ export function SignatureTool() {
       data.append("date_font_size", String(datePlacement.fontSize));
     }
     try {
-      await processPDF("signature", data, "signed.pdf", t);
+      await processPDF("signature", data, "signed.pdf", t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "signature.operationFailed"));
@@ -143,6 +152,7 @@ export function SignatureTool() {
         datePlacement={datePlacement}
         disabled={working}
         working={working}
+        exportProgress={exportProgress}
         previewReady={previewReady}
         error={error}
         success={success}

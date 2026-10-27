@@ -2,8 +2,9 @@ import { useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, FileText, Image, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
+import { formatOperationError, processPDF, type ExportProgressState } from "../../shared/api";
 import { Button, Card, Spinner } from "@internal/ui";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize, moveFileInList } from "../../shared/files";
 
@@ -14,6 +15,10 @@ export function ImagesToPdfTool() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
 
   const moveFile = (index: number, offset: -1 | 1) => {
     setFiles((current) => moveFileInList(current, index, offset));
@@ -27,6 +32,7 @@ export function ImagesToPdfTool() {
     }
 
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
@@ -34,7 +40,7 @@ export function ImagesToPdfTool() {
       data.append("images", file, file.name);
     }
     try {
-      await processPDF("images-to-pdf", data, "images.pdf", t);
+      await processPDF("images-to-pdf", data, "images.pdf", t, setExportProgress);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.imagesToPdfFailed"));
@@ -134,6 +140,7 @@ export function ImagesToPdfTool() {
             <small>{t("imagesToPdf.outputDescription")}</small>
           </span>
         </div>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || files.length === 0} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <FileText size={18} />}
           {working ? t("imagesToPdf.working") : t("imagesToPdf.action")}

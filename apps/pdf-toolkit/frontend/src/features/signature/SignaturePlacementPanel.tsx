@@ -2,6 +2,8 @@ import { FileText, PenTool } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button, Card, Spinner } from "@internal/ui";
+import type { ExportProgressState } from "../../shared/api";
+import { ExportProgress } from "../shared/ExportProgress";
 import { PdfSignaturePreview } from "./PdfSignaturePreview";
 import type { SignaturePlacement, TextPlacement } from "./placement";
 
@@ -17,6 +19,7 @@ type SignaturePlacementPanelProps = {
   datePlacement: TextPlacement;
   disabled: boolean;
   working: boolean;
+  exportProgress: ExportProgressState;
   previewReady: boolean;
   error: string;
   success: boolean;
@@ -40,6 +43,7 @@ export function SignaturePlacementPanel({
   datePlacement,
   disabled,
   working,
+  exportProgress,
   previewReady,
   error,
   success,
@@ -103,6 +107,7 @@ export function SignaturePlacementPanel({
             <small>{t("signature.outputDescription")}</small>
           </span>
         </div>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button
           type="submit"
           disabled={working || !file || !signature || !previewReady}
