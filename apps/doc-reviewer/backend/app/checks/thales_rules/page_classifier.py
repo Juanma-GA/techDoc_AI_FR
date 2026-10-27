@@ -178,6 +178,15 @@ def identify_numerical_index_pages(parsed: ParsedPdf) -> dict[str, str | None]:
     return page_types
 
 
+def page_classification_evidence(page: ParsedPage) -> dict[str, object]:
+    """Describe the footer signals behind a page's automatic classification."""
+    footer = revision.extract_footer(page)
+    return {
+        "footer_lines": _footer_lines(page)[:4],
+        "footer_page_key": footer.page_key if footer is not None else None,
+    }
+
+
 def classify_pages(parsed: ParsedPdf, document: object) -> None:
     """Classify page types and initialize the document's revision state."""
     identify_tp1_pages(
@@ -219,4 +228,5 @@ __all__ = [
     "identify_numerical_index_pages",
     "identify_page_type",
     "identify_tp1_pages",
+    "page_classification_evidence",
 ]

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.checks.client_bundle import ClientBundle
+from app.checks.thales_rules.page_classifier import page_classification_evidence
 from app.checks.thales_rules.preparation_toc import map_preparation_pages_to_toc
+from app.checks.thales_rules.section_detection import classify_preparation_sections
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
 from app.core.logging import get_logger
@@ -22,9 +25,15 @@ def detect_pages_to_modify(
     rules: list[CompiledRule],
     db: Session,
     bundle: ClientBundle,
+    classification_overrides: dict[str, dict[str, str | None]] | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     if bundle.page_classifier is not None:
         bundle.page_classifier(parsed, document)
+    analysis = classify_preparation_sections(parsed, metadata or {})
+    classification = _apply_classification_overrides(
+        parsed, classification_overrides or {}, analysis
+    )
     decisions: list[dict[str, Any]] = []
     pages_without_rules: list[dict[str, int | str | None]] = []
     for page in parsed.pages:
@@ -113,6 +122,8 @@ def detect_pages_to_modify(
             }
         )
     map_preparation_pages_to_toc(parsed, decisions)
+    for decision in decisions:
+        decision.update(classification[decision["page"]])
     _logger.info(
         "preparation_page_rules_resolved",
         page_count=len(parsed.pages),
@@ -134,6 +145,40 @@ def detect_pages_to_modify(
         no_applicable_rule_pages=pages_without_rules[:20],
     )
     return decisions
+
+
+def _apply_classification_overrides(
+    parsed: ParsedPdf,
+    overrides: dict[str, dict[str, str | None]],
+    analysis: dict[int, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """Apply manual page types and describe how each page was classified."""
+    classification: dict[int, dict[str, Any]] = {}
+    for page in parsed.pages:
+        detected_type = page.page_type
+        evidence = page_classification_evidence(page)
+        override = overrides.get(str(page.page)) or {}
+        manual_type = override.get("page_type")
+        manual_document_page = override.get("document_page")
+        if manual_type is not None:
+            page.page_type = manual_type
+            source = "manual"
+        elif detected_type is not None:
+            source = "auto"
+        else:
+            source = "unclassified"
+        details = dict(analysis[page.page])
+        if source == "manual":
+            details["classification_status"] = "manual"
+        classification[page.page] = {
+            "page_type_source": source,
+            "detected_page_type": detected_type,
+            "document_page": manual_document_page or evidence["footer_page_key"],
+            "document_page_source": "manual" if manual_document_page else "auto",
+            "classification_evidence": evidence,
+            **details,
+        }
+    return classification
 
 
 def _rule_targets_page(rule: CompiledRule, page_type: str | None) -> bool:

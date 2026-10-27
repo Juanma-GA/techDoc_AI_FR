@@ -9,6 +9,8 @@ import { PageHeader } from "../components/PageHeader";
 import { useDocument } from "../hooks/useDocuments";
 import {
   useDetectPreparationPages,
+  usePatchAbsentPageTypes,
+  usePatchPageClassification,
   usePatchPreparationDecision,
   usePreparationState,
   useRunOcrDocument,
@@ -33,6 +35,8 @@ export function PreparationWorkspace() {
   const validateAllOcr = useValidateAllOcrPages(id);
   const detectPages = useDetectPreparationPages(id);
   const patchDecision = usePatchPreparationDecision(id);
+  const patchClassification = usePatchPageClassification(id);
+  const patchAbsent = usePatchAbsentPageTypes(id);
   const [step, setStep] = useState<Step>(1);
 
   const state = preparation.data;
@@ -84,7 +88,11 @@ export function PreparationWorkspace() {
     ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
     : patchDecision.isError
       ? messageOf(patchDecision.error)
-      : null;
+      : patchClassification.isError
+        ? messageOf(patchClassification.error)
+        : patchAbsent.isError
+          ? messageOf(patchAbsent.error)
+          : null;
 
   return (
     <div>
@@ -134,8 +142,9 @@ export function PreparationWorkspace() {
                 ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
                 : null
           }
-          onRunOcrAll={() => runOcrDocument.mutate()}
+          onRunOcrAll={(pages) => runOcrDocument.mutate(pages)}
           runningOcrAll={runOcrDocument.isPending}
+          ocrProgress={runOcrDocument.isPending ? runOcrDocument.progress : null}
           onRunOcrPage={(page) => runOcrPage.mutate({ page, provider: "mistral" })}
           runningOcrPage={runOcrPage.isPending}
           onValidateAllAndAnalyze={() =>
@@ -153,9 +162,21 @@ export function PreparationWorkspace() {
           state={state}
           error={checklistError}
           detecting={detectPages.isPending}
-          savingDecision={patchDecision.isPending}
+          savingDecision={
+            patchDecision.isPending || patchClassification.isPending || patchAbsent.isPending
+          }
           onDetect={() => detectPages.mutate()}
           onDecision={(page, isModified) => patchDecision.mutate({ page, is_modified: isModified })}
+          onClassification={(page, pageType, documentPage) =>
+            patchClassification.mutate({
+              page,
+              page_type: pageType,
+              document_page: documentPage,
+            })
+          }
+          onAbsent={(pageTypes, absent) =>
+            patchAbsent.mutate({ page_types: pageTypes, absent })
+          }
           onContinue={() => setStep(3)}
         />
       ) : null}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
+from app.core.preparation_classification import load_page_classification, reset_page_decisions
 from app.core.preparation_readability import (
     READABILITY_VERSION,
     analyze_pdf_pages,
@@ -46,6 +48,9 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
                 ) from exc
             record.page_metadata_json = json.dumps(page_metadata)
             record.page_decisions_json = "[]"
+            if len(page_metadata) != record.page_count:
+                record.page_classification_json = "{}"
+                record.absent_page_types_json = "[]"
         provider_changed = record.selected_provider != "mistral"
         if provider_changed:
             record.ocr_results_json = "{}"
@@ -90,6 +95,8 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
         record.validated_pages_json = "{}"
         record.selected_provider = None
         record.page_decisions_json = "[]"
+        record.page_classification_json = "{}"
+        record.absent_page_types_json = "[]"
         record.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(record)
@@ -102,6 +109,7 @@ def state_payload(
     client_code: str,
     *,
     preparation_rule_count: int = 0,
+    page_type_options: Iterable[str] = (),
 ) -> dict[str, Any]:
     record = get_record(db, document.id)
     checklist = db.get(PreparationChecklist, client_code)
@@ -113,6 +121,7 @@ def state_payload(
         validated: list[int] = []
         available_results: list[dict[str, Any]] = []
         decisions: list[dict[str, Any]] = []
+        page_classification: dict[str, Any] = {}
     else:
         pages = _load_json(record.page_metadata_json, "page_metadata_json")
         filename = record.source_filename
@@ -129,6 +138,7 @@ def state_payload(
             for page_number in provider_results
         ]
         decisions = _load_json(record.page_decisions_json, "page_decisions_json")
+        page_classification = load_page_classification(record)
     rules = _load_json(checklist.rules_json, "rules_json") if checklist else []
     return {
         "document_id": str(document.id),
@@ -145,6 +155,8 @@ def state_payload(
         "checklist_source_filename": checklist.source_filename if checklist else None,
         "page_decisions": decisions,
         "preparation_mapping": preparation_mapping,
+        "page_classification": page_classification,
+        "page_type_options": sorted(page_type_options),
     }
 
 
@@ -165,6 +177,7 @@ def update_preparation_mapping(
     mapping: dict[str, Any],
 ) -> None:
     record.preparation_mapping_json = json.dumps(mapping, ensure_ascii=False)
+    reset_page_decisions(record)
     record.updated_at = datetime.now(UTC)
     db.commit()
 
@@ -179,6 +192,7 @@ def update_readability(
     page = _find_page(pages, page_number)
     page["needs_ocr"] = needs_ocr
     record.page_metadata_json = json.dumps(pages)
+    reset_page_decisions(record)
     record.updated_at = datetime.now(UTC)
     db.commit()
 

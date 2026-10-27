@@ -11,7 +11,13 @@ from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
 from app.core.compiled_rules import CompiledRule
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
-from app.core.preparation_state import _load_json, _load_validation_map, get_or_create_record
+from app.core.preparation_classification import load_page_classification
+from app.core.preparation_state import (
+    _load_json,
+    _load_validation_map,
+    get_or_create_record,
+    load_preparation_mapping,
+)
 from app.db.models import Document
 from app.db.preparation_models import PreparationChecklist
 from app.parsers.pdf_parser import ParsedPdf, PdfLine, Span, parse_pdf
@@ -21,8 +27,11 @@ def detect_preparation_pages(
     db: Session,
     document: Document,
     client_configuration: LoadedClientConfiguration,
+    *,
+    preserve_manual: bool = False,
 ) -> list[dict]:
     record = get_or_create_record(db, document)
+    previous_decisions = _load_json(record.page_decisions_json, "page_decisions_json")
     page_metadata = _load_json(record.page_metadata_json, "page_metadata_json")
     required_pages = [page["page"] for page in page_metadata if page.get("needs_ocr")]
     if record.selected_provider != "mistral":
@@ -66,11 +75,43 @@ def detect_preparation_pages(
         rules,
         db,
         client_configuration.bundle,
+        load_page_classification(record),
+        _detection_metadata(document, load_preparation_mapping(record)),
     )
+    if preserve_manual:
+        _carry_over_manual_decisions(decisions, previous_decisions)
     record.page_decisions_json = json.dumps(decisions, ensure_ascii=False)
     record.updated_at = datetime.now(UTC)
     db.commit()
     return decisions
+
+
+def _detection_metadata(document: Document, preparation_mapping: dict[str, Any]) -> dict[str, Any]:
+    """Document metadata overlaid with the preparation mapping's non-empty values."""
+    metadata: dict[str, Any] = {
+        key: getattr(document, key, None) for key in ("meta_cmm_number", "meta_first_issue_date")
+    }
+    metadata.update({key: value for key, value in preparation_mapping.items() if value})
+    return metadata
+
+
+def _carry_over_manual_decisions(
+    decisions: list[dict[str, Any]],
+    previous: list[dict[str, Any]],
+) -> None:
+    """Keep a manual modified/unchanged choice while the page type is unchanged."""
+    previous_by_page = {item.get("page"): item for item in previous}
+    for decision in decisions:
+        old = previous_by_page.get(decision["page"])
+        if (
+            old is not None
+            and old.get("manual_override")
+            and old.get("is_modified") is not None
+            and old.get("page_type") == decision["page_type"]
+        ):
+            decision["is_modified"] = old["is_modified"]
+            decision["decision_status"] = "selected" if old["is_modified"] else "not_selected"
+            decision["manual_override"] = True
 
 
 def _apply_ocr_text(

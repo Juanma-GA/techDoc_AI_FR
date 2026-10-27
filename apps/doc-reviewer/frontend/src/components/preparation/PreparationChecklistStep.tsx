@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next";
 
 import type { PreparationState } from "../../types/preparation";
 import { PreparationDecisionRow } from "./PreparationDecisionRow";
+import { PreparationMissingPages } from "./PreparationMissingPages";
+import { PreparationSkippedRules } from "./PreparationSkippedRules";
 
 type Props = {
   state: PreparationState;
@@ -10,6 +12,8 @@ type Props = {
   savingDecision: boolean;
   onDetect: () => void;
   onDecision: (page: number, isModified: boolean) => void;
+  onClassification: (page: number, pageType: string | null, documentPage: string | null) => void;
+  onAbsent: (pageTypes: string[], absent: boolean) => void;
   onContinue: () => void;
 };
 
@@ -20,6 +24,8 @@ export function PreparationChecklistStep({
   savingDecision,
   onDetect,
   onDecision,
+  onClassification,
+  onAbsent,
   onContinue,
 }: Props) {
   const { t } = useTranslation();
@@ -83,9 +89,20 @@ export function PreparationChecklistStep({
 
       {decisions.length > 0 ? (
         <div style={{ marginTop: 16 }}>
+          <PreparationMissingPages
+            groups={state.missing_page_types ?? []}
+            absentGroups={state.absent_page_types ?? []}
+            pageCount={state.page_count}
+            saving={savingDecision}
+            onProvide={(page, pageType, documentPage) =>
+              onClassification(page, pageType, documentPage)
+            }
+            onAbsent={onAbsent}
+          />
+          <PreparationSkippedRules rules={state.skipped_rules ?? []} />
           <h3 className="card-title">{t("preparation.decisionsTitle")}</h3>
           <div className="table-scroll">
-            <table className="rules-table">
+            <table className="rules-table prep-decisions">
               <thead>
                 <tr>
                   <th>{t("preparation.page")}</th>
@@ -101,7 +118,9 @@ export function PreparationChecklistStep({
                     key={decision.page}
                     decision={decision}
                     saving={savingDecision}
+                    pageTypeOptions={state.page_type_options ?? []}
                     onDecision={onDecision}
+                    onClassification={onClassification}
                   />
                 ))}
               </tbody>

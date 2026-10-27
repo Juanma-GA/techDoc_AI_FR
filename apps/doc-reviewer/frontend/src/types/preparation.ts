@@ -60,6 +60,24 @@ export type PreparationPageDecision = {
   toc_bbox: number[] | null;
   toc_entry?: string | null;
   manual_override?: boolean;
+  page_type_source?: "auto" | "manual" | "unclassified";
+  detected_page_type?: string | null;
+  document_page?: string | null;
+  document_page_source?: "auto" | "manual";
+  classification_evidence?: {
+    footer_lines: string[];
+    footer_page_key: string | null;
+  };
+  classification_status?:
+    | "confirmed"
+    | "partial"
+    | "detected"
+    | "conflict"
+    | "unclassified"
+    | "manual";
+  classification_signals?: { section: string; family: string; detail: string }[];
+  classification_candidates?: string[];
+  classification_notes?: string[];
 };
 
 export type PreparationState = {
@@ -77,6 +95,17 @@ export type PreparationState = {
   checklist_source_filename: string | null;
   page_decisions: PreparationPageDecision[];
   preparation_mapping: Record<string, unknown>;
+  page_classification?: Record<string, { page_type: string | null; document_page: string | null }>;
+  page_type_options?: string[];
+  missing_page_types?: string[][];
+  absent_page_types?: string[][];
+  skipped_rules?: PreparationSkippedRule[];
+};
+
+export type PreparationSkippedRule = {
+  rule_id: string;
+  title: string;
+  page_types: string[];
 };
 
 export type PreparationPageText = {

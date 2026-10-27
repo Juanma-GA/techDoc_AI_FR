@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { ExportSelector } from "../reviewer/ExportSelector";
 import { PreparationMetadataPanel } from "./PreparationMetadataPanel";
 import { PreparationReviewPane } from "./PreparationReviewPane";
+import { PreparationSkippedRules } from "./PreparationSkippedRules";
 import { useClientConfig } from "../../hooks/useClientConfig";
 import { useAnalyze } from "../../hooks/useAnalyze";
 import {
@@ -146,6 +147,7 @@ export function PreparationReview({ document, preparation }: Props) {
           {syncAnnotations.error instanceof Error ? syncAnnotations.error.message : ""}
         </p>
       ) : null}
+      <PreparationSkippedRules rules={preparation.skipped_rules ?? []} />
       <div className="row" style={{ gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
         <button
           type="button"

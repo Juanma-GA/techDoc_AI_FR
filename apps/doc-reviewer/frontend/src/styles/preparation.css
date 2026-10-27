@@ -64,6 +64,239 @@
   color: var(--brand);
 }
 
+.prep-type {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+}
+
+.prep-type-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prep-type-name {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+}
+
+.prep-type-meta {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+}
+
+.prep-type-edit summary {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.prep-type-edit summary:hover,
+.prep-type-edit[open] summary {
+  color: var(--fg);
+}
+
+.prep-type-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+}
+
+.prep-type-evidence {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 8px;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+}
+
+.prep-type-evidence li {
+  display: flex;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.prep-type-evidence li > span:first-child:not(:last-child) {
+  flex: none;
+  font-family: "JetBrains Mono", monospace;
+  color: var(--fg);
+}
+
+.prep-type-fields,
+.prep-missing-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.prep-type-fields label,
+.prep-missing-fields label {
+  display: grid;
+  gap: 3px;
+  color: var(--fg-dim);
+  font-size: 0.7rem;
+}
+
+.prep-type-fields .input,
+.prep-missing-fields .input {
+  width: 100%;
+  min-width: 90px;
+}
+
+.prep-type-panel > .btn {
+  justify-self: start;
+}
+
+.prep-missing {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.prep-missing-title {
+  margin: 0 0 2px;
+  font-size: 0.9rem;
+}
+
+.prep-missing-list {
+  display: grid;
+  gap: 0;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.prep-missing-item {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.prep-missing-type {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.prep-skipped-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+
+.prep-skipped-list li {
+  display: grid;
+  gap: 1px;
+}
+
+@media (max-width: 700px) {
+  .prep-missing {
+    padding: 10px;
+  }
+
+  .prep-missing-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .prep-missing-fields .btn {
+    justify-self: start;
+  }
+
+  .prep-type-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table-scroll:has(.prep-decisions) {
+    overflow-x: visible;
+  }
+
+  .prep-decisions,
+  .prep-decisions tbody,
+  .prep-decisions tr,
+  .prep-decisions td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .table-scroll .prep-decisions {
+    min-width: 0;
+  }
+
+  .prep-decisions thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .prep-decisions tr {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+  }
+
+  .prep-decisions td {
+    display: grid;
+    grid-template-columns: minmax(70px, 28%) minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+    overflow-wrap: anywhere;
+  }
+
+  .prep-decisions td:first-child {
+    border-top: 0;
+  }
+
+  .prep-decisions td::before {
+    content: attr(data-label);
+    color: var(--fg-dim);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .prep-type {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .prep-missing-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .preparation-rule-results {
   display: grid;
   gap: 8px;

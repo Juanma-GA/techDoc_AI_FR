@@ -1,15 +1,20 @@
 import { useTranslation } from "react-i18next";
 
 import type { PreparationPageDecision } from "../../types/preparation";
+import { PreparationClassificationCell } from "./PreparationClassificationCell";
 
 export function PreparationDecisionRow({
   decision,
   saving,
+  pageTypeOptions,
   onDecision,
+  onClassification,
 }: {
   decision: PreparationPageDecision;
   saving: boolean;
+  pageTypeOptions: string[];
   onDecision: (page: number, isModified: boolean) => void;
+  onClassification: (page: number, pageType: string | null, documentPage: string | null) => void;
 }) {
   const { t } = useTranslation();
   const resultKey =
@@ -41,10 +46,17 @@ export function PreparationDecisionRow({
   } as const;
   return (
     <tr>
-      <td>{decision.page}</td>
-      <td>{decision.page_type ?? "—"}</td>
-      <td>{t(resultKey)}</td>
-      <td>
+      <td data-label={t("preparation.page")}>{decision.page}</td>
+      <td data-label={t("preparation.pageType")}>
+        <PreparationClassificationCell
+          decision={decision}
+          pageTypeOptions={pageTypeOptions}
+          saving={saving}
+          onClassification={onClassification}
+        />
+      </td>
+      <td data-label={t("preparation.decision")}>{t(resultKey)}</td>
+      <td data-label={t("preparation.reasons")}>
         {ruleResults.length > 0 ? (
           <details className="preparation-rule-details">
             <summary>
@@ -74,7 +86,7 @@ export function PreparationDecisionRow({
           "—"
         )}
       </td>
-      <td>
+      <td data-label={t("preparation.manualOverride")} className="prep-decision-actions">
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <button
             type="button"
