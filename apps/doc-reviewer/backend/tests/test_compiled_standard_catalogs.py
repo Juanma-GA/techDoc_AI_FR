@@ -37,7 +37,14 @@ from app.core.page_range import filter_pdf_pages
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfBookmark, PdfLine, Span
+from app.parsers.pdf_parser import (
+    ParsedPage,
+    ParsedPdf,
+    PdfBookmark,
+    PdfLine,
+    PdfVectorPrimitive,
+    Span,
+)
 
 
 _TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
@@ -3854,6 +3861,44 @@ def test_metric_length_conversion_skips_table_but_checks_body_text() -> None:
     assert [suggestion.original for suggestion in temperature_suggestions] == [
         "Temperature: 15 deg. C"
     ]
+
+
+@pytest.mark.parametrize(
+    ("rule_code", "measurement"),
+    [
+        ("CUSTOM_METRIC_LENGTH_INCH_CONVERSION", "25.4 mm"),
+        ("CUSTOM_METRIC_MASS_LBF_CONVERSION", "1 kg"),
+        ("CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION", "1 N.m"),
+    ],
+)
+def test_metric_conversions_skip_vector_bordered_table_cells(
+    rule_code: str,
+    measurement: str,
+) -> None:
+    page = ParsedPage(
+        page=1,
+        text=f"Capacity {measurement}",
+        spans=[
+            Span(
+                text=f"Capacity {measurement}",
+                bbox=(297.2, 111.0, 381.2, 125.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            )
+        ],
+        page_height=792.0,
+        vector_primitives=[
+            PdfVectorPrimitive("rect", (50.0, y, 528.0, y + 0.5), None, None, 0.0)
+            for y in (90.0, 110.0, 130.0, 150.0)
+        ],
+    )
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule(rule_code)])
+
+    assert results[0].status == "PASS", rule_code
+    assert suggestions == [], rule_code
 
 
 def test_forbidden_consumables_are_reported_by_one_rule() -> None:
