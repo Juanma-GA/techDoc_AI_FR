@@ -73,7 +73,7 @@ def test_repository_active_client_configuration_loads() -> None:
         "THALES-CUSTOM",
         "ASD-STE100",
     ]
-    assert len(configuration.bundle.rules) == 87
+    assert len(configuration.bundle.rules) == 91
     ste_rule = next(
         rule for rule in configuration.bundle.rules if rule.code == "STE_NO_MAYBE"
     )

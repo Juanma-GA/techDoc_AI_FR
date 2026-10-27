@@ -6,6 +6,7 @@ mapping: a FAIL means the page still has to be modified.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -17,8 +18,11 @@ from . import revision_engine as revision
 
 ROR_NEW_ROW = "ror_new_row"
 LEP_MODIFIED_PAGES = "lep_modified_pages"
+TOC_INTRODUCTION = "toc_introduction"
 _ROR_PAGE_TYPE = "ROR"
 _LEP_PAGE_TYPE = "LEP"
+_TOC_PAGE_TYPE = "TABLE_OF_CONTENTS"
+_TOC_INTRODUCTION_RE = re.compile(r"(?im)^\s*(?:\d+(?:\.\d+)*[.)]?\s+)?INTRODUCTION\b")
 
 
 def _runtime(context: Any) -> Any:
@@ -27,7 +31,7 @@ def _runtime(context: Any) -> Any:
 
 def _control(parameters: Mapping[str, Any]) -> str:
     control = parameters.get("control")
-    if control not in {ROR_NEW_ROW, LEP_MODIFIED_PAGES}:
+    if control not in {ROR_NEW_ROW, LEP_MODIFIED_PAGES, TOC_INTRODUCTION}:
         raise ValueError("preparation_check operation requires a known control")
     return str(control)
 
@@ -140,6 +144,29 @@ def _lep_findings(context: Any) -> tuple[list[OperationResult], list[int]]:
     return findings, unresolved
 
 
+def _toc_introduction(context: Any) -> OperationResult:
+    toc_pages = [page for page in _document_pages(context) if page.page_type == _TOC_PAGE_TYPE]
+    if not toc_pages:
+        return OperationResult(
+            status="INCONCLUSIVE", message="Aucune page de table des matières identifiée."
+        )
+    first_page = toc_pages[0]
+    targets = _target_pages(context)
+    if targets and first_page.page not in targets:
+        return OperationResult(status="PASS", page=first_page.page)
+    if any(_TOC_INTRODUCTION_RE.search(page.text or "") for page in toc_pages):
+        return OperationResult(status="PASS", page=first_page.page)
+    return OperationResult(
+        status="FAIL",
+        expected="INTRODUCTION",
+        message=(
+            "Le chapitre INTRODUCTION est absent de la table des matières : "
+            "l'ajouter en première ligne."
+        ),
+        page=first_page.page,
+    )
+
+
 def _evaluate(context: Any, parameters: Mapping[str, Any]) -> OperationResult:
     control = _control(parameters)
     if getattr(_runtime(context), "is_docx", False) or getattr(
@@ -148,6 +175,8 @@ def _evaluate(context: Any, parameters: Mapping[str, Any]) -> OperationResult:
         return OperationResult(status="INCONCLUSIVE", expected=control)
     if control == ROR_NEW_ROW:
         return _ror_new_row(context)
+    if control == TOC_INTRODUCTION:
+        return _toc_introduction(context)
     if _mapped_revision_date(context) is None:
         return OperationResult(
             status="INCONCLUSIVE",

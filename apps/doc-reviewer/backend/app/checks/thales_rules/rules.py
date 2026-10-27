@@ -3031,6 +3031,153 @@ CUSTOM_PREP_LEP_MODIFIED_PAGES = rule(
     },
 )
 
+_TESTING_STABILIZATION_PATTERN = (
+    r"(?i)\bNOTE\s*:\s*Before\s+the\s+tests,\s+let\s+the\s+equipment\s+stay\s+in\s+"
+    r"these\s+conditions\s+for\s+two\s+hours\s+minimum\b"
+)
+_TESTING_STABILIZATION_TEXT = (
+    "NOTE: Before the tests, let the equipment stay in these conditions for "
+    "two hours minimum."
+)
+
+CUSTOM_PREP_TOC_INTRODUCTION = rule(
+    code="CUSTOM_PREP_TOC_INTRODUCTION",
+    name="Preparation : chapitre INTRODUCTION dans la table des matieres",
+    description=(
+        "La table des matieres doit contenir le chapitre INTRODUCTION. S'il est "
+        "absent, l'ajouter en premiere ligne."
+    ),
+    message="Le chapitre INTRODUCTION est absent de la table des matieres.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="TABLE_OF_CONTENTS"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="preparation_check",
+            operation_params={"control": "toc_introduction"},
+        )
+    ],
+    failure_message="chapitre INTRODUCTION absent de la table des matieres.",
+    translations={
+        "en": {
+            "description": (
+                "The table of contents must contain the INTRODUCTION chapter. If it is "
+                "missing, add it as the first line."
+            ),
+            "message": "The INTRODUCTION chapter is missing from the table of contents.",
+        }
+    },
+)
+
+CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION = rule(
+    code="CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION",
+    name="Preparation : Shop Verification de l'INTRODUCTION",
+    description=(
+        "Le bloc Shop Verification de l'INTRODUCTION doit correspondre au constructeur "
+        "du mapping de preparation : Boeing (« Testing and Fault Isolation: shop "
+        "verification done JUN 24/88. ») ou, sinon, « The shop verification will be "
+        "done at the first repair of the equipment. »"
+    ),
+    message="Le bloc Shop Verification de l'INTRODUCTION est absent ou incorrect.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="INTRODUCTION"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="shop_verification",
+            require_all=True,
+        ),
+    ],
+    failure_message="Shop Verification INTRODUCTION non conforme.",
+    only_if=Condition(field="meta_manufacturer", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The INTRODUCTION Shop Verification block must match the manufacturer in "
+                "the preparation mapping: Boeing (\"Testing and Fault Isolation: shop "
+                "verification done JUN 24/88.\") or otherwise \"The shop verification "
+                "will be done at the first repair of the equipment.\""
+            ),
+            "message": "The INTRODUCTION Shop Verification block is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_PREP_TESTING_HUMIDITY_NOTE = rule(
+    code="CUSTOM_PREP_TESTING_HUMIDITY_NOTE",
+    name="Preparation : NOTE d'humidite relative des pages TESTING",
+    description=(
+        "La NOTE des pages TESTING doit etre a jour : « Relative humidity: Refer to "
+        "Standard Practices Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-800A-A - "
+        "Storage - General procedure. »"
+    ),
+    message="La NOTE d'humidite relative de la page TESTING n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="TESTING"),
+    checks=[
+        _required_note_check(
+            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+            display=_REPAIR_RELATIVE_HUMIDITY,
+            page_type="TESTING",
+        ),
+    ],
+    failure_message="NOTE d'humidite relative TESTING non a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The TESTING page NOTE must be up to date: \"Relative humidity: Refer to "
+                "Standard Practices Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-800A-A "
+                "- Storage - General procedure.\""
+            ),
+            "message": "The relative humidity NOTE on the TESTING page is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_TESTING_STABILIZATION_NOTE = rule(
+    code="CUSTOM_PREP_TESTING_STABILIZATION_NOTE",
+    name="Preparation : NOTE de stabilisation des pages TESTING",
+    description=(
+        "Les pages TESTING doivent porter la NOTE : « NOTE: Before the tests, let the "
+        "equipment stay in these conditions for two hours minimum. »"
+    ),
+    message="La NOTE de stabilisation de la page TESTING est absente ou incorrecte.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="TESTING"),
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_TESTING_STABILIZATION_PATTERN,
+            require_all=True,
+            expected_display=_TESTING_STABILIZATION_TEXT,
+            suggestion_mode="fuzzy",
+            missing_anchor=_NOTE_PRESSURE_PATTERN,
+            missing_anchor_position="below",
+        ),
+    ],
+    failure_message="NOTE de stabilisation TESTING absente ou incorrecte.",
+    translations={
+        "en": {
+            "description": (
+                "TESTING pages must carry the NOTE: \"NOTE: Before the tests, let the "
+                "equipment stay in these conditions for two hours minimum.\""
+            ),
+            "message": "The TESTING stabilization NOTE is missing or incorrect.",
+        }
+    },
+)
+
 PREPARATION_RULE_DEFINITIONS = (
     CUSTOM_PREP_STANDARD_PRACTICE_ATA,
     CUSTOM_PREP_STANDARD_PRACTICE_REPLACE,
@@ -3039,6 +3186,10 @@ PREPARATION_RULE_DEFINITIONS = (
     CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER,
     CUSTOM_PREP_ROR_NEW_ROW,
     CUSTOM_PREP_LEP_MODIFIED_PAGES,
+    CUSTOM_PREP_TOC_INTRODUCTION,
+    CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION,
+    CUSTOM_PREP_TESTING_HUMIDITY_NOTE,
+    CUSTOM_PREP_TESTING_STABILIZATION_NOTE,
 )
 
 REVISION_RULE_DEFINITIONS = (

@@ -184,6 +184,10 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER": "error",
         "CUSTOM_PREP_ROR_NEW_ROW": "error",
         "CUSTOM_PREP_LEP_MODIFIED_PAGES": "error",
+        "CUSTOM_PREP_TOC_INTRODUCTION": "error",
+        "CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION": "error",
+        "CUSTOM_PREP_TESTING_HUMIDITY_NOTE": "error",
+        "CUSTOM_PREP_TESTING_STABILIZATION_NOTE": "error",
     }
 
 

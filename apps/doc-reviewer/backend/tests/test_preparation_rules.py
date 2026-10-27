@@ -49,7 +49,7 @@ def _lines(*texts: str, top: float = 80) -> list[Placed]:
 def test_all_new_rules_are_preparation_rules() -> None:
     codes = [code for code in RULES if code.startswith("CUSTOM_PREP_")]
 
-    assert len(codes) == 7
+    assert len(codes) == 11
     assert all(RULES[code].preparation for code in codes)
 
 
@@ -271,3 +271,108 @@ def test_lep_without_any_commented_page_or_date_passes_or_stays_open() -> None:
     status = _status("CUSTOM_PREP_LEP_MODIFIED_PAGES", parsed, _document(), page=1)
 
     assert status == "INCONCLUSIVE"
+
+
+def _toc(parsed_pages: list[list[Placed]], types: list[str]):
+    parsed = _parse(parsed_pages)
+    for page, page_type in zip(parsed.pages, types, strict=True):
+        page.page_type = page_type
+    return parsed
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        (["TABLE OF CONTENTS", "INTRODUCTION 1", "TESTING 101"], "PASS"),
+        (["TABLE OF CONTENTS", "1. INTRODUCTION", "TESTING 101"], "PASS"),
+        (["TABLE OF CONTENTS", "TESTING 101", "REPAIR 601"], "FAIL"),
+    ],
+)
+def test_table_of_contents_must_list_the_introduction(entries: list[str], expected: str) -> None:
+    parsed = _toc([_lines(*entries)], ["TABLE_OF_CONTENTS"])
+
+    assert _status("CUSTOM_PREP_TOC_INTRODUCTION", parsed, _document()) == expected
+
+
+def test_toc_introduction_is_reported_once_on_the_first_toc_page() -> None:
+    parsed = _toc(
+        [_lines("TABLE OF CONTENTS", "TESTING 101"), _lines("REPAIR 601")],
+        ["TABLE_OF_CONTENTS", "TABLE_OF_CONTENTS"],
+    )
+    document = _document()
+
+    assert _status("CUSTOM_PREP_TOC_INTRODUCTION", parsed, document, page=1) == "FAIL"
+    assert _status("CUSTOM_PREP_TOC_INTRODUCTION", parsed, document, page=2) == "PASS"
+
+
+_AIRBUS_SHOP = (
+    "Shop Verification:",
+    "A. Verification of the procedures in this manual",
+    "(1) The shop verification will be done at the first repair of the equipment.",
+)
+_BOEING_SHOP = (
+    "Shop Verification:",
+    "A. Verification of the procedures in this manual",
+    "(1) Testing and Fault Isolation: shop verification done JUN 24/88.",
+)
+
+
+@pytest.mark.parametrize(
+    ("manufacturer", "shop", "expected"),
+    [
+        ("Airbus", _AIRBUS_SHOP, "PASS"),
+        ("Airbus", _BOEING_SHOP, "FAIL"),
+        ("Boeing", _BOEING_SHOP, "PASS"),
+        ("Boeing", _AIRBUS_SHOP, "FAIL"),
+    ],
+)
+def test_introduction_shop_verification_follows_the_mapped_manufacturer(
+    manufacturer: str, shop: tuple[str, ...], expected: str
+) -> None:
+    parsed = _toc([_lines("INTRODUCTION", *shop)], ["INTRODUCTION"])
+
+    status = _status(
+        "CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION",
+        parsed,
+        _document(meta_manufacturer=manufacturer),
+    )
+
+    assert status == expected
+
+
+_TESTING_INTRO = (
+    "NOTE: During testing operations, make sure that the environmental"
+    " conditions are as follows:"
+)
+_HUMIDITY = (
+    "- Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00,",
+    "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure.",
+)
+
+
+def test_testing_humidity_note_must_be_up_to_date() -> None:
+    current = _toc(
+        [_lines(_TESTING_INTRO, "- Temperature: 15 to 35 deg. C", *_HUMIDITY)], ["TESTING"]
+    )
+    outdated = _toc(
+        [
+            _lines(
+                _TESTING_INTRO,
+                "- Temperature: 15 to 35 deg. C",
+                "- Relative humidity: 20 to 80 percent.",
+            )
+        ],
+        ["TESTING"],
+    )
+
+    assert _status("CUSTOM_PREP_TESTING_HUMIDITY_NOTE", current, _document()) == "PASS"
+    assert _status("CUSTOM_PREP_TESTING_HUMIDITY_NOTE", outdated, _document()) == "FAIL"
+
+
+def test_testing_stabilization_note_must_be_present() -> None:
+    note = "NOTE: Before the tests, let the equipment stay in these conditions for two hours minimum."
+    present = _toc([_lines("Body", note)], ["TESTING"])
+    missing = _toc([_lines("Body", "NOTE: Before the tests, wait one hour.")], ["TESTING"])
+
+    assert _status("CUSTOM_PREP_TESTING_STABILIZATION_NOTE", present, _document()) == "PASS"
+    assert _status("CUSTOM_PREP_TESTING_STABILIZATION_NOTE", missing, _document()) == "FAIL"

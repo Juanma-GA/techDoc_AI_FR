@@ -29,8 +29,8 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
     assert config["catalogs"][0]["code"] == "THALES-CUSTOM"
     assert len(config["catalogs"]) == 2
     assert config["catalogs"][1]["code"] == "ASD-STE100"
-    assert len(rules) == 87
-    assert [rule["rule_number"] for rule in rules] == list(range(1, 88))
+    assert len(rules) == 91
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 92))
     preparation_rule_codes = {
         "CUSTOM_TP1_REVISION_NUMBER",
         "CUSTOM_TP1_THALES_ADDRESS",
@@ -42,6 +42,10 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
         "CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER",
         "CUSTOM_PREP_ROR_NEW_ROW",
         "CUSTOM_PREP_LEP_MODIFIED_PAGES",
+        "CUSTOM_PREP_TOC_INTRODUCTION",
+        "CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION",
+        "CUSTOM_PREP_TESTING_HUMIDITY_NOTE",
+        "CUSTOM_PREP_TESTING_STABILIZATION_NOTE",
     }
     assert {
         rule["code"] for rule in rules if rule["scope"] == "preparation"
