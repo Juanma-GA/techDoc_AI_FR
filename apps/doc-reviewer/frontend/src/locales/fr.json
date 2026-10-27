@@ -23,7 +23,7 @@
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
     "dashboard": "Tableau de bord",
-    "documents": "Vérification",
+    "documents": "Contrôle",
     "preparation": "Préparation",
     "rejections": "Rejets",
     "standards": "Normes",
@@ -112,7 +112,7 @@
     "empty": "Aucun élément à afficher"
   },
   "documents": {
-    "title": "Vérification",
+    "title": "Contrôle",
     "subtitle": "Importer, analyser et vérifier des documents techniques.",
     "uploadTitle": "Importer des documents",
     "listTitle": "Documents importés (y compris ceux de la préparation)",
@@ -238,7 +238,7 @@
     "steps": {
       "ocr": "1. OCR du document",
       "checklist": "2. Pages à modifier",
-      "review": "3. Vérification"
+      "review": "3. Contrôle"
     },
     "sourceDocument": "Document préparé : {{filename}} · {{count}} pages",
     "ocrTitle": "OCR et vérification visuelle",

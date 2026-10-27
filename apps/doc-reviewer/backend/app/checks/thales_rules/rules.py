@@ -2016,7 +2016,9 @@ CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
     name="Titre des signets PDF present sur la page cible",
     description=(
         "Le titre de chaque signet PDF doit apparaitre dans le texte de la page "
-        "vers laquelle le signet renvoie."
+        "vers laquelle le signet renvoie. Si un titre de page lui ressemble a "
+        "90 % ou plus sans etre identique, une faute probable dans le titre est "
+        "signalee avec la correction proposee."
     ),
     message="Le titre du signet PDF ne correspond pas au contenu de sa page cible.",
     kind="field_required",
@@ -2034,7 +2036,8 @@ CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
         "en": {
             "description": (
                 "The title of each PDF bookmark must appear in the text of its "
-                "destination page."
+                "destination page. If a page title is at least 90% similar but "
+                "not identical, a likely typo is reported with a suggested correction."
             ),
             "message": "The PDF bookmark title does not match the content of its destination page.",
         }

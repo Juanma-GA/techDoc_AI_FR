@@ -23,7 +23,7 @@
     "themeToggle": "Switch theme",
     "languageSwitcher": "Language",
     "dashboard": "Dashboard",
-    "documents": "Verification",
+    "documents": "Control",
     "preparation": "Preparation",
     "rejections": "Rejections",
     "standards": "Standards",
@@ -112,7 +112,7 @@
     "empty": "Nothing to show"
   },
   "documents": {
-    "title": "Verification",
+    "title": "Control",
     "subtitle": "Import, analyze, and verify technical documents.",
     "uploadTitle": "Import documents",
     "listTitle": "Imported documents (including those from Preparation)",
@@ -238,7 +238,7 @@
     "steps": {
       "ocr": "1. Document OCR",
       "checklist": "2. Pages to modify",
-      "review": "3. Verification"
+      "review": "3. Control"
     },
     "sourceDocument": "Document being prepared: {{filename}} · {{count}} pages",
     "ocrTitle": "OCR and visual review",

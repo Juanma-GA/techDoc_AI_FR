@@ -2877,20 +2877,38 @@ def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
 
 
 @pytest.mark.parametrize(
-    ("bookmark_title", "page_title", "expected_status"),
+    ("bookmark_title", "page_title", "expected_status", "expected_proposed"),
     [
-        ("LIST OF EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
-        ("LIST EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
-        ("LIST OF EFFECTIVE PAGES", "LIST OF EFECTIVE PAGES", "PASS"),
-        ("Illustrated Parts List", "ILLUSTRATED PART LIS", "PASS"),
-        ("REPAIR PROCEDURE", "REPAIR PROCEDURES", "PASS"),
-        ("REPAIR PROCEDURE", "INTRODUCTION", "FAIL"),
-        ("REPAIR PROCEDURE 101", "REPAIR PROCEDURE 102", "FAIL"),
-        ("CHECK", "CHEEK", "FAIL"),
+        (
+            "LIST OF EFFECTIVE PAGES",
+            "LIST OF EFFECTIVES PAGES",
+            "FAIL",
+            "LIST OF EFFECTIVE PAGES",
+        ),
+        (
+            "LIST EFFECTIVE PAGES",
+            "LIST OF EFFECTIVES PAGES",
+            "FAIL",
+            "LIST EFFECTIVE PAGES",
+        ),
+        (
+            "LIST OF EFFECTIVE PAGES",
+            "LIST OF EFECTIVE PAGES",
+            "FAIL",
+            "LIST OF EFFECTIVE PAGES",
+        ),
+        ("Illustrated Parts List", "ILLUSTRATED PART LIS", "FAIL", "Illustrated Parts List"),
+        ("REPAIR PROCEDURE", "REPAIR PROCEDURES", "FAIL", "REPAIR PROCEDURE"),
+        ("REPAIR PROCEDURE", "INTRODUCTION", "FAIL", ""),
+        ("REPAIR PROCEDURE 101", "REPAIR PROCEDURE 102", "FAIL", ""),
+        ("CHECK", "CHEEK", "FAIL", ""),
     ],
 )
 def test_pdf_bookmark_tolerates_small_title_typos_but_not_wrong_destinations(
-    bookmark_title: str, page_title: str, expected_status: str,
+    bookmark_title: str,
+    page_title: str,
+    expected_status: str,
+    expected_proposed: str,
 ) -> None:
     parsed = ParsedPdf(
         page_count=1,
@@ -2904,6 +2922,12 @@ def test_pdf_bookmark_tolerates_small_title_typos_but_not_wrong_destinations(
 
     assert results[0].status == expected_status
     assert bool(suggestions) is (expected_status == "FAIL")
+    if expected_proposed:
+        assert suggestions[0].original == page_title
+        assert suggestions[0].proposed == expected_proposed
+        assert "faute d'orthographe" in suggestions[0].message
+    elif suggestions:
+        assert suggestions[0].proposed == ""
 
 
 def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
@@ -2953,7 +2977,12 @@ def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
     results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
 
     assert results[0].status == "FAIL"
-    assert [(item.original, item.page) for item in suggestions] == [(header, 1)]
+    assert [(item.original, item.page) for item in suggestions] == [
+        (header, 1),
+        ("LIST OF EFFECTIVE PAGES", 1),
+    ]
+    assert suggestions[1].proposed == "LIST OF EFFECTIVE PAGE"
+    assert "faute d'orthographe" in suggestions[1].message
 
 
 def test_pdf_bookmark_typo_does_not_match_running_header() -> None:

@@ -2640,18 +2640,16 @@ def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> boo
     return median(span.size for span in line_spans) < median(body_font_sizes) * 0.85
 
 
-def _pdf_bookmark_titles_match(title: str, candidate: str) -> bool:
+def _pdf_bookmark_title_similarity(title: str, candidate: str) -> float | None:
     normalized_title = re.sub(r"[\W_]+", "", title.casefold())
     normalized_candidate = re.sub(r"[\W_]+", "", candidate.casefold())
     if not normalized_title or not normalized_candidate:
-        return False
-    if normalized_title == normalized_candidate:
-        return True
+        return None
     if min(len(normalized_title), len(normalized_candidate)) < 8:
-        return False
+        return None
     if re.findall(r"\d+", title) != re.findall(r"\d+", candidate):
-        return False
-    return SequenceMatcher(None, normalized_title, normalized_candidate).ratio() >= 0.88
+        return None
+    return SequenceMatcher(None, normalized_title, normalized_candidate).ratio()
 
 
 def _pdf_bookmark_findings(
@@ -2737,7 +2735,7 @@ def _pdf_bookmark_findings(
                 [line.text for line in page.lines] if page.lines else page.text.splitlines()
             )
             page_text = " ".join(page.text.split()).casefold()
-        if title in page_text:
+        if re.search(rf"(?<!\w){re.escape(title)}(?!\w)", page_text):
             continue
         title_lines = (
             [
@@ -2747,7 +2745,40 @@ def _pdf_bookmark_findings(
             if page.lines and page.page_height > 0
             else page_body_lines
         )
-        if any(_pdf_bookmark_titles_match(title, line) for line in title_lines):
+        closest_title: str | None = None
+        closest_similarity = 0.0
+        for line in title_lines:
+            similarity = _pdf_bookmark_title_similarity(title, line)
+            if (
+                similarity is not None
+                and similarity < 1.0
+                and similarity >= 0.90
+                and similarity > closest_similarity
+            ):
+                closest_title = line
+                closest_similarity = similarity
+        if closest_title is not None:
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=closest_title,
+                    expected=_PDF_BOOKMARK_EXPECTED,
+                    message=(
+                        f"Le titre « {closest_title} » de la page {page.page} "
+                        f"correspond presque au signet « {bookmark.title} » : "
+                        "il s'agit probablement d'une faute d'orthographe dans "
+                        f"le titre de la page. Corriger en « {bookmark.title} »."
+                    ),
+                    original=closest_title,
+                    proposed=bookmark.title,
+                    page=page.page,
+                )
+            )
+            continue
+        if any(
+            _pdf_bookmark_title_similarity(title, line) == 1.0
+            for line in title_lines
+        ):
             continue
         findings.append(
             OperationResult(
