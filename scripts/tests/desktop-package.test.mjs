@@ -25,11 +25,12 @@ function fixture(t) {
   return { app, installer, build };
 }
 
-test("desktop ZIP contains only the generated setup at its root and refuses overwrite", {
+test("desktop ZIP contains only the generated setup and repeated packages preserve earlier ZIPs", {
   skip: process.platform !== "win32",
 }, (t) => {
   const { app, build } = fixture(t);
-  const zip = packageDesktop(app, { build });
+  const now = new Date("2026-10-27T12:00:00.000Z");
+  const zip = packageDesktop(app, { build, now });
   const quote = (value) => `'${value.replaceAll("'", "''")}'`;
   const result = spawnSync("powershell", ["-NoProfile", "-Command",
     "Add-Type -AssemblyName System.IO.Compression.FileSystem; " +
@@ -39,7 +40,9 @@ test("desktop ZIP contains only the generated setup at its root and refuses over
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout.trim(), "PDF Toolkit_1.0.0_x64-setup.exe");
   const before = readFileSync(zip);
-  assert.throws(() => packageDesktop(app, { build: () => assert.fail("must not build") }), /already exists/);
+  const nextZip = packageDesktop(app, { build, now });
+  assert.equal(nextZip, path.join(app, "dist", "pdf-toolkit-desktop-v1.0.0-20261027-2.zip"));
+  assert.equal(existsSync(nextZip), true);
   assert.deepEqual(readFileSync(zip), before);
 });
 
