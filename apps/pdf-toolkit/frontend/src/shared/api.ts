@@ -96,8 +96,9 @@ export async function chooseSplitDestination(
         filters: [{ name: "ZIP archive", extensions: ["zip"] }],
       });
       return zipPath ? { kind: "tauri", zipPath } : null;
-    } catch {
-      throw new Error(t("exportOptions.savePickerFailed"));
+    } catch (reason) {
+      const detail = reason instanceof Error ? reason.message : String(reason);
+      throw new Error(`${t("exportOptions.savePickerFailed")} (${detail})`);
     }
   }
 
