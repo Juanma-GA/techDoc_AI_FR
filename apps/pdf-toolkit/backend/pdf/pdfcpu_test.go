@@ -80,6 +80,34 @@ func TestPDFCPUOperations(t *testing.T) {
 	assertPageCount(t, processor, rotatedAll, 3)
 }
 
+func TestPDFCPUSplitDocumentReusesSourceContext(t *testing.T) {
+	tempDir := t.TempDir()
+	input := filepath.Join(tempDir, "source.pdf")
+	if err := os.WriteFile(input, testPDF(t, 3), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	document, err := NewPDFCPU().OpenSplitDocument(context.Background(), input)
+	if err != nil {
+		t.Fatalf("OpenSplitDocument() error = %v", err)
+	}
+	defer func() {
+		if err := document.Close(); err != nil {
+			t.Errorf("Close() error = %v", err)
+		}
+	}()
+	if document.PageCount() != 3 {
+		t.Fatalf("PageCount() = %d, want 3", document.PageCount())
+	}
+
+	for index, pages := range [][]int{{3, 1}, {2}} {
+		output := filepath.Join(tempDir, fmt.Sprintf("part-%d.pdf", index+1))
+		if err := document.Extract(context.Background(), output, pages); err != nil {
+			t.Fatalf("Extract(%v) error = %v", pages, err)
+		}
+		assertPageCount(t, NewPDFCPU(), output, len(pages))
+	}
+}
+
 func writeTestPNG(t *testing.T, filePath string) {
 	t.Helper()
 	file, err := os.Create(filePath)

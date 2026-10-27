@@ -16,12 +16,23 @@
     "collapse": "Collapse menu",
     "expand": "Expand menu"
   },
+  "exportOptions": {
+    "fileName": "Output filename",
+    "saveLocationHint": "When you start the export, choose a location in the Save As dialog. If it is unavailable, the standard browser download is used.",
+    "required": "Enter a filename.",
+    "invalidName": "Enter a valid filename without a path or prohibited characters.",
+    "savePickerFailed": "Could not open the Save As dialog.",
+    "saveFailed": "Could not save the file to the selected location."
+  },
   "exportProgress": {
     "uploading": "Uploading to server",
     "processing": "Processing on server",
     "downloading": "Downloading result",
     "preparing": "Preparing PDF",
-    "pages": "Converting pages: {{completed}} / {{total}}"
+    "pages": "Converting pages: {{completed}} / {{total}}",
+    "splitFiles": "Splitting files: {{completed}} / {{total}}",
+    "splitArchive": "Adding to ZIP: {{completed}} / {{total}}",
+    "progressUnavailable": "Progress unavailable; processing continues"
   },
   "tools": {
     "merge": {

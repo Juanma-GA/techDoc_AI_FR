@@ -2,7 +2,13 @@ import { useId, useState, type FormEvent } from "react";
 import { FileText, RotateCw, Scissors, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF, type ExportProgressState } from "../../shared/api";
+import {
+  chooseExportDestination,
+  formatOperationError,
+  processPDF,
+  validateExportFileName,
+  type ExportProgressState,
+} from "../../shared/api";
 import { Button, Card, Input, Select, Spinner } from "@internal/ui";
 import { ExportProgress } from "./ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
@@ -51,9 +57,11 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
   const Icon = config.icon;
   const pageInputId = useId();
   const rotationInputId = useId();
+  const outputNameId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [selection, setSelection] = useState("");
   const [rotation, setRotation] = useState("90");
+  const [outputName, setOutputName] = useState<string>(config.outputName);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
@@ -72,7 +80,14 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
       setError(t("pages.selectPages"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     setWorking(true);
     setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
@@ -84,7 +99,17 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
       data.append("rotation", rotation);
     }
     try {
-      await processPDF(config.endpoint, data, config.outputName, t, setExportProgress);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processPDF(
+        config.endpoint,
+        data,
+        fileName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(
@@ -201,10 +226,26 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
             <FileText size={21} aria-hidden="true" />
           </span>
           <span>
-            <strong>{config.outputName}</strong>
+            <label className="field-label" htmlFor={outputNameId}>
+              {t("exportOptions.fileName")}
+            </label>
+            <Input
+              id={outputNameId}
+              value={outputName}
+              disabled={working}
+              aria-describedby={`${outputNameId}-help`}
+              onChange={(event) => {
+                setOutputName(event.currentTarget.value);
+                setError("");
+                setSuccess(false);
+              }}
+            />
             <small>{t(config.outputKey)}</small>
           </span>
         </div>
+        <p className="input-help" id={`${outputNameId}-help`}>
+          {t("exportOptions.saveLocationHint")}
+        </p>
         {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button
           type="submit"
@@ -222,7 +263,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              {t(mode === "rotate" ? "rotate.success" : "pages.success", { fileName: config.outputName })}
+              {t(mode === "rotate" ? "rotate.success" : "pages.success", { fileName: outputName })}
             </p>
           ) : null}
         </div>

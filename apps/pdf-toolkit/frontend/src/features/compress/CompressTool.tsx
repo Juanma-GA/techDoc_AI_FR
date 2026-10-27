@@ -1,9 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { FileText, Minimize2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF, type ExportProgressState } from "../../shared/api";
-import { Button, Card, Spinner } from "@internal/ui";
+import {
+  chooseExportDestination,
+  formatOperationError,
+  processPDF,
+  validateExportFileName,
+  type ExportProgressState,
+} from "../../shared/api";
+import { Button, Card, Input, Spinner } from "@internal/ui";
 import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
@@ -11,7 +17,9 @@ import { formatFileSize } from "../../shared/files";
 export function CompressTool() {
   const { t, i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
+  const outputNameId = useId();
   const [file, setFile] = useState<File | null>(null);
+  const [outputName, setOutputName] = useState("compressed.pdf");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
@@ -26,7 +34,14 @@ export function CompressTool() {
       setError(t("files.select"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     setWorking(true);
     setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
@@ -34,7 +49,17 @@ export function CompressTool() {
     const data = new FormData();
     data.append("file", file, file.name);
     try {
-      await processPDF("compress", data, "compressed.pdf", t, setExportProgress);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processPDF(
+        "compress",
+        data,
+        fileName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.compressionFailed"));
@@ -102,10 +127,26 @@ export function CompressTool() {
             <FileText size={21} aria-hidden="true" />
           </span>
           <span>
-            <strong>compressed.pdf</strong>
+            <label className="field-label" htmlFor={outputNameId}>
+              {t("exportOptions.fileName")}
+            </label>
+            <Input
+              id={outputNameId}
+              value={outputName}
+              disabled={working}
+              aria-describedby={`${outputNameId}-help`}
+              onChange={(event) => {
+                setOutputName(event.currentTarget.value);
+                setError("");
+                setSuccess(false);
+              }}
+            />
             <small>{t("compress.outputDescription")}</small>
           </span>
         </div>
+        <p className="input-help" id={`${outputNameId}-help`}>
+          {t("exportOptions.saveLocationHint")}
+        </p>
         {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || !file} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Minimize2 size={18} />}
@@ -119,7 +160,7 @@ export function CompressTool() {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              {t("compress.success", { fileName: "compressed.pdf" })}
+              {t("compress.success", { fileName: outputName })}
             </p>
           ) : null}
         </div>

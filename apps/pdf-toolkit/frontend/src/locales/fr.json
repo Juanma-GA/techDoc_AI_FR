@@ -16,12 +16,23 @@
     "collapse": "Replier le menu",
     "expand": "Déplier le menu"
   },
+  "exportOptions": {
+    "fileName": "Nom du fichier de sortie",
+    "saveLocationHint": "Au lancement de l’export, choisis l’emplacement dans la fenêtre « Enregistrer sous ». Si elle n’est pas disponible, le téléchargement standard est utilisé.",
+    "required": "Saisis un nom de fichier.",
+    "invalidName": "Saisis un nom de fichier valide, sans chemin ni caractères interdits.",
+    "savePickerFailed": "Impossible d’ouvrir la fenêtre « Enregistrer sous ».",
+    "saveFailed": "Impossible d’enregistrer le fichier à l’emplacement choisi."
+  },
   "exportProgress": {
     "uploading": "Envoi au serveur",
     "processing": "Traitement sur le serveur",
     "downloading": "Téléchargement du résultat",
     "preparing": "Préparation du PDF",
-    "pages": "Conversion des pages : {{completed}} / {{total}}"
+    "pages": "Conversion des pages : {{completed}} / {{total}}",
+    "splitFiles": "Découpage des fichiers : {{completed}} / {{total}}",
+    "splitArchive": "Ajout au ZIP : {{completed}} / {{total}}",
+    "progressUnavailable": "Progression indisponible ; le traitement continue"
   },
   "tools": {
     "merge": {

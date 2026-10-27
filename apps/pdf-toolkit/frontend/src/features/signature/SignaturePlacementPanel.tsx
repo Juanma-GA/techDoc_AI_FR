@@ -1,7 +1,8 @@
 import { FileText, PenTool } from "lucide-react";
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Button, Card, Spinner } from "@internal/ui";
+import { Button, Card, Input, Spinner } from "@internal/ui";
 import type { ExportProgressState } from "../../shared/api";
 import { ExportProgress } from "../shared/ExportProgress";
 import { PdfSignaturePreview } from "./PdfSignaturePreview";
@@ -19,6 +20,7 @@ type SignaturePlacementPanelProps = {
   datePlacement: TextPlacement;
   disabled: boolean;
   working: boolean;
+  outputName: string;
   exportProgress: ExportProgressState;
   previewReady: boolean;
   error: string;
@@ -29,6 +31,7 @@ type SignaturePlacementPanelProps = {
   onPlacementChange: (placement: SignaturePlacement) => void;
   onNamePlacementChange: (placement: TextPlacement) => void;
   onDatePlacementChange: (placement: TextPlacement) => void;
+  onOutputNameChange: (name: string) => void;
 };
 
 export function SignaturePlacementPanel({
@@ -43,6 +46,7 @@ export function SignaturePlacementPanel({
   datePlacement,
   disabled,
   working,
+  outputName,
   exportProgress,
   previewReady,
   error,
@@ -53,8 +57,10 @@ export function SignaturePlacementPanel({
   onPlacementChange,
   onNamePlacementChange,
   onDatePlacementChange,
+  onOutputNameChange,
 }: SignaturePlacementPanelProps) {
   const { t } = useTranslation();
+  const outputNameId = useId();
 
   return (
     <Card className="panel signature-placement-panel">
@@ -103,10 +109,22 @@ export function SignaturePlacementPanel({
             <FileText size={21} aria-hidden="true" />
           </span>
           <span>
-            <strong>signed.pdf</strong>
+            <label className="field-label" htmlFor={outputNameId}>
+              {t("exportOptions.fileName")}
+            </label>
+            <Input
+              id={outputNameId}
+              value={outputName}
+              disabled={working}
+              aria-describedby={`${outputNameId}-help`}
+              onChange={(event) => onOutputNameChange(event.currentTarget.value)}
+            />
             <small>{t("signature.outputDescription")}</small>
           </span>
         </div>
+        <p className="input-help" id={`${outputNameId}-help`}>
+          {t("exportOptions.saveLocationHint")}
+        </p>
         {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button
           type="submit"

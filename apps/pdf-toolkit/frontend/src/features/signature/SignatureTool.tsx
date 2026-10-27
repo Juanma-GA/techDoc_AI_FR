@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  chooseExportDestination,
   formatOperationError,
   processPDF,
+  validateExportFileName,
   type ExportProgressState,
 } from "../../shared/api";
 import { SignaturePlacementPanel } from "./SignaturePlacementPanel";
@@ -23,6 +25,7 @@ export function SignatureTool() {
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
+  const [outputName, setOutputName] = useState("signed.pdf");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [dateValue, setDateValue] = useState("");
@@ -78,7 +81,14 @@ export function SignatureTool() {
       setError(t("signature.previewFailed"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     setWorking(true);
     setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
@@ -103,7 +113,17 @@ export function SignatureTool() {
       data.append("date_font_size", String(datePlacement.fontSize));
     }
     try {
-      await processPDF("signature", data, "signed.pdf", t, setExportProgress);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processPDF(
+        "signature",
+        data,
+        fileName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "signature.operationFailed"));
@@ -152,6 +172,7 @@ export function SignatureTool() {
         datePlacement={datePlacement}
         disabled={working}
         working={working}
+        outputName={outputName}
         exportProgress={exportProgress}
         previewReady={previewReady}
         error={error}
@@ -165,6 +186,11 @@ export function SignatureTool() {
         onPlacementChange={setPlacement}
         onNamePlacementChange={setNamePlacement}
         onDatePlacementChange={setDatePlacement}
+        onOutputNameChange={(name) => {
+          setOutputName(name);
+          setError("");
+          setSuccess(false);
+        }}
       />
     </form>
   );

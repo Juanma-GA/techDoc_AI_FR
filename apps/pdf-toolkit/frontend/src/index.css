@@ -355,6 +355,8 @@ a {
 
 .output-preview > span:last-child {
   display: grid;
+  min-width: 0;
+  flex: 1;
   gap: 3px;
 }
 

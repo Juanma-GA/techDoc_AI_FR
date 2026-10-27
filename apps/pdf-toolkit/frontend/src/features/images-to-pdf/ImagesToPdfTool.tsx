@@ -1,9 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, FileText, Image, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF, type ExportProgressState } from "../../shared/api";
-import { Button, Card, Spinner } from "@internal/ui";
+import {
+  chooseExportDestination,
+  formatOperationError,
+  processPDF,
+  validateExportFileName,
+  type ExportProgressState,
+} from "../../shared/api";
+import { Button, Card, Input, Spinner } from "@internal/ui";
 import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize, moveFileInList } from "../../shared/files";
@@ -11,7 +17,9 @@ import { formatFileSize, moveFileInList } from "../../shared/files";
 export function ImagesToPdfTool() {
   const { t, i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
+  const outputNameId = useId();
   const [files, setFiles] = useState<File[]>([]);
+  const [outputName, setOutputName] = useState("images.pdf");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
@@ -30,7 +38,14 @@ export function ImagesToPdfTool() {
       setError(t("files.selectImagePdf"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     setWorking(true);
     setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
@@ -40,7 +55,17 @@ export function ImagesToPdfTool() {
       data.append("images", file, file.name);
     }
     try {
-      await processPDF("images-to-pdf", data, "images.pdf", t, setExportProgress);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processPDF(
+        "images-to-pdf",
+        data,
+        fileName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.imagesToPdfFailed"));
@@ -136,10 +161,26 @@ export function ImagesToPdfTool() {
             <FileText size={21} aria-hidden="true" />
           </span>
           <span>
-            <strong>images.pdf</strong>
+            <label className="field-label" htmlFor={outputNameId}>
+              {t("exportOptions.fileName")}
+            </label>
+            <Input
+              id={outputNameId}
+              value={outputName}
+              disabled={working}
+              aria-describedby={`${outputNameId}-help`}
+              onChange={(event) => {
+                setOutputName(event.currentTarget.value);
+                setError("");
+                setSuccess(false);
+              }}
+            />
             <small>{t("imagesToPdf.outputDescription")}</small>
           </span>
         </div>
+        <p className="input-help" id={`${outputNameId}-help`}>
+          {t("exportOptions.saveLocationHint")}
+        </p>
         {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || files.length === 0} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <FileText size={18} />}
@@ -153,7 +194,7 @@ export function ImagesToPdfTool() {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              {t("imagesToPdf.success", { fileName: "images.pdf" })}
+              {t("imagesToPdf.success", { fileName: outputName })}
             </p>
           ) : null}
         </div>

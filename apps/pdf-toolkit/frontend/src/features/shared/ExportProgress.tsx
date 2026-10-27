@@ -12,9 +12,13 @@ export function ExportProgress({ progress }: ExportProgressProps) {
     progress.percentage === null
       ? null
       : Math.max(0, Math.min(100, Math.round(progress.percentage)));
+  const hasCount =
+    progress.phase === "pages" ||
+    progress.phase === "splitFiles" ||
+    progress.phase === "splitArchive";
   const label =
-    progress.phase === "pages" && progress.total !== undefined
-      ? t("exportProgress.pages", {
+    hasCount && progress.total !== undefined
+      ? t(`exportProgress.${progress.phase}`, {
           completed: progress.completed ?? 0,
           total: progress.total,
         })

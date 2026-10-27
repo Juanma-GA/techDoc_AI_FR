@@ -5,10 +5,14 @@ import { ExportProgress } from "./ExportProgress";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, values?: { completed?: number; total?: number }) =>
-      key === "exportProgress.pages"
-        ? `Pages ${values?.completed ?? 0} / ${values?.total ?? 0}`
-        : key,
+    t: (key: string, values?: { completed?: number; total?: number }) => {
+      const label = {
+        "exportProgress.pages": "Pages",
+        "exportProgress.splitFiles": "Split files",
+        "exportProgress.splitArchive": "ZIP files",
+      }[key];
+      return label ? `${label} ${values?.completed ?? 0} / ${values?.total ?? 0}` : key;
+    },
   }),
 }));
 
@@ -31,5 +35,14 @@ describe("ExportProgress", () => {
     expect(markup).toContain('aria-label="exportProgress.processing"');
     expect(markup).not.toContain("aria-valuenow=");
     expect(markup).not.toContain("%</span>");
+  });
+
+  it("shows the number of split files processed", () => {
+    const markup = renderToStaticMarkup(
+      <ExportProgress progress={{ phase: "splitFiles", percentage: 40, completed: 2, total: 5 }} />,
+    );
+
+    expect(markup).toContain('aria-label="Split files 2 / 5"');
+    expect(markup).toContain('aria-valuenow="40"');
   });
 });

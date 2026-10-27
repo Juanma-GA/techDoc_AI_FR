@@ -6,15 +6,24 @@ import { useTranslation } from "react-i18next";
 
 import { Button, Card, Input, Select, Spinner, Textarea } from "@internal/ui";
 import {
+  chooseSplitDestination,
   formatOperationError,
   processSplit,
+  validateExportFileName,
   type ExportProgressState,
 } from "../../shared/api";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { ExportProgress } from "../shared/ExportProgress";
 import { AdvancedSplit } from "./AdvancedSplit";
-import { chunkRows, maxSplitGroups, parseSplitRanges, sourceBaseName, uniqueFileNames } from "./splitModel";
+import {
+  chunkRows,
+  maxSplitGroups,
+  parseSplitRanges,
+  sanitizeBaseName,
+  sourceBaseName,
+  uniqueFileNames,
+} from "./splitModel";
 import "./split.css";
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -57,8 +66,10 @@ export function SplitTool() {
   const advancedId = useId();
   const modeId = useId();
   const rangesId = useId();
+  const folderId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
+  const [folder, setFolder] = useState("split");
   const [chunkSize, setChunkSize] = useState("1");
   const [simpleMode, setSimpleMode] = useState("chunks");
   const [rangesText, setRangesText] = useState("");
@@ -70,6 +81,7 @@ export function SplitTool() {
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [successFileName, setSuccessFileName] = useState("");
   const pageCount = usePageCount(file);
 
   const size = Number(chunkSize);
@@ -79,12 +91,14 @@ export function SplitTool() {
   const documentCount = simpleMode === "ranges"
     ? customRanges?.length ?? 0
     : pageCount > 0 && validSize ? Math.ceil(pageCount / size) : 0;
-  const folderName = file ? sourceBaseName(file.name) || "split" : "split";
+  const folderName = sanitizeBaseName(folder) || "split";
+  const archiveName = `${folderName}.zip`;
   const canSubmit = Boolean(file) && documentCount > 0 && documentCount <= maxSplitGroups;
 
   const selectFile = useCallback((incoming: File | null) => {
     setFile(incoming);
     setFileKey((current) => current + 1);
+    setFolder(incoming ? sourceBaseName(incoming.name) || "split" : "split");
     setError("");
     setSuccess(false);
   }, []);
@@ -99,6 +113,12 @@ export function SplitTool() {
       setError(t(simpleMode === "ranges" ? "split.rangesInvalid" : "split.simpleInvalid"));
       return;
     }
+    const nameError = validateExportFileName(archiveName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
+    const destinationChoice = chooseSplitDestination(archiveName, t);
     const rows = simpleMode === "ranges"
       ? (customRanges ?? []).map((pages) => ({ pages }))
       : chunkRows(pageCount, size);
@@ -115,7 +135,16 @@ export function SplitTool() {
     setError("");
     setSuccess(false);
     try {
-      await processSplit(data, `${folderName}.zip`, t, setExportProgress);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processSplit(
+        data,
+        archiveName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setSuccessFileName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "split.failed"));
@@ -225,15 +254,33 @@ export function SplitTool() {
             </>
           )}
           <p className="input-help">{t("split.simpleHelp")}</p>
+          <label className="field-label" htmlFor={folderId}>
+            {t("split.folderLabel")}
+          </label>
+          <Input
+            id={folderId}
+            value={folder}
+            disabled={working}
+            aria-describedby={`${folderId}-help`}
+            onChange={(event) => {
+              setFolder(event.currentTarget.value);
+              setError("");
+              setSuccess(false);
+            }}
+          />
+          <p className="input-help" id={`${folderId}-help`}>
+            {t("split.simpleFolderHelp")}
+          </p>
           <div className="output-preview">
             <span className="output-icon">
               <FileArchive size={21} aria-hidden="true" />
             </span>
             <span>
-              <strong>{folderName}.zip</strong>
+              <strong>{archiveName}</strong>
               <small>{t("split.outputSummary", { count: documentCount, folder: folderName })}</small>
             </span>
           </div>
+          <p className="input-help">{t("exportOptions.saveLocationHint")}</p>
           {working ? <ExportProgress progress={exportProgress} /> : null}
           <Button type="submit" disabled={working || !canSubmit} className="action-button">
             {working ? <Spinner aria-label={t("common.loading")} /> : <Split size={18} />}
@@ -247,7 +294,7 @@ export function SplitTool() {
             ) : null}
             {success ? (
               <p className="feedback feedback-success" role="status">
-                {t("split.success", { fileName: `${folderName}.zip`, count: documentCount })}
+                {t("split.success", { fileName: successFileName, count: documentCount })}
               </p>
             ) : null}
           </div>
