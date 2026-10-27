@@ -73,7 +73,7 @@ def test_repository_active_client_configuration_loads() -> None:
         "THALES-CUSTOM",
         "ASD-STE100",
     ]
-    assert len(configuration.bundle.rules) == 80
+    assert len(configuration.bundle.rules) == 87
     ste_rule = next(
         rule for rule in configuration.bundle.rules if rule.code == "STE_NO_MAYBE"
     )
@@ -81,6 +81,7 @@ def test_repository_active_client_configuration_loads() -> None:
     assert ste_rule.bundle_label == "ASD-STE100"
     assert set(configuration.bundle.operations) == {
         "revision_consistency",
+        "preparation_check",
         "shop_verification",
         "cmm_mapping_consistency",
         "highlights_holder",

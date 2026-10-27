@@ -250,6 +250,19 @@ def _resolve(
     return section, status, []
 
 
+def apply_preparation_page_types(
+    parsed: ParsedPdf,
+    metadata: Mapping[str, Any],
+    overrides: Mapping[str, Mapping[str, str | None]],
+) -> None:
+    """Detect section types, then apply the manual page types chosen in preparation."""
+    classify_preparation_sections(parsed, metadata)
+    for page in parsed.pages:
+        manual_type = (overrides.get(str(page.page)) or {}).get("page_type")
+        if manual_type is not None:
+            page.page_type = manual_type
+
+
 def classify_preparation_sections(
     parsed: ParsedPdf,
     metadata: Mapping[str, Any],

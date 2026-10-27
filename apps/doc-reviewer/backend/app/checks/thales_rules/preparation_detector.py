@@ -18,6 +18,16 @@ from app.parsers.pdf_parser import ParsedPdf
 
 _logger = get_logger(__name__)
 
+# Rules whose verdict depends on which other pages were found to be modified.
+DECISION_DEPENDENT_RULES = frozenset({"CUSTOM_PREP_LEP_MODIFIED_PAGES"})
+
+
+def _mark_commented_pages(parsed: ParsedPdf, decisions: list[dict[str, Any]]) -> None:
+    """Expose the pages decided so far as modified (commented) to the document rules."""
+    modified = {item["page"]: item["is_modified"] for item in decisions}
+    for page in parsed.pages:
+        page.is_modified = modified.get(page.page)
+
 
 def detect_pages_to_modify(
     parsed: ParsedPdf,
@@ -36,7 +46,20 @@ def detect_pages_to_modify(
     )
     decisions: list[dict[str, Any]] = []
     pages_without_rules: list[dict[str, int | str | None]] = []
-    for page in parsed.pages:
+    deferred_pages = {
+        page.page
+        for page in parsed.pages
+        if any(
+            rule.id in DECISION_DEPENDENT_RULES and _rule_targets_page(rule, page.page_type)
+            for rule in rules
+        )
+    }
+    ordered_pages = sorted(parsed.pages, key=lambda item: item.page in deferred_pages)
+    commented_pages_marked = False
+    for page in ordered_pages:
+        if page.page in deferred_pages and not commented_pages_marked:
+            _mark_commented_pages(parsed, decisions)
+            commented_pages_marked = True
         applicable = [rule for rule in rules if _rule_targets_page(rule, page.page_type)]
         if not applicable:
             pages_without_rules.append(
@@ -121,6 +144,7 @@ def detect_pages_to_modify(
                 "review_reasons": review_reasons,
             }
         )
+    decisions.sort(key=lambda item: item["page"])
     map_preparation_pages_to_toc(parsed, decisions)
     for decision in decisions:
         decision.update(classification[decision["page"]])

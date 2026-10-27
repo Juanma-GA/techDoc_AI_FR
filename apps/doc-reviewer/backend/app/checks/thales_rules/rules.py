@@ -2771,6 +2771,276 @@ CUSTOM_ROR_REVISION_DATE = rule(
     },
 )
 
+_ROR_TARGET = RuleTarget(page="all", region="full_page", page_type="ROR")
+_LEP_TARGET = RuleTarget(page="all", region="full_page", page_type="LEP")
+_HIGHLIGHTS_FOOTER_TARGET = RuleTarget(
+    page="all",
+    region="footer",
+    page_types=["HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"],
+)
+_STANDARD_PRACTICES_ATA = "Standard Practices Manual ATA No. 20-02-00"
+_STANDARD_PRACTICE_MANUAL_ATA = "Standard Practice Manual ATA No. 20-02-00"
+
+CUSTOM_PREP_STANDARD_PRACTICE_ATA = rule(
+    code="CUSTOM_PREP_STANDARD_PRACTICE_ATA",
+    name="Preparation : numero ATA des Standard Practices",
+    description=(
+        "Des que les Standard Practices sont mentionnees, le numero ATA doit etre "
+        "'ATA No. 20-02-00'."
+    ),
+    message="Le numero ATA des Standard Practices doit etre ATA No. 20-02-00.",
+    kind="regex_flag",
+    severity="error",
+    preparation=True,
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=(
+                r"(?i)\bStandard\s+Practices?(?:\s+Manual)?\s+ATA\s+No\.?\s*"
+                r"(?!20-02-00(?!\w))\d{2}-\d{2}-\d{2}[A-Za-z]?(?!\w)"
+            ),
+            replacement=_STANDARD_PRACTICES_ATA,
+        ),
+    ],
+    failure_message="numero ATA des Standard Practices different de 20-02-00.",
+    translations={
+        "en": {
+            "description": (
+                "Whenever the Standard Practices are mentioned, the ATA number must be "
+                "'ATA No. 20-02-00'."
+            ),
+            "message": "The Standard Practices ATA number must be ATA No. 20-02-00.",
+        }
+    },
+)
+
+CUSTOM_PREP_STANDARD_PRACTICE_REPLACE = rule(
+    code="CUSTOM_PREP_STANDARD_PRACTICE_REPLACE",
+    name="Preparation : remplacer Standard Electronic Hardware Practice 39-50-00",
+    description=(
+        "'Standard Electronic Hardware Practice 39-50-00' doit etre remplace par "
+        "'Standard Practice Manual ATA No. 20-02-00'."
+    ),
+    message=(
+        "Remplacer la reference Standard Electronic Hardware Practice 39-50-00 par "
+        f"{_STANDARD_PRACTICE_MANUAL_ATA}."
+    ),
+    kind="regex_flag",
+    severity="error",
+    preparation=True,
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=(
+                r"(?i)\bstandard\s+electronic\s+hardware\s+practices?"
+                r"(?:\s+(?:manual|ATA\s+No\.?))?\s*39-50-00(?!\w)"
+            ),
+            replacement=_STANDARD_PRACTICE_MANUAL_ATA,
+        ),
+    ],
+    failure_message="reference Standard Electronic Hardware Practice 39-50-00 a remplacer.",
+    translations={
+        "en": {
+            "description": (
+                "'Standard Electronic Hardware Practice 39-50-00' must be replaced with "
+                "'Standard Practice Manual ATA No. 20-02-00'."
+            ),
+            "message": (
+                "Replace the Standard Electronic Hardware Practice 39-50-00 reference "
+                f"with {_STANDARD_PRACTICE_MANUAL_ATA}."
+            ),
+        }
+    },
+)
+
+CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE = rule(
+    code="CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE",
+    name="Preparation : date de revision au-dessus du tableau Highlights",
+    description=(
+        "La date de revision au-dessus du tableau Highlights doit etre la nouvelle "
+        "date du mapping de preparation, au format MMM JJ/AA."
+    ),
+    message="La date de revision au-dessus du tableau Highlights n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?i)(?<!\w)DATED\s+{{meta_revision_date}}(?!\w)",
+            require_all=True,
+            expected_display="DATED {{meta_revision_date}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bREVISION\s+No\b",
+            missing_anchor_position="same",
+        ),
+    ],
+    failure_message="date de revision Highlights non mise a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The revision date above the Highlights table must be the new date from "
+                "the preparation mapping, in MMM DD/YY format."
+            ),
+            "message": "The revision date above the Highlights table is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE = rule(
+    code="CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE",
+    name="Preparation : date de revision du pied de page Highlights",
+    description=(
+        "La date du pied de page des pages Highlights doit etre la nouvelle date de "
+        "revision du mapping de preparation, au format MMM JJ/AA."
+    ),
+    message="La date du pied de page Highlights n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_HIGHLIGHTS_FOOTER_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?<!\w){{meta_revision_date}}(?!\w)",
+            require_all=True,
+            expected_display="{{meta_revision_date}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bHigh?lights?\s+Page\b",
+            missing_anchor_position="same",
+        ),
+    ],
+    failure_message="date du pied de page Highlights non mise a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The footer date of Highlights pages must be the new revision date from "
+                "the preparation mapping, in MMM DD/YY format."
+            ),
+            "message": "The Highlights footer date is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER = rule(
+    code="CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER",
+    name="Preparation : numero de revision au-dessus du tableau Highlights",
+    description=(
+        "Le numero de revision au-dessus du tableau Highlights doit etre le nouveau "
+        "numero du mapping de preparation (par exemple 03 devient 04)."
+    ),
+    message="Le numero de revision au-dessus du tableau Highlights n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}(?!\w)",
+            require_all=True,
+            expected_display="REVISION No. {{meta_revision_number}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bHighlights\b",
+            missing_anchor_position="above",
+        ),
+    ],
+    failure_message="numero de revision Highlights non mis a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The revision number above the Highlights table must be the new number "
+                "from the preparation mapping (for example 03 becomes 04)."
+            ),
+            "message": "The revision number above the Highlights table is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_ROR_NEW_ROW = rule(
+    code="CUSTOM_PREP_ROR_NEW_ROW",
+    name="Preparation : nouvelle ligne du Record of Revisions",
+    description=(
+        "Le Record of Revisions doit recevoir une nouvelle ligne de revision. Si le "
+        "jour de la date de revision est inferieur a 15, la date d'insertion reprend "
+        "le meme mois (JUL 14/26 -> JUL 26), sinon le mois suivant (JUL 15/26 -> AUG 26)."
+    ),
+    message="Une nouvelle ligne de revision doit etre ajoutee au Record of Revisions.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_ROR_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="preparation_check",
+            operation_params={"control": "ror_new_row"},
+        )
+    ],
+    failure_message="nouvelle ligne de revision absente du Record of Revisions.",
+    translations={
+        "en": {
+            "description": (
+                "The Record of Revisions must receive a new revision row. If the revision "
+                "day is below 15 the insertion date keeps the same month (JUL 14/26 -> "
+                "JUL 26), otherwise it uses the next month (JUL 15/26 -> AUG 26)."
+            ),
+            "message": "A new revision row must be added to the Record of Revisions.",
+        }
+    },
+)
+
+CUSTOM_PREP_LEP_MODIFIED_PAGES = rule(
+    code="CUSTOM_PREP_LEP_MODIFIED_PAGES",
+    name="Preparation : pages commentees dans la LEP",
+    description=(
+        "Les pages commentees (a modifier) doivent apparaitre dans la liste des pages "
+        "effectives sous la forme 'MMM JJ/AA *' avec la nouvelle date de revision."
+    ),
+    message="Une page commentee n'est pas mise a jour dans la LEP.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_LEP_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="preparation_check",
+            operation_params={"control": "lep_modified_pages"},
+        )
+    ],
+    failure_message="page commentee non mise a jour dans la LEP.",
+    translations={
+        "en": {
+            "description": (
+                "Commented (to be modified) pages must appear in the list of effective "
+                "pages as 'MMM DD/YY *' with the new revision date."
+            ),
+            "message": "A commented page is not updated in the LEP.",
+        }
+    },
+)
+
+PREPARATION_RULE_DEFINITIONS = (
+    CUSTOM_PREP_STANDARD_PRACTICE_ATA,
+    CUSTOM_PREP_STANDARD_PRACTICE_REPLACE,
+    CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE,
+    CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE,
+    CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER,
+    CUSTOM_PREP_ROR_NEW_ROW,
+    CUSTOM_PREP_LEP_MODIFIED_PAGES,
+)
+
 REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_LEP_STAR,
     CUSTOM_REVISION_UNDECLARED_STAR,
@@ -2792,6 +3062,7 @@ REVISION_RULE_DEFINITIONS = (
 
 RULE_DEFINITIONS = (
     *REVISION_RULE_DEFINITIONS,
+    *PREPARATION_RULE_DEFINITIONS,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_MAPPING_SUSPECT,
     CUSTOM_CMM_NUMBER_FONT_SIZE,

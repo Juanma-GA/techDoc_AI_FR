@@ -30,6 +30,7 @@ export function PreparationDecisionRow({
     ...decision.review_reasons.map((item) => item.message),
   ];
   const ruleResults = decision.rule_results ?? [];
+  const issues = ruleResults.filter((result) => result.status !== "PASS");
   const statusClass = {
     PASS: "ok",
     FAIL: "danger",
@@ -57,25 +58,20 @@ export function PreparationDecisionRow({
       </td>
       <td data-label={t("preparation.decision")}>{t(resultKey)}</td>
       <td data-label={t("preparation.reasons")}>
-        {ruleResults.length > 0 ? (
-          <details className="preparation-rule-details">
-            <summary>
-              {t("preparationUi.ruleResults", { count: ruleResults.length })}
-            </summary>
-            <ul className="preparation-rule-results">
-              {ruleResults.map((result) => (
-                <li key={result.rule_id}>
-                  <span className={`badge ${statusClass[result.status]}`}>
-                    {t(`preparationUi.ruleStatus.${statusKey[result.status]}`)}
-                  </span>
-                  <div>
-                    <strong>{result.title}</strong>
-                    {result.status !== "PASS" ? <p>{result.message}</p> : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </details>
+        {issues.length > 0 ? (
+          <ul className="preparation-rule-results">
+            {issues.map((result) => (
+              <li key={result.rule_id}>
+                <span className={`badge ${statusClass[result.status]}`}>
+                  {t(`preparationUi.ruleStatus.${statusKey[result.status]}`)}
+                </span>
+                <div>
+                  <strong>{result.title}</strong>
+                  <p>{result.message}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : decision.decision_status === "no_applicable_rule" ? (
           <span className="badge warn">
             {t("preparationUi.noApplicableRule")}

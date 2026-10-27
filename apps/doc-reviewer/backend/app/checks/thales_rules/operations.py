@@ -21,6 +21,7 @@ from app.parsers.pdf_parser import (
 )
 from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
+from .preparation_operations import PREPARATION_CHECK
 from .revision_engine import _highlights_previous_revision_findings
 from .rules import (
     DOCUMENT_TYPE_PATTERN,
@@ -3195,6 +3196,7 @@ OPERATIONS = {
     operation.name: operation
     for operation in (
         REVISION_CONSISTENCY,
+        PREPARATION_CHECK,
         SHOP_VERIFICATION,
         HIGHLIGHTS_HOLDER,
         HIGHLIGHTS_DOCUMENT_TYPE,

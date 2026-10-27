@@ -73,7 +73,7 @@ def test_preparation_initializes_from_uploaded_document_without_reference_upload
     assert body["pages"][0]["native_text_chars"] > 0
     assert body["pages"][0]["needs_ocr"] is True
     assert body["pages"][0]["native_text_usable"] is False
-    assert body["preparation_rule_count"] == 3
+    assert body["preparation_rule_count"] == 10
     assert body["checklist_imported_rule_count"] == 0
 
 

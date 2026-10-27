@@ -36,9 +36,9 @@ export function ClientRules() {
   }, [allRules, targetRuleCode]);
   const localizeRule = useCallback(
     (rule: ClientRule, field: "name" | "description") => {
-      const catalogTranslation = t(`clientRuleCatalog.${rule.code}.${field}`, {
-        defaultValue: "",
-      });
+      const catalogKey = `clientRuleCatalog.${rule.code}.${field}`;
+      const translated = t(catalogKey);
+      const catalogTranslation = translated === catalogKey ? "" : translated;
       return catalogTranslation || rule.translations[locale]?.[field] || rule[field];
     },
     [locale, t],

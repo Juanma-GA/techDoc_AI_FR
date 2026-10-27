@@ -176,6 +176,14 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_ROR_INSERTION_DATE": "error",
         "CUSTOM_ROR_REVISION_DATE": "error",
         "CUSTOM_REVISION_HIGHLIGHTS_STATUS": "warning",
+        "CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS": "error",
+        "CUSTOM_PREP_STANDARD_PRACTICE_ATA": "error",
+        "CUSTOM_PREP_STANDARD_PRACTICE_REPLACE": "error",
+        "CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE": "error",
+        "CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE": "error",
+        "CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER": "error",
+        "CUSTOM_PREP_ROR_NEW_ROW": "error",
+        "CUSTOM_PREP_LEP_MODIFIED_PAGES": "error",
     }
 
 

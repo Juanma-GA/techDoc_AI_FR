@@ -23,17 +23,25 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
     assert config["client_code"] == "THALES"
     assert config["bundle"] == "thales_rules"
-    assert config["bundle_version"] == "1.2.16"
+    assert config["bundle_version"] == "1.2.18"
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
     assert config["catalogs"][0]["code"] == "THALES-CUSTOM"
     assert len(config["catalogs"]) == 2
     assert config["catalogs"][1]["code"] == "ASD-STE100"
-    assert len(rules) == 79
-    assert [rule["rule_number"] for rule in rules] == list(range(1, 80))
+    assert len(rules) == 87
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 88))
     preparation_rule_codes = {
-        "CUSTOM_TP2_REVISION_BAR_BODY_ONLY",
+        "CUSTOM_TP1_REVISION_NUMBER",
         "CUSTOM_TP1_THALES_ADDRESS",
+        "CUSTOM_TP2_IMPORTANT_NOTICE",
+        "CUSTOM_PREP_STANDARD_PRACTICE_ATA",
+        "CUSTOM_PREP_STANDARD_PRACTICE_REPLACE",
+        "CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE",
+        "CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE",
+        "CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER",
+        "CUSTOM_PREP_ROR_NEW_ROW",
+        "CUSTOM_PREP_LEP_MODIFIED_PAGES",
     }
     assert {
         rule["code"] for rule in rules if rule["scope"] == "preparation"

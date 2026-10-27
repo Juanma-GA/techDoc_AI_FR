@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -69,14 +70,18 @@ def detect_preparation_pages(
     parsed = parse_pdf(current_path(document.storage_dir, document.current_version))
     ocr_results = _load_json(record.ocr_results_json, "ocr_results_json").get("mistral", {})
     _apply_ocr_text(parsed, page_metadata, ocr_results)
+    metadata = preparation_metadata(
+        client_configuration.bundle.mapping.fields,
+        load_preparation_mapping(record),
+    )
     decisions = detect_pages_to_modify(
         parsed,
-        document,
+        PreparationDocument(document, metadata),
         rules,
         db,
         client_configuration.bundle,
         load_page_classification(record),
-        _detection_metadata(document, load_preparation_mapping(record)),
+        metadata,
     )
     if preserve_manual:
         _carry_over_manual_decisions(decisions, previous_decisions)
@@ -86,13 +91,40 @@ def detect_preparation_pages(
     return decisions
 
 
-def _detection_metadata(document: Document, preparation_mapping: dict[str, Any]) -> dict[str, Any]:
-    """Document metadata overlaid with the preparation mapping's non-empty values."""
-    metadata: dict[str, Any] = {
-        key: getattr(document, key, None) for key in ("meta_cmm_number", "meta_first_issue_date")
-    }
-    metadata.update({key: value for key, value in preparation_mapping.items() if value})
+_METADATA_FIELDS = (
+    "meta_revision_date",
+    "meta_cmm_number",
+    "meta_first_issue_date",
+    "meta_last_issue_date",
+    "meta_revision_number",
+    "meta_pnr_number",
+    "meta_manufacturer",
+    "document_language",
+)
+
+
+def preparation_metadata(
+    fields: Mapping[str, Any],
+    saved_mapping: Mapping[str, Any],
+) -> dict[str, Any]:
+    """The preparation mapping completed with field defaults, as the analysis does."""
+    metadata = {name: saved_mapping[name] for name in fields if name in saved_mapping}
+    for name, definition in fields.items():
+        metadata.setdefault(name, definition.default)
     return metadata
+
+
+class PreparationDocument:
+    """Document view whose metadata comes only from the preparation mapping."""
+
+    def __init__(self, document: Document, metadata: Mapping[str, Any]) -> None:
+        self._document = document
+        self.client_metadata = dict(metadata)
+        for name in _METADATA_FIELDS:
+            setattr(self, name, metadata.get(name))
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._document, name)
 
 
 def _carry_over_manual_decisions(

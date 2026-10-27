@@ -33,6 +33,7 @@ from app.core.page_range import (
     select_pdf_page_numbers,
 )
 from app.core.pdf_versioning import current_path, path_for  # noqa: F401
+from app.core.preparation_classification import load_page_classification
 from app.core.preparation_state import load_preparation_mapping
 from app.core.rules_engine import load_compiled_rules, materialize, run_all
 from app.core.security import read_upload_bounded
@@ -235,6 +236,7 @@ def analyze_stream(
     client_configuration = get_request_client_configuration(request, db)
     client_bundle = client_configuration.bundle
     analysis_metadata = dict(doc.client_metadata or {})
+    preparation_page_classification: dict[str, dict[str, str | None]] = {}
     if preparation_context:
         if (
             doc.working_format != "pdf"
@@ -257,6 +259,7 @@ def analyze_stream(
                 status_code=409,
             )
         saved_preparation_mapping = load_preparation_mapping(preparation)
+        preparation_page_classification = load_page_classification(preparation)
         analysis_metadata = {
             name: saved_preparation_mapping[name]
             for name in client_configuration.mapping.fields
@@ -721,6 +724,16 @@ def analyze_stream(
                         for version in versions:
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
+                    if preparation_context:
+                        from app.checks.thales_rules.section_detection import (
+                            apply_preparation_page_types,
+                        )
+
+                        apply_preparation_page_types(
+                            parsed,
+                            client_metadata_value,
+                            preparation_page_classification,
+                        )
                     revision_state = getattr(parsed, "_thales_revision_state", None)
                     has_revision_evidence = revision_state is not None and bool(
                         getattr(revision_state, "highlights_pages", ())
