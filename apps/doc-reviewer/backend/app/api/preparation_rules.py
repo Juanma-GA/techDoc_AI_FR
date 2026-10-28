@@ -18,11 +18,22 @@ from app.config import settings
 from app.core.errors import AppError
 from app.core.preparation_annotations import sync_toc_annotations
 from app.core.preparation_check_service import detect_preparation_pages
+from app.core.preparation_classification import (
+    available_page_title_options,
+    available_page_types,
+    set_absent_page_types,
+    set_page_classification,
+)
 from app.core.preparation_state import get_or_create_record, set_page_decision
 from app.core.security import read_upload_limited, safe_filename
 from app.db.preparation_models import PreparationChecklist
 from app.db.session import get_db
-from app.preparation_schemas import ChecklistImportOut, PageDecisionPatchIn
+from app.preparation_schemas import (
+    AbsentPageTypesPatchIn,
+    ChecklistImportOut,
+    PageClassificationPatchIn,
+    PageDecisionPatchIn,
+)
 
 router = APIRouter(tags=["preparation"])
 
@@ -119,6 +130,54 @@ def patch_decision(
     record = get_or_create_record(db, document)
     decisions = set_page_decision(db, record, page_number, body.is_modified)
     return {"decisions": decisions}
+
+
+@router.patch("/documents/{document_id}/preparation/pages/{page_number}/classification")
+def patch_page_classification(
+    document_id: uuid.UUID,
+    page_number: int,
+    body: PageClassificationPatchIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    document, client_configuration = get_preparation_context(request, document_id, db)
+    record = get_or_create_record(db, document)
+    classification = set_page_classification(
+        db,
+        record,
+        page_number,
+        body.page_type,
+        body.document_page,
+        available_page_types(db, client_configuration.bundle),
+        available_page_title_options(db, client_configuration.bundle),
+        body.page_title,
+    )
+    has_decisions = record.page_decisions_json != "[]"
+    decisions = (
+        detect_preparation_pages(db, document, client_configuration, preserve_manual=True)
+        if has_decisions
+        else []
+    )
+    return {"page": page_number, "classification": classification, "decisions": decisions}
+
+
+@router.patch("/documents/{document_id}/preparation/absent-page-types")
+def patch_absent_page_types(
+    document_id: uuid.UUID,
+    body: AbsentPageTypesPatchIn,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    document, client_configuration = get_preparation_context(request, document_id, db)
+    record = get_or_create_record(db, document)
+    absent = set_absent_page_types(
+        db,
+        record,
+        body.page_types,
+        body.absent,
+        available_page_types(db, client_configuration.bundle),
+    )
+    return {"absent_page_types": absent}
 
 
 @router.post("/documents/{document_id}/preparation/toc-annotations")

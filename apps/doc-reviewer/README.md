@@ -15,6 +15,10 @@ validation remain environment-dependent.
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
 - Prepare PDFs using the native text layer where it is legible and Mistral OCR
   only for pages that need it; preparation rule results are shown per page.
+- Configure recognized THALES preparation titles in Rules > Page titles.
+  Pages without a new recognized title continue the previous section; titles
+  outside the list are ignored. Rerun detection to apply catalog changes to
+  prepared documents.
 - Use Airbus and English as initial mapping defaults for new imports; saved
   mapping values continue to be reused.
 - Offer a no-OCR mapping suggestion from the first four pages of a PDF CMM.
@@ -23,6 +27,15 @@ validation remain environment-dependent.
 - Apply deterministic technical-writing catalogs, unit checks, editable rules, and optional LLM checklist analysis.
 - Accept, edit, reject, and remember review decisions.
 - Review native DOCX blocks as well as PDF pages.
+- Compare 2–20 text-layer PDFs against a selected reference in a synchronized
+	side-by-side viewer. Page text is aligned in reading order at 85% similarity
+	or above; missing or
+	changed page runs are signalled, and linked difference boxes reveal removed
+	and added text only on paired pages. The viewer navigates only paired pages and
+	shows both page numbers (e.g. reference p. 7 alongside revision p. 9).
+	Unmatched page numbers are listed, but their pages are not shown or text/box
+	analyzed. Saved comparisons remain in a separate library and export as
+	commented PDFs.
 - Export original, corrected, commented, and converted outputs when the local
 	converter supports them.
 - Show a degradation warning before PDF/Word format conversions.
@@ -98,7 +111,16 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 
 ## Persistence
 
-SQLite stores document versions, findings, review decisions, rejection memory, and runtime configuration under `backend/data/`.
+SQLite stores document versions, findings, review decisions, rejection memory,
+saved comparison reports, and runtime configuration under `backend/data/`.
+Comparison source PDFs are stored separately under
+`backend/data/storage/comparisons/` and remain there until the comparison is
+deleted in the Comparison tab. The optional Mistral summary receives only
+changed text excerpts from paired pages and page numbers for unmatched pages;
+unmatched page content is not included. It does not receive the complete PDF
+files.
+Older saved reports are reprocessed from their locally stored source PDFs the
+first time they are opened in the visual comparison viewer.
 
 ## LLM Configuration
 

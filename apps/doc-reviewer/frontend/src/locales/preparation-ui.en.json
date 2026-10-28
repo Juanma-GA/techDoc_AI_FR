@@ -8,10 +8,50 @@
   "ocrRequired": "OCR required",
   "ocrPending": "Run OCR on {{count}} pages to check",
   "ocrPendingRunning": "Running OCR on pages…",
-  "analyzePages": "Analyze pages",
+  "ocrProgress": "OCR: {{done}}/{{total}} pages",
+  "continueToChecklist": "Continue to rules",
   "runCurrentOcr": "Run OCR for this page",
   "rerunCurrentOcr": "Rerun OCR for this page",
   "ruleResults": "{{count}} rule result(s)",
+  "classification": {
+    "edit": "Correct page type",
+    "automatic": "Automatic detection",
+    "configuredTitles": "Configured titles",
+    "otherTypes": "Other page types",
+    "save": "Save correction",
+    "footerKey": "Page read in footer: {{value}}",
+    "noEvidence": "No evidence detected for this page.",
+    "source": {
+      "auto": "Auto",
+      "detected": "Detected",
+      "confirmed": "Confirmed",
+      "partial": "To check",
+      "conflict": "Conflict",
+      "manual": "Manual",
+      "unclassified": "Unclassified"
+    },
+    "candidates": "Conflicting evidence: {{value}}",
+    "family": {
+      "footer": "footer",
+      "title": "title",
+      "content": "content",
+      "position": "position"
+    }
+  },
+  "missing": {
+    "title": "Pages required by the rules were not found",
+    "hint": "Enter the PDF page matching each type below so its rules can apply.",
+    "pageLabel": "PDF page (1 to {{count}})",
+    "provide": "Confirm page",
+    "notPresent": "Not present",
+    "markedAbsent": "Marked as absent from the document",
+    "undo": "Undo"
+  },
+  "skipped": {
+    "title": "{{count}} rule(s) not run",
+    "hint": "These rules could not be checked because the page they target is absent from the document.",
+    "because": "Page absent: {{value}}"
+  },
   "noApplicableRule": "No applicable rule: page type is not recognized or no rule targets it.",
   "ruleStatus": {
     "pass": "Passed",

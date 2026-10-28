@@ -13,8 +13,11 @@ from app.config import settings
 from app.db.session import Base  # noqa: F401  -- registers metadata
 
 try:  # noqa: SIM105
-    from app.db import models  # type: ignore  # noqa: F401
-    from app.db import preparation_models  # type: ignore  # noqa: F401
+    from app.db import (
+        comparison_models,  # type: ignore  # noqa: F401
+        models,  # type: ignore  # noqa: F401
+        preparation_models,  # type: ignore  # noqa: F401
+    )
 except ImportError:
     pass
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
+  type OcrDocumentProgress,
   useOcrPageResult,
   usePreparationNativeText,
 } from "../../hooks/usePreparation";
@@ -15,9 +16,10 @@ type Props = {
   documentId: string;
   state: PreparationState;
   error: string | null;
-  onRunOcrAll: () => void;
+  onRunOcrAll: (pages: number[]) => void;
   runningOcrAll: boolean;
-  onValidateAllAndAnalyze: () => void;
+  ocrProgress: OcrDocumentProgress | null;
+  onValidateAllAndContinue: () => void;
   validatingAll: boolean;
   analyzing: boolean;
   onRunOcrPage: (page: number) => void;
@@ -30,7 +32,8 @@ export function PreparationOcrStep({
   error,
   onRunOcrAll,
   runningOcrAll,
-  onValidateAllAndAnalyze,
+  ocrProgress,
+  onValidateAllAndContinue,
   validatingAll,
   analyzing,
   onRunOcrPage,
@@ -58,13 +61,16 @@ export function PreparationOcrStep({
           (entry) => entry.provider === "mistral" && entry.page === item.page,
         ),
     );
-  const pendingOcrCount = state.pages.filter(
-    (item) =>
-      item.needs_ocr &&
-      !state.ocr_results_available.some(
-        (entry) => entry.provider === "mistral" && entry.page === item.page,
-      ),
-  ).length;
+  const pendingPages = state.pages
+    .filter(
+      (item) =>
+        item.needs_ocr &&
+        !state.ocr_results_available.some(
+          (entry) => entry.provider === "mistral" && entry.page === item.page,
+        ),
+    )
+    .map((item) => item.page);
+  const pendingOcrCount = pendingPages.length;
   const pageLabel = t("preparation.ocrPage", {
     page: pageNumber,
     count: state.page_count,
@@ -83,7 +89,7 @@ export function PreparationOcrStep({
               type="button"
               className="btn secondary small"
               disabled={runningOcrAll || runningOcrPage || validatingAll || analyzing}
-              onClick={onRunOcrAll}
+              onClick={() => onRunOcrAll(pendingPages)}
             >
               {runningOcrAll
                 ? t("preparationUi.ocrPendingRunning")
@@ -100,15 +106,15 @@ export function PreparationOcrStep({
               validatingAll ||
               analyzing
             }
-            onClick={onValidateAllAndAnalyze}
+            onClick={onValidateAllAndContinue}
           >
             {validatingAll
               ? t("preparation.validatingAll")
               : analyzing
                 ? t("preparation.detectingPages")
                 : state.pages.some((item) => item.needs_ocr)
-                  ? t("preparation.validateAllAndAnalyze")
-                  : t("preparationUi.analyzePages")}
+                  ? t("preparation.validateAllAndContinue")
+                  : t("preparationUi.continueToChecklist")}
           </button>
         </div>
       </div>
@@ -119,6 +125,24 @@ export function PreparationOcrStep({
         })}
       </p>
       {error ? <p className="error" role="alert">{error}</p> : null}
+      {ocrProgress ? (
+        <div className="preparation-ocr-progress">
+          <div
+            className="progress"
+            role="progressbar"
+            aria-label={t("preparationUi.ocrProgress", ocrProgress)}
+            aria-valuemin={0}
+            aria-valuemax={ocrProgress.total}
+            aria-valuenow={ocrProgress.done}
+          >
+            <div
+              className="progress-bar"
+              style={{ width: `${(ocrProgress.done / Math.max(ocrProgress.total, 1)) * 100}%` }}
+            />
+          </div>
+          <span className="label">{t("preparationUi.ocrProgress", ocrProgress)}</span>
+        </div>
+      ) : null}
       <PreparationOcrControls
         state={state}
         pageNumber={pageNumber}

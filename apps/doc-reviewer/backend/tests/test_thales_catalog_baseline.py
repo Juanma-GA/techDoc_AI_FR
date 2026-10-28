@@ -13,9 +13,9 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
     payload = serialize_builtin_version(spec, "v1")
     canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    assert len(payload) == 72
+    assert len(payload) == 84
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "8912daa80e77ef0ad663049bf0905c853bb5645520c68da85a17ba83c03be516"
+        "a0b60865b22ff95dc5b4b067eb99e97579a927b7e841cdd1d740bf0f1b9a7ca7"
     )
 
     expected_controls = {
@@ -59,6 +59,10 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         "CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION": (
             "document_structure",
             {"control": "highlights_revised_description"},
+        ),
+        "CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS": (
+            "document_structure",
+            {"control": "highlights_environmental_conditions"},
         ),
         "CUSTOM_CHAPTER_NUMBER_SEQUENCE": (
             "document_structure",

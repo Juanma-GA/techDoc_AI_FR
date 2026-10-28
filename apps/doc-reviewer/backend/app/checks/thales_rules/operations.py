@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
+from itertools import pairwise
 from statistics import median
 from typing import Any, cast
 
@@ -20,6 +21,7 @@ from app.parsers.pdf_parser import (
 )
 from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
+from .preparation_operations import PREPARATION_CHECK
 from .revision_engine import _highlights_previous_revision_findings
 from .rules import (
     DOCUMENT_TYPE_PATTERN,
@@ -111,7 +113,10 @@ _PARAGRAPH_LIST_ITEM_MARKER = re.compile(
 )
 _PARAGRAPH_TABLE_HEADER_MARKER = re.compile(r"^\s*[A-Z][A-Z0-9 /&()_\-]{1,}\s*$")
 _TABLE_OF_CONTENTS_MARKER = re.compile(r"(?im)^\s*TABLE\s+OF\s+CONTENTS\s*$")
-_CHAPTER_HEADING_RE = re.compile(r"^\s*(?P<number>\d+)\.\s+(?P<title>.+?)\s*$")
+_CHAPTER_HEADING_RE = re.compile(
+    r"^\s*(?P<number>\d+)\.\s*(?P<title>[^\W\d_].*?)\s*$",
+    re.UNICODE,
+)
 _CHAPTER_TITLE_CONNECTORS = frozenset(
     {
         "a", "an", "and", "as", "at", "by", "de", "des", "du", "et",
@@ -120,6 +125,8 @@ _CHAPTER_TITLE_CONNECTORS = frozenset(
     }
 )
 _DELETED_DESCRIPTION_RE = re.compile(r"(?i)\b(?:chapter|page)\s+deleted\b")
+_ENVIRONMENTAL_CONDITIONS = "environmental conditions"
+_ENVIRONMENTAL_CONDITIONS_COMPACT = "environmentalconditions"
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
 _FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
@@ -973,7 +980,7 @@ def _pnr_value_pattern(value: str) -> re.Pattern[str] | None:
         pattern.append(re.escape(token))
         previous_is_word = is_word
     return re.compile(
-        rf"(?i)(?<![A-Z0-9]){''.join(pattern)}(?![A-Z0-9])"
+        rf"(?i)(?<![A-Z0-9])(?P<value>{''.join(pattern)})(?![A-Z0-9])"
     )
 
 
@@ -1048,21 +1055,32 @@ def _format_pnr_values(values: list[str]) -> str:
     return f"{', '.join(values[:-1])} and {values[-1]}"
 
 
-def _pnr_header_matches(text: str) -> list[re.Match[str]]:
+def _pnr_header_matches(
+    text: str,
+    expected_values: list[str] | None = None,
+) -> list[re.Match[str]]:
     labels = list(_PNR_HEADER_LABEL_RE.finditer(text))
     if not labels:
-        return list(_PNR_HEADER_TOKEN_RE.finditer(text))
+        matches = list(_PNR_HEADER_TOKEN_RE.finditer(text))
+    else:
+        matches = []
+        for index, label in enumerate(labels):
+            end = labels[index + 1].start() if index + 1 < len(labels) else len(text)
+            cursor = label.end()
+            for match in _PNR_HEADER_TOKEN_RE.finditer(text, cursor, end):
+                if not _PNR_HEADER_SEPARATOR_RE.fullmatch(text[cursor : match.start()]):
+                    break
+                matches.append(match)
+                cursor = match.end()
 
-    matches: list[re.Match[str]] = []
-    for index, label in enumerate(labels):
-        end = labels[index + 1].start() if index + 1 < len(labels) else len(text)
-        cursor = label.end()
-        for match in _PNR_HEADER_TOKEN_RE.finditer(text, cursor, end):
-            if not _PNR_HEADER_SEPARATOR_RE.fullmatch(text[cursor : match.start()]):
-                break
-            matches.append(match)
-            cursor = match.end()
-    return matches
+    matches_by_span = {(match.start(), match.end()): match for match in matches}
+    for value in expected_values or []:
+        pattern = _pnr_value_pattern(value)
+        if pattern is None:
+            continue
+        for match in pattern.finditer(text):
+            matches_by_span.setdefault((match.start(), match.end()), match)
+    return sorted(matches_by_span.values(), key=lambda match: match.start())
 
 
 def _tp1_pnr_page_value_findings(
@@ -1157,6 +1175,15 @@ def _highlights_pnr_header_findings(
     for target in targets:
         if series_pattern is not None and series_pattern.search(target.text):
             continue
+        matches = _pnr_header_matches(target.text, pnr_values)
+        first_pattern = expected_patterns[0][1]
+        if (
+            len(pnr_values) > 1
+            and len(matches) == 1
+            and first_pattern is not None
+            and first_pattern.fullmatch(matches[0].group("value"))
+        ):
+            continue
         missing = [
             value
             for value, pattern in expected_patterns
@@ -1165,7 +1192,6 @@ def _highlights_pnr_header_findings(
         if not missing:
             continue
 
-        matches = _pnr_header_matches(target.text)
         if len(pnr_values) == 1 and expected_patterns[0][1] is not None:
             invalid_matches = [
                 match
@@ -1301,6 +1327,81 @@ def _highlights_description_findings(
                 bbox=bbox,
             )
         )
+    return findings, len(entries)
+
+
+def _environmental_conditions_typos(
+    description: str,
+) -> list[tuple[int, int, str]]:
+    words = list(re.finditer(r"[^\W\d_]+", description, flags=re.UNICODE))
+    typos: list[tuple[int, int, str]] = []
+    for first, second in pairwise(words):
+        candidate = f"{first.group().casefold()}{second.group().casefold()}"
+        if (
+            candidate != _ENVIRONMENTAL_CONDITIONS_COMPACT
+            and SequenceMatcher(
+                None,
+                candidate,
+                _ENVIRONMENTAL_CONDITIONS_COMPACT,
+            ).ratio()
+            >= 0.9
+        ):
+            start, end = first.start(), second.end()
+            typos.append((start, end, description[start:end]))
+    return typos
+
+
+def _highlights_environmental_conditions_findings(
+    context: Any,
+) -> tuple[list[OperationResult], int]:
+    runtime = getattr(context, "runtime", context)
+    parsed_pdf = getattr(runtime, "parsed_pdf", None)
+    if getattr(runtime, "is_docx", False) or not isinstance(parsed_pdf, ParsedPdf):
+        return [], 0
+
+    targets = tuple(getattr(context, "targets", ()))
+    target_pages = {target.raw_page for target in targets}
+    text_by_page = {target.raw_page: target.text for target in targets}
+    entries = [
+        entry
+        for page in parsed_pdf.pages
+        if not target_pages or page.page in target_pages
+        for entry in revision.extract_highlights(page)
+    ]
+    findings: list[OperationResult] = []
+    for entry in entries:
+        descriptions = [
+            (entry.description, entry.description_bbox),
+            (entry.subject_description, entry.subject_description_bbox),
+        ]
+        seen_descriptions: set[str] = set()
+        for description, bbox in descriptions:
+            if not description or description.casefold() in seen_descriptions:
+                continue
+            seen_descriptions.add(description.casefold())
+            description_start = text_by_page.get(entry.page, "").find(description)
+            for start, end, original in _environmental_conditions_typos(description):
+                span = (
+                    (description_start + start, description_start + end)
+                    if description_start >= 0
+                    else (0, 0)
+                )
+                findings.append(
+                    OperationResult(
+                        status="FAIL",
+                        observed=original,
+                        expected="Environmental conditions",
+                        message=(
+                            "La description des Highlights doit respecter "
+                            "l'orthographe « Environmental conditions »."
+                        ),
+                        original=original,
+                        proposed="Environmental conditions",
+                        span=span,
+                        page=entry.page,
+                        bbox=bbox,
+                    )
+                )
     return findings, len(entries)
 
 
@@ -2385,6 +2486,9 @@ def _document_structure_findings(
             if control == "highlights_deleted_description"
             else "Une description de modification"
         )
+    elif control == "highlights_environmental_conditions":
+        findings, checked = _highlights_environmental_conditions_findings(context)
+        expected = "Environmental conditions (orthographe exacte)"
     elif control in {
         "list_materials_code_parentheses",
         "list_materials_code_lowercase",
@@ -2537,18 +2641,16 @@ def _pdf_bookmark_line_is_running_header(page: ParsedPage, line: PdfLine) -> boo
     return median(span.size for span in line_spans) < median(body_font_sizes) * 0.85
 
 
-def _pdf_bookmark_titles_match(title: str, candidate: str) -> bool:
+def _pdf_bookmark_title_similarity(title: str, candidate: str) -> float | None:
     normalized_title = re.sub(r"[\W_]+", "", title.casefold())
     normalized_candidate = re.sub(r"[\W_]+", "", candidate.casefold())
     if not normalized_title or not normalized_candidate:
-        return False
-    if normalized_title == normalized_candidate:
-        return True
+        return None
     if min(len(normalized_title), len(normalized_candidate)) < 8:
-        return False
+        return None
     if re.findall(r"\d+", title) != re.findall(r"\d+", candidate):
-        return False
-    return SequenceMatcher(None, normalized_title, normalized_candidate).ratio() >= 0.88
+        return None
+    return SequenceMatcher(None, normalized_title, normalized_candidate).ratio()
 
 
 def _pdf_bookmark_findings(
@@ -2634,7 +2736,7 @@ def _pdf_bookmark_findings(
                 [line.text for line in page.lines] if page.lines else page.text.splitlines()
             )
             page_text = " ".join(page.text.split()).casefold()
-        if title in page_text:
+        if re.search(rf"(?<!\w){re.escape(title)}(?!\w)", page_text):
             continue
         title_lines = (
             [
@@ -2644,7 +2746,40 @@ def _pdf_bookmark_findings(
             if page.lines and page.page_height > 0
             else page_body_lines
         )
-        if any(_pdf_bookmark_titles_match(title, line) for line in title_lines):
+        closest_title: str | None = None
+        closest_similarity = 0.0
+        for line in title_lines:
+            similarity = _pdf_bookmark_title_similarity(title, line)
+            if (
+                similarity is not None
+                and similarity < 1.0
+                and similarity >= 0.90
+                and similarity > closest_similarity
+            ):
+                closest_title = line
+                closest_similarity = similarity
+        if closest_title is not None:
+            findings.append(
+                OperationResult(
+                    status="FAIL",
+                    observed=closest_title,
+                    expected=_PDF_BOOKMARK_EXPECTED,
+                    message=(
+                        f"Le titre « {closest_title} » de la page {page.page} "
+                        f"correspond presque au signet « {bookmark.title} » : "
+                        "il s'agit probablement d'une faute d'orthographe dans "
+                        f"le titre de la page. Corriger en « {bookmark.title} »."
+                    ),
+                    original=closest_title,
+                    proposed=bookmark.title,
+                    page=page.page,
+                )
+            )
+            continue
+        if any(
+            _pdf_bookmark_title_similarity(title, line) == 1.0
+            for line in title_lines
+        ):
             continue
         findings.append(
             OperationResult(
@@ -3061,6 +3196,7 @@ OPERATIONS = {
     operation.name: operation
     for operation in (
         REVISION_CONSISTENCY,
+        PREPARATION_CHECK,
         SHOP_VERIFICATION,
         HIGHLIGHTS_HOLDER,
         HIGHLIGHTS_DOCUMENT_TYPE,
