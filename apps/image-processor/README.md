@@ -94,8 +94,8 @@ The first run creates separate Python 3.11 development environments for the API 
 installs their dependencies. On a fresh checkout, run `pnpm install` at the
 repository root first to install the Tauri CLI and frontend dependencies.
 
-The NSIS installer is built with `pnpm desktop:build:image-processor` or
-`package.bat desktop`. It bundles the React UI, backend sources, PaddleOCR tiny
+The NSIS installer is built with `pnpm desktop:build:image-processor`,
+`package.bat desktop`, or `package-desktop.bat`. It bundles the React UI, backend sources, PaddleOCR tiny
 detection/recognition and text-line orientation models, and the LaMa checkpoint.
 During setup, it visibly downloads the embedded Python runtimes and installs
 their locked dependencies from PyPI. The installer needs an Internet connection

@@ -42,6 +42,15 @@ The reserved template port is `8000`. New apps use the next unassigned target po
 
 Double-click `start.bat`.
 
+## Desktop Build On Windows
+
+For an app generated with `--desktop`, double-click `package-desktop.bat` to run
+the Tauri build. `package.bat` without arguments creates the web package, not the
+desktop build. The ungenerated template and apps created without `--desktop`
+cannot build desktop; `_package.bat` reports when `frontend/desktop.json` is
+missing. See the [desktop and stack guide](../../docs/standards/desktop-and-stacks.md)
+for build prerequisites.
+
 ## Start On Unix
 
 Run `bash start.sh`.
