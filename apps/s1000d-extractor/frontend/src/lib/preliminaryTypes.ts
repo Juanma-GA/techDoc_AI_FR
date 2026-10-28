@@ -34,6 +34,7 @@ export type ReaderPosition = {
 
 export type ProcedureReview = {
   fingerprint: string;
+  rules_revision?: number;
   status: "pending" | "reviewed" | "stale";
   passages: ReviewPassage[];
   position: ReaderPosition;

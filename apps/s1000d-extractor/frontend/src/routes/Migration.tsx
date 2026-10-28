@@ -685,6 +685,7 @@ export function Migration() {
             <label className="grow">
               <div className="label">{t("migration.upload.issue")}</div>
               <select
+                className="input"
                 value={issue}
                 onChange={(e) => {
                   mappingTouched.current = true;
@@ -958,6 +959,7 @@ export function Migration() {
                   <label>
                     <div className="label">{t("migration.split.level")}</div>
                     <select
+                      className="input"
                       value={splitLevel}
                       onChange={(e) => setSplitLevel(e.target.value)}
                     >
@@ -1125,6 +1127,7 @@ export function Migration() {
                         {d.is_orphan ? t("migration.dm.orphan") : d.title}
                       </span>
                       <select
+                        className="input"
                         value={typeEdits[d.dm_id] ?? d.dm_type}
                         onChange={(e) =>
                           setTypeEdits((p) => ({ ...p, [d.dm_id]: e.target.value }))

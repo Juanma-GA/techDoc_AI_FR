@@ -50,13 +50,13 @@ async function render(language: string, changes: Partial<ReviewPassage> = {}) {
 
 describe.each([
   {
-    language: "fr", proposed: "Sécurité — à confirmer",
-    bodyPending: "Reste dans la procédure — à confirmer",
+    language: "fr", proposed: "Sécurité",
+    bodyPending: "Reste dans la procédure",
     ambiguous: "À trancher", body: "Reste dans la procédure", accept: "Accepter la proposition",
   },
   {
-    language: "en", proposed: "Safety — awaiting confirmation",
-    bodyPending: "Keep in procedure — awaiting confirmation",
+    language: "en", proposed: "Safety",
+    bodyPending: "Keep in procedure",
     ambiguous: "Decision needed", body: "Keep in procedure", accept: "Accept proposal",
   },
 ])("explicit classification proposals ($language)", (labels) => {

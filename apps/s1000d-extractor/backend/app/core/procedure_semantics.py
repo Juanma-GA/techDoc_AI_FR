@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.core.ir import IRNode
+from app.core.preliminary_rule_defaults import HEADINGS
 
 REQUIREMENT_CATEGORIES = ("conditions", "personnel", "support", "supplies", "spares", "safety")
 EXTRA_DESTINATIONS = ("common", "closing")
@@ -21,14 +22,7 @@ _TECHNICAL_UNIT = re.compile(
     re.IGNORECASE,
 )
 _MARKER = re.compile(r"^(?:(?:chapter|chapitre|section)\s+)?\d+(?:\.\d+)+\.?$")
-_CATEGORY_HEADINGS = {
-    "conditions": r"(?:preconditions?|prerequisites?|required conditions?|conditions?(?: prealables?| requises?| a respecter)?)",
-    "personnel": r"(?:(?:required |qualified )?personnel(?: requis| necessaire)?|manpower)",
-    "support": r"(?:(?:required |special )?(?:support equipment|tools?|tooling|equipment|outillage|outils?|equipements?)(?: required| necessaires?| requis)?)",
-    "supplies": r"(?:required )?(?:supplies|consumables?|fournitures?|consommables?)(?: required| requis)?",
-    "spares": r"(?:required )?(?:spares?|spare parts|pieces? (?:de )?rechange)(?: required| requises?)?",
-    "safety": r"(?:(?:general |required )?safety(?: requirements?| precautions?)?|security requirements?|securite|precautions?(?: de securite)?)",
-}
+_CATEGORY_HEADINGS = {category: set(fr + en) for category, (fr, en) in HEADINGS.items()}
 _PHASE_HEADINGS = {
     "preliminary": r"(?:preliminary (?:requirements|requisites)|exigences preliminaires|preliminaires|prerequis)",
     "main": r"(?:main procedure|procedure(?: principale)?|procedure steps|instructions?|operations?|removal|installation|depose|repose|demontage|montage|inspection|repair|reparation)",
@@ -67,13 +61,17 @@ def heading_text(text: str) -> str:
     return stripped.strip()
 
 
-def heading_scope(text: str) -> tuple[str, str | None]:
-    label = re.sub(r"[^a-z0-9]+", " ", normalize(heading_text(text))).strip()
+def heading_label(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", normalize(heading_text(text))).strip()
+
+
+def heading_scope(text: str, *, headings: dict[str, set[str]] | None = None) -> tuple[str, str | None]:
+    label = heading_label(text)
     for phase, pattern in _PHASE_HEADINGS.items():
         if re.fullmatch(pattern, label):
             return phase, None
-    for category, pattern in _CATEGORY_HEADINGS.items():
-        if re.fullmatch(pattern, label):
+    for category, labels in (_CATEGORY_HEADINGS if headings is None else headings).items():
+        if label in labels:
             return "preliminary", category
     return "unknown", None
 
@@ -89,33 +87,41 @@ def column_key(text: str) -> str | None:
     return next((key for key, labels in _COLUMNS.items() if label in labels), None)
 
 
-def table_heading(node: dict) -> list[str]:
+def table_heading(node: dict, *, headings: dict[str, set[str]] | None = None) -> list[str]:
     if node.get("table_header"):
         return node["table_header"]
     rows = node.get("table_rows") or []
     if rows:
-        keys = [column_key(cell) for cell in rows[0]]
+        keys = [
+            column_key(cell) or (
+                "name" if heading_scope(cell, headings=headings)[1] in {"personnel", "support", "supplies", "spares"}
+                else None
+            )
+            for cell in rows[0]
+        ]
         if "name" in keys and (len(rows[0]) == 1 or sum(key is not None for key in keys) >= 2):
             return rows[0]
     return []
 
 
-def table_category(header: list[str]) -> str | None:
+def table_category(header: list[str], *, headings: dict[str, set[str]] | None = None) -> str | None:
     for cell in header:
-        phase, category = heading_scope(cell)
+        phase, category = heading_scope(cell, headings=headings)
         if phase == "preliminary" and category in {"personnel", "support", "supplies", "spares"}:
             return category
     return None
 
 
-def passage_role(node: dict, row: int | None, text: str) -> str:
+def passage_role(
+    node: dict, row: int | None, text: str, *, headings: dict[str, set[str]] | None = None,
+) -> str:
     if node.get("zone") in LAYOUT_ZONES:
         return "layout"
     if node["kind"] in {"section", "title"}:
         return "heading"
     if node["kind"] == "figure":
         return "caption"
-    if row is not None and row == 0 and table_heading(node) == (node.get("table_rows") or [[]])[0]:
+    if row is not None and row == 0 and table_heading(node, headings=headings) == (node.get("table_rows") or [[]])[0]:
         return "table-header"
     if node["kind"] == "paragraph" and node.get("zone") == "chapter" and (
         _MARKER.fullmatch(normalize(text.strip()))

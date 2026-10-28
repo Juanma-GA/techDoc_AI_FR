@@ -1,13 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import type { PreliminaryState, ReviewAction } from "../../src/lib/preliminaryTypes";
+import type { RequirementRules } from "../../src/lib/preliminaryRules";
 
 function syntheticState(sourceFormat = "docx"): PreliminaryState {
   return {
     revision: 1, active_dm_id: "proc", source_format: sourceFormat, source_changed: false,
     reviews: {
       proc: {
-        fingerprint: "synthetic-only", status: "pending", saved_at: null,
+        fingerprint: "synthetic-only", rules_revision: 0, status: "pending", saved_at: null,
         position: { page: 1, scroll_top: 0, selected_id: null },
         passages: Array.from({ length: 18 }, (_, index) => ({
           id: `p${index}`, node_id: `n${index}`, row: null, start: 0, end: 80,
@@ -30,6 +31,9 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     position: { page: 1, scroll_top: 0, selected_id: null }, saved_at: null,
   };
   let failSave = false;
+  let rules: RequirementRules = {
+    revision: 0, groups: [{ category: "conditions", kind: "keyword", fr: ["avant"], en: ["before"] }],
+  };
   const writes: Array<ReviewAction & { revision: number }> = [];
   await page.addInitScript(() => localStorage.setItem("i18nextLng", "fr"));
   await page.route("**/api/v1/**", async (route) => {
@@ -37,6 +41,13 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     const path = url.pathname;
     let response: unknown = {};
     if (path.endsWith("/health")) response = { status: "ok", llm: "disabled" };
+    else if (path.endsWith("/settings/preliminary-rules")) {
+      if (route.request().method() === "POST") {
+        const payload = route.request().postDataJSON() as RequirementRules;
+        rules = { ...payload, revision: rules.revision + 1 };
+      }
+      response = rules;
+    }
     else if (path.endsWith("/settings")) response = { demo_enabled: false, llm_enabled: false };
     else if (path.endsWith("/documents")) response = [{
       id: "synthetic-doc", filename: "synthetic-source.docx", source_format: sourceFormat, status: "wizard",
@@ -118,6 +129,26 @@ test("classifies, scrolls continuously, and restores after reopening without adv
   expect(server.writes.some((action) => action.op === "cursor")).toBe(true);
 });
 
+test("saving rules in Settings flags an already-open review without discarding its decisions", async ({ page }) => {
+  const server = await mockApplication(page);
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+  await page.locator("article").first().getByLabel("Décision de classement").selectOption("safety");
+  await expect(page.locator("article").first().getByLabel("Décision de classement")).toHaveValue("safety");
+  await page.getByRole("link", { name: "Paramètres", exact: true }).click();
+  await page.getByRole("button", { name: "Afficher les règles", exact: true }).click();
+  const form = page.getByRole("form", { name: "Règles de préremplissage des exigences" });
+  const category = form.getByTestId("rule-category-conditions");
+  await category.locator("summary").first().click();
+  await category.locator("fieldset").first().getByLabel("Liste française (FR)").fill("avant\navant intervention");
+  await form.getByRole("button", { name: "Enregistrer les règles", exact: true }).click();
+  await expect(form.getByRole("status")).toContainText("révision 1");
+  await page.getByRole("link", { name: "Migration", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Recommencer cette revue", exact: true })).toBeVisible();
+  expect(server.read().reviews.proc!.passages[0]?.decision).toBe("safety");
+  expect(server.writes.some((write) => write.op === "restart")).toBe(false);
+});
+
 test("exposes a failed save and retries without claiming success", async ({ page }) => {
   const server = await mockApplication(page);
   await page.goto("/migration");
@@ -162,17 +193,53 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
   const cards = page.locator("article");
-  await expect(cards.nth(0).locator("select option:checked")).toHaveText("Sécurité — à confirmer");
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Reste dans la procédure — à confirmer");
+  await expect(cards.nth(0).locator("select option:checked")).toHaveText("Sécurité");
+  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Reste dans la procédure");
   await expect(cards.nth(2).locator("select option:checked")).toHaveText("À trancher");
   expect(server.writes.filter((action) => action.op === "decide")).toHaveLength(0);
   expect(server.read().reviews.proc!.passages.every((passage) => passage.decision === null)).toBe(true);
+  const complete = page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" });
+  await expect(complete).toBeDisabled();
+  const collapseButton = cards.nth(0).getByRole("button", { name: "Replier le passage" });
+  await expect(collapseButton).toHaveText("");
+  await expect(collapseButton.locator("svg")).toBeVisible();
+  const filter = page.getByLabel("Afficher les passages");
+  await filter.selectOption("safety");
+  await expect(cards).toHaveCount(1);
+  await filter.selectOption("all");
+  await expect(cards).toHaveCount(18);
   await cards.nth(0).getByRole("button", { name: "Accepter la proposition" }).click();
   await expect(cards.nth(0).getByLabel("Décision de classement")).toHaveValue("safety");
+  const expandButton = cards.nth(0).getByRole("button", { name: "Développer le passage" });
+  await expect(expandButton).toHaveText("");
+  await expect(expandButton.locator("svg")).toBeVisible();
+  await expect(expandButton)
+    .toHaveAttribute("aria-expanded", "false");
+  await expect(cards.nth(0).getByLabel("Décision de classement")).toBeHidden();
+  await expect(complete).toBeDisabled();
+  await expandButton.click();
+  await expect(cards.nth(0).getByLabel("Décision de classement")).toBeVisible();
+  await expect(cards.nth(0).getByRole("button", { name: "Replier le passage" }).locator("svg"))
+    .toBeVisible();
   expect(server.read().reviews.proc!.passages[1]!.decision).toBeNull();
   await page.getByRole("button", { name: "EN", exact: true }).click();
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Keep in procedure — awaiting confirmation");
+  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Keep in procedure");
   await expect(cards.nth(2).locator("select option:checked")).toHaveText("Decision needed");
+});
+
+test("splits source text at a selected word boundary", async ({ page }) => {
+  const server = await mockApplication(page);
+  await page.goto("/migration");
+  await page.getByRole("button", { name: "Reprendre", exact: true }).click();
+  const first = page.locator("article").first();
+  await first.locator("details > summary").click();
+  const slider = first.getByRole("slider", { name: "Position de scission entre les mots" });
+  await slider.press("Home");
+  await slider.press("ArrowRight");
+  await slider.press("ArrowRight");
+  await expect(slider).toHaveAttribute("aria-valuetext", "Après le mot 3 sur 11 : « passage »");
+  await first.getByRole("button", { name: "Scinder le passage source" }).click();
+  expect(server.writes.filter((action) => action.op === "split").slice(-1)[0]?.split_at).toBe(24);
 });
 
 test("PDF errors and unlocated passages never reintroduce a text transcription", async ({ page }) => {
@@ -294,7 +361,7 @@ test("editorial structure is not classified and closing conditions have their ow
   await expect(reader.locator('[data-passage="heading"]')).toHaveText("3.2 Tools required");
   await expect(reader.locator('[data-passage="header"]').getByRole("cell")).toHaveText(["Tool", "Qty"]);
   await expect(page.getByText("3 passage(s) sans décision sur 18", { exact: true })).toBeVisible();
-  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Conditions de clôture — à confirmer");
+  await expect(cards.nth(1).locator("select option:checked")).toHaveText("Conditions de clôture");
   await expect(cards.nth(2).getByText(/Contenu de la procédure/)).toBeVisible();
   for (const index of [0, 1, 2]) {
     await cards.nth(index).getByRole("button", { name: "Accepter la proposition" }).click();

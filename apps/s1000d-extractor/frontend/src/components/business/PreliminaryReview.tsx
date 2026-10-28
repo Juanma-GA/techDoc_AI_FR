@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { WizardDm } from "../../lib/api";
-import { isReviewable, procedureCategories, reviewDestinations, type PreliminaryState } from "../../lib/preliminaryTypes";
+import {
+  isReviewable, procedureCategories, reviewDestinations, type PreliminaryState, type ReviewPassage,
+} from "../../lib/preliminaryTypes";
 import { usePreliminaryReview } from "../../lib/usePreliminaryReview";
 import { PreliminaryPassage } from "./PreliminaryPassage";
 import { ProcedureReader } from "./ProcedureReader";
@@ -43,6 +45,10 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   const stale = current.status === "stale";
   const passages = current.passages.filter(isReviewable);
   const undecided = passages.filter((item) => !item.decision).length;
+  const matchesFilter = (passage: ReviewPassage) =>
+    filter === "all" || (filter === "pending"
+      ? !passage.decision
+      : passage.decision === filter || (!passage.decision && passage.suggested === filter));
   const complete = Object.values(review.state.reviews).every((item) => item.status === "reviewed");
 
   const changeProcedure = async (id: string) => {
@@ -149,7 +155,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                 </label>
                 <p>{t("preliminary.remaining", { count: undecided, total: passages.length })}</p>
                 <div className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
-                  {passages.filter((p) => filter === "all" || (filter === "pending" ? !p.decision : p.decision === filter))
+                  {passages.filter(matchesFilter)
                     .map((passage) => (
                       <PreliminaryPassage key={passage.id} dmId={active} passage={passage}
                         text={review.edits[passage.id] ?? passage.text}

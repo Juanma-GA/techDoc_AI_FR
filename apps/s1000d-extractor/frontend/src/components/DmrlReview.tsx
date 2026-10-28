@@ -165,6 +165,7 @@ export function DmrlReview({
             ) : (
               <>
                 <select
+                  className="input"
                   id={`dmrl-type-${row.index}`}
                   aria-label={t("migration.dmrl.typeLabel", { title: row.title })}
                   aria-invalid={needsExplicitTypeChoice(row)}

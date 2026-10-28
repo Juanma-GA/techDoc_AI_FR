@@ -10,11 +10,12 @@ from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import update
-from sqlalchemy.orm import Session
+from sqlalchemy import inspect, update
+from sqlalchemy.orm import Session, object_session
 
 from app.core import preliminary_detection as detection
 from app.core.errors import AppError
+from app.core.preliminary_rules import RulesConfig, defaults, read_rules
 from app.core.wizard_split import load_dms
 from app.db.models import Document
 
@@ -50,7 +51,16 @@ def load(doc: Document) -> dict:
     }
 
 
-def _fingerprint(doc: Document, dm: dict, generation: int) -> str:
+def rules_for(doc: Document) -> RulesConfig:
+    db = object_session(doc)
+    if db is not None:
+        return read_rules(db)
+    if inspect(doc).transient:
+        return defaults()
+    raise AppError("RULES_SESSION_REQUIRED", "Session de base requise pour verifier les regles de revue.", 500)
+
+
+def _fingerprint(doc: Document, dm: dict, generation: int, rules: RulesConfig) -> str:
     def source(node: dict) -> dict:
         return {
             key: ([source(child) for child in value] if key == "children" else value)
@@ -60,21 +70,23 @@ def _fingerprint(doc: Document, dm: dict, generation: int) -> str:
 
     path = Path(doc.storage_path)
     stat = path.stat() if path.is_file() else None
-    data = [detection.RULE_VERSION, generation, doc.s1000d_issue,
+    data = [detection.RULE_VERSION, rules.fingerprint, generation, doc.s1000d_issue,
             [stat.st_size, stat.st_mtime_ns] if stat else None,
             doc.pdf_cut_start_page, doc.pdf_cut_end_page, source(dm["tree"])]
     return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
 
-def _new_review(doc: Document, dm: dict, generation: int) -> dict:
+def _new_review(doc: Document, dm: dict, generation: int, rules: RulesConfig) -> dict:
     items = detection.passages(
         dm["tree"], source_format=doc.source_format,
         page_offset=load(doc).get(
             "page_offset", (doc.pdf_cut_start_page or 1) - 1 if doc.pdf_cut_path else 0,
         ),
+        rules=rules,
     )
     return {
-        "fingerprint": _fingerprint(doc, dm, generation),
+        "fingerprint": _fingerprint(doc, dm, generation, rules),
+        "rules_revision": rules.revision,
         "status": "pending", "passages": items,
         "position": {"page": next((item["page"] for item in items if item["page"]), 1),
                      "scroll_top": 0, "selected_id": None},
@@ -84,12 +96,13 @@ def _new_review(doc: Document, dm: dict, generation: int) -> dict:
 
 def prepare(doc: Document) -> None:
     state = load(doc)
+    rules = rules_for(doc)
     changed = False
     for dm in load_dms(doc):
         if dm["dm_type"] != "procedural":
             continue
         if dm["dm_id"] not in state["reviews"]:
-            state["reviews"][dm["dm_id"]] = _new_review(doc, dm, state["generation"])
+            state["reviews"][dm["dm_id"]] = _new_review(doc, dm, state["generation"], rules)
             changed = True
     if changed:
         state["revision"] += 1
@@ -105,14 +118,15 @@ def invalidate_source(doc: Document) -> None:
 
 def view(doc: Document) -> dict:
     state = load(doc)
+    rules = rules_for(doc)
     reviews = {}
     for dm in load_dms(doc):
         if dm["dm_type"] != "procedural":
             continue
         review = state["reviews"].get(dm["dm_id"])
         if review is None:
-            review = _new_review(doc, dm, state["generation"])
-        elif review["fingerprint"] != _fingerprint(doc, dm, state["generation"]):
+            review = _new_review(doc, dm, state["generation"], rules)
+        elif review["fingerprint"] != _fingerprint(doc, dm, state["generation"], rules):
             review = {**review, "status": "stale"}
         reviews[dm["dm_id"]] = review
     active = state["active_dm_id"]
@@ -149,6 +163,7 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
         raise AppError("REVIEW_STEP_REQUIRED", "Ouvrez l'etape de revue procedurale.", 409)
     previous = doc.preliminary_review_json
     state = load(doc)
+    rules = read_rules(db)
     if action.revision != state["revision"]:
         raise AppError("REVIEW_CONFLICT", "La revue a change. Rechargez avant de modifier.", 409)
     dm = next((dm for dm in load_dms(doc) if dm["dm_id"] == action.dm_id), None)
@@ -156,10 +171,10 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
         raise AppError("REVIEW_DM_NOT_FOUND", "Procedure inconnue.", 404)
     review = state["reviews"].get(action.dm_id)
     if action.op == "restart":
-        review = _new_review(doc, dm, state["generation"])
+        review = _new_review(doc, dm, state["generation"], rules)
         state["reviews"][action.dm_id] = review
-    elif review is None or review["fingerprint"] != _fingerprint(doc, dm, state["generation"]):
-        raise AppError("REVIEW_STALE", "La source a change. Recommencez explicitement la revue.", 409)
+    elif review is None or review["fingerprint"] != _fingerprint(doc, dm, state["generation"], rules):
+        raise AppError("REVIEW_STALE", "La source ou les regles ont change. Recommencez explicitement la revue.", 409)
     if action.op in {"decide", "split"}:
         item = next((p for p in review["passages"] if p["id"] == action.passage_id), None)
         if item is None:
@@ -190,6 +205,7 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
                 text = item["source_text"][start:end]
                 suggested, rule = detection.suggestion(
                     text, item.get("category_hint"), item.get("phase", "unknown"), item.get("admonition"),
+                    rules=rules,
                 )
                 parts.append({
                     **item, "id": str(uuid4()), "start": item["start"] + start,
@@ -231,6 +247,7 @@ def apply(db: Session, doc: Document, action: ReviewAction) -> dict:
         update(Document).where(
             Document.id == doc.id, Document.preliminary_review_json == previous,
             Document.dms_json == doc.dms_json, Document.wizard_step == "preliminary",
+            rules.unchanged_condition(),
         ).values(preliminary_review_json=encoded),
         execution_options={"synchronize_session": False},
     )

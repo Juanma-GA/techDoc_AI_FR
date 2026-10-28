@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+from app.core.preliminary_rules import RulesConfig, defaults
 from app.core.procedure_semantics import (
     EXTRA_DESTINATIONS,
     REQUIREMENT_CATEGORIES,
@@ -16,17 +16,7 @@ from app.core.procedure_semantics import (
 
 CATEGORIES = REQUIREMENT_CATEGORIES
 DESTINATIONS = (*CATEGORIES, *EXTRA_DESTINATIONS, "body", "discard")
-RULE_VERSION = 2
-
-_PATTERNS = {
-    "conditions": r"\b(before|prior to|ensure|make sure|prerequisite|condition|avant|assurer|prealable|hors tension)\b",
-    "personnel": r"\b(personnel|technician|technicians|operator|operators|mechanic|qualified|technicien|techniciens|operateur|operateurs|qualification)\b",
-    "support": r"\b(tool|tools|equipment|wrench|spanner|screwdriver|outillage|outil|outils|equipement|cle|tournevis)\b",
-    "supplies": r"\b(consumable|consumables|supply|supplies|lubricant|grease|solvent|adhesive|consommable|consommables|graisse|solvant|colle)\b",
-    "spares": r"\b(spare|spares|replacement part|replacement parts|rechange|joint neuf|new seal|new gasket)\b",
-    "safety": r"\b(warning|caution|danger|hazard|safety|protective|avertissement|attention|risque|securite|protection)\b",
-}
-_RULES = {category: re.compile(pattern) for category, pattern in _PATTERNS.items()}
+RULE_VERSION = 3
 
 
 def is_reviewable(passage: dict) -> bool:
@@ -35,6 +25,7 @@ def is_reviewable(passage: dict) -> bool:
 
 def suggestion(
     text: str, inherited: str | None, phase: str = "unknown", admonition: str | None = None,
+    *, rules: RulesConfig | None = None,
 ) -> tuple[str, str]:
     if admonition in {"warning", "caution"} and phase in {"closing", "common"}:
         return "review", "multiple"
@@ -46,7 +37,8 @@ def suggestion(
         return inherited, "heading"
     if is_action(text):
         return "body", "action"
-    matches = [category for category, rule in _RULES.items() if rule.search(normalize(text))]
+    active = rules if rules is not None else defaults()
+    matches = [category for category, rule in active.keywords.items() if rule.search(normalize(text))]
     if len(matches) > 1:
         return "review", "multiple"
     if matches:
@@ -54,19 +46,22 @@ def suggestion(
     return "body", "unmatched"
 
 
-def passages(tree: dict, *, source_format: str, page_offset: int) -> list[dict]:
+def passages(
+    tree: dict, *, source_format: str, page_offset: int, rules: RulesConfig | None = None,
+) -> list[dict]:
     result: list[dict] = []
     reading_page, page_size = 1, 0
+    active = rules if rules is not None else defaults()
 
     def visit(node: dict, inherited: str | None = None, phase: str = "unknown", *, root: bool = False) -> None:
         nonlocal reading_page, page_size
         kind = node["kind"]
         if kind in {"section", "title"}:
-            scoped_phase, category = heading_scope(node.get("text", ""))
+            scoped_phase, category = heading_scope(node.get("text", ""), headings=active.headings)
             if scoped_phase != "unknown":
                 phase, inherited = scoped_phase, category
         if kind == "table" and not inherited and phase not in {"main", "closing", "common"}:
-            inherited = table_category(table_heading(node))
+            inherited = table_category(table_heading(node, headings=active.headings), headings=active.headings)
         rows = node.get("table_rows") or []
         texts = (
             [(index, " | ".join(row)) for index, row in enumerate(rows)]
@@ -83,9 +78,9 @@ def passages(tree: dict, *, source_format: str, page_offset: int) -> list[dict]:
                 (node.get("page") + page_offset if node.get("page") else None)
                 if source_format == "pdf" else reading_page
             )
-            role = passage_role(node, row, text)
+            role = passage_role(node, row, text, headings=active.headings)
             category, rule = (
-                suggestion(text, inherited, phase, node.get("admonition"))
+                suggestion(text, inherited, phase, node.get("admonition"), rules=active)
                 if role == "content" else ("body", "structure")
             )
             result.append({

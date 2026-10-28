@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { preliminaryApi } from "./preliminaryApi";
 import { ApiRequestError } from "./api";
 import type { PreliminaryState, ReaderPosition, ReviewAction } from "./preliminaryTypes";
+import { preliminaryRulesApi, preliminaryRulesQueryKey } from "./preliminaryRules";
 
 export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
+  const rules = useQuery({
+    queryKey: preliminaryRulesQueryKey, queryFn: preliminaryRulesApi.read, enabled: false,
+  }).data;
   const [state, setState] = useState(initial);
   const latest = useRef(initial);
   const [saving, setSaving] = useState(false);
@@ -144,5 +149,13 @@ export function usePreliminaryReview(docId: string, initial: PreliminaryState) {
     };
   }, [flush]);
 
-  return { state, saving, dirty, error, edits, edit, act, position, flush, retry, reload };
+  const outdated = (review: PreliminaryState["reviews"][string]) =>
+    rules !== undefined && review.rules_revision !== undefined && rules.revision > review.rules_revision;
+  const displayed = rules && Object.values(state.reviews).some(outdated) ? {
+    ...state, source_changed: true,
+    reviews: Object.fromEntries(Object.entries(state.reviews).map(([id, review]) => [
+      id, outdated(review) ? { ...review, status: "stale" as const } : review,
+    ])),
+  } : state;
+  return { state: displayed, saving, dirty, error, edits, edit, act, position, flush, retry, reload };
 }

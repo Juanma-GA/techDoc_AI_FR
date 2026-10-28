@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 
 import { DemoModeSettings } from "../components/DemoModeSettings";
+import { PreliminaryRulesSettings } from "../components/business/PreliminaryRulesSettings";
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 
 export function Settings() {
@@ -78,7 +79,9 @@ export function Settings() {
         <p>{t("settings.subtitle")}</p>
       </div>
 
-      <DemoModeSettings />
+      <div className="space-y-6" data-testid="settings-sections">
+        <DemoModeSettings />
+        <PreliminaryRulesSettings />
 
       <div className="card">
         <h2 className="card-title">{t("settings.aiTitle")}</h2>
@@ -186,6 +189,7 @@ export function Settings() {
             </div>
           ) : null}
         </div>
+      </div>
       </div>
     </>
   );

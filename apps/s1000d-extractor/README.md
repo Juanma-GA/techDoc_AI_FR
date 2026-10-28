@@ -149,6 +149,60 @@ after updating; no migration of an existing user database is performed by tests.
 Existing generated procedural wizard documents without a review are returned to
 the review step when resumed.
 
+### Editable requirement rules
+
+**Settings > Requirement prefill rules** lists the effective rules by requirement
+category and detection type in a panel collapsed by default. The entire header,
+including its title, summary and padding, toggles the panel through the accessible
+**Show rules** / **Collapse rules** button. Editor fields and actions do not toggle
+it. Folding preserves the editor draft; the header indicates unsaved changes
+even while collapsed. Six expandable categories replace individual rule forms:
+conditions, personnel, support equipment, supplies, spares and safety. Each has
+French and English keyword lists, plus a separate expandable heading-list section.
+Fields stack on narrower layouts, and settings panels have separate spacing.
+Existing FR/EN patterns are supplied as editable literal expressions, including
+legacy heading variants. Write one expression per line; blank lines are ignored.
+French and English lists are independent and may contain different numbers of
+synonyms: lines are not paired translations. Each active category/type needs both
+languages, at most 200 characters per expression and 1000 expressions per language
+across the whole configuration. Both languages are searched regardless of the
+interface language. Clear both languages to remove a category/type list.
+Add, edit or remove list entries, then click **Save rules**. Saving removals or
+replacements, and discarding unsaved edits, require a second click within three
+seconds; additions save immediately.
+
+Keywords match complete literal expressions at word boundaries; section/column
+headings match the entire normalized label. Case and accents are ignored, and
+editorial numbering is removed from headings, not from technical values.
+No regular expression or automatic translation is executed. Recognized S1000D
+phases, operating actions, typed warnings and source-role safeguards remain
+protected. Rules only propose destinations; human confirmation remains mandatory.
+Conflicting expressions assigned to different categories are rejected explicitly.
+Deleting every entry is supported and does not silently restore defaults.
+
+The dedicated `GET/POST /api/v1/settings/preliminary-rules` API validates the
+complete bilingual configuration and stores it in the existing `AppConfig` table
+under `preliminary_rules`. No migration, new dependency or account is required.
+Settings apply to this mono-user installation, survive restarts and document
+resets, and do not enter browser storage. Save failures preserve the local draft;
+concurrent settings saves are rejected using a compare-and-swap revision.
+The API uses `{revision, groups: [{category, kind, fr: [...], en: [...]}]}`.
+Previously saved paired `rules` JSON remains readable: equivalent expressions
+are grouped without changing the effective matching sets. Reads and unchanged
+saves do not rewrite that JSON or increment its revision; the next actual edit
+stores the grouped format.
+Restart the application after this update so its backend and rebuilt frontend
+use the same grouped API contract.
+
+The saved rule configuration participates in review fingerprints. Effective
+changes invalidate previous reviews, including completed reviews, without
+rewriting or deleting saved decisions. Resume the wizard and explicitly restart
+each stale review before generation or XML/ZIP export. Saving identical rules
+does not invalidate reviews. New reviews, explicit restarts and passage splits
+all use the saved rules. The original source IR remains unchanged.
+Reading legacy paired settings, including defaults, preserves their original
+review fingerprint: regrouping expressions alone does not make reviews stale.
+
 The implementation targets the bundled official Issue 4.1/4.2 `proced.xsd`
 content models: optional common information, preliminary requirements, nested
 operating steps and closing conditions. See the [official S1000D download portal](https://users.s1000d.org/Default.aspx)

@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import { act, createElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { preliminaryApi } from "./preliminaryApi";
 import type { PreliminaryState } from "./preliminaryTypes";
+import { preliminaryRulesQueryKey } from "./preliminaryRules";
 import { usePreliminaryReview } from "./usePreliminaryReview";
 
 vi.mock("./preliminaryApi", () => ({
@@ -15,7 +17,7 @@ vi.mock("./preliminaryApi", () => ({
 const initial: PreliminaryState = {
   revision: 1, active_dm_id: "proc", source_format: "docx", source_changed: false,
   reviews: { proc: {
-    fingerprint: "synthetic", status: "pending", passages: [],
+    fingerprint: "synthetic", rules_revision: 0, status: "pending", passages: [],
     position: { page: 1, scroll_top: 0, selected_id: null }, saved_at: null,
   } },
 };
@@ -23,6 +25,7 @@ const initial: PreliminaryState = {
 let root: Root;
 let container: HTMLDivElement;
 let current: ReturnType<typeof usePreliminaryReview>;
+let client: QueryClient;
 
 function Probe() {
   current = usePreliminaryReview("synthetic-document", initial);
@@ -38,17 +41,44 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root.render(createElement(Probe)));
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  act(() => root.render(createElement(QueryClientProvider, { client }, createElement(Probe))));
 });
 
 afterEach(async () => {
   await act(async () => { root.unmount(); });
   container.remove();
+  client.clear();
   vi.clearAllMocks();
   vi.useRealTimers();
 });
 
 describe("server-persisted procedural review", () => {
+  it("marks the still-open review stale after saving settings without deleting local edits", async () => {
+    act(() => current.edit({ dm_id: "proc", op: "decide", passage_id: "p", text: "Local correction" }));
+    await act(async () => {
+      client.setQueryData(preliminaryRulesQueryKey, { revision: 1, groups: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(current.state.source_changed).toBe(true);
+    expect(current.state.reviews.proc?.status).toBe("stale");
+    expect(current.edits.p).toBe("Local correction");
+    expect(preliminaryApi.save).not.toHaveBeenCalled();
+  });
+
+  it("does not invalidate a newer review using an older settings cache", async () => {
+    vi.mocked(preliminaryApi.save).mockResolvedValueOnce({
+      ...initial, reviews: { proc: { ...initial.reviews.proc!, rules_revision: 2 } },
+    });
+    await act(async () => {
+      await current.act({ dm_id: "proc", op: "restart" });
+      client.setQueryData(preliminaryRulesQueryKey, { revision: 1, groups: [] });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(current.state.reviews.proc?.status).toBe("pending");
+    expect(current.state.source_changed).toBe(false);
+  });
+
   it("flushes the last scroll position before a classification and serializes revisions", async () => {
     act(() => current.position("proc", { page: 2, scroll_top: 420.5, selected_id: "passage" }));
     expect(current.dirty).toBe(true);
