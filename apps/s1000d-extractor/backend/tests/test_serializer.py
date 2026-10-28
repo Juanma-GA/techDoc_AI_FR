@@ -292,6 +292,36 @@ def test_figure_icn_referenced() -> None:
     assert "ICN-ZZZ-00000" not in xml
 
 
+def test_pictograms_are_not_serialized_as_dm_figures() -> None:
+    root = IRNode(
+        id="root",
+        kind="section",
+        children=[
+            IRNode(
+                id="pictogram",
+                kind="figure",
+                text="Picto chapitre 1",
+                icn="picto_chapitre_1.jpg",
+                is_pictogram=True,
+            ),
+            IRNode(
+                id="illustration",
+                kind="figure",
+                text="Figure 1 - Vue generale",
+                icn="figure-1-vue-generale.jpg",
+            ),
+        ],
+    )
+    resolve(root)
+
+    xml = serialize(root, issue="4.2", dm_type="descriptive")
+
+    assert 'id="fig-0001"' in xml
+    assert "Picto chapitre 1" not in xml
+    assert "picto_chapitre_1" not in xml
+    assert "figure-1-vue-generale" in xml
+
+
 def test_composite_figure_references_all_graphics() -> None:
     from app.core.ir import IRNode
     from app.core.s1000d_serializer import serialize
@@ -314,7 +344,7 @@ def test_composite_figure_references_all_graphics() -> None:
     assert 'infoEntityIdent="figure-5-4-composite-2"' in xml
 
 
-def test_figures_and_tables_have_incremental_ids() -> None:
+def test_figures_and_tables_restart_ids_for_each_dm() -> None:
     root = IRNode(id="r", kind="section", level=0)
     root.children = [
         IRNode(id="f1", kind="figure", text="Figure 1 First"),
@@ -326,14 +356,12 @@ def test_figures_and_tables_have_incremental_ids() -> None:
         root,
         issue="4.2",
         dm_type="descriptive",
-        figure_offset=4,
-        table_offset=7,
     )
 
-    assert '<figure id="fig-0005">' in xml
-    assert '<figure id="fig-0006">' in xml
-    assert '<table id="tbl-0008">' in xml
-    assert '<table id="tbl-0009">' in xml
+    assert '<figure id="fig-0001">' in xml
+    assert '<figure id="fig-0002">' in xml
+    assert '<table id="tab-0001">' in xml
+    assert '<table id="tab-0002">' in xml
 
 
 def test_final_titles_drop_editorial_numbering() -> None:
@@ -421,7 +449,7 @@ def test_detected_refs_resolve_inline_to_real_targets() -> None:
     refs = para.findall("internalRef")
     assert [(ref.get("internalRefId"), ref.get("internalRefTargetType")) for ref in refs] == [
         ("fig-0001", "irtt01"),
-        ("tbl-0001", "irtt02"),
+        ("tab-0001", "irtt02"),
     ]
     assert "".join(para.itertext()) == text
     assert not doc.xpath('.//internalRef[starts-with(@internalRefId, "TODO-")]')

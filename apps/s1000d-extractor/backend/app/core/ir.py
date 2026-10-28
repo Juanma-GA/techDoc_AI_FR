@@ -146,6 +146,8 @@ class IRNode:
     refs: list[dict] | None = None             # renvois/hyperliens (-> internalRef...)
     inline_runs: list[InlineRun] = field(default_factory=list)
 
+    reviewed_requirements: dict[str, list[IRNode]] | None = None
+
     def walk(self) -> list[IRNode]:
         """Parcours prefixe (self puis enfants) - pratique pour stats/tests."""
         out = [self]
@@ -195,6 +197,11 @@ def from_dict(data: dict) -> IRNode:
             for run in data.get("inline_runs", [])
             if isinstance(run, dict) and run.get("text") is not None
         ],
+        reviewed_requirements=(
+            {key: [from_dict(node) for node in nodes]
+             for key, nodes in data["reviewed_requirements"].items()}
+            if data.get("reviewed_requirements") is not None else None
+        ),
     )
 
 
@@ -230,5 +237,10 @@ def to_dict(node: IRNode) -> dict:
         "is_pictogram": node.is_pictogram,
         "refs": node.refs,
         "inline_runs": [run.to_dict() for run in node.inline_runs],
+        "reviewed_requirements": (
+            {key: [to_dict(item) for item in nodes]
+             for key, nodes in node.reviewed_requirements.items()}
+            if node.reviewed_requirements is not None else None
+        ),
         "children": [to_dict(c) for c in node.children],
     }

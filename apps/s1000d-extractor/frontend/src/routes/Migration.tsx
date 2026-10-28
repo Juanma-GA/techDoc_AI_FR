@@ -6,14 +6,18 @@ import { useNavigate } from "react-router-dom";
 import { useDemoMode } from "@internal/ui";
 
 import { BrexAnalysisSummary } from "../components/BrexAnalysisSummary";
+import { PreliminaryReview } from "../components/business/PreliminaryReview";
 import { BrexViolationsPanel } from "../components/BrexViolationsPanel";
 import { DmPreview } from "../components/DmPreview";
 import { DM_TYPES, DmrlReview } from "../components/DmrlReview";
 import { BrexProfileControl } from "../components/BrexProfileControl";
 import { PdfCutStartSelector } from "../components/PdfCutStartSelector";
+import { WizardStepBackButton } from "../components/WizardStepBackButton";
+import { WizardZipDownloadButton } from "../components/WizardZipDownloadButton";
 import { PageFlag, RefFlag, ReviewFlag, TableFlag, ZoneFlag } from "../components/zoneFlags";
 import {
   documentsApi,
+  ApiRequestError,
   migrationInputsApi,
   pdfCutApi,
   resourcesApi,
@@ -30,6 +34,7 @@ import {
 } from "../lib/api";
 import { loadDemoMigrationFiles } from "../lib/demoMigrationFiles";
 import { needsDmrlReview } from "../lib/wizardReview";
+import { splitImageNames } from "../lib/imageClassification";
 
 export { hasUnmatchedDmrlDms } from "../lib/wizardReview";
 
@@ -211,6 +216,7 @@ export function Migration() {
   const [splitLevel, setSplitLevel] = useState("section");
   const [splitMsg, setSplitMsg] = useState<string | null>(null);
   const wizRef = useRef<HTMLDivElement>(null);
+  const preliminaryFlush = useRef<(() => Promise<boolean>) | null>(null);
   const inputRefs = useRef<Partial<Record<MigrationInputKind, HTMLInputElement | null>>>({});
   const mappingTouched = useRef(false);
   const demoSeededInputs = useRef<Set<MigrationInputKind>>(new Set());
@@ -371,10 +377,6 @@ export function Migration() {
       if (!includeSplit) return state;
       state = await wizardApi.action(id, "advance", {});
     }
-    if (state.step === "type") state = await wizardApi.action(id, "advance", { types: {} });
-    if (state.step === "structure") {
-      state = await wizardApi.action(id, "advance", { overrides: [] });
-    }
     return state;
   };
 
@@ -447,6 +449,7 @@ export function Migration() {
   };
 
   const doStart = async () => {
+    if (preliminaryFlush.current && !await preliminaryFlush.current()) return;
     const selectedFile = generationFile(inputRefs.current.document?.files?.[0] ?? null, file);
     if (!selectedFile) {
       setLoadError(t("migration.upload.noFile"));
@@ -477,13 +480,18 @@ export function Migration() {
   };
 
   const openWizard = async (id: string) => {
+    if (preliminaryFlush.current && !await preliminaryFlush.current()) return;
     setDocId(id);
     setWiz(null);
     setWizError(null);
     let state: WizardState;
     try {
       state = await wizardApi.get(id);
-    } catch {
+    } catch (error) {
+      if (!(error instanceof ApiRequestError) || error.code !== "WIZARD_NOT_STARTED") {
+        setWizError(error instanceof Error ? error.message : String(error));
+        return;
+      }
       try {
         const doc = await documentsApi.get(id);
         await startDocument(id, doc.source_format);
@@ -494,7 +502,7 @@ export function Migration() {
       return;
     }
     try {
-      setWiz(await normalizeWizard(id, state));
+      setWiz(state);
     } catch (e) {
       setWizError(e instanceof Error ? e.message : String(e));
     }
@@ -561,6 +569,7 @@ export function Migration() {
 
   const wizAction = async (action: string, params?: Record<string, unknown>) => {
     if (!docId) return;
+    if (preliminaryFlush.current && !await preliminaryFlush.current()) return;
     setBusy(true);
     setWizError(null);
     try {
@@ -611,6 +620,19 @@ export function Migration() {
 
   const docs = docsQuery.data ?? [];
   const images = imagesQuery.data ?? [];
+  const { illustrations, pictograms } = splitImageNames(images);
+  const imageGroups = [
+    {
+      names: illustrations,
+      title: "migration.generate.images",
+      alt: "migration.generate.imageAlt",
+    },
+    {
+      names: pictograms,
+      title: "migration.generate.pictograms",
+      alt: "migration.generate.pictogramAlt",
+    },
+  ];
   const generationDms = wiz?.step === "generate" ? wiz.dms : [];
   const commonMissingFields = getCommonMissingFields(generationDms);
   const commonMissingFieldSet = new Set(commonMissingFields);
@@ -663,6 +685,7 @@ export function Migration() {
             <label className="grow">
               <div className="label">{t("migration.upload.issue")}</div>
               <select
+                className="input"
                 value={issue}
                 onChange={(e) => {
                   mappingTouched.current = true;
@@ -922,13 +945,21 @@ export function Migration() {
                     {t("migration.split.dmrlDriven", { count: wiz.dmrl_dm_count })}
                   </p>
                 ) : null}
-                <details className="migration-split-review">
-                  <summary>{t("migration.split.review", { count: wiz.dms.length })}</summary>
+                <div className="row" style={{ marginBottom: 10 }}>
+                  <WizardStepBackButton
+                    steps={wiz.steps ?? []}
+                    step={wiz.step}
+                    disabled={busy}
+                    onBack={() => void wizAction("back")}
+                  />
+                  <details className="migration-split-review grow">
+                    <summary>{t("migration.split.review", { count: wiz.dms.length })}</summary>
                   <div className="migration-split-review-content">
                 <div className="row" style={{ marginBottom: 10 }}>
                   <label>
                     <div className="label">{t("migration.split.level")}</div>
                     <select
+                      className="input"
                       value={splitLevel}
                       onChange={(e) => setSplitLevel(e.target.value)}
                     >
@@ -1046,6 +1077,7 @@ export function Migration() {
                 </div>
                   </div>
                 </details>
+                </div>
                 <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
                   <button
                     type="button"
@@ -1095,6 +1127,7 @@ export function Migration() {
                         {d.is_orphan ? t("migration.dm.orphan") : d.title}
                       </span>
                       <select
+                        className="input"
                         value={typeEdits[d.dm_id] ?? d.dm_type}
                         onChange={(e) =>
                           setTypeEdits((p) => ({ ...p, [d.dm_id]: e.target.value }))
@@ -1199,12 +1232,28 @@ export function Migration() {
               </>
             ) : null}
 
+            {wiz.step === "preliminary" && wiz.preliminary && docId ? (
+              <PreliminaryReview key={docId} docId={docId} initial={wiz.preliminary} dms={wiz.dms}
+                busy={busy} onBack={() => void wizAction("back")}
+                onGenerate={() => void wizAction("advance", {})}
+                onFlushReady={(flush) => { preliminaryFlush.current = flush; }} />
+            ) : null}
+
             {wiz.step === "generate" ? (
               <div className="card">
                 <h2 className="card-title">
                   {t("migration.generate.title", { count: wiz.dms.length })}
                 </h2>
-                <div className="row" style={{ marginBottom: 12 }}>
+                <div
+                  className="row"
+                  style={{ marginBottom: 12, alignItems: "flex-end" }}
+                >
+                  <WizardStepBackButton
+                    steps={wiz.steps ?? []}
+                    step={wiz.step}
+                    disabled={busy}
+                    onBack={() => void wizAction("back")}
+                  />
                   {wiz.resources?.dmrl_count && docId ? (
                     <a className="btn secondary" href={resourcesApi.pmcUrl(docId)}>
                       {t("migration.generate.pmc")}
@@ -1226,10 +1275,8 @@ export function Migration() {
                       <ShieldCheck aria-hidden="true" size={15} /> {t("migration.generate.validate")}
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    className="btn primary"
-                    style={{ marginLeft: "auto" }}
+                  <WizardZipDownloadButton
+                    docId={docId}
                     disabled={
                       busy ||
                       !docId ||
@@ -1241,12 +1288,7 @@ export function Migration() {
                         ? t("migration.generate.generationPending")
                         : undefined
                     }
-                    onClick={() => {
-                      if (docId) window.location.assign(wizardApi.zipUrl(docId));
-                    }}
-                  >
-                    {t("migration.generate.zip")}
-                  </button>
+                  />
                 </div>
                 <BrexAnalysisSummary
                   hasProfile={wiz.has_brex_profile === true}
@@ -1365,13 +1407,13 @@ export function Migration() {
                     );
                   })}
                 </div>
-                {images.length ? (
-                  <div style={{ marginTop: 16 }}>
+                {imageGroups.map((group) => group.names.length ? (
+                  <div key={group.title} style={{ marginTop: 16 }}>
                     <h3 className="label">
-                      {t("migration.generate.images", { count: images.length })}
+                      {t(group.title, { count: group.names.length })}
                     </h3>
                     <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
-                      {images.map((name, i) => (
+                      {group.names.map((name, i) => (
                         <a
                           key={name}
                           href={docId ? wizardApi.imageUrl(docId, name) : "#"}
@@ -1382,7 +1424,7 @@ export function Migration() {
                         >
                           <img
                             src={docId ? wizardApi.imageUrl(docId, name) : undefined}
-                            alt={t("migration.generate.imageAlt", { index: i + 1 })}
+                            alt={t(group.alt, { index: i + 1 })}
                             style={{
                               width: 96,
                               height: 72,
@@ -1401,7 +1443,7 @@ export function Migration() {
                       ))}
                     </div>
                   </div>
-                ) : null}
+                ) : null)}
               </div>
             ) : null}
           </>

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
@@ -26,6 +27,7 @@ from app.core import wizard_resources as wres
 from app.core.brex_rules import load_brex_rules
 from app.core.cir import load_cir
 from app.core.errors import AppError
+from app.core.pmc import pmc_filename
 from app.db.models import Document
 from app.db.session import get_db
 
@@ -115,7 +117,10 @@ def get_pmc(doc_id: str, db: Session = Depends(get_db)) -> Response:
     xml = wres.pmc_xml(doc)
     if not xml:
         raise AppError("NO_DMRL", "Aucune DMRL attachee : impossible de generer la PMC.", 409)
+    download_name = quote(pmc_filename(doc.filename), safe="").replace("'", "%27")
     return Response(
         content=xml, media_type="application/xml",
-        headers={"Content-Disposition": f'attachment; filename="{doc.id}_pmc.xml"'},
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{download_name}"
+        },
     )

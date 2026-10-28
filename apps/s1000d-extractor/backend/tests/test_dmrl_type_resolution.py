@@ -145,7 +145,9 @@ def test_non_41_dmrl_keeps_legacy_type_precedence(tmp_path, monkeypatch) -> None
     assert dmrl.load_dmrl(path, issue="4.2")[0].dm_type == "descriptive"
 
 
-def test_issue_41_conflict_must_be_resolved_before_generation(client, pdf_bytes, monkeypatch) -> None:
+def test_issue_41_conflict_must_be_resolved_before_generation(
+    client, pdf_bytes, monkeypatch, complete_preliminary,
+) -> None:
     monkeypatch.setattr(dmrl, "load_info_code_schemas", lambda: {"520": "proced"})
 
     document_response = client.post(
@@ -210,6 +212,7 @@ def test_issue_41_conflict_must_be_resolved_before_generation(client, pdf_bytes,
         f"/api/v1/documents/{doc_id}/wizard/advance",
         json={"overrides": []},
     ).json()
+    state = complete_preliminary(doc_id, state)
     assert state["step"] == "generate"
     assert state["dms"][0]["dm_type"] == "procedural"
 

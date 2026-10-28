@@ -67,7 +67,7 @@ def test_dmrl_upload_drives_the_split(client, pdf_bytes) -> None:
     # Une DMRL chargee insere une etape de validation AVANT le decoupage.
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
     assert state["step"] == "dmrl"
-    assert state["steps"] == ["dmrl", "split", "type", "structure", "generate"]
+    assert state["steps"] == ["dmrl", "split", "type", "structure", "preliminary", "generate"]
     assert [row["matched"] for row in state["dmrl"]] == [True, True]
 
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()

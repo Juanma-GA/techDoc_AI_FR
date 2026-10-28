@@ -18,6 +18,7 @@ from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
+import pymupdf as fitz
 from sqlalchemy.orm import Session
 
 from app.core import ocr
@@ -37,6 +38,7 @@ def extract_blocks(
     fmt: str,
     db: Session | None = None,
     progress_cb: ProgressCb | None = None,
+    local_only: bool = False,
 ) -> list[RawBlock]:
     if fmt == "docx":
         return parse_docx(path)
@@ -69,6 +71,25 @@ def extract_blocks(
         len(scanned),
         sum(len(page.blocks) for page in pages),
     )
+    if local_only:
+        with fitz.open(str(path)) as source:
+            requires_ocr = [
+                page.index for page in scanned
+                if source[page.index - 1].get_image_info()
+                or (source[page.index - 1].get_drawings()
+                    and not source[page.index - 1].get_text("text").strip())
+            ]
+        if requires_ocr:
+            raise AppError(
+                "LOCAL_OCR_REQUIRED",
+                "Wizard local : certaines pages necessitent une couche texte. "
+                "Fournissez un PDF avec OCR effectue localement ; aucun contenu n'a ete envoye.",
+                status_code=422, detail={"pages_in_analyzed_pdf": requires_ocr},
+            )
+        blocks = [block for page in pages for block in page.blocks]
+        if not any(block.text.strip() or block.table_rows for block in blocks):
+            raise AppError("EMPTY_SOURCE", "Aucun texte exploitable dans la source locale.", 422)
+        return blocks
 
     # Cas 1 : tout est lisible en texte -> aucun OCR.
     if not scanned:
