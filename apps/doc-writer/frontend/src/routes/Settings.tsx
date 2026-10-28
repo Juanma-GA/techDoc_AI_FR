@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { DocsManagerCard } from "../components/DocsManagerCard";
-import { PromptsCard } from "../components/PromptsCard";
+import { SettingsModelFields } from "../components/SettingsModelFields";
 import { TemplatesManagerCard } from "../components/TemplatesManagerCard";
+import { DemoModeSettings } from "./DemoModeSettings";
 import {
   ApiClientError,
   settingsApi,
@@ -14,7 +15,6 @@ import {
 } from "../lib/api";
 
 // Page Parametres, pixel-identique au preview (.switch-row / .form / .banner).
-// Mistral = cle / base_url / chat / embed (vision/ocr non exposes, parite preview).
 export function Settings() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -22,14 +22,17 @@ export function Settings() {
   const [baseUrl, setBaseUrl] = useState("");
   const [chatModel, setChatModel] = useState("");
   const [embedModel, setEmbedModel] = useState("");
+  const [visionModel, setVisionModel] = useState("");
+  const [ocrModel, setOcrModel] = useState("");
   const [transcribeModel, setTranscribeModel] = useState("");
+  const [mistralSettingsOpen, setMistralSettingsOpen] = useState(true);
   // Cle/URL DEDIEES a Voxtral (volet discret). Vides = la transcription utilise
   // la cle Mistral principale.
   const [voxtralApiKey, setVoxtralApiKey] = useState("");
   const [voxtralBaseUrl, setVoxtralBaseUrl] = useState("");
-  // Modeles disponibles decouverts au test de connexion (/v1/models), pour
-  // proposer le bon id de transcription sans le deviner.
+  // Modeles fournis par chaque API au test de connexion, sans les deviner.
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [transcriptionModels, setTranscriptionModels] = useState<string[]>([]);
   // Detail du dernier test PAR API appelee (Mistral principale + Voxtral dediee).
   const [apiResults, setApiResults] = useState<ApiTestResultDto[]>([]);
   const [feedback, setFeedback] = useState<
@@ -48,9 +51,17 @@ export function Settings() {
     setBaseUrl(d.base_url);
     setChatModel(d.chat_model);
     setEmbedModel(d.embed_model);
+    setVisionModel(d.vision_model);
+    setOcrModel(d.ocr_model);
     setTranscribeModel(d.transcribe_model);
     setVoxtralBaseUrl(d.voxtral_base_url);
   }, [settingsQuery.data]);
+
+  useEffect(() => {
+    if (settingsQuery.data) {
+      setMistralSettingsOpen(!settingsQuery.data.api_key_set);
+    }
+  }, [settingsQuery.data?.api_key_set]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -59,6 +70,8 @@ export function Settings() {
         base_url: baseUrl || undefined,
         chat_model: chatModel,
         embed_model: embedModel,
+        vision_model: visionModel,
+        ocr_model: ocrModel,
         transcribe_model: transcribeModel || undefined,
         voxtral_api_key: voxtralApiKey || undefined,
         voxtral_base_url: voxtralBaseUrl,
@@ -78,12 +91,12 @@ export function Settings() {
     mutationFn: () => settingsApi.test(),
     onSuccess: (r: TestConnectionDto) => {
       setApiResults(r.apis);
-      // Le select de transcription se remplit depuis l'API qui SERT la
-      // transcription : Voxtral dediee si presente et OK, sinon l'API principale.
       const vx = r.apis.find((a) => a.api === "voxtral");
       const main = r.apis.find((a) => a.api === "mistral");
-      const source = vx?.ok ? vx.models : main?.ok ? main.models : r.models;
-      if (source?.length) setAvailableModels(source);
+      setAvailableModels(main?.ok ? main.models : r.models);
+      setTranscriptionModels(
+        vx?.ok ? vx.models : main?.ok ? main.models : [],
+      );
       setFeedback(
         r.ok
           ? { kind: "ok", text: t("settings.testOk", { count: r.models.length }) }
@@ -113,6 +126,8 @@ export function Settings() {
         <h1>{t("settings.title")}</h1>
         <p>{t("settings.subtitle")}</p>
       </div>
+
+      <DemoModeSettings />
 
       <div className="card">
         <h2 className="card-title">{t("settings.llmSectionTitle")}</h2>
@@ -145,7 +160,19 @@ export function Settings() {
               <span className="badge warn">NOT CONFIGURED</span>
             )}
           </span>
+          <button
+            type="button"
+            className="btn ghost small"
+            aria-expanded={mistralSettingsOpen}
+            aria-controls="mistral-settings-fields"
+            onClick={() => setMistralSettingsOpen((open) => !open)}
+          >
+            {mistralSettingsOpen
+              ? t("settings.collapseConfiguration")
+              : t("settings.expandConfiguration")}
+          </button>
         </h2>
+        <div id="mistral-settings-fields" hidden={!mistralSettingsOpen}>
         <div className="form">
           <label>
             <div className="label">{t("settings.apiKeyLabel")}</div>
@@ -172,58 +199,20 @@ export function Settings() {
               onChange={(e) => setBaseUrl(e.target.value)}
             />
           </label>
-          <div className="row">
-            <label className="grow">
-              <div className="label">{t("settings.chatModelLabel")}</div>
-              <input
-                className="input"
-                type="text"
-                value={chatModel}
-                onChange={(e) => setChatModel(e.target.value)}
-              />
-            </label>
-            <label className="grow">
-              <div className="label">{t("settings.embedModelLabel")}</div>
-              <input
-                className="input"
-                type="text"
-                value={embedModel}
-                onChange={(e) => setEmbedModel(e.target.value)}
-              />
-            </label>
-          </div>
-          <label>
-            <div className="label">{t("settings.transcribeModelLabel")}</div>
-            {availableModels.length > 0 && (
-              <select
-                className="input"
-                value={availableModels.includes(transcribeModel) ? transcribeModel : ""}
-                onChange={(e) => setTranscribeModel(e.target.value)}
-                style={{ marginBottom: 6 }}
-              >
-                <option value="">{t("settings.transcribeModelPick")}</option>
-                {[...availableModels]
-                  .sort((a, b) => Number(b.includes("voxtral")) - Number(a.includes("voxtral")))
-                  .map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-              </select>
-            )}
-            <input
-              className="input"
-              type="text"
-              placeholder="voxtral-..."
-              value={transcribeModel}
-              onChange={(e) => setTranscribeModel(e.target.value)}
-            />
-            <small style={{ color: "var(--fg-dim)", fontSize: "0.78rem" }}>
-              {availableModels.length > 0
-                ? t("settings.transcribeModelHintTested", { count: availableModels.length })
-                : t("settings.transcribeModelHint")}
-            </small>
-          </label>
+          <SettingsModelFields
+            chatModel={chatModel}
+            setChatModel={setChatModel}
+            embedModel={embedModel}
+            setEmbedModel={setEmbedModel}
+            visionModel={visionModel}
+            setVisionModel={setVisionModel}
+            ocrModel={ocrModel}
+            setOcrModel={setOcrModel}
+            transcribeModel={transcribeModel}
+            setTranscribeModel={setTranscribeModel}
+            availableModels={availableModels}
+            transcriptionModels={transcriptionModels}
+          />
           <details
             style={{
               border: "1px solid var(--border)",
@@ -339,6 +328,7 @@ export function Settings() {
             </div>
           ) : null}
         </div>
+        </div>
       </div>
 
       <div className="banner">
@@ -352,7 +342,6 @@ export function Settings() {
         hint={t("settings.styleDocsHint")}
         accept=".pptx,.docx,.pdf,.txt,.md"
       />
-      <PromptsCard />
     </>
   );
 }

@@ -1,6 +1,6 @@
 # PDF Toolkit
 
-Application web locale, légère et open source pour les opérations PDF courantes : fusion, compression, conversion d'images, extraction, suppression, réorganisation et rotation de pages. Aucun compte, aucune base de données et aucun stockage permanent.
+Application web locale, légère et open source pour les opérations PDF courantes : fusion, compression, conversion d'images, extraction, découpage par valeur, suppression, réorganisation et rotation de pages. Aucun compte, aucune base de données et aucun stockage permanent.
 
 ## Auth
 
@@ -27,19 +27,20 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Assembler des images PNG ou JPEG dans l'ordre choisi vers `images.pdf`.
 - Exporter toutes les pages d'un PDF en PNG ou JPEG dans `pdf-images.zip`, directement dans le navigateur.
 - Extraire des pages avec des sélections comme `1`, `1-5`, `1,3,7` ou `2-4,8` vers `extract.pdf`.
+- Découper un PDF en plusieurs documents téléchargés dans un dossier ZIP. Découpage simple : un document toutes les N pages ou par plages personnalisées (`1-4 ; 5-8 ; 9-12`, un PDF par plage ; retour à la ligne également accepté, virgules pour réunir des pages dans un même PDF), fichiers numérotés `<nom>_01.pdf`, `<nom>_02.pdf`… Le panneau repliable « Découpage avancé » (« Advanced split ») regroupe le découpage par valeur : tableau pages / valeur, modèle de nom, collage `pages;valeur` depuis Excel et détection automatique (relancée à l'export si la zone ou les réglages ont changé) : l'utilisateur trace une zone sur l'aperçu (ou la saisit en %, décimales libres), ou cherche sur la page entière, et choisit le type de valeur (texte, nombre, code/référence, expression régulière) ; un nouveau document commence à chaque changement de valeur, ou les pages de même valeur sont regroupées. Les noms suivent un modèle paramétrable avec les balises `{valeur}`, `{n}`, `{pages}` et `{nom}` (ex. `DOC_{valeur}_rev1`), nettoyés et dédoublonnés. La lecture de zone se fait dans le navigateur et exige un PDF avec couche texte (pas d'OCR pour les scans).
 - Supprimer des pages selon la même syntaxe vers `trimmed.pdf` (au moins une page doit rester).
 - Réorganiser toutes les pages par glisser-déposer de miniatures vers `reordered.pdf`.
 - Faire pivoter toutes les pages ou une sélection vers `rotated.pdf`, de 90°, 180° ou 270° dans le sens horaire.
 - Dessiner ou importer une signature PNG/JPEG (10 Mo maximum), ajouter facultativement un prénom, un nom et une date dans des cadres déplaçables et redimensionnables par leurs coins, puis exporter `signed.pdf`. Ces éléments sont visuels, gardés en mémoire uniquement pendant l'opération et n'ont pas de validation cryptographique. Les caractères hors Latin-1 sont refusés par la police PDF standard.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
-- Shell et thème visuel repris de `apps/_template` et `packages/ui` : huit onglets, modes clair/sombre et interface française/anglaise.
+- Shell et thème visuel repris de `apps/_template` et `packages/ui` : dix onglets, modes clair/sombre et interface française/anglaise.
 
 ## Architecture
 
 ```text
 frontend/
   src/App.tsx
-  src/features/{merge,compress,extract,delete,reorder,rotate,signature,images-to-pdf,pdf-to-images}
+  src/features/{merge,compress,extract,split,delete,reorder,rotate,signature,images-to-pdf,pdf-to-images}
   src/shared
   src/locales/{fr,en}.json
 backend/
@@ -180,6 +181,7 @@ Toutes les réponses de traitement réussies sont des téléchargements `applica
 | `POST` | `/api/v1/images-to-pdf` | `images` répété, PNG ou JPEG | `images.pdf` |
 | `POST` | `/api/v1/compress` | `file` | `compressed.pdf` |
 | `POST` | `/api/v1/extract` | `file`, `pages` | `extract.pdf` |
+| `POST` | `/api/v1/split` | `file`, `groups` (tableau JSON `[{name, pages}]`, 1000 maximum), `folder` (facultatif) | `<folder>.zip` contenant `<folder>/<name>.pdf` |
 | `POST` | `/api/v1/delete` | `file`, `pages` | `trimmed.pdf` |
 | `POST` | `/api/v1/reorder` | `file`, `order` (tableau JSON de pages 1-based) | `reordered.pdf` |
 | `POST` | `/api/v1/rotate` | `file`, `rotation` (90, 180 ou 270), `pages` (facultatif; vide pour toutes les pages) | `rotated.pdf` |

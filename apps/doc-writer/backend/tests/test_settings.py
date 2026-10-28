@@ -34,6 +34,24 @@ def test_write_then_read_settings(client) -> None:
     assert body["chat_model"] == "mistral-small-latest"
 
 
+def test_demo_mode_defaults_off_and_can_be_toggled(client) -> None:
+    initial = client.get("/api/v1/settings")
+    assert initial.status_code == 200
+    assert initial.json()["demo_enabled"] is False
+
+    enabled = client.post("/api/v1/settings", json={"demo_enabled": True})
+    assert enabled.status_code == 200
+    assert enabled.json()["demo_enabled"] is True
+
+    persisted = client.get("/api/v1/settings")
+    assert persisted.status_code == 200
+    assert persisted.json()["demo_enabled"] is True
+
+    disabled = client.post("/api/v1/settings", json={"demo_enabled": False})
+    assert disabled.status_code == 200
+    assert disabled.json()["demo_enabled"] is False
+
+
 def test_write_settings_rejects_non_approved_base_url(client) -> None:
     # F-01 : un endpoint hors allow-list est refuse (pas de routage silencieux
     # de documents internes vers un service IA non approuve).

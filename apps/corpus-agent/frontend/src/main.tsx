@@ -1,6 +1,7 @@
 import "./index.css";
 import "./styles/preview-skin.css";
 
+import { setAi4TechDocFavicon } from "@internal/ui";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -8,6 +9,8 @@ import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
 import { bootstrapI18n } from "./i18n";
+
+setAi4TechDocFavicon();
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.demo_mode import get_demo_enabled, set_demo_enabled
 from app.core.mistral_client import (
     MistralClient,
     MistralError,
@@ -50,6 +51,7 @@ def read_settings(db: Session = Depends(get_db)) -> SettingsOut:
         voxtral_base_url=s["voxtral_base_url"],
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
+        demo_enabled=get_demo_enabled(db),
     )
 
 
@@ -58,6 +60,8 @@ def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> Settin
     save_settings(db, payload.model_dump(exclude_unset=True))
     if payload.llm_enabled is not None:
         set_llm_enabled(db, payload.llm_enabled)
+    if payload.demo_enabled is not None:
+        set_demo_enabled(db, payload.demo_enabled)
     s = get_effective_settings(db)
     return SettingsOut(
         api_key_set=bool(s["api_key"]),
@@ -71,6 +75,7 @@ def write_settings(payload: SettingsIn, db: Session = Depends(get_db)) -> Settin
         voxtral_base_url=s["voxtral_base_url"],
         llm_enabled=get_llm_enabled(db),
         llm_tested=get_llm_tested(db),
+        demo_enabled=get_demo_enabled(db),
     )
 
 

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -17,7 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.mistral_client import MistralClient, get_llm_enabled
-from app.db.models import Anomaly, Project
+from app.core.plain_text import PLAIN_TEXT_RULE_FR, strip_markdown
+from app.db.models import AppConfig, Anomaly, Project
 from app.db.session import get_db
 from app.schemas import AnomalyBulkStatusIn, AnomalyBulkStatusOut, AnomalyOut, AnomalyStatusIn
 
@@ -177,9 +180,43 @@ class RejectionsSummaryOut(BaseModel):
     items: list[RejectionItem]
     synthese: str = ""
     llm_used: bool = False
+    cached: bool = False
+    generated_at: str = ""
 
 
 _SYNTHESE_MAX_MOTIFS = 40  # borne les motifs envoyes au LLM (cout/tokens)
+_SYNTHESE_KEY = "rejections_synthese:"
+
+
+def _fingerprint(rejected: list[Anomaly]) -> str:
+    raw = "|".join(sorted(f"{a.id}:{a.category or ''}:{(a.feedback or '').strip()}" for a in rejected))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_cached_synthese(db: Session, project_id: uuid.UUID, fingerprint: str) -> dict | None:
+    row = db.get(AppConfig, _SYNTHESE_KEY + str(project_id))
+    if row is None:
+        return None
+    try:
+        data = json.loads(row.value)
+    except ValueError:
+        return None
+    if isinstance(data, dict) and data.get("fingerprint") == fingerprint and data.get("text"):
+        return data
+    return None
+
+
+def _store_synthese(db: Session, project_id: uuid.UUID, fingerprint: str, text: str) -> str:
+    generated_at = datetime.now(timezone.utc).isoformat()
+    value = json.dumps({"fingerprint": fingerprint, "text": text, "generated_at": generated_at}, ensure_ascii=False)
+    key = _SYNTHESE_KEY + str(project_id)
+    row = db.get(AppConfig, key)
+    if row is None:
+        db.add(AppConfig(key=key, value=value))
+    else:
+        row.value = value
+    db.commit()
+    return generated_at
 
 
 def _file_of(a: Anomaly) -> str:
@@ -213,17 +250,17 @@ def _synthesize_rejections(
         "1) dégage les motifs de rejet récurrents ; 2) identifie les sujets "
         "(règles) qui génèrent le plus de faux positifs et mériteraient d'être "
         "affinés ou retirés ; 3) reste concrète et actionnable. Pas de liste à "
-        "puces, un paragraphe."
+        "puces, un paragraphe. " + PLAIN_TEXT_RULE_FR
     )
     user = (
         f"Projet : {project_name}\n"
         f"Rejets par sujet : {cats}\n\n"
         f"Motifs de rejet (échantillon) :\n{motifs_block}"
     )
-    return client.chat(
+    return strip_markdown(client.chat(
         [{"role": "system", "content": system}, {"role": "user", "content": user}],
         temperature=0.3,
-    ).strip()
+    )).strip()
 
 
 @router.get(
@@ -236,6 +273,7 @@ def rejections_summary(
         default=True,
         description="Générer le paragraphe de synthèse IA (gardé par l'interrupteur LLM).",
     ),
+    refresh: bool = Query(default=False, description="Forcer la régénération de la synthèse en cache."),
     db: Session = Depends(get_db),
 ) -> RejectionsSummaryOut:
     project = db.get(Project, project_id)
@@ -274,18 +312,27 @@ def rejections_summary(
 
     synthese = ""
     llm_used = False
+    cached = False
+    generated_at = ""
     # Synthese IA optionnelle : uniquement s'il y a des rejets et que l'IA est
-    # activee. `MistralClient.from_db` LEVE si aucune cle n'est configuree -> on
-    # englobe la construction ET l'appel dans le meme try : tout echec LLM
-    # (cle absente, reseau, JSON) retombe silencieusement sur l'agregat
-    # deterministe (jamais de 5xx a cause de la synthese).
+    # activee. Elle est mise en cache (AppConfig) et n'est regeneree que si les
+    # rejets ou leurs motifs changent, ou sur demande (`refresh`). Tout echec LLM
+    # (cle absente, reseau) retombe sur l'agregat deterministe, jamais de 5xx.
     if synthesize and rejected and get_llm_enabled(db):
-        try:
-            client = MistralClient.from_db(db)
-            synthese = _synthesize_rejections(client, project.name, by_category, rejected)
-            llm_used = bool(synthese)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("rejections_synthese_failed", error=type(exc).__name__, message=str(exc))
+        fingerprint = _fingerprint(rejected)
+        hit = None if refresh else _load_cached_synthese(db, project_id, fingerprint)
+        if hit is not None:
+            synthese, llm_used, cached = hit["text"], True, True
+            generated_at = str(hit.get("generated_at", ""))
+        else:
+            try:
+                client = MistralClient.from_db(db)
+                synthese = _synthesize_rejections(client, project.name, by_category, rejected)
+                llm_used = bool(synthese)
+                if synthese:
+                    generated_at = _store_synthese(db, project_id, fingerprint, synthese)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("rejections_synthese_failed", error=type(exc).__name__, message=str(exc))
 
     return RejectionsSummaryOut(
         total=len(rejected),
@@ -293,4 +340,6 @@ def rejections_summary(
         items=items,
         synthese=synthese,
         llm_used=llm_used,
+        cached=cached,
+        generated_at=generated_at,
     )

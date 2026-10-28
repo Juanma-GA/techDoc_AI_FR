@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.indexer import search_similar
 from app.core.mistral_client import MistralClient
+from app.core.plain_text import PLAIN_TEXT_RULE_EN, PLAIN_TEXT_RULE_FR, PlainTextStream, strip_markdown
 from app.db.models import Anomaly, ChatMessage, ChatSession, Project
 
 
@@ -25,20 +26,23 @@ SYSTEM_PROMPT_FR = (
     "Tu réponds TOUJOURS en français, de façon concise et factuelle. "
     "Tu cites tes sources au format [nom_fichier] entre crochets après chaque affirmation "
     "qui s'appuie sur un extrait. "
-    "Si l'information n'est pas dans le contexte fourni, dis-le clairement au lieu d'inventer."
+    "Si l'information n'est pas dans le contexte fourni, dis-le clairement au lieu d'inventer. "
+    + PLAIN_TEXT_RULE_FR
 )
 SYSTEM_PROMPT_EN = (
     "You are the Corpus Agent assistant: you answer questions about the documents in a "
     "document corpus and anomalies detected in one or several projects. You ALWAYS reply in English, concisely "
     "and factually. You cite sources in the format [file_name] in brackets after each statement "
     "based on a snippet. If the information is not in the provided context, say so explicitly "
-    "instead of making it up."
+    "instead of making it up. "
+    + PLAIN_TEXT_RULE_EN
 )
 SYSTEM_PROMPT_ES = (
     "Eres el asistente Corpus Agent: respondes a preguntas sobre los documentos de un "
     "corpus documental y las anomalías detectadas en uno o varios proyectos. Respondes SIEMPRE en español, "
     "de manera concisa y factual. Citas tus fuentes en el formato [nombre_archivo] entre "
-    "corchetes. Si la información no está en el contexto, dilo claramente en lugar de inventar."
+    "corchetes. Si la información no está en el contexto, dilo claramente en lugar de inventar. "
+    "Responde en TEXTO PLANO: nunca uses Markdown (sin **negrita**, sin títulos #, sin backticks)."
 )
 
 
@@ -243,7 +247,11 @@ def get_or_create_session(
 
 def history_for_session(db: Session, session: ChatSession, limit: int = 10) -> list[dict[str, Any]]:
     msgs = list(session.messages)[-limit:]
-    return [{"role": m.role, "content": m.content} for m in msgs if m.role in ("user", "assistant")]
+    return [
+        {"role": m.role, "content": strip_markdown(m.content) if m.role == "assistant" else m.content}
+        for m in msgs
+        if m.role in ("user", "assistant")
+    ]
 
 
 def session_scope_ids(session: ChatSession) -> list[uuid.UUID]:
@@ -276,9 +284,16 @@ async def stream_answer(
     db.commit()
 
     full_answer = ""
+    plain = PlainTextStream()
     async for delta in mistral.chat_stream(messages):
-        full_answer += delta
-        yield delta
+        clean = plain.feed(delta)
+        if clean:
+            full_answer += clean
+            yield clean
+    tail = plain.flush()
+    if tail:
+        full_answer += tail
+        yield tail
 
     db.add(ChatMessage(
         session_id=session.id,
