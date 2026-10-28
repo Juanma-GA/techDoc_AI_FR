@@ -189,14 +189,14 @@ export function usePatchPreparationDecision(documentId: string | undefined) {
 
 export function usePatchPageClassification(documentId: string | undefined) {
   return usePreparationMutation<
-    { page: number; page_type: string | null },
+    { page: number; page_type: string | null; page_title: string | null },
     { decisions: PreparationPageDecision[] }
   >(
     documentId,
-    ({ page, page_type }) =>
+    ({ page, page_type, page_title }) =>
       api.patch<{ decisions: PreparationPageDecision[] }>(
         `/documents/${documentId}/preparation/pages/${page}/classification`,
-        { page_type, document_page: null },
+        { page_type, document_page: null, page_title },
       ),
   );
 }

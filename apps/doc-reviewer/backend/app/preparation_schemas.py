@@ -20,6 +20,11 @@ class PreparationPageOut(BaseModel):
     needs_ocr: bool
 
 
+class PreparationPageTitleOption(BaseModel):
+    title: str
+    page_type: str
+
+
 class PreparationStateOut(BaseModel):
     document_id: str
     source_filename: str | None
@@ -37,6 +42,7 @@ class PreparationStateOut(BaseModel):
     preparation_mapping: dict[str, Any] = Field(default_factory=dict)
     page_classification: dict[str, dict[str, str | None]] = Field(default_factory=dict)
     page_type_options: list[str] = Field(default_factory=list)
+    page_title_options: list[PreparationPageTitleOption] = Field(default_factory=list)
     missing_page_types: list[list[str]] = Field(default_factory=list)
     absent_page_types: list[list[str]] = Field(default_factory=list)
     skipped_rules: list[dict[str, Any]] = Field(default_factory=list)
@@ -90,6 +96,7 @@ class PageDecisionPatchIn(BaseModel):
 class PageClassificationPatchIn(BaseModel):
     page_type: str | None = Field(default=None, max_length=60)
     document_page: str | None = Field(default=None, max_length=40)
+    page_title: str | None = Field(default=None, max_length=80)
 
 
 class AbsentPageTypesPatchIn(BaseModel):

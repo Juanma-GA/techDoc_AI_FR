@@ -172,10 +172,11 @@ export function PreparationWorkspace() {
           }
           onDetect={() => detectPages.mutate()}
           onDecision={(page, isModified) => patchDecision.mutate({ page, is_modified: isModified })}
-          onClassification={(page, pageType) =>
+          onClassification={(page, pageType, pageTitle) =>
             patchClassification.mutate({
               page,
               page_type: pageType,
+              page_title: pageTitle,
             })
           }
           onAbsent={(pageTypes, absent) =>

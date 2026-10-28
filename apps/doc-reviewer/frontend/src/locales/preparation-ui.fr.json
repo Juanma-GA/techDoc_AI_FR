@@ -16,6 +16,8 @@
   "classification": {
     "edit": "Corriger le type",
     "automatic": "Détection automatique",
+    "configuredTitles": "Titres configurés",
+    "otherTypes": "Autres types de page",
     "save": "Enregistrer la correction",
     "footerKey": "Page lue en pied de page : {{value}}",
     "noEvidence": "Aucun indice détecté pour cette page.",

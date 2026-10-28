@@ -41,9 +41,10 @@ def detect_pages_to_modify(
 ) -> list[dict[str, Any]]:
     if bundle.page_classifier is not None:
         bundle.page_classifier(parsed, document)
-    analysis = classify_preparation_sections(parsed, metadata or {}, page_titles)
+    overrides = classification_overrides or {}
+    analysis = classify_preparation_sections(parsed, metadata or {}, page_titles, overrides)
     classification = _apply_classification_overrides(
-        parsed, classification_overrides or {}, analysis
+        parsed, overrides, analysis
     )
     decisions: list[dict[str, Any]] = []
     pages_without_rules: list[dict[str, int | str | None]] = []
@@ -195,6 +196,9 @@ def _apply_classification_overrides(
         details = dict(analysis[page.page])
         if source == "manual":
             details["classification_status"] = "manual"
+        manual_title = override.get("page_title")
+        if manual_title is not None:
+            details["page_title"] = manual_title
         classification[page.page] = {
             "page_type_source": source,
             "detected_page_type": detected_type,

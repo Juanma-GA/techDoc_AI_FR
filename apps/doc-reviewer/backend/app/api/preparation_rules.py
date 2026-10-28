@@ -19,6 +19,7 @@ from app.core.errors import AppError
 from app.core.preparation_annotations import sync_toc_annotations
 from app.core.preparation_check_service import detect_preparation_pages
 from app.core.preparation_classification import (
+    available_page_title_options,
     available_page_types,
     set_absent_page_types,
     set_page_classification,
@@ -148,6 +149,8 @@ def patch_page_classification(
         body.page_type,
         body.document_page,
         available_page_types(db, client_configuration.bundle),
+        available_page_title_options(db, client_configuration.bundle),
+        body.page_title,
     )
     has_decisions = record.page_decisions_json != "[]"
     decisions = (

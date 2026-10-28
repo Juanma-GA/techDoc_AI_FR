@@ -9,7 +9,11 @@ from app.api.preparation_common import get_preparation_context
 from app.core.client_metadata import validate_client_metadata_patch
 from app.core.errors import AppError
 from app.core.ocr_providers import available_providers
-from app.core.preparation_classification import available_page_types, page_requirements
+from app.core.preparation_classification import (
+    available_page_title_options,
+    available_page_types,
+    page_requirements,
+)
 from app.core.preparation_state import (
     get_or_create_record,
     select_provider,
@@ -57,6 +61,7 @@ def get_preparation_state(
         config.bundle.client_code,
         preparation_rule_count=preparation_rule_count,
         page_type_options=available_page_types(db, config.bundle),
+        page_title_options=available_page_title_options(db, config.bundle),
     )
     payload.update(page_requirements(db, config.bundle, record, payload["page_decisions"]))
     return payload

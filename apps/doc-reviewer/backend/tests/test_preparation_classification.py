@@ -50,10 +50,22 @@ def _page_type_options(client: TestClient, document_id: str) -> list[str]:
 def test_state_exposes_page_types_targeted_by_preparation_rules(client: TestClient) -> None:
     document_id = _upload(client, _readable_pdf([None]))
 
-    options = _page_type_options(client, document_id)
+    state = client.get(f"/api/v1/documents/{document_id}/preparation").json()
+    options = state["page_type_options"]
 
     assert options
     assert options == sorted(options)
+    title_options = state["page_title_options"]
+    configured_titles = client.get(
+        "/api/v1/client-preparation-page-titles"
+    ).json()["titles"]
+    assert [option["title"] for option in title_options] == configured_titles
+    assert len(title_options) == len(configured_titles)
+    assert {option["page_type"] for option in title_options} <= set(options)
+    assert next(option for option in title_options if option["title"] == "TESTS") == {
+        "title": "TESTS",
+        "page_type": "TESTING",
+    }
 
 
 def test_manual_classification_is_stored_validated_and_reverted(client: TestClient) -> None:
@@ -84,10 +96,52 @@ def test_manual_classification_is_stored_validated_and_reverted(client: TestClie
     assert state["page_classification"] == {}
 
 
+def test_manual_type_correction_becomes_the_next_page_continuation(
+    client: TestClient,
+) -> None:
+    pdf = fitz.open()
+    for _ in range(2):
+        page = pdf.new_page(width=400, height=600)
+        for line in range(10):
+            page.insert_text(
+                (40, 60 + line * 24),
+                f"Readable native text on this page with enough detail for extraction {line}.",
+                fontsize=10,
+            )
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+    document_id = _upload(client, pdf_bytes)
+    base = f"/api/v1/documents/{document_id}/preparation"
+
+    detected = client.post(f"{base}/detect")
+    assert detected.status_code == 200, detected.text
+    assert [item["page_type"] for item in detected.json()] == [None, None]
+
+    corrected = client.patch(
+        _classification_url(document_id, 1),
+        json={"page_type": "TESTING", "page_title": "TESTS"},
+    )
+
+    assert corrected.status_code == 200, corrected.text
+    first, second = corrected.json()["decisions"]
+    assert first["page_type"] == "TESTING"
+    assert first["page_title"] == "TESTS"
+    assert first["page_type_source"] == "manual"
+    assert second["page_type"] == "TESTING"
+    assert second["page_title"] == "TESTS"
+    assert second["page_type_source"] == "auto"
+    assert second["classification_signals"][0]["detail"] == (
+        "continuation: TESTING page 2"
+    )
+    state = client.get(base).json()
+    assert state["page_classification"]["1"]["page_title"] == "TESTS"
+
+
 @pytest.mark.parametrize(
     ("page", "body", "code"),
     [
         (1, {"page_type": "NOT_A_SECTION"}, "PAGE_TYPE_INVALID"),
+        (1, {"page_type": "TESTING", "page_title": "UNKNOWN"}, "PAGE_TITLE_INVALID"),
         (1, {"document_page": "<script>"}, "DOCUMENT_PAGE_INVALID"),
         (1, {"document_page": "x" * 21}, "DOCUMENT_PAGE_INVALID"),
         (9, {"document_page": "1"}, "PAGE_RANGE_INVALID"),
@@ -338,9 +392,11 @@ def test_detection_reports_section_status_and_uses_the_preparation_mapping(
     assert response.status_code == 200, response.text
     first, second = response.json()
     assert first["page_type"] == "TESTING"
+    assert first["page_title"] == "TESTING AND FAULT ISOLATION"
     assert first["classification_status"] == "confirmed"
     assert {item["family"] for item in first["classification_signals"]} == {"footer", "title"}
     assert second["page_type"] == "TESTING"
+    assert second["page_title"] == "TESTING AND FAULT ISOLATION"
     assert second["classification_status"] == "partial"
     assert second["classification_signals"][0]["detail"] == "continuation: TESTING page 2"
 
@@ -466,14 +522,18 @@ def test_detector_manual_type_selects_rules_and_keeps_detected_type(monkeypatch)
         {"1": {"page_type": "TP2", "document_page": "12"}},
     )
 
-    assert seen_pages == [1]
+    assert seen_pages == [1, 2]
     assert decisions[0]["page_type"] == "TP2"
     assert decisions[0]["detected_page_type"] == "TP1"
     assert decisions[0]["page_type_source"] == "manual"
     assert decisions[0]["document_page"] == "12"
-    assert decisions[1]["page_type"] is None
-    assert decisions[1]["page_type_source"] == "unclassified"
-    assert decisions[1]["decision_status"] == "no_applicable_rule"
+    assert decisions[1]["page_type"] == "TP2"
+    assert decisions[1]["detected_page_type"] == "TP2"
+    assert decisions[1]["page_type_source"] == "auto"
+    assert decisions[1]["classification_signals"][0]["detail"] == (
+        "continuation: TP2 page 2"
+    )
+    assert decisions[1]["decision_status"] == "not_selected"
 
 
 def test_detector_document_page_only_override_keeps_detected_type(monkeypatch) -> None:

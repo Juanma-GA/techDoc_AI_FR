@@ -110,6 +110,7 @@ def state_payload(
     *,
     preparation_rule_count: int = 0,
     page_type_options: Iterable[str] = (),
+    page_title_options: Iterable[dict[str, str]] = (),
 ) -> dict[str, Any]:
     record = get_record(db, document.id)
     checklist = db.get(PreparationChecklist, client_code)
@@ -157,6 +158,7 @@ def state_payload(
         "preparation_mapping": preparation_mapping,
         "page_classification": page_classification,
         "page_type_options": sorted(page_type_options),
+        "page_title_options": list(page_title_options),
     }
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.checks.thales_rules.section_detection import (
     DEFAULT_PREPARATION_TITLES,
     SECTION_PAGE_TYPES,
+    page_type_for_title,
     page_types_for_titles,
 )
 from app.core.compiled_rules import CompiledRule
@@ -64,6 +65,15 @@ def available_page_types(db: Session, bundle: Any) -> list[str]:
             ).values()
         )
     return sorted(page_types)
+
+
+def available_page_title_options(db: Session, bundle: Any) -> list[dict[str, str]]:
+    if bundle.client_code != "THALES":
+        return []
+    return [
+        {"title": title, "page_type": page_type_for_title(title)}
+        for title in load_preparation_page_titles(db, bundle.client_code)
+    ]
 
 
 def load_preparation_page_titles(db: Session, client_code: str) -> list[str]:
@@ -282,6 +292,8 @@ def set_page_classification(
     page_type: str | None,
     document_page: str | None,
     allowed_page_types: Iterable[str],
+    allowed_page_title_options: Iterable[Mapping[str, str]],
+    page_title: str | None = None,
 ) -> dict[str, str | None] | None:
     """Store a manual correction; both values empty reverts to automatic detection."""
     if not 1 <= page_number <= record.page_count:
@@ -292,13 +304,27 @@ def set_page_classification(
             "Ce type de page n'est pas proposé pour ce client.",
             status_code=422,
         )
+    title_types = {
+        option["title"]: option["page_type"]
+        for option in allowed_page_title_options
+    }
+    if page_title is not None and (
+        page_type is None or title_types.get(page_title) != page_type
+    ):
+        raise AppError(
+            "PAGE_TITLE_INVALID",
+            "Ce titre n'est pas proposé pour le type de page sélectionné.",
+            status_code=422,
+        )
     document_page = normalize_document_page(document_page)
     classification = load_page_classification(record)
     entry: dict[str, str | None] | None = None
-    if page_type is None and document_page is None:
+    if page_type is None and document_page is None and page_title is None:
         classification.pop(str(page_number), None)
     else:
         entry = {"page_type": page_type, "document_page": document_page}
+        if page_title is not None:
+            entry["page_title"] = page_title
         classification[str(page_number)] = entry
     if page_type is not None:
         absent = [item for item in load_absent_page_types(record) if item != page_type]

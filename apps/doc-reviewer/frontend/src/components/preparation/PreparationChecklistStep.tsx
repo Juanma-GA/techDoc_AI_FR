@@ -15,7 +15,11 @@ type Props = {
   savingDecision: boolean;
   onDetect: () => void;
   onDecision: (page: number, isModified: boolean) => void;
-  onClassification: (page: number, pageType: string | null) => void;
+  onClassification: (
+    page: number,
+    pageType: string | null,
+    pageTitle: string | null,
+  ) => void;
   onAbsent: (pageTypes: string[], absent: boolean) => void;
   onContinue: () => void;
 };
@@ -102,7 +106,7 @@ export function PreparationChecklistStep({
             absentGroups={state.absent_page_types ?? []}
             pageCount={state.page_count}
             saving={savingDecision}
-            onProvide={onClassification}
+            onProvide={(page, pageType) => onClassification(page, pageType, null)}
             onAbsent={onAbsent}
           />
           <PreparationSkippedRules rules={state.skipped_rules ?? []} />
@@ -125,6 +129,7 @@ export function PreparationChecklistStep({
                     decision={decision}
                     saving={savingDecision}
                     pageTypeOptions={state.page_type_options ?? []}
+                    pageTitleOptions={state.page_title_options ?? []}
                     onDecision={onDecision}
                     onClassification={onClassification}
                   />

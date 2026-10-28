@@ -1,20 +1,29 @@
 import { useTranslation } from "react-i18next";
 
-import type { PreparationPageDecision } from "../../types/preparation";
+import type {
+  PreparationPageDecision,
+  PreparationPageTitleOption,
+} from "../../types/preparation";
 import { PreparationClassificationCell } from "./PreparationClassificationCell";
 
 export function PreparationDecisionRow({
   decision,
   saving,
   pageTypeOptions,
+  pageTitleOptions,
   onDecision,
   onClassification,
 }: {
   decision: PreparationPageDecision;
   saving: boolean;
   pageTypeOptions: string[];
+  pageTitleOptions: PreparationPageTitleOption[];
   onDecision: (page: number, isModified: boolean) => void;
-  onClassification: (page: number, pageType: string | null) => void;
+  onClassification: (
+    page: number,
+    pageType: string | null,
+    pageTitle: string | null,
+  ) => void;
 }) {
   const { t } = useTranslation();
   const resultKey =
@@ -52,6 +61,7 @@ export function PreparationDecisionRow({
         <PreparationClassificationCell
           decision={decision}
           pageTypeOptions={pageTypeOptions}
+          pageTitleOptions={pageTitleOptions}
           saving={saving}
           onClassification={onClassification}
         />

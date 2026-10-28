@@ -16,6 +16,8 @@
   "classification": {
     "edit": "Correct page type",
     "automatic": "Automatic detection",
+    "configuredTitles": "Configured titles",
+    "otherTypes": "Other page types",
     "save": "Save correction",
     "footerKey": "Page read in footer: {{value}}",
     "noEvidence": "No evidence detected for this page.",

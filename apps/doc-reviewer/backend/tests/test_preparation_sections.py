@@ -132,9 +132,7 @@ def test_unknown_standalone_title_is_not_classified() -> None:
     assert page_type is None
     assert info["classification_status"] == "unclassified"
     assert info["classification_signals"] == []
-    assert info["classification_notes"] == [
-        "Title not in the configured list: HYDRAULIC PUMP OVERHAUL"
-    ]
+    assert info["classification_notes"] == []
 
 
 def test_unknown_ocr_title_is_not_classified() -> None:
@@ -157,9 +155,8 @@ def test_unknown_ocr_title_is_not_classified() -> None:
 
     assert parsed.pages[0].page_type is None
     assert analysis[1]["classification_status"] == "unclassified"
-    assert analysis[1]["classification_notes"] == [
-        "Title not in the configured list: HYDRAULIC PUMP OVERHAUL"
-    ]
+    assert analysis[1]["classification_signals"] == []
+    assert analysis[1]["classification_notes"] == []
 
 
 def test_configured_titles_start_sections_and_continuations_inherit_them() -> None:
@@ -181,8 +178,8 @@ def test_configured_titles_start_sections_and_continuations_inherit_them() -> No
         "CUSTOM INTRODUCTION",
         "CLEANING",
         "CLEANING",
-        None,
-        None,
+        "CLEANING",
+        "CLEANING",
     ]
     assert analysis[1]["classification_status"] == "partial"
     assert analysis[2]["classification_signals"][0]["detail"] == (
@@ -191,11 +188,13 @@ def test_configured_titles_start_sections_and_continuations_inherit_them() -> No
     assert analysis[4]["classification_signals"][0]["detail"] == (
         "continuation: CLEANING page 2"
     )
-    assert analysis[5]["classification_signals"] == []
-    assert analysis[5]["classification_notes"] == [
-        "Title not in the configured list: HYDRAULIC PUMP OVERHAUL"
-    ]
-    assert analysis[6]["classification_signals"] == []
+    assert analysis[5]["classification_signals"][0]["detail"] == (
+        "continuation: CLEANING page 3"
+    )
+    assert analysis[5]["classification_notes"] == []
+    assert analysis[6]["classification_signals"][0]["detail"] == (
+        "continuation: CLEANING page 4"
+    )
 
 
 def test_unknown_sentence_from_page_body_is_not_used_as_a_title() -> None:

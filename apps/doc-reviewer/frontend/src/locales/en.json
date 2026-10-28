@@ -458,7 +458,7 @@
       "pageTitles": {
         "tab": "Page titles",
         "title": "Titles recognized during preparation",
-        "description": "Title-based detection uses this list. Without a new title, a page continues the previous section; an unlisted title stays unclassified. Rerun detection to apply changes to documents already prepared.",
+        "description": "Title-based detection uses this list. Without a new recognized title, a page continues the previous type; titles outside the list are not analyzed as titles. Rerun detection to apply changes to documents already prepared.",
         "count": "titles",
         "inputLabel": "New page title",
         "add": "Add",

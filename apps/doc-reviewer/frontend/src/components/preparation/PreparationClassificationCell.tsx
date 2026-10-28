@@ -1,24 +1,47 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { PreparationPageDecision } from "../../types/preparation";
+import type {
+  PreparationPageDecision,
+  PreparationPageTitleOption,
+} from "../../types/preparation";
 
 type Props = {
   decision: PreparationPageDecision;
   pageTypeOptions: string[];
+  pageTitleOptions: PreparationPageTitleOption[];
   saving: boolean;
-  onClassification: (page: number, pageType: string | null) => void;
+  onClassification: (
+    page: number,
+    pageType: string | null,
+    pageTitle: string | null,
+  ) => void;
 };
 
 export function PreparationClassificationCell({
   decision,
   pageTypeOptions,
+  pageTitleOptions,
   saving,
   onClassification,
 }: Props) {
   const { t } = useTranslation();
   const manualType = decision.page_type_source === "manual" ? decision.page_type : null;
-  const [pageType, setPageType] = useState(manualType ?? "");
+  const representativeTitle = new Map<string, string>();
+  for (const option of pageTitleOptions) {
+    if (!representativeTitle.has(option.page_type)) {
+      representativeTitle.set(option.page_type, option.title);
+    }
+  }
+  const titleOptionValue = (option: PreparationPageTitleOption) =>
+    representativeTitle.get(option.page_type) === option.title
+      ? option.page_type
+      : `configured-title:${option.title}`;
+  const manualTitle = decision.page_type_source === "manual" ? decision.page_title ?? null : null;
+  const initialTitle = pageTitleOptions.find((option) => option.title === manualTitle);
+  const [pageType, setPageType] = useState(
+    initialTitle ? titleOptionValue(initialTitle) : manualType ?? "",
+  );
   const source = decision.page_type_source ?? (decision.page_type ? "auto" : "unclassified");
   const status = decision.classification_status ?? source;
   const statusClass = {
@@ -36,17 +59,27 @@ export function PreparationClassificationCell({
   const candidates = decision.classification_candidates ?? [];
   const footerLines = evidence?.footer_lines ?? [];
   const footerKey = evidence?.footer_page_key ?? null;
-  const unchanged = pageType === (manualType ?? "");
+  const selectedTitle = pageTitleOptions.find(
+    (option) => titleOptionValue(option) === pageType,
+  );
+  const selectedPageType = selectedTitle?.page_type ?? pageType;
+  const unchanged =
+    selectedPageType === (manualType ?? "") &&
+    (selectedTitle?.title ?? null) === manualTitle;
   const options = pageTypeOptions.includes(manualType ?? "")
     ? pageTypeOptions
     : manualType
       ? [...pageTypeOptions, manualType]
       : pageTypeOptions;
+  const titleTypes = new Set(pageTitleOptions.map((option) => option.page_type));
+  const otherPageTypes = options.filter((option) => !titleTypes.has(option));
 
   return (
     <div className="prep-type">
       <div className="prep-type-head">
-        <strong className="prep-type-name">{decision.page_type ?? "—"}</strong>
+        <strong className="prep-type-name">
+          {decision.page_title ?? decision.page_type ?? "—"}
+        </strong>
         <span className={`badge ${statusClass[status]}`}>
           {t(`preparationUi.classification.source.${status}`)}
         </span>
@@ -99,11 +132,24 @@ export function PreparationClassificationCell({
                 onChange={(event) => setPageType(event.target.value)}
               >
                 <option value="">{t("preparationUi.classification.automatic")}</option>
-                {options.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
+                {pageTitleOptions.length > 0 ? (
+                  <optgroup label={t("preparationUi.classification.configuredTitles")}>
+                    {pageTitleOptions.map((option) => (
+                      <option key={option.title} value={titleOptionValue(option)}>
+                        {option.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
+                {otherPageTypes.length > 0 ? (
+                  <optgroup label={t("preparationUi.classification.otherTypes")}>
+                    {otherPageTypes.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null}
               </select>
             </label>
           </div>
@@ -111,7 +157,14 @@ export function PreparationClassificationCell({
             type="button"
             className="btn secondary small"
             disabled={saving || unchanged}
-            onClick={() => onClassification(decision.page, pageType || null)}
+            onClick={() => {
+              const nextPageType = selectedPageType || null;
+              const nextPageTitle = selectedTitle?.title ?? null;
+              onClassification(decision.page, nextPageType, nextPageTitle);
+              setPageType(
+                selectedTitle ? titleOptionValue(selectedTitle) : nextPageType ?? "",
+              );
+            }}
           >
             {t("preparationUi.classification.save")}
           </button>

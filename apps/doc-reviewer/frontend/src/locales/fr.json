@@ -458,7 +458,7 @@
       "pageTitles": {
         "tab": "Titres de page",
         "title": "Titres reconnus en préparation",
-        "description": "La détection par titre utilise cette liste. Sans nouveau titre, la page reprend la section précédente ; un titre non répertorié reste non classé. Relancez la détection pour appliquer les changements aux documents déjà préparés.",
+        "description": "La détection par titre utilise cette liste. Sans nouveau titre reconnu, la page reprend le type précédent ; les titres absents de la liste ne sont pas analysés comme titres. Relancez la détection pour appliquer les changements aux documents déjà préparés.",
         "count": "titres",
         "inputLabel": "Nouveau titre de page",
         "add": "Ajouter",

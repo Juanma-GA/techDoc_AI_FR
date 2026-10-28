@@ -170,61 +170,6 @@ def page_types_for_titles(titles: Iterable[str]) -> dict[str, str]:
     }
 
 
-def _unlisted_title_candidate(page: ParsedPage) -> str | None:
-    def valid_title(text: str) -> str | None:
-        normalized = " ".join(text.split())
-        words = normalized.split()
-        if (
-            not normalized
-            or len(normalized) > 60
-            or not 2 <= len(words) <= 8
-            or not any(character.isalpha() for character in normalized)
-            or re.search(r"[.!?]", normalized)
-        ):
-            return None
-        return normalized
-
-    if page.lines and page.page_height > 0 and page.page_width > 0:
-        body_sizes = sorted(
-            span.size
-            for span in page.spans
-            if span.size > 0 and span.bbox[1] < page.page_height * 0.8
-        )
-        median_size = body_sizes[len(body_sizes) // 2] if body_sizes else 0
-        candidates: list[str] = []
-        for line in page.lines:
-            title = valid_title(line.text)
-            x0, y0, x1, y1 = line.bbox
-            centered = abs((x0 + x1) / 2 - page.page_width / 2) <= page.page_width * 0.28
-            left_aligned = x0 <= page.page_width * 0.22
-            if (
-                title is None
-                or not page.page_height * 0.03 <= y0 <= page.page_height * 0.42
-                or not (left_aligned or centered)
-            ):
-                continue
-            matching_spans = [
-                span
-                for span in page.spans
-                if span.bbox[1] < y1 and span.bbox[3] > y0
-            ]
-            if title.isupper() or any(
-                span.size >= max(12, median_size * 1.2)
-                or "bold" in span.font.casefold()
-                for span in matching_spans
-            ):
-                candidates.append(title)
-    else:
-        candidates = [
-            title
-            for line in _text_lines(page)[:4]
-            if (title := valid_title(line)) is not None
-            and title.isupper()
-        ]
-    unique = list(dict.fromkeys(candidates))
-    return unique[0] if len(unique) == 1 else None
-
-
 def _footer_signals(page: ParsedPage) -> list[SectionSignal]:
     signals: list[SectionSignal] = []
     lines = footer_lines(page)
@@ -360,7 +305,7 @@ def apply_preparation_page_types(
     page_titles: Mapping[str, str] | None = None,
 ) -> None:
     """Detect section types, then apply the manual page types chosen in preparation."""
-    classify_preparation_sections(parsed, metadata, page_titles)
+    classify_preparation_sections(parsed, metadata, page_titles, overrides)
     for page in parsed.pages:
         manual_type = (overrides.get(str(page.page)) or {}).get("page_type")
         if manual_type is not None:
@@ -371,8 +316,9 @@ def classify_preparation_sections(
     parsed: ParsedPdf,
     metadata: Mapping[str, Any],
     page_titles: Mapping[str, str] | None = None,
+    manual_overrides: Mapping[str, Mapping[str, str | None]] | None = None,
 ) -> dict[int, dict[str, Any]]:
-    """Classify configured title pages and carry their type across continuation pages."""
+    """Classify pages and carry configured or manually corrected types to continuations."""
     signals = {
         page.page: detect_section_signals(page, metadata, page_titles)
         for page in parsed.pages
@@ -404,22 +350,29 @@ def classify_preparation_sections(
                 resolved[number] = (page_type, "partial", candidates)
 
     active_section: str | None = None
+    active_title: str | None = None
     section_page = 0
+    page_title_by_page: dict[int, str | None] = {}
     for page in parsed.pages:
         page_type, status, _candidates = resolved[page.page]
+        override = (manual_overrides or {}).get(str(page.page), {})
+        manual_type = override.get("page_type")
+        manual_title = override.get("page_title")
+        title_signal = next(
+            (signal for signal in signals[page.page] if signal.family == TITLE),
+            None,
+        )
         if status == "conflict":
             active_section = None
+            active_title = None
             section_page = 0
-        elif any(signal.family == TITLE for signal in signals[page.page]):
+        elif title_signal is not None:
             active_section = page_type
+            active_title = _normalize_title(title_signal.detail.partition(": ")[2])
             section_page = 1
+            page_title_by_page[page.page] = active_title
         elif page_type is None and not signals[page.page] and legacy[page.page] is None:
-            unlisted_title = _unlisted_title_candidate(page)
-            if unlisted_title is not None:
-                notes[page.page].append(f"Title not in the configured list: {unlisted_title}")
-                active_section = None
-                section_page = 0
-            elif active_section is not None:
+            if active_section is not None:
                 section_page += 1
                 signals[page.page].append(
                     SectionSignal(
@@ -429,11 +382,21 @@ def classify_preparation_sections(
                     )
                 )
                 resolved[page.page] = (active_section, "partial", [])
+                page_title_by_page[page.page] = active_title
         elif page_type == active_section and active_section is not None:
             section_page += 1
+            page_title_by_page[page.page] = active_title
         else:
             active_section = None
+            active_title = None
             section_page = 0
+        if manual_type is not None:
+            active_section = manual_type
+            active_title = manual_title
+            section_page = 1
+            page_title_by_page[page.page] = manual_title
+        elif page_type != active_section:
+            page_title_by_page.setdefault(page.page, None)
 
     analysis: dict[int, dict[str, Any]] = {}
     for page in parsed.pages:
@@ -445,4 +408,7 @@ def classify_preparation_sections(
             "classification_candidates": candidates,
             "classification_notes": notes[page.page],
         }
+        title = page_title_by_page.get(page.page)
+        if title is not None:
+            analysis[page.page]["page_title"] = title
     return analysis

@@ -45,12 +45,16 @@ describe("PreparationClassificationCell", () => {
     container.remove();
   });
 
-  function render(decision: PreparationPageDecision): void {
+  function render(
+    decision: PreparationPageDecision,
+    pageTitleOptions: { title: string; page_type: string }[] = [],
+  ): void {
     act(() => {
       root.render(
         <PreparationClassificationCell
           decision={decision}
           pageTypeOptions={["TP1", "TP2"]}
+          pageTitleOptions={pageTitleOptions}
           saving={false}
           onClassification={onClassification}
         />,
@@ -79,7 +83,57 @@ describe("PreparationClassificationCell", () => {
     });
 
     expect(container.querySelector("input")).toBeNull();
-    expect(onClassification).toHaveBeenCalledWith(3, "TP2");
+    expect(onClassification).toHaveBeenCalledWith(3, "TP2", null);
+  });
+
+  it("shows each configured title while keeping its canonical page type", () => {
+    render(baseDecision, [
+      { title: "TESTING", page_type: "TESTING" },
+      { title: "TESTS", page_type: "TESTING" },
+    ]);
+
+    const options = [
+      ...container.querySelectorAll<HTMLOptionElement>(
+        'optgroup[label="preparationUi.classification.configuredTitles"] option',
+      ),
+    ];
+    expect(options.map((option) => option.textContent)).toEqual(["TESTING", "TESTS"]);
+    expect(options.map((option) => option.value)).toEqual([
+      "TESTING",
+      "configured-title:TESTS",
+    ]);
+
+    const select = container.querySelector("select") as HTMLSelectElement;
+    act(() => {
+      select.value = "configured-title:TESTS";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    act(() => {
+      (container.querySelector("button") as HTMLButtonElement).click();
+    });
+
+    expect(onClassification).toHaveBeenCalledWith(3, "TESTING", "TESTS");
+  });
+
+  it("keeps a manually selected alias as the displayed title", () => {
+    render(
+      {
+        ...baseDecision,
+        page_type: "TESTING",
+        page_title: "TESTS",
+        page_type_source: "manual",
+      },
+      [
+        { title: "TESTING", page_type: "TESTING" },
+        { title: "TESTS", page_type: "TESTING" },
+      ],
+    );
+
+    expect(container.querySelector(".prep-type-name")?.textContent).toBe("TESTS");
+    expect((container.querySelector("select") as HTMLSelectElement).value).toBe(
+      "configured-title:TESTS",
+    );
+    expect((container.querySelector("button") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows a manual source and detection evidence without a document-page number", () => {
