@@ -66,37 +66,33 @@ describe("PreparationClassificationCell", () => {
     expect(save.disabled).toBe(true);
   });
 
-  it("submits the chosen type and document page", () => {
+  it("submits the chosen page type without a document-page input", () => {
     render(baseDecision);
     const select = container.querySelector("select") as HTMLSelectElement;
-    const input = container.querySelector("input") as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
     act(() => {
       select.value = "TP2";
       select.dispatchEvent(new Event("change", { bubbles: true }));
-      setter?.call(input, " 12 ");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     act(() => {
       (container.querySelector("button") as HTMLButtonElement).click();
     });
 
-    expect(onClassification).toHaveBeenCalledWith(3, "TP2", "12");
+    expect(container.querySelector("input")).toBeNull();
+    expect(onClassification).toHaveBeenCalledWith(3, "TP2");
   });
 
-  it("shows a manual source and detection evidence", () => {
+  it("shows a manual source and detection evidence without a document-page number", () => {
     render({
       ...baseDecision,
       page_type: "TP1",
       page_type_source: "manual",
-      document_page: "401",
-      document_page_source: "manual",
       classification_evidence: { footer_lines: ["JUL 27/26"], footer_page_key: "Page 401" },
     });
 
     expect(container.textContent).toContain("preparationUi.classification.source.manual");
     expect(container.textContent).toContain("JUL 27/26");
+    expect(container.textContent).not.toContain("preparationUi.classification.documentPage");
     expect((container.querySelector("select") as HTMLSelectElement).value).toBe("TP1");
   });
 });

@@ -14,11 +14,9 @@
   "rerunCurrentOcr": "Rerun OCR for this page",
   "ruleResults": "{{count}} rule result(s)",
   "classification": {
-    "edit": "Correct type and page",
+    "edit": "Correct page type",
     "automatic": "Automatic detection",
     "save": "Save correction",
-    "documentPage": "Document page: {{value}}",
-    "documentPageLabel": "Document page number",
     "footerKey": "Page read in footer: {{value}}",
     "noEvidence": "No evidence detected for this page.",
     "source": {

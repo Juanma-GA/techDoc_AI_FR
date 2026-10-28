@@ -14,11 +14,9 @@
   "rerunCurrentOcr": "Relancer l'OCR de cette page",
   "ruleResults": "{{count}} résultat(s) de règle",
   "classification": {
-    "edit": "Corriger le type et la page",
+    "edit": "Corriger le type",
     "automatic": "Détection automatique",
     "save": "Enregistrer la correction",
-    "documentPage": "Page documentaire : {{value}}",
-    "documentPageLabel": "Numéro de page documentaire",
     "footerKey": "Page lue en pied de page : {{value}}",
     "noEvidence": "Aucun indice détecté pour cette page.",
     "source": {

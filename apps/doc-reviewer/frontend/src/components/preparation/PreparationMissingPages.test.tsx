@@ -84,6 +84,7 @@ describe("PreparationMissingPages", () => {
       );
     });
     const inputs = container.querySelectorAll<HTMLInputElement>('input[type="number"]');
+    expect(container.querySelectorAll("input")).toHaveLength(2);
     const buttons = container.querySelectorAll<HTMLButtonElement>("button");
     const input = inputs[0] as HTMLInputElement;
     const button = buttons[0] as HTMLButtonElement;
@@ -103,6 +104,6 @@ describe("PreparationMissingPages", () => {
     act(() => button.click());
 
     expect(container.textContent).toContain("HIGHLIGHTS / HIGHLIGHTS_PAGE_1");
-    expect(onProvide).toHaveBeenCalledWith(3, "TP1", null);
+    expect(onProvide).toHaveBeenCalledWith(3, "TP1");
   });
 });

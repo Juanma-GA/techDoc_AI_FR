@@ -12,7 +12,7 @@ type Props = {
   savingDecision: boolean;
   onDetect: () => void;
   onDecision: (page: number, isModified: boolean) => void;
-  onClassification: (page: number, pageType: string | null, documentPage: string | null) => void;
+  onClassification: (page: number, pageType: string | null) => void;
   onAbsent: (pageTypes: string[], absent: boolean) => void;
   onContinue: () => void;
 };
@@ -49,16 +49,16 @@ export function PreparationChecklistStep({
     selectedPages.length > 0;
 
   return (
-    <section className="card">
+    <section className="card prep-checklist">
       <h2 className="card-title">{t("preparationUi.rulesTitle")}</h2>
       <p className="card-sub">{t("preparationUi.rulesHint")}</p>
       {state.preparation_rule_count > 0 ? (
-        <p className="hint" style={{ marginTop: 8 }}>
+        <p className="hint prep-checklist-count">
           {t("preparation.builtinRules", { count: state.preparation_rule_count })}
         </p>
       ) : null}
       {state.checklist_source_filename ? (
-        <p className="label" style={{ marginTop: 8 }}>
+        <p className="label prep-checklist-count">
           {t("preparationUi.savedImportedRules", {
             filename: state.checklist_source_filename,
             count: state.checklist_imported_rule_count,
@@ -66,13 +66,13 @@ export function PreparationChecklistStep({
         </p>
       ) : null}
       {state.checklist_rule_count === 0 ? (
-        <p className="hint" style={{ marginTop: 8 }}>
+        <p className="hint prep-checklist-count">
           {t("preparationUi.noRules")}
         </p>
       ) : null}
       {error ? <p className="error" role="alert">{error}</p> : null}
       {state.checklist_rule_count > 0 ? (
-        <>
+        <div className="prep-checklist-actions">
           <button
             type="button"
             className="btn primary small"
@@ -84,24 +84,22 @@ export function PreparationChecklistStep({
           {unvalidatedPages.length > 0 ? (
             <p className="hint">{t("preparation.providerNotReady")}</p>
           ) : null}
-        </>
+        </div>
       ) : null}
 
       {decisions.length > 0 ? (
-        <div style={{ marginTop: 16 }}>
+        <div className="prep-checklist-content">
           <PreparationMissingPages
             groups={state.missing_page_types ?? []}
             absentGroups={state.absent_page_types ?? []}
             pageCount={state.page_count}
             saving={savingDecision}
-            onProvide={(page, pageType, documentPage) =>
-              onClassification(page, pageType, documentPage)
-            }
+            onProvide={onClassification}
             onAbsent={onAbsent}
           />
           <PreparationSkippedRules rules={state.skipped_rules ?? []} />
-          <h3 className="card-title">{t("preparation.decisionsTitle")}</h3>
-          <div className="table-scroll">
+          <h3 className="card-title prep-decisions-title">{t("preparation.decisionsTitle")}</h3>
+          <div className="table-scroll prep-decisions-scroll">
             <table className="rules-table prep-decisions">
               <thead>
                 <tr>

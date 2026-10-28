@@ -14,7 +14,7 @@ export function PreparationDecisionRow({
   saving: boolean;
   pageTypeOptions: string[];
   onDecision: (page: number, isModified: boolean) => void;
-  onClassification: (page: number, pageType: string | null, documentPage: string | null) => void;
+  onClassification: (page: number, pageType: string | null) => void;
 }) {
   const { t } = useTranslation();
   const resultKey =
@@ -83,7 +83,7 @@ export function PreparationDecisionRow({
         )}
       </td>
       <td data-label={t("preparation.manualOverride")} className="prep-decision-actions">
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        <div className="prep-decision-buttons">
           <button
             type="button"
             className={decision.is_modified === true ? "btn primary small" : "btn secondary small"}

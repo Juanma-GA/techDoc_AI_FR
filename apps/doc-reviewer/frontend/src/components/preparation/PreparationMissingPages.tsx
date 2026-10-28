@@ -6,7 +6,7 @@ type Props = {
   absentGroups?: string[][];
   pageCount: number;
   saving: boolean;
-  onProvide: (page: number, pageType: string, documentPage: string | null) => void;
+  onProvide: (page: number, pageType: string) => void;
   onAbsent: (pageTypes: string[], absent: boolean) => void;
 };
 
@@ -27,7 +27,6 @@ function MissingPageType({
   const key = group.join("-");
   const [pageType, setPageType] = useState(group[0] ?? "");
   const [page, setPage] = useState("");
-  const [documentPage, setDocumentPage] = useState("");
   const pageNumber = Number(page);
   const valid = Number.isInteger(pageNumber) && pageNumber >= 1 && pageNumber <= pageCount;
 
@@ -36,7 +35,7 @@ function MissingPageType({
       <strong className="prep-missing-type">{group.join(" / ")}</strong>
       <div className="prep-missing-fields">
         {group.length > 1 ? (
-          <label>
+          <label className="prep-missing-type-control">
             <span>{t("preparation.pageType")}</span>
             <select
               className="input small"
@@ -51,8 +50,10 @@ function MissingPageType({
               ))}
             </select>
           </label>
-        ) : null}
-        <label htmlFor={`missing-page-${key}`}>
+        ) : (
+          <span className="prep-missing-type-spacer" aria-hidden="true" />
+        )}
+        <label className="prep-missing-page-control" htmlFor={`missing-page-${key}`}>
           <span>{t("preparationUi.missing.pageLabel", { count: pageCount })}</span>
           <input
             id={`missing-page-${key}`}
@@ -65,22 +66,11 @@ function MissingPageType({
             onChange={(event) => setPage(event.target.value)}
           />
         </label>
-        <label htmlFor={`missing-doc-page-${key}`}>
-          <span>{t("preparationUi.classification.documentPageLabel")}</span>
-          <input
-            id={`missing-doc-page-${key}`}
-            className="input small"
-            value={documentPage}
-            maxLength={20}
-            disabled={saving}
-            onChange={(event) => setDocumentPage(event.target.value)}
-          />
-        </label>
         <button
           type="button"
           className="btn secondary small"
           disabled={saving || !valid}
-          onClick={() => onProvide(pageNumber, pageType, documentPage.trim() || null)}
+          onClick={() => onProvide(pageNumber, pageType)}
         >
           {t("preparationUi.missing.provide")}
         </button>
@@ -125,7 +115,7 @@ export function PreparationMissingPages({
         {absentGroups.map((group) => (
           <li key={`absent-${group.join("-")}`} className="prep-missing-item">
             <strong className="prep-missing-type">{group.join(" / ")}</strong>
-            <div className="prep-missing-fields">
+            <div className="prep-missing-fields prep-missing-fields--absent">
               <span className="prep-type-meta">{t("preparationUi.missing.markedAbsent")}</span>
               <button
                 type="button"

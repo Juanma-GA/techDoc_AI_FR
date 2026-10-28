@@ -7,7 +7,7 @@ type Props = {
   decision: PreparationPageDecision;
   pageTypeOptions: string[];
   saving: boolean;
-  onClassification: (page: number, pageType: string | null, documentPage: string | null) => void;
+  onClassification: (page: number, pageType: string | null) => void;
 };
 
 export function PreparationClassificationCell({
@@ -18,10 +18,7 @@ export function PreparationClassificationCell({
 }: Props) {
   const { t } = useTranslation();
   const manualType = decision.page_type_source === "manual" ? decision.page_type : null;
-  const manualDocumentPage =
-    decision.document_page_source === "manual" ? (decision.document_page ?? "") : "";
   const [pageType, setPageType] = useState(manualType ?? "");
-  const [documentPage, setDocumentPage] = useState(manualDocumentPage);
   const source = decision.page_type_source ?? (decision.page_type ? "auto" : "unclassified");
   const status = decision.classification_status ?? source;
   const statusClass = {
@@ -39,8 +36,7 @@ export function PreparationClassificationCell({
   const candidates = decision.classification_candidates ?? [];
   const footerLines = evidence?.footer_lines ?? [];
   const footerKey = evidence?.footer_page_key ?? null;
-  const unchanged =
-    pageType === (manualType ?? "") && documentPage.trim() === manualDocumentPage;
+  const unchanged = pageType === (manualType ?? "");
   const options = pageTypeOptions.includes(manualType ?? "")
     ? pageTypeOptions
     : manualType
@@ -63,11 +59,6 @@ export function PreparationClassificationCell({
       {notes.map((note) => (
         <p key={note} className="prep-type-meta">{note}</p>
       ))}
-      {decision.document_page ? (
-        <p className="prep-type-meta">
-          {t("preparationUi.classification.documentPage", { value: decision.document_page })}
-        </p>
-      ) : null}
       <details className="prep-type-edit">
         <summary>{t("preparationUi.classification.edit")}</summary>
         <div className="prep-type-panel">
@@ -115,25 +106,12 @@ export function PreparationClassificationCell({
                 ))}
               </select>
             </label>
-            <label htmlFor={`document-page-${decision.page}`}>
-              <span>{t("preparationUi.classification.documentPageLabel")}</span>
-              <input
-                id={`document-page-${decision.page}`}
-                className="input small"
-                value={documentPage}
-                maxLength={20}
-                disabled={saving}
-                onChange={(event) => setDocumentPage(event.target.value)}
-              />
-            </label>
           </div>
           <button
             type="button"
             className="btn secondary small"
             disabled={saving || unchanged}
-            onClick={() =>
-              onClassification(decision.page, pageType || null, documentPage.trim() || null)
-            }
+            onClick={() => onClassification(decision.page, pageType || null)}
           >
             {t("preparationUi.classification.save")}
           </button>
