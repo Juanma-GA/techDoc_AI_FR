@@ -56,6 +56,9 @@ describe("Home replacement box offsets", () => {
       references: [{
         reference: "R-001", found: true, line_indices: [0],
         replacement: "R-002", replacement_count: 1,
+      }, {
+        reference: "R-001", found: false, line_indices: [],
+        replacement: "R-003",
       }],
       edited_image: imageData,
       filename: "source.jpg",
@@ -63,7 +66,7 @@ describe("Home replacement box offsets", () => {
     vi.spyOn(imageReplaceApi, "runOcr").mockResolvedValue(result);
     const reapplySpy = vi.spyOn(imageReplaceApi, "reapplyReplacements").mockResolvedValue({
       edited_image: imageData,
-      replacement_counts: [1],
+      replacement_counts: [1, 0],
       replacement_font_size: null,
     });
     const source = new File(["synthetic image"], "source.png", { type: "image/png" });
@@ -102,5 +105,10 @@ describe("Home replacement box offsets", () => {
       text: "R-001",
       box: [[125, 125], [225, 125], [225, 155], [125, 155]],
     }]);
+    expect(form?.get("broadcast_references_json")).toBe(JSON.stringify(["R-001"]));
+    expect(JSON.parse(String(form?.get("replacement_pairs_json")))).toEqual([
+      { reference: "R-001", replacement: "R-002" },
+      { reference: "R-001", replacement: "R-003" },
+    ]);
   });
 });

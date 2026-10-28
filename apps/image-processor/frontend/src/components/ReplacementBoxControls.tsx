@@ -28,7 +28,12 @@ export function ReplacementBoxControls({
   t,
 }: ReplacementBoxControlsProps) {
   const selectedLine = selectedLineIndex == null ? undefined : result?.lines[selectedLineIndex];
-  const hasReplacements = Boolean(result?.references.some((reference) => reference.replacement));
+  const hasReplacements = Boolean(
+    result?.references.some((reference) => reference.found && reference.replacement),
+  );
+  const hasAppliedReplacements = Boolean(
+    result?.references.some((reference) => reference.replacement_count !== undefined),
+  );
 
   function updateOffset(axis: "x" | "y", value: number) {
     if (!selectedLine || selectedLineIndex == null) return;
@@ -94,7 +99,7 @@ export function ReplacementBoxControls({
           disabled={disabled || !hasReplacements || reapplyBlocked}
           onClick={onReapply}
         >
-          {t("image.reapplyReplacements")}
+          {t(hasAppliedReplacements ? "image.reapplyReplacements" : "image.replaceFound")}
         </Button>
       </div>
       {reapplyBlocked ? (

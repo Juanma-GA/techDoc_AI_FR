@@ -35,6 +35,32 @@ beforeEach(async () => {
 afterEach(cleanup);
 
 describe("replacement box controls", () => {
+  it("offers to replace found references before the first replacement", () => {
+    const onReapply = vi.fn();
+    render(
+      <ReplacementBoxControls
+        result={{
+          ...result,
+          references: result.references.map((reference) => ({
+            ...reference,
+            replacement_count: undefined,
+          })),
+        }}
+        selectedLineIndex={0}
+        disabled={false}
+        reapplyBlocked={false}
+        onUpdateOffsets={vi.fn()}
+        onApplyToAll={vi.fn()}
+        onReapply={onReapply}
+        t={i18n.t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remplacer" }));
+
+    expect(onReapply).toHaveBeenCalledOnce();
+  });
+
   it("updates the selected box and exposes apply-all and reapply actions", () => {
     const onUpdateOffsets = vi.fn();
     const onApplyToAll = vi.fn();

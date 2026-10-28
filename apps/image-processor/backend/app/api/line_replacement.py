@@ -17,7 +17,7 @@ from app.services.constants import (
 )
 from app.services.image_layout import create_a4_page, prepare_source_image
 from app.services.image_replacement import apply_replacements
-from app.services.ocr_engine import normalize_reference
+from app.services.ocr_engine import find_reference_occurrences, normalize_reference
 
 router = APIRouter(prefix="/image-processor", tags=["image-processor"])
 
@@ -84,7 +84,7 @@ async def replace_recognized_line(
     reference = reference.strip()
     replacement = replacement.strip()
     normalized_reference = normalize_reference(reference)
-    if not normalized_reference or normalized_reference not in normalize_reference(line.text):
+    if not normalized_reference or not find_reference_occurrences(line.text, reference):
         raise HTTPException(status_code=422, detail="La référence n'est pas présente dans la ligne OCR.")
     if not replacement:
         raise HTTPException(status_code=422, detail="Le nouveau repère ne peut pas être vide.")
@@ -100,6 +100,7 @@ async def replace_recognized_line(
         [{"text": line.text, "box": [list(point) for point in line.box]}],
         [{"reference": reference, "replacement": replacement}],
         replacement_font_size,
+        broadcast_references={normalized_reference},
     )
     replacement_count = replacement_counts[0]
     if replacement_count == 0:

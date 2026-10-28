@@ -39,12 +39,12 @@ describe("startup preferences and progressive replacements", () => {
     expect(screen.getByLabelText("Nouveaux repères")).toHaveValue("2");
     expect(screen.getByLabelText("ICN (nom du JPG)")).toHaveValue("3");
     expect(screen.getByLabelText("Noms des pièces")).toHaveValue("4");
-    expect(screen.getByLabelText("Pièce à traiter")).toHaveValue("");
+    expect(screen.getByLabelText("Description au point d’emploi")).toHaveValue("");
     expect(screen.getByText("Choisir une image")).toBeInTheDocument();
     expect(pairs).not.toHaveBeenCalled();
 
     await uploadImage(user, first.container);
-    await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
+    await user.selectOptions(screen.getByLabelText("Description au point d’emploi"), "2");
     await screen.findByRole("textbox", { name: "Référence Excel 1" });
     await waitFor(() => expect(mocks.save.mock.lastCall?.[1].excel.pieceRow).toBe("2"));
     const saved = mocks.saveExcel.mock.lastCall?.[0];
@@ -55,7 +55,7 @@ describe("startup preferences and progressive replacements", () => {
 
     renderWorkflow(<Home />);
     await screen.findByText("Sauvegarde locale à jour.");
-    expect(screen.getByLabelText("Pièce à traiter")).toHaveValue("");
+    expect(screen.getByLabelText("Description au point d’emploi")).toHaveValue("");
     expect(screen.getByText("Choisir une image")).toBeInTheDocument();
     expect(screen.getByLabelText("Noms des pièces")).toHaveValue("4");
   });
@@ -105,12 +105,18 @@ describe("startup preferences and progressive replacements", () => {
     const { container } = renderWorkflow(<Home />);
     await screen.findByText("Sauvegarde locale à jour.");
     await uploadImage(user, container);
-    await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
+    await user.selectOptions(screen.getByLabelText("Description au point d’emploi"), "2");
+    await waitFor(() => expect(ocr).toHaveBeenCalledOnce());
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Lancer l’OCR sur CPU" })).toBeEnabled();
+    });
     await user.click(await screen.findByRole("checkbox", { name: "Appliquer le couple Excel 1" }));
     await user.click(screen.getByRole("button", { name: "Lancer l’OCR sur CPU" }));
-    expect(ocr.mock.calls[0]?.[0].get("excel_replacement_pairs")).toBe(
+    await waitFor(() => expect(ocr).toHaveBeenCalledTimes(2));
+    expect(ocr.mock.calls[1]?.[0].get("excel_replacement_pairs")).toBe(
       JSON.stringify([{ reference: "R-2", replacement: "N-2" }]),
     );
+    expect(ocr.mock.calls[0]?.[0].get("comparison_only")).toBe("true");
     await waitFor(() => expect(mocks.save.mock.lastCall?.[1].excel.pairs[0]?.enabled).toBe(false));
     expect(screen.getByRole("textbox", { name: "Référence Excel 1" })).toHaveValue("R-1");
   });

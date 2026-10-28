@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { imageReplaceApi, type OcrResultDto } from "../lib/api";
 import { analysisForm } from "../lib/analysis-form";
@@ -13,12 +13,18 @@ import { useWorkspaceStorage } from "./useWorkspaceStorage";
 
 export type { ReplacementPair } from "../lib/workspace-api";
 
+type PendingAutoOcr = { pieceRow: string; requestId: number };
+
 export function useImageReplace(t: TFunction) {
   const [replacementPairs, setReplacementPairs] = useState<ReplacementPair[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [retouching, setRetouching] = useState(false);
+  const [pendingAutoOcr, setPendingAutoOcr] = useState<PendingAutoOcr | null>(null);
+  const autoOcrRequestId = useRef(0);
+  const startedAutoOcrRequestId = useRef<number | null>(null);
+  const ocrRunningRef = useRef(false);
   const excel = useExcelMapping(t);
   const image = useImageDocument(t);
   const download = useImageDownload({ image, excel, setError, t });
@@ -34,7 +40,17 @@ export function useImageReplace(t: TFunction) {
   const replaceRecognizedLine = useRecognizedTextReplacement(recognizedTextOptions);
   const undoRecognizedLine = useRecognizedTextUndo(recognizedTextOptions);
 
+  function selectExcelPieceRow(pieceRow: string) {
+    excel.setExcelPieceRow(pieceRow);
+    if (!pieceRow) {
+      setPendingAutoOcr(null);
+      return;
+    }
+    setPendingAutoOcr({ pieceRow, requestId: ++autoOcrRequestId.current });
+  }
+
   async function chooseImage(files: File[]) {
+    setPendingAutoOcr(null);
     setRestoring(true);
     setError("");
     try {
@@ -53,6 +69,7 @@ export function useImageReplace(t: TFunction) {
   }
 
   async function newImage() {
+    setPendingAutoOcr(null);
     setRestoring(true);
     setError("");
     try {
@@ -91,23 +108,72 @@ export function useImageReplace(t: TFunction) {
     setReplacementPairs((current) => current.filter((pair) => pair.id !== id));
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!image.currentFile || !image.imageFile || loading || restoring) return;
+  async function runOcr() {
+    if (
+      !image.currentFile || !image.imageFile || loading || restoring ||
+      retouching || download.downloading || ocrRunningRef.current
+    ) return;
+    ocrRunningRef.current = true;
     setLoading(true);
     setError("");
     try {
       const form = analysisForm(
         image.currentFile, image.imageFile.name, replacementPairs, excel, t,
         image.result?.replacement_font_size,
+        true,
       );
       image.applyOcr(await imageReplaceApi.runOcr(form));
     } catch (requestFailure) {
       setError(requestError(requestFailure, t("image.errorGeneric")));
     } finally {
+      ocrRunningRef.current = false;
       setLoading(false);
     }
   }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await runOcr();
+  }
+
+  const runOcrRef = useRef(runOcr);
+  runOcrRef.current = runOcr;
+
+  useEffect(() => {
+    const pending = pendingAutoOcr;
+    if (!pending) return;
+    if (pending.pieceRow !== excel.excelPieceRow) {
+      setPendingAutoOcr((current) =>
+        current?.requestId === pending.requestId ? null : current,
+      );
+      return;
+    }
+    if (
+      !image.currentFile || !image.imageFile || !excel.excelSelectionReady ||
+      !storage.ready || loading || restoring || retouching || download.downloading
+    ) return;
+
+    if (startedAutoOcrRequestId.current === pending.requestId) return;
+    startedAutoOcrRequestId.current = pending.requestId;
+    setPendingAutoOcr((current) =>
+      current?.requestId === pending.requestId ? null : current,
+    );
+    void runOcrRef.current();
+  }, [
+    pendingAutoOcr,
+    excel.excelPieceRow,
+    excel.excelSelectionReady,
+    excel.excelPairs,
+    image.currentFile,
+    image.imageFile,
+    image.result?.replacement_font_size,
+    storage.ready,
+    loading,
+    restoring,
+    retouching,
+    download.downloading,
+    replacementPairs,
+  ]);
 
   async function reapplyReplacements(resultOverride?: OcrResultDto): Promise<boolean> {
     const result = resultOverride ?? image.result;
@@ -136,9 +202,9 @@ export function useImageReplace(t: TFunction) {
       );
       form.append(
         "broadcast_references_json",
-        JSON.stringify(references
-          .filter(({ reference }) => (reference.replacement_count ?? 0) > 1)
-          .map(({ reference }) => reference.reference)),
+        JSON.stringify([...new Set(references
+          .filter(({ reference }) => reference.found)
+          .map(({ reference }) => reference.reference))]),
       );
       if (result.replacement_font_size != null) {
         form.append("replacement_font_size", String(result.replacement_font_size));
@@ -170,6 +236,7 @@ export function useImageReplace(t: TFunction) {
   }
 
   async function openHistory(id: string) {
+    setPendingAutoOcr(null);
     setRestoring(true);
     setError("");
     try {
@@ -201,6 +268,7 @@ export function useImageReplace(t: TFunction) {
     downloading: download.downloading, savingAs: download.savingAs, restoring, retouching,
     setRetouching,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
+    setExcelPieceRow: selectExcelPieceRow,
     replaceRecognizedLine, undoRecognizedLine, reapplyReplacements, openHistory,
     downloadImage: download.downloadImage,
     downloadImageAs: download.downloadImageAs,

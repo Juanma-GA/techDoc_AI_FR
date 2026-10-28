@@ -106,5 +106,5 @@ export async function selectExcelPartInHome(
   await user.selectOptions(screen.getByLabelText("ICN (nom du JPG)"), "4");
   await user.selectOptions(screen.getByLabelText("Noms des pièces"), "5");
   await screen.findByRole("option", { name: "Pump A" });
-  await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
+  await user.selectOptions(screen.getByLabelText("Description au point d’emploi"), "2");
 }

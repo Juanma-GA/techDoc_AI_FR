@@ -72,12 +72,13 @@ def test_replace_line_renders_only_the_requested_ocr_line(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fake_apply_replacements(image, lines, pairs, replacement_font_size):
+    def fake_apply_replacements(image, lines, pairs, replacement_font_size, broadcast_references):
         captured.update(
             image_size=image.size,
             lines=lines,
             pairs=pairs,
             replacement_font_size=replacement_font_size,
+            broadcast_references=broadcast_references,
         )
         rendered = image.copy()
         ImageDraw.Draw(rendered).rectangle((100, 100, 200, 130), fill="black")
@@ -108,6 +109,7 @@ def test_replace_line_renders_only_the_requested_ocr_line(
         "lines": [{"text": "K555", "box": line["box"]}],
         "pairs": [{"reference": "K555", "replacement": "K777"}],
         "replacement_font_size": 10,
+        "broadcast_references": {"K555"},
     }
 
     image_bytes = base64.b64decode(payload["edited_image"].split(",", 1)[1])
@@ -129,11 +131,11 @@ def test_replace_line_rejects_a_reference_not_present_in_the_selected_line(
         files={"image": ("working.jpg", _a4_jpeg(), "image/jpeg")},
         data={
             "line_json": json.dumps({
-                "text": "K555",
+                "text": "XXXYY*",
                 "box": [[100, 100], [200, 100], [200, 130], [100, 130]],
             }),
-            "reference": "A100",
-            "replacement": "A200",
+            "reference": "XXXY",
+            "replacement": "XXXZ",
         },
     )
 

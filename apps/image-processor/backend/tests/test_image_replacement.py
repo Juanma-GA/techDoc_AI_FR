@@ -27,6 +27,7 @@ def test_duplicate_reference_pairs_replace_separate_occurrences_in_order(monkeyp
             {"reference": "R-001", "replacement": "202"},
         ],
         replacement_font_size=14,
+        broadcast_references={"R001"},
     )
 
     assert applied_counts == [1, 1]
@@ -34,7 +35,7 @@ def test_duplicate_reference_pairs_replace_separate_occurrences_in_order(monkeyp
     assert drawn_replacements[0][1] < drawn_replacements[1][1]
 
 
-def test_single_reference_pair_replaces_only_first_occurrence(monkeypatch) -> None:
+def test_single_reference_pair_replaces_all_occurrences_with_the_same_value(monkeypatch) -> None:
     drawn_replacements: list[tuple[str, float]] = []
     monkeypatch.setattr(
         image_replacement,
@@ -49,11 +50,54 @@ def test_single_reference_pair_replaces_only_first_occurrence(monkeypatch) -> No
         [{"text": "R-001 R-001", "box": [[10, 10], [110, 10], [110, 30], [10, 30]]}],
         [{"reference": "R-001", "replacement": "101"}],
         replacement_font_size=14,
+        broadcast_references={"R001"},
     )
 
-    assert applied_counts == [1]
-    assert [text for text, _ in drawn_replacements] == ["101"]
-    assert drawn_replacements[0][1] < 60
+    assert applied_counts == [2]
+    assert [text for text, _ in drawn_replacements] == ["101", "101"]
+    assert drawn_replacements[0][1] < drawn_replacements[1][1]
+
+
+def test_duplicate_identical_pairs_broadcast_all_occurrences(monkeypatch) -> None:
+    drawn_replacements: list[str] = []
+    monkeypatch.setattr(
+        image_replacement,
+        "_draw_replacement_text",
+        lambda draw, polygon, text, fill, **kwargs: drawn_replacements.append(text),
+    )
+
+    _, applied_counts, _ = apply_replacements(
+        Image.new("RGB", (180, 60), "white"),
+        [{"text": "R-001 R-001 R-001", "box": [[10, 10], [170, 10], [170, 30], [10, 30]]}],
+        [
+            {"reference": "R-001", "replacement": "101"},
+            {"reference": "R-001", "replacement": "101"},
+        ],
+        replacement_font_size=14,
+        broadcast_references={"R001"},
+    )
+
+    assert applied_counts == [2, 1]
+    assert drawn_replacements == ["101", "101", "101"]
+
+
+def test_replacement_does_not_match_reference_inside_a_longer_token(monkeypatch) -> None:
+    drawn_replacements: list[str] = []
+    monkeypatch.setattr(
+        image_replacement,
+        "_draw_replacement_text",
+        lambda draw, polygon, text, fill, **kwargs: drawn_replacements.append(text),
+    )
+
+    _, applied_counts, _ = apply_replacements(
+        Image.new("RGB", (120, 60), "white"),
+        [{"text": "XXXYY*", "box": [[10, 10], [110, 10], [110, 30], [10, 30]]}],
+        [{"reference": "XXXY", "replacement": "101"}],
+        replacement_font_size=14,
+    )
+
+    assert applied_counts == [0]
+    assert drawn_replacements == []
 
 
 def test_replacement_segment_reduces_horizontal_width_by_one_more_pixel() -> None:

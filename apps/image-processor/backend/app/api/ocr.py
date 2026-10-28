@@ -48,6 +48,7 @@ async def run_ocr(
     references: str = Form(default=""),
     replacement_pairs: str | None = Form(default=None),
     excel_replacement_pairs: str | None = Form(default=None),
+    comparison_only: bool = Form(default=False),
     workbook: UploadFile | None = File(default=None),
     excel_sheet: str | None = Form(default=None),
     excel_reference_column: int | None = Form(default=None),
@@ -68,7 +69,14 @@ async def run_ocr(
         raise HTTPException(status_code=400, detail="Le fichier image est vide.")
 
     stage_started = perf_counter()
-    replacement_list = _parse_replacement_pairs(replacement_pairs) if replacement_pairs is not None else []
+    replacement_list = (
+        _parse_replacement_pairs(
+            replacement_pairs,
+            allow_empty_replacement=comparison_only,
+        )
+        if replacement_pairs is not None
+        else []
+    )
     if replacement_pairs is not None or workbook is not None:
         reference_list = [pair["reference"] for pair in replacement_list]
     else:
@@ -103,11 +111,13 @@ async def run_ocr(
                 excel_icn_column or 0,
                 excel_piece_column or 0,
                 excel_piece_row or 0,
+                require_replacement=not comparison_only,
             )
             if excel_replacement_pairs is not None:
                 excel_replacements = _parse_replacement_pairs(
                     excel_replacement_pairs,
                     skip_empty_references=True,
+                    allow_empty_replacement=comparison_only,
                 )
 
         manual_references = {
@@ -172,16 +182,23 @@ async def run_ocr(
         line["box"] = [
             [point[0] * scale_x + offset_x, point[1] * scale_y + offset_y] for point in line["box"]
         ]
-    output_image, applied_counts, font_size = apply_replacements(
-        output_image,
-        lines,
-        replacement_list,
-        replacement_font_size,
-        broadcast_references=broadcast_references,
-    )
-    for match, pair, applied_count in zip(matches, replacement_list, applied_counts, strict=False):
+    if comparison_only:
+        applied_counts = [0] * len(replacement_list)
+        font_size = replacement_font_size
+    else:
+        output_image, applied_counts, font_size = apply_replacements(
+            output_image,
+            lines,
+            replacement_list,
+            replacement_font_size,
+            broadcast_references=broadcast_references,
+        )
+    for pair_index, (match, pair) in enumerate(
+        zip(matches, replacement_list, strict=False)
+    ):
         match["replacement"] = pair["replacement"]
-        match["replacement_count"] = applied_count
+        if not comparison_only:
+            match["replacement_count"] = applied_counts[pair_index]
     timings["replacement_layout_ms"] = _elapsed_ms(stage_started)
 
     stage_started = perf_counter()
