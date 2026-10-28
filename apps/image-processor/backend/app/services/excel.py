@@ -153,6 +153,8 @@ def extract_excel_replacements(
     icn_column: int,
     piece_column: int,
     piece_row: int,
+    *,
+    require_replacement: bool = True,
 ) -> tuple[list[dict[str, str]], str]:
     column_count = int(worksheet.max_column or 0)
     for column in (reference_column, replacement_column, icn_column, piece_column):
@@ -200,7 +202,7 @@ def extract_excel_replacements(
         if not reference:
             replacements.append({"reference": "", "replacement": replacement})
             continue
-        if not replacement:
+        if not replacement and require_replacement:
             raise HTTPException(
                 status_code=422,
                 detail=f"Le couple de remplacement sur la ligne {row_number} est incomplet.",

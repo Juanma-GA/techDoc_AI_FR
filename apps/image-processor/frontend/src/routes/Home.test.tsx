@@ -1,4 +1,4 @@
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,10 +56,12 @@ describe("Image Processor home workflow", () => {
     const user = userEvent.setup();
     const { container } = render(<Home />);
     vi.spyOn(imageReplaceApi, "excelPairs").mockResolvedValue({ pairs: [] });
+    const ocrSpy = vi.spyOn(imageReplaceApi, "runOcr");
 
     await selectExcelPartInHome(user, container);
 
     expect(await screen.findByText("Aucun couple trouvé pour cette pièce.")).toBeInTheDocument();
+    expect(ocrSpy).not.toHaveBeenCalled();
   });
 
   it("shows a preview error instead of a false empty state", async () => {
@@ -144,7 +146,12 @@ describe("Image Processor home workflow", () => {
     await user.selectOptions(screen.getByLabelText("ICN (nom du JPG)"), "4");
     await user.selectOptions(screen.getByLabelText("Noms des pièces"), "5");
     await screen.findByRole("option", { name: "Pump A" });
-    await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
+    await user.selectOptions(screen.getByLabelText("Description au point d’emploi"), "2");
+    await waitFor(() => expect(ocrSpy).toHaveBeenCalledOnce());
+    expect(ocrSpy.mock.calls[0]?.[0].get("comparison_only")).toBe("true");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Lancer l’OCR sur CPU" })).toBeEnabled();
+    });
 
     const missingReference = await screen.findByRole("textbox", {
       name: "Référence Excel 3",
@@ -165,8 +172,9 @@ describe("Image Processor home workflow", () => {
     await user.click(screen.getByRole("button", { name: "Supprimer le couple Excel 2" }));
     await user.click(screen.getByRole("button", { name: "Lancer l’OCR sur CPU" }));
 
-    expect(ocrSpy).toHaveBeenCalled();
-    const formData = ocrSpy.mock.calls[0]?.[0];
+    await waitFor(() => expect(ocrSpy).toHaveBeenCalledTimes(2));
+    const formData = ocrSpy.mock.calls.at(-1)?.[0];
+    expect(formData?.get("comparison_only")).toBe("true");
     expect(formData?.get("excel_replacement_pairs")).toBe(
       JSON.stringify([{ reference: "R-001", replacement: "N-009" }]),
     );
