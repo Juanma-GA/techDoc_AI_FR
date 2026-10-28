@@ -108,5 +108,5 @@ export function useSignaturePdf(
     };
   }, [documentProxy, pageNumber, onReady]);
 
-  return { canvasRef, hasDocument: documentProxy !== null, pageSize, status };
+  return { canvasRef, documentProxy, hasDocument: documentProxy !== null, pageSize, status };
 }

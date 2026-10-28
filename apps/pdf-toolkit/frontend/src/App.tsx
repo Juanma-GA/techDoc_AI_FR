@@ -9,6 +9,7 @@ import {
   RotateCw,
   Scissors,
   ShieldCheck,
+  Split,
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,7 @@ import { ImagesToPdfTool } from "./features/images-to-pdf/ImagesToPdfTool";
 import { PdfToImagesTool } from "./features/pdf-to-images/PdfToImagesTool";
 import { RotateTool } from "./features/rotate/RotateTool";
 import { SignatureTool } from "./features/signature/SignatureTool";
+import { SplitTool } from "./features/split/SplitTool";
 
 const ReorderTool = lazy(() =>
   import("./features/reorder/ReorderTool").then((module) => ({ default: module.ReorderTool })),
@@ -37,6 +39,7 @@ const ReorderTool = lazy(() =>
 const tools = [
   { id: "merge", icon: Combine },
   { id: "extract", icon: Scissors },
+  { id: "split", icon: Split },
   { id: "delete", icon: Trash2 },
   { id: "reorder", icon: Grip },
   { id: "compress", icon: Minimize2 },
@@ -152,6 +155,7 @@ export function App() {
         >
           {activeTool === "merge" ? <MergeTool /> : null}
           {activeTool === "extract" ? <ExtractTool /> : null}
+          {activeTool === "split" ? <SplitTool /> : null}
           {activeTool === "delete" ? <DeleteTool /> : null}
           {activeTool === "compress" ? <CompressTool /> : null}
           {activeTool === "rotate" ? <RotateTool /> : null}

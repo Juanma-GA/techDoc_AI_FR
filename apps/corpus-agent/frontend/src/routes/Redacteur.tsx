@@ -10,6 +10,12 @@ import { useScopeStore } from "../stores/useScopeStore";
 import type { AnomalyOut, AnomalyStatus, FileOut, ProjectOut } from "../lib/types";
 
 const STATUSES: AnomalyStatus[] = ["open", "acknowledged", "fixed", "rejected"];
+const REJECTION_REASON_KEYS = [
+  "redacteur.reason.falsePositive",
+  "redacteur.reason.outOfScope",
+  "redacteur.reason.alreadyCovered",
+  "redacteur.reason.accepted",
+] as const;
 const STATUS_KEY: Record<AnomalyStatus, string> = {
   open: "redacteur.statusOpen",
   acknowledged: "redacteur.statusAck",
@@ -218,18 +224,35 @@ function AnomalyRow({
       {a.location && <div className="red-anomaly-loc">{a.location}</div>}
       {suggestion && <div className="red-anomaly-suggestion">→ {suggestion}</div>}
       {rejected && (
-        <input
-          className="input red-anomaly-feedback"
-          placeholder={t("redacteur.feedbackPlaceholder")}
-          value={feedback}
-          onChange={(e) => setFeedback(e.target.value)}
-          onBlur={() => {
-            if (feedback !== (a.feedback ?? "")) onStatus("rejected", feedback);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-          }}
-        />
+        <>
+          <div className="red-reject-reasons">
+            {REJECTION_REASON_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={`chat-suggestion${feedback === t(key) ? " active" : ""}`}
+                onClick={() => {
+                  setFeedback(t(key));
+                  if (t(key) !== (a.feedback ?? "")) onStatus("rejected", t(key));
+                }}
+              >
+                {t(key)}
+              </button>
+            ))}
+          </div>
+          <input
+            className="input red-anomaly-feedback"
+            placeholder={t("redacteur.feedbackPlaceholder")}
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            onBlur={() => {
+              if (feedback !== (a.feedback ?? "")) onStatus("rejected", feedback);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+          />
+        </>
       )}
     </div>
   );

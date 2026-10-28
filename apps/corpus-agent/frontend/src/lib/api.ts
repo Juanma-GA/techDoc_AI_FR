@@ -14,6 +14,8 @@ import type {
   AnalysisRunOut,
   AnomalyOut,
   AnomalyStatus,
+  AppSettingsIn,
+  AppSettingsOut,
   ChatMessageOut,
   ChatSessionOut,
   ChecklistImportMode,
@@ -224,9 +226,9 @@ export const anomaliesApi = {
     ),
   exportCsv: (pid: string) =>
     downloadBlob(`/projects/${pid}/anomalies/export.csv`, `anomalies-${pid}.csv`),
-  rejectionsSummary: (pid: string, synthesize = true) =>
+  rejectionsSummary: (pid: string, synthesize = true, refresh = false) =>
     api.get<RejectionsSummaryOut>(
-      `/projects/${pid}/anomalies/rejections-summary?synthesize=${synthesize ? "true" : "false"}`,
+      `/projects/${pid}/anomalies/rejections-summary?synthesize=${synthesize ? "true" : "false"}&refresh=${refresh ? "true" : "false"}`,
     ),
 };
 
@@ -240,6 +242,11 @@ export const kpisApi = {
 export const adminApi = {
   stats: () => api.get<AdminStatsOut>("/admin/stats"),
   reset: (scope: AdminResetScope) => api.post<AdminResetOut>("/admin/reset", { scope }),
+};
+
+export const demoSettingsApi = {
+  read: () => api.get<AppSettingsOut>("/settings"),
+  write: (body: AppSettingsIn) => api.post<AppSettingsOut>("/settings", body),
 };
 
 export const settingsApi = {

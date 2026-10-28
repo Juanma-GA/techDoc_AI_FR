@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDemoMode } from "@internal/ui";
 
 import { ExportButtons } from "../components/ExportButtons";
 import { useDictation } from "../hooks/useDictation";
@@ -13,6 +14,15 @@ import {
   type DocumentDto,
   type SettingsDto,
 } from "../lib/api";
+import {
+  createMaintenanceDemoFiles,
+  createMaintenanceDemoReport,
+  createMaintenanceDemoStyles,
+  createMaintenanceDemoTemplates,
+  type MaintenanceDemoFile,
+  type MaintenanceDemoStyle,
+  type MaintenanceDemoTemplate,
+} from "../lib/maintenanceDemo";
 import { useGenerateStore } from "../stores/useGenerateStore";
 
 const STATUS = {
@@ -24,7 +34,9 @@ const STATUS = {
 
 // Page Generation, pixel-identique au preview (renderGenerate).
 export function Generate() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { mode } = useDemoMode();
+  const demoMode = mode === "demo";
   const qc = useQueryClient();
   const cancelRef = useRef<(() => void) | null>(null);
   // Suivi du run en cours pour le recap "done" et le message stream vide.
@@ -52,8 +64,6 @@ export function Generate() {
     templateDocId,
     styleDocId,
     outputLang,
-    outputFormat,
-    length,
     outputFilename,
     output,
     status,
@@ -62,43 +72,80 @@ export function Generate() {
     setTemplateDocId,
     setStyleDocId,
     setOutputLang,
-    setOutputFormat,
-    setLength,
     setOutputFilename,
+    setLocalOutput,
     beginStream,
     appendToken,
     finishStream,
     failStream,
     reset,
   } = useGenerateStore();
+  const demoT = i18n.getFixedT(outputLang);
 
   const docsQuery = useQuery<DocumentDto[], ApiClientError>({
     queryKey: ["documents", "source"],
     queryFn: () => documentsApi.list("source"),
+    enabled: !demoMode,
   });
   const templatesQuery = useQuery<DocumentDto[], ApiClientError>({
     queryKey: ["documents", "template"],
     queryFn: () => documentsApi.list("template"),
+    enabled: !demoMode,
   });
   const stylesQuery = useQuery<DocumentDto[], ApiClientError>({
     queryKey: ["documents", "style"],
     queryFn: () => documentsApi.list("style"),
+    enabled: !demoMode,
   });
   const settingsQuery = useQuery<SettingsDto, ApiClientError>({
     queryKey: ["settings"],
     queryFn: settingsApi.read,
   });
 
-  const docs = docsQuery.data ?? [];
-  const templates = templatesQuery.data ?? [];
-  const styles = stylesQuery.data ?? [];
-  const mistralReady = settingsQuery.data?.api_key_set ?? false;
+  const demoFiles: MaintenanceDemoFile[] = demoMode
+    ? createMaintenanceDemoFiles({
+        conveyor: {
+        fileName: demoT("demo.scenarios.conveyor.fileName"),
+        fileContent: demoT("demo.scenarios.conveyor.fileContent"),
+        output: demoT("demo.scenarios.conveyor.output"),
+        },
+        pump: {
+        fileName: demoT("demo.scenarios.pump.fileName"),
+        fileContent: demoT("demo.scenarios.pump.fileContent"),
+        output: demoT("demo.scenarios.pump.output"),
+        },
+      })
+    : [];
+  const demoTemplates: MaintenanceDemoTemplate[] = demoMode
+    ? createMaintenanceDemoTemplates({
+      "service-report": demoT("demo.templates.serviceReport.name"),
+      "inspection-checklist": demoT("demo.templates.inspectionChecklist.name"),
+      })
+    : [];
+  const demoStyles: MaintenanceDemoStyle[] = demoMode
+    ? createMaintenanceDemoStyles(
+        demoT("demo.styles.documentName"),
+        demoT("demo.styles.documentContent"),
+        )
+    : [];
+  const docs = demoMode ? demoFiles : docsQuery.data ?? [];
+  const templates = demoMode ? demoTemplates : templatesQuery.data ?? [];
+  const styles = demoMode ? demoStyles : stylesQuery.data ?? [];
+  const selectedScopeIds = scopeDocIds.filter((id) =>
+    docs.some((document) => document.id === id),
+  );
+  const mistralReady = demoMode || (settingsQuery.data?.api_key_set ?? false);
   const isStreaming = status === "streaming";
 
-  const templateDoc = templateDocId
-    ? templates.find((d) => d.id === templateDocId)
-    : undefined;
-  const templateFormat: "pptx" | "docx" | null = templateDoc
+  const templateDoc =
+    templates.find((document) => document.id === templateDocId) ?? templates[0];
+  const resolvedTemplateDocId = templateDoc?.id ?? null;
+  const resolvedStyleDocId = styles.some((style) => style.id === styleDocId)
+    ? styleDocId
+    : null;
+  const templateFormat: "pptx" | "docx" | null = demoMode
+    ? null
+    : templateDoc
     ? templateDoc.filename.toLowerCase().endsWith(".pptx")
       ? "pptx"
       : "docx"
@@ -113,19 +160,43 @@ export function Generate() {
 
   const toggleScope = (id: string) =>
     setScopeDocIds(
-      scopeDocIds.includes(id)
-        ? scopeDocIds.filter((x) => x !== id)
-        : [...scopeDocIds, id],
+      selectedScopeIds.includes(id)
+        ? selectedScopeIds.filter((x) => x !== id)
+        : [...selectedScopeIds, id],
     );
 
   const onGenerate = async () => {
     setFeedback(null);
-    if (prompt.trim().length < 10) {
-      setFeedback({ kind: "error", text: t("generate.tooShort") });
+    const question = prompt.trim() || t("generate.defaultBrief");
+    if (!demoMode && !resolvedTemplateDocId) {
+      setFeedback({ kind: "error", text: t("generate.templateRequired") });
       return;
     }
-    if (outputFormat === "template" && !templateDocId) {
-      setFeedback({ kind: "error", text: t("generate.templateRequired") });
+    if (demoMode) {
+      const selectedFiles = demoFiles.filter(
+        (document) =>
+          selectedScopeIds.length === 0 || selectedScopeIds.includes(document.id),
+      );
+      if (selectedFiles.length === 0) {
+        setFeedback({ kind: "error", text: t("demo.noFilesSelected") });
+        return;
+      }
+      const selectedTemplate = demoTemplates.find(
+        (template) => template.id === resolvedTemplateDocId,
+      );
+      const selectedStyle = demoStyles.find(
+        (style) => style.id === styleDocId,
+      );
+      setLocalOutput(
+        createMaintenanceDemoReport(
+          prompt,
+          selectedFiles,
+          demoT,
+          selectedTemplate,
+          selectedStyle,
+        ),
+      );
+      setFeedback({ kind: "ok", text: demoT("demo.generated") });
       return;
     }
     // Etape 1/4 : creation de la session.
@@ -133,12 +204,12 @@ export function Generate() {
     let session;
     try {
       session = await sessionsApi.create({
-        scope_doc_ids: scopeDocIds,
+        scope_doc_ids: selectedScopeIds,
         lang: outputLang,
-        output_format: outputFormat,
-        length,
-        template_doc_id: templateDocId,
-        style_doc_id: styleDocId,
+        output_format: "template",
+        length: "medium",
+        template_doc_id: resolvedTemplateDocId,
+        style_doc_id: resolvedStyleDocId,
       });
     } catch (err) {
       const msg =
@@ -157,7 +228,7 @@ export function Generate() {
     firstTokenRef.current = false;
     // Etape 2/4 : contact API Mistral (premier round-trip RAG).
     setFeedback({ kind: "ok", text: t("generate.stepContactingMistral") });
-    const cancel = streamAsk(session.id, prompt, {
+    const cancel = streamAsk(session.id, question, {
       onSession: () => {
         // Etape 3/4 : connexion etablie, on attend le premier token.
         setFeedback({
@@ -243,9 +314,9 @@ export function Generate() {
           </label>
           <ExportButtons
             sessionId={currentSessionId ?? ""}
-            hasTemplate={!!templateDocId}
+            hasTemplate={!!templateDoc}
             templateFormat={templateFormat}
-            templateDocId={templateDocId}
+            templateDocId={resolvedTemplateDocId}
             filename={outputFilename || undefined}
             ready={status === "done" && !!currentSessionId}
           />
@@ -278,7 +349,7 @@ export function Generate() {
                     <label key={d.id}>
                       <input
                         type="checkbox"
-                        checked={scopeDocIds.includes(d.id)}
+                        checked={selectedScopeIds.includes(d.id)}
                         onChange={() => toggleScope(d.id)}
                       />
                       <span>{d.filename}</span>
@@ -289,36 +360,6 @@ export function Generate() {
             </label>
 
             <div className="row">
-              <label className="grow">
-                <div className="label">{t("generate.format")}</div>
-                <select
-                  className="input"
-                  value={outputFormat}
-                  disabled={isStreaming}
-                  onChange={(e) =>
-                    setOutputFormat(e.target.value as typeof outputFormat)
-                  }
-                >
-                  <option value="markdown">{t("generate.formatMarkdown")}</option>
-                  <option value="faq">{t("generate.formatFaq")}</option>
-                  <option value="structured">{t("generate.formatStructured")}</option>
-                  <option value="table">{t("generate.formatTable")}</option>
-                  <option value="template">{t("generate.formatTemplate")}</option>
-                </select>
-              </label>
-              <label className="grow">
-                <div className="label">{t("generate.length")}</div>
-                <select
-                  className="input"
-                  value={length}
-                  disabled={isStreaming}
-                  onChange={(e) => setLength(e.target.value as typeof length)}
-                >
-                  <option value="short">{t("generate.lengthShort")}</option>
-                  <option value="medium">{t("generate.lengthMedium")}</option>
-                  <option value="long">{t("generate.lengthLong")}</option>
-                </select>
-              </label>
               <label className="grow">
                 <div className="label">{t("generate.outputLang")}</div>
                 <select
@@ -341,11 +382,10 @@ export function Generate() {
                 <div className="label">{t("generate.templateLabel")}</div>
                 <select
                   className="input"
-                  value={templateDocId ?? ""}
+                  value={resolvedTemplateDocId ?? ""}
                   disabled={isStreaming}
                   onChange={(e) => setTemplateDocId(e.target.value || null)}
                 >
-                  <option value="">{t("generate.templateNone")}</option>
                   {templates.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.filename}
@@ -391,7 +431,7 @@ export function Generate() {
               <textarea
                 rows={6}
                 value={prompt}
-                placeholder={t("generate.promptPlaceholder")}
+                placeholder={t("generate.briefOptional")}
                 disabled={isStreaming}
                 onChange={(e) => setPrompt(e.target.value)}
               />

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { anomaliesApi } from "../lib/api";
@@ -25,9 +25,15 @@ function truncate(s: string, n = 90): string {
  */
 export function RejectionsSummaryCard({ projectId }: { projectId: string }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const q = useQuery<RejectionsSummaryOut>({
     queryKey: ["rejections-summary", projectId],
     queryFn: () => anomaliesApi.rejectionsSummary(projectId, true),
+    staleTime: Infinity,
+  });
+  const regenerate = useMutation({
+    mutationFn: () => anomaliesApi.rejectionsSummary(projectId, true, true),
+    onSuccess: (fresh) => qc.setQueryData(["rejections-summary", projectId], fresh),
   });
 
   const data = q.data;
@@ -93,6 +99,21 @@ export function RejectionsSummaryCard({ projectId }: { projectId: string }) {
                 {t("rejections.aiTitle")}
               </strong>
               {data.synthese}
+              <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
+                <span className="label">
+                  {data.generated_at
+                    ? t("rejections.generatedAt", { date: new Date(data.generated_at).toLocaleString() })
+                    : ""}
+                </span>
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  disabled={regenerate.isPending}
+                  onClick={() => regenerate.mutate()}
+                >
+                  {regenerate.isPending ? t("rejections.regenerating") : t("rejections.regenerate")}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="label" style={{ marginBottom: 12 }}>
