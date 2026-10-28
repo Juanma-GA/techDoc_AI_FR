@@ -1,11 +1,14 @@
 import { useTranslation } from "react-i18next";
 
+import type { Document } from "../../types/domain";
 import type { PreparationState } from "../../types/preparation";
 import { PreparationDecisionRow } from "./PreparationDecisionRow";
+import { PreparationMetadataPanel } from "./PreparationMetadataPanel";
 import { PreparationMissingPages } from "./PreparationMissingPages";
 import { PreparationSkippedRules } from "./PreparationSkippedRules";
 
 type Props = {
+  document: Document;
   state: PreparationState;
   error: string | null;
   detecting: boolean;
@@ -18,6 +21,7 @@ type Props = {
 };
 
 export function PreparationChecklistStep({
+  document,
   state,
   error,
   detecting,
@@ -71,6 +75,10 @@ export function PreparationChecklistStep({
         </p>
       ) : null}
       {error ? <p className="error" role="alert">{error}</p> : null}
+      <PreparationMetadataPanel
+        document={document}
+        mapping={state.preparation_mapping}
+      />
       {state.checklist_rule_count > 0 ? (
         <div className="prep-checklist-actions">
           <button

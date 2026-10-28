@@ -64,6 +64,15 @@
   color: var(--brand);
 }
 
+.prep-document-row {
+  outline: none;
+}
+
+.prep-document-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .prep-checklist {
   display: grid;
   gap: 12px;

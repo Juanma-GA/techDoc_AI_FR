@@ -10,7 +10,6 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { ExportSelector } from "../reviewer/ExportSelector";
-import { PreparationMetadataPanel } from "./PreparationMetadataPanel";
 import { PreparationReviewPane } from "./PreparationReviewPane";
 import { PreparationSkippedRules } from "./PreparationSkippedRules";
 import { useClientConfig } from "../../hooks/useClientConfig";
@@ -223,7 +222,6 @@ export function PreparationReview({ document, preparation }: Props) {
         <ExportSelector documentId={document.id} />
       </div>
       {hasUndecidedPages ? <p className="hint">{t("preparation.resolvePages")}</p> : null}
-      <PreparationMetadataPanel document={document} />
       <PreparationReviewPane
         pageImageUrl={pageImageUrl}
         pageNumber={currentPage}

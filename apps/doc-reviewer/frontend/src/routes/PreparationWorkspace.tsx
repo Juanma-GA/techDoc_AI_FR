@@ -138,8 +138,8 @@ export function PreparationWorkspace() {
               ? messageOf(runOcrDocument.error)
               : runOcrPage.isError
                 ? messageOf(runOcrPage.error)
-              : detectPages.isError
-                ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
+              : validateAllOcr.isError
+                ? messageOf(validateAllOcr.error)
                 : null
           }
           onRunOcrAll={(pages) => runOcrDocument.mutate(pages)}
@@ -147,9 +147,13 @@ export function PreparationWorkspace() {
           ocrProgress={runOcrDocument.isPending ? runOcrDocument.progress : null}
           onRunOcrPage={(page) => runOcrPage.mutate({ page, provider: "mistral" })}
           runningOcrPage={runOcrPage.isPending}
-          onValidateAllAndAnalyze={() =>
+          onValidateAllAndContinue={() =>
             validateAllOcr.mutate(undefined, {
-              onSuccess: () => detectPages.mutate(undefined, { onSuccess: () => setStep(2) }),
+              onSuccess: () => {
+                void preparation.refetch().then((result) => {
+                  if (result.isSuccess) setStep(2);
+                });
+              },
             })
           }
           validatingAll={validateAllOcr.isPending}
@@ -159,6 +163,7 @@ export function PreparationWorkspace() {
 
       {step === 2 ? (
         <PreparationChecklistStep
+          document={document.data}
           state={state}
           error={checklistError}
           detecting={detectPages.isPending}

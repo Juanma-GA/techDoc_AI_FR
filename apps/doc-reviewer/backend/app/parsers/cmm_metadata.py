@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TypedDict
 
@@ -49,7 +49,11 @@ _DATE_RE = re.compile(
 )
 
 
-def suggest_cmm_metadata_from_pdf(path: str | Path) -> CmmMetadataSuggestions:
+def suggest_cmm_metadata_from_pdf(
+    path: str | Path,
+    *,
+    ocr_page_texts: Mapping[int, str] | None = None,
+) -> CmmMetadataSuggestions:
     pdf = fitz.open(str(path))
     try:
         page_texts = [
@@ -58,6 +62,9 @@ def suggest_cmm_metadata_from_pdf(path: str | Path) -> CmmMetadataSuggestions:
         ]
     finally:
         pdf.close()
+    for page_number, text in (ocr_page_texts or {}).items():
+        if 1 <= page_number <= len(page_texts):
+            page_texts[page_number - 1] = text
     return suggest_cmm_metadata_from_pages(page_texts)
 
 

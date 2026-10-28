@@ -9,7 +9,7 @@
   "ocrPending": "Run OCR on {{count}} pages to check",
   "ocrPendingRunning": "Running OCR on pages…",
   "ocrProgress": "OCR: {{done}}/{{total}} pages",
-  "analyzePages": "Analyze pages",
+  "continueToChecklist": "Continue to rules",
   "runCurrentOcr": "Run OCR for this page",
   "rerunCurrentOcr": "Rerun OCR for this page",
   "ruleResults": "{{count}} rule result(s)",

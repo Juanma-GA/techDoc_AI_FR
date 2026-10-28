@@ -1,32 +1,19 @@
-import { useTranslation } from "react-i18next";
-
-import { usePatchPreparationMapping, usePreparationState } from "../../hooks/usePreparation";
+import { usePatchPreparationMapping } from "../../hooks/usePreparation";
 import type { Document } from "../../types/domain";
 import { ClientMetadataPanel } from "../reviewer/ClientMetadataPanel";
 
 type Props = {
   document: Document;
+  mapping: Record<string, unknown>;
 };
 
-export function PreparationMetadataPanel({ document }: Props) {
-  const { t } = useTranslation();
-  const preparation = usePreparationState(document.id);
+export function PreparationMetadataPanel({ document, mapping }: Props) {
   const patchMapping = usePatchPreparationMapping(document.id);
-
-  if (preparation.isLoading) {
-    return <p className="hint">{t("common.loading")}</p>;
-  }
-  if (preparation.isError || !preparation.data) {
-    const message = preparation.error instanceof Error
-      ? preparation.error.message
-      : t("common.retry");
-    return <p className="banner warn" role="alert">{message}</p>;
-  }
 
   return (
     <ClientMetadataPanel
       document={document}
-      mappingValues={preparation.data.preparation_mapping}
+      mappingValues={mapping}
       onSaveMapping={async (mapping) => {
         await patchMapping.mutateAsync({ mapping });
       }}

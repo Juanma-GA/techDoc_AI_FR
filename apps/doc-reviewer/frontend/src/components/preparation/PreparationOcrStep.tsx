@@ -19,7 +19,7 @@ type Props = {
   onRunOcrAll: (pages: number[]) => void;
   runningOcrAll: boolean;
   ocrProgress: OcrDocumentProgress | null;
-  onValidateAllAndAnalyze: () => void;
+  onValidateAllAndContinue: () => void;
   validatingAll: boolean;
   analyzing: boolean;
   onRunOcrPage: (page: number) => void;
@@ -33,7 +33,7 @@ export function PreparationOcrStep({
   onRunOcrAll,
   runningOcrAll,
   ocrProgress,
-  onValidateAllAndAnalyze,
+  onValidateAllAndContinue,
   validatingAll,
   analyzing,
   onRunOcrPage,
@@ -106,15 +106,15 @@ export function PreparationOcrStep({
               validatingAll ||
               analyzing
             }
-            onClick={onValidateAllAndAnalyze}
+            onClick={onValidateAllAndContinue}
           >
             {validatingAll
               ? t("preparation.validatingAll")
               : analyzing
                 ? t("preparation.detectingPages")
                 : state.pages.some((item) => item.needs_ocr)
-                  ? t("preparation.validateAllAndAnalyze")
-                  : t("preparationUi.analyzePages")}
+                  ? t("preparation.validateAllAndContinue")
+                  : t("preparationUi.continueToChecklist")}
           </button>
         </div>
       </div>

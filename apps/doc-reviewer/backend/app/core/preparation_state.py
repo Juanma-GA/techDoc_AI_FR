@@ -283,6 +283,34 @@ def get_page_ocr_result(
     return results.get(provider, {}).get(str(page_number))
 
 
+def get_validated_ocr_page_text(
+    record: DocumentPreparation,
+    provider: str,
+    page_number: int,
+) -> str | None:
+    validated_pages = _load_validation_map(record).get(provider, [])
+    if not isinstance(validated_pages, list) or any(
+        type(page) is not int or page < 1 for page in validated_pages
+    ):
+        raise AppError(
+            "PREPARATION_STATE_INVALID",
+            "L'état de préparation (pages OCR validées) est illisible.",
+            status_code=500,
+        )
+    if page_number not in validated_pages:
+        return None
+    results = _load_json(record.ocr_results_json, "ocr_results_json")
+    provider_results = results.get(provider) if isinstance(results, dict) else None
+    result = provider_results.get(str(page_number)) if isinstance(provider_results, dict) else None
+    if not isinstance(result, dict) or not isinstance(result.get("text"), str):
+        raise AppError(
+            "PREPARATION_STATE_INVALID",
+            "Le texte OCR validé d'une page est indisponible.",
+            status_code=500,
+        )
+    return result["text"]
+
+
 def _find_page(pages: list[dict[str, Any]], page_number: int) -> dict[str, Any]:
     page = next((item for item in pages if item.get("page") == page_number), None)
     if page is None:
