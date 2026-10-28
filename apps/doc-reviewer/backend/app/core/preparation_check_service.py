@@ -8,11 +8,15 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.checks.client_registry import LoadedClientConfiguration
+from app.checks.thales_rules.section_detection import page_types_for_titles
 from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
 from app.core.compiled_rules import CompiledRule
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
-from app.core.preparation_classification import load_page_classification
+from app.core.preparation_classification import (
+    load_page_classification,
+    load_preparation_page_titles,
+)
 from app.core.preparation_state import (
     _load_json,
     _load_validation_map,
@@ -82,6 +86,11 @@ def detect_preparation_pages(
         client_configuration.bundle,
         load_page_classification(record),
         metadata,
+        page_types_for_titles(
+            load_preparation_page_titles(db, client_configuration.bundle.client_code)
+        )
+        if client_configuration.bundle.client_code == "THALES"
+        else None,
     )
     if preserve_manual:
         _carry_over_manual_decisions(decisions, previous_decisions)

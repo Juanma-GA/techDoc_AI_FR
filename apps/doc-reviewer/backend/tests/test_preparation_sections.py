@@ -3,13 +3,22 @@ from __future__ import annotations
 import fitz
 import pytest
 
-from app.checks.thales_rules.section_detection import classify_preparation_sections
+from app.checks.thales_rules.section_detection import (
+    classify_preparation_sections,
+    page_types_for_titles,
+)
 from app.parsers.pdf_parser import parse_pdf
 
 PageSpec = tuple[list[str], list[str]]
 
 
-def _classify(pages: list[PageSpec], metadata: dict | None = None, *, table: set[int] | None = None):
+def _classify(
+    pages: list[PageSpec],
+    metadata: dict | None = None,
+    *,
+    table: set[int] | None = None,
+    page_titles: dict[str, str] | None = None,
+):
     pdf = fitz.open()
     for index, (body, footer) in enumerate(pages, start=1):
         page = pdf.new_page(width=400, height=600)
@@ -22,7 +31,7 @@ def _classify(pages: list[PageSpec], metadata: dict | None = None, *, table: set
                 page.draw_line((40, y), (360, y))
     parsed = parse_pdf(pdf.tobytes())
     pdf.close()
-    analysis = classify_preparation_sections(parsed, metadata or {})
+    analysis = classify_preparation_sections(parsed, metadata or {}, page_titles)
     return parsed, analysis
 
 
@@ -108,11 +117,92 @@ def test_numbers_outside_documented_ranges_leave_page_unclassified(footer: str) 
 def test_single_signal_is_partial_and_no_signal_is_unclassified() -> None:
     title_only, title_info = _single(["REPAIR"], ["JUL 27/26"])
     footer_only, footer_info = _single(["Body"], ["Page 650"])
+    tp1_footer, tp1_footer_info = _single(["Title page text"], ["TP 1"])
     none, none_info = _single(["Body"], [])
 
     assert (title_only, title_info["classification_status"]) == ("REPAIR", "partial")
     assert (footer_only, footer_info["classification_status"]) == ("REPAIR", "partial")
+    assert (tp1_footer, tp1_footer_info["classification_status"]) == ("TP1", "partial")
     assert (none, none_info["classification_status"]) == (None, "unclassified")
+
+
+def test_unknown_standalone_title_is_not_classified() -> None:
+    page_type, info = _single(["HYDRAULIC PUMP OVERHAUL"], [])
+
+    assert page_type is None
+    assert info["classification_status"] == "unclassified"
+    assert info["classification_signals"] == []
+    assert info["classification_notes"] == [
+        "Title not in the configured list: HYDRAULIC PUMP OVERHAUL"
+    ]
+
+
+def test_unknown_ocr_title_is_not_classified() -> None:
+    from app.parsers.pdf_parser import ParsedPage, ParsedPdf
+
+    parsed = ParsedPdf(
+        page_count=1,
+        pages=[
+            ParsedPage(
+                page=1,
+                text="HYDRAULIC PUMP OVERHAUL\nInstructions for servicing",
+                has_text_layer=False,
+            )
+        ],
+        full_text="HYDRAULIC PUMP OVERHAUL\nInstructions for servicing",
+        is_signed=False,
+    )
+
+    analysis = classify_preparation_sections(parsed, {})
+
+    assert parsed.pages[0].page_type is None
+    assert analysis[1]["classification_status"] == "unclassified"
+    assert analysis[1]["classification_notes"] == [
+        "Title not in the configured list: HYDRAULIC PUMP OVERHAUL"
+    ]
+
+
+def test_configured_titles_start_sections_and_continuations_inherit_them() -> None:
+    page_titles = page_types_for_titles(["CUSTOM INTRODUCTION", "CLEANING"])
+    parsed, analysis = _classify(
+        [
+            (["CUSTOM INTRODUCTION"], []),
+            (["Procedures continue on this page."], []),
+            (["CLEANING"], []),
+            (["The cleaning process continues."], []),
+            (["HYDRAULIC PUMP OVERHAUL"], []),
+            (["Procedures continue on this page."], []),
+        ],
+        page_titles=page_titles,
+    )
+
+    assert [page.page_type for page in parsed.pages] == [
+        "CUSTOM INTRODUCTION",
+        "CUSTOM INTRODUCTION",
+        "CLEANING",
+        "CLEANING",
+        None,
+        None,
+    ]
+    assert analysis[1]["classification_status"] == "partial"
+    assert analysis[2]["classification_signals"][0]["detail"] == (
+        "continuation: CUSTOM INTRODUCTION page 2"
+    )
+    assert analysis[4]["classification_signals"][0]["detail"] == (
+        "continuation: CLEANING page 2"
+    )
+    assert analysis[5]["classification_signals"] == []
+    assert analysis[5]["classification_notes"] == [
+        "Title not in the configured list: HYDRAULIC PUMP OVERHAUL"
+    ]
+    assert analysis[6]["classification_signals"] == []
+
+
+def test_unknown_sentence_from_page_body_is_not_used_as_a_title() -> None:
+    page_type, info = _single(["This is a body sentence."], [])
+
+    assert page_type is None
+    assert info["classification_status"] == "unclassified"
 
 
 def test_conflicting_signals_stay_unclassified_and_list_candidates() -> None:

@@ -446,7 +446,7 @@
       "mode": "Mode d'exécution",
       "description": "Description",
       "openRule": "Ouvrir la règle n°{{number}} dans l'onglet Règles",
-      "search": "Rechercher une règle",
+      "search": "Rechercher une règle ou un titre",
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "règles",
@@ -454,6 +454,22 @@
       "scope": {
         "verification": "Contrôle",
         "preparation": "Préparation"
+      },
+      "pageTitles": {
+        "tab": "Titres de page",
+        "title": "Titres reconnus en préparation",
+        "description": "La détection par titre utilise cette liste. Sans nouveau titre, la page reprend la section précédente ; un titre non répertorié reste non classé. Relancez la détection pour appliquer les changements aux documents déjà préparés.",
+        "count": "titres",
+        "inputLabel": "Nouveau titre de page",
+        "add": "Ajouter",
+        "remove": "Supprimer",
+        "removeTitle": "Supprimer ce titre ?",
+        "confirmRemove": "Supprimer le titre",
+        "duplicate": "Ce titre est déjà présent dans la liste.",
+        "saving": "Enregistrement de la liste des titres…",
+        "empty": "Aucun titre configuré. Ajoutez les titres que la détection peut reconnaître.",
+        "loadFailed": "Impossible de charger la liste des titres.",
+        "saveFailed": "Impossible d'enregistrer la liste des titres. Réessayez."
       },
       "scopeEmpty": "Aucune règle n’est disponible dans cette catégorie.",
       "searchEmpty": "Aucune règle ne correspond à votre recherche.",

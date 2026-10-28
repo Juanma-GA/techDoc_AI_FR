@@ -37,10 +37,11 @@ def detect_pages_to_modify(
     bundle: ClientBundle,
     classification_overrides: dict[str, dict[str, str | None]] | None = None,
     metadata: Mapping[str, Any] | None = None,
+    page_titles: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     if bundle.page_classifier is not None:
         bundle.page_classifier(parsed, document)
-    analysis = classify_preparation_sections(parsed, metadata or {})
+    analysis = classify_preparation_sections(parsed, metadata or {}, page_titles)
     classification = _apply_classification_overrides(
         parsed, classification_overrides or {}, analysis
     )

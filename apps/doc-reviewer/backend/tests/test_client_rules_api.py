@@ -118,6 +118,48 @@ def test_client_rule_toggle_rejects_unknown_codes(client: TestClient) -> None:
     assert response.json()["code"] == "CLIENT_RULE_NOT_FOUND"
 
 
+def test_preparation_page_title_catalog_has_defaults_and_persists_edits(
+    client: TestClient,
+) -> None:
+    path = "/api/v1/client-preparation-page-titles"
+    initial = client.get(path)
+
+    assert initial.status_code == 200, initial.text
+    expected_titles = {
+        "RECORD OF TEMPORARY REVISIONS",
+        "RECORD OF SERVICE BULLETINS",
+        "LIST OF APPROVED REPAIRERS",
+        "LIST OF MATERIALS",
+        "TABLE OF CONTENTS",
+        "DISASSEMBLY",
+        "CLEANING",
+        "REASSEMBLY",
+        "TESTS",
+        "TROUBLE SHOOTING",
+        "STORAGE INSTRUCTIONS",
+        "SPECIAL EQUIPMENT AND TOOLING",
+        "ILLUSTRATED PARTS LIST",
+        "DETAILED PARTS LIST",
+    }
+    assert expected_titles <= set(initial.json()["titles"])
+
+    saved = client.patch(
+        path,
+        json={"titles": ["  CUSTOM PROCEDURE  ", "CLEANING"]},
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["titles"] == ["CUSTOM PROCEDURE", "CLEANING"]
+    assert client.get(path).json()["titles"] == ["CUSTOM PROCEDURE", "CLEANING"]
+
+    duplicate = client.patch(
+        path,
+        json={"titles": ["CLEANING", " cleaning "]},
+    )
+    assert duplicate.status_code == 422
+    assert duplicate.json()["code"] == "PREPARATION_TITLE_DUPLICATE"
+
+
 def test_ste_rule_toggle_uses_the_ste100_catalog(client: TestClient) -> None:
     config = client.get("/api/v1/client-config").json()
     ste_version_id = uuid.UUID(config["catalogs"][1]["standard_version_id"])

@@ -9,7 +9,7 @@ signals pointing at different sections are a conflict and stay unclassified.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -60,32 +60,53 @@ _NUMBER_RANGES = (
     (SPECIAL_TOOLS, 901, 999),
     (VENDOR_CODE_LIST, 1001, 1999),
 )
+_TITLE_PAGE_TYPES = {
+    "TESTING": TESTING,
+    "TESTING AND FAULT ISOLATION": TESTING,
+    "TESTS": TESTING,
+    "REPAIR": REPAIR,
+    "ASSEMBLY": ASSEMBLY,
+    "ASSEMBLY AND STORAGE": ASSEMBLY,
+    "ASSEMBLY INCLUDING STORAGE": ASSEMBLY,
+    "ASSEMBLY (INCLUDING STORAGE)": ASSEMBLY,
+    "VENDOR CODE LIST": VENDOR_CODE_LIST,
+    "TABLE OF CONTENTS": TABLE_OF_CONTENTS,
+    "INTRODUCTION": INTRODUCTION,
+    "RECORD OF REVISIONS": ROR,
+    "LIST OF EFFECTIVE PAGES": LEP,
+    "CONSUMABLES": SPECIAL_TOOLS,
+    "LIST OF CONSUMABLES": SPECIAL_TOOLS,
+    "LIST OF MATERIALS": SPECIAL_TOOLS,
+    "MATERIALS": SPECIAL_TOOLS,
+    "SPECIAL EQUIPMENT AND TOOLING": SPECIAL_TOOLS,
+}
+DEFAULT_PREPARATION_TITLES = tuple(
+    dict.fromkeys(
+        [
+            *_TITLE_PAGE_TYPES,
+            "RECORD OF TEMPORARY REVISIONS",
+            "RECORD OF SERVICE BULLETINS",
+            "LIST OF APPROVED REPAIRERS",
+            "DISASSEMBLY",
+            "CLEANING",
+            "REASSEMBLY",
+            "TROUBLE SHOOTING",
+            "STORAGE INSTRUCTIONS",
+            "ILLUSTRATED PARTS LIST",
+            "DETAILED PARTS LIST",
+        ]
+    )
+)
 _FOOTER_LABELS = (
     (HIGHLIGHTS_PAGE_TYPE, re.compile(r"(?i)\bHigh?lights?\s+Page\s+(\d+)")),
-    (TP1_PAGE_TYPE, re.compile(r"(?i)\bTP(?:\s+Page\s+|\s*-\s*)(\d+)")),
+    (TP1_PAGE_TYPE, re.compile(r"(?i)\bTP(?:\s+Page\s+|\s*-\s*|\s+)(\d+)")),
     (ROR, re.compile(r"(?i)\b(?:ROR\s+Page\s+|RR\s*-\s*)(\d+)")),
     (LEP, re.compile(r"(?i)\b(?:LEP\s+Page\s+|LEP\s*-\s*)(\d+)")),
     (INTRODUCTION, re.compile(r"(?i)\b(?:INTRO\s+Page\s+|INTRO\s*-\s*)(\d+)")),
     (TABLE_OF_CONTENTS, re.compile(r"(?i)\b(?:TC\s+Page\s+|TC\s*-\s*)(\d+)")),
     (SPECIAL_TOOLS, re.compile(r"(?i)\b(?:LM\s+Page\s+|LM\s*-\s*)(\d+)")),
 )
-_NUMBERED = r"(?:\d+(?:\.\d+)*[.)]?\s+)?"
-_TITLES = {
-    TESTING: r"TESTING(?:\s+AND\s+FAULT\s+ISOLATION)?",
-    REPAIR: r"REPAIR",
-    ASSEMBLY: (
-        r"ASSEMBLY(?:\s+AND\s+STORAGE|\s+INCLUDING\s+STORAGE"
-        r"|\s+\(\s*INCLUDING\s+STORAGE\s*\))?"
-    ),
-    VENDOR_CODE_LIST: r"VENDOR\s+CODE\s+LIST",
-    TABLE_OF_CONTENTS: r"TABLE\s+OF\s+CONTENTS",
-    INTRODUCTION: r"INTRODUCTION",
-    ROR: r"RECORD\s+OF\s+REVISIONS",
-    LEP: r"LIST\s+OF\s+EFFECTIVE\s+PAGES",
-}
-_TITLE_RES = {
-    section: re.compile(rf"(?i){_NUMBERED}{pattern}") for section, pattern in _TITLES.items()
-}
+_NUMBERED_PREFIX_RE = re.compile(r"^\d+(?:\.\d+)*[.)]?\s+")
 _SPECIAL_TOOLS_TITLE_RE = re.compile(
     r"(?i)(?:consumables|list\s+of\s+consumables(?:\s*\(\s*cont[’']?d\.?\s*\))?"
     r"|list\s+of\s+materials|materials)"
@@ -132,6 +153,78 @@ def _text_lines(page: ParsedPage) -> list[str]:
     return lines
 
 
+def _normalize_title(value: str) -> str:
+    without_number = _NUMBERED_PREFIX_RE.sub("", value.strip())
+    return " ".join(without_number.split()).upper()
+
+
+def page_type_for_title(title: str) -> str:
+    normalized = _normalize_title(title)
+    return _TITLE_PAGE_TYPES.get(normalized, normalized)
+
+
+def page_types_for_titles(titles: Iterable[str]) -> dict[str, str]:
+    return {
+        _normalize_title(title): page_type_for_title(title)
+        for title in titles
+    }
+
+
+def _unlisted_title_candidate(page: ParsedPage) -> str | None:
+    def valid_title(text: str) -> str | None:
+        normalized = " ".join(text.split())
+        words = normalized.split()
+        if (
+            not normalized
+            or len(normalized) > 60
+            or not 2 <= len(words) <= 8
+            or not any(character.isalpha() for character in normalized)
+            or re.search(r"[.!?]", normalized)
+        ):
+            return None
+        return normalized
+
+    if page.lines and page.page_height > 0 and page.page_width > 0:
+        body_sizes = sorted(
+            span.size
+            for span in page.spans
+            if span.size > 0 and span.bbox[1] < page.page_height * 0.8
+        )
+        median_size = body_sizes[len(body_sizes) // 2] if body_sizes else 0
+        candidates: list[str] = []
+        for line in page.lines:
+            title = valid_title(line.text)
+            x0, y0, x1, y1 = line.bbox
+            centered = abs((x0 + x1) / 2 - page.page_width / 2) <= page.page_width * 0.28
+            left_aligned = x0 <= page.page_width * 0.22
+            if (
+                title is None
+                or not page.page_height * 0.03 <= y0 <= page.page_height * 0.42
+                or not (left_aligned or centered)
+            ):
+                continue
+            matching_spans = [
+                span
+                for span in page.spans
+                if span.bbox[1] < y1 and span.bbox[3] > y0
+            ]
+            if title.isupper() or any(
+                span.size >= max(12, median_size * 1.2)
+                or "bold" in span.font.casefold()
+                for span in matching_spans
+            ):
+                candidates.append(title)
+    else:
+        candidates = [
+            title
+            for line in _text_lines(page)[:4]
+            if (title := valid_title(line)) is not None
+            and title.isupper()
+        ]
+    unique = list(dict.fromkeys(candidates))
+    return unique[0] if len(unique) == 1 else None
+
+
 def _footer_signals(page: ParsedPage) -> list[SectionSignal]:
     signals: list[SectionSignal] = []
     lines = footer_lines(page)
@@ -162,14 +255,12 @@ def _footer_signals(page: ParsedPage) -> list[SectionSignal]:
     return signals
 
 
-def _title_signals(page: ParsedPage) -> list[SectionSignal]:
+def _title_signals(page: ParsedPage, page_titles: Mapping[str, str]) -> list[SectionSignal]:
     signals: list[SectionSignal] = []
     for line in _text_lines(page):
-        for section, pattern in _TITLE_RES.items():
-            if pattern.fullmatch(line):
-                signals.append(SectionSignal(section, TITLE, f"title: {line}"))
-        if _SPECIAL_TOOLS_TITLE_RE.fullmatch(line):
-            signals.append(SectionSignal(SPECIAL_TOOLS, TITLE, f"sub-section: {line}"))
+        section = page_titles.get(_normalize_title(line))
+        if section is not None:
+            signals.append(SectionSignal(section, TITLE, f"title: {line}"))
     return signals
 
 
@@ -206,8 +297,20 @@ def _content_signals(page: ParsedPage, metadata: Mapping[str, Any]) -> list[Sect
     return signals
 
 
-def detect_section_signals(page: ParsedPage, metadata: Mapping[str, Any]) -> list[SectionSignal]:
-    signals = _footer_signals(page) + _title_signals(page) + _content_signals(page, metadata)
+def detect_section_signals(
+    page: ParsedPage,
+    metadata: Mapping[str, Any],
+    page_titles: Mapping[str, str] | None = None,
+) -> list[SectionSignal]:
+    title_types = (
+        page_titles
+        if page_titles is not None
+        else {
+            _normalize_title(title): page_type_for_title(title)
+            for title in DEFAULT_PREPARATION_TITLES
+        }
+    )
+    signals = _footer_signals(page) + _title_signals(page, title_types) + _content_signals(page, metadata)
     titles = {signal.section for signal in signals if signal.family == TITLE}
     # LEP and table-of-contents pages list every other section title as a line.
     owner = LEP if LEP in titles else TABLE_OF_CONTENTS if TABLE_OF_CONTENTS in titles else None
@@ -254,9 +357,10 @@ def apply_preparation_page_types(
     parsed: ParsedPdf,
     metadata: Mapping[str, Any],
     overrides: Mapping[str, Mapping[str, str | None]],
+    page_titles: Mapping[str, str] | None = None,
 ) -> None:
     """Detect section types, then apply the manual page types chosen in preparation."""
-    classify_preparation_sections(parsed, metadata)
+    classify_preparation_sections(parsed, metadata, page_titles)
     for page in parsed.pages:
         manual_type = (overrides.get(str(page.page)) or {}).get("page_type")
         if manual_type is not None:
@@ -266,10 +370,12 @@ def apply_preparation_page_types(
 def classify_preparation_sections(
     parsed: ParsedPdf,
     metadata: Mapping[str, Any],
+    page_titles: Mapping[str, str] | None = None,
 ) -> dict[int, dict[str, Any]]:
-    """Set `page_type` from the 11 checks and describe how each page was resolved."""
+    """Classify configured title pages and carry their type across continuation pages."""
     signals = {
-        page.page: detect_section_signals(page, metadata) for page in parsed.pages
+        page.page: detect_section_signals(page, metadata, page_titles)
+        for page in parsed.pages
     }
     legacy = {page.page: page.page_type for page in parsed.pages}
     resolved = {
@@ -296,6 +402,38 @@ def classify_preparation_sections(
             if page_type == TP1_PAGE_TYPE and number != expected:
                 notes[number].append(f"Highlights/TP1 sequence expects TP1 on page {expected}")
                 resolved[number] = (page_type, "partial", candidates)
+
+    active_section: str | None = None
+    section_page = 0
+    for page in parsed.pages:
+        page_type, status, _candidates = resolved[page.page]
+        if status == "conflict":
+            active_section = None
+            section_page = 0
+        elif any(signal.family == TITLE for signal in signals[page.page]):
+            active_section = page_type
+            section_page = 1
+        elif page_type is None and not signals[page.page] and legacy[page.page] is None:
+            unlisted_title = _unlisted_title_candidate(page)
+            if unlisted_title is not None:
+                notes[page.page].append(f"Title not in the configured list: {unlisted_title}")
+                active_section = None
+                section_page = 0
+            elif active_section is not None:
+                section_page += 1
+                signals[page.page].append(
+                    SectionSignal(
+                        active_section,
+                        POSITION,
+                        f"continuation: {active_section} page {section_page}",
+                    )
+                )
+                resolved[page.page] = (active_section, "partial", [])
+        elif page_type == active_section and active_section is not None:
+            section_page += 1
+        else:
+            active_section = None
+            section_page = 0
 
     analysis: dict[int, dict[str, Any]] = {}
     for page in parsed.pages:

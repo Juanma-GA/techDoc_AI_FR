@@ -129,10 +129,47 @@ def test_detection_reports_manual_and_automatic_sources(client: TestClient) -> N
     assert first["document_page_source"] == "auto"
     assert second["page_type"] == page_type
     assert second["page_type_source"] == "manual"
-    assert second["detected_page_type"] is None
+    assert second["detected_page_type"] == "REPAIR"
     assert second["document_page"] == "401"
     assert second["document_page_source"] == "manual"
     assert "classification_evidence" in second
+
+
+def test_detection_uses_configured_title_and_inherits_it_on_continuation(
+    client: TestClient,
+) -> None:
+    pdf = fitz.open()
+    for index in range(2):
+        page = pdf.new_page(width=400, height=600)
+        if index == 0:
+            page.insert_text((40, 80), "CUSTOM PROCEDURE", fontsize=14)
+        for line in range(10):
+            page.insert_text(
+                (40, 130 + line * 24),
+                f"Readable native text on this page with enough detail for extraction {line}.",
+                fontsize=10,
+            )
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+    document_id = _upload(client, pdf_bytes)
+    title_url = "/api/v1/client-preparation-page-titles"
+    titles = client.get(title_url).json()["titles"] + ["CUSTOM PROCEDURE"]
+    configured = client.patch(title_url, json={"titles": titles})
+    assert configured.status_code == 200, configured.text
+
+    response = client.post(f"/api/v1/documents/{document_id}/preparation/detect")
+
+    assert response.status_code == 200, response.text
+    first, second = response.json()
+    assert first["page_type"] == "CUSTOM PROCEDURE"
+    assert first["page_type_source"] == "auto"
+    assert first["classification_status"] == "partial"
+    assert first["classification_signals"][0]["family"] == "title"
+    assert second["page_type"] == "CUSTOM PROCEDURE"
+    assert second["classification_status"] == "partial"
+    assert second["classification_signals"][0]["detail"] == (
+        "continuation: CUSTOM PROCEDURE page 2"
+    )
 
 
 def test_reclassification_keeps_manual_decision_only_while_type_is_unchanged(
@@ -303,7 +340,9 @@ def test_detection_reports_section_status_and_uses_the_preparation_mapping(
     assert first["page_type"] == "TESTING"
     assert first["classification_status"] == "confirmed"
     assert {item["family"] for item in first["classification_signals"]} == {"footer", "title"}
-    assert second["classification_status"] == "unclassified"
+    assert second["page_type"] == "TESTING"
+    assert second["classification_status"] == "partial"
+    assert second["classification_signals"][0]["detail"] == "continuation: TESTING page 2"
 
 
 def test_missing_required_page_types_are_requested_until_the_user_provides_them(

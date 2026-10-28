@@ -97,6 +97,10 @@ class AbsentPageTypesPatchIn(BaseModel):
     absent: bool
 
 
+class PreparationPageTitlesPatchIn(BaseModel):
+    titles: list[str] = Field(max_length=200)
+
+
 class PreparationMappingPatchIn(BaseModel):
     mapping: dict[str, Any] = Field(default_factory=dict)
 

@@ -10,12 +10,18 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.checks.thales_rules.section_detection import SECTION_PAGE_TYPES
+from app.checks.thales_rules.section_detection import (
+    DEFAULT_PREPARATION_TITLES,
+    SECTION_PAGE_TYPES,
+    page_types_for_titles,
+)
 from app.core.compiled_rules import CompiledRule
 from app.core.errors import AppError
+from app.db.models import AppConfig
 from app.db.preparation_models import DocumentPreparation, PreparationChecklist
 
 _DOCUMENT_PAGE_RE = re.compile(r"^(?=.*[A-Za-z0-9])[A-Za-z0-9][A-Za-z0-9 ./-]{0,19}$")
+_PREPARATION_TITLE_CONFIG_PREFIX = "prep_titles:"
 
 
 def collect_rule_page_types(rules: Iterable[Any]) -> set[str]:
@@ -52,7 +58,99 @@ def available_page_types(db: Session, bundle: Any) -> list[str]:
     page_types = collect_rule_page_types(preparation_rules(db, bundle))
     if bundle.client_code == "THALES":
         page_types.update(SECTION_PAGE_TYPES)
+        page_types.update(
+            page_types_for_titles(
+                load_preparation_page_titles(db, bundle.client_code)
+            ).values()
+        )
     return sorted(page_types)
+
+
+def load_preparation_page_titles(db: Session, client_code: str) -> list[str]:
+    row = db.get(AppConfig, f"{_PREPARATION_TITLE_CONFIG_PREFIX}{client_code}")
+    if row is None:
+        return list(DEFAULT_PREPARATION_TITLES)
+    try:
+        value = json.loads(row.value)
+    except (TypeError, ValueError) as exc:
+        raise AppError(
+            "PREPARATION_TITLES_INVALID",
+            "La liste des titres de préparation est illisible.",
+            status_code=500,
+        ) from exc
+    if not isinstance(value, list):
+        raise AppError(
+            "PREPARATION_TITLES_INVALID",
+            "La liste des titres de préparation est invalide.",
+            status_code=500,
+        )
+    try:
+        return _normalize_preparation_page_titles(value, status_code=500)
+    except AppError as exc:
+        raise AppError(
+            "PREPARATION_TITLES_INVALID",
+            "La liste des titres de préparation est invalide.",
+            status_code=500,
+        ) from exc
+
+
+def save_preparation_page_titles(
+    db: Session,
+    client_code: str,
+    titles: list[str],
+) -> list[str]:
+    normalized = _normalize_preparation_page_titles(titles)
+    config_key = f"{_PREPARATION_TITLE_CONFIG_PREFIX}{client_code}"
+    row = db.get(AppConfig, config_key)
+    serialized = json.dumps(normalized, ensure_ascii=False)
+    if row is None:
+        db.add(AppConfig(key=config_key, value=serialized))
+    else:
+        row.value = serialized
+    db.commit()
+    return normalized
+
+
+def _normalize_preparation_page_titles(
+    titles: list[Any],
+    *,
+    status_code: int = 422,
+) -> list[str]:
+    if len(titles) > 200:
+        raise AppError(
+            "PREPARATION_TITLES_INVALID",
+            "La liste ne peut pas contenir plus de 200 titres.",
+            status_code=status_code,
+        )
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for title in titles:
+        if not isinstance(title, str):
+            raise AppError(
+                "PREPARATION_TITLE_INVALID",
+                "Chaque titre doit être une chaîne de caractères.",
+                status_code=status_code,
+            )
+        value = " ".join(title.split())
+        if (
+            not 2 <= len(value) <= 80
+            or any(ord(character) < 32 for character in title)
+        ):
+            raise AppError(
+                "PREPARATION_TITLE_INVALID",
+                "Chaque titre doit contenir entre 2 et 80 caractères sur une seule ligne.",
+                status_code=status_code,
+            )
+        key = value.casefold()
+        if key in seen:
+            raise AppError(
+                "PREPARATION_TITLE_DUPLICATE",
+                "La liste contient un titre en double.",
+                status_code=status_code,
+            )
+        seen.add(key)
+        normalized.append(value)
+    return normalized
 
 
 def required_page_type_groups(rules: Iterable[CompiledRule]) -> list[list[str]]:

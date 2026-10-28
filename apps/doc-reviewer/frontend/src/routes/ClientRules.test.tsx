@@ -9,9 +9,11 @@ import { ClientRules } from "./ClientRules";
 
 const mockClientHooks = vi.hoisted(() => ({
   useClientConfig: vi.fn(),
+  useClientPreparationPageTitles: vi.fn(),
   useClientRules: vi.fn(),
   usePatchClientRule: vi.fn(),
   usePatchClientRuleBundle: vi.fn(),
+  useSaveClientPreparationPageTitles: vi.fn(),
 }));
 
 vi.mock("../hooks/useClientConfig", () => mockClientHooks);
@@ -64,6 +66,17 @@ describe("ClientRuleBundles", () => {
   let root: Root;
 
   beforeEach(() => {
+    mockClientHooks.useClientPreparationPageTitles.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: { titles: ["INTRODUCTION"] },
+      refetch: vi.fn(),
+    });
+    mockClientHooks.useSaveClientPreparationPageTitles.mockReturnValue({
+      isError: false,
+      isPending: false,
+      mutate: vi.fn(),
+    });
     Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
       value: true,
       configurable: true,
@@ -186,7 +199,7 @@ describe("ClientRuleBundles", () => {
       isLoading: false,
       isError: false,
       data: {
-        client_code: "thales",
+        client_code: "THALES",
         label: "THALES",
         bundle: "thales_rules",
         bundle_version: "1",
@@ -233,6 +246,86 @@ describe("ClientRuleBundles", () => {
 
     expect(container.textContent).toContain("PREPARATION_RULE");
     expect(container.textContent).not.toContain("THALES_RULE");
+  });
+
+  it("adds a configured preparation title from the dedicated tab", async () => {
+    const saveTitles = vi.fn();
+    mockClientHooks.useClientConfig.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        client_code: "THALES",
+        label: "THALES",
+        bundle: "thales_rules",
+        bundle_version: "1",
+        contract_version: "1",
+        manifest_hash: "manifest-hash",
+        mapping_hash: "mapping-hash",
+        bundle_hash: "bundle-hash",
+        catalogs: [],
+        mapping: { fields: {}, entities: {}, tokens: {} },
+        ui_options: {},
+      },
+      refetch: vi.fn(),
+    });
+    mockClientHooks.useClientRules.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: [],
+      refetch: vi.fn(),
+    });
+    mockClientHooks.usePatchClientRule.mockReturnValue({
+      isError: false,
+      isPending: false,
+      mutate: vi.fn(),
+    });
+    mockClientHooks.usePatchClientRuleBundle.mockReturnValue({
+      isError: false,
+      isPending: false,
+      mutate: vi.fn(),
+    });
+    mockClientHooks.useSaveClientPreparationPageTitles.mockReturnValue({
+      isError: false,
+      isPending: false,
+      mutate: saveTitles,
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <ClientRules />
+        </MemoryRouter>,
+      );
+    });
+
+    const titlesTab = [...container.querySelectorAll<HTMLButtonElement>('[role="group"] button')]
+      .find((button) => button.textContent?.includes("rules.client.pageTitles.tab"));
+    expect(titlesTab).toBeDefined();
+    await act(async () => titlesTab?.click());
+    expect(container.textContent).toContain("INTRODUCTION");
+
+    const input = container.querySelector<HTMLInputElement>(
+      'input[aria-label="rules.client.pageTitles.inputLabel"]',
+    );
+    expect(input).not.toBeNull();
+    await act(async () => {
+      if (!input) throw new Error("Expected title input");
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setValue?.call(input, "CUSTOM PROCEDURE");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const form = input?.closest("form");
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(saveTitles.mock.calls[0]?.[0]).toEqual(["INTRODUCTION", "CUSTOM PROCEDURE"]);
+    expect(saveTitles.mock.calls[0]?.[1]).toEqual({
+      onSuccess: expect.any(Function),
+    });
   });
 
   it("renders the demo bundle label without exposing the normal client name", async () => {

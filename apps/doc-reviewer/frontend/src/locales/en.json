@@ -446,7 +446,7 @@
       "mode": "Execution mode",
       "description": "Description",
       "openRule": "Open rule #{{number}} in Rules",
-      "search": "Search rules",
+      "search": "Search rules or titles",
       "manifestHash": "Manifest",
       "mappingHash": "Mapping",
       "ruleCount": "rules",
@@ -454,6 +454,22 @@
       "scope": {
         "verification": "Control",
         "preparation": "Preparation"
+      },
+      "pageTitles": {
+        "tab": "Page titles",
+        "title": "Titles recognized during preparation",
+        "description": "Title-based detection uses this list. Without a new title, a page continues the previous section; an unlisted title stays unclassified. Rerun detection to apply changes to documents already prepared.",
+        "count": "titles",
+        "inputLabel": "New page title",
+        "add": "Add",
+        "remove": "Remove",
+        "removeTitle": "Remove this title?",
+        "confirmRemove": "Remove title",
+        "duplicate": "This title is already in the list.",
+        "saving": "Saving the title list…",
+        "empty": "No titles configured. Add the titles that detection should recognize.",
+        "loadFailed": "Could not load the title list.",
+        "saveFailed": "Could not save the title list. Try again."
       },
       "scopeEmpty": "No rules are available in this category.",
       "searchEmpty": "No rules match your search.",

@@ -15,6 +15,9 @@ validation remain environment-dependent.
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
 - Prepare PDFs using the native text layer where it is legible and Mistral OCR
   only for pages that need it; preparation rule results are shown per page.
+- Configure recognized THALES preparation titles in Rules > Page titles.
+  Pages without a new title continue the previous section; unlisted titles stay
+  unclassified. Rerun detection to apply catalog changes to prepared documents.
 - Use Airbus and English as initial mapping defaults for new imports; saved
   mapping values continue to be reused.
 - Offer a no-OCR mapping suggestion from the first four pages of a PDF CMM.

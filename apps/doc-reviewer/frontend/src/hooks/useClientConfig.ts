@@ -56,10 +56,34 @@ export type ClientRule = {
   translations: Record<string, Record<string, string>>;
 };
 
+export type ClientPreparationPageTitles = {
+  titles: string[];
+};
+
 export function useClientConfig() {
   return useQuery({
     queryKey: ["client-config"],
     queryFn: () => api.get<ClientConfig>("/client-config"),
+  });
+}
+
+export function useClientPreparationPageTitles(enabled: boolean) {
+  return useQuery({
+    queryKey: ["client-preparation-page-titles"],
+    queryFn: () => api.get<ClientPreparationPageTitles>("/client-preparation-page-titles"),
+    enabled,
+  });
+}
+
+export function useSaveClientPreparationPageTitles() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (titles: string[]) =>
+      api.patch<ClientPreparationPageTitles>("/client-preparation-page-titles", { titles }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["client-preparation-page-titles"] });
+      void queryClient.invalidateQueries({ queryKey: ["preparation"] });
+    },
   });
 }
 
