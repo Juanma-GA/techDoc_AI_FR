@@ -141,7 +141,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                   {passages.filter((p) => p.decision === category).length}</span>
               ))}
             </div>
-            <div className="grid gap-4 lg:grid-cols-2 min-w-0">
+            <div className="grid gap-4 min-w-0 lg:grid-cols-2 lg:items-stretch">
               <ProcedureReader key={`${active}:${current.fingerprint}:${readerEpoch}`} docId={docId} dmId={active} review={current}
                 sourceFormat={review.state.source_format} selectedId={selectedId} jump={jump}
                 onPosition={(value) => review.position(active, value)} />
@@ -154,7 +154,7 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
                     }))} onChange={(event) => setFilter(event.target.value)} />
                 </label>
                 <p>{t("preliminary.remaining", { count: undecided, total: passages.length })}</p>
-                <div className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
+                <div data-testid="passage-list" className="h-96 lg:h-[70vh] overflow-y-auto space-y-3 pr-2">
                   {passages.filter(matchesFilter)
                     .map((passage) => (
                       <PreliminaryPassage key={passage.id} dmId={active} passage={passage}

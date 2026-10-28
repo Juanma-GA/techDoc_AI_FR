@@ -171,6 +171,14 @@ test("PDF pages load progressively with source highlighting in dark and light la
   await expect(reader.locator("[data-passage]")).toHaveCount(0);
   await expect(reader.getByText(/Synthetic source passage/)).toHaveCount(0);
   await expect(page.getByRole("img", { name: "Page PDF source 1" })).toBeVisible();
+  const passageList = page.getByTestId("passage-list");
+  const [readerBox, listBox] = await Promise.all([
+    reader.boundingBox(), passageList.boundingBox(),
+  ]);
+  if (!readerBox || !listBox) throw new Error("Review scroll boxes are not visible.");
+  expect(Math.abs(
+    readerBox.y + readerBox.height - listBox.y - listBox.height,
+  )).toBeLessThan(2);
   await page.locator("article").first().getByRole("button", { name: /Voir la source/ }).click();
   await expect(page.locator("[data-source-anchor]").first()).toBeVisible();
   await page.locator("article").nth(12).getByRole("button", { name: /Voir la source/ }).click();
@@ -184,6 +192,11 @@ test("PDF pages load progressively with source highlighting in dark and light la
   await page.evaluate(() => document.documentElement.classList.remove("dark"));
   await page.setViewportSize({ width: 768, height: 900 });
   await expect(page.getByTestId("procedure-reader")).toBeVisible();
+  const [tabletReaderBox, tabletListBox] = await Promise.all([
+    reader.boundingBox(), passageList.boundingBox(),
+  ]);
+  if (!tabletReaderBox || !tabletListBox) throw new Error("Tablet review scroll boxes are not visible.");
+  expect(Math.abs(tabletReaderBox.height - tabletListBox.height)).toBeLessThan(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/preliminary-light-tablet.png", fullPage: true });
 });
@@ -201,7 +214,7 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   const complete = page.getByRole("button", { name: "Marquer cette procédure comme vérifiée" });
   await expect(complete).toBeDisabled();
   const collapseButton = cards.nth(0).getByRole("button", { name: "Replier le passage" });
-  await expect(collapseButton).toHaveText("");
+  await expect(collapseButton).toHaveText("Page source 1");
   await expect(collapseButton.locator("svg")).toBeVisible();
   const filter = page.getByLabel("Afficher les passages");
   await filter.selectOption("safety");
@@ -211,16 +224,23 @@ test("clear proposals await confirmation while ambiguity requires a decision", a
   await cards.nth(0).getByRole("button", { name: "Accepter la proposition" }).click();
   await expect(cards.nth(0).getByLabel("Décision de classement")).toHaveValue("safety");
   const expandButton = cards.nth(0).getByRole("button", { name: "Développer le passage" });
-  await expect(expandButton).toHaveText("");
+  await expect(expandButton).toHaveText("Page source 1");
   await expect(expandButton.locator("svg")).toBeVisible();
   await expect(expandButton)
     .toHaveAttribute("aria-expanded", "false");
   await expect(cards.nth(0).getByLabel("Décision de classement")).toBeHidden();
+  await expect(cards.nth(0).getByText("Proposition : Sécurité")).toBeHidden();
   await expect(complete).toBeDisabled();
-  await expandButton.click();
+  await expandButton.click({ position: { x: 30, y: 16 } });
   await expect(cards.nth(0).getByLabel("Décision de classement")).toBeVisible();
-  await expect(cards.nth(0).getByRole("button", { name: "Replier le passage" }).locator("svg"))
-    .toBeVisible();
+  await expect.poll(() => server.read().reviews.proc!.position.selected_id).toBe("p0");
+  const sourcePassage = cards.nth(0).getByRole("button", { name: "Voir la source — page 1" });
+  await expect(sourcePassage).toBeVisible();
+  await expect(cards.nth(0).getByText("Voir la source — page 1", { exact: true })).toHaveCount(0);
+  await sourcePassage.click();
+  await expect(cards.nth(0).getByRole("button", { name: "Développer le passage" }))
+    .toHaveAttribute("aria-expanded", "false");
+  await expect.poll(() => server.read().reviews.proc!.position.selected_id).toBe("p0");
   expect(server.read().reviews.proc!.passages[1]!.decision).toBeNull();
   await page.getByRole("button", { name: "EN", exact: true }).click();
   await expect(cards.nth(1).locator("select option:checked")).toHaveText("Keep in procedure");

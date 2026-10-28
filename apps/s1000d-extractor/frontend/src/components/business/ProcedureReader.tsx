@@ -182,7 +182,9 @@ export function ProcedureReader({ docId, dmId, review, sourceFormat, selectedId,
       {sourcePageUnavailable ? <p role="status" className="text-warning">{t("preliminary.sourcePageUnavailable")}</p> : null}
       <div ref={container} data-testid="procedure-reader" tabIndex={0} role="region"
         aria-label={t("preliminary.reader")} onScroll={capture}
-        className="h-96 lg:h-[70vh] overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 p-3 space-y-4">
+        className={`h-96 overflow-y-auto overscroll-contain rounded-sm border bg-bg-2 p-3 space-y-4 ${
+          pdf ? "lg:h-[calc(70vh_+_4rem)]" : "lg:h-[70vh]"
+        }`}>
         {ready ? pageNumbers.map((pageNumber) => {
           const items = grouped.get(pageNumber) ?? [];
           const page = manifest.data?.find((p) => p.page === pageNumber);

@@ -33,6 +33,9 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
   const [splitAfter, setSplitAfter] = useState(Math.max(1, Math.floor(words.length / 2)));
   const [expanded, setExpanded] = useState(!passage.decision);
   const base = { dm_id: dmId, passage_id: passage.id };
+  const pageLabel = passage.page === null
+    ? t("preliminary.unlocated")
+    : t("preliminary.page", { page: passage.page });
   const decide = (destination: ReviewAction["destination"]) =>
     onAction({ ...base, op: "decide", destination });
   const pendingLabel = passage.suggested === "review"
@@ -48,35 +51,35 @@ export function PreliminaryPassage({ dmId, passage, text, disabled, editDisabled
       setExpanded(false);
     }
   };
+  const toggleAndSelect = () => {
+    setExpanded((open) => !open);
+    onSelect();
+  };
   return (
     <article className={`rounded-sm border p-3 space-y-3 ${selected ? "border-bright bg-bg-3" : "bg-card"}`}>
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={onSelect} aria-pressed={selected}>
-          {t("preliminary.sourceAt", { page: passage.page ?? t("preliminary.unlocated") })}
-        </Button>
-        {!expanded ? (
-          <p className="min-w-0 flex-1 truncate text-sm text-fg-dim" title={passage.text}>
-            {passage.decision
-              ? t("preliminary.decisionSummary", { category: t(`preliminary.category.${passage.decision}`) })
-              : t("preliminary.proposed", { category: t(`preliminary.category.${passage.suggested}`) })}
-            {" — "}{passage.text}
-          </p>
-        ) : null}
+      <div>
         <Button variant="ghost" size="sm" aria-expanded={expanded}
+          className="w-full justify-between text-left"
           aria-controls={`preliminary-passage-${passage.id}`}
-          aria-label={t(expanded ? "preliminary.collapsePassage" : "preliminary.expandPassage")}
-          onClick={() => setExpanded((open) => !open)}>
+          aria-label={`${pageLabel}, ${t(expanded ? "preliminary.collapsePassage" : "preliminary.expandPassage")}`}
+          onClick={toggleAndSelect}>
+          <span>{pageLabel}</span>
           {expanded
             ? <ChevronUp className="h-4 w-4" aria-hidden="true" />
             : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
         </Button>
       </div>
       <div id={`preliminary-passage-${passage.id}`} hidden={!expanded} className="space-y-3">
-        <p className="whitespace-pre-wrap">{passage.text}</p>
-        <p className="text-sm text-fg-dim">
-          {t("preliminary.proposed", { category: t(`preliminary.category.${passage.suggested}`) })}
-          {" - "}{t(`preliminary.rule.${passage.rule}`)}
-        </p>
+        <Button variant="ghost" size="md"
+          className="h-auto w-full flex-col items-start justify-start whitespace-normal px-0 py-1 text-left font-normal"
+          onClick={toggleAndSelect} aria-pressed={selected}
+          aria-label={t("preliminary.sourceAt", { page: passage.page ?? t("preliminary.unlocated") })}>
+          <span className="block w-full whitespace-pre-wrap break-words">{passage.text}</span>
+          <span className="block w-full text-sm text-fg-dim">
+            {t("preliminary.proposed", { category: t(`preliminary.category.${passage.suggested}`) })}
+            {" - "}{t(`preliminary.rule.${passage.rule}`)}
+          </span>
+        </Button>
         <label className="block space-y-1">
           <span>{t("preliminary.destination")}</span>
           <Select
