@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path
+from app.core.preparation_classification import load_page_classification, reset_page_decisions
 from app.core.preparation_readability import (
     READABILITY_VERSION,
     analyze_pdf_pages,
@@ -46,6 +48,9 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
                 ) from exc
             record.page_metadata_json = json.dumps(page_metadata)
             record.page_decisions_json = "[]"
+            if len(page_metadata) != record.page_count:
+                record.page_classification_json = "{}"
+                record.absent_page_types_json = "[]"
         provider_changed = record.selected_provider != "mistral"
         if provider_changed:
             record.ocr_results_json = "{}"
@@ -90,6 +95,8 @@ def get_or_create_record(db: Session, document: Document) -> DocumentPreparation
         record.validated_pages_json = "{}"
         record.selected_provider = None
         record.page_decisions_json = "[]"
+        record.page_classification_json = "{}"
+        record.absent_page_types_json = "[]"
         record.updated_at = datetime.now(UTC)
     db.commit()
     db.refresh(record)
@@ -102,21 +109,26 @@ def state_payload(
     client_code: str,
     *,
     preparation_rule_count: int = 0,
+    page_type_options: Iterable[str] = (),
+    page_title_options: Iterable[dict[str, str]] = (),
 ) -> dict[str, Any]:
     record = get_record(db, document.id)
     checklist = db.get(PreparationChecklist, client_code)
     if record is None:
         pages = []
         filename = source_sha256 = provider = None
+        preparation_mapping = {}
         page_count = 0
         validated: list[int] = []
         available_results: list[dict[str, Any]] = []
         decisions: list[dict[str, Any]] = []
+        page_classification: dict[str, Any] = {}
     else:
         pages = _load_json(record.page_metadata_json, "page_metadata_json")
         filename = record.source_filename
         source_sha256 = record.source_sha256
         provider = record.selected_provider
+        preparation_mapping = load_preparation_mapping(record)
         page_count = record.page_count
         validated_by_provider = _load_validation_map(record)
         validated = validated_by_provider.get(provider, []) if provider else []
@@ -127,6 +139,7 @@ def state_payload(
             for page_number in provider_results
         ]
         decisions = _load_json(record.page_decisions_json, "page_decisions_json")
+        page_classification = load_page_classification(record)
     rules = _load_json(checklist.rules_json, "rules_json") if checklist else []
     return {
         "document_id": str(document.id),
@@ -142,7 +155,33 @@ def state_payload(
         "preparation_rule_count": preparation_rule_count,
         "checklist_source_filename": checklist.source_filename if checklist else None,
         "page_decisions": decisions,
+        "preparation_mapping": preparation_mapping,
+        "page_classification": page_classification,
+        "page_type_options": sorted(page_type_options),
+        "page_title_options": list(page_title_options),
     }
+
+
+def load_preparation_mapping(record: DocumentPreparation) -> dict[str, Any]:
+    mapping = _load_json(record.preparation_mapping_json, "preparation_mapping_json")
+    if not isinstance(mapping, dict):
+        raise AppError(
+            "PREPARATION_MAPPING_INVALID",
+            "Le mapping de préparation enregistré est invalide.",
+            status_code=500,
+        )
+    return mapping
+
+
+def update_preparation_mapping(
+    db: Session,
+    record: DocumentPreparation,
+    mapping: dict[str, Any],
+) -> None:
+    record.preparation_mapping_json = json.dumps(mapping, ensure_ascii=False)
+    reset_page_decisions(record)
+    record.updated_at = datetime.now(UTC)
+    db.commit()
 
 
 def update_readability(
@@ -155,6 +194,7 @@ def update_readability(
     page = _find_page(pages, page_number)
     page["needs_ocr"] = needs_ocr
     record.page_metadata_json = json.dumps(pages)
+    reset_page_decisions(record)
     record.updated_at = datetime.now(UTC)
     db.commit()
 
@@ -243,6 +283,34 @@ def get_page_ocr_result(
 ) -> dict[str, Any] | None:
     results = _load_json(record.ocr_results_json, "ocr_results_json")
     return results.get(provider, {}).get(str(page_number))
+
+
+def get_validated_ocr_page_text(
+    record: DocumentPreparation,
+    provider: str,
+    page_number: int,
+) -> str | None:
+    validated_pages = _load_validation_map(record).get(provider, [])
+    if not isinstance(validated_pages, list) or any(
+        type(page) is not int or page < 1 for page in validated_pages
+    ):
+        raise AppError(
+            "PREPARATION_STATE_INVALID",
+            "L'état de préparation (pages OCR validées) est illisible.",
+            status_code=500,
+        )
+    if page_number not in validated_pages:
+        return None
+    results = _load_json(record.ocr_results_json, "ocr_results_json")
+    provider_results = results.get(provider) if isinstance(results, dict) else None
+    result = provider_results.get(str(page_number)) if isinstance(provider_results, dict) else None
+    if not isinstance(result, dict) or not isinstance(result.get("text"), str):
+        raise AppError(
+            "PREPARATION_STATE_INVALID",
+            "Le texte OCR validé d'une page est indisponible.",
+            status_code=500,
+        )
+    return result["text"]
 
 
 def _find_page(pages: list[dict[str, Any]], page_number: int) -> dict[str, Any]:

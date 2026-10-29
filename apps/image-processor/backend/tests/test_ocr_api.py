@@ -176,6 +176,106 @@ def test_ocr_route_combines_manual_and_excel_pairs(
         assert output_image.info["dpi"] == (A4_DPI, A4_DPI)
 
 
+def test_ocr_comparison_only_does_not_replace_text(
+    client: TestClient, monkeypatch, synthetic_ocr_image,
+) -> None:
+    image = BytesIO()
+    synthetic_ocr_image.save(image, format="PNG")
+    prediction = SimpleNamespace(
+        json={
+            "res": {
+                "rec_texts": ["XXXYY*"],
+                "rec_scores": [0.99],
+                "rec_polys": [[[10, 10], [110, 10], [110, 25], [10, 25]]],
+            }
+        }
+    )
+    monkeypatch.setattr(
+        "app.api.ocr.run_ocr_on_image",
+        lambda image_bytes, timings=None: prediction,
+    )
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("Comparison-only OCR must not apply replacements.")
+
+    monkeypatch.setattr("app.api.ocr.apply_replacements", fail_if_called)
+    response = client.post(
+        "/api/v1/image-processor/ocr",
+        files={"image": ("source.png", image.getvalue(), "image/png")},
+        data={
+            "replacement_pairs": (
+                '[{"reference":"XXXY","replacement":"XXXZ"},'
+                '{"reference":"MISSING","replacement":""}]'
+            ),
+            "comparison_only": "true",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    references = response.json()["references"]
+    assert [(item["reference"], item["found"]) for item in references] == [
+        ("XXXY", False),
+        ("MISSING", False),
+    ]
+    assert references[0]["replacement"] == "XXXZ"
+    assert "replacement_count" not in references[0]
+
+
+def test_ocr_comparison_only_accepts_excel_references_without_replacements(
+    client: TestClient, monkeypatch, synthetic_ocr_image,
+) -> None:
+    image = BytesIO()
+    synthetic_ocr_image.save(image, format="PNG")
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Repères"
+    sheet.append(["Référence", "Colonne B", "Repère", "ICN", "Pièce"])
+    sheet.append([None, None, "00", "ICN-A", "Pompe A"])
+    sheet.append(["R-001", None, None, None, None])
+    workbook_output = BytesIO()
+    workbook.save(workbook_output)
+    prediction = SimpleNamespace(
+        json={
+            "res": {
+                "rec_texts": ["R-001"],
+                "rec_scores": [0.99],
+                "rec_polys": [[[10, 10], [110, 10], [110, 25], [10, 25]]],
+            }
+        }
+    )
+    monkeypatch.setattr(
+        "app.api.ocr.run_ocr_on_image",
+        lambda image_bytes, timings=None: prediction,
+    )
+
+    response = client.post(
+        "/api/v1/image-processor/ocr",
+        files={
+            "image": ("source.png", image.getvalue(), "image/png"),
+            "workbook": (
+                "mapping.xlsx",
+                workbook_output.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        },
+        data={
+            "excel_sheet": "Repères",
+            "excel_reference_column": "1",
+            "excel_replacement_column": "3",
+            "excel_icn_column": "4",
+            "excel_piece_column": "5",
+            "excel_piece_row": "2",
+            "excel_replacement_pairs": '[{"reference":"R-001","replacement":""}]',
+            "comparison_only": "true",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["references"][0]["reference"] == "R-001"
+    assert response.json()["references"][0]["found"] is True
+    assert response.json()["references"][0]["replacement"] == ""
+
+
 def test_ocr_route_uses_edited_and_removed_excel_pairs(
     client: TestClient, monkeypatch, synthetic_ocr_image,
 ) -> None:

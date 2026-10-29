@@ -309,6 +309,7 @@ class SettingsIn(BaseModel):
     voxtral_api_key: Optional[str] = None
     voxtral_base_url: Optional[str] = None
     llm_enabled: Optional[bool] = None
+    demo_enabled: Optional[bool] = None
 
 
 class SettingsOut(BaseModel):
@@ -325,6 +326,7 @@ class SettingsOut(BaseModel):
     voxtral_base_url: str = ""
     llm_enabled: bool
     llm_tested: bool = False
+    demo_enabled: bool = False
 
 
 class ApiTestResult(BaseModel):

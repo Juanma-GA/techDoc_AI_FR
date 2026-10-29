@@ -423,6 +423,7 @@ CUSTOM_TP1_REVISION_NUMBER = rule(
     ),
     kind="field_required",
     severity="error",
+    preparation=True,
     target=_TP1_REVISION_TARGET,
     checks=[
         Check(
@@ -582,6 +583,39 @@ CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION = rule(
                 "Illustrated Parts List may use the description on its section row."
             ),
             "message": "A revised Highlights row is missing its description.",
+        }
+    },
+)
+
+CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS = rule(
+    code="CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS",
+    name="Orthographe d'Environmental conditions dans les Highlights",
+    description=(
+        "Dans les descriptions des Highlights, toute formulation correspondant "
+        "a au moins 90 % a « Environmental conditions » doit respecter "
+        "l'orthographe exacte de ces deux mots."
+    ),
+    message="L'orthographe de « Environmental conditions » est incorrecte.",
+    kind="field_required",
+    severity="error",
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "highlights_environmental_conditions"},
+        )
+    ],
+    failure_message="Orthographe incorrecte d'Environmental conditions dans les Highlights.",
+    translations={
+        "en": {
+            "description": (
+                "In Highlights descriptions, any wording at least 90% similar "
+                "to 'Environmental conditions' must use the exact spelling of "
+                "both words."
+            ),
+            "message": "The spelling of 'Environmental conditions' is incorrect.",
         }
     },
 )
@@ -883,7 +917,6 @@ CUSTOM_TP2_REVISION_BAR_BODY_ONLY = rule(
     message="La barre de revision d'une page TP2/R est dans l'en-tete ou le pied de page.",
     kind="field_required",
     severity="error",
-    preparation=True,
     target=_TP2_TARGET,
     checks=[
         Check(
@@ -1024,8 +1057,8 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     code="CUSTOM_HIGHLIGHTS_PNR_HEADER",
     name="Numeros PNR presents et conformes dans l'en-tete Highlights",
     description=(
-        "L'en-tete de chaque page Highlights doit contenir tous les numeros "
-        "PNR renseignes dans le mapping du document."
+        "L'en-tete de chaque page Highlights doit contenir les numeros PNR "
+        "renseignes dans le mapping du document, ou uniquement le premier."
     ),
     message="Un ou plusieurs numeros PNR de l'en-tete Highlights sont absents ou incorrects.",
     kind="field_required",
@@ -1043,7 +1076,7 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     only_if=Condition(field="meta_pnr_number", state="present"),
     translations={
         "en": {
-            "description": "The header of every Highlights page must contain all PNR numbers in the document mapping.",
+            "description": "The header of every Highlights page must contain the PNR numbers in the document mapping, or only the first one.",
             "message": "One or more Highlights header PNR numbers are missing or incorrect.",
         }
     },
@@ -1377,7 +1410,8 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
         "Sur les pages modifiees, chaque phrase doit se terminer par un point et "
         "chaque enumeration doit suivre le signe terminal majoritaire (point, "
         "point-virgule, virgule ou absence de signe). En cas d'egalite, les "
-        "elements intermediaires prennent une virgule et le dernier un point."
+        "elements intermediaires prennent une virgule et le dernier un point. "
+        "Les legendes de figures et le contenu des tableaux sont exclus."
     ),
     message="Une ponctuation obligatoire est absente.",
     kind="field_required",
@@ -1397,7 +1431,8 @@ CUSTOM_SENTENCE_PUNCTUATION = rule(
                 "On modified pages, every sentence must end with a full stop and "
                 "every enumeration must follow its most common terminal mark "
                 "(full stop, semicolon, comma, or no mark). Ties use commas for "
-                "intermediate items and a full stop for the last."
+                "intermediate items and a full stop for the last. Figure captions "
+                "and table contents are excluded."
             ),
             "message": "A required punctuation mark is missing.",
         }
@@ -1410,7 +1445,8 @@ CUSTOM_ENUMERATION_PUNCTUATION_SWAP = rule(
     description=(
         "Sur les pages modifiees, signale a titre informatif un point a la place "
         "d'une virgule dans un element intermediaire, ou une virgule a la place "
-        "du point final d'une enumeration."
+        "du point final d'une enumeration. Les legendes de figures et le contenu "
+        "des tableaux sont exclus."
     ),
     message="Un point et une virgule semblent intervertis dans cette enumeration.",
     kind="field_required",
@@ -1429,7 +1465,8 @@ CUSTOM_ENUMERATION_PUNCTUATION_SWAP = rule(
             "description": (
                 "On modified pages, informationally flags a full stop instead of "
                 "a comma on an intermediate enumeration item, or a comma instead "
-                "of the final full stop."
+                "of the final full stop. Figure captions and table contents are "
+                "excluded."
             ),
             "message": "A full stop and comma appear to be swapped in this enumeration.",
         }
@@ -1480,7 +1517,7 @@ CUSTOM_BAR_PSI_CONVERSION = rule(
     name="Pression en bar accompagnee de sa conversion en p.s.i.",
     description=(
         "Toute pression exprimee en bar doit etre suivie entre parentheses "
-        "de sa conversion numerique en p.s.i."
+        "de sa conversion numerique en p.s.i. hors des tableaux."
     ),
     message="La pression en bar doit etre suivie de sa conversion en p.s.i.",
     kind="field_required",
@@ -1500,7 +1537,7 @@ CUSTOM_BAR_PSI_CONVERSION = rule(
         "en": {
             "description": (
                 "Every pressure expressed in bar must be followed in parentheses "
-                "by its numeric conversion in p.s.i."
+                "by its numeric conversion in p.s.i., outside tables."
             ),
             "message": "A pressure in bar must be followed by its p.s.i. conversion.",
         }
@@ -1512,7 +1549,7 @@ CUSTOM_PASCAL_INHG_CONVERSION = rule(
     name="Pression en pascals accompagnee de sa conversion en inHg",
     description=(
         "Toute pression exprimee en Pa, hPa, kPa, MPa ou GPa doit etre suivie "
-        "de sa conversion numerique en inHg entre parentheses."
+        "de sa conversion numerique en inHg entre parentheses, hors des tableaux."
     ),
     message="La pression en pascals doit etre suivie de sa conversion en inHg.",
     kind="field_required",
@@ -1530,7 +1567,8 @@ CUSTOM_PASCAL_INHG_CONVERSION = rule(
         "en": {
             "description": (
                 "Every pressure expressed in Pa, hPa, kPa, MPa, or GPa must be "
-                "followed by its numeric conversion in inHg in parentheses."
+                "followed by its numeric conversion in inHg in parentheses, "
+                "outside tables."
             ),
             "message": "A pressure in pascals must be followed by its inHg conversion.",
         }
@@ -1542,7 +1580,7 @@ CUSTOM_METRIC_LENGTH_INCH_CONVERSION = rule(
     name="Longueur metrique accompagnee de sa conversion en pouces",
     description=(
         "Toute longueur exprimee en mm, cm, m ou km doit etre suivie de sa "
-        "conversion numerique en in. entre parentheses."
+        "conversion numerique en in. entre parentheses, hors des tableaux."
     ),
     message="La longueur metrique doit etre suivie de sa conversion en in.",
     kind="field_required",
@@ -1560,7 +1598,7 @@ CUSTOM_METRIC_LENGTH_INCH_CONVERSION = rule(
         "en": {
             "description": (
                 "Every length expressed in mm, cm, m, or km must be followed by "
-                "its numeric conversion in inches in parentheses."
+                "its numeric conversion in inches in parentheses, outside tables."
             ),
             "message": "A metric length must be followed by its inch conversion.",
         }
@@ -1572,7 +1610,7 @@ CUSTOM_METRIC_MASS_LBF_CONVERSION = rule(
     name="Masse metrique accompagnee de sa conversion en lb",
     description=(
         "Toute masse exprimee en mg, g, kg ou tonne doit etre suivie entre "
-        "parentheses de sa conversion numerique en lb."
+        "parentheses de sa conversion numerique en lb, hors des tableaux."
     ),
     message="La masse metrique doit etre suivie de sa conversion en lb.",
     kind="field_required",
@@ -1590,7 +1628,7 @@ CUSTOM_METRIC_MASS_LBF_CONVERSION = rule(
         "en": {
             "description": (
                 "Every mass expressed in mg, g, kg, or tonnes must be followed by "
-                "its numeric conversion in lb in parentheses."
+                "its numeric conversion in lb in parentheses, outside tables."
             ),
             "message": "A metric mass must be followed by its conversion in lb.",
         }
@@ -1602,7 +1640,7 @@ CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION = rule(
     name="Couple metrique accompagne de sa conversion en lbf.in",
     description=(
         "Tout couple exprime en N.m, daN.m ou kN.m doit etre suivi de sa "
-        "conversion numerique en lbf.in entre parentheses."
+        "conversion numerique en lbf.in entre parentheses, hors des tableaux."
     ),
     message="Le couple metrique doit etre suivi de sa conversion en lbf.in.",
     kind="field_required",
@@ -1620,7 +1658,7 @@ CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION = rule(
         "en": {
             "description": (
                 "Every torque expressed in N.m, daN.m, or kN.m must be followed "
-                "by its numeric conversion in lbf.in in parentheses."
+                "by its numeric conversion in lbf.in in parentheses, outside tables."
             ),
             "message": "A metric torque must be followed by its lbf.in conversion.",
         }
@@ -1837,6 +1875,7 @@ CUSTOM_TP2_IMPORTANT_NOTICE = rule(
     message="L'Important Notice de la page TP2 n'est pas conforme au modele ATA100.",
     kind="field_required",
     severity="error",
+    preparation=True,
     target=_TP2_TARGET,
     checks=[
         Check(
@@ -1977,7 +2016,9 @@ CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
     name="Titre des signets PDF present sur la page cible",
     description=(
         "Le titre de chaque signet PDF doit apparaitre dans le texte de la page "
-        "vers laquelle le signet renvoie."
+        "vers laquelle le signet renvoie. Si un titre de page lui ressemble a "
+        "90 % ou plus sans etre identique, une faute probable dans le titre est "
+        "signalee avec la correction proposee."
     ),
     message="Le titre du signet PDF ne correspond pas au contenu de sa page cible.",
     kind="field_required",
@@ -1995,7 +2036,8 @@ CUSTOM_PDF_BOOKMARK_TITLE_MATCH = rule(
         "en": {
             "description": (
                 "The title of each PDF bookmark must appear in the text of its "
-                "destination page."
+                "destination page. If a page title is at least 90% similar but "
+                "not identical, a likely typo is reported with a suggested correction."
             ),
             "message": "The PDF bookmark title does not match the content of its destination page.",
         }
@@ -2087,7 +2129,7 @@ CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
     name="Temperature en deg. C accompagnee de sa conversion en deg. F",
     description=(
         "Toute temperature exprimee en deg. C doit etre suivie de sa "
-        "conversion numerique en deg. F entre parentheses."
+        "conversion numerique en deg. F entre parentheses, hors des tableaux."
     ),
     message="La temperature en deg. C doit etre suivie de sa conversion en deg. F.",
     kind="regex_flag",
@@ -2106,7 +2148,7 @@ CUSTOM_TEMPERATURE_FAHRENHEIT = rule(
         "en": {
             "description": (
                 "Every temperature expressed in deg. C must be followed by "
-                "its numeric conversion in deg. F in parentheses."
+                "its numeric conversion in deg. F in parentheses, outside tables."
             ),
             "message": "A temperature in deg. C must be followed by its conversion in deg. F.",
         }
@@ -2374,7 +2416,8 @@ CUSTOM_HIGHLIGHTS_CHAPTER = rule(
     name="Intitule de chapitre autorise dans les Highlights",
     description=(
         "Chaque chapitre ou section des Highlights doit utiliser l'un des "
-        "intitules autorises du catalogue THALES."
+        "intitules autorises du catalogue THALES. « Environmental conditions » "
+        "doit conserver cette orthographe exacte."
     ),
     message="Un chapitre des Highlights n'est pas autorise.",
     kind="field_required",
@@ -2394,7 +2437,8 @@ CUSTOM_HIGHLIGHTS_CHAPTER = rule(
         "en": {
             "description": (
                 "Every chapter or section in Highlights must use one of the "
-                "chapter titles authorized by the THALES catalog."
+                "chapter titles authorized by the THALES catalog. "
+                "'Environmental conditions' must use this exact spelling."
             ),
             "message": "A Highlights chapter title is not authorized.",
         }
@@ -2727,6 +2771,427 @@ CUSTOM_ROR_REVISION_DATE = rule(
     },
 )
 
+_ROR_TARGET = RuleTarget(page="all", region="full_page", page_type="ROR")
+_LEP_TARGET = RuleTarget(page="all", region="full_page", page_type="LEP")
+_HIGHLIGHTS_FOOTER_TARGET = RuleTarget(
+    page="all",
+    region="footer",
+    page_types=["HIGHLIGHTS", "HIGHLIGHTS_PAGE_1"],
+)
+_STANDARD_PRACTICES_ATA = "Standard Practices Manual ATA No. 20-02-00"
+_STANDARD_PRACTICE_MANUAL_ATA = "Standard Practice Manual ATA No. 20-02-00"
+
+CUSTOM_PREP_STANDARD_PRACTICE_ATA = rule(
+    code="CUSTOM_PREP_STANDARD_PRACTICE_ATA",
+    name="Preparation : numero ATA des Standard Practices",
+    description=(
+        "Des que les Standard Practices sont mentionnees, le numero ATA doit etre "
+        "'ATA No. 20-02-00'."
+    ),
+    message="Le numero ATA des Standard Practices doit etre ATA No. 20-02-00.",
+    kind="regex_flag",
+    severity="error",
+    preparation=True,
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=(
+                r"(?i)\bStandard\s+Practices?(?:\s+Manual)?\s+ATA\s+No\.?\s*"
+                r"(?!20-02-00(?!\w))\d{2}-\d{2}-\d{2}[A-Za-z]?(?!\w)"
+            ),
+            replacement=_STANDARD_PRACTICES_ATA,
+        ),
+    ],
+    failure_message="numero ATA des Standard Practices different de 20-02-00.",
+    translations={
+        "en": {
+            "description": (
+                "Whenever the Standard Practices are mentioned, the ATA number must be "
+                "'ATA No. 20-02-00'."
+            ),
+            "message": "The Standard Practices ATA number must be ATA No. 20-02-00.",
+        }
+    },
+)
+
+CUSTOM_PREP_STANDARD_PRACTICE_REPLACE = rule(
+    code="CUSTOM_PREP_STANDARD_PRACTICE_REPLACE",
+    name="Preparation : remplacer Standard Electronic Hardware Practice 39-50-00",
+    description=(
+        "'Standard Electronic Hardware Practice 39-50-00' doit etre remplace par "
+        "'Standard Practice Manual ATA No. 20-02-00'."
+    ),
+    message=(
+        "Remplacer la reference Standard Electronic Hardware Practice 39-50-00 par "
+        f"{_STANDARD_PRACTICE_MANUAL_ATA}."
+    ),
+    kind="regex_flag",
+    severity="error",
+    preparation=True,
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex",
+            expected=(
+                r"(?i)\bstandard\s+electronic\s+hardware\s+practices?"
+                r"(?:\s+(?:manual|ATA\s+No\.?))?\s*39-50-00(?!\w)"
+            ),
+            replacement=_STANDARD_PRACTICE_MANUAL_ATA,
+        ),
+    ],
+    failure_message="reference Standard Electronic Hardware Practice 39-50-00 a remplacer.",
+    translations={
+        "en": {
+            "description": (
+                "'Standard Electronic Hardware Practice 39-50-00' must be replaced with "
+                "'Standard Practice Manual ATA No. 20-02-00'."
+            ),
+            "message": (
+                "Replace the Standard Electronic Hardware Practice 39-50-00 reference "
+                f"with {_STANDARD_PRACTICE_MANUAL_ATA}."
+            ),
+        }
+    },
+)
+
+CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE = rule(
+    code="CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE",
+    name="Preparation : date de revision au-dessus du tableau Highlights",
+    description=(
+        "La date de revision au-dessus du tableau Highlights doit etre la nouvelle "
+        "date du mapping de preparation, au format MMM JJ/AA."
+    ),
+    message="La date de revision au-dessus du tableau Highlights n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?i)(?<!\w)DATED\s+{{meta_revision_date}}(?!\w)",
+            require_all=True,
+            expected_display="DATED {{meta_revision_date}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bREVISION\s+No\b",
+            missing_anchor_position="same",
+        ),
+    ],
+    failure_message="date de revision Highlights non mise a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The revision date above the Highlights table must be the new date from "
+                "the preparation mapping, in MMM DD/YY format."
+            ),
+            "message": "The revision date above the Highlights table is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE = rule(
+    code="CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE",
+    name="Preparation : date de revision du pied de page Highlights",
+    description=(
+        "La date du pied de page des pages Highlights doit etre la nouvelle date de "
+        "revision du mapping de preparation, au format MMM JJ/AA."
+    ),
+    message="La date du pied de page Highlights n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_HIGHLIGHTS_FOOTER_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?<!\w){{meta_revision_date}}(?!\w)",
+            require_all=True,
+            expected_display="{{meta_revision_date}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bHigh?lights?\s+Page\b",
+            missing_anchor_position="same",
+        ),
+    ],
+    failure_message="date du pied de page Highlights non mise a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The footer date of Highlights pages must be the new revision date from "
+                "the preparation mapping, in MMM DD/YY format."
+            ),
+            "message": "The Highlights footer date is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER = rule(
+    code="CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER",
+    name="Preparation : numero de revision au-dessus du tableau Highlights",
+    description=(
+        "Le numero de revision au-dessus du tableau Highlights doit etre le nouveau "
+        "numero du mapping de preparation (par exemple 03 devient 04)."
+    ),
+    message="Le numero de revision au-dessus du tableau Highlights n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_HIGHLIGHTS_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=r"(?i)(?<!\w)REVISION\s+No\.?\s*{{meta_revision_number}}(?!\w)",
+            require_all=True,
+            expected_display="REVISION No. {{meta_revision_number}}",
+            suggestion_mode="single",
+            missing_anchor=r"(?i)\bHighlights\b",
+            missing_anchor_position="above",
+        ),
+    ],
+    failure_message="numero de revision Highlights non mis a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The revision number above the Highlights table must be the new number "
+                "from the preparation mapping (for example 03 becomes 04)."
+            ),
+            "message": "The revision number above the Highlights table is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_ROR_NEW_ROW = rule(
+    code="CUSTOM_PREP_ROR_NEW_ROW",
+    name="Preparation : nouvelle ligne du Record of Revisions",
+    description=(
+        "Le Record of Revisions doit recevoir une nouvelle ligne de revision. Si le "
+        "jour de la date de revision est inferieur a 15, la date d'insertion reprend "
+        "le meme mois (JUL 14/26 -> JUL 26), sinon le mois suivant (JUL 15/26 -> AUG 26)."
+    ),
+    message="Une nouvelle ligne de revision doit etre ajoutee au Record of Revisions.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_ROR_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="preparation_check",
+            operation_params={"control": "ror_new_row"},
+        )
+    ],
+    failure_message="nouvelle ligne de revision absente du Record of Revisions.",
+    translations={
+        "en": {
+            "description": (
+                "The Record of Revisions must receive a new revision row. If the revision "
+                "day is below 15 the insertion date keeps the same month (JUL 14/26 -> "
+                "JUL 26), otherwise it uses the next month (JUL 15/26 -> AUG 26)."
+            ),
+            "message": "A new revision row must be added to the Record of Revisions.",
+        }
+    },
+)
+
+CUSTOM_PREP_LEP_MODIFIED_PAGES = rule(
+    code="CUSTOM_PREP_LEP_MODIFIED_PAGES",
+    name="Preparation : pages commentees dans la LEP",
+    description=(
+        "Les pages commentees (a modifier) doivent apparaitre dans la liste des pages "
+        "effectives sous la forme 'MMM JJ/AA *' avec la nouvelle date de revision."
+    ),
+    message="Une page commentee n'est pas mise a jour dans la LEP.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=_LEP_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="preparation_check",
+            operation_params={"control": "lep_modified_pages"},
+        )
+    ],
+    failure_message="page commentee non mise a jour dans la LEP.",
+    translations={
+        "en": {
+            "description": (
+                "Commented (to be modified) pages must appear in the list of effective "
+                "pages as 'MMM DD/YY *' with the new revision date."
+            ),
+            "message": "A commented page is not updated in the LEP.",
+        }
+    },
+)
+
+_TESTING_STABILIZATION_PATTERN = (
+    r"(?i)\bNOTE\s*:\s*Before\s+the\s+tests,\s+let\s+the\s+equipment\s+stay\s+in\s+"
+    r"these\s+conditions\s+for\s+two\s+hours\s+minimum\b"
+)
+_TESTING_STABILIZATION_TEXT = (
+    "NOTE: Before the tests, let the equipment stay in these conditions for "
+    "two hours minimum."
+)
+
+CUSTOM_PREP_TOC_INTRODUCTION = rule(
+    code="CUSTOM_PREP_TOC_INTRODUCTION",
+    name="Preparation : chapitre INTRODUCTION dans la table des matieres",
+    description=(
+        "La table des matieres doit contenir le chapitre INTRODUCTION. S'il est "
+        "absent, l'ajouter en premiere ligne."
+    ),
+    message="Le chapitre INTRODUCTION est absent de la table des matieres.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="TABLE_OF_CONTENTS"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="preparation_check",
+            operation_params={"control": "toc_introduction"},
+        )
+    ],
+    failure_message="chapitre INTRODUCTION absent de la table des matieres.",
+    translations={
+        "en": {
+            "description": (
+                "The table of contents must contain the INTRODUCTION chapter. If it is "
+                "missing, add it as the first line."
+            ),
+            "message": "The INTRODUCTION chapter is missing from the table of contents.",
+        }
+    },
+)
+
+CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION = rule(
+    code="CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION",
+    name="Preparation : Shop Verification de l'INTRODUCTION",
+    description=(
+        "Le bloc Shop Verification de l'INTRODUCTION doit correspondre au constructeur "
+        "du mapping de preparation : Boeing (« Testing and Fault Isolation: shop "
+        "verification done JUN 24/88. ») ou, sinon, « The shop verification will be "
+        "done at the first repair of the equipment. »"
+    ),
+    message="Le bloc Shop Verification de l'INTRODUCTION est absent ou incorrect.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="INTRODUCTION"),
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="shop_verification",
+            require_all=True,
+        ),
+    ],
+    failure_message="Shop Verification INTRODUCTION non conforme.",
+    only_if=Condition(field="meta_manufacturer", state="present"),
+    translations={
+        "en": {
+            "description": (
+                "The INTRODUCTION Shop Verification block must match the manufacturer in "
+                "the preparation mapping: Boeing (\"Testing and Fault Isolation: shop "
+                "verification done JUN 24/88.\") or otherwise \"The shop verification "
+                "will be done at the first repair of the equipment.\""
+            ),
+            "message": "The INTRODUCTION Shop Verification block is missing or incorrect.",
+        }
+    },
+)
+
+CUSTOM_PREP_TESTING_HUMIDITY_NOTE = rule(
+    code="CUSTOM_PREP_TESTING_HUMIDITY_NOTE",
+    name="Preparation : NOTE d'humidite relative des pages TESTING",
+    description=(
+        "La NOTE des pages TESTING doit etre a jour : « Relative humidity: Refer to "
+        "Standard Practices Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-800A-A - "
+        "Storage - General procedure. »"
+    ),
+    message="La NOTE d'humidite relative de la page TESTING n'est pas a jour.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="TESTING"),
+    checks=[
+        _required_note_check(
+            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
+            display=_REPAIR_RELATIVE_HUMIDITY,
+            page_type="TESTING",
+        ),
+    ],
+    failure_message="NOTE d'humidite relative TESTING non a jour.",
+    translations={
+        "en": {
+            "description": (
+                "The TESTING page NOTE must be up to date: \"Relative humidity: Refer to "
+                "Standard Practices Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-800A-A "
+                "- Storage - General procedure.\""
+            ),
+            "message": "The relative humidity NOTE on the TESTING page is not up to date.",
+        }
+    },
+)
+
+CUSTOM_PREP_TESTING_STABILIZATION_NOTE = rule(
+    code="CUSTOM_PREP_TESTING_STABILIZATION_NOTE",
+    name="Preparation : NOTE de stabilisation des pages TESTING",
+    description=(
+        "Les pages TESTING doivent porter la NOTE : « NOTE: Before the tests, let the "
+        "equipment stay in these conditions for two hours minimum. »"
+    ),
+    message="La NOTE de stabilisation de la page TESTING est absente ou incorrecte.",
+    kind="field_required",
+    severity="error",
+    preparation=True,
+    target=RuleTarget(page="all", region="full_page", page_type="TESTING"),
+    checks=[
+        Check(
+            field="text",
+            operator="regex_exists",
+            expected=_TESTING_STABILIZATION_PATTERN,
+            require_all=True,
+            expected_display=_TESTING_STABILIZATION_TEXT,
+            suggestion_mode="fuzzy",
+            missing_anchor=_NOTE_PRESSURE_PATTERN,
+            missing_anchor_position="below",
+        ),
+    ],
+    failure_message="NOTE de stabilisation TESTING absente ou incorrecte.",
+    translations={
+        "en": {
+            "description": (
+                "TESTING pages must carry the NOTE: \"NOTE: Before the tests, let the "
+                "equipment stay in these conditions for two hours minimum.\""
+            ),
+            "message": "The TESTING stabilization NOTE is missing or incorrect.",
+        }
+    },
+)
+
+PREPARATION_RULE_DEFINITIONS = (
+    CUSTOM_PREP_STANDARD_PRACTICE_ATA,
+    CUSTOM_PREP_STANDARD_PRACTICE_REPLACE,
+    CUSTOM_PREP_HIGHLIGHTS_REVISION_DATE,
+    CUSTOM_PREP_HIGHLIGHTS_FOOTER_DATE,
+    CUSTOM_PREP_HIGHLIGHTS_REVISION_NUMBER,
+    CUSTOM_PREP_ROR_NEW_ROW,
+    CUSTOM_PREP_LEP_MODIFIED_PAGES,
+    CUSTOM_PREP_TOC_INTRODUCTION,
+    CUSTOM_PREP_INTRODUCTION_SHOP_VERIFICATION,
+    CUSTOM_PREP_TESTING_HUMIDITY_NOTE,
+    CUSTOM_PREP_TESTING_STABILIZATION_NOTE,
+)
+
 REVISION_RULE_DEFINITIONS = (
     CUSTOM_REVISION_LEP_STAR,
     CUSTOM_REVISION_UNDECLARED_STAR,
@@ -2748,6 +3213,7 @@ REVISION_RULE_DEFINITIONS = (
 
 RULE_DEFINITIONS = (
     *REVISION_RULE_DEFINITIONS,
+    *PREPARATION_RULE_DEFINITIONS,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_MAPPING_SUSPECT,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
@@ -2763,6 +3229,7 @@ RULE_DEFINITIONS = (
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
     CUSTOM_HIGHLIGHTS_DELETION_DESCRIPTION,
     CUSTOM_HIGHLIGHTS_REVISED_DESCRIPTION,
+    CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS,
     CUSTOM_CHAPTER_NUMBER_SEQUENCE,
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,

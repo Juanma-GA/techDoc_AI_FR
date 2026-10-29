@@ -42,6 +42,11 @@ Ask for missing values and reject ambiguous or unsafe slugs.
 
 For desktop scaffolding, copy only the canonical optional assets under
 `apps/_template/desktop`, never an existing application's Tauri sources.
+The scaffold also supplies `package-desktop.bat`. On Windows, use it for the
+Tauri build; `package.bat` without arguments creates the web package. The desktop
+wrapper delegates to `_package.bat desktop` and requires an app generated with
+`--desktop`. Keep this distinction in the generated app README and verify that
+`frontend/desktop.json` exists for desktop builds.
 Validate identity, backend preparation, resource paths, health readiness and
 child-process shutdown. Follow `docs/standards/desktop-and-stacks.md`.
 

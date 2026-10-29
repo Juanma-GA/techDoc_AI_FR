@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useDemoMode } from "@internal/ui";
 
 import {
   ApiClientError,
@@ -8,6 +9,7 @@ import {
   type DocumentDto,
   type DocumentKind,
 } from "../lib/api";
+import { createMaintenanceDemoStyles } from "../lib/maintenanceDemo";
 import { PreviewDropzone } from "./PreviewDropzone";
 
 function formatSize(n: number): string {
@@ -33,12 +35,15 @@ type Props = {
 // Gestion (upload + liste + suppression) d'un kind non-source, skin preview.
 export function DocsManagerCard({ kind, title, hint, accept }: Props) {
   const { t } = useTranslation();
+  const { mode } = useDemoMode();
+  const demoMode = mode === "demo";
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
   const docsQuery = useQuery<DocumentDto[], ApiClientError>({
     queryKey: ["documents", kind],
     queryFn: () => documentsApi.list(kind),
+    enabled: !demoMode,
   });
 
   const invalidate = () => {
@@ -59,7 +64,14 @@ export function DocsManagerCard({ kind, title, hint, accept }: Props) {
     onSuccess: invalidate,
   });
 
-  const docs = docsQuery.data ?? [];
+  const demoStyles =
+    demoMode && kind === "style"
+      ? createMaintenanceDemoStyles(
+          t("demo.styles.documentName"),
+          t("demo.styles.documentContent"),
+        )
+      : [];
+  const docs = demoMode ? demoStyles : docsQuery.data ?? [];
 
   return (
     <div className="card">
@@ -68,17 +80,23 @@ export function DocsManagerCard({ kind, title, hint, accept }: Props) {
         {hint}
       </p>
 
-      <PreviewDropzone
-        accept={accept}
-        multiple
-        disabled={uploadMutation.isPending}
-        title={t("settings.docsUploadLabel")}
-        hint={accept}
-        onFiles={(files) => uploadMutation.mutate(files)}
-      />
-      {uploadMutation.isPending ? (
-        <div className="success">{t("documents.uploading")}</div>
-      ) : null}
+      {demoMode ? (
+        <div className="banner">{t("demo.readOnlyExamples")}</div>
+      ) : (
+        <>
+          <PreviewDropzone
+            accept={accept}
+            multiple
+            disabled={uploadMutation.isPending}
+            title={t("settings.docsUploadLabel")}
+            hint={accept}
+            onFiles={(files) => uploadMutation.mutate(files)}
+          />
+          {uploadMutation.isPending ? (
+            <div className="success">{t("documents.uploading")}</div>
+          ) : null}
+        </>
+      )}
       {error ? <div className="error">{error}</div> : null}
 
       {docs.length === 0 ? (
@@ -90,7 +108,9 @@ export function DocsManagerCard({ kind, title, hint, accept }: Props) {
               <th>{t("documents.columnFilename")}</th>
               <th>{t("documents.columnSize")}</th>
               <th>{t("documents.columnDate")}</th>
-              <th style={{ textAlign: "right" }}>{t("documents.columnActions")}</th>
+              {!demoMode ? (
+                <th style={{ textAlign: "right" }}>{t("documents.columnActions")}</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -99,16 +119,18 @@ export function DocsManagerCard({ kind, title, hint, accept }: Props) {
                 <td className="file-name">{doc.filename}</td>
                 <td className="file-meta">{formatSize(doc.size)}</td>
                 <td className="file-meta">{formatDate(doc.uploaded_at)}</td>
-                <td style={{ textAlign: "right" }}>
-                  <button
-                    type="button"
-                    className="btn ghost small"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => deleteMutation.mutate(doc.id)}
-                  >
-                    {t("documents.delete")}
-                  </button>
-                </td>
+                {!demoMode ? (
+                  <td style={{ textAlign: "right" }}>
+                    <button
+                      type="button"
+                      className="btn ghost small"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(doc.id)}
+                    >
+                      {t("documents.delete")}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

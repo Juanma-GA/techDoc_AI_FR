@@ -37,7 +37,14 @@ from app.core.page_range import filter_pdf_pages
 from app.core.compiled_rules import CompiledRule
 from app.core.standard_rule_compiler import compile_standard_rule
 from app.parsers.docx_parser import Block
-from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfBookmark, PdfLine, Span
+from app.parsers.pdf_parser import (
+    ParsedPage,
+    ParsedPdf,
+    PdfBookmark,
+    PdfLine,
+    PdfVectorPrimitive,
+    Span,
+)
 
 
 _TEST_CLIENT_BUNDLE = load_active_client_configuration().bundle
@@ -63,6 +70,29 @@ def _rule(code: str) -> CompiledRule:
 
 def _pdf(text: str) -> ParsedPdf:
     page = ParsedPage(page=1, text=text, spans=[])
+    return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
+
+
+def _two_row_table_pdf(rows: list[tuple[str, str]]) -> ParsedPdf:
+    lines: list[str] = []
+    spans: list[Span] = []
+    for row_index, (left, right) in enumerate(rows):
+        y = 200.0 + row_index * 20.0
+        lines.append(f"{left} {right}")
+        spans.extend(
+            [
+                Span(left, (40.0, y, 220.0, y + 12.0), 1, "Arial", 10.0),
+                Span(right, (280.0, y, 500.0, y + 12.0), 1, "Arial", 10.0),
+            ]
+        )
+    text = "\n".join(lines)
+    page = ParsedPage(
+        page=1,
+        text=text,
+        spans=spans,
+        is_modified=True,
+        page_height=792.0,
+    )
     return ParsedPdf(page_count=1, pages=[page], full_text=text, is_signed=False)
 
 
@@ -651,10 +681,27 @@ def test_sentence_punctuation_ignores_figure_titles_and_column_labels() -> None:
         "List\n"
         "- 1st column: Figure Item - Figure and Item number\n\n"
         "Figure 12: Pump assembly\n\n"
-        "Fig. 13: Pump assembly"
+        "Fig. 13: Pump assembly\n\n"
+        "Figure 301A Schematic without terminal punctuation\n\n"
+        "Figure X: Detail without terminal punctuation"
     )
 
     assert sentence_punctuation_issues(text) == []
+
+
+def test_sentence_punctuation_ignores_two_row_tables() -> None:
+    rule = _rule("CUSTOM_SENTENCE_PUNCTUATION")
+    parsed = _two_row_table_pdf(
+        [
+            ("A sentence without its final punctuation", "Column value one"),
+            ("Another sentence without its final punctuation", "Column value two"),
+        ]
+    )
+
+    results, suggestions = execute_pdf_rules(parsed, [rule])
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_user_cmm_rule_uses_the_document_context_value() -> None:
@@ -1559,7 +1606,7 @@ def test_highlights_pnr_header_matches_mapping_and_uses_one_header_comment() -> 
     assert invalid_suggestions[0].bbox == (40.0, 100.0, 180.0, 110.0)
 
 
-def test_highlights_pnr_header_requires_all_mapping_values() -> None:
+def test_highlights_pnr_header_accepts_all_values_or_only_the_first_mapping_value() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     document = SimpleNamespace(
         client_metadata={"meta_pnr_number": ["33140-02", "33140-03"]}
@@ -1587,18 +1634,40 @@ def test_highlights_pnr_header_requires_all_mapping_values() -> None:
     valid, valid_suggestions = execute_pdf_rules(
         build_page("33140 - 02 and 33140 - 03"), [rule], document=document
     )
-    incomplete, incomplete_suggestions = execute_pdf_rules(
+    first_only, first_only_suggestions = execute_pdf_rules(
         build_page("33140 - 02"), [rule], document=document
+    )
+    incomplete, incomplete_suggestions = execute_pdf_rules(
+        build_page("33140 - 03"), [rule], document=document
     )
 
     assert valid[0].status == "PASS"
     assert valid_suggestions == []
+    assert first_only[0].status == "PASS"
+    assert first_only_suggestions == []
     assert incomplete[0].status == "FAIL"
     assert [
         (item.original, item.proposed) for item in incomplete_suggestions
     ] == [
-        ("33140 - 02", "33140-02 and 33140-03")
+        ("33140 - 03", "33140-02 and 33140-03")
     ]
+
+
+def test_highlights_pnr_header_accepts_unseparated_first_mapping_value() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    page = _document_type_header_page("C12438", page_type=HIGHLIGHTS_PAGE_TYPE)
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(
+            client_metadata={"meta_pnr_number": ["C12438", "C12438AB01"]}
+        ),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_highlights_pnr_header_accepts_shared_series_for_multiple_mapping_values() -> None:
@@ -2562,6 +2631,65 @@ def test_revised_highlights_require_description_with_illustrated_parts_list_exce
     assert len(illustrated_missing_suggestions) == 1
 
 
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Environmental condition and minor technical correction.",
+        "Environmentel conditions and minor technical correction.",
+    ],
+)
+def test_highlights_description_checks_environmental_conditions_spelling(
+    description: str,
+) -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_ENVIRONMENTAL_CONDITIONS")
+    valid, valid_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf(
+            [("Page 601", "R", "Environmental conditions and correction.")]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _highlights_structure_pdf([("Page 601", "N", description)]),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert len(invalid_suggestions) == 1
+    assert invalid_suggestions[0].original == description.split(" and ")[0]
+    assert invalid_suggestions[0].proposed == "Environmental conditions"
+    assert invalid_suggestions[0].bbox is not None
+
+
+def test_unit_conversion_rules_ignore_two_row_tables() -> None:
+    cases = [
+        (
+            "CUSTOM_PASCAL_INHG_CONVERSION",
+            [
+                ("101.325 kPa", "No conversion"),
+                ("202.65 kPa", "No conversion"),
+            ],
+        ),
+        (
+            "CUSTOM_TEMPERATURE_FAHRENHEIT",
+            [
+                ("Temperature: 15 deg. C", "No conversion"),
+                ("Temperature: 20 deg. C", "No conversion"),
+            ],
+        ),
+    ]
+
+    for rule_code, rows in cases:
+        results, suggestions = execute_pdf_rules(
+            _two_row_table_pdf(rows),
+            [_rule(rule_code)],
+        )
+
+        assert results[0].status == "PASS", rule_code
+        assert suggestions == [], rule_code
+
+
 def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> None:
     rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
     valid, valid_suggestions = execute_pdf_rules(
@@ -2586,6 +2714,71 @@ def test_chapter_number_sequence_continues_across_pages_and_detects_gaps() -> No
     assert len(invalid_suggestions) == 1
     assert invalid_suggestions[0].page == 2
     assert invalid_suggestions[0].proposed == "2. LEAK TESTS"
+
+
+def test_chapter_sequence_counts_unformatted_heading_on_previous_page() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    full_document = _numbered_chapter_pdf(
+        [
+            ("300", ["1. General", "A. Checks before Disassembly"]),
+            ("301", ["2. Procedure"]),
+        ]
+    )
+    full_document.pages[0].is_modified = False
+    full_document.pages[1].is_modified = True
+
+    results, suggestions = execute_pdf_rules(
+        filter_pdf_pages(full_document, [2]),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+@pytest.mark.parametrize("current_heading, expected_status", [("2. Procedure", "PASS"), ("3. Procedure", "FAIL")])
+def test_chapter_sequence_counts_previous_page_with_legacy_copyright(
+    current_heading: str, expected_status: str,
+) -> None:
+    full_document = _numbered_chapter_pdf(
+        [("301", ["1. General"]), ("302", [current_heading])]
+    )
+    previous_page = full_document.pages[0]
+    previous_page.spans[-3].text = (
+        "\u00a9THALES AVIONICS SAS. This document and any data included"
+    )
+    previous_page.is_modified = False
+    full_document.pages[1].is_modified = True
+
+    results, suggestions = execute_pdf_rules(
+        filter_pdf_pages(full_document, [2]),
+        [_rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")],
+    )
+
+    assert results[0].status == expected_status
+    assert [suggestion.proposed for suggestion in suggestions] == (
+        [] if expected_status == "PASS" else ["2. Procedure"]
+    )
+
+
+def test_chapter_sequence_recognizes_heading_without_extracted_span_space() -> None:
+    rule = _rule("CUSTOM_CHAPTER_NUMBER_SEQUENCE")
+    full_document = _numbered_chapter_pdf(
+        [
+            ("300", ["1.General"]),
+            ("301", ["2. Procedure"]),
+        ]
+    )
+    full_document.pages[0].is_modified = False
+    full_document.pages[1].is_modified = True
+
+    results, suggestions = execute_pdf_rules(
+        filter_pdf_pages(full_document, [2]),
+        [rule],
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
 
 
 def test_chapter_number_sequence_accepts_sentence_case_and_figure_titles() -> None:
@@ -2684,20 +2877,38 @@ def test_pdf_bookmark_title_must_appear_on_its_destination_page() -> None:
 
 
 @pytest.mark.parametrize(
-    ("bookmark_title", "page_title", "expected_status"),
+    ("bookmark_title", "page_title", "expected_status", "expected_proposed"),
     [
-        ("LIST OF EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
-        ("LIST EFFECTIVE PAGES", "LIST OF EFFECTIVES PAGES", "PASS"),
-        ("LIST OF EFFECTIVE PAGES", "LIST OF EFECTIVE PAGES", "PASS"),
-        ("Illustrated Parts List", "ILLUSTRATED PART LIS", "PASS"),
-        ("REPAIR PROCEDURE", "REPAIR PROCEDURES", "PASS"),
-        ("REPAIR PROCEDURE", "INTRODUCTION", "FAIL"),
-        ("REPAIR PROCEDURE 101", "REPAIR PROCEDURE 102", "FAIL"),
-        ("CHECK", "CHEEK", "FAIL"),
+        (
+            "LIST OF EFFECTIVE PAGES",
+            "LIST OF EFFECTIVES PAGES",
+            "FAIL",
+            "LIST OF EFFECTIVE PAGES",
+        ),
+        (
+            "LIST EFFECTIVE PAGES",
+            "LIST OF EFFECTIVES PAGES",
+            "FAIL",
+            "LIST EFFECTIVE PAGES",
+        ),
+        (
+            "LIST OF EFFECTIVE PAGES",
+            "LIST OF EFECTIVE PAGES",
+            "FAIL",
+            "LIST OF EFFECTIVE PAGES",
+        ),
+        ("Illustrated Parts List", "ILLUSTRATED PART LIS", "FAIL", "Illustrated Parts List"),
+        ("REPAIR PROCEDURE", "REPAIR PROCEDURES", "FAIL", "REPAIR PROCEDURE"),
+        ("REPAIR PROCEDURE", "INTRODUCTION", "FAIL", ""),
+        ("REPAIR PROCEDURE 101", "REPAIR PROCEDURE 102", "FAIL", ""),
+        ("CHECK", "CHEEK", "FAIL", ""),
     ],
 )
 def test_pdf_bookmark_tolerates_small_title_typos_but_not_wrong_destinations(
-    bookmark_title: str, page_title: str, expected_status: str,
+    bookmark_title: str,
+    page_title: str,
+    expected_status: str,
+    expected_proposed: str,
 ) -> None:
     parsed = ParsedPdf(
         page_count=1,
@@ -2711,6 +2922,12 @@ def test_pdf_bookmark_tolerates_small_title_typos_but_not_wrong_destinations(
 
     assert results[0].status == expected_status
     assert bool(suggestions) is (expected_status == "FAIL")
+    if expected_proposed:
+        assert suggestions[0].original == page_title
+        assert suggestions[0].proposed == expected_proposed
+        assert "faute d'orthographe" in suggestions[0].message
+    elif suggestions:
+        assert suggestions[0].proposed == ""
 
 
 def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
@@ -2760,7 +2977,12 @@ def test_pdf_bookmark_does_not_match_a_repeated_page_header() -> None:
     results, suggestions = execute_pdf_rules(parsed, [_rule("CUSTOM_PDF_BOOKMARK_TITLE_MATCH")])
 
     assert results[0].status == "FAIL"
-    assert [(item.original, item.page) for item in suggestions] == [(header, 1)]
+    assert [(item.original, item.page) for item in suggestions] == [
+        (header, 1),
+        ("LIST OF EFFECTIVE PAGES", 1),
+    ]
+    assert suggestions[1].proposed == "LIST OF EFFECTIVE PAGE"
+    assert "faute d'orthographe" in suggestions[1].message
 
 
 def test_pdf_bookmark_typo_does_not_match_running_header() -> None:
@@ -3668,6 +3890,44 @@ def test_metric_length_conversion_skips_table_but_checks_body_text() -> None:
     assert [suggestion.original for suggestion in temperature_suggestions] == [
         "Temperature: 15 deg. C"
     ]
+
+
+@pytest.mark.parametrize(
+    ("rule_code", "measurement"),
+    [
+        ("CUSTOM_METRIC_LENGTH_INCH_CONVERSION", "25.4 mm"),
+        ("CUSTOM_METRIC_MASS_LBF_CONVERSION", "1 kg"),
+        ("CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION", "1 N.m"),
+    ],
+)
+def test_metric_conversions_skip_vector_bordered_table_cells(
+    rule_code: str,
+    measurement: str,
+) -> None:
+    page = ParsedPage(
+        page=1,
+        text=f"Capacity {measurement}",
+        spans=[
+            Span(
+                text=f"Capacity {measurement}",
+                bbox=(297.2, 111.0, 381.2, 125.0),
+                page=1,
+                font="Arial",
+                size=10.0,
+            )
+        ],
+        page_height=792.0,
+        vector_primitives=[
+            PdfVectorPrimitive("rect", (50.0, y, 528.0, y + 0.5), None, None, 0.0)
+            for y in (90.0, 110.0, 130.0, 150.0)
+        ],
+    )
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(parsed, [_rule(rule_code)])
+
+    assert results[0].status == "PASS", rule_code
+    assert suggestions == [], rule_code
 
 
 def test_forbidden_consumables_are_reported_by_one_rule() -> None:

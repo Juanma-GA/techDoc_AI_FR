@@ -54,8 +54,11 @@ class ExcelWorkspaceState(ExcelPresetState):
 class OcrLine(StateModel):
     text: str
     confidence: float
-    box: list[list[float]]
+    box: list[list[float]] = Field(min_length=4, max_length=4)
     matched_references: list[str]
+    original_box: list[list[float]] | None = Field(default=None, min_length=4, max_length=4)
+    box_offset_x: float = 0
+    box_offset_y: float = 0
 
 
 class OcrReferenceSnapshot(StateModel):

@@ -7,15 +7,18 @@ function selectedPairs(
   pairs: ReplacementPair[],
   t: TFunction,
   skipEmptyReferences = false,
+  comparisonOnly = false,
 ) {
   const selected = pairs.filter((pair) => pair.enabled)
     .map(({ reference, replacement }) => ({
       reference: reference.trim(), replacement: replacement.trim(),
     })).filter(({ reference, replacement }) => reference || replacement);
-  const applicable = skipEmptyReferences
+  const applicable = skipEmptyReferences || comparisonOnly
     ? selected.filter(({ reference }) => reference)
     : selected;
-  if (applicable.some(({ reference, replacement }) => !reference || !replacement)) {
+  if (applicable.some(({ reference, replacement }) =>
+    !reference || (!comparisonOnly && !replacement),
+  )) {
     throw new Error(t("image.errorPairIncomplete"));
   }
   return applicable;
@@ -46,14 +49,22 @@ export function analysisForm(
   image: File, sourceName: string, pairs: ReplacementPair[],
   excel: ReturnType<typeof useExcelMapping>, t: TFunction,
   replacementFontSize?: number | null,
+  comparisonOnly = false,
 ): FormData {
   const form = imageForm(image, sourceName, excel, t);
   if (replacementFontSize != null) {
     form.append("replacement_font_size", String(replacementFontSize));
   }
-  form.append("replacement_pairs", JSON.stringify(selectedPairs(pairs, t)));
+  form.append(
+    "replacement_pairs",
+    JSON.stringify(selectedPairs(pairs, t, false, comparisonOnly)),
+  );
+  form.append("comparison_only", String(comparisonOnly));
   if (excel.excelFile) {
-    form.append("excel_replacement_pairs", JSON.stringify(selectedPairs(excel.excelPairs, t, true)));
+    form.append(
+      "excel_replacement_pairs",
+      JSON.stringify(selectedPairs(excel.excelPairs, t, true, comparisonOnly)),
+    );
   }
   return form;
 }

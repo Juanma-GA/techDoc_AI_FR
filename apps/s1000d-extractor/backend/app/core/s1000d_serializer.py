@@ -16,19 +16,23 @@ Noms d'elements conformes aux XSD locaux Issue 4.1 / 4.2 :
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-import re
-import unicodedata
 
 from lxml import etree
 
 from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
-from app.core.ir import IRNode, InlineRun
+from app.core.ir import InlineRun, IRNode
 from app.core.pmc import parse_dmc
+from app.core.procedure_semantics import EXTRA_DESTINATIONS, heading_scope, heading_text, resource_rows
+from app.core.procedure_structure import common_information_nodes, procedure_steps
+from app.core.procedure_structure import is_numbered_procedure_group as _is_numbered_procedure_group
 from app.core.s1000d_codes import emphasis_code_for_style, get_code
+from app.core.s1000d_ids import normalize_dm_ids
 from app.core.xsd_model import ConstraintReport, load_xsd_model
 
 _BANNER = (
@@ -46,6 +50,11 @@ _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
 _GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
 _GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}
+_ICN_TITLE_TOKEN = re.compile(
+    r"(?<![A-Za-z0-9_-])ICN-[A-Za-z0-9_.-]+?(?:\.(?:jpe?g|png))?"
+    r"(?=$|[\s,;|)\]}])",
+    re.IGNORECASE,
+)
 _FIGURE_TITLE_PREFIX = re.compile(
     r"^\s*(?:figure|fig\.?|illustration)\s+\d+(?:[.\-]\d+)*"
     r"(?:\s*[:.\-\u2013\u2014]\s*|\s+)",
@@ -65,6 +74,15 @@ _SCHEMA_NAMES = {
     "procedural": "proced.xsd",
     "procedure": "proced.xsd",
     "ipd": "ipd.xsd",
+}
+_DM_TYPE_ALIASES = {
+    "descriptive": "descriptive",
+    "description": "descriptive",
+    "descript": "descriptive",
+    "procedural": "procedural",
+    "procedure": "procedural",
+    "proced": "procedural",
+    "ipd": "ipd",
 }
 _DM_CODE_DEFAULTS = {
     "assyCode": "ZZ",
@@ -101,6 +119,12 @@ _INTERNAL_REF_CODES = {
     "graphic": "irtt09",
     "section": "irtt07",
 }
+_MIXED_CONTENT_TAGS = frozenset({
+    "para",
+    "notePara",
+    "warningAndCautionPara",
+    "attentionListItemPara",
+})
 _LAYOUT_NOISE_ZONES = frozenset({"header", "footer", "cover", "toc"})
 _FIGURE_LABEL_RE = re.compile(
     r"^\s*(?:figure|fig\.?|illustration)\s*(\d+(?:[.\-]\d+)*)\b",
@@ -111,25 +135,13 @@ _TABLE_LABEL_RE = re.compile(
     re.IGNORECASE,
 )
 _SECTION_LABEL_RE = re.compile(r"^\s*(\d+(?:[.\-]\d+)*)\b")
-_PROCEDURE_REQUIREMENT_HEADINGS = {
-    "conditions": re.compile(
-        r"\b(?:preconditions?|prerequisites?|required conditions?|"
-        r"conditions? (?:prealables?|requises?|a respecter))\b"
-    ),
-    "personnel": re.compile(r"\b(?:required personnel|personnel(?: requis| necessaire)?|manpower)\b"),
-    "support": re.compile(
-        r"\b(?:support equipment|special tools?|tools?|tooling|outillage|"
-        r"outils?(?: necessaires?| requis?)?)\b"
-    ),
-    "supplies": re.compile(r"\b(?:supplies|consumables?|fournitures?|consommables?)\b"),
-    "spares": re.compile(r"\b(?:spares?|spare parts|pieces? (?:de )?rechange)\b"),
-    "safety": re.compile(r"\b(?:safety(?: requirements?)?|security requirements?|securite|precautions?)\b"),
-}
-_PRELIMINARY_CONTAINER_TITLES = {
-    "preliminary requirements",
-    "preliminary requisites",
-    "exigences preliminaires",
-}
+
+
+def _normalize_dm_type(dm_type: str) -> str:
+    normalized = _DM_TYPE_ALIASES.get((dm_type or "").lower())
+    if normalized is None:
+        raise ValueError(f"Type de DM non pris en charge par le generateur XSD : {dm_type}.")
+    return normalized
 _NO_REQUIREMENT_RE = re.compile(
     r"^(?:no\b|none\b|not required\b|not applicable\b|"
     r"aucun(?:e|s|es)?\b|pas de\b|sans\b)"
@@ -199,7 +211,9 @@ def _content_nodes(root: IRNode) -> list[IRNode]:
 
     def walk(node: IRNode) -> None:
         for child in node.children:
-            if child.zone in _LAYOUT_NOISE_ZONES:
+            if child.zone in _LAYOUT_NOISE_ZONES or (
+                child.kind == "figure" and child.is_pictogram
+            ):
                 continue
             nodes.append(child)
             walk(child)
@@ -214,70 +228,91 @@ def content_node_count(root: IRNode, kind: str) -> int:
 
 def build_reference_index(
     documents: Sequence[tuple[str, IRNode, Mapping[str, object] | None]],
-    *,
-    figure_offset: int = 0,
-    table_offset: int = 0,
-    section_offset: int = 0,
 ) -> ReferenceIndex:
-    """Indexe les cibles visibles avec les IDs emis dans les DM.
-
-    `documents` respecte l'ordre de generation : les offsets produits ici
-    doivent donc rester synchronises avec ceux passes a `serialize`.
-    """
+    """Index visible reference targets with the IDs emitted in each DM."""
     index: ReferenceIndex = {}
     for dm_id, root, metadata in documents:
-        dmc = str((metadata or {}).get("dmc") or "")
+        metadata = metadata or {}
+        dmc = str(metadata.get("dmc") or "")
+        dm_type = _normalize_dm_type(str(metadata.get("dm_type") or "descriptive"))
+        issue = str(metadata.get("issue") or "4.2")
+        content = _build_content(
+            root,
+            dm_type,
+            {"figure": 0, "table": 0, "section": 0},
+            reference_index={},
+            current_dm_id=dm_id,
+        )
+        load_xsd_model(issue, dm_type).constrain(content)
+        normalize_dm_ids(content)
+
+        targets_by_kind = {
+            "figure": list(content.iter("figure")),
+            "table": list(content.iter("table")),
+            "section": [
+                element for element in content.iter()
+                if element.tag in {"proceduralStep", "levelledPara"}
+            ],
+        }
+        used_target_ids: set[str] = set()
         nodes = _content_nodes(root)
         for position, node in enumerate(nodes):
-            if node.kind == "section":
-                section_offset += 1
-                target = ReferenceTarget(
-                    kind="section",
-                    label="",
-                    target_id=f"par-{section_offset:04d}",
-                    target_type=_INTERNAL_REF_CODES["section"],
+            kind = node.kind if node.kind in {"section", "figure", "table"} else ""
+            if not kind:
+                continue
+            labels = _labels_for_text(kind, node.text)
+            if kind == "table" and not labels:
+                nearby_labels = [
+                    (
+                        abs(candidate_position - position),
+                        _labels_for_text("table", candidate.text),
+                    )
+                    for candidate_position, candidate in enumerate(
+                        nodes[max(0, position - 3):position + 4],
+                        start=max(0, position - 3),
+                    )
+                    if candidate is not node
+                    and candidate.page == node.page
+                    and _labels_for_text("table", candidate.text)
+                ]
+                if nearby_labels:
+                    labels = min(nearby_labels, key=lambda item: item[0])[1]
+            if not labels:
+                continue
+
+            expected_title = (
+                clean_figure_title(node.text) or "A REMPLACER"
+                if kind == "figure"
+                else clean_title(node.text) or None
+            )
+            target = next(
+                (
+                    element for element in targets_by_kind[kind]
+                    if element.get("id") not in used_target_ids
+                    and element.findtext("title") == expected_title
+                ),
+                None,
+            )
+            if target is None:
+                continue
+            target_id = target.get("id")
+            if not target_id:
+                continue
+            used_target_ids.add(target_id)
+            target_type = (
+                _INTERNAL_REF_CODES["step"]
+                if target.tag == "proceduralStep"
+                else _INTERNAL_REF_CODES[kind]
+            )
+            for label in labels:
+                _add_reference_target(index, ReferenceTarget(
+                    kind=kind,
+                    label=label,
+                    target_id=target_id,
+                    target_type=target_type,
                     dm_id=dm_id,
                     dmc=dmc,
-                )
-                for label in _labels_for_text("section", node.text):
-                    _add_reference_target(index, ReferenceTarget(
-                        kind=target.kind, label=label, target_id=target.target_id,
-                        target_type=target.target_type, dm_id=target.dm_id, dmc=target.dmc,
-                    ))
-            elif node.kind == "figure":
-                figure_offset += 1
-                target_id = f"fig-{figure_offset:04d}"
-                for label in _labels_for_text("figure", node.text):
-                    _add_reference_target(index, ReferenceTarget(
-                        kind="figure", label=label, target_id=target_id,
-                        target_type=_INTERNAL_REF_CODES["figure"], dm_id=dm_id, dmc=dmc,
-                    ))
-            elif node.kind == "table":
-                table_offset += 1
-                target_id = f"tbl-{table_offset:04d}"
-                labels = _labels_for_text("table", node.text)
-                if not labels:
-                    nearby = nodes[max(0, position - 3):position + 4]
-                    nearby_labels = [
-                        (
-                            abs(candidate_position - position),
-                            _labels_for_text("table", candidate.text),
-                        )
-                        for candidate_position, candidate in enumerate(
-                            nodes[max(0, position - 3):position + 4],
-                            start=max(0, position - 3),
-                        )
-                        if candidate is not node
-                        and candidate.page == node.page
-                        and _labels_for_text("table", candidate.text)
-                    ]
-                    if nearby_labels:
-                        labels = min(nearby_labels, key=lambda item: item[0])[1]
-                for label in labels:
-                    _add_reference_target(index, ReferenceTarget(
-                        kind="table", label=label, target_id=target_id,
-                        target_type=_INTERNAL_REF_CODES["table"], dm_id=dm_id, dmc=dmc,
-                    ))
+                ))
     return index
 
 
@@ -302,6 +337,13 @@ def clean_title(value: str | None) -> str:
     title = xml_text(value).strip()
     title = _FIGURE_TITLE_PREFIX.sub("", title)
     return _NUMBERED_TITLE_PREFIX.sub("", title).strip()
+
+
+def clean_figure_title(value: str | None) -> str:
+    title = _ICN_TITLE_TOKEN.sub("", clean_title(value))
+    title = re.sub(r"\(\s*\)|\[\s*\]", "", title)
+    title = re.sub(r"\s+([,.;:!?])", r"\1", title)
+    return re.sub(r"\s+", " ", title).strip(" \t\u00a0,;:\u2013\u2014-")
 
 
 def _safe_element(name: str, fallback: str) -> str:
@@ -330,7 +372,7 @@ def _doctype(root: IRNode, dmodule: etree._Element | None = None) -> str:
     declared: set[str] = set()
     placeholder_ident = "ICN-ZZZ-00000"
     for node in root.walk():
-        if node.kind != "figure":
+        if node.kind != "figure" or node.is_pictogram:
             continue
         if not _figure_icns(node) and placeholder_ident not in declared:
             declarations.append(
@@ -848,7 +890,7 @@ def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None
     if header and rows and rows[0] == header:
         body_rows = rows[1:]          # evite de repeter l'entete dans le corps
     ncols = max([len(r) for r in rows] + ([len(header)] if header else []), default=1)
-    table = etree.SubElement(parent, "table", id=f"tbl-{table_number:04d}")
+    table = etree.SubElement(parent, "table", id=f"tab-{table_number:04d}")
     if node.text:
         etree.SubElement(table, "title").text = clean_title(node.text)
     tgroup = etree.SubElement(table, "tgroup", cols=str(ncols))
@@ -865,7 +907,7 @@ def _emit_table(parent: etree._Element, node: IRNode, table_number: int) -> None
 def _emit_figure(parent: etree._Element, node: IRNode, figure_number: int) -> None:
     fig = etree.SubElement(parent, "figure", id=f"fig-{figure_number:04d}")
     title = etree.SubElement(fig, "title")
-    title.text = clean_title(node.text) or "A REMPLACER"
+    title.text = clean_figure_title(node.text) or "A REMPLACER"
     if _figure_icns(node):
         # ICN reelle : illustration extraite et enregistree (nom de fichier).
         for icn in _figure_icns(node):
@@ -987,24 +1029,17 @@ def _normalized_requirement_heading(value: str) -> str:
 def _procedure_requirement_category(node: IRNode) -> str | None:
     if node.kind != "section":
         return None
-    heading = _normalized_requirement_heading(node.text)
-    for category, pattern in _PROCEDURE_REQUIREMENT_HEADINGS.items():
-        if pattern.search(heading):
-            return category
-    return None
+    phase, category = heading_scope(node.text)
+    return category if phase == "preliminary" else None
 
 
 def _is_preliminary_container(node: IRNode) -> bool:
-    return _normalized_requirement_heading(node.text) in _PRELIMINARY_CONTAINER_TITLES
+    phase, category = heading_scope(node.text)
+    return phase == "preliminary" and category is None
 
 
 def _requirement_texts(sections: Sequence[IRNode]) -> list[str]:
-    texts: list[str] = []
-    for section in sections:
-        for node in section.walk()[1:]:
-            if node.kind in {"paragraph", "item"} and node.text.strip():
-                texts.append(node.text.strip())
-    return texts
+    return [row.text for row in resource_rows(sections)]
 
 
 def _explicitly_no_requirement(text: str) -> bool:
@@ -1015,6 +1050,7 @@ def _is_classified_safety_section(section: IRNode) -> bool:
     content = [
         node for node in section.walk()[1:]
         if node.kind in {"paragraph", "item", "admonition", "figure", "table"}
+        and not (node.kind == "figure" and node.is_pictogram)
     ]
     if not content:
         return True
@@ -1028,6 +1064,10 @@ def _partition_preliminary_sections(
     requirements: dict[str, list[IRNode]] = {}
 
     for child in children:
+        phase, _category = heading_scope(child.text) if child.kind == "section" else ("unknown", None)
+        if phase in EXTRA_DESTINATIONS:
+            requirements.setdefault(phase, []).append(child)
+            continue
         category = _procedure_requirement_category(child)
         if category == "safety" and not _is_classified_safety_section(child):
             category = None
@@ -1068,18 +1108,17 @@ def _emit_personnel_requirements(
     parent: etree._Element,
     sections: Sequence[IRNode],
 ) -> None:
-    texts = [
-        text for text in _requirement_texts(sections)
-        if not _explicitly_no_requirement(text)
-    ]
-    if not texts:
+    people = [row for row in resource_rows(sections) if not _explicitly_no_requirement(row.text)]
+    if not people:
         return
 
     required_persons = etree.SubElement(parent, "reqPersons")
-    for text in texts:
+    for person in people:
         personnel = etree.SubElement(required_persons, "personnel")
+        if person.quantity and re.fullmatch(r"\d+", person.quantity):
+            personnel.set("numRequired", person.quantity)
         trade = etree.SubElement(personnel, "trade")
-        trade.text = xml_text(text)
+        trade.text = xml_text(person.text)
 
 
 def _emit_material_requirements(
@@ -1092,23 +1131,29 @@ def _emit_material_requirements(
     sections: Sequence[IRNode],
 ) -> None:
     container = etree.SubElement(parent, container_tag)
-    texts = _requirement_texts(sections)
-    materials = [text for text in texts if not _explicitly_no_requirement(text)]
+    materials = [row for row in resource_rows(sections) if not _explicitly_no_requirement(row.text)]
     if not materials:
         etree.SubElement(container, no_tag)
         return
 
     group = etree.SubElement(container, group_tag)
-    for text in materials:
+    for material in materials:
         item = etree.SubElement(group, item_tag)
         name = etree.SubElement(item, "name")
-        name.text = xml_text(text)
-        item.append(_comment("A REMPLACER: code fabricant, quantite et unite de mesure."))
+        name.text = xml_text(material.name)
+        if not all((material.manufacturer, material.quantity, material.unit)):
+            item.append(_comment("A REMPLACER: champs fabricant, quantite ou unite absents de la source."))
         ident_number = etree.SubElement(item, "identNumber")
         manufacturer = etree.SubElement(ident_number, "manufacturerCode")
-        manufacturer.text = "A REMPLACER"
-        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure="A REMPLACER")
-        quantity.text = "A REMPLACER"
+        manufacturer.text = xml_text(material.manufacturer or "A REMPLACER")
+        if material.part_number:
+            part = etree.SubElement(ident_number, "partAndSerialNumber")
+            etree.SubElement(part, "partNumber").text = xml_text(material.part_number)
+        quantity = etree.SubElement(item, "reqQuantity", unitOfMeasure=xml_text(material.unit or "A REMPLACER"))
+        quantity.text = xml_text(material.quantity or "A REMPLACER")
+        if material.remarks:
+            remarks = etree.SubElement(item, "remarks")
+            etree.SubElement(remarks, "simplePara").text = xml_text(material.remarks)
 
 
 def _emit_safety_requirements(
@@ -1246,7 +1291,10 @@ def _emit_children(
 def _has_figure_after_procedural_step(children: Sequence[IRNode]) -> bool:
     has_step = False
     for child in children:
-        if child.kind in {"figure", "table"} and has_step:
+        if (
+            child.kind == "table"
+            or (child.kind == "figure" and not child.is_pictogram)
+        ) and has_step:
             return True
         if child.kind == "section" and _top_element(child, "levelledPara") == "proceduralStep":
             has_step = True
@@ -1255,21 +1303,6 @@ def _has_figure_after_procedural_step(children: Sequence[IRNode]) -> bool:
         elif child.kind == "item-sequence" and _top_element(child, "randomList") == "proceduralStep":
             has_step = True
     return False
-
-
-def _is_numbered_procedure_group(node: IRNode) -> bool:
-    if node.kind != "section" or node.text or node.context != "procedural":
-        return False
-    if len(node.children) != 2:
-        return False
-    introduction, sequence = node.children
-    return (
-        introduction.kind == "paragraph"
-        and introduction.text.rstrip().endswith(":")
-        and sequence.kind == "item-sequence"
-        and sequence.form == "ordered"
-        and bool(sequence.children)
-    )
 
 
 def _has_numbered_procedure_group(children: Sequence[IRNode]) -> bool:
@@ -1373,6 +1406,8 @@ def _emit_node(
 ) -> etree._Element | None:
     if node.zone in _LAYOUT_NOISE_ZONES:
         return None
+    if node.kind == "figure" and node.is_pictogram:
+        return None
     alt = _alt_comment(node)
     if alt:
         parent.append(etree.Comment(alt))
@@ -1452,7 +1487,7 @@ def _emit_node(
             )
             if node.text:
                 title = etree.SubElement(procedure_step, "title")
-                title.text = clean_title(node.text)
+                title.text = heading_text(node.text)
             _emit_procedural_step_children(
                 procedure_step,
                 node.children,
@@ -1467,7 +1502,7 @@ def _emit_node(
         sect = etree.SubElement(parent, top, id=f"par-{counters['section']:04d}")
         if node.text:
             title = etree.SubElement(sect, "title")
-            title.text = clean_title(node.text)
+            title.text = heading_text(node.text) if top == "proceduralStep" else clean_title(node.text)
         _emit_children(
             sect,
             node.children,
@@ -1490,7 +1525,18 @@ def _build_content(
     content = etree.Element("content")
     if dm_type == "procedural":
         proc = etree.SubElement(content, "procedure")
-        main_children, requirements = _partition_preliminary_sections(root.children)
+        if root.reviewed_requirements is not None:
+            main_children, requirements = root.children, root.reviewed_requirements
+        else:
+            main_children, requirements = _partition_preliminary_sections(root.children)
+        if requirements.get("common"):
+            common = etree.SubElement(proc, "commonInfo")
+            for section in requirements["common"]:
+                paragraph = etree.SubElement(common, "commonInfoDescrPara")
+                _emit_children(
+                    paragraph, common_information_nodes(section.children), counters,
+                    reference_index=reference_index, current_dm_id=current_dm_id,
+                )
         _emit_preliminary_requirements(
             proc,
             requirements,
@@ -1500,7 +1546,7 @@ def _build_content(
         main = etree.SubElement(proc, "mainProcedure")
         _emit_children(
             main,
-            main_children,
+            procedure_steps(main_children),
             counters,
             reference_index=reference_index,
             current_dm_id=current_dm_id,
@@ -1520,7 +1566,7 @@ def _build_content(
                 "Etape de procedure a completer a partir de la source."
             )
         close = etree.SubElement(proc, "closeRqmts")
-        _emit_no_req_cond_group(close)
+        _emit_condition_requirements(close, requirements.get("closing", []))
     elif dm_type == "ipd":
         etree.SubElement(content, "illustratedPartsCatalog")
     else:
@@ -1535,15 +1581,32 @@ def _build_content(
     return content
 
 
+def _indent_element_only(element: etree._Element, level: int = 0) -> None:
+    children = list(element)
+    if not children:
+        return
+    mixed_content = (
+        element.tag in _MIXED_CONTENT_TAGS
+        or bool(element.text and element.text.strip())
+        or any(child.tail and child.tail.strip() for child in children)
+    )
+    if mixed_content:
+        return
+    if not (element.text and element.text.strip()):
+        element.text = "\n" + "  " * (level + 1)
+    for child in children:
+        if isinstance(child.tag, str):
+            _indent_element_only(child, level + 1)
+        if not (child.tail and child.tail.strip()):
+            child.tail = "\n" + "  " * level
+
+
 def serialize(
     root: IRNode,
     *,
     issue: str,
     dm_type: str,
     title: str = "",
-    figure_offset: int = 0,
-    table_offset: int = 0,
-    section_offset: int = 0,
     dm_metadata: Mapping[str, object] | None = None,
     missing_fields: Sequence[str] = (),
     header_template: Mapping[str, object] | None = None,
@@ -1555,28 +1618,17 @@ def serialize(
     """Construit un squelette XML S1000D contraint par le XSD local (UTF-8 indente)."""
     if issue not in {"4.1", "4.2"}:
         raise ValueError(f"Generation XSD non disponible pour l'Issue {issue}.")
-    normalized_type = {
-        "descriptive": "descriptive",
-        "description": "descriptive",
-        "descript": "descriptive",
-        "procedural": "procedural",
-        "procedure": "procedural",
-        "proced": "procedural",
-        "ipd": "ipd",
-    }.get((dm_type or "").lower())
-    if normalized_type is None:
-        raise ValueError(f"Type de DM non pris en charge par le generateur XSD : {dm_type}.")
+    normalized_type = _normalize_dm_type(dm_type)
     if reference_index is None:
+        reference_metadata = dict(dm_metadata or {})
+        reference_metadata.update({"dm_type": normalized_type, "issue": issue})
         reference_index = build_reference_index(
-            [(reference_dm_id, root, dm_metadata)],
-            figure_offset=figure_offset,
-            table_offset=table_offset,
-            section_offset=section_offset,
+            [(reference_dm_id, root, reference_metadata)],
         )
     counters = {
-        "figure": figure_offset,
-        "table": table_offset,
-        "section": section_offset,
+        "figure": 0,
+        "table": 0,
+        "section": 0,
     }
     dmodule = etree.Element("dmodule", nsmap={
         "xsi": _XSI_NS,
@@ -1604,6 +1656,7 @@ def serialize(
         current_dm_id=reference_dm_id,
     ))
     xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(dmodule)
+    normalize_dm_ids(dmodule)
     if normalized_type == "ipd" and _content_nodes(root):
         xsd_report.violations.append({
             "severity": "error",
@@ -1627,6 +1680,7 @@ def serialize(
         diagnostics.xsd_violations.extend(xsd_report.violations)
         diagnostics.provisional_fields.extend(xsd_report.provisional_fields)
 
+    _indent_element_only(dmodule)
     tree = dmodule.getroottree()
     return etree.tostring(
         tree, pretty_print=True, xml_declaration=True, encoding="UTF-8",

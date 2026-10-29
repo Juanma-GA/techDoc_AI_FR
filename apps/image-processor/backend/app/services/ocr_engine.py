@@ -14,6 +14,49 @@ def normalize_reference(value: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", ascii_text.upper())
 
 
+def _normalized_text_with_positions(value: str) -> tuple[str, list[int]]:
+    normalized_parts: list[str] = []
+    positions: list[int] = []
+    for index, character in enumerate(value):
+        normalized_character = normalize_reference(character)
+        normalized_parts.append(normalized_character)
+        positions.extend([index] * len(normalized_character))
+    return "".join(normalized_parts), positions
+
+
+def find_reference_occurrences(value: str, reference: str) -> list[tuple[int, int]]:
+    normalized_reference = normalize_reference(reference)
+    if not normalized_reference:
+        return []
+
+    normalized_text, positions = _normalized_text_with_positions(value)
+    occurrences: list[tuple[int, int]] = []
+    search_offset = 0
+    while True:
+        start = normalized_text.find(normalized_reference, search_offset)
+        if start < 0:
+            break
+        end = start + len(normalized_reference)
+        source_start = positions[start]
+        source_end = positions[end - 1] + 1
+        starts_inside_character = start > 0 and positions[start - 1] == source_start
+        ends_inside_character = end < len(positions) and positions[end] == source_end - 1
+        has_left_boundary = source_start == 0 or not normalize_reference(value[source_start - 1])
+        has_right_boundary = source_end == len(value) or not normalize_reference(value[source_end])
+
+        if (
+            not starts_inside_character
+            and not ends_inside_character
+            and has_left_boundary
+            and has_right_boundary
+        ):
+            occurrences.append((source_start, source_end))
+            search_offset = end
+        else:
+            search_offset = start + 1
+    return occurrences
+
+
 def _build_lines(prediction: object) -> list[dict[str, object]]:
     prediction_json = getattr(prediction, "json", None)
     if not isinstance(prediction_json, dict):
@@ -53,13 +96,6 @@ def _build_lines(prediction: object) -> list[dict[str, object]]:
 def _match_references(
     lines: list[dict[str, object]], references: list[str]
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    normalized_text = ""
-    character_lines: list[int] = []
-    for index, line in enumerate(lines):
-        normalized_line = normalize_reference(str(line["text"]))
-        normalized_text += normalized_line
-        character_lines.extend([index] * len(normalized_line))
-
     reference_indices: dict[str, list[int]] = {}
     matches: list[dict[str, object]] = [
         {"reference": reference, "found": False, "line_indices": []}
@@ -71,14 +107,13 @@ def _match_references(
         if normalized:
             reference_indices.setdefault(normalized, []).append(reference_index)
 
-    for normalized, pair_indices in reference_indices.items():
+    for pair_indices in reference_indices.values():
         occurrences: list[list[int]] = []
-        start = normalized_text.find(normalized)
-        while start >= 0:
-            occurrences.append(
-                sorted(set(character_lines[start : start + len(normalized)]))
+        reference = references[pair_indices[0]]
+        for line_index, line in enumerate(lines):
+            occurrences.extend(
+                [[line_index] for _ in find_reference_occurrences(str(line["text"]), reference)]
             )
-            start = normalized_text.find(normalized, start + len(normalized))
 
         for line_indices in occurrences:
             for line_index in line_indices:
@@ -118,6 +153,7 @@ def _parse_replacement_pairs(
     raw_pairs: str,
     *,
     skip_empty_references: bool = False,
+    allow_empty_replacement: bool = False,
 ) -> list[dict[str, str]]:
     try:
         payload = json.loads(raw_pairs)
@@ -148,7 +184,7 @@ def _parse_replacement_pairs(
         if skip_empty_references and not reference:
             continue
         normalized_reference = normalize_reference(reference)
-        if not normalized_reference or not replacement:
+        if not normalized_reference or (not replacement and not allow_empty_replacement):
             raise HTTPException(
                 status_code=422,
                 detail="Chaque couple doit contenir une référence et un nouveau repère.",

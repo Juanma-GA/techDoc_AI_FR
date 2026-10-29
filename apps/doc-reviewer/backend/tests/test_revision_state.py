@@ -256,6 +256,31 @@ def test_highlights_page_range_keeps_spans_past_the_header_boundary() -> None:
     assert entry.page_keys == ("INTRO 1", "INTRO 2")
 
 
+def test_highlights_header_uses_word_geometry_when_column_titles_are_merged() -> None:
+    page = _page(
+        1,
+        [
+            _span("Chapter/Section and Page No", 54.0, 100.0, 1),
+            _span("Designation Description of Change", 254.6, 100.0, 1),
+            _span("Page 701", 90.7, 120.0, 1),
+            _span("R", 285.4, 120.0, 1),
+            _span("Consumable and minor corrections", 329.0, 120.0, 1),
+        ],
+    )
+    page.words = [
+        _word("Designation", 254.6, 100.0, 0),
+        _word("Description", 329.2, 100.0, 1),
+        _word("of", 401.2, 100.0, 2),
+        _word("Change", 419.2, 100.0, 3),
+    ]
+
+    entries = revision.extract_highlights(page)
+
+    assert len(entries) == 1
+    assert entries[0].page_keys == ("701",)
+    assert entries[0].status == "R"
+
+
 def test_highlights_extracts_row_and_illustrated_parts_list_descriptions() -> None:
     page = _page(
         1,
@@ -1491,6 +1516,7 @@ def test_highlights_page_row_without_designation_is_reported() -> None:
         "Cleaning",
         "Description and Operation",
         "Disassembly",
+        "Environmental conditions",
         "Fault Isolation",
         "Illustrated Parts List",
         "Introduction",
@@ -1499,16 +1525,19 @@ def test_highlights_page_row_without_designation_is_reported() -> None:
         "List of Materials",
         "Record of Revisions",
         "Record of Temporary Revisions",
+        "Removal Procedure and Special",
         "Repair",
         "Service Bulletin List",
         "Special Tools, Fixtures and Equipment",
         "Special Tools, Fixtures, Equipment and Consumables",
         "Special Tools, Fixtures and Equipment - List of Special Materials",
+        "Storage - Packaging - Conditioning",
         "Storage",
         "Table of Contents",
         "Testing",
         "Testing and Fault Isolation",
         "Testing and Trouble Shooting",
+        "Test Run",
         "Title Page",
         "Vendor Code List",
         "Illustrated Part Lis",
@@ -1545,7 +1574,15 @@ def test_highlights_chapter_rule_accepts_catalog_titles(chapter: str) -> None:
     assert suggestions == []
 
 
-@pytest.mark.parametrize("chapter", ["Avionics", "Warranty Conditions"])
+@pytest.mark.parametrize(
+    "chapter",
+    [
+        "Avionics",
+        "Warranty Conditions",
+        "Environmental condition",
+        "Environmentel conditions",
+    ],
+)
 def test_highlights_chapter_rule_reports_unlisted_title_on_its_cell(chapter: str) -> None:
     parsed = _consistent_document()
     parsed.pages[0] = _highlights_page(

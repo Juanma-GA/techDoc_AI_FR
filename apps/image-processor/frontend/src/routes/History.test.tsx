@@ -65,7 +65,7 @@ it("restores the complete saved analysis, edits, selections, and undo without an
   renderHistory();
   await user.click(await screen.findByRole("button", { name: "Reprendre" }));
   expect(await screen.findByRole("heading", { name: "Détection et remplacement" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Pièce à traiter")).toHaveValue("2");
+  expect(screen.getByLabelText("Description au point d’emploi")).toHaveValue("2");
   expect(await screen.findByRole("textbox", { name: "Référence Excel 1" })).toHaveValue("EDITED-REF");
   expect(screen.getByRole("textbox", { name: "Nouveau repère Excel 1" })).toHaveValue("CUSTOM");
   expect(screen.getByRole("checkbox", { name: "Appliquer le couple Excel 1" })).not.toBeChecked();
