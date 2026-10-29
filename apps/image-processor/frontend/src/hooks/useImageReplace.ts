@@ -1,10 +1,13 @@
 import type { TFunction } from "i18next";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useDemoMode } from "@internal/ui";
 
 import { imageReplaceApi, type OcrResultDto } from "../lib/api";
 import { analysisForm, hasValidManualPairs } from "../lib/analysis-form";
-import { requestError, workspaceApi, type ReplacementPair } from "../lib/workspace-api";
-import { useExcelMapping } from "./useExcelMapping";
+import {
+  requestError, restoreFile, storeFile, workspaceApi, type ReplacementPair,
+} from "../lib/workspace-api";
+import { useExcelMapping, type ExcelMemorySnapshot } from "./useExcelMapping";
 import { useImageDocument } from "./useImageDocument";
 import { useImageDownload } from "./useImageDownload";
 import { useRecognizedTextReplacement } from "./useRecognizedTextReplacement";
@@ -14,13 +17,52 @@ import { useWorkspaceStorage } from "./useWorkspaceStorage";
 export type { ReplacementPair } from "../lib/workspace-api";
 
 type PendingAutoOcr = { pieceRow: string; requestId: number };
+type DemoWorkspaceBackup = {
+  document: ReturnType<typeof useImageDocument>["document"];
+  excel: ReturnType<typeof useExcelMapping>["persistenceState"];
+  manualPairs: ReplacementPair[];
+};
+
+function emptyExcelSnapshot(): ExcelMemorySnapshot {
+  return {
+    workbook: null,
+    sheets: [],
+    sheet: "",
+    columns: [],
+    referenceColumn: "",
+    replacementColumn: "",
+    icnColumn: "",
+    pieceColumn: "",
+    pieces: [],
+    pieceRow: "",
+    pairs: [],
+  };
+}
+
+async function saveExcelSnapshot(snapshot: ExcelMemorySnapshot) {
+  await workspaceApi.saveExcel({
+    workbook: snapshot.workbook ? await storeFile(snapshot.workbook) : null,
+    sheets: snapshot.sheets,
+    sheet: snapshot.sheet,
+    columns: snapshot.columns,
+    referenceColumn: snapshot.referenceColumn,
+    replacementColumn: snapshot.replacementColumn,
+    icnColumn: snapshot.icnColumn,
+    pieceColumn: snapshot.pieceColumn,
+    pieces: snapshot.pieces,
+  });
+}
 
 export function useImageReplace(t: TFunction) {
+  const { mode, isReady: demoModeReady } = useDemoMode();
   const [replacementPairs, setReplacementPairs] = useState<ReplacementPair[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [retouching, setRetouching] = useState(false);
+  const [demoWorkspaceActive, setDemoWorkspaceActive] = useState(mode === "demo");
+  const [demoWorkspacePrepared, setDemoWorkspacePrepared] = useState(mode !== "demo");
+  const demoWorkspaceBackup = useRef<DemoWorkspaceBackup | null>(null);
   const [pendingAutoOcr, setPendingAutoOcr] = useState<PendingAutoOcr | null>(null);
   const autoOcrRequestId = useRef(0);
   const startedAutoOcrRequestId = useRef<number | null>(null);
@@ -32,7 +74,35 @@ export function useImageReplace(t: TFunction) {
     excel: excel.persistenceState, restoreExcel: excel.restoreExcel,
     excelPending: excel.excelLoading || (excel.excelSelectionConfigured && !excel.excelPairsReady),
     document: image.document, manualPairs: replacementPairs,
+    suspendPersistence: !demoModeReady || mode === "demo" || demoWorkspaceActive,
   });
+  const captureDemoWorkspace = useCallback(async () => {
+    if (demoWorkspaceBackup.current) return;
+    await storage.flush();
+    if (demoWorkspaceBackup.current) return;
+    const previousDocumentIsDemo =
+      image.document?.source.name.toLocaleUpperCase() === "IMAGE_ROUE.PNG";
+    const previousWorkbookIsDemo =
+      excel.excelFile?.name.toLocaleUpperCase() === "DEMO_ROUE.XLSX";
+    demoWorkspaceBackup.current = {
+      document: previousDocumentIsDemo ? null : image.document,
+      excel: previousWorkbookIsDemo ? emptyExcelSnapshot() : excel.persistenceState,
+      manualPairs: previousDocumentIsDemo ? [] : replacementPairs,
+    };
+    setDemoWorkspaceActive(true);
+    setDemoWorkspacePrepared(true);
+  }, [storage.flush, image.document, excel.excelFile, excel.persistenceState, replacementPairs]);
+  useEffect(() => {
+    if (mode === "demo" && !demoWorkspaceBackup.current) {
+      setDemoWorkspacePrepared(false);
+    }
+  }, [mode]);
+  useEffect(() => {
+    if (mode !== "demo" || !storage.ready || demoWorkspaceBackup.current) return;
+    void captureDemoWorkspace().catch((requestFailure: unknown) => {
+      setError(requestError(requestFailure, t("image.errorGeneric")));
+    });
+  }, [mode, storage.ready, captureDemoWorkspace, t]);
   const recognizedTextOptions = {
     image, manualPairs: replacementPairs, setManualPairs: setReplacementPairs,
     excel, loading, restoring, downloading: download.downloading, retouching, setLoading, setError, t,
@@ -87,6 +157,7 @@ export function useImageReplace(t: TFunction) {
   }
 
   async function loadDemoFiles() {
+    await captureDemoWorkspace();
     const [imageResponse, workbookResponse] = await Promise.all([
       fetch(`${import.meta.env.BASE_URL}demo/Image_roue.png`),
       fetch(`${import.meta.env.BASE_URL}demo/DEMO_ROUE.xlsx`),
@@ -106,8 +177,53 @@ export function useImageReplace(t: TFunction) {
     if (!await chooseImage([imageFile])) {
       throw new Error(t("settings.demo.importError"));
     }
-    if (!await excel.chooseExcel([workbookFile])) {
+    if (!await excel.chooseExcel([workbookFile], {
+      preferredSheetName: "PDE",
+      fallbackSheetIndex: 2,
+      referenceColumn: "C",
+      replacementColumn: "E",
+      icnColumn: "AD",
+      pieceColumn: "F",
+    })) {
       throw new Error(t("settings.demo.importError"));
+    }
+  }
+
+  async function leaveDemoWorkspace() {
+    setPendingAutoOcr(null);
+    setRestoring(true);
+    setError("");
+    try {
+      const backup = demoWorkspaceBackup.current;
+      let normalExcel: ExcelMemorySnapshot;
+      if (backup) {
+        normalExcel = backup.excel;
+        image.restoreDocument(backup.document);
+        excel.restoreMemory(backup.excel);
+        setReplacementPairs(backup.manualPairs);
+      } else {
+        const savedPreset = await workspaceApi.readExcel();
+        normalExcel = savedPreset.workbook?.name.toLocaleUpperCase() === "DEMO_ROUE.XLSX"
+          ? emptyExcelSnapshot()
+          : {
+              ...savedPreset,
+              workbook: savedPreset.workbook ? restoreFile(savedPreset.workbook) : null,
+              pieceRow: "",
+              pairs: [],
+            };
+        image.clear();
+        setReplacementPairs([]);
+        excel.restoreMemory(normalExcel);
+      }
+      await saveExcelSnapshot(normalExcel);
+      demoWorkspaceBackup.current = null;
+      setDemoWorkspaceActive(false);
+      setDemoWorkspacePrepared(true);
+    } catch (requestFailure) {
+      setError(requestError(requestFailure, t("settings.demo.restoreError")));
+      throw requestFailure;
+    } finally {
+      setRestoring(false);
     }
   }
 
@@ -291,8 +407,9 @@ export function useImageReplace(t: TFunction) {
   return {
     ...excel, ...image, storage, replacementPairs, error, loading,
     canRunOcr: excel.excelSelectionReady || hasValidManualPairs(replacementPairs),
+    demoWorkspacePrepared,
     downloading: download.downloading, savingAs: download.savingAs, restoring, retouching,
-    setRetouching, loadDemoFiles,
+    setRetouching, loadDemoFiles, leaveDemoWorkspace,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
     setExcelPieceRow: selectExcelPieceRow,
     replaceRecognizedLine, undoRecognizedLine, reapplyReplacements, openHistory,

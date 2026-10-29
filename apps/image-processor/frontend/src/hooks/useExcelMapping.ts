@@ -8,6 +8,14 @@ import { useExcelPairs, type RestoredExcelPairs } from "./useExcelPairs";
 
 export type ExcelMemorySnapshot = Omit<ExcelSnapshot, "workbook"> & { workbook: File | null };
 type MappingState = Omit<ExcelMemorySnapshot, "pairs">;
+type ExcelColumnPrefill = {
+  preferredSheetName: string;
+  fallbackSheetIndex: number;
+  referenceColumn: string;
+  replacementColumn: string;
+  icnColumn: string;
+  pieceColumn: string;
+};
 const EMPTY: MappingState = {
   workbook: null, sheets: [], sheet: "", columns: [], referenceColumn: "",
   replacementColumn: "", icnColumn: "", pieceColumn: "", pieces: [], pieceRow: "",
@@ -46,7 +54,10 @@ export function useExcelMapping(t: TFunction) {
     }
   }
 
-  async function chooseExcel(files: File[]): Promise<boolean> {
+  async function chooseExcel(
+    files: File[],
+    prefill?: ExcelColumnPrefill,
+  ): Promise<boolean> {
     const file = files[0];
     if (!file) return false;
     if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size > MAX_UPLOAD_BYTES) {
@@ -56,12 +67,59 @@ export function useExcelMapping(t: TFunction) {
     setRestored(null);
     setState({ ...EMPTY, workbook: file });
     return load(async (currentRequest) => {
-      const form = new FormData();
-      form.append("workbook", file);
-      const payload = await imageReplaceApi.excelSheets(form);
-      if (payload.sheets.length === 0) throw new Error(t("image.errorExcelSheets"));
+      const sheetsForm = new FormData();
+      sheetsForm.append("workbook", file);
+      const { sheets } = await imageReplaceApi.excelSheets(sheetsForm);
+      if (sheets.length === 0) throw new Error(t("image.errorExcelSheets"));
+      let nextState: MappingState = { ...EMPTY, workbook: file, sheets };
+
+      if (prefill) {
+        const preferredSheet = sheets.find(
+          (sheet) => sheet.trim().toLocaleUpperCase() ===
+            prefill.preferredSheetName.trim().toLocaleUpperCase(),
+        );
+        const sheet = preferredSheet ?? sheets[prefill.fallbackSheetIndex];
+        if (!sheet) throw new Error(t("settings.demo.sheetMissing"));
+
+        const columnsForm = new FormData();
+        columnsForm.append("workbook", file);
+        columnsForm.append("sheet_name", sheet);
+        const { columns } = await imageReplaceApi.excelColumns(columnsForm);
+        const indexFor = (letter: string) => columns.find(
+          (column) => column.letter.toLocaleUpperCase() === letter.toLocaleUpperCase(),
+        )?.index;
+        const referenceColumn = indexFor(prefill.referenceColumn);
+        const replacementColumn = indexFor(prefill.replacementColumn);
+        const icnColumn = indexFor(prefill.icnColumn);
+        const pieceColumn = indexFor(prefill.pieceColumn);
+        if (
+          referenceColumn === undefined || replacementColumn === undefined ||
+          icnColumn === undefined || pieceColumn === undefined
+        ) {
+          throw new Error(t("settings.demo.columnsMissing"));
+        }
+
+        const piecesForm = new FormData();
+        piecesForm.append("workbook", file);
+        piecesForm.append("sheet_name", sheet);
+        piecesForm.append("reference_column", String(referenceColumn));
+        piecesForm.append("replacement_column", String(replacementColumn));
+        piecesForm.append("piece_column", String(pieceColumn));
+        const { pieces } = await imageReplaceApi.excelPieces(piecesForm);
+        nextState = {
+          ...nextState,
+          sheet,
+          columns,
+          referenceColumn: String(referenceColumn),
+          replacementColumn: String(replacementColumn),
+          icnColumn: String(icnColumn),
+          pieceColumn: String(pieceColumn),
+          pieces,
+        };
+      }
+
       if (currentRequest === requestId.current) {
-        setState((current) => ({ ...current, sheets: payload.sheets }));
+        setState(nextState);
       }
     });
   }
@@ -135,6 +193,15 @@ export function useExcelMapping(t: TFunction) {
     setExcelLoading(false);
   }, []);
 
+  function restoreMemory(snapshot: ExcelMemorySnapshot) {
+    requestId.current += 1;
+    const { pairs, ...mapping } = snapshot;
+    setRestored({ selection: { ...mapping }, pairs });
+    setState(mapping);
+    setExcelError("");
+    setExcelLoading(false);
+  }
+
   function removeExcel() {
     requestId.current += 1;
     setRestored(null);
@@ -153,7 +220,7 @@ export function useExcelMapping(t: TFunction) {
     state.icnColumn && state.pieceColumn && state.pieceRow,
   );
   return {
-    persistenceState, restoreExcel, resetPiece,
+    persistenceState, restoreExcel, restoreMemory, resetPiece,
     excelFile: state.workbook, excelSheets: state.sheets, excelSheet: state.sheet,
     excelColumns: state.columns, excelReferenceColumn: state.referenceColumn,
     excelReplacementColumn: state.replacementColumn, excelIcnColumn: state.icnColumn,

@@ -17,9 +17,15 @@ export function DemoModeSettings() {
   const { mode, isReady } = useDemoMode();
   const [demoImporting, setDemoImporting] = useState(false);
   const [demoImportError, setDemoImportError] = useState("");
+  const [demoReturning, setDemoReturning] = useState(false);
+  const [demoReturnError, setDemoReturnError] = useState("");
   const modeMutation = useMutation({
     mutationFn: (enabled: boolean) => settingsApi.write({ demo_enabled: enabled }),
-    onSuccess: (settings) => queryClient.setQueryData(["settings"], settings),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(["settings"], settings);
+      if (settings.demo_enabled) void importDemoFiles();
+      else if (mode === "demo") void restoreNormalWorkspace();
+    },
   });
 
   async function importDemoFiles() {
@@ -37,6 +43,21 @@ export function DemoModeSettings() {
     }
   }
 
+  async function restoreNormalWorkspace() {
+    setDemoReturnError("");
+    setDemoReturning(true);
+    try {
+      await workflow.leaveDemoWorkspace();
+      navigate("/");
+    } catch (error) {
+      setDemoReturnError(
+        error instanceof Error ? error.message : t("settings.demo.restoreError"),
+      );
+    } finally {
+      setDemoReturning(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -49,21 +70,38 @@ export function DemoModeSettings() {
           labels={{ normal: t("settings.demo.normal"), demo: t("settings.demo.demo") }}
           ariaLabel={t("settings.demo.title")}
           disabled={
-            !isReady || !workflow.storage.ready || modeMutation.isPending || demoImporting
+            !isReady || !workflow.storage.ready || modeMutation.isPending ||
+            demoImporting || demoReturning || workflow.loading || workflow.restoring ||
+            workflow.retouching || workflow.downloading || workflow.excelLoading ||
+            workflow.excelPairsLoading || !workflow.demoWorkspacePrepared
           }
           onModeChange={(nextMode) => {
             setDemoImportError("");
-            modeMutation.mutate(nextMode === "demo", {
-              onSuccess: (settings) => {
-                if (settings.demo_enabled) void importDemoFiles();
-              },
-            });
+            setDemoReturnError("");
+            modeMutation.mutate(nextMode === "demo");
           }}
         />
         {!workflow.storage.ready && !workflow.storage.startupError ? (
           <p role="status" className="text-sm text-fg-dim">
             {t("settings.demo.workspaceLoading")}
           </p>
+        ) : null}
+        {mode === "demo" && workflow.storage.ready && !workflow.demoWorkspacePrepared &&
+        !workflow.error ? (
+          <p role="status" className="text-sm text-fg-dim">
+            {t("settings.demo.preparing")}
+          </p>
+        ) : null}
+        {mode === "demo" && !workflow.demoWorkspacePrepared && workflow.error ? (
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-danger">{workflow.error}</p>
+            <Button
+              variant="secondary"
+              onClick={() => void importDemoFiles()}
+            >
+              {t("settings.demo.retryPrepare")}
+            </Button>
+          </div>
         ) : null}
         {workflow.storage.startupError ? (
           <div className="space-y-2">
@@ -83,7 +121,7 @@ export function DemoModeSettings() {
             {t("settings.demo.importing")}
           </p>
         ) : null}
-        {demoImportError ? (
+        {demoImportError && workflow.demoWorkspacePrepared ? (
           <div className="space-y-2">
             <p role="alert" className="text-sm text-danger">{demoImportError}</p>
             <Button
@@ -92,6 +130,23 @@ export function DemoModeSettings() {
               onClick={() => void importDemoFiles()}
             >
               {t("settings.demo.retryImport")}
+            </Button>
+          </div>
+        ) : null}
+        {demoReturning ? (
+          <p role="status" className="text-sm text-fg-dim">
+            {t("settings.demo.restoring")}
+          </p>
+        ) : null}
+        {demoReturnError ? (
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-danger">{demoReturnError}</p>
+            <Button
+              variant="secondary"
+              disabled={demoReturning}
+              onClick={() => void restoreNormalWorkspace()}
+            >
+              {t("settings.demo.retryRestore")}
             </Button>
           </div>
         ) : null}

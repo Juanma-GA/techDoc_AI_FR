@@ -236,7 +236,8 @@ No real-model orientation benchmark was run for the typography change.
 - **Deviation:** Selecting Demo in Settings loads the bundled `Image_roue.png` and `DEMO_ROUE.xlsx` into the normal Image Processor workspace. Excel parsing and any subsequent OCR use the app's local API.
 - **Reason:** The product owner requested a ready-to-use demonstration with the supplied wheel drawing and workbook.
 - **Approval:** Explicitly approved by the product owner on 2026-10-29.
-- **Behavior:** Import navigates to Home but does not start OCR automatically. The active image and workbook are replaced; the current image workspace is saved through the existing history workflow.
+- **Behavior:** The `PDE` worksheet is preferred, with the third worksheet as fallback. Reference, replacement, ICN, and part columns are prefilled from C, E, AD, and F. No part is selected and OCR is not started automatically.
+- **Persistence:** Demo image, workbook, mappings, and edits remain in memory only. Leaving Demo restores the normal workspace that was active before the import; demo state is not written to normal history or the startup Excel preset.
 
 ## Technical References
 

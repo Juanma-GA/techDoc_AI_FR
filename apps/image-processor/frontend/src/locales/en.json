@@ -224,8 +224,15 @@
     "demo.workspaceLoading": "Loading the local workspace…",
     "demo.workspaceError": "The local workspace could not be loaded.",
     "demo.retryWorkspace": "Retry local workspace loading",
+    "demo.preparing": "Preparing the normal workspace before the demo…",
+    "demo.retryPrepare": "Retry preparation",
     "demo.importing": "Importing demo files…",
     "demo.importError": "Could not load the demo image and workbook.",
-    "demo.retryImport": "Retry import"
+    "demo.retryImport": "Retry import",
+    "demo.sheetMissing": "The PDE or third worksheet could not be found.",
+    "demo.columnsMissing": "One or more of columns C, E, AD, and F are missing.",
+    "demo.restoring": "Restoring the normal workspace…",
+    "demo.restoreError": "Could not restore the previous normal workspace.",
+    "demo.retryRestore": "Retry restoration"
   }
 }

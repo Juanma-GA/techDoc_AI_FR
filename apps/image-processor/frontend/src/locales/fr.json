@@ -224,8 +224,15 @@
     "demo.workspaceLoading": "Chargement de l’espace de travail local…",
     "demo.workspaceError": "L’espace de travail local n’a pas pu être chargé.",
     "demo.retryWorkspace": "Réessayer le chargement local",
+    "demo.preparing": "Préparation de l’espace normal avant la démonstration…",
+    "demo.retryPrepare": "Réessayer la préparation",
     "demo.importing": "Import des fichiers de démonstration…",
     "demo.importError": "Impossible de charger l’image et le classeur de démonstration.",
-    "demo.retryImport": "Réessayer l’import"
+    "demo.retryImport": "Réessayer l’import",
+    "demo.sheetMissing": "L’onglet PDE ou le troisième onglet est introuvable.",
+    "demo.columnsMissing": "Les colonnes C, E, AD et F ne sont pas toutes disponibles.",
+    "demo.restoring": "Restauration de l’espace de travail normal…",
+    "demo.restoreError": "Impossible de restaurer l’espace de travail normal précédent.",
+    "demo.retryRestore": "Réessayer la restauration"
   }
 }
