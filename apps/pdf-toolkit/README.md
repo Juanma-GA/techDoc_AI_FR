@@ -213,7 +213,11 @@ MIT. Voir [LICENSE](./LICENSE).
 Les contrats Go existants ne sont pas réécrits pour imiter FastAPI : erreurs `{error}`,
 logs Gin/Go et absence de routes admin/settings persistantes. Le stockage est temporaire,
 sans SQLite ni migrations. Le profil `files` utilise cette suppression après requête plutôt
-qu'une conservation/version SHA-256. L'interface garde ses huit outils plutôt que d'ajouter
-des onglets Données/Paramètres sans fonctionnalités correspondantes.
+qu'une conservation/version SHA-256. L'interface propose dix outils PDF et un onglet
+Paramètres : le mode démo est conservé en mémoire jusqu'à la fermeture. Il précharge
+`frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf` dans les outils acceptant un PDF, puis les
+actions habituelles utilisent leur flux local normal (backend Go ou navigateur selon l'outil) ;
+c'est une exception documentée au contrat général d'isolation des scénarios démo.
+L'outil Images → PDF reste réservé aux images.
 Le bundle est généré dans `backend/web/static/generated` pour `go:embed`, pas dans
 `frontend/dist`. Ces différences sont bornées à cette application.

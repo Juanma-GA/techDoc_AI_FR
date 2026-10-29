@@ -12,7 +12,7 @@
     "ariaLabel": "Main navigation",
     "themeToggle": "Switch theme",
     "languageSwitcher": "Language",
-    "tools": "PDF tools",
+    "tools": "PDF tools and settings",
     "collapse": "Collapse menu",
     "expand": "Expand menu"
   },
@@ -74,6 +74,22 @@
       "tab": "PDF → Images",
       "title": "Convert a PDF to images",
       "description": "Export every page as PNG or JPEG in a ZIP archive."
+    },
+    "settings": {
+      "tab": "Settings",
+      "title": "Settings",
+      "description": "Choose normal or demo mode to preload the sample PDF."
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Operating mode",
+      "hint": "The anonymized PDF is preloaded in tabs that accept a PDF. Normal actions stay local; depending on the tool, processing uses the local backend or the browser. The mode resets to normal when the app closes. Merge still requires a second PDF.",
+      "normal": "Normal mode",
+      "demo": "Demo mode",
+      "badge": "DEMO MODE",
+      "loading": "Loading the demo PDF…",
+      "loadError": "Could not load the demo PDF."
     }
   },
   "common": {

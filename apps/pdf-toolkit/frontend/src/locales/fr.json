@@ -12,7 +12,7 @@
     "ariaLabel": "Navigation principale",
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
-    "tools": "Outils PDF",
+    "tools": "Outils PDF et paramètres",
     "collapse": "Replier le menu",
     "expand": "Déplier le menu"
   },
@@ -74,6 +74,22 @@
       "tab": "PDF → Images",
       "title": "Convertir un PDF en images",
       "description": "Exportez chaque page en PNG ou JPEG dans une archive ZIP."
+    },
+    "settings": {
+      "tab": "Paramètres",
+      "title": "Paramètres",
+      "description": "Choisissez le mode normal ou démo pour précharger le PDF d’exemple."
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Mode de fonctionnement",
+      "hint": "Le PDF anonymisé est préchargé dans les onglets qui acceptent un PDF. Les actions habituelles restent locales ; selon l’outil, le traitement utilise le backend local ou le navigateur. Le mode revient à la normale à la fermeture. Fusionner demande toujours un deuxième PDF.",
+      "normal": "Mode normal",
+      "demo": "Mode démo",
+      "badge": "MODE DÉMO",
+      "loading": "Chargement du PDF de démonstration…",
+      "loadError": "Impossible de charger le PDF de démonstration."
     }
   },
   "common": {
