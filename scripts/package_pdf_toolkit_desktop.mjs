@@ -7,11 +7,13 @@ import { run } from "./lib/frontend-build.mjs";
 const repo = fileURLToPath(new URL("../", import.meta.url));
 const target = "x86_64-pc-windows-msvc";
 
-function buildTauri(app) {
+export function buildTauri(app, runCommand = run) {
   const frontend = path.join(app, "frontend");
-  if (!existsSync(path.join(frontend, "node_modules"))) run("pnpm", ["install"], frontend);
-  run("pnpm", ["tauri:build", "--bundles", "nsis", "--target", target, "--ci", "--", "--locked"],
-    frontend, { ...process.env, CARGO_TARGET_DIR: path.join(app, "dist", "tauri") });
+  if (!existsSync(path.join(frontend, "node_modules"))) runCommand("pnpm", ["install"], frontend);
+  const buildEnv = { ...process.env, CARGO_TARGET_DIR: path.join(app, "dist", "tauri") };
+  runCommand("cargo", ["clean"], path.join(frontend, "src-tauri"), buildEnv);
+  runCommand("pnpm", ["tauri:build", "--bundles", "nsis", "--target", target, "--ci", "--", "--locked"],
+    frontend, buildEnv);
 }
 
 export function packageDesktop(app, { build = buildTauri, now = new Date() } = {}) {
