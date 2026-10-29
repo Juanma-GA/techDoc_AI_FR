@@ -41,14 +41,16 @@ describe("App demo mode", () => {
     await waitFor(() => expect(view.getByText("DEMO MODE")).toBeTruthy());
 
     fireEvent.click(view.getByRole("tab", { name: "Merge" }));
-    await waitFor(() => expect(view.getByText("DEMO_CMM_PDF_anonyme.pdf")).toBeTruthy());
+    await waitFor(() => {
+      expect(view.getAllByText("DEMO_CMM_PDF_anonyme.pdf")).toHaveLength(2);
+    });
 
     fireEvent.click(view.getByRole("tab", { name: "Settings" }));
     fireEvent.click(view.getByRole("button", { name: "Normal mode" }));
     fireEvent.click(view.getByRole("tab", { name: "Merge" }));
 
     await waitFor(() => {
-      expect(view.queryByText("DEMO_CMM_PDF_anonyme.pdf")).toBeNull();
+      expect(view.queryAllByText("DEMO_CMM_PDF_anonyme.pdf")).toHaveLength(0);
     });
   });
 });

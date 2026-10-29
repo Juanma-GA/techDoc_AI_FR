@@ -31,6 +31,7 @@ import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { renderPdfThumbnails, type PageThumbnail } from "./pdfPreview";
+import "./reorder.css";
 
 export function ReorderTool() {
   const { t, i18n } = useTranslation();

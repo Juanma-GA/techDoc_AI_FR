@@ -63,7 +63,7 @@
     "rotate": {
       "tab": "Rotate",
       "title": "Rotate pages",
-      "description": "Rotate every page or only the pages you select."
+      "description": "Rotate pages and preview the result before export."
     },
     "imagesToPdf": {
       "tab": "Images → PDF",
@@ -84,7 +84,7 @@
   "settings": {
     "demo": {
       "title": "Operating mode",
-      "hint": "The anonymized PDF is preloaded in tabs that accept a PDF. Normal actions stay local; depending on the tool, processing uses the local backend or the browser. The mode resets to normal when the app closes. Merge still requires a second PDF.",
+      "hint": "The anonymized PDF is preloaded in tabs that accept a PDF. Normal actions stay local; depending on the tool, processing uses the local backend or the browser. The mode resets to normal when the app closes. In demo mode, Merge receives two copies of the PDF.",
       "normal": "Normal mode",
       "demo": "Demo mode",
       "badge": "DEMO MODE",
@@ -227,9 +227,15 @@
     "pagesPlaceholder": "e.g. 1-5, 8, 10-12",
     "pagesHelp": "Leave empty for every page, or enter page numbers/ranges (e.g. 1,3,7 or 2-4,8).",
     "angleLabel": "Clockwise rotation",
-    "clockwise90": "90° clockwise",
-    "clockwise180": "180°",
-    "clockwise270": "270° clockwise",
+    "previewPage": "Preview of page {{page}}",
+    "previewCanvasLabel": "Preview of page {{page}}, rotated {{angle}} degrees",
+    "previewEmpty": "Load a PDF to preview its rotation.",
+    "previewLoading": "Loading the PDF preview…",
+    "previewFailed": "Could not render this page preview.",
+    "emptyDocument": "This PDF has no pages.",
+    "currentAngle": "Current angle: {{angle}}°",
+    "advanceRotation": "Add 90° clockwise. Current angle: {{angle}}°.",
+    "rotationHelp": "Each click adds 90° clockwise; after 270°, the button returns to 90°.",
     "outputDescription": "Rotated pages",
     "action": "Rotate",
     "working": "Rotating…",

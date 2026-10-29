@@ -9,10 +9,12 @@ import {
   validateExportFileName,
   type ExportProgressState,
 } from "../../shared/api";
-import { Button, Card, Input, Select, Spinner } from "@internal/ui";
+import { Button, Card, Input, Spinner } from "@internal/ui";
 import { ExportProgress } from "./ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
+import { RotationPreview } from "./RotationPreview";
+import "./pageSelection.css";
 
 type PageSelectionMode = "extract" | "delete" | "rotate";
 
@@ -56,11 +58,10 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
   const config = modeConfiguration[mode];
   const Icon = config.icon;
   const pageInputId = useId();
-  const rotationInputId = useId();
   const outputNameId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [selection, setSelection] = useState("");
-  const [rotation, setRotation] = useState("90");
+  const [rotation, setRotation] = useState(90);
   const [outputName, setOutputName] = useState<string>(config.outputName);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -69,6 +70,8 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
     phase: "uploading",
     percentage: 0,
   });
+  const nextRotation = rotation === 270 ? 90 : rotation + 90;
+  const previewPageNumber = getPreviewPageNumber(selection);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -96,7 +99,7 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
     data.append("file", file, file.name);
     data.append("pages", selection);
     if (mode === "rotate") {
-      data.append("rotation", rotation);
+      data.append("rotation", String(rotation));
     }
     try {
       const destination = await destinationChoice;
@@ -198,25 +201,33 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
           {t(mode === "rotate" ? "rotate.pagesHelp" : "pages.help")}
         </p>
         {mode === "rotate" ? (
-          <>
-            <label className="field-label" htmlFor={rotationInputId}>
-              {t("rotate.angleLabel")}
-            </label>
-            <Select
-              id={rotationInputId}
-              options={[
-                { value: "90", label: t("rotate.clockwise90") },
-                { value: "180", label: t("rotate.clockwise180") },
-                { value: "270", label: t("rotate.clockwise270") },
-              ]}
-              value={rotation}
+          <div className="rotation-control">
+            <span className="field-label">{t("rotate.angleLabel")}</span>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rotation-button"
               disabled={working}
-              onChange={(event) => {
-                setRotation(event.currentTarget.value);
+              aria-label={t("rotate.advanceRotation", { angle: rotation })}
+              onClick={() => {
+                setRotation(nextRotation);
                 setSuccess(false);
               }}
+            >
+              <RotateCw
+                size={20}
+                aria-hidden="true"
+                style={{ transform: `rotate(${rotation}deg)` }}
+              />
+              <span aria-live="polite">{t("rotate.currentAngle", { angle: rotation })}</span>
+            </Button>
+            <p className="input-help">{t("rotate.rotationHelp")}</p>
+            <RotationPreview
+              file={file}
+              pageNumber={previewPageNumber}
+              rotation={rotation}
             />
-          </>
+          </div>
         ) : null}
         {mode === "delete" ? (
           <p className="warning-note">{t("pages.deleteWarning")}</p>
@@ -270,4 +281,10 @@ export function PageSelectionTool({ mode }: PageSelectionToolProps) {
       </Card>
     </form>
   );
+}
+
+function getPreviewPageNumber(selection: string): number {
+  const match = /^\s*(\d+)/u.exec(selection);
+  const pageNumber = Number(match?.[1] ?? 1);
+  return Number.isSafeInteger(pageNumber) && pageNumber > 0 ? pageNumber : 1;
 }

@@ -9,13 +9,16 @@ import {
   validateExportFileName,
   type ExportProgressState,
 } from "../../shared/api";
-import { Button, Card, Input, Spinner } from "@internal/ui";
+import { Button, Card, Input, Spinner, useDemoMode } from "@internal/ui";
 import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
+import { useDemoPdfFile } from "../../shared/demoPdf";
 import { formatFileSize, moveFileInList } from "../../shared/files";
 
 export function MergeTool() {
   const { t, i18n } = useTranslation();
+  const { mode } = useDemoMode();
+  const demoPdf = useDemoPdfFile();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
   const outputNameId = useId();
   const [files, setFiles] = useState<File[]>([]);
@@ -87,7 +90,15 @@ export function MergeTool() {
         <FileDropzone
           multiple
           disabled={working}
-          onFiles={(incoming) => setFiles((current) => [...current, ...incoming])}
+          onFiles={(incoming) => {
+            const duplicateDemoPdf =
+              mode === "demo" && demoPdf && incoming.includes(demoPdf) ? demoPdf : null;
+            setFiles((current) => [
+              ...current,
+              ...incoming,
+              ...(duplicateDemoPdf ? [duplicateDemoPdf] : []),
+            ]);
+          }}
           onError={setError}
           label={t("files.dropMultipleLabel")}
           description={t("files.dropMultipleDescription")}

@@ -63,7 +63,7 @@
     "rotate": {
       "tab": "Rotation",
       "title": "Faire pivoter des pages",
-      "description": "Faites pivoter toutes les pages ou uniquement celles que vous sélectionnez."
+      "description": "Faites pivoter les pages et visualisez l’aperçu avant l’export."
     },
     "imagesToPdf": {
       "tab": "Images → PDF",
@@ -84,7 +84,7 @@
   "settings": {
     "demo": {
       "title": "Mode de fonctionnement",
-      "hint": "Le PDF anonymisé est préchargé dans les onglets qui acceptent un PDF. Les actions habituelles restent locales ; selon l’outil, le traitement utilise le backend local ou le navigateur. Le mode revient à la normale à la fermeture. Fusionner demande toujours un deuxième PDF.",
+      "hint": "Le PDF anonymisé est préchargé dans les onglets qui acceptent un PDF. Les actions habituelles restent locales ; selon l’outil, le traitement utilise le backend local ou le navigateur. Le mode revient à la normale à la fermeture. En mode démo, Fusionner reçoit deux copies du PDF.",
       "normal": "Mode normal",
       "demo": "Mode démo",
       "badge": "MODE DÉMO",
@@ -227,9 +227,15 @@
     "pagesPlaceholder": "Ex. 1-5, 8, 10-12",
     "pagesHelp": "Laissez vide pour toutes les pages, ou indiquez des numéros/plages (ex. 1,3,7 ou 2-4,8).",
     "angleLabel": "Rotation horaire",
-    "clockwise90": "90° vers la droite",
-    "clockwise180": "180°",
-    "clockwise270": "270° vers la droite",
+    "previewPage": "Aperçu de la page {{page}}",
+    "previewCanvasLabel": "Aperçu de la page {{page}}, tournée de {{angle}} degrés",
+    "previewEmpty": "Chargez un PDF pour afficher l’aperçu de sa rotation.",
+    "previewLoading": "Chargement de l’aperçu PDF…",
+    "previewFailed": "Impossible d’afficher l’aperçu de cette page.",
+    "emptyDocument": "Le PDF ne contient aucune page.",
+    "currentAngle": "Angle actuel : {{angle}}°",
+    "advanceRotation": "Ajouter 90° vers la droite. Angle actuel : {{angle}}°.",
+    "rotationHelp": "Chaque clic ajoute 90° dans le sens horaire ; après 270°, le bouton revient à 90°.",
     "outputDescription": "Pages pivotées",
     "action": "Faire pivoter",
     "working": "Rotation en cours…",
