@@ -29,31 +29,33 @@ export function useExcelMapping(t: TFunction) {
     () => ({ ...state, pairs: preview.pairs }), [state, preview.pairs],
   );
 
-  async function load(run: (currentRequest: number) => Promise<void>) {
+  async function load(run: (currentRequest: number) => Promise<void>): Promise<boolean> {
     const currentRequest = ++requestId.current;
     setExcelError("");
     setExcelLoading(true);
     try {
       await run(currentRequest);
+      return currentRequest === requestId.current;
     } catch (error) {
       if (currentRequest === requestId.current) {
         setExcelError(error instanceof Error ? error.message : t("image.errorGeneric"));
       }
+      return false;
     } finally {
       if (currentRequest === requestId.current) setExcelLoading(false);
     }
   }
 
-  async function chooseExcel(files: File[]) {
+  async function chooseExcel(files: File[]): Promise<boolean> {
     const file = files[0];
-    if (!file) return;
+    if (!file) return false;
     if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size > MAX_UPLOAD_BYTES) {
       setExcelError(t(file.size > MAX_UPLOAD_BYTES ? "image.errorExcelSize" : "image.errorExcelType"));
-      return;
+      return false;
     }
     setRestored(null);
     setState({ ...EMPTY, workbook: file });
-    await load(async (currentRequest) => {
+    return load(async (currentRequest) => {
       const form = new FormData();
       form.append("workbook", file);
       const payload = await imageReplaceApi.excelSheets(form);

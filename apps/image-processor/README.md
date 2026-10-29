@@ -230,6 +230,14 @@ No real-model orientation benchmark was run for the typography change.
 - **Approval:** The original navigation exception and the addition of History were explicitly approved by the product owner.
 - **Review condition:** Revisit if the product adds a separate data-management workflow or the standard changes.
 
+### Demo files in the OCR workflow
+
+- **Rule:** The [demo mode integration guide](../../docs/standards/demo-mode-integration.md) keeps demo scenarios separate from the normal application request path.
+- **Deviation:** Selecting Demo in Settings loads the bundled `Image_roue.png` and `DEMO_ROUE.xlsx` into the normal Image Processor workspace. Excel parsing and any subsequent OCR use the app's local API.
+- **Reason:** The product owner requested a ready-to-use demonstration with the supplied wheel drawing and workbook.
+- **Approval:** Explicitly approved by the product owner on 2026-10-29.
+- **Behavior:** Import navigates to Home but does not start OCR automatically. The active image and workbook are replaced; the current image workspace is saved through the existing history workflow.
+
 ## Technical References
 
 - [Repository technical standard](../../STANDARD_POC.md)

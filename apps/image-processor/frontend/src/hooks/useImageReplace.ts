@@ -86,6 +86,31 @@ export function useImageReplace(t: TFunction) {
     }
   }
 
+  async function loadDemoFiles() {
+    const [imageResponse, workbookResponse] = await Promise.all([
+      fetch(`${import.meta.env.BASE_URL}demo/Image_roue.png`),
+      fetch(`${import.meta.env.BASE_URL}demo/DEMO_ROUE.xlsx`),
+    ]);
+    if (!imageResponse.ok || !workbookResponse.ok) {
+      throw new Error(t("settings.demo.importError"));
+    }
+
+    const [imageBlob, workbookBlob] = await Promise.all([
+      imageResponse.blob(), workbookResponse.blob(),
+    ]);
+    const imageFile = new File([imageBlob], "Image_roue.png", { type: "image/png" });
+    const workbookFile = new File([workbookBlob], "DEMO_ROUE.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    if (!await chooseImage([imageFile])) {
+      throw new Error(t("settings.demo.importError"));
+    }
+    if (!await excel.chooseExcel([workbookFile])) {
+      throw new Error(t("settings.demo.importError"));
+    }
+  }
+
   function updatePair(id: number, field: "reference" | "replacement", value: string) {
     setReplacementPairs((current) =>
       current.map((pair) => pair.id === id ? { ...pair, [field]: value } : pair),
@@ -267,7 +292,7 @@ export function useImageReplace(t: TFunction) {
     ...excel, ...image, storage, replacementPairs, error, loading,
     canRunOcr: excel.excelSelectionReady || hasValidManualPairs(replacementPairs),
     downloading: download.downloading, savingAs: download.savingAs, restoring, retouching,
-    setRetouching,
+    setRetouching, loadDemoFiles,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
     setExcelPieceRow: selectExcelPieceRow,
     replaceRecognizedLine, undoRecognizedLine, reapplyReplacements, openHistory,

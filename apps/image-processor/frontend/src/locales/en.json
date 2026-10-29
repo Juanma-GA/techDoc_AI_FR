@@ -220,6 +220,12 @@
     "demo.hint": "Normal mode is selected by default. The choice is stored in the app's local configuration.",
     "demo.normal": "Normal mode",
     "demo.demo": "Demo mode",
-    "demo.saveError": "Could not save the mode."
+    "demo.saveError": "Could not save the mode.",
+    "demo.workspaceLoading": "Loading the local workspace…",
+    "demo.workspaceError": "The local workspace could not be loaded.",
+    "demo.retryWorkspace": "Retry local workspace loading",
+    "demo.importing": "Importing demo files…",
+    "demo.importError": "Could not load the demo image and workbook.",
+    "demo.retryImport": "Retry import"
   }
 }
