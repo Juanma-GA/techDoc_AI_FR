@@ -110,7 +110,7 @@ export function ImageInputPanel({ workflow, disabled, t }: ImageInputPanelProps)
           type="submit"
           size="lg"
           className="w-full"
-          disabled={!workflow.imageFile || disabled || !workflow.excelSelectionReady}
+          disabled={!workflow.imageFile || disabled || !workflow.canRunOcr}
         >
           {workflow.loading ? (
             <span role="status">{t("image.runningOcr")}</span>
