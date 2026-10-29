@@ -14,7 +14,8 @@ validation remain environment-dependent.
 
 - Ingest PDF, DOCX, DOC, and supported ZIP inputs.
 - Prepare PDFs using the native text layer where it is legible and Mistral OCR
-  only for pages that need it; preparation rule results are shown per page.
+  only for pages that need it; final verification runs enabled THALES rules on
+  modified pages and uses validated OCR boxes to position scan findings.
 - Configure recognized THALES preparation titles in Rules > Page titles.
   Pages without a new recognized title continue the previous section; titles
   outside the list are ignored. Rerun detection to apply catalog changes to
