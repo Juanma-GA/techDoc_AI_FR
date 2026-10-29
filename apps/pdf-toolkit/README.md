@@ -126,7 +126,7 @@ node scripts\package_pdf_toolkit_desktop.mjs --out apps\pdf-toolkit\dist
 
 Le résultat `dist/pdf-toolkit-desktop-v1.0.0-YYYYMMDD.zip` contient uniquement le setup `.exe` NSIS, à extraire puis exécuter. Les packages répétés le même jour reçoivent un suffixe (`-2`, `-3`, etc.) ; aucun ancien ZIP n'est écrasé. Les fichiers intermédiaires restent sous `dist/tauri/x86_64-pc-windows-msvc/release/bundle/nsis/`. Le poste de build nécessite Go, Node/pnpm, Rust et Visual Studio C++ ; le destinataire n'a pas besoin de ces outils. WebView2 est requis ; le setup peut le télécharger s'il est absent. Le setup et le backend embarqué restent soumis aux protections Windows, sans signature ni acceptation garanties.
 
-Tauri embarque le même frontend et serveur Go. Un écran de démarrage affiche les erreurs éventuelles, puis l'interface s'ouvre dans la fenêtre native. Le serveur utilise un port local libre et s'arrête à sa fermeture. Le mode web et les routes API restent inchangés.
+Tauri embarque le même frontend et serveur Go. Un écran de démarrage affiche les erreurs éventuelles, puis l'interface s'ouvre dans la fenêtre native. Le logo AI4TECHDOC est utilisé comme icône de la fenêtre ; sa barre de titre suit le thème clair/sombre de l'interface. Le serveur utilise un port local libre et s'arrête à sa fermeture. Le mode web et les routes API restent inchangés.
 
 ## Développement
 

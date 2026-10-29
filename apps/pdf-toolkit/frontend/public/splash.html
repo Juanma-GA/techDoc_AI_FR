@@ -4,7 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="./theme.css" />
-    <script>document.documentElement.classList.toggle("dark", localStorage.getItem("theme") !== "light");</script>
+    <script>
+      (function () {
+        const theme = localStorage.getItem("theme") === "light" ? "light" : "dark";
+        document.documentElement.classList.toggle("dark", theme === "dark");
+        const tauri = window.__TAURI__;
+        if (!tauri) {
+          if ("__TAURI_INTERNALS__" in window) {
+            console.error("Tauri window API is unavailable; check withGlobalTauri.");
+          }
+          return;
+        }
+        const nativeWindow = tauri.window?.getCurrentWindow?.();
+        if (!nativeWindow) {
+          console.error("Tauri window API is unavailable; check withGlobalTauri.");
+          return;
+        }
+        nativeWindow.setTheme(theme).catch((error) => {
+          console.error("Unable to synchronize desktop window theme:", error);
+        });
+      })();
+    </script>
     <title>PDF Toolkit — Démarrage</title>
     <style>
       :root {

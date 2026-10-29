@@ -52,11 +52,54 @@ const tools = [
 type ToolId = (typeof tools)[number]["id"];
 const languages = ["fr", "en"] as const;
 
+declare global {
+  interface Window {
+    __TAURI__?: {
+      window?: {
+        getCurrentWindow?: () => {
+          setTheme: (theme: "dark" | "light") => Promise<void>;
+        };
+      };
+    };
+  }
+}
+
 export function App() {
   const { t, i18n } = useTranslation();
   const [activeTool, setActiveTool] = useState<ToolId>("merge");
   const isCompact = useMediaQuery("(max-width: 760px)");
   const currentLanguage = (i18n.resolvedLanguage ?? i18n.language ?? "fr").slice(0, 2);
+
+  useEffect(() => {
+    const tauri = window.__TAURI__;
+    if (!tauri) {
+      if ("__TAURI_INTERNALS__" in window) {
+        console.error("Tauri window API is unavailable; check withGlobalTauri.");
+      }
+      return;
+    }
+
+    const nativeWindow = tauri.window?.getCurrentWindow?.();
+    if (!nativeWindow) {
+      console.error("Tauri window API is unavailable; check withGlobalTauri.");
+      return;
+    }
+
+    const syncTheme = () => {
+      const theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+      void nativeWindow.setTheme(theme).catch((error: unknown) => {
+        console.error("Unable to synchronize desktop window theme:", error);
+      });
+    };
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    syncTheme();
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = currentLanguage;

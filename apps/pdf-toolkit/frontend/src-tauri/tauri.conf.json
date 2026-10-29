@@ -9,8 +9,15 @@
     "beforeBuildCommand": "pnpm tauri:prepare"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [],
-    "security": {}
+    "security": {
+      "capabilities": [
+        "default",
+        "loopback-save-dialog",
+        "loopback-window-theme"
+      ]
+    }
   },
   "bundle": {
     "active": true,

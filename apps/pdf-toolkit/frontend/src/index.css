@@ -116,6 +116,7 @@ a {
   align-items: center;
   gap: 9px;
   margin: 0;
+  margin-top: auto;
   padding-top: 20px;
   color: var(--color-text-dim);
   font-size: 0.75rem;
@@ -132,6 +133,12 @@ a {
 
 .tool-panel {
   min-width: 0;
+}
+
+.pdf-toolkit-shell .ui-main {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .pdf-toolkit-shell .ui-tool-tabs {
