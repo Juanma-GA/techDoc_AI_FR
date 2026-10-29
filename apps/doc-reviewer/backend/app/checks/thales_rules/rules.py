@@ -748,6 +748,39 @@ CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM = rule(
     },
 )
 
+CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE",
+    name="Pays en majuscules dans la colonne fournisseur",
+    description=(
+        "Dans la colonne SUPPLIERS TRADE NAME AND CODE FSCM de la LIST OF "
+        "MATERIALS, le pays indique apres le numero FSCM doit etre ecrit en "
+        "majuscules. Le nom du fournisseur et le numero FSCM ne sont pas concernes."
+    ),
+    message="Le pays de la colonne fournisseur doit etre ecrit en majuscules.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_supplier_country_uppercase"},
+        )
+    ],
+    failure_message="Le pays apres le numero FSCM doit etre en majuscules.",
+    translations={
+        "en": {
+            "description": (
+                "In the SUPPLIERS TRADE NAME AND CODE FSCM column of the LIST OF "
+                "MATERIALS, the country after the FSCM number must be uppercase. "
+                "The supplier name and FSCM number are not affected."
+            ),
+            "message": "The country in the supplier column must be uppercase.",
+        }
+    },
+)
+
 CUSTOM_REVISION_BAR_NEW_PAGE = rule(
     code="CUSTOM_REVISION_BAR_NEW_PAGE",
     name="Barre de revision pleine hauteur sur les pages nouvelles",
@@ -1375,7 +1408,9 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
         "Chaque page doit afficher un seul numero dans le pied de page, sans "
         "forme combinee telle que Page 25/26. Les pages "
         "LEP, ROR, Highlights et Title Page sont verifiees contre leur prefixe "
-        "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.)."
+        "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.). Pour Boeing, "
+        "LEP-1 et RR-1 remplacent LEP Page 1 et ROR Page 1; INTRO Page 1 / INTRO-1 "
+        "et TC Page 1 / TC-1 sont egalement reconnus."
     ),
     message="Le numero de page du pied de page est absent ou incorrect.",
     kind="field_required",
@@ -1396,7 +1431,9 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
             "description": (
                 "Every page must show one page number in the footer, not a combined "
                 "label such as Page 25/26. LEP, ROR, Highlights, "
-                "and Title Page pages are checked against their expected prefix and order."
+                "and Title Page pages are checked against their expected prefix and order. "
+                "For Boeing, LEP-1 and RR-1 replace LEP Page 1 and ROR Page 1; "
+                "INTRO Page 1 / INTRO-1 and TC Page 1 / TC-1 are also recognized."
             ),
             "message": "The footer page number is missing or incorrect.",
         }
@@ -3234,6 +3271,7 @@ RULE_DEFINITIONS = (
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
     CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM,
+    CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE,
     CUSTOM_REVISION_BAR_NEW_PAGE,
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_MARGIN_POSITION,

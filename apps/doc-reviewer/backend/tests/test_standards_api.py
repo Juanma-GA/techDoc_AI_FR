@@ -128,6 +128,7 @@ def test_thales_catalog_assigns_rule_specific_severity(client: TestClient) -> No
         "CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES": "error",
         "CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE": "error",
         "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM": "error",
+        "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE": "error",
         "CUSTOM_REVISION_BAR_NEW_PAGE": "error",
         "CUSTOM_REVISION_BAR_MODIFIED_PAGE": "error",
         "CUSTOM_REVISION_BAR_MARGIN_POSITION": "error",

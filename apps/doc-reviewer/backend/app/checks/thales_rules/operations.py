@@ -129,7 +129,12 @@ _ENVIRONMENTAL_CONDITIONS = "environmental conditions"
 _ENVIRONMENTAL_CONDITIONS_COMPACT = "environmentalconditions"
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
-_FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
+_FSCM_SUFFIX_RE = re.compile(
+    r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)(?:\s+.+)?$"
+)
+_FSCM_COUNTRY_SUFFIX_RE = re.compile(
+    r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s+(?P<country>.+?)\s*$"
+)
 _VENDOR_CODE_LIST_TITLE_RE = re.compile(r"(?i)^\s*VENDOR\s+CODE\s+LIST\s*:?[ \t]*$")
 _VENDOR_CODE_HEADER = "code"
 _VENDOR_ADDRESS_HEADER = "vendorsaddress"
@@ -1468,7 +1473,10 @@ def _list_materials_code_findings(
         checked_pages += 1
 
         visual_rows = revision.visual_rows(page.spans)
-        if control == "list_materials_supplier_fscm":
+        if control in {
+            "list_materials_supplier_fscm",
+            "list_materials_supplier_country_uppercase",
+        }:
             use_header = next(
                 (span for span in page.spans if span.text.strip().upper() == "USE"),
                 None,
@@ -1510,6 +1518,38 @@ def _list_materials_code_findings(
                     if span.text.strip()
                 )
                 if not supplier_name or not any(char.isalpha() for char in supplier_name):
+                    continue
+                if control == "list_materials_supplier_country_uppercase":
+                    country_match = _FSCM_COUNTRY_SUFFIX_RE.search(supplier_name)
+                    if country_match is None:
+                        continue
+                    country = country_match.group("country").strip()
+                    if not any(char.isalpha() for char in country) or country.isupper():
+                        continue
+                    proposed = (
+                        supplier_name[: country_match.start("country")] + country.upper()
+                    )
+                    bbox = (
+                        min(span.bbox[0] for span in supplier_spans),
+                        min(span.bbox[1] for span in supplier_spans),
+                        max(span.bbox[2] for span in supplier_spans),
+                        max(span.bbox[3] for span in supplier_spans),
+                    )
+                    findings.append(
+                        OperationResult(
+                            status="FAIL",
+                            observed=supplier_name,
+                            expected="Pays en majuscules",
+                            message=(
+                                f"Le pays « {country} » du fournisseur « {supplier_name} » "
+                                "doit etre ecrit en majuscules."
+                            ),
+                            original=supplier_name,
+                            proposed=proposed,
+                            page=page.page,
+                            bbox=bbox,
+                        )
+                    )
                     continue
                 fscm_match = _FSCM_SUFFIX_RE.search(supplier_name)
                 if fscm_match is not None:
@@ -2493,12 +2533,15 @@ def _document_structure_findings(
         "list_materials_code_parentheses",
         "list_materials_code_lowercase",
         "list_materials_supplier_fscm",
+        "list_materials_supplier_country_uppercase",
     }:
         findings, checked = _list_materials_code_findings(context, control)
         if control == "list_materials_code_parentheses":
             expected = "Code de la LIST OF MATERIALS sans parentheses"
         elif control == "list_materials_code_lowercase":
             expected = "Code de la LIST OF MATERIALS en minuscules"
+        elif control == "list_materials_supplier_country_uppercase":
+            expected = "Pays de la colonne fournisseur en majuscules"
         else:
             expected = "Nom fournisseur suivi de (FSCM XXXXX)"
     elif control in {

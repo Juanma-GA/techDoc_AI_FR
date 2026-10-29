@@ -217,6 +217,10 @@ def _codes(parsed: ParsedPdf, document: object = _DOCUMENT) -> list[str]:
 
 def test_page_key_normalization_unifies_the_three_sources() -> None:
     assert revision.normalize_page_key("ROR Page 1") == "ROR 1"
+    assert revision.normalize_page_key("RR-1") == "ROR 1"
+    assert revision.normalize_page_key("LEP-1") == "LEP 1"
+    assert revision.normalize_page_key("INTRO-1") == "INTRO 1"
+    assert revision.normalize_page_key("TC-1") == "TC 1"
     assert revision.normalize_page_key("Page 401") == "401"
     assert revision.normalize_page_key("TP 1") == "TP 1"
     assert revision.normalize_page_key("INTRO 1101 Page 1") == "INTRO 1101 1"
@@ -1076,6 +1080,65 @@ def test_missing_highlights_and_ror_footer_numbers_follow_section_order() -> Non
         for finding in findings
         if finding.control == revision.FOOTER_PAGE_NUMBER
     ] == [(2, "Highlights Page 2"), (4, "ROR Page 2")]
+
+
+def test_boeing_revision_section_footers_use_boeing_page_labels() -> None:
+    parsed = _consistent_document()
+    parsed.pages.append(
+        _page(
+            6,
+            [_span("RECORD OF REVISIONS", 100.0, 120.0, 6)]
+            + _footer(6, "ROR Page 1", _REVISION_DATE),
+        )
+    )
+    parsed.page_count = 6
+    document = SimpleNamespace(
+        meta_revision_date=_REVISION_DATE,
+        meta_first_issue_date="JUL 1966",
+        meta_last_issue_date="MAR 77",
+        meta_manufacturer="Boeing",
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed, document)
+        if finding.control == revision.FOOTER_PAGE_NUMBER
+    ]
+
+    assert {(finding.page, finding.proposed) for finding in findings} == {
+        (2, "LEP-1"),
+        (6, "RR-1"),
+    }
+
+
+def test_boeing_revision_section_footers_accept_boeing_page_labels() -> None:
+    parsed = _consistent_document()
+    for span in parsed.pages[1].spans:
+        if span.text == "LEP Page 1":
+            span.text = "LEP-1"
+    parsed.pages[1].text = "\n".join(span.text for span in parsed.pages[1].spans)
+    parsed.pages.append(
+        _page(
+            6,
+            [_span("RECORD OF REVISIONS", 100.0, 120.0, 6)]
+            + _footer(6, "RR-1", _REVISION_DATE),
+        )
+    )
+    parsed.page_count = 6
+    document = SimpleNamespace(
+        meta_revision_date=_REVISION_DATE,
+        meta_first_issue_date="JUL 1966",
+        meta_last_issue_date="MAR 77",
+        meta_manufacturer="Boeing",
+    )
+
+    findings = [
+        finding
+        for finding in _findings(parsed, document)
+        if finding.control == revision.FOOTER_PAGE_NUMBER
+    ]
+
+    assert not any(finding.page in {2, 6} for finding in findings)
 
 
 def test_revised_page_without_star_in_the_lep_is_reported() -> None:

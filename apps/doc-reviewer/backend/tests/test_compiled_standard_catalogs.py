@@ -3090,7 +3090,7 @@ def test_list_of_materials_supplier_requires_fscm_in_parentheses() -> None:
     valid, valid_suggestions = execute_pdf_rules(
         _list_materials_code_pdf(
             [
-                ("RED PAINT", "pa-pa-024", "ACME AEROSPACE (FSCM 12345)"),
+                ("RED PAINT", "pa-pa-024", "ACME AEROSPACE (FSCM 12345) France"),
                 ("BLUE PAINT", "pa-pa-025", "(FSCM 67890)"),
             ]
         ),
@@ -3115,6 +3115,43 @@ def test_list_of_materials_supplier_requires_fscm_in_parentheses() -> None:
         "ACME AEROSPACE",
         "ACME COMPONENTS FSCM 12345",
         "ACME PARTS (FSCM 1234)",
+    ]
+
+
+def test_list_of_materials_supplier_country_must_be_uppercase() -> None:
+    rule = _rule("CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE")
+    valid, valid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [
+                ("RED PAINT", "pa-pa-024", "ACME AEROSPACE (FSCM 12345) FRANCE"),
+                ("BLUE PAINT", "pa-pa-025", "ACME COMPONENTS (FSCM 67890) UNITED KINGDOM"),
+                ("GREEN PAINT", "pa-pa-026", "ACME PARTS (FSCM 12345)"),
+            ]
+        ),
+        [rule],
+    )
+    invalid, invalid_suggestions = execute_pdf_rules(
+        _list_materials_code_pdf(
+            [
+                ("RED PAINT", "pa-pa-024", "ACME AEROSPACE (FSCM 12345) France"),
+                ("BLUE PAINT", "pa-pa-025", "ACME COMPONENTS (FSCM 67890) Côte d'Ivoire"),
+            ]
+        ),
+        [rule],
+    )
+
+    assert valid[0].status == "PASS"
+    assert valid_suggestions == []
+    assert invalid[0].status == "FAIL"
+    assert [(item.original, item.proposed) for item in invalid_suggestions] == [
+        (
+            "ACME AEROSPACE (FSCM 12345) France",
+            "ACME AEROSPACE (FSCM 12345) FRANCE",
+        ),
+        (
+            "ACME COMPONENTS (FSCM 67890) Côte d'Ivoire",
+            "ACME COMPONENTS (FSCM 67890) CÔTE D'IVOIRE",
+        ),
     ]
 
 

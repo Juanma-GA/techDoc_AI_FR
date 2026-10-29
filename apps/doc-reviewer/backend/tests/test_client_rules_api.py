@@ -23,14 +23,18 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
     assert config["client_code"] == "THALES"
     assert config["bundle"] == "thales_rules"
-    assert config["bundle_version"] == "1.2.18"
+    assert config["bundle_version"] == "1.2.19"
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
     assert config["catalogs"][0]["code"] == "THALES-CUSTOM"
     assert len(config["catalogs"]) == 2
     assert config["catalogs"][1]["code"] == "ASD-STE100"
-    assert len(rules) == 91
-    assert [rule["rule_number"] for rule in rules] == list(range(1, 92))
+    assert len(rules) == 92
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 93))
+    assert any(
+        rule["code"] == "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE"
+        for rule in rules
+    )
     preparation_rule_codes = {
         "CUSTOM_TP1_REVISION_NUMBER",
         "CUSTOM_TP1_THALES_ADDRESS",
