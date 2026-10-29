@@ -85,6 +85,7 @@ _REVISION_BAR_MIN_LENGTH = 8.0
 _REVISION_BAR_MIN_THICKNESS = 1.0
 _REVISION_BAR_MAX_THICKNESS = 4.5
 _REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
+_TP1_REVISION_BAR_VERTICAL_TOLERANCE = 8.0
 _REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE = re.compile(
     r"(?im)^\s*(?:EQUIPMENT\s+DESIGNATOR\s+INDEX|NUMERICAL\s+INDEX|PARTS\s+LIST)\s*$"
 )
@@ -392,6 +393,7 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
             continue
         current: list[PdfLine] = []
         for line in ordered_lines:
+            is_list_item = _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
             if current:
                 previous = current[-1]
                 line_height = max(
@@ -403,12 +405,15 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
                     line.line_index > previous.line_index + 1
                     or line.bbox[1] - previous.bbox[1]
                     > max(18.0, line_height * 1.8)
-                    or _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
+                    or is_list_item
                     or _PARAGRAPH_TABLE_HEADER_MARKER.match(line.text) is not None
                 ):
                     paragraphs.append(current)
                     current = []
             current.append(line)
+            if is_list_item and line.text.rstrip().endswith((".", "!", "?")):
+                paragraphs.append(current)
+                current = []
         if current:
             paragraphs.append(current)
     return paragraphs
@@ -475,6 +480,24 @@ def _paragraph_justification_issue(
             (index, line)
             for index, line in measurable
             if index not in misaligned_indexes
+        ]
+        right_edges = [line.bbox[2] for _index, line in measurable]
+        expected_right = median(right_edges)
+        misaligned = [
+            (index, line)
+            for index, line in measurable
+            if abs(line.bbox[2] - expected_right) > right_tolerance
+        ]
+    if (
+        len(measurable) >= 3
+        and len(misaligned) == 1
+        and misaligned[0][1].bbox[2] < expected_right - right_tolerance
+    ):
+        misaligned_index = misaligned[0][0]
+        measurable = [
+            (index, line)
+            for index, line in measurable
+            if index != misaligned_index
         ]
         right_edges = [line.bbox[2] for _index, line in measurable]
         expected_right = median(right_edges)
@@ -1153,6 +1176,28 @@ def _tp1_pnr_page_value_findings(
     return findings, len(targets)
 
 
+def _pnr_header_shortcut_prefixes(
+    text: str,
+    expected_values: list[str],
+) -> list[str]:
+    labels = list(_PNR_HEADER_LABEL_RE.finditer(text))
+    prefixes: list[str] = []
+    for label in labels:
+        line_end = text.find("\n", label.end())
+        value_text = text[label.end() : line_end if line_end >= 0 else len(text)]
+        for token in re.split(r"[\s,/;|]+", value_text):
+            normalized = _normalize_pnr_separators(token)
+            if any(
+                normalized.casefold() == _normalize_pnr_separators(value).casefold()
+                for value in expected_values
+            ):
+                continue
+            prefix = re.sub(r"(?i)x+$", "", normalized)
+            if prefix != normalized and any(character.isalnum() for character in prefix):
+                prefixes.append(prefix.casefold())
+    return prefixes
+
+
 def _highlights_pnr_header_findings(
     context: Any,
 ) -> tuple[list[OperationResult], int]:
@@ -1178,6 +1223,7 @@ def _highlights_pnr_header_findings(
         )
     findings: list[OperationResult] = []
     for target in targets:
+        shortcut_prefixes = _pnr_header_shortcut_prefixes(target.text, pnr_values)
         if series_pattern is not None and series_pattern.search(target.text):
             continue
         matches = _pnr_header_matches(target.text, pnr_values)
@@ -1192,7 +1238,12 @@ def _highlights_pnr_header_findings(
         missing = [
             value
             for value, pattern in expected_patterns
-            if pattern is not None and pattern.search(target.text) is None
+            if pattern is not None
+            and pattern.search(target.text) is None
+            and not any(
+                _normalize_pnr_separators(value).casefold().startswith(prefix)
+                for prefix in shortcut_prefixes
+            )
         ]
         if not missing:
             continue
@@ -2431,10 +2482,10 @@ def _revision_bar_findings(
             )
             checked += 1
             spans_footer_content = any(
-                bar.top <= revision_top + 3.0
-                and bar.bottom >= copyright_bottom - 2.0
-                and bar.top <= first_issue_top
-                and bar.bottom >= first_issue_bottom
+                bar.top <= revision_top + _TP1_REVISION_BAR_VERTICAL_TOLERANCE
+                and bar.bottom >= copyright_bottom - _TP1_REVISION_BAR_VERTICAL_TOLERANCE
+                and bar.top <= first_issue_top + _TP1_REVISION_BAR_VERTICAL_TOLERANCE
+                and bar.bottom >= first_issue_bottom - _TP1_REVISION_BAR_VERTICAL_TOLERANCE
                 for bar in bars
             )
             if spans_footer_content:

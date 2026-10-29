@@ -1670,6 +1670,73 @@ def test_highlights_pnr_header_accepts_unseparated_first_mapping_value() -> None
     assert suggestions == []
 
 
+def test_highlights_pnr_header_accepts_wildcard_shortcuts_covering_mapping_values() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    mapping = [
+        "C4171ADM7",
+        "C4171AHAM1",
+        "C4171AEM7",
+        "C4171AJAM1",
+        "C4171AFM5",
+        "C4171AKAM1",
+        "C4171AGM5",
+        "C4171ALAM1",
+        "C4355AAM",
+    ]
+
+    page = _document_type_header_page(
+        "PNR : C4171Axxx/C4355AAMx",
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+    )
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(meta_pnr_number=mapping),
+    )
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
+def test_highlights_pnr_header_rejects_wildcard_shortcuts_missing_mapping_families() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    mapping = ["C4171ADM7", "C4171AHAM1", "C4355AAM"]
+    page = _document_type_header_page(
+        "PNR : C4171Axxx",
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+    )
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(meta_pnr_number=mapping),
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+
+
+def test_highlights_pnr_header_does_not_treat_a_mapped_x_as_a_wildcard() -> None:
+    rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
+    mapping = ["C4171ADM7", "C4171Axxx"]
+    page = _document_type_header_page(
+        "PNR : C4171Axxx",
+        page_type=HIGHLIGHTS_PAGE_TYPE,
+    )
+    parsed = ParsedPdf(page_count=1, pages=[page], full_text=page.text, is_signed=False)
+
+    results, suggestions = execute_pdf_rules(
+        parsed,
+        [rule],
+        document=SimpleNamespace(meta_pnr_number=mapping),
+    )
+
+    assert results[0].status == "FAIL"
+    assert len(suggestions) == 1
+
+
 def test_highlights_pnr_header_accepts_shared_series_for_multiple_mapping_values() -> None:
     rule = _rule("CUSTOM_HIGHLIGHTS_PNR_HEADER")
     for mapping, header, expected_status in (

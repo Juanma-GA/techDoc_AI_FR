@@ -909,7 +909,7 @@ CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
     description=(
         "Sur la page TP 1 declaree R, une barre de revision noire doit longer le "
         "footer depuis la ligne Revision, en couvrant First Issue, jusqu'en dessous "
-        "de la derniere ligne du copyright."
+        "de la derniere ligne du copyright, avec une tolerance verticale de 8 pt."
     ),
     message="La TP1/R n'a pas de barre de revision sur toute la hauteur du footer.",
     kind="field_required",
@@ -932,7 +932,7 @@ CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
             "description": (
                 "On TP 1 declared R, a black revision bar must run through the "
                 "footer from Revision, covering First Issue, to below the final "
-                "copyright line."
+                "copyright line, with an 8 pt vertical tolerance."
             ),
             "message": "The TP1/R revision bar does not span the full footer.",
         }
@@ -1091,7 +1091,9 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     name="Numeros PNR presents et conformes dans l'en-tete Highlights",
     description=(
         "L'en-tete de chaque page Highlights doit contenir les numeros PNR "
-        "renseignes dans le mapping du document, ou uniquement le premier."
+        "renseignes dans le mapping du document, ou uniquement le premier. "
+        "Un prefixe termine par x est accepte pour les valeurs du mapping qu'il "
+        "couvre; il ne remplace pas les autres numeros PNR non couverts."
     ),
     message="Un ou plusieurs numeros PNR de l'en-tete Highlights sont absents ou incorrects.",
     kind="field_required",
@@ -1109,7 +1111,12 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     only_if=Condition(field="meta_pnr_number", state="present"),
     translations={
         "en": {
-            "description": "The header of every Highlights page must contain the PNR numbers in the document mapping, or only the first one.",
+            "description": (
+                "The header of every Highlights page must contain the PNR numbers "
+                "in the document mapping, or only the first one. A prefix ending "
+                "in x is accepted for mapped values it covers; it does not replace "
+                "other uncovered PNR values."
+            ),
             "message": "One or more Highlights header PNR numbers are missing or incorrect.",
         }
     },
@@ -1516,6 +1523,9 @@ CUSTOM_PARAGRAPH_JUSTIFICATION = rule(
     description=(
         "Sur les pages modifiees, les paragraphes de contenu multilignes doivent "
         "etre visuellement alignes a gauche et a droite, hors derniere ligne. "
+        "Les lignes de liste autonomes terminees par une ponctuation sont "
+        "separees du paragraphe suivant; un unique ecart de fin de ligne court "
+        "est tolere dans les paragraphes d'au moins trois lignes mesurables. "
         "Le controle estime l'alignement a partir de la geometrie du PDF et peut "
         "etre inconclusif pour les paragraphes courts ou sans couche texte."
     ),
@@ -1541,6 +1551,9 @@ CUSTOM_PARAGRAPH_JUSTIFICATION = rule(
             "description": (
                 "On modified pages, multiline body paragraphs must be visually "
                 "aligned on both the left and right, except for the final line. "
+                "Completed standalone list items are separated from the following "
+                "paragraph, and one short right-edge outlier is tolerated in "
+                "paragraphs with at least three measurable lines. "
                 "Alignment is estimated from PDF geometry and may be inconclusive "
                 "for short paragraphs or pages without a text layer."
             ),

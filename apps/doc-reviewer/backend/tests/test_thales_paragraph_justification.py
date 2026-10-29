@@ -182,6 +182,23 @@ def test_short_sentence_final_line_is_ignored_when_other_edges_align() -> None:
     assert suggestions == []
 
 
+def test_completed_list_note_does_not_skew_following_paragraph_alignment() -> None:
+    parsed = _layout_pdf(
+        [
+            ("- Not applicable for this CMM ATA 22-44-44.", 20.0, 300.0),
+            ("Refer to CMMs 22-43-18, 22-43-25B2, B3, B4 and B5 which contain", 50.0, 500.0),
+            ("the section Testing and Fault Isolation or Automatic Test", 50.0, 390.0),
+            ("Requirements for the board part number listed in the Title Page", 50.0, 500.0),
+            ("of this CMM.", 50.0, 300.0),
+        ]
+    )
+
+    results, suggestions = _run_rule(parsed)
+
+    assert results[0].status == "PASS"
+    assert suggestions == []
+
+
 def test_missing_pdf_line_index_splits_paragraphs() -> None:
     parsed = _layout_pdf(
         [
