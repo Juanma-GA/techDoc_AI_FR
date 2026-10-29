@@ -19,7 +19,7 @@ export type MissingValueMode = "previous" | "skip";
 export const defaultZone: SplitZone = { x: 0.6, y: 0.03, width: 0.35, height: 0.08 };
 export const fullPageZone: SplitZone = { x: 0, y: 0, width: 1, height: 1 };
 export const defaultNamePattern = "{nom}_{valeur}";
-export const maxSplitGroups = 1000;
+export const maxSplitGroups = 5000;
 
 const maxNameLength = 150;
 const reservedNames = new Set([

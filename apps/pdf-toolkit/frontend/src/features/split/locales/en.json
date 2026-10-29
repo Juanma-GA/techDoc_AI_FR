@@ -74,8 +74,8 @@
     "stepOutputDescription": "Each table row becomes a PDF in the exported folder.",
     "patternLabel": "File name pattern",
     "patternHelp": "Tags: {value}, {n} (number), {pages}, {name} (source PDF). E.g. DOC_{value}_rev1",
-    "folderLabel": "Folder name",
-    "folderHelp": "The folder is downloaded as a ZIP archive.",
+    "folderLabel": "Folder name inside the ZIP",
+    "folderHelp": "This name also determines the ZIP filename.",
     "columnPages": "Pages",
     "columnValue": "Value",
     "columnFile": "Generated file",
@@ -107,9 +107,10 @@
     "simpleMode": "Split mode",
     "rangesLabel": "Custom ranges",
     "rangesHelp": "One PDF per range, separated by semicolons or newlines. Example: 1-4 ; 5-8 ; 9-12. A comma combines pages into one PDF: 1-3,5.",
-    "rangesInvalid": "Check the ranges: existing pages, ascending bounds and no more than 1000 documents.",
-    "simpleInvalid": "Enter a positive whole number and limit the export to 1000 documents.",
+    "rangesInvalid": "Check the ranges: existing pages, ascending bounds and no more than 5000 documents.",
+    "simpleInvalid": "Enter a positive whole number and limit the export to 5000 documents.",
     "simpleHelp": "Files are numbered: name_01.pdf, name_02.pdf…",
+    "simpleFolderHelp": "This name is used for the folder inside the ZIP and for the archive filename.",
     "advancedNeedsFile": "Load a PDF in step 01 first."
   }
 }

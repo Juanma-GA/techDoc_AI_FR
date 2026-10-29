@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   closestCenter,
   DndContext,
@@ -19,16 +19,26 @@ import { CSS } from "@dnd-kit/utilities";
 import { FileText, Grip, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
-import { Button, Card, Spinner } from "@internal/ui";
+import {
+  chooseExportDestination,
+  formatOperationError,
+  processPDF,
+  validateExportFileName,
+  type ExportProgressState,
+} from "../../shared/api";
+import { Button, Card, Input, Spinner } from "@internal/ui";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { formatFileSize } from "../../shared/files";
 import { renderPdfThumbnails, type PageThumbnail } from "./pdfPreview";
+import "./reorder.css";
 
 export function ReorderTool() {
   const { t, i18n } = useTranslation();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
+  const outputNameId = useId();
   const [file, setFile] = useState<File | null>(null);
+  const [outputName, setOutputName] = useState("reordered.pdf");
   const [thumbnails, setThumbnails] = useState<PageThumbnail[]>([]);
   const [order, setOrder] = useState<number[]>([]);
   const [previewError, setPreviewError] = useState("");
@@ -37,6 +47,10 @@ export function ReorderTool() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [working, setWorking] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -105,15 +119,33 @@ export function ReorderTool() {
       setError(t("reorder.selectAndWait"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
     data.append("file", file, file.name);
     data.append("order", JSON.stringify(order));
     try {
-      await processPDF("reorder", data, "reordered.pdf", t);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processPDF(
+        "reorder",
+        data,
+        fileName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.reorderFailed"));
@@ -227,10 +259,27 @@ export function ReorderTool() {
               <FileText size={21} aria-hidden="true" />
             </span>
             <span>
-              <strong>reordered.pdf</strong>
+              <label className="field-label" htmlFor={outputNameId}>
+                {t("exportOptions.fileName")}
+              </label>
+              <Input
+                id={outputNameId}
+                value={outputName}
+                disabled={working}
+                aria-describedby={`${outputNameId}-help`}
+                onChange={(event) => {
+                  setOutputName(event.currentTarget.value);
+                  setError("");
+                  setSuccess(false);
+                }}
+              />
               <small>{t("reorder.outputDescription")}</small>
             </span>
           </div>
+          <p className="input-help" id={`${outputNameId}-help`}>
+            {t("exportOptions.saveLocationHint")}
+          </p>
+          {working ? <ExportProgress progress={exportProgress} /> : null}
           <Button
             type="submit"
             disabled={working || previewLoading || order.length === 0}
