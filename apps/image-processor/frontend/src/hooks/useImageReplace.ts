@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { imageReplaceApi, type OcrResultDto } from "../lib/api";
-import { analysisForm } from "../lib/analysis-form";
+import { analysisForm, hasValidManualPairs } from "../lib/analysis-form";
 import { requestError, workspaceApi, type ReplacementPair } from "../lib/workspace-api";
 import { useExcelMapping } from "./useExcelMapping";
 import { useImageDocument } from "./useImageDocument";
@@ -265,6 +265,7 @@ export function useImageReplace(t: TFunction) {
 
   return {
     ...excel, ...image, storage, replacementPairs, error, loading,
+    canRunOcr: excel.excelSelectionReady || hasValidManualPairs(replacementPairs),
     downloading: download.downloading, savingAs: download.savingAs, restoring, retouching,
     setRetouching,
     chooseImage, newImage, updatePair, togglePair, addPair, removePair, submit,
