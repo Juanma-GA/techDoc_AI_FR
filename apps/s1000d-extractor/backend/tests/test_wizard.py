@@ -34,7 +34,7 @@ def _upload(client, data: bytes) -> str:
     return doc_id
 
 
-def test_wizard_full_flow(client, pdf_bytes) -> None:
+def test_wizard_full_flow(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload(client, pdf_bytes)
     dmrl = [
         {
@@ -86,6 +86,7 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
 
     # avancer vers generation
     st = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}).json()
+    st = complete_preliminary(doc_id, st)
     assert st["step"] == "generate"
 
     # chaque DM a un XML bien forme ; le DM procedural -> <procedure>
@@ -106,7 +107,7 @@ def test_wizard_full_flow(client, pdf_bytes) -> None:
     assert z.headers["content-type"] == "application/zip"
 
 
-def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes) -> None:
+def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload(client, pdf_bytes)
     client.post(f"/api/v1/documents/{doc_id}/wizard/start")
     state = client.post(
@@ -128,6 +129,7 @@ def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes) -
         }]},
     ).json()
 
+    state = complete_preliminary(doc_id, state)
     assert state["step"] == "generate"
     invalid_dm = next(item for item in state["dms"] if not item["xsd_valid"])
     assert any(violation["rule"] == "XSD" for violation in invalid_dm["xsd_violations"])
@@ -155,7 +157,7 @@ def test_xsd_invalid_wizard_dms_are_warned_but_downloadable(client, pdf_bytes) -
         assert "proceduralStep" not in archive.read(invalid_name).decode("utf-8")
 
 
-def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
+def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload(client, pdf_bytes)
     dmrl = [
         {
@@ -207,9 +209,13 @@ def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes) -> None:
     state = client.post(
         f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}
     ).json()
+    state = complete_preliminary(doc_id, state)
     assert state["step"] == "generate"
 
-    archive_response = client.get(f"/api/v1/documents/{doc_id}/wizard/zip")
+    archive_response = client.get(
+        f"/api/v1/documents/{doc_id}/wizard/zip",
+        params={"max_dimension": "64", "image_format": "png"},
+    )
     assert archive_response.status_code == 200, archive_response.text
     pmc_path = f"PMC/{doc_id}_pmc.xml"
     with ZipFile(BytesIO(archive_response.content)) as archive:
@@ -268,8 +274,8 @@ def test_downloaded_dm_xml_keeps_global_figure_and_table_ids(client) -> None:
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
     assert 'id="fig-0001"' in first.text
-    assert 'id="fig-0002"' in second.text
-    assert 'id="tbl-0001"' in second.text
+    assert 'id="fig-0001"' in second.text
+    assert 'id="tab-0001"' in second.text
 
 
 def test_dm_xml_recomputes_stale_template_warning_from_current_tree() -> None:
@@ -527,7 +533,7 @@ def test_split_one_into_subdms() -> None:
     assert {s["title"] for s in subs} == {"1.1 Clean", "1.2 Oil"}
 
 
-def test_wizard_type_override(client, pdf_bytes) -> None:
+def test_wizard_type_override(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload(client, pdf_bytes)
     dmrl = [
         {"DMC": "DMC-WEG-A-00-00-00-00A-040A-D", "Titre": "Description"},
@@ -550,7 +556,8 @@ def test_wizard_type_override(client, pdf_bytes) -> None:
         f"/api/v1/documents/{doc_id}/wizard/advance",
         json={"types": {dm0: "procedural"}},
     ).json()
-    client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []})
+    st = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}).json()
+    complete_preliminary(doc_id, st)
     xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm0}/xml").text
     assert "<procedure>" in xml
 

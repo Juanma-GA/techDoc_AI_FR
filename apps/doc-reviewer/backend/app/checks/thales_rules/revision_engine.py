@@ -51,6 +51,7 @@ _HIGHLIGHTS_CHAPTERS = (
     "Cleaning",
     "Description and Operation",
     "Disassembly",
+    "Environmental conditions",
     "Fault Isolation",
     "Illustrated Parts List",
     "Introduction",
@@ -60,15 +61,18 @@ _HIGHLIGHTS_CHAPTERS = (
     "List of Approved Repairs",
     "Record of Revisions",
     "Record of Temporary Revisions",
+    "Removal Procedure and Special",
     "Repair",
     "Service Bulletin List",
     "Special Equipment and Tooling",
     "Special Tools, Fixtures and Equipment",
     "Special Tools, Fixtures, Equipment and Consumables",
     "Special Tools, Fixtures and Equipment - List of Special Materials",
+    "Storage - Packaging - Conditioning",
     "Storage",
     "Storage Instructions",
     "Table of Contents",
+    "Test Run",
     "Testing",
     "Testing and Fault Isolation",
     "Testing and Trouble Shooting",
@@ -79,6 +83,7 @@ _HIGHLIGHTS_CHAPTER_BY_KEY = {
     re.sub(r"[^a-z0-9]", "", chapter.casefold()): chapter
     for chapter in _HIGHLIGHTS_CHAPTERS
 }
+_ENVIRONMENTAL_CONDITIONS_KEY = "environmentalconditions"
 
 _MONTHS = (
     "JAN",
@@ -117,7 +122,7 @@ _TITLE_PAGE_ANCHOR_RE = re.compile(
 )
 _LEP_HEADER_CELLS = ("SUBJECT", "PAGE", "DATE")
 
-_COPYRIGHT_ANCHOR_RE = re.compile(r"(?i)THALES\s+AVS\s+FRANCE")
+_COPYRIGHT_ANCHOR_RE = re.compile(r"(?i)THALES\s+(?:AVS\s+FRANCE|AVIONICS\s+SAS)\b")
 HIGHLIGHTS_KEY_PREFIX = "HIGHLIGHTS"
 _PAGE_KEY_RE = re.compile(
     r"(?i)^(?:(?P<prefix>.+?)\s+)?(?P<number>\d+(?:-\d+)?)$"
@@ -667,13 +672,21 @@ def match_highlights_chapter(subject: str) -> str | None:
         _HIGHLIGHTS_CHAPTER_BY_KEY,
         key=lambda candidate: SequenceMatcher(None, normalized, candidate).ratio(),
     )
+    if (
+        closest == _ENVIRONMENTAL_CONDITIONS_KEY
+        and normalized != _ENVIRONMENTAL_CONDITIONS_KEY
+    ):
+        return None
     threshold = 0.85 if len(normalized) >= 10 else 0.8
     if SequenceMatcher(None, normalized, closest).ratio() < threshold:
         return None
     return _HIGHLIGHTS_CHAPTER_BY_KEY[closest]
 
 
-def _highlights_header(rows: list[list[Span]]) -> tuple[int, float, float, float] | None:
+def _highlights_header(
+    rows: list[list[Span]],
+    words: list[PdfWord] | None = None,
+) -> tuple[int, float, float, float] | None:
     """Locate the Highlights header row and its two column boundaries."""
     for index, row in enumerate(rows):
         designation = next(
@@ -688,21 +701,66 @@ def _highlights_header(rows: list[list[Span]]) -> tuple[int, float, float, float
             (span for span in row if _HIGHLIGHTS_HEADER_RE.search(span.text)),
             None,
         )
-        if designation is None or change is None or pages is None:
+        if pages is None:
             continue
+        if designation is None or change is None:
+            if not words:
+                continue
+            row_center = sum(_center_y(span) for span in row) / len(row)
+            row_words = [
+                word
+                for word in words
+                if abs((word.bbox[1] + word.bbox[3]) / 2 - row_center)
+                <= _ROW_TOLERANCE
+            ]
+            word_texts = [word.text.strip().casefold() for word in row_words]
+            designation_word = next(
+                (
+                    word
+                    for word, text in zip(row_words, word_texts)
+                    if text == "designation"
+                ),
+                None,
+            )
+            description_index = next(
+                (
+                    offset
+                    for offset in range(len(word_texts) - 2)
+                    if word_texts[offset : offset + 3]
+                    == ["description", "of", "change"]
+                ),
+                None,
+            )
+            if designation is None and designation_word is None:
+                continue
+            if change is None and description_index is None:
+                continue
+            designation_x = (
+                designation.bbox[0]
+                if designation is not None
+                else designation_word.bbox[0]
+            )
+            change_x = (
+                change.bbox[0]
+                if change is not None
+                else row_words[description_index].bbox[0]
+            )
+        else:
+            designation_x = designation.bbox[0]
+            change_x = change.bbox[0]
         # Column starts, not column ends: the data cells of this table are
         # left-aligned well before the (centered) header labels, so a
         # boundary taken on the header's right edge misclassifies them.
-        pages_max = (pages.bbox[0] + designation.bbox[0]) / 2
-        status_max = (designation.bbox[0] + change.bbox[0]) / 2
-        return index, pages_max, status_max, designation.bbox[0]
+        pages_max = (pages.bbox[0] + designation_x) / 2
+        status_max = (designation_x + change_x) / 2
+        return index, pages_max, status_max, designation_x
     return None
 
 
 def extract_highlights(page: ParsedPage) -> list[HighlightsEntry]:
     """Read one Highlights page into (subject, page range, status) entries."""
     rows = visual_rows(page.spans)
-    header = _highlights_header(rows)
+    header = _highlights_header(rows, page.words)
     if header is None:
         return []
     header_index, pages_max, status_max, designation_x = header
@@ -823,7 +881,7 @@ def extract_invalid_highlights_designations(
     page: ParsedPage,
 ) -> list[InvalidHighlightsDesignation]:
     rows = visual_rows(page.spans)
-    header = _highlights_header(rows)
+    header = _highlights_header(rows, page.words)
     if header is None:
         return []
     header_index, _pages_max, status_max, designation_x = header
@@ -866,7 +924,7 @@ def extract_missing_highlights_designations(
     page: ParsedPage,
 ) -> list[MissingHighlightsDesignation]:
     rows = visual_rows(page.spans)
-    header = _highlights_header(rows)
+    header = _highlights_header(rows, page.words)
     if header is None:
         return []
     header_index, _pages_max, status_max, designation_x = header
@@ -1346,7 +1404,7 @@ def extract_footer(page: ParsedPage, fallback_key: str | None = None) -> PageFoo
 
 def _is_highlights_page(page: ParsedPage) -> bool:
     return (
-        _highlights_header(visual_rows(page.spans)) is not None
+        _highlights_header(visual_rows(page.spans), page.words) is not None
         or _HIGHLIGHTS_TITLE_RE.search(page.text or "") is not None
     )
 

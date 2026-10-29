@@ -2,18 +2,28 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { FileText, Image } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button, Card, Select, Spinner } from "@internal/ui";
+import { Button, Card, Input, Select, Spinner } from "@internal/ui";
+import {
+  chooseExportDestination,
+  saveExportBlob,
+  validateExportFileName,
+  type ExportProgressState,
+} from "../../shared/api";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
 import { renderPdfImages, type RasterFormat } from "./renderPdfImages";
-
-const outputName = "pdf-images.zip";
 
 export function PdfToImagesTool() {
   const { t } = useTranslation();
   const formatSelectId = useId();
+  const outputNameId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [format, setFormat] = useState<RasterFormat>("png");
-  const [progress, setProgress] = useState({ completed: 0, total: 0 });
+  const [outputName, setOutputName] = useState("pdf-images.zip");
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "preparing",
+    percentage: null,
+  });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
@@ -32,18 +42,33 @@ export function PdfToImagesTool() {
       setError(t("files.select"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     const controller = new AbortController();
     controllerRef.current = controller;
     setWorking(true);
-    setProgress({ completed: 0, total: 0 });
+    setExportProgress({ phase: "preparing", percentage: null });
     setError("");
     setSuccess(false);
     try {
+      const destination = await destinationChoice;
+      if (destination === null) return;
       const archive = await renderPdfImages(
         file,
         format,
-        (completed, total) => setProgress({ completed, total }),
+        (completed, total) =>
+          setExportProgress({
+            phase: "pages",
+            percentage: Math.round((completed / total) * 100),
+            completed,
+            total,
+          }),
         controller.signal,
         {
           emptyDocument: t("pdfToImages.emptyDocument"),
@@ -55,7 +80,8 @@ export function PdfToImagesTool() {
       if (controller.signal.aborted) {
         return;
       }
-      downloadArchive(archive, outputName);
+      const savedName = await saveExportBlob(archive, fileName, destination, t);
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       if (!controller.signal.aborted) {
@@ -133,16 +159,27 @@ export function PdfToImagesTool() {
             <Image size={21} aria-hidden="true" />
           </span>
           <span>
-            <strong>{outputName}</strong>
+            <label className="field-label" htmlFor={outputNameId}>
+              {t("exportOptions.fileName")}
+            </label>
+            <Input
+              id={outputNameId}
+              value={outputName}
+              disabled={working}
+              aria-describedby={`${outputNameId}-help`}
+              onChange={(event) => {
+                setOutputName(event.currentTarget.value);
+                setError("");
+                setSuccess(false);
+              }}
+            />
             <small>{t("pdfToImages.stepOutputDescription")}</small>
           </span>
         </div>
-        {working && progress.total > 0 ? (
-          <p className="preview-status" role="status">
-            <Spinner aria-label={t("common.loading")} />
-            {t("pdfToImages.progress", progress)}
-          </p>
-        ) : null}
+        <p className="input-help" id={`${outputNameId}-help`}>
+          {t("exportOptions.saveLocationHint")}
+        </p>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || !file} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Image size={18} />}
           {working ? t("pdfToImages.working") : t("pdfToImages.action")}
@@ -162,16 +199,6 @@ export function PdfToImagesTool() {
       </Card>
     </form>
   );
-}
-
-function downloadArchive(archive: Blob, fileName: string): void {
-  const url = URL.createObjectURL(archive);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function isRasterFormat(value: string): value is RasterFormat {

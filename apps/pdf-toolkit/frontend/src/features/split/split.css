@@ -1,7 +1,7 @@
 .split-workflow {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.15fr);
-  align-items: start;
+  align-items: stretch;
   gap: 16px;
 }
 

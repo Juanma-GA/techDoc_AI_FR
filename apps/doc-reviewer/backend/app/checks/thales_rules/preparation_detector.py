@@ -1,15 +1,32 @@
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.checks.client_bundle import ClientBundle
+from app.checks.thales_rules.page_classifier import page_classification_evidence
 from app.checks.thales_rules.preparation_toc import map_preparation_pages_to_toc
+from app.checks.thales_rules.section_detection import classify_preparation_sections
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
+from app.core.logging import get_logger
 from app.core.page_range import filter_pdf_pages
 from app.parsers.pdf_parser import ParsedPdf
+
+_logger = get_logger(__name__)
+
+# Rules whose verdict depends on which other pages were found to be modified.
+DECISION_DEPENDENT_RULES = frozenset({"CUSTOM_PREP_LEP_MODIFIED_PAGES"})
+
+
+def _mark_commented_pages(parsed: ParsedPdf, decisions: list[dict[str, Any]]) -> None:
+    """Expose the pages decided so far as modified (commented) to the document rules."""
+    modified = {item["page"]: item["is_modified"] for item in decisions}
+    for page in parsed.pages:
+        page.is_modified = modified.get(page.page)
 
 
 def detect_pages_to_modify(
@@ -18,13 +35,38 @@ def detect_pages_to_modify(
     rules: list[CompiledRule],
     db: Session,
     bundle: ClientBundle,
+    classification_overrides: dict[str, dict[str, str | None]] | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    page_titles: Mapping[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     if bundle.page_classifier is not None:
         bundle.page_classifier(parsed, document)
+    overrides = classification_overrides or {}
+    analysis = classify_preparation_sections(parsed, metadata or {}, page_titles, overrides)
+    classification = _apply_classification_overrides(
+        parsed, overrides, analysis
+    )
     decisions: list[dict[str, Any]] = []
-    for page in parsed.pages:
+    pages_without_rules: list[dict[str, int | str | None]] = []
+    deferred_pages = {
+        page.page
+        for page in parsed.pages
+        if any(
+            rule.id in DECISION_DEPENDENT_RULES and _rule_targets_page(rule, page.page_type)
+            for rule in rules
+        )
+    }
+    ordered_pages = sorted(parsed.pages, key=lambda item: item.page in deferred_pages)
+    commented_pages_marked = False
+    for page in ordered_pages:
+        if page.page in deferred_pages and not commented_pages_marked:
+            _mark_commented_pages(parsed, decisions)
+            commented_pages_marked = True
         applicable = [rule for rule in rules if _rule_targets_page(rule, page.page_type)]
         if not applicable:
+            pages_without_rules.append(
+                {"page": page.page, "page_type": page.page_type}
+            )
             decisions.append(
                 {
                     "page": page.page,
@@ -104,8 +146,68 @@ def detect_pages_to_modify(
                 "review_reasons": review_reasons,
             }
         )
+    decisions.sort(key=lambda item: item["page"])
     map_preparation_pages_to_toc(parsed, decisions)
+    for decision in decisions:
+        decision.update(classification[decision["page"]])
+    _logger.info(
+        "preparation_page_rules_resolved",
+        page_count=len(parsed.pages),
+        page_type_counts=dict(
+            Counter(page.page_type or "unclassified" for page in parsed.pages)
+        ),
+        rule_target_page_types=sorted(
+            {
+                page_type
+                for rule in rules
+                for page_type in (
+                    rule.target.page_type,
+                    *(rule.target.page_types or ()),
+                )
+                if page_type is not None
+            }
+        ),
+        no_applicable_rule_count=len(pages_without_rules),
+        no_applicable_rule_pages=pages_without_rules[:20],
+    )
     return decisions
+
+
+def _apply_classification_overrides(
+    parsed: ParsedPdf,
+    overrides: dict[str, dict[str, str | None]],
+    analysis: dict[int, dict[str, Any]],
+) -> dict[int, dict[str, Any]]:
+    """Apply manual page types and describe how each page was classified."""
+    classification: dict[int, dict[str, Any]] = {}
+    for page in parsed.pages:
+        detected_type = page.page_type
+        evidence = page_classification_evidence(page)
+        override = overrides.get(str(page.page)) or {}
+        manual_type = override.get("page_type")
+        manual_document_page = override.get("document_page")
+        if manual_type is not None:
+            page.page_type = manual_type
+            source = "manual"
+        elif detected_type is not None:
+            source = "auto"
+        else:
+            source = "unclassified"
+        details = dict(analysis[page.page])
+        if source == "manual":
+            details["classification_status"] = "manual"
+        manual_title = override.get("page_title")
+        if manual_title is not None:
+            details["page_title"] = manual_title
+        classification[page.page] = {
+            "page_type_source": source,
+            "detected_page_type": detected_type,
+            "document_page": manual_document_page or evidence["footer_page_key"],
+            "document_page_source": "manual" if manual_document_page else "auto",
+            "classification_evidence": evidence,
+            **details,
+        }
+    return classification
 
 
 def _rule_targets_page(rule: CompiledRule, page_type: str | None) -> bool:

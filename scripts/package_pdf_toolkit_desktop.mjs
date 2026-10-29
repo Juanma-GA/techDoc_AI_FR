@@ -26,8 +26,12 @@ export function packageDesktop(app, { build = buildTauri, now = new Date() } = {
   }
   const output = path.join(app, "dist");
   const name = `pdf-toolkit-desktop-v${version}-${now.toISOString().slice(0, 10).replaceAll("-", "")}`;
-  const zip = path.join(output, `${name}.zip`);
-  if (existsSync(zip)) throw new Error(`Package already exists; move it before rebuilding: ${zip}`);
+  let suffix = 1;
+  let zip;
+  do {
+    zip = path.join(output, `${name}${suffix === 1 ? "" : `-${suffix}`}.zip`);
+    suffix += 1;
+  } while (existsSync(zip));
   const started = Date.now();
   build(app);
   const installerName = `${config.productName}_${version}_x64-setup.exe`;

@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 from app.core import wizard
 from app.core.ir import Candidate, IRNode, to_dict
+from app.core import preliminary_review
+from app.db.models import Document
 
 
 def test_wizard_guides_and_persists_a_brex_compliant_candidate(monkeypatch) -> None:
@@ -40,8 +42,9 @@ def test_wizard_guides_and_persists_a_brex_compliant_candidate(monkeypatch) -> N
             )
         ],
     )
-    document = SimpleNamespace(
+    document = Document(
         id="doc-1",
+        filename="synthetic.docx", source_format="docx", storage_path="synthetic-unused",
         s1000d_issue="4.2",
         brex_id="brex-1",
         dmrl_json=None,
@@ -53,6 +56,13 @@ def test_wizard_guides_and_persists_a_brex_compliant_candidate(monkeypatch) -> N
             "tree": to_dict(root),
         }]),
     )
+    preliminary_review.prepare(document)
+    review_state = preliminary_review.load(document)
+    for procedure in review_state["reviews"].values():
+        for passage in procedure["passages"]:
+            passage["decision"] = "body"
+        procedure["status"] = "reviewed"
+    document.preliminary_review_json = json.dumps(review_state)
 
     monkeypatch.setattr(wizard, "_brex_xml", lambda *_args: brex_xml)
     monkeypatch.setattr(wizard, "extract_brex_dm_code", lambda _xml: None)

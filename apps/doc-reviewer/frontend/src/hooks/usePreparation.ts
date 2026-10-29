@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { api } from "../lib/api";
 import type {
@@ -109,17 +110,33 @@ export function useRunOcrPage(documentId: string | undefined) {
   });
 }
 
+export type OcrDocumentProgress = { done: number; total: number };
+
 export function useRunOcrDocument(documentId: string | undefined) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      api.post<{ provider: "mistral"; page_count: number; elapsed_ms: number }>(
-        `/documents/${documentId}/preparation/ocr`,
-      ),
+  const [progress, setProgress] = useState<OcrDocumentProgress | null>(null);
+  const mutation = useMutation({
+    mutationFn: async (pages: number[]) => {
+      setProgress({ done: 0, total: pages.length });
+      for (const [index, page] of pages.entries()) {
+        await api.post<OcrPageResult>(
+          `/documents/${documentId}/preparation/ocr/pages/${page}`,
+          { provider: "mistral" },
+        );
+        setProgress({ done: index + 1, total: pages.length });
+      }
+    },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["preparation", documentId] });
     },
   });
+  return {
+    mutate: mutation.mutate,
+    isPending: mutation.isPending,
+    isError: mutation.isError,
+    error: mutation.error,
+    progress,
+  };
 }
 
 export function useValidateAllOcrPages(documentId: string | undefined) {
@@ -166,6 +183,48 @@ export function usePatchPreparationDecision(documentId: string | undefined) {
       api.patch<{ decisions: PreparationPageDecision[] }>(
         `/documents/${documentId}/preparation/decisions/${page}`,
         { is_modified },
+      ),
+  );
+}
+
+export function usePatchPageClassification(documentId: string | undefined) {
+  return usePreparationMutation<
+    { page: number; page_type: string | null; page_title: string | null },
+    { decisions: PreparationPageDecision[] }
+  >(
+    documentId,
+    ({ page, page_type, page_title }) =>
+      api.patch<{ decisions: PreparationPageDecision[] }>(
+        `/documents/${documentId}/preparation/pages/${page}/classification`,
+        { page_type, document_page: null, page_title },
+      ),
+  );
+}
+
+export function usePatchAbsentPageTypes(documentId: string | undefined) {
+  return usePreparationMutation<
+    { page_types: string[]; absent: boolean },
+    { absent_page_types: string[] }
+  >(
+    documentId,
+    (body) =>
+      api.patch<{ absent_page_types: string[] }>(
+        `/documents/${documentId}/preparation/absent-page-types`,
+        body,
+      ),
+  );
+}
+
+export function usePatchPreparationMapping(documentId: string | undefined) {
+  return usePreparationMutation<
+    { mapping: Record<string, unknown> },
+    { preparation_mapping: Record<string, unknown> }
+  >(
+    documentId,
+    ({ mapping }) =>
+      api.patch<{ preparation_mapping: Record<string, unknown> }>(
+        `/documents/${documentId}/preparation/mapping`,
+        { mapping },
       ),
   );
 }

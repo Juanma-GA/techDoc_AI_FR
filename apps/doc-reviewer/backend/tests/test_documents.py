@@ -257,6 +257,96 @@ def test_metadata_suggestions_scan_only_four_pages_without_persisting(
         assert after[field] == before[field]
 
 
+def test_metadata_suggestions_prefers_validated_preparation_ocr(
+    client: TestClient,
+) -> None:
+    import json
+    import uuid
+
+    import fitz
+    from sqlalchemy import select
+
+    from app.db.preparation_models import DocumentPreparation
+    from app.db.session import SessionLocal
+
+    pdf = fitz.open()
+    page = pdf.new_page()
+    page.insert_textbox(
+        fitz.Rect(30, 30, 560, 800),
+        "HIGHLIGHTS PAGE 1\n"
+        "ATA No. 80-80-01\n"
+        "Revision No. 01\n"
+        "Revision Date: JUL 27/26",
+        fontname="helv",
+        fontsize=11,
+    )
+    pdf_bytes = pdf.tobytes()
+    pdf.close()
+
+    document = _upload(client, pdf_bytes)
+    preparation = client.get(f"/api/v1/documents/{document['id']}/preparation")
+    assert preparation.status_code == 200, preparation.text
+
+    session = SessionLocal()
+    try:
+        record = session.scalar(
+            select(DocumentPreparation).where(
+                DocumentPreparation.document_id == uuid.UUID(document["id"])
+            )
+        )
+        assert record is not None
+        record.ocr_results_json = json.dumps(
+            {
+                "mistral": {
+                    "1": {
+                        "text": (
+                            "HIGHLIGHTS PAGE 1\n"
+                            "ATA No. 90-90-02\n"
+                            "Revision No. 04\n"
+                            "Revision Date: AUG 14/26"
+                        )
+                    }
+                }
+            }
+        )
+        record.validated_pages_json = json.dumps({"mistral": []})
+        session.commit()
+    finally:
+        session.close()
+
+    response = client.post(
+        f"/api/v1/documents/{document['id']}/metadata-suggestions"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["meta_cmm_number"] == "80-80-01"
+
+    session = SessionLocal()
+    try:
+        record = session.scalar(
+            select(DocumentPreparation).where(
+                DocumentPreparation.document_id == uuid.UUID(document["id"])
+            )
+        )
+        assert record is not None
+        record.validated_pages_json = json.dumps({"mistral": [1]})
+        session.commit()
+    finally:
+        session.close()
+
+    response = client.post(
+        f"/api/v1/documents/{document['id']}/metadata-suggestions"
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "pages_scanned": 1,
+        "meta_cmm_number": "90-90-02",
+        "meta_pnr_number": [],
+        "meta_revision_number": "04",
+        "meta_revision_date": "AUG 14/26",
+        "meta_first_issue_date": None,
+    }
+
+
 def test_get_pdf_unknown_version(client: TestClient, sample_pdf_bytes: bytes) -> None:
     doc = _upload(client, sample_pdf_bytes)
     resp = client.get(f"/api/v1/documents/{doc['id']}/pdf?version=42")

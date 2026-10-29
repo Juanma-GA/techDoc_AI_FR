@@ -9,6 +9,8 @@ import { PageHeader } from "../components/PageHeader";
 import { useDocument } from "../hooks/useDocuments";
 import {
   useDetectPreparationPages,
+  usePatchAbsentPageTypes,
+  usePatchPageClassification,
   usePatchPreparationDecision,
   usePreparationState,
   useRunOcrDocument,
@@ -33,6 +35,8 @@ export function PreparationWorkspace() {
   const validateAllOcr = useValidateAllOcrPages(id);
   const detectPages = useDetectPreparationPages(id);
   const patchDecision = usePatchPreparationDecision(id);
+  const patchClassification = usePatchPageClassification(id);
+  const patchAbsent = usePatchAbsentPageTypes(id);
   const [step, setStep] = useState<Step>(1);
 
   const state = preparation.data;
@@ -84,7 +88,11 @@ export function PreparationWorkspace() {
     ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
     : patchDecision.isError
       ? messageOf(patchDecision.error)
-      : null;
+      : patchClassification.isError
+        ? messageOf(patchClassification.error)
+        : patchAbsent.isError
+          ? messageOf(patchAbsent.error)
+          : null;
 
   return (
     <div>
@@ -130,17 +138,22 @@ export function PreparationWorkspace() {
               ? messageOf(runOcrDocument.error)
               : runOcrPage.isError
                 ? messageOf(runOcrPage.error)
-              : detectPages.isError
-                ? t("preparation.detectFailed", { message: messageOf(detectPages.error) })
+              : validateAllOcr.isError
+                ? messageOf(validateAllOcr.error)
                 : null
           }
-          onRunOcrAll={() => runOcrDocument.mutate()}
+          onRunOcrAll={(pages) => runOcrDocument.mutate(pages)}
           runningOcrAll={runOcrDocument.isPending}
+          ocrProgress={runOcrDocument.isPending ? runOcrDocument.progress : null}
           onRunOcrPage={(page) => runOcrPage.mutate({ page, provider: "mistral" })}
           runningOcrPage={runOcrPage.isPending}
-          onValidateAllAndAnalyze={() =>
+          onValidateAllAndContinue={() =>
             validateAllOcr.mutate(undefined, {
-              onSuccess: () => detectPages.mutate(undefined, { onSuccess: () => setStep(2) }),
+              onSuccess: () => {
+                void preparation.refetch().then((result) => {
+                  if (result.isSuccess) setStep(2);
+                });
+              },
             })
           }
           validatingAll={validateAllOcr.isPending}
@@ -150,12 +163,25 @@ export function PreparationWorkspace() {
 
       {step === 2 ? (
         <PreparationChecklistStep
+          document={document.data}
           state={state}
           error={checklistError}
           detecting={detectPages.isPending}
-          savingDecision={patchDecision.isPending}
+          savingDecision={
+            patchDecision.isPending || patchClassification.isPending || patchAbsent.isPending
+          }
           onDetect={() => detectPages.mutate()}
           onDecision={(page, isModified) => patchDecision.mutate({ page, is_modified: isModified })}
+          onClassification={(page, pageType, pageTitle) =>
+            patchClassification.mutate({
+              page,
+              page_type: pageType,
+              page_title: pageTitle,
+            })
+          }
+          onAbsent={(pageTypes, absent) =>
+            patchAbsent.mutate({ page_types: pageTypes, absent })
+          }
           onContinue={() => setStep(3)}
         />
       ) : null}

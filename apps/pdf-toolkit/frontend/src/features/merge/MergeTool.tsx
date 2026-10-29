@@ -1,19 +1,35 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Combine, FileText, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { formatOperationError, processPDF } from "../../shared/api";
-import { Button, Card, Spinner } from "@internal/ui";
+import {
+  chooseExportDestination,
+  formatOperationError,
+  processPDF,
+  validateExportFileName,
+  type ExportProgressState,
+} from "../../shared/api";
+import { Button, Card, Input, Spinner, useDemoMode } from "@internal/ui";
+import { ExportProgress } from "../shared/ExportProgress";
 import { FileDropzone } from "../../shared/components/FileDropzone";
+import { useDemoPdfFile } from "../../shared/demoPdf";
 import { formatFileSize, moveFileInList } from "../../shared/files";
 
 export function MergeTool() {
   const { t, i18n } = useTranslation();
+  const { mode } = useDemoMode();
+  const demoPdf = useDemoPdfFile();
   const language = i18n.resolvedLanguage ?? i18n.language ?? "fr";
+  const outputNameId = useId();
   const [files, setFiles] = useState<File[]>([]);
+  const [outputName, setOutputName] = useState("merged.pdf");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
 
   const moveFile = (index: number, offset: -1 | 1) => {
     setFiles((current) => moveFileInList(current, index, offset));
@@ -25,8 +41,16 @@ export function MergeTool() {
       setError(t("merge.minimumFiles"));
       return;
     }
+    const fileName = outputName.trim();
+    const nameError = validateExportFileName(fileName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
 
+    const destinationChoice = chooseExportDestination(fileName, t);
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
@@ -34,7 +58,17 @@ export function MergeTool() {
       data.append("files", file, file.name);
     }
     try {
-      await processPDF("merge", data, "merged.pdf", t);
+      const destination = await destinationChoice;
+      if (destination === null) return;
+      const savedName = await processPDF(
+        "merge",
+        data,
+        fileName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setOutputName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "errors.mergeFailed"));
@@ -56,7 +90,15 @@ export function MergeTool() {
         <FileDropzone
           multiple
           disabled={working}
-          onFiles={(incoming) => setFiles((current) => [...current, ...incoming])}
+          onFiles={(incoming) => {
+            const duplicateDemoPdf =
+              mode === "demo" && demoPdf && incoming.includes(demoPdf) ? demoPdf : null;
+            setFiles((current) => [
+              ...current,
+              ...incoming,
+              ...(duplicateDemoPdf ? [duplicateDemoPdf] : []),
+            ]);
+          }}
           onError={setError}
           label={t("files.dropMultipleLabel")}
           description={t("files.dropMultipleDescription")}
@@ -122,10 +164,27 @@ export function MergeTool() {
             <FileText size={21} aria-hidden="true" />
           </span>
           <span>
-            <strong>merged.pdf</strong>
+            <label className="field-label" htmlFor={outputNameId}>
+              {t("exportOptions.fileName")}
+            </label>
+            <Input
+              id={outputNameId}
+              value={outputName}
+              disabled={working}
+              aria-describedby={`${outputNameId}-help`}
+              onChange={(event) => {
+                setOutputName(event.currentTarget.value);
+                setSuccess(false);
+                setError("");
+              }}
+            />
             <small>{t("merge.outputDescription")}</small>
           </span>
         </div>
+        <p className="input-help" id={`${outputNameId}-help`}>
+          {t("exportOptions.saveLocationHint")}
+        </p>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={working || files.length < 2} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Combine size={18} />}
           {working ? t("merge.working") : t("merge.action")}
@@ -138,7 +197,7 @@ export function MergeTool() {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              {t("merge.success", { fileName: "merged.pdf" })}
+              {t("merge.success", { fileName: outputName })}
             </p>
           ) : null}
         </div>

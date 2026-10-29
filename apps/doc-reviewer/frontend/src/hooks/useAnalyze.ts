@@ -22,6 +22,8 @@ export type AnalyzeOptions = {
   firstPage?: number;
   lastPage?: number;
   modifiedOnly?: boolean;
+  preparationContext?: boolean;
+  contextReadyOverride?: boolean;
   pageNumber?: number;
   additionalPages?: number[];
   pageOverrides?: Record<number, boolean>;
@@ -73,7 +75,7 @@ export function useAnalyze(
 
   const start = useCallback(async (options: AnalyzeOptions = {}) => {
     if (!documentId) return;
-    if (!contextReady) {
+    if (!(options.contextReadyOverride ?? contextReady)) {
       setStatus("error");
       setError("DOCUMENT_CONTEXT_INCOMPLETE");
       return;
@@ -95,6 +97,9 @@ export function useAnalyze(
       if (options.lastPage !== undefined) params.set("last_page", String(options.lastPage));
       if (options.modifiedOnly !== undefined) {
         params.set("modified_only", String(options.modifiedOnly));
+      }
+      if (options.preparationContext !== undefined) {
+        params.set("preparation_context", String(options.preparationContext));
       }
       if (options.pageNumber !== undefined) {
         params.set("page_number", String(options.pageNumber));

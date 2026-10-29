@@ -12,9 +12,27 @@
     "ariaLabel": "Navigation principale",
     "themeToggle": "Changer de thème",
     "languageSwitcher": "Langue",
-    "tools": "Outils PDF",
+    "tools": "Outils PDF et paramètres",
     "collapse": "Replier le menu",
     "expand": "Déplier le menu"
+  },
+  "exportOptions": {
+    "fileName": "Nom du fichier de sortie",
+    "saveLocationHint": "Au lancement de l’export, choisis l’emplacement dans la fenêtre « Enregistrer sous ». Si elle n’est pas disponible, le téléchargement standard est utilisé.",
+    "required": "Saisis un nom de fichier.",
+    "invalidName": "Saisis un nom de fichier valide, sans chemin ni caractères interdits.",
+    "savePickerFailed": "Impossible d’ouvrir la fenêtre « Enregistrer sous ».",
+    "saveFailed": "Impossible d’enregistrer le fichier à l’emplacement choisi."
+  },
+  "exportProgress": {
+    "uploading": "Envoi au serveur",
+    "processing": "Traitement sur le serveur",
+    "downloading": "Téléchargement du résultat",
+    "preparing": "Préparation du PDF",
+    "pages": "Conversion des pages : {{completed}} / {{total}}",
+    "splitFiles": "Découpage des fichiers : {{completed}} / {{total}}",
+    "splitArchive": "Ajout au ZIP : {{completed}} / {{total}}",
+    "progressUnavailable": "Progression indisponible ; le traitement continue"
   },
   "tools": {
     "merge": {
@@ -45,7 +63,7 @@
     "rotate": {
       "tab": "Rotation",
       "title": "Faire pivoter des pages",
-      "description": "Faites pivoter toutes les pages ou uniquement celles que vous sélectionnez."
+      "description": "Faites pivoter les pages et visualisez l’aperçu avant l’export."
     },
     "imagesToPdf": {
       "tab": "Images → PDF",
@@ -56,6 +74,22 @@
       "tab": "PDF → Images",
       "title": "Convertir un PDF en images",
       "description": "Exportez chaque page en PNG ou JPEG dans une archive ZIP."
+    },
+    "settings": {
+      "tab": "Paramètres",
+      "title": "Paramètres",
+      "description": "Choisissez le mode normal ou démo pour précharger le PDF d’exemple."
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Mode de fonctionnement",
+      "hint": "Le PDF anonymisé est préchargé dans les onglets qui acceptent un PDF. Les actions habituelles restent locales ; selon l’outil, le traitement utilise le backend local ou le navigateur. Le mode revient à la normale à la fermeture. En mode démo, Fusionner reçoit deux copies du PDF.",
+      "normal": "Mode normal",
+      "demo": "Mode démo",
+      "badge": "MODE DÉMO",
+      "loading": "Chargement du PDF de démonstration…",
+      "loadError": "Impossible de charger le PDF de démonstration."
     }
   },
   "common": {
@@ -68,15 +102,15 @@
     "dropDescription": "ou parcourez les fichiers de votre ordinateur",
     "dropMultipleLabel": "Déposez plusieurs PDF ici",
     "dropMultipleDescription": "Cliquez pour parcourir et ajouter plusieurs fichiers",
-    "limit": "PDF · 250 Mo maximum par fichier",
+    "limit": "PDF · 500 Mo maximum par fichier",
     "imageDropLabel": "Déposez vos images ici",
     "imageDropDescription": "Ajoutez des images PNG ou JPEG, dans l'ordre souhaité",
-    "imageLimit": "PNG ou JPEG · 250 Mo maximum par fichier",
+    "imageLimit": "PNG ou JPEG · 500 Mo maximum par fichier",
     "singleOnly": "Sélectionnez un seul fichier PDF pour cette opération.",
     "imageSingleOnly": "Sélectionnez une seule image pour cette opération.",
     "select": "Sélectionnez un fichier PDF.",
     "selectImagePdf": "Sélectionnez au moins une image PNG ou JPEG.",
-    "tooLarge": "« {{name}} » dépasse la limite de 250 Mo.",
+    "tooLarge": "« {{name}} » dépasse la limite de 500 Mo.",
     "notPdf": "« {{name}} » n'est pas un fichier PDF.",
     "notImage": "« {{name}} » n'est pas une image PNG ou JPEG.",
     "remove": "Retirer le fichier",
@@ -193,9 +227,15 @@
     "pagesPlaceholder": "Ex. 1-5, 8, 10-12",
     "pagesHelp": "Laissez vide pour toutes les pages, ou indiquez des numéros/plages (ex. 1,3,7 ou 2-4,8).",
     "angleLabel": "Rotation horaire",
-    "clockwise90": "90° vers la droite",
-    "clockwise180": "180°",
-    "clockwise270": "270° vers la droite",
+    "previewPage": "Aperçu de la page {{page}}",
+    "previewCanvasLabel": "Aperçu de la page {{page}}, tournée de {{angle}} degrés",
+    "previewEmpty": "Chargez un PDF pour afficher l’aperçu de sa rotation.",
+    "previewLoading": "Chargement de l’aperçu PDF…",
+    "previewFailed": "Impossible d’afficher l’aperçu de cette page.",
+    "emptyDocument": "Le PDF ne contient aucune page.",
+    "currentAngle": "Angle actuel : {{angle}}°",
+    "advanceRotation": "Ajouter 90° vers la droite. Angle actuel : {{angle}}°.",
+    "rotationHelp": "Chaque clic ajoute 90° dans le sens horaire ; après 270°, le bouton revient à 90°.",
     "outputDescription": "Pages pivotées",
     "action": "Faire pivoter",
     "working": "Rotation en cours…",
@@ -222,7 +262,7 @@
     "fieldTooLarge": "Un champ du formulaire est trop volumineux.",
     "unexpectedFile": "Le formulaire contient un fichier inattendu.",
     "singleFileOnly": "Un seul fichier PDF est accepté pour cette opération.",
-    "fileTooLarge": "Chaque fichier doit faire au maximum 250 Mo.",
+    "fileTooLarge": "Chaque fichier doit faire au maximum 500 Mo.",
     "mergeMinimumFiles": "Sélectionnez au moins deux fichiers PDF.",
     "selectImages": "Sélectionnez au moins une image PNG ou JPEG.",
     "selectFile": "Sélectionnez un fichier PDF.",

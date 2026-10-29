@@ -33,7 +33,7 @@ export function ClientRuleBundles({
 }) {
   const { t } = useTranslation();
   const [expandedRuleCodes, setExpandedRuleCodes] = useState<Set<string>>(() => new Set());
-  const [expandedBundleCodes, setExpandedBundleCodes] = useState<Set<string> | null>(null);
+  const [expandedBundleCodes, setExpandedBundleCodes] = useState<Set<string>>(() => new Set());
   const groups = rules.reduce<RuleGroup[]>((result, rule) => {
     let group = result.find((item) => item.code === rule.bundle_code);
     if (!group) {
@@ -54,7 +54,7 @@ export function ClientRuleBundles({
     if (!target) return;
     setExpandedRuleCodes((current) => new Set(current).add(target.code));
     setExpandedBundleCodes((current) => {
-      const next = new Set(current ?? rules.map((rule) => rule.bundle_code));
+      const next = new Set(current);
       next.add(target.bundle_code);
       return next;
     });
@@ -147,8 +147,7 @@ export function ClientRuleBundles({
   return (
     <>
       {groups.map((group) => {
-        const isOpen =
-          expandedBundleCodes === null || expandedBundleCodes.has(group.code);
+        const isOpen = expandedBundleCodes.has(group.code);
         const allActive = group.allRules.every((rule) => rule.active);
         const actionKey = allActive ? "rules.client.disableAll" : "rules.client.enableAll";
         return (
@@ -169,7 +168,7 @@ export function ClientRuleBundles({
               onToggle={(event) => {
                 const nextOpen = event.currentTarget.open;
                 setExpandedBundleCodes((current) => {
-                  const next = new Set(current ?? rules.map((rule) => rule.bundle_code));
+                  const next = new Set(current);
                   if (nextOpen) next.add(group.code);
                   else next.delete(group.code);
                   return next;

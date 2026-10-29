@@ -8,10 +8,50 @@
   "ocrRequired": "OCR requis",
   "ocrPending": "OCRiser les {{count}} pages à vérifier",
   "ocrPendingRunning": "OCR des pages en cours…",
-  "analyzePages": "Analyser les pages",
+  "ocrProgress": "OCR : {{done}}/{{total}} pages",
+  "continueToChecklist": "Continuer vers les règles",
   "runCurrentOcr": "OCRiser cette page",
   "rerunCurrentOcr": "Relancer l'OCR de cette page",
   "ruleResults": "{{count}} résultat(s) de règle",
+  "classification": {
+    "edit": "Corriger le type",
+    "automatic": "Détection automatique",
+    "configuredTitles": "Titres configurés",
+    "otherTypes": "Autres types de page",
+    "save": "Enregistrer la correction",
+    "footerKey": "Page lue en pied de page : {{value}}",
+    "noEvidence": "Aucun indice détecté pour cette page.",
+    "source": {
+      "auto": "Auto",
+      "detected": "Détectée",
+      "confirmed": "Confirmée",
+      "partial": "À vérifier",
+      "conflict": "Conflit",
+      "manual": "Manuel",
+      "unclassified": "Non classée"
+    },
+    "candidates": "Indices contradictoires : {{value}}",
+    "family": {
+      "footer": "pied de page",
+      "title": "titre",
+      "content": "contenu",
+      "position": "position"
+    }
+  },
+  "missing": {
+    "title": "Pages requises par les règles non trouvées",
+    "hint": "Indiquez la page du PDF correspondant à chaque type ci-dessous pour que ses règles s'appliquent.",
+    "pageLabel": "Page du PDF (1 à {{count}})",
+    "provide": "Valider la page",
+    "notPresent": "Pas présente",
+    "markedAbsent": "Marquée comme absente du document",
+    "undo": "Annuler"
+  },
+  "skipped": {
+    "title": "{{count}} règle(s) non exécutée(s)",
+    "hint": "Ces règles n'ont pas pu être vérifiées car la page qu'elles ciblent est absente du document.",
+    "because": "Page absente : {{value}}"
+  },
   "noApplicableRule": "Aucune règle applicable : type non reconnu ou aucune règle ciblée.",
   "ruleStatus": {
     "pass": "Réussite",

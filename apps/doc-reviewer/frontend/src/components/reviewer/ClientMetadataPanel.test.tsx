@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Document } from "../../types/domain";
+import { missingDocumentContext, type Document } from "../../types/domain";
 
 const mocks = vi.hoisted(() => ({
   useClientConfig: vi.fn(),
@@ -176,5 +176,38 @@ describe("ClientMetadataPanel metadata suggestions", () => {
       },
       expect.objectContaining({ onError: expect.any(Function), onSuccess: expect.any(Function) }),
     );
+  });
+
+  it("uses isolated mapping values without falling back to verification metadata", async () => {
+    const saveMapping = vi.fn().mockResolvedValue(undefined);
+    await act(async () => {
+      root.render(
+        <ClientMetadataPanel
+          document={fixtureDocument}
+          mappingValues={{ meta_cmm_number: "80-80-01" }}
+          onSaveMapping={saveMapping}
+          titleKey="preparation.mappingTitle"
+          subtitleKey="preparation.mappingSubtitle"
+        />,
+      );
+    });
+
+    expect(container.querySelector('input[value="80-80-01"]')).not.toBeNull();
+    expect(container.querySelector('input[value="79-30-02"]')).toBeNull();
+    expect(container.querySelector('input[value="MAR 77"]')).toBeNull();
+    expect(container.textContent).toContain("preparation.mappingTitle");
+  });
+
+  it("checks required context against preparation mapping without verification fallbacks", () => {
+    expect(
+      missingDocumentContext(fixtureDocument, ["meta_cmm_number"], {
+        meta_cmm_number: "80-80-01",
+      }),
+    ).toEqual([]);
+    expect(
+      missingDocumentContext(fixtureDocument, ["meta_cmm_number"], {
+        meta_cmm_number: "",
+      }),
+    ).toEqual(["meta_cmm_number"]);
   });
 });

@@ -23,14 +23,14 @@ describe("validatePDFFile", () => {
     ).toBeNull();
   });
 
-  it("rejects a file over 250 Mo", () => {
+  it("rejects a file over 500 Mo", () => {
     expect(
       validatePDFFile({
         name: "large.pdf",
         type: "application/pdf",
         size: MAX_FILE_SIZE + 1,
       }),
-    ).toContain("250 Mo");
+    ).toContain("500 Mo");
   });
 
   it("rejects non-PDF files", () => {

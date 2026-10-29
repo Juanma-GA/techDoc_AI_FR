@@ -1,0 +1,163 @@
+.comparison-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.comparison-pane-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.comparison-pane-header h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.9rem;
+}
+
+.comparison-page-viewport {
+  max-height: 70vh;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+}
+
+.comparison-page-surface {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.comparison-page-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.comparison-page-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.comparison-diff-box {
+  position: absolute;
+  box-sizing: border-box;
+  min-width: 6px;
+  min-height: 6px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--border-bright);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+
+.comparison-diff-box--added {
+  border-color: var(--success);
+}
+
+.comparison-diff-box--removed {
+  border-color: var(--danger);
+}
+
+.comparison-diff-box:hover {
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+}
+
+.comparison-diff-box.is-selected {
+  z-index: 1;
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
+  box-shadow: 0 0 0 2px var(--brand-light);
+}
+
+.comparison-page-placeholder {
+  display: grid;
+  min-height: 20rem;
+  place-items: center;
+  padding: 24px;
+  border: 1px dashed var(--border-bright);
+  border-radius: 6px;
+  color: var(--fg-dim);
+  background: var(--bg-2);
+  text-align: center;
+}
+
+.comparison-difference-detail {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+}
+
+.comparison-difference-detail h3,
+.comparison-difference-detail h4 {
+  margin: 0 0 8px;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.85rem;
+}
+
+.comparison-difference-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.comparison-difference-columns > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.comparison-difference-columns ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comparison-difference-columns li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+
+.comparison-difference-columns pre {
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .comparison-difference-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

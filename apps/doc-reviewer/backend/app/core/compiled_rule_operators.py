@@ -22,7 +22,7 @@ from app.core.compiled_rules import (
     RuleResult,
     RuleTarget,
 )
-from app.parsers.pdf_parser import ParsedPage
+from app.parsers.pdf_parser import ParsedPage, PdfVectorPrimitive
 from app.core.logging import get_logger
 from app.core.regex_safety import (
     USER_REGEX_TIMEOUT_SECONDS,
@@ -205,7 +205,9 @@ _PAGE_LABEL_RE = re.compile(
     r"(?:PAGE\s+)?\d+\s*$"
 )
 _HEADING_RE = re.compile(r"^\s*(?:\d+\.\s+|[A-Z]\.\s+)[A-Z].*$")
-_FIGURE_CAPTION_RE = re.compile(r"(?i)^\s*(?:table|figure|fig\.?)\s+\d+\b")
+_FIGURE_CAPTION_RE = re.compile(
+    r"(?i)^\s*(?:table|figure|fig\.?)\s+(?:\d+(?:[-.]\d+)*[a-z]?|x)\b"
+)
 _COLUMN_LABEL_RE = re.compile(
     r"(?i)^\s*[-*]\s*\d+(?:st|nd|rd|th)\s+column\s*:"
 )
@@ -275,7 +277,7 @@ def _table_row_span_ranges(
             > 40.0
         ):
             candidate_rows.append((center, nearby))
-    if len(candidate_rows) < 3:
+    if len(candidate_rows) < 2:
         return ()
     table_rows: list[tuple[float, list[_SpanRange]]] = []
     for row in candidate_rows:
@@ -292,11 +294,90 @@ def _table_row_span_ranges(
                 )
             )
         ]
-        if len(aligned_rows) >= 3:
+        if len(aligned_rows) >= 2:
             for candidate in aligned_rows:
                 if candidate not in table_rows:
                     table_rows.append(candidate)
     return tuple(item for _center, row in table_rows for item in row)
+
+
+def _vector_table_row_bboxes(
+    primitives: list[PdfVectorPrimitive],
+) -> tuple[tuple[float, float, float, float], ...]:
+    horizontal_segments: list[tuple[float, float, float]] = []
+    for primitive in primitives:
+        x0, y0, x1, y1 = primitive.bbox
+        if x1 - x0 >= 20.0 and y1 - y0 <= 2.0:
+            horizontal_segments.append(((y0 + y1) / 2, x0, x1))
+
+    horizontal_segments.sort()
+    grouped_rules: list[tuple[float, list[tuple[float, float]]]] = []
+    for center, x0, x1 in horizontal_segments:
+        if grouped_rules and abs(center - grouped_rules[-1][0]) <= 2.0:
+            grouped_rules[-1][1].append((x0, x1))
+        else:
+            grouped_rules.append((center, [(x0, x1)]))
+
+    rules: list[tuple[float, float, float]] = []
+    for center, segments in grouped_rules:
+        merged: list[list[float]] = []
+        for x0, x1 in sorted(segments):
+            if merged and x0 <= merged[-1][1] + 2.0:
+                merged[-1][1] = max(merged[-1][1], x1)
+            else:
+                merged.append([x0, x1])
+        rules.extend(
+            (center, x0, x1)
+            for x0, x1 in merged
+            if x1 - x0 >= 40.0
+        )
+
+    aligned_rules: list[list[tuple[float, float, float]]] = []
+    for rule in rules:
+        group = next(
+            (
+                candidate
+                for candidate in aligned_rules
+                if abs(candidate[0][1] - rule[1]) <= 5.0
+                and abs(candidate[0][2] - rule[2]) <= 5.0
+            ),
+            None,
+        )
+        if group is None:
+            aligned_rules.append([rule])
+        else:
+            group.append(rule)
+
+    table_rows: list[tuple[float, float, float, float]] = []
+    for group in aligned_rules:
+        if len(group) < 3:
+            continue
+        ordered = sorted(group)
+        for previous, following in zip(ordered, ordered[1:]):
+            row_height = following[0] - previous[0]
+            if 2.0 < row_height <= 100.0:
+                table_rows.append(
+                    (
+                        max(previous[1], following[1]),
+                        previous[0],
+                        min(previous[2], following[2]),
+                        following[0],
+                    )
+                )
+    return tuple(table_rows)
+
+
+def _target_vector_table_rows(
+    context: _EvalContext,
+    target: _TextTarget,
+) -> tuple[tuple[float, float, float, float], ...]:
+    if context.pdf_pages is None:
+        return ()
+    page = next(
+        (page for page in context.pdf_pages if page.page == target.raw_page),
+        None,
+    )
+    return _vector_table_row_bboxes(page.vector_primitives) if page is not None else ()
 
 
 def _span_overlaps_table_row(
@@ -305,6 +386,29 @@ def _span_overlaps_table_row(
 ) -> bool:
     start, end = span
     return any(item[1] > start and item[0] < end for item in table_span_ranges)
+
+
+def _match_overlaps_table(
+    span: tuple[int, int],
+    span_ranges: tuple[_SpanRange, ...],
+    table_row_bboxes: tuple[tuple[float, float, float, float], ...],
+    table_span_ranges: tuple[_SpanRange, ...],
+) -> bool:
+    if _span_overlaps_table_row(span, table_span_ranges):
+        return True
+    start, end = span
+    for item in span_ranges:
+        if item[1] <= start or item[0] >= end:
+            continue
+        x0, y0, x1, y1 = item[2]
+        center_x = (x0 + x1) / 2
+        center_y = (y0 + y1) / 2
+        if any(
+            left <= center_x <= right and top <= center_y <= bottom
+            for left, top, right, bottom in table_row_bboxes
+        ):
+            return True
+    return False
 
 
 def is_table_row_match(
@@ -319,9 +423,15 @@ def pressure_conversion_issues(
     policy: str = "bar_to_psi",
     *,
     span_ranges: tuple[_SpanRange, ...] = (),
+    table_row_bboxes: tuple[tuple[float, float, float, float], ...] = (),
 ) -> list[PressureConversionIssue]:
     """Return bar values missing or carrying an incorrect psi conversion."""
-    return unit_conversion_issues(text, policy, span_ranges=span_ranges)
+    return unit_conversion_issues(
+        text,
+        policy,
+        span_ranges=span_ranges,
+        table_row_bboxes=table_row_bboxes,
+    )
 
 
 def _uncertainty_key(modifier: str | None) -> tuple[str, Decimal] | None:
@@ -388,6 +498,7 @@ def unit_conversion_issues(
     policy: str,
     *,
     span_ranges: tuple[_SpanRange, ...] = (),
+    table_row_bboxes: tuple[tuple[float, float, float, float], ...] = (),
 ) -> list[PressureConversionIssue]:
     """Return SI values missing or carrying an incorrect paired conversion."""
     if is_list_of_materials_page(text):
@@ -401,7 +512,9 @@ def unit_conversion_issues(
     table_span_ranges = _table_row_span_ranges(span_ranges)
     if policy == "metric_length_to_inch":
         for match in _METRIC_LENGTH_RANGE_RE.finditer(text):
-            if _span_overlaps_table_row(match.span(), table_span_ranges):
+            if _match_overlaps_table(
+                match.span(), span_ranges, table_row_bboxes, table_span_ranges
+            ):
                 continue
             paired_ranges.append(match.span())
             source_units = (
@@ -450,7 +563,9 @@ def unit_conversion_issues(
 
     ignored_until = 0
     for source_match in conversion_policy.source_pattern.finditer(text):
-        if _span_overlaps_table_row(source_match.span(), table_span_ranges):
+        if _match_overlaps_table(
+            source_match.span(), span_ranges, table_row_bboxes, table_span_ranges
+        ):
             continue
         if any(start <= source_match.start() < end for start, end in paired_ranges):
             continue
@@ -892,6 +1007,7 @@ def evaluate_check(
                 value or "",
                 policy,
                 span_ranges=target.span_ranges,
+                table_row_bboxes=_target_vector_table_rows(ctx, target),
             )
             if issues:
                 issue = issues[0]
@@ -904,6 +1020,7 @@ def evaluate_check(
                 value or "",
                 policy,
                 span_ranges=target.span_ranges,
+                table_row_bboxes=_target_vector_table_rows(ctx, target),
             )
             if issues:
                 issue = issues[0]
