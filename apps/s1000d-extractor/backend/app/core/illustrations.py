@@ -98,6 +98,16 @@ def slugify(text: str, *, maxlen: int = 60) -> str:
     return slug[:maxlen].strip("-") or "illustration"
 
 
+def _to_jpeg_compatible(fitz, pix):
+    """Drop alpha, then convert non-RGB/gray colorspaces to RGB (JPEG has no alpha)."""
+    if pix.alpha:
+        # Pixmap(csRGB, pix) keeps the alpha channel; it must be removed explicitly.
+        pix = fitz.Pixmap(pix, 0)
+    if pix.n not in (1, 3):
+        pix = fitz.Pixmap(fitz.csRGB, pix)
+    return pix
+
+
 def _save_pixmap(
     doc, xref: int, dest: Path, diagnostics: IllustrationResult | None = None,
 ) -> bool:
@@ -114,10 +124,7 @@ def _save_pixmap(
             # JPEG has no alpha channel; copy its encoded bytes without rasterizing.
             atomic_write_bytes(dest, extracted["image"])
             return True
-        pix = fitz.Pixmap(doc, xref)
-        if pix.n >= 5 or pix.alpha:            # CMYK ou canal alpha -> RGB
-            pix = fitz.Pixmap(fitz.csRGB, pix)
-
+        pix = _to_jpeg_compatible(fitz, fitz.Pixmap(doc, xref))
         atomic_write_bytes(dest, pix.tobytes("jpg", jpg_quality=_JPEG_QUALITY))
         return True
     except _EXTRACTION_ERRORS as exc:
@@ -867,11 +874,12 @@ def rename_illustration(out_dir: Path, current_name: str, target_name: str) -> s
             import pymupdf as fitz
 
             pixmap = fitz.Pixmap(str(source))
-            if pixmap.n >= 5 or pixmap.alpha:
-                pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
             if target.suffix.lower() == ".png":
+                if pixmap.n - pixmap.alpha >= 4:
+                    pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
                 atomic_write_bytes(destination, pixmap.tobytes("png"))
             else:
+                pixmap = _to_jpeg_compatible(fitz, pixmap)
                 atomic_write_bytes(destination, pixmap.tobytes("jpg", jpg_quality=_JPEG_QUALITY))
             source.unlink()
     except _EXTRACTION_ERRORS as exc:

@@ -40,6 +40,7 @@ export function App() {
   return (
     <AppShell
       className="dw"
+      mainClassName="relative"
       title={t("app.title")}
       brandTitle={t("app.description")}
       navigationLabel={t("nav.ariaLabel")}

@@ -132,6 +132,23 @@ def test_embedded_rgb_jpeg_is_preserved_without_reencoding(tmp_path, monkeypatch
     embedded.close()
 
 
+@pytest.mark.parametrize("colorspace", ["csRGB", "csGRAY", "csCMYK"])
+def test_pixmap_with_alpha_is_converted_for_jpeg(colorspace) -> None:
+    import fitz
+
+    from app.core.illustrations import _to_jpeg_compatible
+
+    source = fitz.Pixmap(getattr(fitz, colorspace), fitz.IRect(0, 0, 8, 6), 1)
+    with pytest.raises(ValueError):
+        fitz.Pixmap(fitz.csRGB, source).tobytes("jpg")
+
+    converted = _to_jpeg_compatible(fitz, source)
+
+    assert not converted.alpha
+    assert converted.n in (1, 3)
+    assert converted.tobytes("jpg").startswith(b"\xff\xd8")
+
+
 def test_small_page_icon_does_not_replace_real_figure_image(tmp_path) -> None:
     import fitz
 
