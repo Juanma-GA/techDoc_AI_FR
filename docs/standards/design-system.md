@@ -128,3 +128,28 @@ Rules:
 - CSS uses `var(--font-sans)`, `var(--font-mono)`, `var(--font-display)`; never a literal font name outside `design-tokens/`.
 - Fonts use `font-display: swap`; the stacks fall back to `system-ui` / `Segoe UI` / `Consolas` while loading or if a face is missing.
 - `@import "@internal/design-tokens/theme.css"` alone remains supported for compatibility, but then the app must load fonts itself; migrate to `base.css`.
+
+## 5. Shared Primitives
+
+All primitives come from `@internal/ui`, use tokens only, support both themes and keyboard focus (`ring-focus`), and ship with a Vitest file.
+
+| Need | Primitive | Notes |
+|---|---|---|
+| Page title + description + actions | `PageHeader` | Orbitron title (`text-page-title`), optional `eyebrow`, actions wrap on mobile. Keeps the legacy `page-header` class names. |
+| Labeled form control | `FormField` | Wires `htmlFor`/`id`, `aria-describedby` (hint/error), `aria-invalid`, `aria-required`; sets `state="error"` on `Input`/`Select`/`Textarea`. |
+| Optional or advanced block | `CollapsibleSection` | Disclosure button with `aria-expanded`/`aria-controls`; controlled or uncontrolled. Use it for the LLM settings block (collapsed once configured). |
+| Inline information / warning / error | `Alert` | `info`/`success`/`warning`/`danger`; `danger` uses `role="alert"`. |
+| Views within a page | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` | Radix: arrow keys, roving focus. Always give `TabsList` an `aria-label`. |
+| Tabular data | `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableCaption` | Scroll container with border; `data-state="selected"` rows use `brand.soft`. |
+| Hint on hover/focus | `Tooltip` (or `TooltipRoot`/`TooltipTrigger`/`TooltipContent`) | Child must be focusable; icon-only buttons still need `aria-label`. |
+| Loading placeholder | `Skeleton` | `aria-hidden`; respects `prefers-reduced-motion`. Pair with a `role="status"` label for screen readers. |
+| Empty list | `EmptyState` | |
+| Blocking action confirmation | `Dialog` | Never `alert()`/`confirm()`. |
+| Transient feedback | `Toast` | Opaque card with a colored left edge per variant. |
+
+Shared component conventions (v2):
+
+- `Button` `primary`/`danger` text uses `text-brand-fg`; hover uses `brand.hover` (darker in light, lighter in dark); focus ring has an offset.
+- `Input`/`Select`/`Textarea` sit on `surface.sunken`, focus with a brand border plus a soft ring; the `error` state keeps the danger border on focus.
+- `Card`, `EmptyState`, `CollapsibleSection`, `Table` use `rounded-lg` (token 12px) and `shadow-card`; overlays use `shadow-popover` and `bg-overlay`.
+- `Switch`/`Checkbox` use `ring-focus`, `border-md`, and `brand.fg` for the checked knob/check mark.

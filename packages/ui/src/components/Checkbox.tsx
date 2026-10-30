@@ -28,9 +28,9 @@ export const Checkbox = forwardRef<HTMLButtonElement, CheckboxProps>(
       onClick={() => onCheckedChange(!checked)}
       className={cn(
         "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border transition-colors",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-light",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "border-brand bg-brand text-fg" : "border-border bg-bg-3",
+        checked ? "border-brand bg-brand text-brand-fg" : "border-md bg-bg-3",
         className,
       )}
       {...props}

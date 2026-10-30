@@ -414,12 +414,15 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 
 | Catégorie | Composants |
 |---|---|
-| Atoms | `Badge`, `Button`, `Card` |
+| Atoms | `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Select`, `Spinner`, `Switch`, `Textarea`, `Skeleton` |
+| Layout & formulaires | `AppShell`, `PageHeader`, `FormField`, `CollapsibleSection`, `Tabs`, `Table`, `Alert`, `Tooltip` |
 | Overlays (remplacent alert/confirm) | `Dialog`, `Toast` |
-| Métier transverses | `ChartCard`, `EmptyState`, `KpiCard`, `LoadingOverlay` |
+| Métier transverses | `ChartCard`, `EmptyState`, `KpiCard`, `LoadingOverlay`, `FileDropzone`, `MultiSelect`, `Slicer`, `MarkdownView`, `LlmStatus`, `DemoMode*` |
 | Hooks & utils | `useMediaQuery`, `cn` |
 
-**Règle d'extension** : tout composant atomique nouveau (Input, Select, Tabs, Tooltip, Skeleton, etc.) se crée dans `packages/ui/` **avant** d'être consommé dans une app. Pas de réinvention locale dans `apps/<poc>/frontend/src/components/`.
+Usage, états et a11y de chaque primitive : [supplément design system §5](./docs/standards/design-system.md#5-shared-primitives).
+
+**Règle d'extension** : tout composant atomique nouveau se crée dans `packages/ui/` **avant** d'être consommé dans une app, avec un test Vitest. Pas de réinvention locale dans `apps/<poc>/frontend/src/components/` (en-têtes de page, onglets, tableaux, bandeaux, infobulles, champs de formulaire et sections repliables existent déjà).
 
 **Bannis** :
 - `alert()` natif (bloquant, pas stylable, pas a11y) → utiliser `Dialog`.

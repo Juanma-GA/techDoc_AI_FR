@@ -30,6 +30,34 @@ export {
   textareaVariants,
   type TextareaProps,
 } from "./components/Textarea";
+export { Skeleton } from "./components/Skeleton";
+
+// Layout & forms
+export { PageHeader, type PageHeaderProps } from "./components/PageHeader";
+export { FormField, type FormFieldProps } from "./components/FormField";
+export {
+  CollapsibleSection,
+  type CollapsibleSectionProps,
+} from "./components/CollapsibleSection";
+export { Alert, alertVariants, type AlertProps } from "./components/Alert";
+export { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/Tabs";
+export {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./components/Table";
+export {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipRoot,
+  TooltipTrigger,
+  type TooltipProps,
+} from "./components/Tooltip";
 
 // Business
 export { ChartCard, type ChartCardProps } from "./components/ChartCard";
