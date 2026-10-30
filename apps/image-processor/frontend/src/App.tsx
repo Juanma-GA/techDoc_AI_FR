@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Ai4TechDocLogo,
   AppShell,
   DemoModeBadge,
   DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
+  SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
 import { useTranslation } from "react-i18next";
@@ -19,6 +19,12 @@ import { WorkflowProvider } from "./hooks/WorkflowProvider";
 import { Settings } from "./routes/Settings";
 
 const LANGUAGES = ["fr", "en"] as const;
+
+const NAV_ITEMS = [
+  { to: "/", key: "nav.home", icon: "scan" },
+  { to: "/history", key: "nav.history", icon: "files" },
+  { to: "/settings", key: "nav.settings", icon: "settings" },
+] as const;
 
 declare global {
   interface Window {
@@ -74,12 +80,11 @@ export function App() {
 
   return (
     <AppShell
-      className="[&>.ui-sidebar]:shrink-0"
       title={t("app.title")}
       brandTitle={t("app.description")}
-      version={t("app.version")}
-      headerStart={<Ai4TechDocLogo alt="" />}
       navigationLabel={t("nav.ariaLabel")}
+      collapseLabel={t("nav.collapse")}
+      expandLabel={t("nav.expand")}
       themeToggleLabel={t("nav.themeToggle")}
       sidebarTop={
         demoEnabled ? (
@@ -90,15 +95,22 @@ export function App() {
       }
       navigation={
         <>
-          <NavLink to="/" end className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.home")}
-          </NavLink>
-          <NavLink to="/history" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.history")}
-          </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => sidebarNavItemClass(isActive)}>
-            {t("nav.settings")}
-          </NavLink>
+          {NAV_ITEMS.map(({ to, key, icon }) => {
+            const label = t(key);
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                title={label}
+                aria-label={label}
+                className={({ isActive }) => sidebarNavItemClass(isActive)}
+              >
+                <SidebarNavContent icon={icon} label={label} />
+              </NavLink>
+            );
+          })}
         </>
       }
       languageSwitcher={
