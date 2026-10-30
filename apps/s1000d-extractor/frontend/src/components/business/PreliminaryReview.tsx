@@ -97,8 +97,14 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
   return (
     <Card>
       <CardContent className="space-y-4 pt-4">
-        <h2 className="font-display text-lg">{t("preliminary.title")}</h2>
-        <p className="text-sm text-fg-dim">{t("preliminary.localOnly")}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="font-display text-lg">{t("preliminary.title")}</h2>
+          <div className="ml-auto">
+            <Button variant="secondary" disabled={disabled || review.dirty} onClick={() => void skipReviews()}>
+              {t(skipArmed ? "preliminary.skipConfirm" : "preliminary.skip")}
+            </Button>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-3 items-center">
           <strong>{t("preliminary.progress", { current: index + 1, total: procedures.length })}</strong>
           <span>{t(`preliminary.status.${current.status}`)}</span>
@@ -162,8 +168,6 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
         ) : (
           <>
             <div className="flex flex-wrap gap-3 text-sm text-fg-dim">
-              <p className="w-full">{t("preliminary.confirmationHelp")}</p>
-              <p className="w-full">{t("preliminary.structureHelp", { count: current.passages.length - passages.length })}</p>
               {procedureCategories.map((category) => (
                 <span key={category}>{t(`preliminary.category.${category}`)}:{" "}
                   {passages.filter((p) => p.decision === category).length}</span>
@@ -212,12 +216,6 @@ export function PreliminaryReview({ docId, initial, dms, busy, onBack, onGenerat
         )}
         <div className="flex flex-wrap gap-3 justify-between">
           <Button variant="secondary" disabled={disabled} onClick={onBack}>{t("common.back")}</Button>
-          <div className="space-y-2">
-        <p className="max-w-xl text-sm text-fg-dim">{t("preliminary.skipHelp")}</p>
-        <Button variant="secondary" disabled={disabled || review.dirty} onClick={() => void skipReviews()}>
-          {t(skipArmed ? "preliminary.skipConfirm" : "preliminary.skip")}
-        </Button>
-          </div>
           <Button disabled={disabled || !complete || review.dirty} onClick={onGenerate}>
         {t("preliminary.generate")}
           </Button>

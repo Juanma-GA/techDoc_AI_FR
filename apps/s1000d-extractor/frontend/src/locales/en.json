@@ -1,7 +1,6 @@
 {
   "preliminary": {
     "title": "Review the procedural DM",
-    "localOnly": "Strictly local wizard: no content sent to an AI service. Rules propose; you decide.",
     "progress": "Procedure {{current}} of {{total}}",
     "procedure": "Procedure",
     "previous": "Previous procedure",
@@ -25,7 +24,6 @@
     "complete": "Mark this procedure as reviewed",
     "skip": "Skip reviews and generate as-is",
     "skipConfirm": "Confirm generation without review",
-    "skipHelp": "This skips every procedural DM review and generates from the extracted structure without applying review decisions.",
     "generate": "Generate and validate XML",
     "sourceAt": "Show source — page {{page}}",
     "unlocated": "Source page unknown",
@@ -46,8 +44,6 @@
     "decisionSummary": "Decision: {{category}}",
     "collapsePassage": "Collapse passage",
     "expandPassage": "Expand passage",
-    "confirmationHelp": "Category filters also show proposals. Counts include only decisions; a proposal alone cannot validate the review.",
-    "structureHelp": "{{count}} heading(s), marker(s), caption(s) or table header(s) retained in the source, outside requirement classification. Technical numbers and data rows still need review.",
     "destination": "Classification decision",
     "accept": "Accept proposal",
     "editSplit": "Edit or split passage",

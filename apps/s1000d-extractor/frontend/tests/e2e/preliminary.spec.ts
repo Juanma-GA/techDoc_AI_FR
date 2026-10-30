@@ -382,7 +382,13 @@ test("skips every procedural review and starts generation directly", async ({ pa
   await page.goto("/migration");
   await page.getByRole("button", { name: "Reprendre", exact: true }).click();
 
-  await page.getByRole("button", { name: "Ignorer les revues et générer en l'état" }).click();
+  const title = page.getByRole("heading", { name: "Revoir le DM de procédure" });
+  const skip = page.getByRole("button", { name: "Ignorer les revues et générer en l'état" });
+  const [titleBox, skipBox] = await Promise.all([title.boundingBox(), skip.boundingBox()]);
+  if (!titleBox || !skipBox) throw new Error("Procedure title or skip action is not visible.");
+  expect(skipBox.x).toBeGreaterThan(titleBox.x + titleBox.width);
+  expect(Math.abs(skipBox.y - titleBox.y)).toBeLessThan(16);
+  await skip.click();
   const confirm = page.getByRole("button", { name: "Confirmer la génération sans revue" });
   await expect(confirm).toBeVisible();
   await confirm.click();

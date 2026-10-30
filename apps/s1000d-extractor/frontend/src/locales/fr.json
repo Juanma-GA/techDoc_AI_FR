@@ -1,7 +1,6 @@
 {
   "preliminary": {
     "title": "Revoir le DM de procédure",
-    "localOnly": "Wizard strictement local : aucun contenu transmis à un service d'IA. Les règles proposent ; vous décidez.",
     "progress": "Procédure {{current}} sur {{total}}",
     "procedure": "Procédure",
     "previous": "Procédure précédente",
@@ -25,7 +24,6 @@
     "complete": "Marquer cette procédure comme vérifiée",
     "skip": "Ignorer les revues et générer en l'état",
     "skipConfirm": "Confirmer la génération sans revue",
-    "skipHelp": "Cette action ignore toutes les revues des DM procéduraux et génère à partir de la structure extraite, sans appliquer de décisions de classement.",
     "generate": "Générer et valider le XML",
     "sourceAt": "Voir la source — page {{page}}",
     "unlocated": "Page source non déterminée",
@@ -46,8 +44,6 @@
     "decisionSummary": "Décision : {{category}}",
     "collapsePassage": "Replier le passage",
     "expandPassage": "Développer le passage",
-    "confirmationHelp": "Les filtres par catégorie affichent aussi les propositions. Les compteurs ne reflètent que les décisions prises ; une proposition seule ne permet pas de valider la revue.",
-    "structureHelp": "{{count}} titre(s), repère(s), légende(s) ou en-tête(s) conservé(s) dans la source, hors classement des exigences. Les chiffres techniques et les lignes de données restent à examiner.",
     "destination": "Décision de classement",
     "accept": "Accepter la proposition",
     "editSplit": "Corriger ou scinder le passage",
