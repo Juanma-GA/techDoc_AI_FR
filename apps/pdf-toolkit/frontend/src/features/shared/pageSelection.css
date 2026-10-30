@@ -1,0 +1,47 @@
+.rotation-control {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  margin: 14px 0;
+}
+
+.rotation-button {
+  min-height: 40px;
+}
+
+.rotation-button svg {
+  flex: 0 0 auto;
+  transition: transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rotation-button svg {
+    transition: none;
+  }
+}
+
+.rotation-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.rotation-preview > .input-help {
+  margin: 0;
+}
+
+.rotation-preview-frame {
+  display: flex;
+  width: min(100%, 560px);
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border-base);
+  border-radius: var(--radius-sm);
+  background: var(--color-card-base);
+}
+
+.rotation-preview-frame canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}

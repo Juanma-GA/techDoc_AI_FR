@@ -4,10 +4,18 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { useTranslation } from "react-i18next";
 
 import { Button, Card, Input, Spinner } from "@internal/ui";
-import { formatOperationError, processSplit } from "../../shared/api";
+import {
+  chooseSplitDestination,
+  formatOperationError,
+  processSplit,
+  validateExportFileName,
+  type ExportProgressState,
+  type SplitDestination,
+} from "../../shared/api";
 import { SplitTable } from "./SplitTable";
 import { SplitValuesPanel, type SplitMode, type ZoneSettings } from "./SplitValuesPanel";
 import { ZonePreview } from "./ZonePreview";
+import { ExportProgress } from "../shared/ExportProgress";
 import {
   applyNamePattern,
   buildValuePattern,
@@ -50,8 +58,13 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
   const [folder, setFolder] = useState(() => (file ? sourceBaseName(file.name) : ""));
   const [documentProxy, setDocumentProxy] = useState<PDFDocumentProxy | null>(null);
   const [working, setWorking] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    phase: "uploading",
+    percentage: 0,
+  });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [successFileName, setSuccessFileName] = useState("");
 
   const valuePattern = useMemo(() => {
     try {
@@ -123,6 +136,21 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
       setError(t("files.select"));
       return;
     }
+    const archiveName = `${folderName}.zip`;
+    const nameError = validateExportFileName(archiveName);
+    if (nameError) {
+      setError(t(`exportOptions.${nameError}`));
+      return;
+    }
+    let destination: SplitDestination | null;
+    try {
+      destination = await chooseSplitDestination(archiveName, t);
+    } catch (reason) {
+      setError(formatOperationError(reason, t, "split.failed"));
+      return;
+    }
+    if (destination === null) return;
+
     let target = rows;
     if (needsDetection) {
       const detected = await detect();
@@ -142,6 +170,7 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
     }
     const names = buildFileNames(target);
     setWorking(true);
+    setExportProgress({ phase: "uploading", percentage: 0 });
     setError("");
     setSuccess(false);
     const data = new FormData();
@@ -152,7 +181,14 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
     );
     data.append("folder", folderName);
     try {
-      await processSplit(data, `${folderName}.zip`, t);
+      const savedName = await processSplit(
+        data,
+        archiveName,
+        t,
+        setExportProgress,
+        destination,
+      );
+      setSuccessFileName(savedName);
       setSuccess(true);
     } catch (reason) {
       setError(formatOperationError(reason, t, "split.failed"));
@@ -321,6 +357,8 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
             <small>{t("split.outputSummary", { count: rows.length, folder: folderName })}</small>
           </span>
         </div>
+        <p className="input-help">{t("exportOptions.saveLocationHint")}</p>
+        {working ? <ExportProgress progress={exportProgress} /> : null}
         <Button type="submit" disabled={busy || !canSubmit} className="action-button">
           {working ? <Spinner aria-label={t("common.loading")} /> : <Split size={18} />}
           {working ? t("split.working") : t("split.action")}
@@ -333,7 +371,7 @@ export function AdvancedSplit({ file }: AdvancedSplitProps) {
           ) : null}
           {success ? (
             <p className="feedback feedback-success" role="status">
-              {t("split.success", { fileName: `${folderName}.zip`, count: rows.length })}
+              {t("split.success", { fileName: successFileName, count: rows.length })}
             </p>
           ) : null}
         </div>

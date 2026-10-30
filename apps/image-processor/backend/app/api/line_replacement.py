@@ -3,9 +3,10 @@ from __future__ import annotations
 import base64
 from io import BytesIO
 
+import structlog
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
-from pydantic import BaseModel, Field, FiniteFloat, ValidationError
+from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, ValidationError
 
 from app.services.constants import (
     A4_DPI,
@@ -15,22 +16,51 @@ from app.services.constants import (
     MAX_REPLACEMENT_FONT_SIZE,
     SUPPORTED_FORMATS,
 )
+from app.services.image_layout import create_a4_page, prepare_source_image
 from app.services.image_replacement import apply_replacements
-from app.services.ocr_engine import normalize_reference
+from app.services.ocr_engine import (
+    _match_references,
+    find_reference_occurrences,
+    normalize_reference,
+)
 
 router = APIRouter(prefix="/image-processor", tags=["image-processor"])
+log = structlog.get_logger(__name__)
 
 
 class RecognizedLineIn(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(max_length=2000)
     box: list[tuple[FiniteFloat, FiniteFloat]] = Field(min_length=4, max_length=4)
+
+
+class ReplacementPairIn(BaseModel):
+    reference: str = Field(min_length=1, max_length=500)
+    replacement: str = Field(min_length=1, max_length=500)
+
+
+def _log_invalid_reapply_payload(field: str, error: ValueError) -> None:
+    validation_errors = []
+    if isinstance(error, ValidationError):
+        validation_errors = [
+            {"location": list(item["loc"]), "type": item["type"]}
+            for item in error.errors(include_input=False)
+        ]
+    log.warning(
+        "reapply_replacements_payload_invalid",
+        field=field,
+        error_type=type(error).__name__,
+        validation_errors=validation_errors,
+    )
 
 
 def _parse_line(raw_line: str) -> RecognizedLineIn:
     try:
-        return RecognizedLineIn.model_validate_json(raw_line)
+        line = RecognizedLineIn.model_validate_json(raw_line)
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=422, detail="La ligne OCR est invalide.") from error
+    if not line.text.strip():
+        raise HTTPException(status_code=422, detail="La ligne OCR est invalide.")
+    return line
 
 
 def _open_a4_image(image_bytes: bytes) -> Image.Image:
@@ -78,7 +108,7 @@ async def replace_recognized_line(
     reference = reference.strip()
     replacement = replacement.strip()
     normalized_reference = normalize_reference(reference)
-    if not normalized_reference or normalized_reference not in normalize_reference(line.text):
+    if not normalized_reference or not find_reference_occurrences(line.text, reference):
         raise HTTPException(status_code=422, detail="La référence n'est pas présente dans la ligne OCR.")
     if not replacement:
         raise HTTPException(status_code=422, detail="Le nouveau repère ne peut pas être vide.")
@@ -94,6 +124,7 @@ async def replace_recognized_line(
         [{"text": line.text, "box": [list(point) for point in line.box]}],
         [{"reference": reference, "replacement": replacement}],
         replacement_font_size,
+        broadcast_references={normalized_reference},
     )
     replacement_count = replacement_counts[0]
     if replacement_count == 0:
@@ -105,5 +136,118 @@ async def replace_recognized_line(
     return {
         "edited_image": f"data:image/jpeg;base64,{encoded_image}",
         "replacement_count": replacement_count,
+        "replacement_font_size": font_size,
+    }
+
+
+@router.post("/reapply-replacements")
+async def reapply_replacements(
+    image: UploadFile = File(...),
+    lines_json: str = Form(..., max_length=1_000_000),
+    replacement_pairs_json: str = Form(..., max_length=100_000),
+    broadcast_references_json: str = Form(default="[]", max_length=100_000),
+    replacement_font_size: int | None = Form(
+        default=None, ge=1, le=MAX_REPLACEMENT_FONT_SIZE,
+    ),
+) -> dict[str, object]:
+    image_bytes = await image.read(MAX_IMAGE_BYTES + 1)
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="L'image dépasse la limite de 15 Mo.")
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Le fichier image est vide.")
+
+    try:
+        with Image.open(BytesIO(image_bytes)) as image_data:
+            image_format = image_data.format
+            image_data.verify()
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError) as error:
+        raise HTTPException(
+            status_code=400, detail="Le fichier fourni n'est pas une image valide.",
+        ) from error
+    if SUPPORTED_FORMATS.get(image_format or "") is None:
+        raise HTTPException(status_code=415, detail="Formats acceptés : PNG, JPEG, WEBP, BMP et TIFF.")
+
+    try:
+        lines = TypeAdapter(list[RecognizedLineIn]).validate_json(lines_json)
+    except (ValueError, ValidationError) as error:
+        _log_invalid_reapply_payload("lines_json", error)
+        raise HTTPException(status_code=422, detail="Les zones ou remplacements sont invalides.") from error
+    lines = [line for line in lines if line.text.strip()]
+    try:
+        replacement_pairs = TypeAdapter(list[ReplacementPairIn]).validate_json(
+            replacement_pairs_json,
+        )
+    except (ValueError, ValidationError) as error:
+        _log_invalid_reapply_payload("replacement_pairs_json", error)
+        raise HTTPException(status_code=422, detail="Les zones ou remplacements sont invalides.") from error
+    try:
+        broadcast_references = TypeAdapter(list[str]).validate_json(broadcast_references_json)
+    except (ValueError, ValidationError) as error:
+        _log_invalid_reapply_payload("broadcast_references_json", error)
+        raise HTTPException(status_code=422, detail="Les zones ou remplacements sont invalides.") from error
+
+    if any(
+        not normalize_reference(pair.reference) or not pair.replacement.strip()
+        for pair in replacement_pairs
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Chaque couple doit contenir une référence et un nouveau repère.",
+        )
+    pairs = [
+        {"reference": pair.reference.strip(), "replacement": pair.replacement.strip()}
+        for pair in replacement_pairs
+    ]
+    normalized_broadcast_references = {
+        normalize_reference(reference) for reference in broadcast_references
+    }
+    replacement_references = {normalize_reference(pair["reference"]) for pair in pairs}
+    if any(
+        not reference or reference not in replacement_references
+        for reference in normalized_broadcast_references
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Une référence à appliquer à toutes les zones est invalide.",
+        )
+
+    replacement_lines, replacement_matches = _match_references(
+        [
+            {"text": line.text, "box": [list(point) for point in line.box]}
+            for line in lines
+        ],
+        [pair["reference"] for pair in pairs],
+    )
+    if any(
+        x < 0 or x > A4_WIDTH or y < 0 or y > A4_HEIGHT
+        for line in lines
+        for x, y in line.box
+    ):
+        raise HTTPException(status_code=422, detail="Une boîte OCR est hors de l'image.")
+
+    try:
+        source_image, _ = prepare_source_image(image_bytes)
+        source_page, *_ = create_a4_page(source_image)
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError) as error:
+        raise HTTPException(
+            status_code=400, detail="Le fichier fourni n'est pas une image valide.",
+        ) from error
+    rendered_image, replacement_counts, font_size = apply_replacements(
+        source_page,
+        replacement_lines,
+        pairs,
+        replacement_font_size,
+        normalized_broadcast_references,
+    )
+
+    output = BytesIO()
+    rendered_image.save(output, format="JPEG", quality=95, optimize=True, dpi=(A4_DPI, A4_DPI))
+    encoded = base64.b64encode(output.getvalue()).decode("ascii")
+    return {
+        "edited_image": f"data:image/jpeg;base64,{encoded}",
+        "replacement_counts": replacement_counts,
+        "partial_line_indices": [
+            match.get("partial_line_indices", []) for match in replacement_matches
+        ],
         "replacement_font_size": font_size,
     }

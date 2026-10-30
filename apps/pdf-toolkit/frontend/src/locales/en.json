@@ -12,9 +12,27 @@
     "ariaLabel": "Main navigation",
     "themeToggle": "Switch theme",
     "languageSwitcher": "Language",
-    "tools": "PDF tools",
+    "tools": "PDF tools and settings",
     "collapse": "Collapse menu",
     "expand": "Expand menu"
+  },
+  "exportOptions": {
+    "fileName": "Output filename",
+    "saveLocationHint": "When you start the export, choose a location in the Save As dialog. If it is unavailable, the standard browser download is used.",
+    "required": "Enter a filename.",
+    "invalidName": "Enter a valid filename without a path or prohibited characters.",
+    "savePickerFailed": "Could not open the Save As dialog.",
+    "saveFailed": "Could not save the file to the selected location."
+  },
+  "exportProgress": {
+    "uploading": "Uploading to server",
+    "processing": "Processing on server",
+    "downloading": "Downloading result",
+    "preparing": "Preparing PDF",
+    "pages": "Converting pages: {{completed}} / {{total}}",
+    "splitFiles": "Splitting files: {{completed}} / {{total}}",
+    "splitArchive": "Adding to ZIP: {{completed}} / {{total}}",
+    "progressUnavailable": "Progress unavailable; processing continues"
   },
   "tools": {
     "merge": {
@@ -45,7 +63,7 @@
     "rotate": {
       "tab": "Rotate",
       "title": "Rotate pages",
-      "description": "Rotate every page or only the pages you select."
+      "description": "Rotate pages and preview the result before export."
     },
     "imagesToPdf": {
       "tab": "Images → PDF",
@@ -56,6 +74,22 @@
       "tab": "PDF → Images",
       "title": "Convert a PDF to images",
       "description": "Export every page as PNG or JPEG in a ZIP archive."
+    },
+    "settings": {
+      "tab": "Settings",
+      "title": "Settings",
+      "description": "Choose normal or demo mode to preload the sample PDF."
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Operating mode",
+      "hint": "The anonymized PDF is preloaded in tabs that accept a PDF. Normal actions stay local; depending on the tool, processing uses the local backend or the browser. The mode resets to normal when the app closes. In demo mode, Merge receives two copies of the PDF.",
+      "normal": "Normal mode",
+      "demo": "Demo mode",
+      "badge": "DEMO MODE",
+      "loading": "Loading the demo PDF…",
+      "loadError": "Could not load the demo PDF."
     }
   },
   "common": {
@@ -68,15 +102,15 @@
     "dropDescription": "or browse files on your computer",
     "dropMultipleLabel": "Drop multiple PDFs here",
     "dropMultipleDescription": "Click to browse and add multiple files",
-    "limit": "PDF · 250 MB maximum per file",
+    "limit": "PDF · 500 MB maximum per file",
     "imageDropLabel": "Drop your images here",
     "imageDropDescription": "Add PNG or JPEG images in the order you want",
-    "imageLimit": "PNG or JPEG · 250 MB maximum per file",
+    "imageLimit": "PNG or JPEG · 500 MB maximum per file",
     "singleOnly": "Select one PDF file for this operation.",
     "imageSingleOnly": "Select one image for this operation.",
     "select": "Select a PDF file.",
     "selectImagePdf": "Select at least one PNG or JPEG image.",
-    "tooLarge": "“{{name}}” exceeds the 250 MB limit.",
+    "tooLarge": "“{{name}}” exceeds the 500 MB limit.",
     "notPdf": "“{{name}}” is not a PDF file.",
     "notImage": "“{{name}}” is not a PNG or JPEG image.",
     "remove": "Remove file",
@@ -193,9 +227,15 @@
     "pagesPlaceholder": "e.g. 1-5, 8, 10-12",
     "pagesHelp": "Leave empty for every page, or enter page numbers/ranges (e.g. 1,3,7 or 2-4,8).",
     "angleLabel": "Clockwise rotation",
-    "clockwise90": "90° clockwise",
-    "clockwise180": "180°",
-    "clockwise270": "270° clockwise",
+    "previewPage": "Preview of page {{page}}",
+    "previewCanvasLabel": "Preview of page {{page}}, rotated {{angle}} degrees",
+    "previewEmpty": "Load a PDF to preview its rotation.",
+    "previewLoading": "Loading the PDF preview…",
+    "previewFailed": "Could not render this page preview.",
+    "emptyDocument": "This PDF has no pages.",
+    "currentAngle": "Current angle: {{angle}}°",
+    "advanceRotation": "Add 90° clockwise. Current angle: {{angle}}°.",
+    "rotationHelp": "Each click adds 90° clockwise; after 270°, the button returns to 90°.",
     "outputDescription": "Rotated pages",
     "action": "Rotate",
     "working": "Rotating…",
@@ -222,7 +262,7 @@
     "fieldTooLarge": "A form field is too large.",
     "unexpectedFile": "The form contains an unexpected file.",
     "singleFileOnly": "Only one PDF file is accepted for this operation.",
-    "fileTooLarge": "Each file must be no larger than 250 MB.",
+    "fileTooLarge": "Each file must be no larger than 500 MB.",
     "mergeMinimumFiles": "Select at least two PDF files.",
     "selectImages": "Select at least one PNG or JPEG image.",
     "selectFile": "Select a PDF file.",

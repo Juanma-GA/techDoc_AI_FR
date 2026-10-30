@@ -47,5 +47,17 @@ func RegisterRoutes(router *gin.Engine, files fs.FS) error {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("open frontend assets: %w", err)
 	}
+
+	demoPath := "demo"
+	if indexPath == "generated/index.html" {
+		demoPath = "generated/demo"
+	}
+	demoFiles, err := fs.Sub(files, demoPath)
+	if err == nil {
+		fileServer := http.StripPrefix("/demo/", http.FileServer(http.FS(demoFiles)))
+		router.GET("/demo/*filepath", gin.WrapH(fileServer))
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("open frontend demo files: %w", err)
+	}
 	return nil
 }

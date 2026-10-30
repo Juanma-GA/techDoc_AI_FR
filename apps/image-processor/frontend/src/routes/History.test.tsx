@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { DemoModeProvider } from "@internal/ui";
 
 import { WorkflowProvider } from "../hooks/WorkflowProvider";
 import i18n from "../i18n";
@@ -26,12 +27,14 @@ function renderHistory() {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/history"]}>
-        <WorkflowProvider>
-          <Routes>
-            <Route path="/history" element={<History />} />
-            <Route path="/" element={<Home />} />
-          </Routes>
-        </WorkflowProvider>
+        <DemoModeProvider mode="normal" isReady>
+          <WorkflowProvider>
+            <Routes>
+              <Route path="/history" element={<History />} />
+              <Route path="/" element={<Home />} />
+            </Routes>
+          </WorkflowProvider>
+        </DemoModeProvider>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -65,7 +68,7 @@ it("restores the complete saved analysis, edits, selections, and undo without an
   renderHistory();
   await user.click(await screen.findByRole("button", { name: "Reprendre" }));
   expect(await screen.findByRole("heading", { name: "Détection et remplacement" })).toBeInTheDocument();
-  expect(screen.getByLabelText("Pièce à traiter")).toHaveValue("2");
+  expect(screen.getByLabelText("Description au point d’emploi")).toHaveValue("2");
   expect(await screen.findByRole("textbox", { name: "Référence Excel 1" })).toHaveValue("EDITED-REF");
   expect(screen.getByRole("textbox", { name: "Nouveau repère Excel 1" })).toHaveValue("CUSTOM");
   expect(screen.getByRole("checkbox", { name: "Appliquer le couple Excel 1" })).not.toBeChecked();

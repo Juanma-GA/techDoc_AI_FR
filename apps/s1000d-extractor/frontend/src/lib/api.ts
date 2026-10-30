@@ -41,6 +41,13 @@ export type ApiError = {
   request_id: string;
 };
 
+export class ApiRequestError extends Error {
+  constructor(public readonly status: number, public readonly code: string, message: string) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // Include X-Request-Id in outgoing request (if we have one from a previous response)
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -61,7 +68,9 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = (await response.json().catch(() => null)) as ApiError | null;
-    throw new Error(error?.message || response.statusText || "Erreur");
+    throw new ApiRequestError(
+      response.status, error?.code ?? "HTTP_ERROR", error?.message || response.statusText || "Erreur",
+    );
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -210,6 +219,11 @@ export const versioningApi = {
 export const brexApi = {
   list: () => api<BrexProfile[]>("/brex"),
   detail: (brexId: string) => api<BrexProfileDetail>(`/brex/${encodeURIComponent(brexId)}`),
+  delete: (brexId: string, confirmToken: string) =>
+    api<{ id: string; status: string }>(
+      `/brex/${encodeURIComponent(brexId)}?confirm_token=${encodeURIComponent(confirmToken)}`,
+      { method: "DELETE" },
+    ),
   upload: async (
     file: File,
     name: string,
@@ -334,7 +348,23 @@ export const wizardApi = {
     const filename = disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? `${dmId}.xml`;
     return new File([await response.blob()], filename, { type: "application/xml" });
   },
-  zipUrl: (docId: string) => `${API_BASE}/documents/${docId}/wizard/zip`,
+  zipUrl: (
+    docId: string,
+    options: {
+      maxDimension?: number;
+      format?: "original" | "jpeg" | "png";
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (options.maxDimension !== undefined) {
+      params.set("max_dimension", String(options.maxDimension));
+    }
+    if (options.format && options.format !== "original") {
+      params.set("image_format", options.format);
+    }
+    const query = params.toString();
+    return `${API_BASE}/documents/${docId}/wizard/zip${query ? `?${query}` : ""}`;
+  },
   images: (docId: string) => api<string[]>(`/documents/${docId}/wizard/images`),
   imageUrl: (docId: string, name: string) =>
     `${API_BASE}/documents/${docId}/wizard/images/${encodeURIComponent(name)}`,

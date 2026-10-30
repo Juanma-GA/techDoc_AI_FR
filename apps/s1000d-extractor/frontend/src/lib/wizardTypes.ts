@@ -45,7 +45,7 @@ export type TreeNode = {
   refs?: NodeRef[] | null;
 };
 
-export type WizardStep = "dmrl" | "split" | "type" | "structure" | "generate";
+export type WizardStep = "dmrl" | "split" | "type" | "structure" | "preliminary" | "generate";
 
 export type PreviewSnippet = {
   text: string;
@@ -116,6 +116,7 @@ export type WizardState = {
   has_brex_profile?: boolean;
   resources?: WizardResources;
   dmrl?: DmrlRow[];
+  preliminary?: import("./preliminaryTypes").PreliminaryState;
 };
 
 export type Override = { dm_id: string; node_id: string; element: string };

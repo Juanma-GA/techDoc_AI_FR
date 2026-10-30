@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { brexApi, type S1000dIssue } from "../lib/api";
 import { BrexRulesPreview } from "./BrexRulesPreview";
+import { BrexProfileDeleteAction } from "./BrexProfileDeleteAction";
 
 type Props = {
   issue: S1000dIssue;
@@ -121,22 +122,34 @@ export function BrexProfileControl({
       </div>
       {uploadError ? <div className="error" role="alert">{uploadError}</div> : null}
 
-      <label>
-        <div className="label">{t("migration.upload.brex")}</div>
-        <select
-          className="input"
-          value={value ?? ""}
-          disabled={disabled || profilesQuery.isLoading}
-          onChange={(event) => onChange(event.target.value || null)}
-        >
-          <option value="">{t("migration.brex.none")}</option>
-          {(profilesQuery.data ?? []).map((profile) => (
-            <option key={profile.id} value={profile.id}>
-              {profile.name} — {t("migration.upload.issueValue", { issue: profile.s1000d_issue })}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="row">
+        <label className="grow">
+          <div className="label">{t("migration.upload.brex")}</div>
+          <select
+            className="input"
+            value={value ?? ""}
+            disabled={disabled || profilesQuery.isLoading}
+            onChange={(event) => onChange(event.target.value || null)}
+          >
+            <option value="">{t("migration.brex.none")}</option>
+            {(profilesQuery.data ?? []).map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name} — {t("migration.upload.issueValue", { issue: profile.s1000d_issue })}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedProfile ? (
+          <BrexProfileDeleteAction
+            key={selectedProfile.id}
+            profileId={selectedProfile.id}
+            disabled={disabled || profilesQuery.isLoading}
+            onDeleted={(deletedId) => {
+              if (value === deletedId) onChange(null);
+            }}
+          />
+        ) : null}
+      </div>
 
       {profilesQuery.isLoading ? (
         <div className="label" role="status">{t("migration.brex.loading")}</div>

@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { FileDropzone as SharedFileDropzone } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
+import { useDemoPdfFile } from "../demoPdf";
 import { validateImageFile, validatePDFFile } from "../files";
 
 type FileType = "pdf" | "image";
@@ -25,6 +27,7 @@ export function FileDropzone({
 }: FileDropzoneProps) {
   const { t } = useTranslation();
   const imageFiles = fileType === "image";
+  const demoPdf = useDemoPdfFile();
 
   const acceptFiles = (selected: File[]) => {
     if (selected.length === 0) {
@@ -52,6 +55,24 @@ export function FileDropzone({
     onError("");
     onFiles(selected);
   };
+
+  const acceptFilesRef = useRef(acceptFiles);
+  const injectedDemoPdfRef = useRef<File | null>(null);
+
+  useEffect(() => {
+    acceptFilesRef.current = acceptFiles;
+  }, [acceptFiles]);
+
+  useEffect(() => {
+    if (!demoPdf) {
+      injectedDemoPdfRef.current = null;
+      return;
+    }
+    if (!imageFiles && injectedDemoPdfRef.current !== demoPdf) {
+      injectedDemoPdfRef.current = demoPdf;
+      acceptFilesRef.current([demoPdf]);
+    }
+  }, [demoPdf, imageFiles]);
 
   return (
     <div>

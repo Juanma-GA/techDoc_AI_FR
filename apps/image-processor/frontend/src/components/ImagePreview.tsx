@@ -1,3 +1,4 @@
+import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import type { TFunction } from "i18next";
 import { Image as ImageIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, EmptyState } from "@internal/ui";
@@ -6,6 +7,22 @@ import type { OcrResultDto } from "../lib/api";
 import { useImageEditor } from "../hooks/useImageEditor";
 import { BrushControls } from "./BrushControls";
 import { ImageToolbar } from "./ImageToolbar";
+import { ReplacementBoxControls } from "./ReplacementBoxControls";
+import type { LineBoxOffset } from "../lib/replacement-box-offsets";
+import { clampLineBoxOffset } from "../lib/replacement-box-offsets";
+
+const DRAG_THRESHOLD_PX = 2;
+const DRAG_SENSITIVITY = 0.25;
+
+type BoxDrag = {
+  pointerId: number;
+  lineIndex: number;
+  startX: number;
+  startY: number;
+  offsetX: number;
+  offsetY: number;
+  moved: boolean;
+};
 
 type ImagePreviewProps = {
   imageFile: File | null;
@@ -22,6 +39,12 @@ type ImagePreviewProps = {
   onImageEdited: (image: string, mode: "lama" | "color") => void;
   onInpaintingChange: (busy: boolean) => void;
   onSelectLine: (lineIndex: number) => void;
+  onSelectBox: (lineIndex: number) => void;
+  selectedLineIndex: number | null;
+  reapplyBlocked: boolean;
+  onUpdateLineOffsets: (offsets: LineBoxOffset[]) => void;
+  onApplyOffsetsToAll: () => void;
+  onReapplyReplacements: () => void;
   t: TFunction;
 };
 
@@ -40,14 +63,78 @@ export function ImagePreview({
   onImageEdited,
   onInpaintingChange,
   onSelectLine,
+  onSelectBox,
+  selectedLineIndex,
+  reapplyBlocked,
+  onUpdateLineOffsets,
+  onApplyOffsetsToAll,
+  onReapplyReplacements,
   t,
 }: ImagePreviewProps) {
+  const boxDrag = useRef<BoxDrag | null>(null);
+  const suppressNextClick = useRef(false);
   const editor = useImageEditor({
     imageFile, imageUrl, manuallyEdited, onImageEdited, onInpaintingChange, t,
   });
   const replacedLines = new Set((result?.references ?? []).flatMap((item) =>
     item.line_indices.slice(0, item.replacement_count ?? 0),
   ));
+
+  function startBoxDrag(
+    event: ReactPointerEvent<SVGPolygonElement>,
+    lineIndex: number,
+    offsetX: number,
+    offsetY: number,
+  ) {
+    event.stopPropagation();
+    if (!result || !replacedLines.has(lineIndex) || disabled || editor.brushEnabled) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    boxDrag.current = {
+      pointerId: event.pointerId,
+      lineIndex,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX,
+      offsetY,
+      moved: false,
+    };
+  }
+
+  function moveBoxDrag(event: ReactPointerEvent<SVGPolygonElement>) {
+    const drag = boxDrag.current;
+    if (!result || !drag || drag.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD_PX) return;
+    const line = result.lines[drag.lineIndex];
+    if (!line) return;
+    drag.moved = true;
+    onSelectBox(drag.lineIndex);
+
+    const svg = event.currentTarget.ownerSVGElement;
+    const bounds = svg?.getBoundingClientRect();
+    if (!bounds?.width || !bounds.height) return;
+    const bounded = clampLineBoxOffset(
+      line.original_box ?? line.box,
+      Math.round(drag.offsetX + deltaX * result.width / bounds.width * DRAG_SENSITIVITY),
+      Math.round(drag.offsetY + deltaY * result.height / bounds.height * DRAG_SENSITIVITY),
+      result.width,
+      result.height,
+    );
+    onUpdateLineOffsets([{ lineIndex: drag.lineIndex, ...bounded }]);
+  }
+
+  function stopBoxDrag(event: ReactPointerEvent<SVGPolygonElement>) {
+    const drag = boxDrag.current;
+    if (drag?.pointerId !== event.pointerId) return;
+    boxDrag.current = null;
+    if (drag.moved && event.type === "pointerup") {
+      suppressNextClick.current = true;
+      window.setTimeout(() => {
+        suppressNextClick.current = false;
+      }, 0);
+    }
+  }
 
   if (!editor.previewImage) {
     return (
@@ -117,21 +204,43 @@ export function ImagePreview({
                       points={line.box.map(([x, y]) => `${x},${y}`).join(" ")}
                       className={`pointer-events-auto cursor-pointer focus-visible:stroke-brand focus-visible:stroke-2 ${
                         replaced
-                          ? "fill-danger stroke-danger"
-                          : "fill-transparent stroke-brand-blue-light"
+                          ? selectedLineIndex === index
+                            ? "fill-danger stroke-brand stroke-2"
+                            : "fill-danger stroke-danger"
+                          : selectedLineIndex === index
+                            ? "fill-transparent stroke-brand stroke-2"
+                            : "fill-transparent stroke-brand-blue-light"
                       }`}
-                      fillOpacity={replaced ? 0.15 : undefined}
+                      style={replaced ? { touchAction: "none" } : undefined}
+                      fillOpacity={replaced ? 0.06 : undefined}
+                      strokeOpacity={replaced ? 0.06 : undefined}
                       strokeWidth="1"
                       vectorEffect="non-scaling-stroke"
                       role="button"
                       tabIndex={canSelect ? 0 : -1}
                       aria-disabled={!canSelect}
+                      aria-pressed={selectedLineIndex === index}
                       aria-label={t(
                         reference ? "image.editRecognizedReplacement" : "image.replaceRecognizedLine",
                         { reference: reference?.reference ?? line.text },
                       )}
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => {
+                      onPointerDown={(event) => startBoxDrag(
+                        event,
+                        index,
+                        line.box_offset_x ?? 0,
+                        line.box_offset_y ?? 0,
+                      )}
+                      onPointerMove={moveBoxDrag}
+                      onPointerUp={stopBoxDrag}
+                      onPointerCancel={stopBoxDrag}
+                      onLostPointerCapture={stopBoxDrag}
+                      onClick={(event) => {
+                        if (suppressNextClick.current) {
+                          suppressNextClick.current = false;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          return;
+                        }
                         if (canSelect) onSelectLine(index);
                       }}
                       onKeyDown={(event) => {
@@ -160,6 +269,16 @@ export function ImagePreview({
             />
           </div>
         </div>
+        <ReplacementBoxControls
+          result={result}
+          selectedLineIndex={selectedLineIndex}
+          disabled={disabled}
+          reapplyBlocked={reapplyBlocked}
+          onUpdateOffsets={onUpdateLineOffsets}
+          onApplyToAll={onApplyOffsetsToAll}
+          onReapply={onReapplyReplacements}
+          t={t}
+        />
         <BrushControls editor={editor} disabled={disabled} t={t} />
         {result ? (
           <p className="text-xs text-fg-dim">

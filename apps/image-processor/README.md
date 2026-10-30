@@ -21,18 +21,21 @@ Find text references in technical images and replace selected references with su
 ## Features
 
 - Upload PNG, JPEG, WEBP, BMP, or TIFF images up to 15 MB.
-- Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed and can be edited or removed before OCR.
-- Add manual replacement pairs; these are combined with the edited Excel pairs.
-- Check or uncheck individual manual/Excel pairs to apply only selected references.
-- A reference entered once in the selected Excel pairs, with no manual pair for the same reference, is replaced at every detected occurrence. Repeated Excel references and manual pairs remain assigned one occurrence at a time. Replacement masks are inset and have rounded corners to preserve nearby strokes.
+- Optionally upload `.xlsx` / `.xlsm` workbooks up to 15 MB, select the sheet, map reference/replacement/ICN/part columns, and select the part section. The selected part's pairs are previewed; selecting the part automatically starts a comparison when an image is loaded and the pairs are ready.
+- Add manual reference/replacement pairs; their references are combined with the edited Excel pairs for comparison.
+- Check or uncheck individual manual/Excel pairs to compare only selected references. Use the OCR button to rerun after editing pairs.
+- OCR reports found and missing references without applying replacements. A reference must match a complete token in one detected OCR box; a shorter reference is not found inside a longer token.
+- Use **Remplacer** to apply the selected new reference to every detected occurrence. After the first application, the action recalculates replacements from the original image. Duplicate source references with the same target are broadcast to every occurrence; conflicting targets retain one-to-one assignment.
+- When replacements are explicitly reapplied, a reference entered once in the selected Excel pairs, with no manual pair for the same reference, is replaced at every detected occurrence. Repeated Excel references and manual pairs remain assigned one occurrence at a time. Replacement masks are inset and have rounded corners to preserve nearby strokes.
 - Standardize replacement font size from visible character heights and the mean
   of the most common group among selected references; only shrink over-wide replacements.
 - Preserve detected reading orientation, snapping angles within 5 degrees of an axis.
   The common A4 font size survives reruns, brushes, undo, and history restoration.
   See [replacement typography](./backend/README.md#replacement-typography).
-- Run PaddleOCR on CPU, inspect recognized text and matches, and download the replacement image as a 2480 × 3508 px A4 JPEG at 300 dpi.
+- Run PaddleOCR on CPU, inspect recognized text and matches, and download the resulting 2480 × 3508 px A4 JPEG at 300 dpi.
+- Select an OCR box and shift its replacement region horizontally or vertically by up to 30 px. Apply the selected offsets to every replaced box, then recalculate from the original image; offsets are kept in workspace history.
 - Zoom and pan the result, then paint a mask to remove an area with local LaMa inpainting or local median-color fill.
-- Every successful replacement or brush edit becomes the source for the next operation. Undo restores the previous image and analysis, one operation at a time.
+- Successful replacements and brush edits become the source for the next operation. Box-offset recalculation is an exception: it starts from the original image to avoid accumulating old erase marks. Undo restores the previous image and analysis, one operation at a time.
 - On startup, restore the last Excel workbook, sheet, and column mapping, but leave the image and selected part empty.
 - History lists each image and restores its complete last workspace: source/current images, undo stack, Excel workbook, selected part, edited/selected pairs, OCR output, and operation log.
 - The selected Excel ICN names the image in History and its download: `<ICN>.jpg`,
@@ -93,8 +96,8 @@ The first run creates separate Python 3.11 development environments for the API 
 installs their dependencies. On a fresh checkout, run `pnpm install` at the
 repository root first to install the Tauri CLI and frontend dependencies.
 
-The NSIS installer is built with `pnpm desktop:build:image-processor` or
-`package.bat desktop`. It bundles the React UI, backend sources, PaddleOCR tiny
+The NSIS installer is built with `pnpm desktop:build:image-processor`,
+`package.bat desktop`, or `package-desktop.bat`. It bundles the React UI, backend sources, PaddleOCR tiny
 detection/recognition and text-line orientation models, and the LaMa checkpoint.
 During setup, it visibly downloads the embedded Python runtimes and installs
 their locked dependencies from PyPI. The installer needs an Internet connection
@@ -226,6 +229,15 @@ No real-model orientation benchmark was run for the typography change.
 - **Reason:** History provides the business-specific restoration and deletion workflow instead of the generic Data screen.
 - **Approval:** The original navigation exception and the addition of History were explicitly approved by the product owner.
 - **Review condition:** Revisit if the product adds a separate data-management workflow or the standard changes.
+
+### Demo files in the OCR workflow
+
+- **Rule:** The [demo mode integration guide](../../docs/standards/demo-mode-integration.md) keeps demo scenarios separate from the normal application request path.
+- **Deviation:** Selecting Demo in Settings loads the bundled `Image_roue.png` and `DEMO_ROUE.xlsx` into the normal Image Processor workspace. Excel parsing and any subsequent OCR use the app's local API.
+- **Reason:** The product owner requested a ready-to-use demonstration with the supplied wheel drawing and workbook.
+- **Approval:** Explicitly approved by the product owner on 2026-10-29.
+- **Behavior:** The `PDE` worksheet is preferred, with the third worksheet as fallback. Reference, replacement, ICN, and part columns are prefilled from C, E, AD, and F. No part is selected and OCR is not started automatically.
+- **Persistence:** Demo image, workbook, mappings, and edits remain in memory only. Leaving Demo restores the normal workspace that was active before the import; demo state is not written to normal history or the startup Excel preset.
 
 ## Technical References
 
