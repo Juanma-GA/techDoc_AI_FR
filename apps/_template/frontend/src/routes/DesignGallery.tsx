@@ -8,10 +8,12 @@ import {
   CardTitle,
   Checkbox,
   CollapsibleSection,
+  DemoModeSettingsCard,
   EmptyState,
   FormField,
   Input,
   KpiCard,
+  LlmSettingsPanel,
   PageHeader,
   Select,
   Skeleton,
@@ -28,6 +30,8 @@ import {
   TabsTrigger,
   Textarea,
   Tooltip,
+  type DemoMode,
+  type LlmSettingsValue,
 } from "@internal/ui";
 import { FileText, Info } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -74,6 +78,13 @@ export function DesignGallery() {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState(true);
   const [selected, setSelected] = useState(false);
+  const [demoMode, setDemoMode] = useState<DemoMode>("normal");
+  const [llmValue, setLlmValue] = useState<LlmSettingsValue>({
+    llmEnabled: true,
+    apiKeySet: true,
+    baseUrl: "https://api.mistral.ai",
+    models: { chat: "mistral-medium-latest", embed: "" },
+  });
 
   return (
     <div className="flex flex-col gap-4" data-testid="design-gallery">
@@ -236,6 +247,47 @@ export function DesignGallery() {
           </FormField>
         </CollapsibleSection>
       </div>
+
+      <Section title={t("design.settingsComponents")}>
+        <div className="flex flex-col gap-4">
+          <DemoModeSettingsCard
+            mode={demoMode}
+            onModeChange={setDemoMode}
+            labels={{
+              title: t("settings.demo.title"),
+              hint: t("settings.demo.hint"),
+              normal: t("settings.demo.normal"),
+              demo: t("settings.demo.demo"),
+              saveError: t("settings.demo.saveError"),
+            }}
+          />
+          <LlmSettingsPanel
+            value={llmValue}
+            defaultOpen
+            availableModels={["mistral-medium-latest", "mistral-small-latest", "mistral-embed"]}
+            onSave={() => undefined}
+            onTest={() => undefined}
+            onToggleEnabled={(enabled) => setLlmValue((current) => ({ ...current, llmEnabled: enabled }))}
+            labels={{
+              title: t("design.llmTitle"),
+              configured: t("design.llmConfigured"),
+              notConfigured: t("design.llmNotConfigured"),
+              disabled: t("design.llmDisabled"),
+              enabled: t("design.llmEnabled"),
+              enabledHint: t("design.llmEnabledHint"),
+              apiKey: t("design.llmApiKey"),
+              apiKeyKeep: t("design.llmApiKeyKeep"),
+              baseUrl: t("design.llmBaseUrl"),
+              models: { chat: t("design.llmChatModel"), embed: t("design.llmEmbedModel") },
+              optionalModel: t("design.llmOptional"),
+              modelsHint: t("design.llmModelsHint"),
+              save: t("common.save"),
+              test: t("design.llmTest"),
+              loading: t("common.loading"),
+            }}
+          />
+        </div>
+      </Section>
     </div>
   );
 }

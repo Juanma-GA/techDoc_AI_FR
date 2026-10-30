@@ -113,6 +113,21 @@
     "tooltip": "Tooltip on focus and hover",
     "collapsible": "Advanced settings",
     "collapsibleHint": "Collapsed sections keep secondary options out of the way.",
-    "sample": "Sample"
+    "sample": "Sample",
+    "settingsComponents": "Settings components",
+    "llmTitle": "Mistral configuration",
+    "llmConfigured": "CONFIGURED",
+    "llmNotConfigured": "NOT CONFIGURED",
+    "llmDisabled": "DISABLED",
+    "llmEnabled": "LLM enabled",
+    "llmEnabledHint": "Disabling skips tasks delegated to AI. The key is kept.",
+    "llmApiKey": "Mistral API key",
+    "llmApiKeyKeep": "A key is already saved (leave empty to keep it).",
+    "llmBaseUrl": "Base URL",
+    "llmChatModel": "Chat model",
+    "llmEmbedModel": "Embeddings model",
+    "llmOptional": "Optional.",
+    "llmModelsHint": "Run the connection test to list the models available from the provider.",
+    "llmTest": "Test connection"
   }
 }

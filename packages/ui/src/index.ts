@@ -77,6 +77,20 @@ export {
   type DemoScenarioPanelLabels,
   type DemoScenarioPanelProps,
 } from "./components/DemoScenarioPanel";
+export {
+  DemoModeSettingsCard,
+  type DemoModeSettingsCardLabels,
+  type DemoModeSettingsCardProps,
+} from "./components/DemoModeSettingsCard";
+export {
+  LlmSettingsPanel,
+  type LlmModelField,
+  type LlmSettingsDraft,
+  type LlmSettingsFeedback,
+  type LlmSettingsLabels,
+  type LlmSettingsPanelProps,
+  type LlmSettingsValue,
+} from "./components/LlmSettingsPanel";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { FileDropzone, type FileDropzoneProps } from "./components/FileDropzone";
 export { KpiCard, type KpiCardProps, type KpiDelta } from "./components/KpiCard";

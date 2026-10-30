@@ -137,7 +137,9 @@ All primitives come from `@internal/ui`, use tokens only, support both themes an
 |---|---|---|
 | Page title + description + actions | `PageHeader` | Orbitron title (`text-page-title`), optional `eyebrow`, actions wrap on mobile. Keeps the legacy `page-header` class names. |
 | Labeled form control | `FormField` | Wires `htmlFor`/`id`, `aria-describedby` (hint/error), `aria-invalid`, `aria-required`; sets `state="error"` on `Input`/`Select`/`Textarea`. |
-| Optional or advanced block | `CollapsibleSection` | Disclosure button with `aria-expanded`/`aria-controls`; controlled or uncontrolled. Use it for the LLM settings block (collapsed once configured). |
+| Optional or advanced block | `CollapsibleSection` | Disclosure button with `aria-expanded`/`aria-controls`; controlled or uncontrolled. |
+| LLM / Mistral settings (profile `llm`) | `LlmSettingsPanel` | Collapsible (open until a key is configured, collapsed afterwards), status badge + LLM switch visible even collapsed, write-only key (sent only when typed, cleared after a successful save), base URL, configurable model fields (`modelFields`: `chat`, `embed`, `vision`, `ocr`; `optionalModelFields`), provider models from the connection test offered via `datalist` (free text kept), feedback `Alert`, unreadable-key warning, and `children` for app-specific LLM options. Presentational: the app keeps its queries/mutations and invalidates `health`. |
+| Operating mode card (demo) | `DemoModeSettingsCard` | Title, hint, `DemoModeSelector`, save error. The app persists `demo_enabled`. |
 | Inline information / warning / error | `Alert` | `info`/`success`/`warning`/`danger`; `danger` uses `role="alert"`. |
 | Views within a page | `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` | Radix: arrow keys, roving focus. Always give `TabsList` an `aria-label`. |
 | Tabular data | `Table`, `TableHeader`, `TableBody`, `TableRow`, `TableHead`, `TableCell`, `TableCaption` | Scroll container with border; `data-state="selected"` rows use `brand.soft`. |
@@ -181,6 +183,13 @@ Rules for app CSS from now on:
 - Recessed panels use `bg-2` / `surface.sunken`, cards use `card`, the page uses `bg`.
 
 Each app owner should still review its screens in both themes; screens were not individually redesigned.
+
+Pending opt-in migrations (apps untouched on purpose; each app owner migrates in its own branch):
+
+| Local implementation | Apps | Shared replacement |
+|---|---|---|
+| Mistral / LLM settings form (126-635 lines each, 3 with their own collapsible) | catia-toolbox, corpus-agent, doc-reviewer, doc-writer, flowchart-generator, ocr-vision, s1000d-extractor | `LlmSettingsPanel` (extra models via `modelFields`, e.g. `["chat", "vision", "ocr"]` for doc-reviewer; app-specific switches such as `checklist_ai_scan` or `vision_enabled` as `children`) |
+| `DemoModeSettings` card | corpus-agent, doc-reviewer, doc-writer, flowchart-generator, image-processor, s1000d-extractor | `DemoModeSettingsCard` |
 
 ## 8. Guardrails
 

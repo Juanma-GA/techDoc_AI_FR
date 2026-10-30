@@ -85,6 +85,7 @@ UI primitives belong in `@internal/ui`; an app must not create a competing local
 |---|---|
 | Inputs and atoms | `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Select`, `Skeleton`, `Spinner`, `Switch`, `Textarea` |
 | Layout and forms | `PageHeader`, `FormField`, `CollapsibleSection`, `Alert`, `Tabs`, `Table`, `Tooltip` |
+| Standard settings | `LlmSettingsPanel`, `DemoModeSettingsCard` |
 | Cross-app/business | `ChartCard`, `EmptyState`, `FileDropzone`, `KpiCard`, `LoadingOverlay`, `MarkdownView`, `MultiSelect`, `PortalLink`, `Slicer` |
 | Overlays | `Dialog`, `Toast` |
 | Shell and utilities | `ThemeToggle`, `ErrorBoundary`, `useMediaQuery`, `cn` |

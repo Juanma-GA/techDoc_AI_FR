@@ -95,7 +95,8 @@
     "mistral.testError": "Échec : {{message}}",
     "title": "Paramètres",
     "subtitle": "Configuration locale de cette application.",
-    "mistral.modelsHint": "Lancer le test de connexion pour lister les modèles disponibles chez le fournisseur."
+    "mistral.modelsHint": "Lancer le test de connexion pour lister les modèles disponibles chez le fournisseur.",
+    "mistral.disabled": "DÉSACTIVÉ"
   },
   "design": {
     "title": "Système de design",
@@ -138,6 +139,21 @@
     "tooltip": "Infobulle au survol et au focus",
     "collapsible": "Paramètres avancés",
     "collapsibleHint": "Les sections repliées gardent les options secondaires à l'écart.",
-    "sample": "Exemple"
+    "sample": "Exemple",
+    "settingsComponents": "Composants de paramètres",
+    "llmTitle": "Configuration Mistral",
+    "llmConfigured": "CONFIGURÉE",
+    "llmNotConfigured": "NON CONFIGURÉE",
+    "llmDisabled": "DÉSACTIVÉ",
+    "llmEnabled": "LLM actif",
+    "llmEnabledHint": "Désactiver saute les tâches confiées à l'IA. La clé est conservée.",
+    "llmApiKey": "Clé API Mistral",
+    "llmApiKeyKeep": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
+    "llmBaseUrl": "Base URL",
+    "llmChatModel": "Modèle chat",
+    "llmEmbedModel": "Modèle embeddings",
+    "llmOptional": "Facultatif.",
+    "llmModelsHint": "Lancer le test de connexion pour lister les modèles disponibles chez le fournisseur.",
+    "llmTest": "Tester la connexion"
   }
 }

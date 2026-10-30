@@ -416,6 +416,7 @@ Liste à jour des composants disponibles dans [`packages/ui/src/index.ts`](./pac
 |---|---|
 | Atoms | `Badge`, `Button`, `Card`, `Checkbox`, `Input`, `Select`, `Spinner`, `Switch`, `Textarea`, `Skeleton` |
 | Layout & formulaires | `AppShell`, `PageHeader`, `FormField`, `CollapsibleSection`, `Tabs`, `Table`, `Alert`, `Tooltip` |
+| Paramètres standard | `LlmSettingsPanel` (bloc Mistral repliable du profil `llm`), `DemoModeSettingsCard` (carte « Mode de fonctionnement ») |
 | Overlays (remplacent alert/confirm) | `Dialog`, `Toast` |
 | Métier transverses | `ChartCard`, `EmptyState`, `KpiCard`, `LoadingOverlay`, `FileDropzone`, `MultiSelect`, `Slicer`, `MarkdownView`, `LlmStatus`, `DemoMode*` |
 | Hooks & utils | `useMediaQuery`, `cn` |
