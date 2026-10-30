@@ -66,9 +66,13 @@ def analysis_standard_version_ids(
     selected = [version_id for version_id in stored_ids if version_id not in demo_ids]
     if not selected and legacy_id is not None and str(legacy_id) not in demo_ids:
         selected = [str(legacy_id)]
-    if selected:
-        return selected
-    return [
+    active_ids = [
         str(version.id)
         for version in active_standard_versions(db, configuration)
     ]
+    if selected:
+        # A document bound to the client catalogs also follows the catalogs published later.
+        if any(version_id in active_ids for version_id in selected):
+            return [*selected, *(version_id for version_id in active_ids if version_id not in selected)]
+        return selected
+    return active_ids

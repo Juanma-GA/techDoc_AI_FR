@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.checks.thales_rules.operations import highlights_document_type_expected
-from app.checks.thales_rules.rules import (
+from app.checks.thales_rules.ata100.operations import highlights_document_type_expected
+from app.checks.thales_rules.ata100.rules import (
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
@@ -360,7 +360,9 @@ def test_note_rules_keep_page_scopes_check_counts_and_storage_anchor() -> None:
     assert len(testing.checks) == 3
     assert storage.target.page_type == "STORAGE"
     assert len(storage.checks) == 3
-    assert storage.checks[2].missing_anchor == r"(?i)\bRelative\s+humidity\s*:"
+    assert storage.checks[1].missing_anchor == r"(?i)\bRelative\s+humidity\s*:"
+    assert storage.checks[1].missing_anchor_position == "below"
+    assert storage.checks[2].missing_anchor == r"(?i)\bPressure\s*:"
     assert storage.checks[2].missing_anchor_position == "below"
 
 

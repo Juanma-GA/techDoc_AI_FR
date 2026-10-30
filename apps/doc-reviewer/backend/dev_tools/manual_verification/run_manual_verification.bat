@@ -11,5 +11,5 @@ if "%~1"=="" (
     echo Exemple: run_manual_verification.bat C:\docs\manual.docx --skip-analysis
     exit /b 2
 )
-".venv\Scripts\python.exe" "tests\backend_only_tests\run_manual_verification.py" %*
+".venv\Scripts\python.exe" "dev_tools\manual_verification\run_manual_verification.py" %*
 exit /b %ERRORLEVEL%

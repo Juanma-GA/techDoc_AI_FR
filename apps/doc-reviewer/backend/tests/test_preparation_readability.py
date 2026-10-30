@@ -1,6 +1,6 @@
 import fitz
 
-from app.checks.thales_rules.page_classifier import identify_tp1_pages
+from app.checks.thales_rules.ata100.page_classifier import identify_tp1_pages
 from app.core.preparation_check_service import _apply_ocr_text
 from app.core.preparation_readability import native_text_is_usable
 from app.parsers.pdf_parser import parse_pdf

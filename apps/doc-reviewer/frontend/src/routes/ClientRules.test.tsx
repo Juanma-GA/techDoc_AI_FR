@@ -163,6 +163,56 @@ describe("ClientRuleBundles", () => {
     expect(onToggleBundle).toHaveBeenCalledWith([thalesRule, hiddenThalesRule], false);
   });
 
+  it("shows the ATA100 and S1000D norms of one client as separate groups with their own bulk toggle", async () => {
+    const [base] = rules;
+    if (!base) throw new Error("Expected a base test rule");
+    const ataRule: ClientRule = { ...base, code: "ATA_RULE", bundle_code: "ata100", bundle_label: "ATA100" };
+    const s1000dRule: ClientRule = {
+      ...base,
+      code: "S1000D_RULE",
+      bundle_code: "s1000d",
+      bundle_label: "S1000D",
+      catalog_code: "THALES-S1000D",
+      active: false,
+    };
+    const onToggleBundle = vi.fn();
+    await act(async () => {
+      root.render(
+        <ClientRuleBundles
+          rules={[ataRule, s1000dRule]}
+          allRules={[ataRule, s1000dRule]}
+          targetRuleCode={null}
+          localizeRule={(rule, field) => rule[field]}
+          bulkUpdatePending={false}
+          ruleUpdatePending={false}
+          onToggleRule={vi.fn()}
+          onToggleBundle={onToggleBundle}
+        />,
+      );
+    });
+
+    const panels = container.querySelectorAll<HTMLDetailsElement>("details.collapsible");
+    expect([...panels].map((panel) => panel.querySelector("strong")?.textContent)).toEqual([
+      "ATA100",
+      "S1000D",
+    ]);
+    const labels = [...container.querySelectorAll("button")].map((button) =>
+      button.getAttribute("aria-label"),
+    );
+    expect(labels).toEqual([
+      "rules.client.disableAll ATA100",
+      "rules.client.enableAll S1000D",
+    ]);
+
+    const s1000dButton = [...container.querySelectorAll("button")].find((button) =>
+      button.getAttribute("aria-label")?.endsWith("S1000D"),
+    );
+    await act(async () => s1000dButton?.click());
+
+    expect(onToggleBundle).toHaveBeenCalledTimes(1);
+    expect(onToggleBundle).toHaveBeenCalledWith([s1000dRule], true);
+  });
+
   it("keeps a stable hook order when client data finishes loading", async () => {
     mockClientHooks.useClientConfig.mockReturnValue({
       isLoading: true,

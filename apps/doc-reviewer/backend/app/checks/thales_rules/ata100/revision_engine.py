@@ -127,6 +127,9 @@ HIGHLIGHTS_KEY_PREFIX = "HIGHLIGHTS"
 _PAGE_KEY_RE = re.compile(
     r"(?i)^(?:(?P<prefix>.+?)\s+)?(?P<number>\d+(?:-\d+)?)$"
 )
+_BOEING_FOOTER_PAGE_RE = re.compile(
+    r"(?i)^(?P<prefix>RR|LEP|INTRO|TC)\s*-\s*(?P<number>\d+(?:-\d+)?)$"
+)
 _LEP_PAGE_PREFIX_ALIASES = {
     "intro": ("introduction",),
     "introduction": ("intro",),
@@ -269,6 +272,7 @@ class RevisionState:
     revision_date: DocDate | None = None
     first_issue_date: DocDate | None = None
     last_issue_date: DocDate | None = None
+    manufacturer: str = "Airbus"
     full_document: bool = True
     highlights_pages: tuple[int, ...] = ()
     lep_pages: tuple[int, ...] = ()
@@ -584,6 +588,11 @@ def normalize_page_key(value: str) -> str | None:
     compact = " ".join(value.split()).strip()
     compact = re.sub(r"(?i)^pages?\s+(?=\d+(?:-\d+)?$)", "", compact)
     compact = re.sub(r"(?i)\s+pages?\s+(?=\d+(?:-\d+)?$)", " ", compact)
+    boeing_label = _BOEING_FOOTER_PAGE_RE.fullmatch(compact)
+    if boeing_label is not None:
+        prefix = boeing_label.group("prefix").upper()
+        prefix = "ROR" if prefix == "RR" else prefix
+        compact = f"{prefix} {boeing_label.group('number')}"
     if parse_date(compact) is not None:
         return None
     match = _PAGE_KEY_RE.fullmatch(compact)
@@ -1500,6 +1509,7 @@ def build_revision_state(parsed: ParsedPdf, document: object | None) -> Revision
         revision_date=parse_date(getattr(document, "meta_revision_date", None)),
         first_issue_date=parse_date(getattr(document, "meta_first_issue_date", None)),
         last_issue_date=parse_date(getattr(document, "meta_last_issue_date", None)),
+        manufacturer=str(getattr(document, "meta_manufacturer", "Airbus") or "Airbus"),
         # `page_range.filter_pdf` keeps the original page numbers, so a run
         # restricted to a sub-range no longer starts at 1 / ends at the last
         # page. Absence controls must stay silent on such a run.
@@ -2156,8 +2166,20 @@ def _footer_findings(state: RevisionState) -> list[RevisionFinding]:
     return findings
 
 
-def _display_page_key(page_key: str) -> str:
+def _display_page_key(page_key: str, manufacturer: str = "Airbus") -> str:
     prefix, _, number = page_key.partition(" ")
+    if manufacturer.strip().casefold() == "boeing":
+        boeing_prefixes = {
+            "ROR": "RR",
+            "LEP": "LEP",
+            "INTRO": "INTRO",
+            "INTRODUCTION": "INTRO",
+            "TC": "TC",
+            "TABLE_OF_CONTENTS": "TC",
+        }
+        boeing_prefix = boeing_prefixes.get(prefix)
+        if boeing_prefix is not None:
+            return f"{boeing_prefix}-{number}"
     if prefix == "TP":
         return f"TP {number}"
     if prefix == "HIGHLIGHTS":
@@ -2180,6 +2202,7 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
     """
     findings: list[RevisionFinding] = []
     expected = state.expected_footer_keys
+    is_boeing = state.manufacturer.strip().casefold() == "boeing"
 
     for page in state.missing_footer_pages:
         expected_key = expected.get(page)
@@ -2187,7 +2210,7 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
             message = f"La page {page} ne contient pas de pied de page identifiable."
             proposed = ""
         else:
-            display = _display_page_key(expected_key)
+            display = _display_page_key(expected_key, state.manufacturer)
             message = (
                 f"La page {page} ne contient pas le numero de page attendu "
                 f"« {display} » dans son pied de page."
@@ -2216,7 +2239,7 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
                 multiple_numbers.group("prefix").strip(),
             )
             proposed = (
-                _display_page_key(expected_key)
+                _display_page_key(expected_key, state.manufacturer)
                 if expected_key is not None
                 else f"{prefix} {multiple_numbers.group('first')}"
             )
@@ -2235,9 +2258,18 @@ def _footer_page_number_findings(state: RevisionState) -> list[RevisionFinding]:
             )
             continue
         if expected_key is not None:
-            if footer.observed_page_key == expected_key:
+            expected_prefix = expected_key.partition(" ")[0]
+            has_expected_format = (
+                not is_boeing
+                or expected_prefix not in {"ROR", "LEP"}
+                or "".join(footer.label_text.split()).casefold()
+                == "".join(
+                    _display_page_key(expected_key, state.manufacturer).split()
+                ).casefold()
+            )
+            if footer.observed_page_key == expected_key and has_expected_format:
                 continue
-            display = _display_page_key(expected_key)
+            display = _display_page_key(expected_key, state.manufacturer)
             findings.append(
                 RevisionFinding(
                     control=FOOTER_PAGE_NUMBER,

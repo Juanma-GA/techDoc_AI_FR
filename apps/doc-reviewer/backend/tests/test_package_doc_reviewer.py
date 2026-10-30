@@ -93,7 +93,8 @@ def test_zip_without_ui_is_refused(pkg: ModuleType, tmp_path: Path) -> None:
 
 def test_shipped_files_exclude_tests_and_client_pdfs(pkg: ModuleType) -> None:
     assert pkg._should_skip(Path("apps/doc-reviewer/79-30-02-01_test_erreur.pdf"))
-    assert pkg._should_skip(Path("apps/doc-reviewer/backend/tests/backend_only_tests/outputs/original.pdf"))
+    assert pkg._should_skip(Path("apps/doc-reviewer/backend/dev_tools/manual_verification/outputs/original.pdf"))
+    assert pkg._should_skip(Path("apps/doc-reviewer/backend/dev_tools/manual_verification/run_manual_verification.bat"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/tests/test_health.py"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/data/doc-reviewer.db"))
     assert pkg._should_skip(Path("apps/doc-reviewer/backend/.env"))

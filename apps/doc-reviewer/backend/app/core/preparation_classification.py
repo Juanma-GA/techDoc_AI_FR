@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.checks.thales_rules.section_detection import (
+from app.checks.thales_rules.ata100.section_detection import (
     DEFAULT_PREPARATION_TITLES,
     SECTION_PAGE_TYPES,
     page_type_for_title,

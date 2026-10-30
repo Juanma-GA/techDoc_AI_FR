@@ -23,10 +23,13 @@ from app.config import settings
 from app.core import doc_convert
 from app.parsers.pdf_parser import parse_pdf
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("DR_TEST_REAL_LIBREOFFICE") != "1" or not doc_convert._find_soffice(),
-    reason="opt-in : DR_TEST_REAL_LIBREOFFICE=1 sur un poste avec LibreOffice",
-)
+pytestmark = [
+    pytest.mark.requires_office,
+    pytest.mark.skipif(
+        os.environ.get("DR_TEST_REAL_LIBREOFFICE") != "1" or not doc_convert._find_soffice(),
+        reason="opt-in : DR_TEST_REAL_LIBREOFFICE=1 sur un poste avec LibreOffice",
+    ),
+]
 
 TEXT = "Faulty parts should be replaced by approved spares only."
 _OLE2 = bytes.fromhex("D0CF11E0A1B11AE1")

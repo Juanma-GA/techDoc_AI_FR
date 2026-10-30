@@ -1,6 +1,8 @@
+import { Button, useDemoMode } from "@internal/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { loadDemoComparisonPdfs } from "../../lib/demoPdf";
 import { PdfUploadZone } from "../upload/PdfUploadZone";
 
 type Props = {
@@ -11,9 +13,28 @@ type Props = {
 
 export function ComparisonSetupCard({ onCompare, isCreating, createError }: Props) {
   const { t } = useTranslation();
+  const { mode, isReady } = useDemoMode();
   const [files, setFiles] = useState<File[]>([]);
   const [referenceIndex, setReferenceIndex] = useState(0);
   const [draftError, setDraftError] = useState("");
+  const [demoLoading, setDemoLoading] = useState(false);
+  const isBusy = isCreating || demoLoading;
+
+  const loadDemoFiles = async (): Promise<void> => {
+    setDemoLoading(true);
+    setDraftError("");
+    try {
+      const demoFiles = await loadDemoComparisonPdfs();
+      setFiles(demoFiles);
+      setReferenceIndex(0);
+    } catch (error: unknown) {
+      setDraftError(t("comparison.demoLoadError", {
+        message: error instanceof Error ? error.message : String(error),
+      }));
+    } finally {
+      setDemoLoading(false);
+    }
+  };
 
   const addFiles = (incoming: File[]) => {
     const pdfs = incoming.filter((file) => file.name.toLowerCase().endsWith(".pdf"));
@@ -39,13 +60,26 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
           <p className="hint">{t("comparison.filesHint")}</p>
           <p className="hint">{t("comparison.textLayerOnly")}</p>
         </div>
+        {isReady && mode === "demo" ? (
+          <div className="space-y-2">
+            <Button
+              variant="secondary"
+              disabled={isBusy}
+              aria-busy={demoLoading || undefined}
+              onClick={() => void loadDemoFiles()}
+            >
+              {demoLoading ? t("comparison.demoLoading") : t("comparison.loadDemo")}
+            </Button>
+            <p className="hint">{t("comparison.demoHint")}</p>
+          </div>
+        ) : null}
         <div className="space-y-2">
           <p className="label">{t("comparison.filesLabel")}</p>
           <PdfUploadZone
             multiple
             pdfOnly
             onFiles={addFiles}
-            disabled={isCreating}
+            disabled={isBusy}
             dropTitle={t("comparison.dropTitle")}
             dropHint={t("comparison.dropHint")}
             dropLimit={t("comparison.dropLimit")}
@@ -67,6 +101,7 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
                     <button
                       type="button"
                       className="btn ghost small"
+                      disabled={isBusy}
                       onClick={() => removeDraftFile(index)}
                     >
                       {t("comparison.removeFile")}
@@ -83,6 +118,7 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
                 id="comparison-reference"
                 className="input"
                 value={referenceIndex}
+                disabled={isBusy}
                 onChange={(event) => setReferenceIndex(Number(event.target.value))}
               >
                 {files.map((file, index) => (
@@ -98,7 +134,7 @@ export function ComparisonSetupCard({ onCompare, isCreating, createError }: Prop
           <button
             type="button"
             className="btn primary"
-            disabled={files.length < 2 || isCreating}
+            disabled={files.length < 2 || isBusy}
             onClick={() => onCompare(files, referenceIndex)}
           >
             {isCreating ? t("comparison.working") : t("comparison.compareButton")}

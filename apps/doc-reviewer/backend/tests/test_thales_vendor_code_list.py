@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.checks.thales_rules import operations
+from app.checks.thales_rules.ata100 import operations
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
 
 

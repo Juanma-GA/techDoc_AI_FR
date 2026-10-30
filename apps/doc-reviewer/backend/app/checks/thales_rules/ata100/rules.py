@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import re
+from functools import partial
 from typing import Literal
 
-from app.checks.client_bundle import ClientRuleDefinition
+from app.checks.thales_rules.rule_factory import build_rule
 from app.core.compiled_rules import (
     Check,
-    CompiledRule,
     Condition,
     FieldRef,
-    RuleExample,
-    RulePrerequisite,
     RuleTarget,
 )
 
@@ -172,10 +170,6 @@ _REPAIR_RELATIVE_HUMIDITY = (
     "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
     "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
 )
-_STORAGE_TEMPERATURE = (
-    "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
-    "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
-)
 _THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
     (r"\(F9111\)", "(F9111)"),
     (r"75-77\s+Avenue\s+Marcel\s+Dassault", "75-77 Avenue Marcel Dassault"),
@@ -188,13 +182,6 @@ _REPAIR_RELATIVE_HUMIDITY_PATTERN = (
     + re.escape(_REPAIR_RELATIVE_HUMIDITY)
     .replace(r"\ ", r"\s+")
     .replace("procedure", r"proc(?:e|\u00e9|\uFFFD)dure")
-    + ")"
-)
-_STORAGE_TEMPERATURE_PATTERN = (
-    "(?i:"
-    + re.escape(_STORAGE_TEMPERATURE)
-    .replace(r"\ ", r"\s+")
-    .replace("–", r"[-\u2010-\u2015\u2212\uFFFD]")
     + ")"
 )
 _NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
@@ -228,50 +215,7 @@ def _required_note_check(
     )
 
 
-def rule(
-    *,
-    code: str,
-    name: str,
-    description: str,
-    message: str,
-    kind: str,
-    severity: Literal["info", "warning", "error"],
-    presentation_severity: Literal["info", "warning", "error"] | None = None,
-    target: RuleTarget,
-    checks: list[Check],
-    failure_message: str | None = None,
-    only_if: Condition | None = None,
-    valid_examples: list[RuleExample] | None = None,
-    invalid_examples: list[RuleExample] | None = None,
-    prerequisites: list[RulePrerequisite] | None = None,
-    preparation: bool = False,
-    translations: dict[str, dict[str, str]] | None = None,
-) -> ClientRuleDefinition:
-    compiled_rule = CompiledRule(
-        id=code,
-        topic=name,
-        failure_message=failure_message,
-        severity=severity,
-        execution="deterministic",
-        target=target,
-        checks=checks,
-        source="standard_rule",
-        origin_ref=f"{_STANDARD_CODE}:{_CATALOG_VERSION}:{code}",
-        only_if=only_if,
-        valid_examples=valid_examples or [],
-        invalid_examples=invalid_examples or [],
-        prerequisites=prerequisites or [],
-    )
-    return ClientRuleDefinition(
-        compiled_rule=compiled_rule,
-        name=name,
-        description=description,
-        message=message,
-        kind=kind,
-        presentation_severity=presentation_severity,
-        preparation=preparation,
-        translations=translations or {},
-    )
+rule = partial(build_rule, _STANDARD_CODE, _CATALOG_VERSION)
 
 
 CUSTOM_THALES_LOGO_FONT_SIZE = rule(
@@ -748,6 +692,39 @@ CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM = rule(
     },
 )
 
+CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE = rule(
+    code="CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE",
+    name="Pays en majuscules dans la colonne fournisseur",
+    description=(
+        "Dans la colonne SUPPLIERS TRADE NAME AND CODE FSCM de la LIST OF "
+        "MATERIALS, le pays indique apres le numero FSCM doit etre ecrit en "
+        "majuscules. Le nom du fournisseur et le numero FSCM ne sont pas concernes."
+    ),
+    message="Le pays de la colonne fournisseur doit etre ecrit en majuscules.",
+    kind="field_required",
+    severity="error",
+    target=_ALL_PAGE_TARGET,
+    checks=[
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="document_structure",
+            operation_params={"control": "list_materials_supplier_country_uppercase"},
+        )
+    ],
+    failure_message="Le pays apres le numero FSCM doit etre en majuscules.",
+    translations={
+        "en": {
+            "description": (
+                "In the SUPPLIERS TRADE NAME AND CODE FSCM column of the LIST OF "
+                "MATERIALS, the country after the FSCM number must be uppercase. "
+                "The supplier name and FSCM number are not affected."
+            ),
+            "message": "The country in the supplier column must be uppercase.",
+        }
+    },
+)
+
 CUSTOM_REVISION_BAR_NEW_PAGE = rule(
     code="CUSTOM_REVISION_BAR_NEW_PAGE",
     name="Barre de revision pleine hauteur sur les pages nouvelles",
@@ -876,7 +853,7 @@ CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
     description=(
         "Sur la page TP 1 declaree R, une barre de revision noire doit longer le "
         "footer depuis la ligne Revision, en couvrant First Issue, jusqu'en dessous "
-        "de la derniere ligne du copyright."
+        "de la derniere ligne du copyright, avec une tolerance verticale de 8 pt."
     ),
     message="La TP1/R n'a pas de barre de revision sur toute la hauteur du footer.",
     kind="field_required",
@@ -899,7 +876,7 @@ CUSTOM_TP1_REVISION_BAR_FOOTER = rule(
             "description": (
                 "On TP 1 declared R, a black revision bar must run through the "
                 "footer from Revision, covering First Issue, to below the final "
-                "copyright line."
+                "copyright line, with an 8 pt vertical tolerance."
             ),
             "message": "The TP1/R revision bar does not span the full footer.",
         }
@@ -1058,7 +1035,9 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     name="Numeros PNR presents et conformes dans l'en-tete Highlights",
     description=(
         "L'en-tete de chaque page Highlights doit contenir les numeros PNR "
-        "renseignes dans le mapping du document, ou uniquement le premier."
+        "renseignes dans le mapping du document, ou uniquement le premier. "
+        "Un prefixe termine par x est accepte pour les valeurs du mapping qu'il "
+        "couvre; il ne remplace pas les autres numeros PNR non couverts."
     ),
     message="Un ou plusieurs numeros PNR de l'en-tete Highlights sont absents ou incorrects.",
     kind="field_required",
@@ -1076,7 +1055,12 @@ CUSTOM_HIGHLIGHTS_PNR_HEADER = rule(
     only_if=Condition(field="meta_pnr_number", state="present"),
     translations={
         "en": {
-            "description": "The header of every Highlights page must contain the PNR numbers in the document mapping, or only the first one.",
+            "description": (
+                "The header of every Highlights page must contain the PNR numbers "
+                "in the document mapping, or only the first one. A prefix ending "
+                "in x is accepted for mapped values it covers; it does not replace "
+                "other uncovered PNR values."
+            ),
             "message": "One or more Highlights header PNR numbers are missing or incorrect.",
         }
     },
@@ -1375,7 +1359,9 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
         "Chaque page doit afficher un seul numero dans le pied de page, sans "
         "forme combinee telle que Page 25/26. Les pages "
         "LEP, ROR, Highlights et Title Page sont verifiees contre leur prefixe "
-        "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.)."
+        "et leur ordre attendu (LEP Page 1, ROR Page 1, TP 1, etc.). Pour Boeing, "
+        "LEP-1 et RR-1 remplacent LEP Page 1 et ROR Page 1; INTRO Page 1 / INTRO-1 "
+        "et TC Page 1 / TC-1 sont egalement reconnus."
     ),
     message="Le numero de page du pied de page est absent ou incorrect.",
     kind="field_required",
@@ -1396,7 +1382,9 @@ CUSTOM_FOOTER_PAGE_NUMBER = rule(
             "description": (
                 "Every page must show one page number in the footer, not a combined "
                 "label such as Page 25/26. LEP, ROR, Highlights, "
-                "and Title Page pages are checked against their expected prefix and order."
+                "and Title Page pages are checked against their expected prefix and order. "
+                "For Boeing, LEP-1 and RR-1 replace LEP Page 1 and ROR Page 1; "
+                "INTRO Page 1 / INTRO-1 and TC Page 1 / TC-1 are also recognized."
             ),
             "message": "The footer page number is missing or incorrect.",
         }
@@ -1479,6 +1467,9 @@ CUSTOM_PARAGRAPH_JUSTIFICATION = rule(
     description=(
         "Sur les pages modifiees, les paragraphes de contenu multilignes doivent "
         "etre visuellement alignes a gauche et a droite, hors derniere ligne. "
+        "Les lignes de liste autonomes terminees par une ponctuation sont "
+        "separees du paragraphe suivant; un unique ecart de fin de ligne court "
+        "est tolere dans les paragraphes d'au moins trois lignes mesurables. "
         "Le controle estime l'alignement a partir de la geometrie du PDF et peut "
         "etre inconclusif pour les paragraphes courts ou sans couche texte."
     ),
@@ -1504,6 +1495,9 @@ CUSTOM_PARAGRAPH_JUSTIFICATION = rule(
             "description": (
                 "On modified pages, multiline body paragraphs must be visually "
                 "aligned on both the left and right, except for the final line. "
+                "Completed standalone list items are separated from the following "
+                "paragraph, and one short right-edge outlier is tolerated in "
+                "paragraphs with at least three measurable lines. "
                 "Alignment is estimated from PDF geometry and may be inconclusive "
                 "for short paragraphs or pages without a text layer."
             ),
@@ -1771,17 +1765,23 @@ CUSTOM_STORAGE_NOTE = rule(
             display="Pressure:",
             page_type="STORAGE",
         ),
-        _required_note_check(
-            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
-            display=_REPAIR_RELATIVE_HUMIDITY,
-            page_type="STORAGE",
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="storage_note_reference",
+            operation_params={"reference": "temperature"},
+            require_all=True,
+            missing_anchor=r"(?i)\bRelative\s+humidity\s*:",
+            missing_anchor_position="below",
         ),
-        _required_note_check(
-            _STORAGE_TEMPERATURE_PATTERN,
-            display=_STORAGE_TEMPERATURE,
-            page_type="STORAGE",
-            anchor=r"(?i)\bRelative\s+humidity\s*:",
-            anchor_position="below",
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="storage_note_reference",
+            operation_params={"reference": "relative_humidity"},
+            require_all=True,
+            missing_anchor=r"(?i)\bPressure\s*:",
+            missing_anchor_position="below",
         ),
     ],
     failure_message="introduction ou categories NOTE STORAGE non conformes.",
@@ -3234,6 +3234,7 @@ RULE_DEFINITIONS = (
     CUSTOM_LIST_OF_MATERIALS_CODE_NO_PARENTHESES,
     CUSTOM_LIST_OF_MATERIALS_CODE_LOWERCASE,
     CUSTOM_LIST_OF_MATERIALS_SUPPLIER_FSCM,
+    CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE,
     CUSTOM_REVISION_BAR_NEW_PAGE,
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_MARGIN_POSITION,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from app.checks.thales_rules.revision_engine import extract_footer
+from app.checks.thales_rules.ata100.revision_engine import extract_footer
 from app.parsers.pdf_parser import ParsedPdf
 
 

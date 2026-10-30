@@ -1,10 +1,10 @@
 """Manual contract check for automatic input/work formats and exports.
 
 Run with the backend venv, for example:
-    .venv\\Scripts\\python.exe tests\\backend_only_tests\\04_auto_format_and_exports.py path\\to\\file.docx
+    .venv\\Scripts\\python.exe dev_tools\\manual_verification\\04_auto_format_and_exports.py path\\to\\file.docx
 
 The script prints every request and saves the metadata/export manifest under
-backend_only_tests/outputs.
+dev_tools/manual_verification/outputs.
 """
 from __future__ import annotations
 

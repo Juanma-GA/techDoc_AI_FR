@@ -23,14 +23,20 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
     assert config["client_code"] == "THALES"
     assert config["bundle"] == "thales_rules"
-    assert config["bundle_version"] == "1.2.18"
+    assert config["bundle_version"] == "1.3.0"
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
-    assert config["catalogs"][0]["code"] == "THALES-CUSTOM"
-    assert len(config["catalogs"]) == 2
-    assert config["catalogs"][1]["code"] == "ASD-STE100"
-    assert len(rules) == 91
-    assert [rule["rule_number"] for rule in rules] == list(range(1, 92))
+    assert [catalog["code"] for catalog in config["catalogs"]] == [
+        "THALES-CUSTOM",
+        "THALES-S1000D",
+        "ASD-STE100",
+    ]
+    assert len(rules) == 124
+    assert [rule["rule_number"] for rule in rules] == list(range(1, 125))
+    assert any(
+        rule["code"] == "CUSTOM_LIST_OF_MATERIALS_SUPPLIER_COUNTRY_UPPERCASE"
+        for rule in rules
+    )
     preparation_rule_codes = {
         "CUSTOM_TP1_REVISION_NUMBER",
         "CUSTOM_TP1_THALES_ADDRESS",
@@ -55,9 +61,17 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
         for rule in rules
         if rule["code"] not in preparation_rule_codes
     )
-    thales_rules = [rule for rule in rules if rule["bundle_code"] == "thales_rules"]
+    ata_rules = [rule for rule in rules if rule["bundle_code"] == "ata100"]
+    s1000d_rules = [rule for rule in rules if rule["bundle_code"] == "s1000d"]
     ste_rules = [rule for rule in rules if rule["bundle_code"] == "ste100_rules"]
-    assert all(rule["active"] for rule in thales_rules)
+    assert (len(ata_rules), len(s1000d_rules), len(ste_rules)) == (85, 32, 7)
+    assert {rule["bundle_label"] for rule in ata_rules} == {"ATA100"}
+    assert {rule["bundle_label"] for rule in s1000d_rules} == {"S1000D"}
+    assert {rule["catalog_code"] for rule in ata_rules} == {"THALES-CUSTOM"}
+    assert {rule["catalog_code"] for rule in s1000d_rules} == {"THALES-S1000D"}
+    assert all(rule["active"] for rule in ata_rules)
+    assert all(not rule["active"] for rule in s1000d_rules)
+    assert all(rule["scope"] == "verification" for rule in s1000d_rules)
     assert ste_rules and all(not rule["active"] for rule in ste_rules)
     assert all(rule["description"] and rule["message"] for rule in rules)
     ste_rule = next(rule for rule in rules if rule["code"] == "STE_NO_MAYBE")
@@ -68,7 +82,9 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
 def test_client_rule_toggle_survives_bundle_catalog_resync(client: TestClient) -> None:
     config = client.get("/api/v1/client-config").json()
-    version_id = uuid.UUID(config["catalogs"][0]["standard_version_id"])
+    version_id = uuid.UUID(
+        next(c["standard_version_id"] for c in config["catalogs"] if c["code"] == "THALES-CUSTOM")
+    )
     rule_code = "CUSTOM_CMM_NUMBER"
     rule_number = next(
         rule["rule_number"]
@@ -160,9 +176,42 @@ def test_preparation_page_title_catalog_has_defaults_and_persists_edits(
     assert duplicate.json()["code"] == "PREPARATION_TITLE_DUPLICATE"
 
 
+def test_s1000d_rules_are_toggled_independently_of_ata100(client: TestClient) -> None:
+    config = client.get("/api/v1/client-config").json()
+    s1000d_version_id = uuid.UUID(
+        next(c["standard_version_id"] for c in config["catalogs"] if c["code"] == "THALES-S1000D")
+    )
+    rule_code = "S1000D_SHOP_VERIFICATION"
+
+    enabled = client.patch(f"/api/v1/client-rules/{rule_code}", json={"active": True})
+
+    assert enabled.status_code == 200, enabled.text
+    assert enabled.json()["catalog_code"] == "THALES-S1000D"
+    assert enabled.json()["bundle_code"] == "s1000d"
+    assert enabled.json()["active"] is True
+    with SessionLocal() as session:
+        version = session.get(StandardVersion, s1000d_version_id)
+        assert version is not None
+        disabled = set(json.loads(version.disabled_rule_codes))
+        assert rule_code not in disabled
+        assert "S1000D_NO_SILICA_GEL_DESICCANT" in disabled
+        sync_user_standard(session)
+        session.refresh(version)
+        assert rule_code not in json.loads(version.disabled_rule_codes)
+    refreshed = {item["code"]: item for item in client.get("/api/v1/client-rules").json()}
+    assert refreshed[rule_code]["active"] is True
+    assert refreshed["CUSTOM_CMM_NUMBER"]["active"] is True
+
+    restored = client.patch(f"/api/v1/client-rules/{rule_code}", json={"active": False})
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["active"] is False
+
+
 def test_ste_rule_toggle_uses_the_ste100_catalog(client: TestClient) -> None:
     config = client.get("/api/v1/client-config").json()
-    ste_version_id = uuid.UUID(config["catalogs"][1]["standard_version_id"])
+    ste_version_id = uuid.UUID(
+        next(c["standard_version_id"] for c in config["catalogs"] if c["code"] == "ASD-STE100")
+    )
     rule_code = "STE_NO_MAYBE"
 
     disabled = client.patch(

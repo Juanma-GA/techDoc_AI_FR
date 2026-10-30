@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import fitz
 import pytest
 
-from app.checks.thales_rules import rules as thales_rules
-from app.checks.thales_rules.operations import OPERATIONS
+from app.checks.thales_rules.ata100 import rules as thales_rules
+from app.checks.thales_rules.ata100.operations import OPERATIONS
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import parse_pdf
 
@@ -229,7 +229,7 @@ def test_lep_lists_commented_pages_with_the_new_date_and_a_star(
 
 
 def test_detection_flags_the_lep_once_other_pages_are_decided_modified() -> None:
-    from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
+    from app.checks.thales_rules.ata100.preparation_detector import detect_pages_to_modify
 
     parsed = _parse(
         [

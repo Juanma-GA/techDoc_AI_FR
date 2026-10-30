@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
-from app.checks.thales_rules.operations import OPERATIONS
-from app.checks.thales_rules.rules import CUSTOM_CMM_MAPPING_SUSPECT, RULE_DEFINITIONS
+from app.checks.thales_rules.ata100.operations import OPERATIONS
+from app.checks.thales_rules.ata100.rules import CUSTOM_CMM_MAPPING_SUSPECT, RULE_DEFINITIONS
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, Span
 

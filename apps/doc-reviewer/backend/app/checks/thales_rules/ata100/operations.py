@@ -23,6 +23,7 @@ from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
 from .preparation_operations import PREPARATION_CHECK
 from .revision_engine import _highlights_previous_revision_findings
+from .storage_operations import STORAGE_NOTE_REFERENCE
 from .rules import (
     DOCUMENT_TYPE_PATTERN,
     DOCUMENT_TYPES,
@@ -85,6 +86,7 @@ _REVISION_BAR_MIN_LENGTH = 8.0
 _REVISION_BAR_MIN_THICKNESS = 1.0
 _REVISION_BAR_MAX_THICKNESS = 4.5
 _REVISION_BAR_FULL_PAGE_TOLERANCE = 0.03
+_TP1_REVISION_BAR_VERTICAL_TOLERANCE = 8.0
 _REVISION_BAR_MODIFIED_EXEMPT_TITLE_RE = re.compile(
     r"(?im)^\s*(?:EQUIPMENT\s+DESIGNATOR\s+INDEX|NUMERICAL\s+INDEX|PARTS\s+LIST)\s*$"
 )
@@ -129,7 +131,12 @@ _ENVIRONMENTAL_CONDITIONS = "environmental conditions"
 _ENVIRONMENTAL_CONDITIONS_COMPACT = "environmentalconditions"
 _LIST_OF_MATERIALS_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+MATERIALS\s*$")
 _SUPPLIERS_HEADER_RE = re.compile(r"(?i)^SUPPLIERS?\s+TRADE\s+NAME\b")
-_FSCM_SUFFIX_RE = re.compile(r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s*$")
+_FSCM_SUFFIX_RE = re.compile(
+    r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)(?:\s+.+)?$"
+)
+_FSCM_COUNTRY_SUFFIX_RE = re.compile(
+    r"(?i)\(\s*FSCM\s+[A-Z0-9]{5}\s*\)\s+(?P<country>.+?)\s*$"
+)
 _VENDOR_CODE_LIST_TITLE_RE = re.compile(r"(?i)^\s*VENDOR\s+CODE\s+LIST\s*:?[ \t]*$")
 _VENDOR_CODE_HEADER = "code"
 _VENDOR_ADDRESS_HEADER = "vendorsaddress"
@@ -387,6 +394,7 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
             continue
         current: list[PdfLine] = []
         for line in ordered_lines:
+            is_list_item = _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
             if current:
                 previous = current[-1]
                 line_height = max(
@@ -398,12 +406,15 @@ def _paragraphs_from_pdf_page(page: ParsedPage) -> list[list[PdfLine]]:
                     line.line_index > previous.line_index + 1
                     or line.bbox[1] - previous.bbox[1]
                     > max(18.0, line_height * 1.8)
-                    or _PARAGRAPH_LIST_ITEM_MARKER.match(line.text) is not None
+                    or is_list_item
                     or _PARAGRAPH_TABLE_HEADER_MARKER.match(line.text) is not None
                 ):
                     paragraphs.append(current)
                     current = []
             current.append(line)
+            if is_list_item and line.text.rstrip().endswith((".", "!", "?")):
+                paragraphs.append(current)
+                current = []
         if current:
             paragraphs.append(current)
     return paragraphs
@@ -470,6 +481,24 @@ def _paragraph_justification_issue(
             (index, line)
             for index, line in measurable
             if index not in misaligned_indexes
+        ]
+        right_edges = [line.bbox[2] for _index, line in measurable]
+        expected_right = median(right_edges)
+        misaligned = [
+            (index, line)
+            for index, line in measurable
+            if abs(line.bbox[2] - expected_right) > right_tolerance
+        ]
+    if (
+        len(measurable) >= 3
+        and len(misaligned) == 1
+        and misaligned[0][1].bbox[2] < expected_right - right_tolerance
+    ):
+        misaligned_index = misaligned[0][0]
+        measurable = [
+            (index, line)
+            for index, line in measurable
+            if index != misaligned_index
         ]
         right_edges = [line.bbox[2] for _index, line in measurable]
         expected_right = median(right_edges)
@@ -1148,6 +1177,28 @@ def _tp1_pnr_page_value_findings(
     return findings, len(targets)
 
 
+def _pnr_header_shortcut_prefixes(
+    text: str,
+    expected_values: list[str],
+) -> list[str]:
+    labels = list(_PNR_HEADER_LABEL_RE.finditer(text))
+    prefixes: list[str] = []
+    for label in labels:
+        line_end = text.find("\n", label.end())
+        value_text = text[label.end() : line_end if line_end >= 0 else len(text)]
+        for token in re.split(r"[\s,/;|]+", value_text):
+            normalized = _normalize_pnr_separators(token)
+            if any(
+                normalized.casefold() == _normalize_pnr_separators(value).casefold()
+                for value in expected_values
+            ):
+                continue
+            prefix = re.sub(r"(?i)x+$", "", normalized)
+            if prefix != normalized and any(character.isalnum() for character in prefix):
+                prefixes.append(prefix.casefold())
+    return prefixes
+
+
 def _highlights_pnr_header_findings(
     context: Any,
 ) -> tuple[list[OperationResult], int]:
@@ -1173,6 +1224,7 @@ def _highlights_pnr_header_findings(
         )
     findings: list[OperationResult] = []
     for target in targets:
+        shortcut_prefixes = _pnr_header_shortcut_prefixes(target.text, pnr_values)
         if series_pattern is not None and series_pattern.search(target.text):
             continue
         matches = _pnr_header_matches(target.text, pnr_values)
@@ -1187,7 +1239,12 @@ def _highlights_pnr_header_findings(
         missing = [
             value
             for value, pattern in expected_patterns
-            if pattern is not None and pattern.search(target.text) is None
+            if pattern is not None
+            and pattern.search(target.text) is None
+            and not any(
+                _normalize_pnr_separators(value).casefold().startswith(prefix)
+                for prefix in shortcut_prefixes
+            )
         ]
         if not missing:
             continue
@@ -1468,7 +1525,10 @@ def _list_materials_code_findings(
         checked_pages += 1
 
         visual_rows = revision.visual_rows(page.spans)
-        if control == "list_materials_supplier_fscm":
+        if control in {
+            "list_materials_supplier_fscm",
+            "list_materials_supplier_country_uppercase",
+        }:
             use_header = next(
                 (span for span in page.spans if span.text.strip().upper() == "USE"),
                 None,
@@ -1510,6 +1570,38 @@ def _list_materials_code_findings(
                     if span.text.strip()
                 )
                 if not supplier_name or not any(char.isalpha() for char in supplier_name):
+                    continue
+                if control == "list_materials_supplier_country_uppercase":
+                    country_match = _FSCM_COUNTRY_SUFFIX_RE.search(supplier_name)
+                    if country_match is None:
+                        continue
+                    country = country_match.group("country").strip()
+                    if not any(char.isalpha() for char in country) or country.isupper():
+                        continue
+                    proposed = (
+                        supplier_name[: country_match.start("country")] + country.upper()
+                    )
+                    bbox = (
+                        min(span.bbox[0] for span in supplier_spans),
+                        min(span.bbox[1] for span in supplier_spans),
+                        max(span.bbox[2] for span in supplier_spans),
+                        max(span.bbox[3] for span in supplier_spans),
+                    )
+                    findings.append(
+                        OperationResult(
+                            status="FAIL",
+                            observed=supplier_name,
+                            expected="Pays en majuscules",
+                            message=(
+                                f"Le pays « {country} » du fournisseur « {supplier_name} » "
+                                "doit etre ecrit en majuscules."
+                            ),
+                            original=supplier_name,
+                            proposed=proposed,
+                            page=page.page,
+                            bbox=bbox,
+                        )
+                    )
                     continue
                 fscm_match = _FSCM_SUFFIX_RE.search(supplier_name)
                 if fscm_match is not None:
@@ -2391,10 +2483,10 @@ def _revision_bar_findings(
             )
             checked += 1
             spans_footer_content = any(
-                bar.top <= revision_top + 3.0
-                and bar.bottom >= copyright_bottom - 2.0
-                and bar.top <= first_issue_top
-                and bar.bottom >= first_issue_bottom
+                bar.top <= revision_top + _TP1_REVISION_BAR_VERTICAL_TOLERANCE
+                and bar.bottom >= copyright_bottom - _TP1_REVISION_BAR_VERTICAL_TOLERANCE
+                and bar.top <= first_issue_top + _TP1_REVISION_BAR_VERTICAL_TOLERANCE
+                and bar.bottom >= first_issue_bottom - _TP1_REVISION_BAR_VERTICAL_TOLERANCE
                 for bar in bars
             )
             if spans_footer_content:
@@ -2493,12 +2585,15 @@ def _document_structure_findings(
         "list_materials_code_parentheses",
         "list_materials_code_lowercase",
         "list_materials_supplier_fscm",
+        "list_materials_supplier_country_uppercase",
     }:
         findings, checked = _list_materials_code_findings(context, control)
         if control == "list_materials_code_parentheses":
             expected = "Code de la LIST OF MATERIALS sans parentheses"
         elif control == "list_materials_code_lowercase":
             expected = "Code de la LIST OF MATERIALS en minuscules"
+        elif control == "list_materials_supplier_country_uppercase":
+            expected = "Pays de la colonne fournisseur en majuscules"
         else:
             expected = "Nom fournisseur suivi de (FSCM XXXXX)"
     elif control in {
@@ -3198,6 +3293,7 @@ OPERATIONS = {
         REVISION_CONSISTENCY,
         PREPARATION_CHECK,
         SHOP_VERIFICATION,
+        STORAGE_NOTE_REFERENCE,
         HIGHLIGHTS_HOLDER,
         HIGHLIGHTS_DOCUMENT_TYPE,
         PARAGRAPH_JUSTIFICATION,
