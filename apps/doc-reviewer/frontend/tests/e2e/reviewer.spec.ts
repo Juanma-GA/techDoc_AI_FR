@@ -23,13 +23,19 @@ test.describe("Doc Reviewer smoke", () => {
       route.fulfill({
         json: [{
           code: "CUSTOM_CMM_NUMBER",
+          bundle_code: "thales_rules",
+          bundle_label: "THALES",
           name: "CMM number",
           description: "Check the CMM number",
           message: "CMM number mismatch",
+          rule_number: 1,
           kind: "client",
+          scope: "verification",
           severity: "warning",
           execution: "deterministic",
           active: true,
+          catalog_code: "THALES-CUSTOM",
+          catalog_version: "v1",
           translations: {},
         }],
       }),
@@ -37,23 +43,31 @@ test.describe("Doc Reviewer smoke", () => {
     await page.goto("/rules");
 
     await expect(page.getByRole("heading", { name: "THALES" })).toBeVisible();
+    await page.locator("details.collapsible > summary").click();
     await expect(page.getByText("Custom Cmm Number", { exact: true })).toBeVisible();
     await expect(page.locator(".rules-table input[type=checkbox]")).toHaveCount(1);
     await expect(page.getByText(/Checklist import/i)).toHaveCount(0);
   });
 
   test("keeps core routes within the viewport", async ({ page }) => {
-    for (const path of ["/", "/documents", "/settings"]) {
-      await page.goto(path);
-      await expect(page.locator("main")).toBeVisible();
+    for (const viewport of [
+      { width: 1280, height: 720 },
+      { width: 1024, height: 768 },
+    ]) {
+      await page.setViewportSize(viewport);
 
-      const overflow = await page.evaluate(() => ({
-        horizontal: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-        body: document.body.scrollWidth - document.body.clientWidth,
-      }));
+      for (const path of ["/", "/documents", "/settings"]) {
+        await page.goto(path);
+        await expect(page.locator("main")).toBeVisible();
 
-      expect(overflow.horizontal).toBeLessThanOrEqual(1);
-      expect(overflow.body).toBeLessThanOrEqual(1);
+        const overflow = await page.evaluate(() => ({
+          horizontal: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          body: document.body.scrollWidth - document.body.clientWidth,
+        }));
+
+        expect(overflow.horizontal).toBeLessThanOrEqual(1);
+        expect(overflow.body).toBeLessThanOrEqual(1);
+      }
     }
   });
 
