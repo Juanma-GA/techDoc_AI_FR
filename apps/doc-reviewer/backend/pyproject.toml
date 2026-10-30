@@ -68,6 +68,9 @@ ignore = ["B008"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "requires_office: needs a real Microsoft Word or LibreOffice (opt-in via DR_TEST_REAL_*); deselect with -m 'not requires_office'",
+]
 
 [tool.mypy]
 python_version = "3.11"

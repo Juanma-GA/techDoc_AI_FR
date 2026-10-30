@@ -131,17 +131,17 @@ frontend est `_run_no_front.bat` à la racine de l'application, et non
 Depuis `backend/`, le parcours manuel complet hors LLM est :
 
 ```bat
-tests\backend_only_tests\run_manual_verification.bat C:\docs\manual.pdf
+dev_tools\manual_verification\run_manual_verification.bat C:\docs\manual.pdf
 ```
 
 Le programme vérifie `/health`, exécute les scripts personnels `01` (upload),
 `04` (format automatique et exports), puis `02` (analyse SSE déterministe).
 Les réponses, événements SSE et artefacts restent dans
-`tests/backend_only_tests/outputs/`. Pour tester la checklist avec le vrai LLM,
+`dev_tools/manual_verification/outputs/`. Pour tester la checklist avec le vrai LLM,
 configurer d'abord Mistral dans l'application puis lancer :
 
 ```bat
-tests\backend_only_tests\run_manual_verification.bat C:\docs\manual.docx --checklist C:\docs\checklist.xlsx --run-llm
+dev_tools\manual_verification\run_manual_verification.bat C:\docs\manual.docx --checklist C:\docs\checklist.xlsx --run-llm
 ```
 
 Le runner n'envoie aucune clé API et n'utilise aucun mock.

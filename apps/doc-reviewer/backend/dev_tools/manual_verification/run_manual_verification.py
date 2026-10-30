@@ -3,11 +3,11 @@
 The backend must already be running. The program uses the current Python
 interpreter, so launch it with backend/.venv/Scripts/python.exe:
 
-    .venv\\Scripts\\python.exe tests\\backend_only_tests\\run_manual_verification.py path\\to\\manual.pdf
-    .venv\\Scripts\\python.exe tests\\backend_only_tests\\run_manual_verification.py path\\to\\manual.docx --checklist checklist.xlsx --run-llm
+    .venv\\Scripts\\python.exe dev_tools\\manual_verification\\run_manual_verification.py path\\to\\manual.pdf
+    .venv\\Scripts\\python.exe dev_tools\\manual_verification\\run_manual_verification.py path\\to\\manual.docx --checklist checklist.xlsx --run-llm
 
 The runner does not contain credentials, does not mock the API, and keeps all
-artifacts produced by the individual scripts in backend_only_tests/outputs.
+artifacts produced by the individual scripts in dev_tools/manual_verification/outputs.
 """
 from __future__ import annotations
 
