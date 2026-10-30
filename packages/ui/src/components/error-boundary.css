@@ -53,7 +53,7 @@
 
 .ui-error-details summary {
   cursor: pointer;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
 }
 
 .ui-error-details pre {

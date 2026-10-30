@@ -51,7 +51,7 @@ Contrast targets are enforced by `design-tokens/tests/contrast.test.mjs`; see [d
 
 ## 3. Token Consumption
 
-- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) is generated from it and exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/theme.css` through their `index.css` and extend the shared Tailwind preset.
+- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) is generated from it and exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/base.css` (theme variables + self-hosted fonts + document defaults) at the top of their `index.css` and extend the shared Tailwind preset.
 - Use semantic utilities such as `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-fg`, `text-fg-dim`, `text-fg-muted`, `text-brand-blue-light`, `text-success`, `text-warning`, `text-danger`, `text-info`, `border`, `border-md`, and `border-bright`.
 - Use `font-sans`, `font-mono`, `font-display`, `rounded-sm`, `rounded-lg`, `shadow-card`, `w-sidebar-w`, `h-topbar-h`, `text-base`, and `text-label` for their corresponding shared tokens.
 - Charts needing theme-aware colors use the shared `colorByTheme(theme, tokenPath)` helper from [design-tokens/index.ts](../../design-tokens/index.ts). Never add app-local hex values or duplicate tokens.
@@ -75,7 +75,7 @@ Contrast targets are enforced by `design-tokens/tests/contrast.test.mjs`; see [d
 | Large radius | 12px |
 | Card shadow | `0 1px 3px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.2)` |
 
-The dimensions and fonts are current local values, not universal AACF defaults. The template's `index.html` currently does not load the specified web fonts; verify font availability before claiming the rendered UI uses them.
+The dimensions and fonts are current local values, not universal AACF defaults. Fonts are self-hosted and loaded once by `@internal/design-tokens/base.css` (see [design-system.md](../standards/design-system.md)); the shared stacks fall back to system fonts.
 
 ## 5. Shared Component Inventory
 
@@ -148,9 +148,9 @@ Invalidate/refetch health after saving settings, toggling the capability, or tes
 | Token format | Local raw-hex JSON + Tailwind preset; AACF specifies DTCG/OKLCH + Style Dictionary. | Define one canonical source and a conversion/registry path. |
 | Tailwind version | Local apps use Tailwind 3.4; AACF's web-app template specifies Tailwind 4. | Confirm a supported adapter/version and compatibility with the AACF registry. |
 | Components | Local `@internal/ui` uses Radix-based components; AACF specifies a private shadcn registry. | Approve the mapping or migrate; do not run competing libraries. |
-| Typography | Inter and JetBrains Mono are shared; local Orbitron is an extra display face. | Approve or remove Orbitron; verify actual font loading. |
+| Typography | Inter and JetBrains Mono are shared; local Orbitron is an extra display face. All three are self-hosted through `design-tokens/base.css`. | Approve or remove Orbitron. |
 | Browser preferences | `ThemeToggle` writes to localStorage. | Resolve HR1 before persisting preferences. |
-| Theme defaults | [tokens.json](../../design-tokens/tokens.json) comments describe a `.light` selector; [theme.css](../../design-tokens/theme.css) actually uses light `:root` plus `.dark`. [STANDARD_POC.md](../../STANDARD_POC.md) says default dark, while the [template startup](../../apps/_template/frontend/index.html) follows OS preference when no saved value exists. | Choose and document one source/runtime behavior; correct stale comments. |
+| Theme defaults | Resolved locally: [theme.css](../../design-tokens/theme.css) is generated from [tokens.json](../../design-tokens/tokens.json) (light `:root`, dark `.dark`) and every template/app starts dark unless `light` was explicitly saved. | Confirm the dark default against AACF. |
 | Shell and routes | [App.tsx](../../apps/_template/frontend/src/App.tsx) has a header and Home route only. [Settings.tsx](../../apps/_template/frontend/src/routes/Settings.tsx) is not routed; Data is absent. | Complete and test the target shell before claiming the scaffold implements it. |
 | Localization and mutation UX | [Settings.tsx](../../apps/_template/frontend/src/routes/Settings.tsx) has hard-coded copy; [ThemeToggle](../../packages/ui/src/components/ThemeToggle.tsx) fallback label is English; the LLM switch is not optimistic. | Localize all strings/aria names and meet HR20 before claiming AACF alignment. |
 | Destructive confirmation | Local double-click pattern is not inherently logged. | Use an approved dialog/audit flow or obtain an explicit HR9 decision. |

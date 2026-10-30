@@ -10,7 +10,9 @@
     ".": "./index.ts",
     "./tokens.json": "./tokens.json",
     "./tailwind-preset": "./tailwind-preset.ts",
-    "./theme.css": "./theme.css"
+    "./theme.css": "./theme.css",
+    "./fonts.css": "./fonts.css",
+    "./base.css": "./base.css"
   },
   "files": [
     "index.ts",
@@ -18,12 +20,19 @@
     "tokens.json",
     "tokens.schema.json",
     "theme.css",
+    "fonts.css",
+    "base.css",
     "scripts"
   ],
   "scripts": {
     "build:theme": "node scripts/build-theme.mjs",
     "check:theme": "node scripts/build-theme.mjs --check",
     "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.1.0",
+    "@fontsource/jetbrains-mono": "^5.1.1",
+    "@fontsource/orbitron": "^5.1.0"
   },
   "peerDependencies": {
     "tailwindcss": "^3.4.0"

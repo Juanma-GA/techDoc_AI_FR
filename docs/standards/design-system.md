@@ -103,3 +103,28 @@ Compatibility notes:
 
 - Code that used the light `bg.base` as a "white page" color must use `card.base` instead (done for flowchart-generator printable exports).
 - Shared shell CSS reads `--color-nav-active-*`, `--color-brand-text` and `--color-focus-ring`; app CSS should do the same rather than `--color-brand-blue` + `--color-text-base` for active states.
+
+## 4. Fonts And Base Stylesheet
+
+Every app has exactly one design-system import, at the top of `frontend/src/index.css`:
+
+```css
+@import "@internal/design-tokens/base.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+`base.css` imports, in order:
+
+1. `theme.css` (generated variables, `color-scheme` per theme);
+2. `fonts.css` (self-hosted `@fontsource` faces: Inter 400/500/600/700, JetBrains Mono 400/500/700, Orbitron 500/700);
+3. document defaults: `html` font stack, 13.5px base size, line-height, themed background/text, font smoothing, `#root` full height, themed `::selection` and `:focus-visible`, mono `code`, and the `.label` class.
+
+Rules:
+
+- Apps never declare `@fontsource/*` dependencies, never `@import "@fontsource/..."`, and never load `fonts.googleapis.com` / `fonts.gstatic.com` (local-first, offline-capable, no third-party request).
+- CSS uses `var(--font-sans)`, `var(--font-mono)`, `var(--font-display)`; never a literal font name outside `design-tokens/`.
+- Fonts use `font-display: swap`; the stacks fall back to `system-ui` / `Segoe UI` / `Consolas` while loading or if a face is missing.
+- `@import "@internal/design-tokens/theme.css"` alone remains supported for compatibility, but then the app must load fonts itself; migrate to `base.css`.

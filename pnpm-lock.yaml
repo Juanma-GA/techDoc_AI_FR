@@ -172,15 +172,6 @@ importers:
 
   apps/_template/frontend:
     dependencies:
-      '@fontsource/inter':
-        specifier: ^5.1.0
-        version: 5.3.0
-      '@fontsource/jetbrains-mono':
-        specifier: ^5.1.1
-        version: 5.3.0
-      '@fontsource/orbitron':
-        specifier: ^5.1.0
-        version: 5.3.0
       '@hookform/resolvers':
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.77.0(react@18.3.1))
@@ -1308,6 +1299,15 @@ importers:
 
   design-tokens:
     dependencies:
+      '@fontsource/inter':
+        specifier: ^5.1.0
+        version: 5.3.0
+      '@fontsource/jetbrains-mono':
+        specifier: ^5.1.1
+        version: 5.3.0
+      '@fontsource/orbitron':
+        specifier: ^5.1.0
+        version: 5.3.0
       tailwindcss:
         specifier: ^3.4.0
         version: 3.4.19

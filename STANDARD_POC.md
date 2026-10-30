@@ -404,7 +404,9 @@ const fill = colorByTheme(currentTheme(), "text.base");  // "#e2e8f0" en dark, "
 
 ### 5.2 Typographie
 
-Inter (sans), JetBrains Mono (chiffres/badges techniques). Body 13.5px line-height 1.5. Identique en dark et light. Imposé par le preset Tailwind partagé.
+Inter (sans, UI), JetBrains Mono (chiffres, badges techniques, `.label`), Orbitron (marque, titres de page et de carte). Body 13.5px line-height 1.5. Identique en dark et light.
+
+Les polices sont **self-hosted** (`@fontsource`) et chargées une seule fois par `@internal/design-tokens/base.css`, que chaque app importe en tête de `src/index.css`. Les apps ne déclarent **ni** dépendance `@fontsource/*`, **ni** `<link>` Google Fonts (interdit : local-first, hors-ligne). Les piles `--font-sans|mono|display` (générées dans `theme.css`) prévoient des polices système de repli. Dans le CSS, utiliser `var(--font-sans)`, `var(--font-mono)`, `var(--font-display)` ; dans le JSX, `font-sans`, `font-mono`, `font-display`. Détail : [supplément design system](./docs/standards/design-system.md#4-fonts-and-base-stylesheet).
 
 ### 5.3 Composants `@internal/ui` (canoniques)
 
@@ -680,11 +682,11 @@ Le titre HTML initial (`<title>`), le `document.title` React et le titre de fen�
 
 ### Conventions visuelles
 
-- **Fonts Google** (chargées via `<link>` dans `<head>`) :
-  - `Inter` (400/500/600/700) — body sans-serif
-  - `JetBrains Mono` (400/500/700) — `.label`, `code`, `.kpi-value`
-  - `Orbitron` (500/700) — `.brand`, `.page-header h1`, `.card-title`
-- **Layout** : `html { font-size: 13.5px; }`, sidebar `var(--sidebar-w)` (252px), topbar 52px, main padding `24px 32px`.
+- **Fonts self-hosted** (chargées par `@internal/design-tokens/base.css`, jamais via `<link>` Google Fonts ni CDN) :
+  - `Inter` (400/500/600/700) — body sans-serif — `var(--font-sans)` / `font-sans`
+  - `JetBrains Mono` (400/500/700) — `.label`, `code`, `.kpi-value` — `var(--font-mono)` / `font-mono`
+  - `Orbitron` (500/700) — `.brand`, `.page-header h1`, `.card-title` — `var(--font-display)` / `font-display`
+- **Layout** : `html { font-size: 13.5px; }` (fourni par `base.css`), sidebar `var(--sidebar-w)` (252px), topbar 52px, main padding `24px 32px`.
 - **Description brève de l'app (obligatoire)** : le nom / logo (`.brand`) porte une
   **infobulle** décrivant l'app en une phrase — attribut `title={t("app.description")}`
   (clé i18n `app.description` FR + EN) + `cursor: help`. Chaque POC personnalise cette
@@ -703,7 +705,7 @@ Le titre HTML initial (`<title>`), le `document.title` React et le titre de fen�
 | `.empty-state` | — | Texte centré "Aucun X" |
 | `.label` | — | Étiquette uppercase mono |
 
-- **Couleurs** : toutes via les CSS vars des design-tokens (`@internal/design-tokens/theme.css` + preset Tailwind). **Aucun hex en dur** (règle #4).
+- **Couleurs** : toutes via les CSS vars des design-tokens (`@internal/design-tokens/base.css`, qui inclut `theme.css`, + preset Tailwind). **Aucun hex en dur** (règle #4).
 
 ### Theme toggle (dark ↔ light)
 

@@ -32,7 +32,7 @@
 .ui-sidebar-brand {
   overflow: hidden;
   color: var(--color-brand-text);
-  font-family: "Orbitron", sans-serif;
+  font-family: var(--font-display);
   font-size: 1.15rem;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -103,7 +103,7 @@
 .ui-nav-group-title {
   padding: 8px 12px 4px;
   color: var(--color-text-dim);
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
