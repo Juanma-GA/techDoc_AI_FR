@@ -335,7 +335,7 @@ apps/<poc>/frontend/src/
 ├── main.tsx                 # ReactDOM root + providers globaux
 ├── App.tsx                  # Layout (sidebar + topbar + main) + ErrorBoundary + routes
 ├── i18n.ts                  # init i18next
-├── index.css                # @tailwind directives + variables CSS si besoin
+├── index.css                # @import "@internal/design-tokens/base.css" + @tailwind directives
 ├── routes/                  # 1 fichier par page
 ├── components/
 │   ├── business/            # composants métier propres au POC

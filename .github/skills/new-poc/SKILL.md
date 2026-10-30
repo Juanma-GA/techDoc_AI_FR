@@ -65,6 +65,9 @@ Any change outside the approved path list requires a new mutation batch and conf
 - Default port is unique in `docs/apps/README.md`; both launchers start from it and implement the same free-port behavior.
 - App README follows `docs/standards/app-readme-template.md` and declares profiles and deviations.
 - Required launcher, packager, backend, frontend, migration, and test files exist.
+- The frontend inherits the design system without local copies: `src/index.css` starts with `@import "@internal/design-tokens/base.css";`, `package.json` has no `@fontsource/*` dependency, `index.html` has no Google Fonts link and keeps `<meta name="color-scheme">` plus the dark-by-default anti-flash script (see `docs/standards/design-system.md`).
+- With the `llm` profile, the overlay `App.tsx`, `routes/Settings.tsx` and locales still contain every template key (`nav.design`, `home.*`, `settings.title`, `design.*`); `pnpm typecheck` and `pnpm test` pass on the generated frontend.
+- `pnpm test:e2e` (including `tests/e2e/design-system.spec.ts`: themes, languages, viewports, fonts loaded) is recorded as executed or recommended; remove the dev-only `/design` gallery only if the app owner asks.
 - No unresolved template markers remain outside intentional template documentation.
 - Record `check_standard`, tests, build, and packaging as executed or recommended.
 

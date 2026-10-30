@@ -1,7 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Switch } from "@internal/ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CollapsibleSection,
+  FormField,
+  Input,
+  PageHeader,
+  Switch,
+} from "@internal/ui";
 
 import { settingsApi, type SettingsDto, type TestConnectionDto } from "../lib/api";
 import { DemoModeSettings } from "./DemoModeSettings";
@@ -9,15 +22,20 @@ import { DemoModeSettings } from "./DemoModeSettings";
 /**
  * Mistral configuration page — same fields/behavior on every POC (STANDARD_POC.md
  * rule #6): LLM on/off switch, API key (write-only), base URL, chat/embed models,
- * Save + Test connection. Personnalise le libelle/description au bootstrap.
+ * Save + Test connection. The Mistral block is a CollapsibleSection, collapsed by
+ * default once a key is configured; models returned by the connection test are
+ * offered as suggestions while free text stays possible.
  */
 export function Settings() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const modelsListId = useId();
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [chatModel, setChatModel] = useState("");
   const [embedModel, setEmbedModel] = useState("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [mistralOpen, setMistralOpen] = useState<boolean | null>(null);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const settingsQuery = useQuery<SettingsDto>({ queryKey: ["settings"], queryFn: settingsApi.read });
@@ -50,6 +68,7 @@ export function Settings() {
   const testMutation = useMutation({
     mutationFn: () => settingsApi.test(),
     onSuccess: (r: TestConnectionDto) => {
+      if (r.ok) setAvailableModels(r.models);
       setFeedback(
         r.ok
           ? { kind: "ok", text: t("settings.mistral.testSuccess", { models: r.models.join(", ") }) }
@@ -71,9 +90,11 @@ export function Settings() {
   const cfg = settingsQuery.data;
   const apiKeySet = cfg?.api_key_set ?? false;
   const llmEnabled = cfg?.llm_enabled ?? true;
+  const modelsHint = availableModels.length === 0 ? t("settings.mistral.modelsHint") : undefined;
 
   return (
-    <div className="flex max-w-xl flex-col gap-4">
+    <div className="flex max-w-3xl flex-col gap-4">
+      <PageHeader title={t("settings.title")} description={t("settings.subtitle")} />
       <DemoModeSettings />
       <Card>
         <CardHeader>
@@ -83,7 +104,7 @@ export function Settings() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="label">{t("settings.ai.toggleLabel")}</div>
-              <p className="text-sm text-fg-dim">{t("settings.ai.toggleHint")}</p>
+              <p className="m-0 text-sm text-fg-dim">{t("settings.ai.toggleHint")}</p>
             </div>
             <Switch
               checked={llmEnabled}
@@ -95,18 +116,21 @@ export function Settings() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {t("settings.mistral.title")}
-            <Badge variant={apiKeySet ? "success" : "warning"}>
-              {apiKeySet ? t("settings.mistral.configured") : t("settings.mistral.notConfigured")}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="label">{t("settings.mistral.apiKeyLabel")}</span>
+      <CollapsibleSection
+        title={t("settings.mistral.title")}
+        open={mistralOpen ?? !apiKeySet}
+        onOpenChange={setMistralOpen}
+        aside={
+          <Badge variant={apiKeySet ? "success" : "warning"}>
+            {apiKeySet ? t("settings.mistral.configured") : t("settings.mistral.notConfigured")}
+          </Badge>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <FormField
+            label={t("settings.mistral.apiKeyLabel")}
+            hint={apiKeySet ? t("settings.mistral.apiKeyHint") : undefined}
+          >
             <Input
               type="password"
               autoComplete="off"
@@ -114,28 +138,35 @@ export function Settings() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
             />
-            {apiKeySet && (
-              <span className="text-sm text-fg-dim">{t("settings.mistral.apiKeyHint")}</span>
-            )}
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="label">{t("settings.mistral.baseUrlLabel")}</span>
+          </FormField>
+          <FormField label={t("settings.mistral.baseUrlLabel")}>
             <Input type="url" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-          </label>
-          <div className="flex gap-3">
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("settings.mistral.chatModelLabel")}</span>
-              <Input value={chatModel} onChange={(e) => setChatModel(e.target.value)} />
-            </label>
-            <label className="flex flex-1 flex-col gap-1">
-              <span className="label">{t("settings.mistral.embedModelLabel")}</span>
-              <Input value={embedModel} onChange={(e) => setEmbedModel(e.target.value)} />
-                <span className="text-sm text-fg-dim">
-                  {t("settings.mistral.embedModelOptional")}
-                </span>
-              </label>
-            </div>
-          <div className="flex gap-2">
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label={t("settings.mistral.chatModelLabel")} hint={modelsHint}>
+              <Input
+                list={modelsListId}
+                value={chatModel}
+                onChange={(e) => setChatModel(e.target.value)}
+              />
+            </FormField>
+            <FormField
+              label={t("settings.mistral.embedModelLabel")}
+              hint={t("settings.mistral.embedModelOptional")}
+            >
+              <Input
+                list={modelsListId}
+                value={embedModel}
+                onChange={(e) => setEmbedModel(e.target.value)}
+              />
+            </FormField>
+          </div>
+          <datalist id={modelsListId}>
+            {availableModels.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="primary"
               disabled={saveMutation.isPending}
@@ -157,13 +188,11 @@ export function Settings() {
               {t("settings.mistral.test")}
             </Button>
           </div>
-          {feedback && (
-            <div className={feedback.kind === "ok" ? "text-success" : "text-danger"}>
-              {feedback.text}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          {feedback ? (
+            <Alert variant={feedback.kind === "ok" ? "success" : "danger"}>{feedback.text}</Alert>
+          ) : null}
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }

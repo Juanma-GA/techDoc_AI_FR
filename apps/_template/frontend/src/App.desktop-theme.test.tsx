@@ -27,7 +27,7 @@ describe("desktop window theme", () => {
     };
     vi.spyOn(settingsApi, "read").mockResolvedValue({
       demo_enabled: false,
-    });
+    } as Awaited<ReturnType<typeof settingsApi.read>>);
   });
 
   afterEach(() => {

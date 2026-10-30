@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AppShell,
@@ -35,7 +35,13 @@ const NAV_ITEMS = [
   { to: "/", key: "nav.home", icon: "home" },
   { to: "/data", key: "nav.data", icon: "data" },
   { to: "/settings", key: "nav.settings", icon: "settings" },
+  // Development-only reference of the shared components (not shipped in builds).
+  ...(import.meta.env.DEV ? [{ to: "/design", key: "nav.design", icon: "color" } as const] : []),
 ] as const;
+
+const DesignGallery = import.meta.env.DEV
+  ? lazy(() => import("./routes/DesignGallery").then((module) => ({ default: module.DesignGallery })))
+  : null;
 
 export function App() {
   useEffect(() => {
@@ -135,6 +141,16 @@ export function App() {
             <Route path="/" element={<Home />} />
             <Route path="/data" element={<Data />} />
             <Route path="/settings" element={<Settings />} />
+            {DesignGallery ? (
+              <Route
+                path="/design"
+                element={
+                  <Suspense fallback={null}>
+                    <DesignGallery />
+                  </Suspense>
+                }
+              />
+            ) : null}
           </Routes>
         </ErrorBoundary>
       </DemoModeProvider>

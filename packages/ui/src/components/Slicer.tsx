@@ -43,7 +43,7 @@ function SlicerPill({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
         active
           ? "border-brand bg-brand text-brand-fg"
-          : "border-md bg-bg-2 text-fg-dim hover:bg-card-hover hover:text-fg",
+          : "border-md bg-surface-sunken text-fg-dim hover:bg-card-hover hover:text-fg",
       )}
     >
       {children}

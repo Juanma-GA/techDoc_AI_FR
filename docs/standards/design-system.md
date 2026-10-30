@@ -153,3 +153,14 @@ Shared component conventions (v2):
 - `Input`/`Select`/`Textarea` sit on `surface.sunken`, focus with a brand border plus a soft ring; the `error` state keeps the danger border on focus.
 - `Card`, `EmptyState`, `CollapsibleSection`, `Table` use `rounded-lg` (token 12px) and `shadow-card`; overlays use `shadow-popover` and `bg-overlay`.
 - `Switch`/`Checkbox` use `ring-focus`, `border-md`, and `brand.fg` for the checked knob/check mark.
+
+## 6. Template And New Apps
+
+`apps/_template` is the reference implementation; `node scripts/new_poc.mjs <slug>` copies it, so every generated app starts compliant:
+
+- `frontend/src/index.css`: only `@import "@internal/design-tokens/base.css";` plus `@tailwind` directives. No `@fontsource/*` dependency in `frontend/package.json`.
+- `frontend/index.html`: anti-flash script (dark unless `light` was saved) and `<meta name="color-scheme" content="dark light">`. The desktop startup page (`--desktop`) has the same meta.
+- Pages: `Home`, `Data`, `Settings` start with `PageHeader`; `Data` uses `KpiCard`, `Skeleton` (with a `role="status"` label) and `Alert`; the `llm` profile Settings page uses `CollapsibleSection` (collapsed once a key is configured), `FormField`, and offers the models returned by the connection test through a `datalist` while keeping free text.
+- Dev-only gallery: `/design` (`routes/DesignGallery.tsx`) is registered only when `import.meta.env.DEV`; production builds exclude it.
+- `tests/e2e/design-system.spec.ts`: 8 combinations (dark/light x FR/EN x 1366/760px). It asserts the theme class, that Inter, JetBrains Mono and Orbitron faces are loaded, and that `main` does not overflow horizontally; screenshots are attached to the report (no committed baselines because rendering differs per OS).
+- The `llm` profile overlay (`apps/_template/profiles/llm`) replaces `App.tsx`, `routes/Settings.tsx` and the locales: any template change to these files must be mirrored there.

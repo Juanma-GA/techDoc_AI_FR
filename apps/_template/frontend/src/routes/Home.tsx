@@ -1,10 +1,12 @@
 import { useTranslation } from "react-i18next";
 import {
+  Alert,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   DemoScenarioPanel,
+  PageHeader,
   useDemoMode,
   type DemoScenario,
 } from "@internal/ui";
@@ -68,13 +70,21 @@ export function Home() {
   }
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
-        <CardTitle>{t("home.title")}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-fg-dim">{t("home.subtitle")}</p>
-      </CardContent>
-    </Card>
+    <div className="flex max-w-3xl flex-col gap-4">
+      <PageHeader title={t("home.title")} description={t("home.subtitle")} />
+      <Card>
+        <CardHeader>
+          <CardTitle>{t("home.nextSteps")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ol className="m-0 flex list-decimal flex-col gap-2 pl-5 text-fg-dim">
+            <li>{t("home.stepRoutes")}</li>
+            <li>{t("home.stepApi")}</li>
+            <li>{t("home.stepLocales")}</li>
+          </ol>
+        </CardContent>
+      </Card>
+      {import.meta.env.DEV ? <Alert variant="info">{t("home.designHint")}</Alert> : null}
+    </div>
   );
 }
