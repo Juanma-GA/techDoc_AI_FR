@@ -7,28 +7,24 @@ Structure-dependent controls live in `operations.py` (`s1000d_*` operations).
 
 from __future__ import annotations
 
-import re
 from functools import partial
 
 from app.checks.thales_rules.rule_factory import build_rule
-from app.core.compiled_rules import Check, RuleTarget
+from app.core.compiled_rules import Check, Condition, RuleTarget
 
 _STANDARD_CODE = "THALES-S1000D"
 _CATALOG_VERSION = "v1"
 _TARGET = RuleTarget(page="all", region="full_page")
 
+# Migration/MCO rules only run when the mapping states the update type; 14/15 follow the manufacturer.
+_MIGRATION = Condition(field="meta_update_type", equals="Migration")
+_MCO = Condition(field="meta_update_type", equals="MCO")
+_AIRBUS = Condition(field="meta_manufacturer", equals="Airbus")
+_BOEING = Condition(field="meta_manufacturer", equals="Boeing")
+
 rule = partial(build_rule, _STANDARD_CODE, _CATALOG_VERSION)
 
-_DASHES = "-\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
 _DASH = r"[-\u2010-\u2015\u2212\uFFFD]"
-
-
-def _literal(text: str) -> str:
-    """Regex of a literal sentence, tolerant to layout whitespace and dash glyph variants."""
-    return r"\s+".join(
-        "".join(_DASH if char in _DASHES else re.escape(char) for char in token)
-        for token in text.split()
-    )
 
 
 def _operation_check(operation: str, control: str) -> Check:
@@ -52,9 +48,11 @@ def _content(control: str) -> Check:
     return _operation_check("s1000d_content", control)
 
 
+# The published footer prints "©2006-2026 THALES AVS FRANCE SAS This document" (no space after the
+# symbol, no full stop after the first company name): both are tolerated, the years are checked apart.
 _COPYRIGHT_PATTERN = (
     r"(?i)\u00a9\s*\d{4}\s*-\s*\d{4}\s+"
-    r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
+    r"THALES\s+AVS\s+FRANCE\s+SAS\.?\s+"
     r"This\s+document\s+and\s+any\s+data\s+included\s+are\s+the\s+property\s+of\s+"
     r"THALES\s+AVS\s+FRANCE\s+SAS\.\s+"
     r"They\s+cannot\s+be\s+reproduced,\s+disclosed\s+or\s+used\s+"
@@ -75,32 +73,13 @@ _SPM_TAIL = rf"\s+20-02-00\s*{_DASH}\s*STANDARD\s+PRACTICES\s+MANUAL\s*\(\s*SPM\
 _SOPM_TAIL = rf"\s+20-02-00\s*{_DASH}\s*STANDARD\s+OVERHAUL\s+PRACTICES\s+MANUAL\s*\(\s*SOPM\s*\)"
 _SPM_LINK_PATTERN = rf"(?i:\brefer\s+to)\s+SPM\b(?!{_SPM_TAIL})"
 _SOPM_LINK_PATTERN = rf"(?i:\brefer\s+to)\s+SOPM\b(?!{_SOPM_TAIL})"
-_FIRST_VERIFICATION_PATTERN = r"(?i)\bFirst\s+verification\s*:?\s*tabtop\b"
-_OTHER_FIRST_VERIFICATION_PATTERN = r"(?i)\bFirst\s+verification\s*:\s*(?!tabtop\b)\w+"
 _SHOP_VERIFICATION_PATTERN = r"(?i)\bShop\s+Verification\b"
-_HUMIDITY_REFERENCE = (
-    "Refer to Standard Practices Manual ATA No. 20-02-00, "
-    "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure"
-)
-_HUMIDITY_REFERENCE_PATTERN = (
-    "(?i)" + _literal(_HUMIDITY_REFERENCE).replace("procedure", r"proc(?:e|\u00e9|\uFFFD)dure")
-)
-_STORAGE_NOTE_DISPLAY = (
-    "NOTE During storage operations, make sure that the environmental conditions are "
-    "as follows: - Temperature: Refer to SPM 20-02-00 - STANDARD PRACTICES MANUAL (SPM), "
-    "Refer to F9111CMON-A-20-02-00-00A-812A-A - Storage and Transportation of Assemblies."
-)
-_STORAGE_NOTE_PATTERN = (
-    r"(?i)\bNOTE\b\s*:?\s*During\s+storage\s+operations,\s+make\s+sure\s+that\s+the\s+"
-    r"environmental\s+conditions\s+are\s+as\s+follows\s*:\s*"
-    rf"[-\u2010-\u2015\u2212\u2022]?\s*Temperature\s*:\s*Refer\s+to\s+SPM\s+20-02-00\s*{_DASH}\s*"
-    r"STANDARD\s+PRACTICES\s+MANUAL\s*\(\s*SPM\s*\)\s*,\s*"
-    rf"Refer\s+to\s+F9111CMON{_DASH}A{_DASH}20{_DASH}02{_DASH}00{_DASH}00A{_DASH}812A{_DASH}A\s*"
-    rf"{_DASH}\s*Storage\s+and\s+Transportation\s+of\s+Assemblies\s*\.?"
-)
+# Two layouts: "Not specific-xxxxx" in the tool name, or the published table cell "Not specific"
+# whose MFR column is then the LOCAL code printed "Commercially available".
 _NOT_SPECIFIC_WITHOUT_LOCAL = (
     r"(?i)(?<!\bLOCAL\b[^\n]*)\bNot\s+sp[e\u00e9]cific\s*[-\u2010-\u2015\u2212]\s*\w+"
     r"(?![^\n]*\bLOCAL\b)(?![^\n]*\n[^\n]*\bLOCAL\b)"
+    r"|(?m:^[ \t]*Not[ \t]+sp[e\u00e9]cific[ \t]*$)(?!\s*(?:LOCAL|Commercially)\b)"
 )
 _NOT_SPECIFIC_SPACING = (
     r"(?i)\bNot[ \t]{2,}sp[e\u00e9]cific\b"
@@ -132,19 +111,23 @@ S1000D_MIGRATION_DM_DATES = rule(  # 5
     description=(
         "Pour une migration, la date d'émission (issue date) de tous les data modules "
         "listés dans la LIST OF EFFECTIVE DATA MODULES doit être la date de révision "
-        "du mapping."
+        "du mapping, hors DM génériques (partagés, ils gardent leur propre date). "
+        "S'applique quand le type de mise à jour du mapping est Migration."
     ),
     message="La date d'un DM de la LOEDM diffère de la date de révision.",
     kind="field_consistency",
     severity="error",
     target=_TARGET,
     checks=[_dm_status("loedm_dates_all")],
+    only_if=_MIGRATION,
     failure_message="date d'un DM non mise à jour (migration).",
     translations={
         "en": {
             "description": (
                 "For a migration, the issue date of every data module listed in the LIST OF "
-                "EFFECTIVE DATA MODULES must be the revision date of the mapping."
+                "EFFECTIVE DATA MODULES must be the revision date of the mapping, except generic "
+                "DMs (shared, they keep their own date). Applies when the update type of the "
+                "mapping is Migration."
             ),
             "message": "A DM date in the LOEDM differs from the revision date.",
         }
@@ -163,6 +146,7 @@ S1000D_MCO_DM_DATES = rule(  # 6
     severity="error",
     target=_TARGET,
     checks=[_dm_status("loedm_dates_modified")],
+    only_if=_MCO,
     failure_message="date d'un DM modifié non mise à jour (MCO).",
     translations={
         "en": {
@@ -187,6 +171,7 @@ S1000D_MIGRATION_REVISION_ISSUE = rule(  # 7
     severity="error",
     target=_TARGET,
     checks=[_front_matter("revision_identification")],
+    only_if=_MIGRATION,
     failure_message="numéro de révision ou issue date non mis à jour (migration).",
     translations={
         "en": {
@@ -211,6 +196,7 @@ S1000D_MCO_REVISION_ROW = rule(  # 8
     severity="error",
     target=_TARGET,
     checks=[_front_matter("revision_record_row")],
+    only_if=_MCO,
     failure_message="ligne de révision absente du Record of revisions (MCO).",
     translations={
         "en": {
@@ -314,29 +300,24 @@ S1000D_QA_FIRST_VERIFICATION = rule(  # 12
     code="S1000D_QA_FIRST_VERIFICATION",
     name="Quality assurance : first verification TABTOP",
     description=(
-        "Le bloc Quality assurance doit porter « First verification : TABTOP » et aucune "
-        "autre valeur de first verification."
+        "La first verification doit être TABTOP. Le PDF n'affiche pas la balise : il la rend par "
+        "« The shop verification will be done at the first repair of the equipment » (ou "
+        "« First verification : TABTOP »). Toute autre valeur (par exemple « Shop check which "
+        "is done by performance ») est signalée."
     ),
     message="La first verification TABTOP est absente ou différente.",
     kind="field_required",
     severity="error",
     target=_TARGET,
-    checks=[
-        Check(
-            field="text",
-            operator="regex_exists",
-            expected=_FIRST_VERIFICATION_PATTERN,
-            expected_display="First verification: TABTOP",
-            suggestion_mode="fuzzy",
-        ),
-        Check(field="text", operator="regex", expected=_OTHER_FIRST_VERIFICATION_PATTERN),
-    ],
+    checks=[_content("first_verification")],
     failure_message="first verification TABTOP absente ou différente.",
     translations={
         "en": {
             "description": (
-                "The Quality assurance block must carry \"First verification: TABTOP\" and no "
-                "other first verification value."
+                "The first verification must be TABTOP. The PDF does not print the tag: it "
+                "renders it as \"The shop verification will be done at the first repair of the "
+                "equipment\" (or \"First verification: TABTOP\"). Any other value (for example "
+                "\"Shop check which is done by performance\") is reported."
             ),
             "message": "The TABTOP first verification is missing or different.",
         }
@@ -379,6 +360,7 @@ S1000D_SPM_LINK_AIRBUS = rule(  # 14
     severity="error",
     target=_TARGET,
     checks=[Check(field="text", operator="regex", expected=_SPM_LINK_PATTERN)],
+    only_if=_AIRBUS,
     failure_message="renvoi SPM non conforme.",
     translations={
         "en": {
@@ -409,6 +391,7 @@ S1000D_SOPM_LINK_BOEING = rule(  # 15
     severity="error",
     target=_TARGET,
     checks=[Check(field="text", operator="regex", expected=_SOPM_LINK_PATTERN)],
+    only_if=_BOEING,
     failure_message="renvoi SOPM non conforme.",
     translations={
         "en": {
@@ -436,6 +419,7 @@ S1000D_MCO_LOEDM_STATUS = rule(  # 16
     severity="error",
     target=_TARGET,
     checks=[_dm_status("loedm_status_modified")],
+    only_if=_MCO,
     failure_message="statut absent pour un DM modifié (MCO).",
     translations={
         "en": {
@@ -461,6 +445,7 @@ S1000D_MIGRATION_LOEDM_STATUS = rule(  # 17
     severity="error",
     target=_TARGET,
     checks=[_dm_status("loedm_status_all")],
+    only_if=_MIGRATION,
     failure_message="statut C absent pour un DM (migration).",
     translations={
         "en": {
@@ -480,7 +465,8 @@ S1000D_SUPPORT_EQUIPMENT_LOCAL_MNF = rule(  # 18
     name="Support equipment : code MNF LOCAL pour les outils « Not specific »",
     description=(
         "Dans les supports équipements, tout outil « Not specific-xxxxx » doit avoir le "
-        "code MNF « LOCAL »."
+        "code MNF « LOCAL ». Dans le tableau publié, le code LOCAL s'imprime « Commercially "
+        "available » dans la colonne MFR qui suit « Not specific »."
     ),
     message="Un outil « Not specific » n'a pas le code MNF LOCAL.",
     kind="regex_flag",
@@ -492,7 +478,8 @@ S1000D_SUPPORT_EQUIPMENT_LOCAL_MNF = rule(  # 18
         "en": {
             "description": (
                 "In the support equipment, every \"Not specific-xxxxx\" tool must have the "
-                "MNF code \"LOCAL\"."
+                "MNF code \"LOCAL\". In the published table, the LOCAL code is printed "
+                "\"Commercially available\" in the MFR column that follows \"Not specific\"."
             ),
             "message": "A \"Not specific\" tool does not have the LOCAL MNF code.",
         }
@@ -723,30 +710,25 @@ S1000D_HUMIDITY_DM_REFERENCE = rule(  # 28
     code="S1000D_HUMIDITY_DM_REFERENCE",
     name="Function test : renvoi à jour vers le DM relative humidity",
     description=(
-        "Le renvoi vers le DM de la relative humidity doit être à jour : « Refer to Standard "
+        "Chaque « Relative humidity » doit renvoyer au DM à jour : « Refer to Standard "
         "Practices Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-800A-A - Storage - "
-        "General procedure »."
+        "General procedure ». Le manuel cité suit le constructeur du mapping : SPM pour Airbus, "
+        "SOPM pour Boeing (texte Boeing déduit du texte Airbus de l'Excel, à confirmer)."
     ),
     message="Le renvoi vers le DM relative humidity est absent ou n'est pas à jour.",
     kind="field_required",
     severity="error",
     target=_TARGET,
-    checks=[
-        Check(
-            field="text",
-            operator="regex_exists",
-            expected=_HUMIDITY_REFERENCE_PATTERN,
-            expected_display=_HUMIDITY_REFERENCE,
-            suggestion_mode="fuzzy",
-        )
-    ],
+    checks=[_content("humidity_reference")],
     failure_message="renvoi relative humidity absent ou non à jour.",
     translations={
         "en": {
             "description": (
-                "The reference to the relative humidity DM must be up to date: \"Refer to "
+                "Every \"Relative humidity\" must refer to the up-to-date DM: \"Refer to "
                 "Standard Practices Manual ATA No. 20-02-00, F9111CMON-A-20-02-00-00A-800A-A - "
-                "Storage - General procedure\"."
+                "Storage - General procedure\". The manual follows the manufacturer of the "
+                "mapping: SPM for Airbus, SOPM for Boeing (Boeing text derived from the Airbus "
+                "text of the spreadsheet, to be confirmed)."
             ),
             "message": "The relative humidity DM reference is missing or out of date.",
         }
@@ -788,21 +770,16 @@ S1000D_STORAGE_TEMPERATURE_NOTE = rule(  # 30
         "La page STORAGE doit contenir la NOTE « During storage operations, make sure that the "
         "environmental conditions are as follows: - Temperature: Refer to SPM 20-02-00 - "
         "STANDARD PRACTICES MANUAL (SPM), Refer to F9111CMON-A-20-02-00-00A-812A-A - Storage "
-        "and Transportation of Assemblies. »"
+        "and Transportation of Assemblies. ». D'autres conditions (pressure, relative humidity) "
+        "peuvent la précéder ; les renvois étant imprimés après le texte, seule leur présence "
+        "est contrôlée. Le manuel cité suit le constructeur du mapping : SPM pour Airbus, SOPM "
+        "pour Boeing (texte Boeing déduit du texte Airbus de l'Excel, à confirmer)."
     ),
     message="La NOTE de renvoi au DM température du STORAGE est absente ou incorrecte.",
     kind="field_required",
     severity="error",
     target=_TARGET,
-    checks=[
-        Check(
-            field="text",
-            operator="regex_exists",
-            expected=_STORAGE_NOTE_PATTERN,
-            expected_display=_STORAGE_NOTE_DISPLAY,
-            suggestion_mode="fuzzy",
-        )
-    ],
+    checks=[_content("storage_temperature_note")],
     failure_message="NOTE STORAGE de renvoi température absente ou incorrecte.",
     translations={
         "en": {
@@ -810,7 +787,11 @@ S1000D_STORAGE_TEMPERATURE_NOTE = rule(  # 30
                 "The STORAGE page must contain the NOTE \"During storage operations, make sure "
                 "that the environmental conditions are as follows: - Temperature: Refer to SPM "
                 "20-02-00 - STANDARD PRACTICES MANUAL (SPM), Refer to "
-                "F9111CMON-A-20-02-00-00A-812A-A - Storage and Transportation of Assemblies.\""
+                "F9111CMON-A-20-02-00-00A-812A-A - Storage and Transportation of Assemblies.\" "
+                "Other conditions (pressure, relative humidity) may precede it; the references "
+                "are printed after the text, so only their presence is checked. The manual "
+                "follows the manufacturer of the mapping: SPM for Airbus, SOPM for Boeing "
+                "(Boeing text derived from the Airbus text of the spreadsheet, to be confirmed)."
             ),
             "message": "The STORAGE temperature DM reference NOTE is missing or incorrect.",
         }

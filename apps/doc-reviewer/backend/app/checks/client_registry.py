@@ -7,7 +7,7 @@ import os
 import re
 import sys
 import types
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -142,6 +142,8 @@ class _LoadedRuleBundle:
     standard_specs: Mapping[str, Mapping[str, Any]]
     operations: Mapping[str, ClientOperation[Any]]
     page_classifier: Callable[[Any, Any], None] | None
+    norm_detector: Callable[[Any], bool] | None = None
+    metadata_suggester: Callable[[Sequence[str]], Mapping[str, Any]] | None = None
 
     @property
     def default_enabled(self) -> bool:
@@ -274,6 +276,35 @@ def _exported_classifier(
     return classifier
 
 
+def _exported_norm_detector(
+    module: types.ModuleType | None,
+    description: str,
+) -> Callable[[Any], bool] | None:
+    if module is None:
+        return None
+    detector = getattr(module, "matches_document", None)
+    if not callable(detector):
+        raise ClientConfigurationError(
+            f"{description} must export callable matches_document"
+        )
+    return detector
+
+
+def _compose_norm_selector(
+    norm_bundles: tuple[_LoadedRuleBundle, ...],
+) -> tuple[Callable[[Any], str | None] | None, str | None]:
+    """Norm that claims a document (first detector to match), and the norm used when none does."""
+    detectors = [(bundle.code, bundle.norm_detector) for bundle in norm_bundles if bundle.norm_detector]
+    default_norm = next((bundle.code for bundle in norm_bundles if bundle.norm_detector is None), None)
+    if not detectors:
+        return None, default_norm
+
+    def select_norm(parsed: Any) -> str | None:
+        return next((code for code, detector in detectors if detector(parsed)), default_norm)
+
+    return select_norm, default_norm
+
+
 def _compose_page_classifiers(
     classifiers: list[Callable[[Any, Any], None]],
 ) -> Callable[[Any, Any], None] | None:
@@ -390,6 +421,10 @@ def _load_rule_bundle(root: Path, bundle_code: str) -> _LoadedRuleBundle:
         page_classifier=_exported_classifier(
             modules.get("page_classifier"), f"{description} page_classifier module"
         ),
+        norm_detector=_exported_norm_detector(
+            modules.get("norm_detector"), f"{description} norm_detector module"
+        ),
+        metadata_suggester=getattr(modules.get("norm_detector"), "suggest_metadata", None),
     )
 
 
@@ -518,6 +553,7 @@ def _build_client_bundle(
     if not catalogs:
         raise ClientConfigurationError("client bundle declares no catalog")
 
+    norm_selector, default_norm = _compose_norm_selector(norm_bundles)
     try:
         return ClientBundle(
             client_code=manifest.client_code,
@@ -532,6 +568,19 @@ def _build_client_bundle(
             operations=operations,
             standard_specs=standard_specs,
             page_classifier=_compose_page_classifiers(classifiers),
+            norm_codes=tuple(bundle.code for bundle in norm_bundles),
+            norm_selector=norm_selector,
+            default_norm=default_norm,
+            norm_page_classifiers={
+                bundle.code: bundle.page_classifier
+                for bundle in norm_bundles
+                if bundle.page_classifier is not None
+            },
+            norm_metadata_suggesters={
+                bundle.code: bundle.metadata_suggester
+                for bundle in norm_bundles
+                if bundle.metadata_suggester is not None
+            },
         )
     except (TypeError, ValueError) as exc:
         raise ClientConfigurationError(f"client bundle contract is invalid: {exc}") from exc

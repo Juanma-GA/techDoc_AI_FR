@@ -25,6 +25,7 @@ from app.core.compiled_rule_runtime import document_metadata
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf
 
 from .data_modules import (
+    DMC_RE,
     STATUS_CHANGED,
     STATUS_REVISED,
     STATUS_STATUS,
@@ -38,6 +39,7 @@ from .data_modules import (
     parse_loedm,
     revision_bars,
     same_issue_date,
+    unwrap_dmc,
 )
 
 _STRUCTURE_ATTR = "_s1000d_structure"
@@ -47,16 +49,21 @@ _NO_STATUS = "Colonne statut illisible dans la LIST OF EFFECTIVE DATA MODULES."
 _NO_REVISION_DATE = "Date de révision absente ou illisible dans le mapping du document."
 
 _RFU_RE = re.compile(r"(?i)\bRFU\b|reasons?\s+for\s+update")
+_HIGHLIGHTS_TITLE_RE = re.compile(r"(?m)^\s*HIGHLIGHTS\s*$")
 _FRONT_MATTER_PAGES = 3
 _SECTION_END_PAGES = 3
 
 _RECORD_OF_REVISIONS_RE = re.compile(
-    r"(?im)^\s*(?:RECORD\s+OF\s+REVISIONS|REVISION\s+RECORD)\s*$"
+    r"(?im)^\s*(?:RECORD\s+OF\s+REVISIONS|REVISION\s+RECORD|CHANGE\s+RECORD)\s*$"
 )
 _REVISION_NUMBER_RE = re.compile(
     r"(?i)\brevision\s*(?:no\.?|number|n\u00b0)?\s*:?\s*(?P<number>\d{1,3})\b"
 )
 _ISSUE_DATE_LABEL_RE = re.compile(r"(?i)\bissue\s+date\s*:?\s*(?P<date>[^\n]{4,30})")
+# Title block of the published CMP: "Issue No: 005" followed by the issue date on the next line.
+_ISSUE_BLOCK_RE = re.compile(
+    r"(?im)^[ \t]*Issue[ \t]+No\.?[ \t]*:?[ \t]*(?P<number>\d{1,3})[ \t]*\n[ \t]*(?P<date>[^\n]{4,30})$"
+)
 _COPYRIGHT_YEARS_RE = re.compile(
     r"(?i)\u00a9\s*(?P<start>\d{4})\s*-\s*(?P<end>\d{4})(?=\s+THALES\s+AVS\s+FRANCE)"
 )
@@ -102,9 +109,10 @@ _BREAKDOWN_HEADER = ("Nomenclature", "Part Number", "Amendment Status", "Equipme
 _BREAKDOWN_AMENDMENT_LETTERS = ("a", "b", "c", "d", "e", "f")
 _BREAKDOWN_WINDOW = 700
 
-_MAIN_PROCEDURE_RE = re.compile(r"(?im)^\s*Main\s+procedure\s*$")
+# The mainProcedure element prints as "Procedure" under a lettered heading, ahead of "Close up".
+_MAIN_PROCEDURE_RE = re.compile(r"(?im)^\s*(?:Main\s+procedure|Procedure)\s*$")
 _PROCEDURE_END_RE = re.compile(
-    r"(?im)^\s*(?:Requirements\s+after\s+job\s+completion|Preliminary\s+requirements)\s*$"
+    r"(?im)^\s*(?:Requirements\s+after\s+job\s+completion|Preliminary\s+requirements|Close[\s-]*up)\s*$"
 )
 _JOB_SETUP_RE = re.compile(r"(?im)^\s*Job\s+set[\s-]*up\s*$")
 _JOB_SETUP_END_RE = re.compile(
@@ -117,6 +125,7 @@ _PRELIMINARY_CONDITIONS_RE = re.compile(r"(?i)\bpreliminary\s+conditions?\b")
 _TOOLING_TABLE_RE = re.compile(
     r"(?is)\b(?:tool(?:ing)?|support\s+equipment)\b[^\n]{0,80}\b(?:qty|quantity)\b"
     r"|\b(?:additional|complementary|complement)\s+(?:tooling|tool)\s+information\b"
+    r"|\btools?\s+additional\s+information\b"
 )
 _DASH_BULLET_RE = re.compile(r"(?m)^[ \t]*[-\u2010-\u2015\u2212\u2022][ \t]+(?P<rest>\S[^\n]*)$")
 
@@ -124,12 +133,36 @@ _STORAGE_INTRO_RE = re.compile(
     r"(?i)During\s+storage\s+operations,\s+make\s+sure\s+that\s+the\s+environmental"
     r"\s+conditions\s+are\s+as\s+follows\s*:"
 )
+_STORAGE_TITLE_RE = re.compile(r"(?m)^\s*STORAGE\s*$")
 _STORAGE_TEMPERATURE_REFERENCE_RE = re.compile(
     r"(?i)Temperature\s*:\s*Refer\s+to\s+SPM[\s\S]{0,260}?Assemblies\.?"
 )
+_TEMPERATURE_LABEL_RE = re.compile(r"(?i)\bTemperature\s*:")
 _TEMPERATURE_MENTION_RE = re.compile(
     r"(?i)\btemperatures?\b|\bdeg\.?\s*[CF]\b|\u00b0\s*[CF]\b"
 )
+_STORAGE_TRANSPORT_DM = "F9111CMON-A-20-02-00-00A-812A-A"
+_STORAGE_TRANSPORT_TITLE_RE = re.compile(r"(?i)Storage\s+and\s+Transportation\s+of\s+Assemblies")
+_HUMIDITY_RE = re.compile(r"(?i)\bRelative\s+humidity\b")
+_HUMIDITY_DM = "F9111CMON-A-20-02-00-00A-800A-A"
+# Looser than DMC_RE on purpose: an outdated reference such as ...-02000-800A-C is not a valid DMC.
+_STORAGE_DM_REF_RE = re.compile(r"\bF9111CMON-A-20-02-00-[A-Z0-9]+-800A-[A-Z0-9]\b")
+_REFERENCE_WINDOW = 450
+_MANUAL_REFERENCE = {
+    "airbus": re.compile(r"(?i)\bSPM\b|Standard\s+Practices\s+Manual"),
+    "boeing": re.compile(r"(?i)\bSOPM\b|Standard\s+Overhaul\s+Practices\s+Manual"),
+}
+_MANUAL_LABEL = {"airbus": "SPM (Standard Practices Manual)", "boeing": "SOPM (Standard Overhaul Practices Manual)"}
+_TABTOP_RE = re.compile(
+    r"(?i)\bFirst\s+verification\s*:?\s*tabtop\b"
+    r"|\bshop\s+verification\s+will\s+be\s+done\s+at\s+the\s+first\s+repair\b"
+)
+_OTHER_VERIFICATION_RE = re.compile(
+    r"(?i)\bFirst\s+verification\s*:\s*(?!tabtop\b)\w+[^\n]*"
+    r"|\bShop\s+check\s+which\s+is\s+done\s+by\s+(?!tab(?:le)?[\s-]*top\b)\w+[^\n]*"
+)
+_SHOP_VERIFICATION_TITLE_RE = re.compile(r"(?im)^\s*(?:\d+\.\s*)?Shop\s+Verification\s*$")
+_TABTOP_SENTENCE = "The shop verification will be done at the first repair of the equipment."
 _LOCTITE_RE = re.compile(r"(?i)\bLoctite\s*(?:\u00ae\s*)?(?P<grade>221|222)\b")
 _SCREW_SIZE_RE = re.compile(r"\bM(?P<size>\d{1,2}(?:[.,]\d)?)\b")
 _LOCTITE_SCREW_LIMIT = 5.0
@@ -137,7 +170,7 @@ _LOCTITE_SCREW_LIMIT = 5.0
 _PROCEDURE_HEADING_RE = re.compile(
     r"(?im)^\s*(?:Preliminary\s+requirements|Main\s+procedure|Job\s+set[\s-]*up|Support\s+equipment)\b"
 )
-_FIGURE_RE = re.compile(r"(?im)^\s*(?:Figure|Fig\.)\s+\S+")
+_FIGURE_RE = re.compile(r"(?im)^\s*(?:(?:Figure|Fig\.|IPD\s+figure)\s+\S+|ICN-\S+)")
 
 _NUMBER_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
 _LARGE_NUMBER_WORDS = {
@@ -165,7 +198,7 @@ _NUMBER_CONTEXT_WORDS = frozenset(
     "qty quantity ref refer index sheet view detail zone area tool ata dm version vol "
     "volume part pn level type class grade series model line row column key position pos "
     "para paragraph ch sb pe fee sil icn code group kit stage phase pin slot channel port "
-    "terminal connector wire frame plate cavity circuit plug jack test".split()
+    "terminal connector wire frame plate cavity circuit plug jack test size".split()
 )
 _UNIT_WORDS = frozenset(
     "mm cm m km in inch inches ft bar bars psi pa kpa mpa n nm v a ma w hz khz mhz deg "
@@ -245,6 +278,16 @@ def _fold(value: str) -> str:
     return " ".join(re.sub(r"[^0-9a-z]+", " ", normalized).split())
 
 
+_ACRONYM_FOLD_RE = re.compile(
+    r"\b(?:service bulletins?|service information letters?|sbs?|sils?|s)\b"
+)
+
+
+def _fold_without_acronyms(value: str) -> str:
+    """Fold, then drop the SB/SIL acronyms that the PDF prints as separate links, out of sentence order."""
+    return " ".join(_ACRONYM_FOLD_RE.sub(" ", _fold(value)).split())
+
+
 def _structure(doc: _Document) -> _Structure:
     cached = getattr(doc.parsed, _STRUCTURE_ATTR, None)
     if cached is None:
@@ -284,7 +327,12 @@ def _loedm_dates(scope: str) -> Control:
             return _inconclusive(expected, _NO_REVISION_DATE)
         if scope == "modified" and not any(row.status for row in structure.rows):
             return _inconclusive(expected, _NO_STATUS)
-        rows = [row for row in structure.rows if scope == "all" or row.modified]
+        # Generic DMs are shared between publications and keep their own issue date.
+        rows = [
+            row
+            for row in structure.rows
+            if (row.modified if scope == "modified" else not row.generic)
+        ]
         readable = [row for row in rows if row.issue_date is not None]
         if rows and not readable:
             return _inconclusive(expected, "Dates des DM illisibles dans la LOEDM.")
@@ -370,6 +418,18 @@ def _bar_context(
     return structure, {page.page: page for page in doc.pages}
 
 
+def _highlights_dmcs(doc: _Document) -> set[str] | None:
+    """DMCs listed on the HIGHLIGHTS pages, where the reasons for update (RFU) are printed."""
+    pages = [
+        page
+        for page in doc.pages
+        if _HIGHLIGHTS_TITLE_RE.search(page.text) and _RFU_RE.search(page.text)
+    ]
+    if not pages:
+        return None
+    return {code for page in pages for code in DMC_RE.findall(unwrap_dmc(page.text))}
+
+
 def _changed_dm_bars(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
     expected = "Barres de révision et RFU pour chaque DM au statut C"
     context = _bar_context(doc, expected)
@@ -378,7 +438,8 @@ def _changed_dm_bars(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome
     structure, pages = context
     dm_pages = _dm_pages(structure)
     changed = [row for row in structure.rows if row.status == STATUS_CHANGED]
-    rfu_printed = any(_RFU_RE.search(page.text) for page in doc.pages)
+    highlights = _highlights_dmcs(doc)
+    rfu_printed = highlights is not None or any(_RFU_RE.search(page.text) for page in doc.pages)
     outcome = _Outcome(expected=expected)
     mapped = 0
     for row in changed:
@@ -394,11 +455,19 @@ def _changed_dm_bars(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome
                     proposed="Barre de révision",
                 )
             )
-        elif rfu_printed and not any(_RFU_RE.search(pages[number].text) for number in numbers):
+        if not rfu_printed:
+            continue
+        has_rfu = (
+            row.dmc in highlights
+            if highlights is not None
+            else any(_RFU_RE.search(pages[number].text) for number in numbers)
+        )
+        if not has_rfu:
+            where = "dans les HIGHLIGHTS" if highlights is not None else "dans le DM"
             outcome.findings.append(
                 _missing(
                     numbers[0],
-                    f"DM {row.dmc} au statut C sans RFU (reason for update).",
+                    f"DM {row.dmc} au statut C sans RFU (reason for update) {where}.",
                     proposed="RFU",
                 )
             )
@@ -517,6 +586,28 @@ def _revision_identification(doc: _Document, _parameters: Mapping[str, Any]) -> 
     outcome = _Outcome(expected=f"Révision {number:02d} — {raw_date}")
     seen = 0
     for page in _front_pages(doc):
+        for match in _ISSUE_BLOCK_RE.finditer(page.text):
+            seen += 1
+            if int(match.group("number")) != number:
+                outcome.findings.append(
+                    _fail(
+                        page.page,
+                        match.group(0).splitlines()[0].strip(),
+                        f"Numéro d'issue {match.group('number')} différent du mapping ({number:02d}).",
+                        proposed=f"{number:03d}",
+                    )
+                )
+            found = parse_issue_date(match.group("date"))
+            if found is not None and not same_issue_date(found, revision):
+                outcome.findings.append(
+                    _fail(
+                        page.page,
+                        match.group("date").strip(),
+                        f"Issue date {match.group('date').strip()} différente de la date de "
+                        f"révision du mapping ({raw_date}).",
+                        proposed=raw_date,
+                    )
+                )
         for match in _REVISION_NUMBER_RE.finditer(page.text):
             seen += 1
             if int(match.group("number")) != number:
@@ -549,7 +640,7 @@ def _revision_identification(doc: _Document, _parameters: Mapping[str, Any]) -> 
 
 
 def _revision_record_row(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
-    expected = "Ligne du Record of revisions avec le numéro de révision et l'issue date"
+    expected = "Ligne du Record of revisions (Change record) avec le numéro de révision et l'issue date"
     number = _revision_number(doc.meta.get("meta_revision_number"))
     revision, raw_date = _revision_date(doc)
     if number is None or revision is None:
@@ -563,7 +654,7 @@ def _revision_record_row(doc: _Document, _parameters: Mapping[str, Any]) -> _Out
         None,
     )
     if heading is None:
-        return _inconclusive(expected, "RECORD OF REVISIONS introuvable dans le PDF.")
+        return _inconclusive(expected, "RECORD OF REVISIONS / CHANGE RECORD introuvable dans le PDF.")
     index, first = heading
     section = doc.pages[index : index + 2]
     for page in section:
@@ -633,11 +724,11 @@ def _sb_record_template(doc: _Document, _parameters: Mapping[str, Any]) -> _Outc
     if start is None:
         return _inconclusive(expected, "DM « Service bulletin record » introuvable dans le PDF.")
     section = doc.pages[start : start + _SECTION_END_PAGES]
-    folded = f" {_fold(' '.join(page.text for page in section))} "
+    folded = f" {_fold_without_acronyms(' '.join(page.text for page in section))} "
     missing = [
         item
         for item in (*_SB_RECORD_TEMPLATE, *_SB_RECORD_TABLE_HEADER)
-        if f" {_fold(item)} " not in folded
+        if f" {_fold_without_acronyms(item)} " not in folded
     ]
     outcome = _Outcome(expected=expected)
     if missing:
@@ -846,9 +937,14 @@ def _breakdown_table(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome
 def _storage_other_temperature(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
     outcome = _Outcome(expected="Aucune autre mention de température que le renvoi de la NOTE STORAGE")
     for page in doc.pages:
-        if not _STORAGE_INTRO_RE.search(page.text):
+        intro = _STORAGE_INTRO_RE.search(page.text)
+        if intro is None:
             continue
         masked = _STORAGE_TEMPERATURE_REFERENCE_RE.sub(lambda m: " " * len(m.group(0)), page.text)
+        # The renderer splits the NOTE bullet from its links: the label alone is the reference.
+        label = _TEMPERATURE_LABEL_RE.search(masked, intro.end())
+        if label is not None:
+            masked = masked[: label.start()] + " " * len(label.group(0)) + masked[label.end() :]
         for match in _TEMPERATURE_MENTION_RE.finditer(masked):
             outcome.findings.append(
                 _fail(
@@ -862,12 +958,135 @@ def _storage_other_temperature(doc: _Document, _parameters: Mapping[str, Any]) -
     return outcome
 
 
+def _manufacturer(doc: _Document) -> str:
+    return "boeing" if doc.meta.get("meta_manufacturer", "").strip().casefold() == "boeing" else "airbus"
+
+
+def _humidity_reference(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
+    manufacturer = _manufacturer(doc)
+    outcome = _Outcome(
+        expected=f"Relative humidity : renvoi à {_MANUAL_LABEL[manufacturer]} et au DM {_HUMIDITY_DM}"
+    )
+    for page in doc.pages:
+        text = unwrap_dmc(page.text)
+        for match in _HUMIDITY_RE.finditer(text):
+            window = text[match.end() : match.end() + _REFERENCE_WINDOW]
+            reference = _STORAGE_DM_REF_RE.search(window)
+            if reference is None:
+                outcome.findings.append(
+                    _fail(
+                        page.page,
+                        _line_at(text, match.start()),
+                        f"Relative humidity : renvoi au DM {_HUMIDITY_DM} absent.",
+                        proposed=_HUMIDITY_DM,
+                    )
+                )
+            elif reference.group(0) != _HUMIDITY_DM:
+                outcome.findings.append(
+                    _fail(
+                        page.page,
+                        reference.group(0),
+                        f"Relative humidity : renvoi {reference.group(0)} obsolète, "
+                        f"{_HUMIDITY_DM} attendu.",
+                        proposed=_HUMIDITY_DM,
+                    )
+                )
+            if not _MANUAL_REFERENCE[manufacturer].search(window):
+                outcome.findings.append(
+                    _fail(
+                        page.page,
+                        _line_at(text, match.start()),
+                        f"Relative humidity : renvoi à {_MANUAL_LABEL[manufacturer]} absent "
+                        f"(constructeur {manufacturer.capitalize()}).",
+                        proposed=_MANUAL_LABEL[manufacturer],
+                    )
+                )
+    return outcome
+
+
+def _storage_temperature_note(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
+    manufacturer = _manufacturer(doc)
+    expected = (
+        "NOTE STORAGE : Temperature renvoyant à "
+        f"{_MANUAL_LABEL[manufacturer]} et au DM {_STORAGE_TRANSPORT_DM}"
+    )
+    notes = [(page, _STORAGE_INTRO_RE.search(page.text)) for page in doc.pages]
+    notes = [(page, intro) for page, intro in notes if intro is not None]
+    if not notes:
+        storage = [page for page in doc.pages if _STORAGE_TITLE_RE.search(page.text)]
+        if not storage:
+            return _inconclusive(expected, "Section STORAGE introuvable dans le PDF.")
+        outcome = _Outcome(expected=expected)
+        outcome.findings.append(
+            _missing(
+                storage[-1].page,
+                "NOTE de renvoi au DM des conditions de température absente du STORAGE.",
+                proposed=f"During storage operations, make sure that the environmental conditions "
+                f"are as follows: Temperature: Refer to {_MANUAL_LABEL[manufacturer]}, "
+                f"Refer to {_STORAGE_TRANSPORT_DM} - Storage and Transportation of Assemblies.",
+            )
+        )
+        return outcome
+    outcome = _Outcome(expected=expected)
+    for page, intro in notes:
+        # The links of the NOTE are printed after its text, in no fixed order.
+        window = unwrap_dmc(page.text[intro.start() :])
+        checks = (
+            ("Temperature:", _TEMPERATURE_LABEL_RE.search(window) is not None),
+            (_MANUAL_LABEL[manufacturer], _MANUAL_REFERENCE[manufacturer].search(window) is not None),
+            (_STORAGE_TRANSPORT_DM, _STORAGE_TRANSPORT_DM in window),
+            (
+                "Storage and Transportation of Assemblies",
+                _STORAGE_TRANSPORT_TITLE_RE.search(window) is not None,
+            ),
+        )
+        missing = [label for label, found in checks if not found]
+        if missing:
+            outcome.findings.append(
+                _fail(
+                    page.page,
+                    _line_at(page.text, intro.start()),
+                    "NOTE STORAGE non conforme, élément(s) manquant(s) : " + " ; ".join(missing) + ".",
+                    proposed=missing[0],
+                )
+            )
+    return outcome
+
+
+def _first_verification(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
+    expected = "First verification : TABTOP"
+    if any(_TABTOP_RE.search(page.text) for page in doc.pages):
+        return _Outcome(expected=expected)
+    outcome = _Outcome(expected=expected)
+    for page in doc.pages:
+        for match in _OTHER_VERIFICATION_RE.finditer(page.text):
+            outcome.findings.append(
+                _fail(
+                    page.page,
+                    match.group(0).strip(),
+                    "First verification différente de TABTOP.",
+                    proposed=_TABTOP_SENTENCE,
+                )
+            )
+    if outcome.findings:
+        return outcome
+    heading = next(
+        (page for page in doc.pages if _SHOP_VERIFICATION_TITLE_RE.search(page.text)), doc.pages[0]
+    )
+    outcome.findings.append(
+        _missing(heading.page, "First verification TABTOP absente.", proposed=_TABTOP_SENTENCE)
+    )
+    return outcome
+
+
 def _screw_sizes(window: str) -> list[float]:
     return [float(match.group("size").replace(",", ".")) for match in _SCREW_SIZE_RE.finditer(window)]
 
 
 def _loctite_grade(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
-    outcome = _Outcome(expected="Loctite 221 pour vis < M5, Loctite 222 pour vis > M5")
+    expected = "Loctite 221 pour vis < M5, Loctite 222 pour vis > M5"
+    outcome = _Outcome(expected=expected)
+    without_size = 0
     for page in doc.pages:
         lines = page.text.splitlines()
         for position, line in enumerate(lines):
@@ -875,6 +1094,9 @@ def _loctite_grade(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
             if match is None:
                 continue
             sizes = _screw_sizes(" ".join(lines[max(position - 1, 0) : position + 2]))
+            if not sizes:
+                without_size += 1
+                continue
             small = [size for size in sizes if size < _LOCTITE_SCREW_LIMIT]
             large = [size for size in sizes if size > _LOCTITE_SCREW_LIMIT]
             grade = match.group("grade")
@@ -894,6 +1116,12 @@ def _loctite_grade(doc: _Document, _parameters: Mapping[str, Any]) -> _Outcome:
                     proposed=_LOCTITE_RE.sub(lambda m: m.group(0).replace(grade, right), line.strip(), 1),
                 )
             )
+    if not outcome.findings and without_size:
+        return _inconclusive(
+            expected,
+            f"{without_size} mention(s) Loctite sans diamètre de vis dans le texte : "
+            "la désignation des vis se trouve dans l'IPL, à vérifier.",
+        )
     return outcome
 
 
@@ -963,11 +1191,14 @@ _FRONT_MATTER_CONTROLS: dict[str, Control] = {
     "abbreviation_acronyms": _abbreviation_acronyms,
 }
 _CONTENT_CONTROLS: dict[str, Control] = {
+    "first_verification": _first_verification,
     "numbers_in_words": _numbers_in_words,
     "procedure_list_markers": _procedure_list_markers,
     "job_setup_preliminary_conditions": _job_setup_preliminary_conditions,
     "job_setup_tooling_table": _job_setup_tooling_table,
     "breakdown_table": _breakdown_table,
+    "humidity_reference": _humidity_reference,
+    "storage_temperature_note": _storage_temperature_note,
     "storage_other_temperature": _storage_other_temperature,
     "loctite_grade": _loctite_grade,
     "broken_links_procedure": _links_control(ipl=False),

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -189,6 +189,20 @@ class ClientBundle(Generic[ContextT]):
     operations: Mapping[str, ClientOperation[ContextT]]
     standard_specs: Mapping[str, Mapping[str, Any]]
     page_classifier: Callable[[Any, Any], None] | None = None
+    # Norms are mutually exclusive rule sets (ATA100, S1000D...): `norm_selector` returns the code
+    # of the one that matches a parsed document, `default_norm` applies when none claims it.
+    norm_codes: tuple[str, ...] = ()
+    norm_selector: Callable[[Any], str | None] | None = None
+    default_norm: str | None = None
+    # Per norm: its own page classifier (page revision status) and its metadata suggestions.
+    norm_page_classifiers: Mapping[str, Callable[[Any, Any], None]] = field(default_factory=dict)
+    norm_metadata_suggesters: Mapping[str, Callable[[Sequence[str]], Mapping[str, Any]]] = field(
+        default_factory=dict
+    )
+
+    def uses_page_classifier(self, norm: str | None) -> bool:
+        """A norm without a page classifier of its own does not track modified pages."""
+        return not self.norm_page_classifiers or norm is None or norm in self.norm_page_classifiers
 
     def __post_init__(self) -> None:
         rule_codes = [definition.code for definition in self.rules]

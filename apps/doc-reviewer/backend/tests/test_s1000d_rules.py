@@ -49,6 +49,10 @@ def _pdf(*texts: str, pages: list[ParsedPage] | None = None) -> ParsedPdf:
 
 
 def _run(code: str, pdf: ParsedPdf, **meta: Any) -> tuple[str, list[Any]]:
+    # The rule's own gating condition (update type, manufacturer) is satisfied unless a test overrides it.
+    condition = _DEFINITIONS[code].compiled_rule.only_if
+    if condition is not None and condition.equals is not None:
+        meta.setdefault(condition.field, condition.equals)
     document = SimpleNamespace(client_metadata={}, **meta)
     results, suggestions = execute_pdf_rules(
         pdf,
@@ -96,11 +100,9 @@ def test_catalog_contains_the_32_automatable_excel_rules_with_translations() -> 
     assert {definition.bundle_label for definition in _DEFINITIONS.values()} == {"S1000D"}
 
 
-def test_s1000d_catalog_starts_disabled_while_ata100_stays_enabled() -> None:
+def test_s1000d_catalog_is_enabled_by_default_like_ata100() -> None:
     specs = _BUNDLE.standard_specs
-    assert set(specs["THALES-S1000D"]["default_disabled_rule_codes_by_version"]["v1"]) == set(
-        _DEFINITIONS
-    )
+    assert "default_disabled_rule_codes_by_version" not in specs["THALES-S1000D"]
     assert "default_disabled_rule_codes_by_version" not in specs["THALES-CUSTOM"]
     assert {rule.bundle_code for rule in _BUNDLE.rules} == {"ata100", "s1000d", "ste100_rules"}
 
@@ -498,8 +500,10 @@ def test_enabled_s1000d_rules_run_through_the_engine_and_disabled_ones_do_not() 
         assert version is not None
         original = version.disabled_rule_codes
         try:
-            assert set(json.loads(original)) == set(_DEFINITIONS)
-            assert load_compiled_rules(session, [version], checklist_enabled=False) == []
+            assert set(json.loads(original)) == set()
+            assert {rule.id for rule in load_compiled_rules(session, [version], checklist_enabled=False)} == set(
+                _DEFINITIONS
+            )
 
             version.disabled_rule_codes = json.dumps(
                 sorted(set(_DEFINITIONS) - {"S1000D_SHOP_VERIFICATION"})
@@ -508,9 +512,19 @@ def test_enabled_s1000d_rules_run_through_the_engine_and_disabled_ones_do_not() 
             loaded = load_compiled_rules(session, [version], checklist_enabled=False)
             assert [rule.id for rule in loaded] == ["S1000D_SHOP_VERIFICATION"]
 
-            suggestions = run_all(_pdf("Testing and fault isolation only."), _Doc(), session, [version])
-            assert {item.rule_code for item in suggestions} == {"S1000D_SHOP_VERIFICATION"}
-            assert not run_all(_pdf("Shop Verification: done."), _Doc(), session, [version])
+            def s1000d_pdf(text: str) -> ParsedPdf:
+                return _pdf(
+                    pages=[ParsedPage(page=1, text=_LOEDM), ParsedPage(page=2, text=text)]
+                )
+
+            def s1000d_codes(pdf: ParsedPdf) -> set[str]:
+                suggestions = run_all(pdf, _Doc(), session, [version])
+                return {item.rule_code for item in suggestions if item.rule_code.startswith("S1000D_")}
+
+            assert s1000d_codes(s1000d_pdf("Testing and fault isolation only.")) == {"S1000D_SHOP_VERIFICATION"}
+            assert not s1000d_codes(s1000d_pdf("Shop Verification: done."))
+            # Not an S1000D publication (no LOEDM): the S1000D rules do not apply.
+            assert not s1000d_codes(_pdf("Testing and fault isolation only."))
         finally:
             version.disabled_rule_codes = original
             session.commit()
@@ -541,3 +555,431 @@ def test_analysis_follows_catalogs_published_after_the_document_upload() -> None
         assert analysis_standard_version_ids(request, db, [str(mat10000.id)], None) == [
             str(mat10000.id)
         ]
+
+
+# ------------------------------------------- published layout (Thales CMP, S1000D 4.2)
+
+_DMC_CONFIGURATION = "F9111FCTN-A-22-15-10-00A-020A-D"
+_DMC_DISASSEMBLY = "F9111FCTN-A-22-15-10-00A-500A-A"
+_PAGE_HEADER = "COMPONENT MAINTENANCE PUBLICATION\nF9111FCTN-F9111-C0044-00\nC13088 Series\n"
+
+# The title precedes the DMC, which the renderer wraps after the model identification code.
+_REAL_LOEDM = (
+    _PAGE_HEADER
+    + "LIST OF EFFECTIVE DATA MODULES\n"
+    "The LOEDM reflects the status of the data modules used within this publication.\n"
+    "Data module title\nData module code\nIssue \nnumber\nIssue Date\nStatus\n"
+    "FLIGHT CONTROL MODULE (FCM) \n- Configuration\nF9111FCTN-\nA-22-15-10-00A-020A-D\n002\n2026-01-29\nC\n"
+    "Generic - Copyright\nF9111GENE-\nA-00-00-00-00A-021A-D\n003\n2026-01-14\n"
+    "FLIGHT CONTROL MODULE (FCM) \n- Disassembly\nF9111FCTN-\nA-22-15-10-00A-500A-A\n002\n2026-01-29\nC\n"
+    "FLIGHT CONTROL MODULE (FCM) \n- IPD Figure 01\nF9111FCTN-\nA-22-15-10-010-941A-D\n002\n2026-01-29\n"
+    "22-15-10\nLIST OF EFFECTIVE DATA MODULES\n2026-01-29\nPage LOEDM-1\n"
+)
+
+
+def _filled_bar(x0: float, x1: float, top: float, bottom: float) -> list[PdfVectorPrimitive]:
+    """A revision bar as exported by the publishing chain: a black-filled rectangle split in four lines."""
+    black = (0.0, 0.0, 0.0)
+
+    def side(bbox: tuple[float, float, float, float]) -> PdfVectorPrimitive:
+        return PdfVectorPrimitive(kind="line", bbox=bbox, color=None, fill=black, width=0.0)
+
+    return [
+        side((x0, top, x1, top)),
+        side((x1, top, x1, bottom)),
+        side((x0, bottom, x1, bottom)),
+        side((x0, top, x0, bottom)),
+    ]
+
+
+def test_loedm_is_read_with_the_title_before_a_wrapped_dmc() -> None:
+    from app.checks.thales_rules.s1000d.data_modules import parse_loedm
+
+    rows, pages = parse_loedm([ParsedPage(page=1, text=_REAL_LOEDM)])
+    assert pages == [1]
+    assert [(row.dmc, row.status, row.generic) for row in rows] == [
+        (_DMC_CONFIGURATION, "C", False),
+        ("F9111GENE-A-00-00-00-00A-021A-D", None, True),
+        (_DMC_DISASSEMBLY, "C", False),
+        ("F9111FCTN-A-22-15-10-010-941A-D", None, False),
+    ]
+    assert [str(row.issue_date) for row in rows] == [
+        "2026-01-29",
+        "2026-01-14",
+        "2026-01-29",
+        "2026-01-29",
+    ]
+    assert rows[0].title == "FLIGHT CONTROL MODULE (FCM) - Configuration"
+
+
+def test_information_codes_may_contain_letters() -> None:
+    from app.checks.thales_rules.s1000d.data_modules import DMC_RE
+
+    # 00T is the information code of the change record.
+    assert DMC_RE.fullmatch("F9111FCTN-A-22-15-10-00A-00TA-D")
+    assert DMC_RE.fullmatch("F9111FCTN-A-22-15-10-010-941A-D")
+
+
+def test_month_day_year_dates_are_understood() -> None:
+    from app.checks.thales_rules.s1000d.data_modules import IssueDate, parse_issue_date
+
+    assert parse_issue_date("DEC 15, 2026") == IssueDate(2026, 12, 15)
+    assert parse_issue_date("DEC 15/26") == IssueDate(2026, 12, 15)
+
+
+def test_pages_are_mapped_from_dm_start_and_end_markers() -> None:
+    from app.checks.thales_rules.s1000d.data_modules import dm_page_map, parse_loedm
+
+    highlights = (
+        _PAGE_HEADER
+        + "HIGHLIGHTS\nThe listed changes are introduced in issue 005.\n"
+        "Data module/Technical publication\nReason for update\nPage number\n"
+        f"{_DMC_CONFIGURATION}\nMigration ATA 2200 en S1000D 4.2\nCONF-1\n"
+    )
+    pages = [
+        ParsedPage(page=1, text=_REAL_LOEDM),
+        ParsedPage(page=2, text=highlights),
+        ParsedPage(page=3, text=_PAGE_HEADER + f"Configuration\n{_DMC_CONFIGURATION}\n1. Product configuration"),
+        ParsedPage(page=4, text=f"More text\n {_DMC_CONFIGURATION}\nEnd of\n22-15-10\nCONFIGURATION"),
+        ParsedPage(page=5, text=_PAGE_HEADER + "Servicing\nSERVC-1 Specific support equipment"),
+        ParsedPage(page=6, text=_PAGE_HEADER + f"{_DMC_DISASSEMBLY}\n1. Disassembly"),
+    ]
+    rows, loedm_pages = parse_loedm(pages)
+    assert dm_page_map(pages, rows, loedm_pages) == {
+        3: _DMC_CONFIGURATION,
+        4: _DMC_CONFIGURATION,
+        6: _DMC_DISASSEMBLY,
+    }
+
+
+def test_revision_bar_drawn_as_a_filled_rectangle_is_detected_but_not_a_table_border() -> None:
+    from app.checks.thales_rules.s1000d.data_modules import revision_bars
+
+    def border(x: float) -> PdfVectorPrimitive:
+        return PdfVectorPrimitive(
+            kind="line", bbox=(x, 460.0, x, 500.0), color=None, fill=(0.0, 0.0, 0.0), width=0.0
+        )
+
+    def page(primitives: list[PdfVectorPrimitive]) -> ParsedPage:
+        return ParsedPage(
+            page=1,
+            text="x",
+            spans=[Span(text="Body", bbox=(70.0, 300.0, 200.0, 312.0), page=1, font="Arial", size=10.0)],
+            page_width=600.0,
+            page_height=800.0,
+            vector_primitives=primitives,
+        )
+
+    bars = revision_bars(page([*_filled_bar(38.8, 42.5, 300.0, 312.0), border(51.0), border(51.8)]))
+    assert len(bars) == 1
+    assert 40.0 < bars[0].x < 41.5
+    assert not revision_bars(page([border(51.0), border(51.8)]))
+
+
+def test_rfu_of_a_changed_dm_is_read_from_the_highlights_page() -> None:
+    highlights = (
+        _PAGE_HEADER
+        + "HIGHLIGHTS\nThe listed changes are introduced in issue 005.\n"
+        "Data module/Technical publication\nReason for update\nPage number\n"
+        f"{_DMC_CONFIGURATION}\nMigration ATA 2200 en S1000D 4.2\nCONF-1\n"
+    )
+    pdf = _pdf(
+        pages=[
+            ParsedPage(page=1, text=_REAL_LOEDM),
+            ParsedPage(page=2, text=highlights),
+            _bar_page(3, f"{_DMC_CONFIGURATION}\nConfiguration", bar=True),
+            _bar_page(4, f"{_DMC_DISASSEMBLY}\nDisassembly", bar=True),
+        ]
+    )
+    status, suggestions = _run("S1000D_CHANGED_DM_REVISION_BARS", pdf)
+    assert status == "FAIL"
+    assert [item.page for item in suggestions] == [4]
+
+
+def test_published_title_block_is_checked_against_the_mapping() -> None:
+    cover = "Manufacturer Code: F9111\nIssue No: 005\n2026-01-29\nPage TP-1"
+    meta = {"meta_revision_date": "JAN 29/26", "meta_revision_number": "005"}
+    assert _run("S1000D_MIGRATION_REVISION_ISSUE", _pdf(cover), **meta)[0] == "PASS"
+    outdated = cover.replace("005", "004").replace("2026-01-29", "2026-01-14")
+    status, suggestions = _run("S1000D_MIGRATION_REVISION_ISSUE", _pdf(outdated), **meta)
+    assert status == "FAIL"
+    assert [item.original for item in suggestions] == ["Issue No: 004", "2026-01-14"]
+
+
+def test_change_record_is_the_record_of_revisions_of_the_published_layout() -> None:
+    change = "Change record\n1. List of revisions\nTable\nIssue Number\nIssue Date\n005\nDEC 15, 2026\n"
+    assert _run("S1000D_MCO_REVISION_ROW", _pdf("cover", change), meta_revision_date="DEC 15/26", meta_revision_number="005")[0] == "PASS"
+    assert _run("S1000D_MCO_REVISION_ROW", _pdf("cover", change), meta_revision_date="JAN 29/26", meta_revision_number="005")[0] == "FAIL"
+
+
+def test_migration_date_rule_leaves_generic_dms_alone() -> None:
+    pdf = _pdf(_REAL_LOEDM)
+    assert _run("S1000D_MIGRATION_DM_DATES", pdf, meta_revision_date="JAN 29/26")[0] == "PASS"
+    status, suggestions = _run("S1000D_MIGRATION_DM_DATES", pdf, meta_revision_date="SEP 22/26")
+    assert status == "FAIL"
+    assert [item.original for item in suggestions] == [
+        _DMC_CONFIGURATION,
+        _DMC_DISASSEMBLY,
+        "F9111FCTN-A-22-15-10-010-941A-D",
+    ]
+    assert _run("S1000D_MIGRATION_LOEDM_STATUS", pdf)[0] == "FAIL"  # the IPD figure has no status
+
+
+def test_procedure_heading_of_the_published_layout() -> None:
+    good = "A.\nJob description\n- Cleaning of the unit\nC.\nProcedure\n(1) Do it.\n(a) Loosen.\nD.\nClose up\n- Outside\n"
+    bad = "C.\nProcedure\n(1) Remove the cover.\n- Loosen the screws.\nD.\nClose-up\nNot applicable\n"
+    assert _run("S1000D_PROCEDURE_LIST_STYLE", _pdf(good))[0] == "PASS"
+    status, suggestions = _run("S1000D_PROCEDURE_LIST_STYLE", _pdf(bad))
+    assert status == "FAIL"
+    assert [item.proposed for item in suggestions] == ["(a) Loosen the screws."]
+
+
+def test_size_designations_are_not_numbers_to_spell_out() -> None:
+    assert _run("S1000D_NUMBERS_IN_WORDS", _pdf("The ARINC 600 Size 2 connector."))[0] == "PASS"
+    assert _run("S1000D_NUMBERS_IN_WORDS", _pdf("(b) Loosen and remove the ten screws"))[0] == "FAIL"
+
+
+def test_tools_additional_information_is_a_tooling_table() -> None:
+    with_table = "B.\nJob Set-up\n(1) Tools additional information\nTable\nName\nC.\nProcedure\n"
+    assert _run("S1000D_JOB_SETUP_TOOLING_TABLE", _pdf(with_table))[0] == "PASS"
+    assert _run("S1000D_JOB_SETUP_TOOLING_TABLE", _pdf(with_table.replace("Tools additional information", "Tools")))[0] == "INCONCLUSIVE"
+
+
+def test_not_specific_table_cell_must_be_followed_by_the_local_mfr() -> None:
+    good = "Ammeter\nNot specific\nCommercially \navailable\nBNG bench\nBS1-1-1\nF9111\nTool (Ammeter (Not specific))\n"
+    bad = "Voltmeter\nNot specific\nF9111\n1\n"
+    assert _run("S1000D_SUPPORT_EQUIPMENT_LOCAL_MNF", _pdf(good))[0] == "PASS"
+    assert _run("S1000D_SUPPORT_EQUIPMENT_LOCAL_MNF", _pdf(bad))[0] == "FAIL"
+
+
+def test_first_verification_is_tabtop_in_the_published_rendering() -> None:
+    outdated = "(1) Testing and Fault Isolation: Shop check which is done by performance (OCT 30/2005).\n"
+    updated = "The shop verification will be done at the first repair of the equipment.\n"
+    assert _run("S1000D_QA_FIRST_VERIFICATION", _pdf(updated))[0] == "PASS"
+    status, suggestions = _run("S1000D_QA_FIRST_VERIFICATION", _pdf(outdated))
+    assert status == "FAIL"
+    assert suggestions[0].original.startswith("Shop check which is done by performance")
+    assert _run("S1000D_QA_FIRST_VERIFICATION", _pdf("8. Shop Verification\nNothing"))[0] == "FAIL"
+
+
+def test_copyright_footer_of_the_published_layout() -> None:
+    footer = (
+        "\u00a92006-2026 THALES AVS FRANCE SAS This document and any data included are the property of "
+        "THALES AVS FRANCE SAS. They \ncannot be reproduced, disclosed or used without the company's "
+        "prior written approval."
+    )
+    meta = {"meta_revision_date": "JAN 29/26", "meta_first_issue_date": "JAN 2006"}
+    assert _run("S1000D_DATA_RESTRICTION_COPYRIGHT", _pdf(footer), **meta)[0] == "PASS"
+    assert _run("S1000D_DATA_RESTRICTION_COPYRIGHT", _pdf(footer.replace("2026", "2024", 1)), **meta)[0] == "FAIL"
+
+
+_PUBLISHED_STORAGE = (
+    "B.\nJob set-up\n(1) Preliminary conditions\nNOTE\n"
+    "During storage operations, make sure that the environmental conditions are as \nfollows:\n"
+    "- Pressure: No specific environmental level other than the ambient pressure \nlevel is necessary.\n"
+    "- Relative humidity: \n \n Storage - \nGeneral procedure.\n"
+    "Refer to SPM 20-02-00 - STANDARD PRACTICES \nMANUAL (SPM) Refer to F9111CMON-A-20-02-00-00A-800A-A\n"
+    "- Temperature: \n \n- Storage and \nTransportation of Assemblies\n"
+    "Refer to SPM 20-02-00 - STANDARD PRACTICES MANUAL \n(SPM) Refer to F9111CMON-A-20-02-00-00A-812A-A\n"
+)
+
+
+def test_published_storage_note_has_the_links_printed_after_its_text() -> None:
+    pdf = _pdf(_PUBLISHED_STORAGE)
+    for code in (
+        "S1000D_STORAGE_TEMPERATURE_NOTE",
+        "S1000D_STORAGE_NO_OTHER_TEMPERATURE",
+        "S1000D_HUMIDITY_DM_REFERENCE",
+    ):
+        assert _run(code, pdf)[0] == "PASS", code
+    status, suggestions = _run("S1000D_STORAGE_TEMPERATURE_NOTE", _pdf(_PUBLISHED_STORAGE.replace("812A", "8120")))
+    assert status == "FAIL"
+
+
+def test_outdated_humidity_reference_is_reported_on_its_text() -> None:
+    outdated = (
+        "3. Relative humidity: \n, \n - Storage - General procedure.\n"
+        "Refer to SPM 20-02-00 - STANDARD PRACTICES MANUAL (SPM)\n"
+        "Refer to F9111CMON-A-20-02-00-02000-800A-C\n"
+    )
+    status, suggestions = _run("S1000D_HUMIDITY_DM_REFERENCE", _pdf(outdated))
+    assert status == "FAIL"
+    assert suggestions[0].original == "F9111CMON-A-20-02-00-02000-800A-C"
+    assert _run("S1000D_HUMIDITY_DM_REFERENCE", _pdf(outdated.replace("02000-800A-C", "00A-800A-A")))[0] == "PASS"
+
+
+def test_storage_and_humidity_notes_follow_the_manufacturer() -> None:
+    boeing = _PUBLISHED_STORAGE.replace("SPM", "SOPM").replace(
+        "STANDARD PRACTICES", "STANDARD OVERHAUL PRACTICES"
+    )
+    for code in ("S1000D_STORAGE_TEMPERATURE_NOTE", "S1000D_HUMIDITY_DM_REFERENCE"):
+        assert _run(code, _pdf(boeing), meta_manufacturer="Boeing")[0] == "PASS", code
+        assert _run(code, _pdf(boeing), meta_manufacturer="Airbus")[0] == "FAIL", code
+        assert _run(code, _pdf(_PUBLISHED_STORAGE), meta_manufacturer="Boeing")[0] == "FAIL", code
+
+
+def test_loctite_without_a_screw_size_in_the_text_is_left_to_verify() -> None:
+    text = "(c) Apply the \nSupply (Loctite 221 (ad-cr-007))\n to the threads of the ten screws \n"
+    assert _run("S1000D_LOCTITE_SCREW_SIZE", _pdf(text))[0] == "INCONCLUSIVE"
+
+
+# --------------------------------------------- gating, mapping field and norm detection
+
+
+@pytest.mark.parametrize(
+    ("code", "meta", "runs"),
+    [
+        ("S1000D_MIGRATION_DM_DATES", {"meta_update_type": "Migration"}, True),
+        ("S1000D_MIGRATION_DM_DATES", {"meta_update_type": "MCO"}, False),
+        ("S1000D_MIGRATION_DM_DATES", {}, False),
+        ("S1000D_MCO_DM_DATES", {"meta_update_type": "mco"}, True),
+        ("S1000D_MCO_REVISION_ROW", {"meta_update_type": "Migration"}, False),
+        ("S1000D_MCO_LOEDM_STATUS", {"meta_update_type": "MCO"}, True),
+        ("S1000D_MIGRATION_LOEDM_STATUS", {"meta_update_type": "MCO"}, False),
+        ("S1000D_MIGRATION_REVISION_ISSUE", {"meta_update_type": "Migration"}, True),
+        ("S1000D_SPM_LINK_AIRBUS", {"meta_manufacturer": "Airbus"}, True),
+        ("S1000D_SPM_LINK_AIRBUS", {"meta_manufacturer": "Boeing"}, False),
+        ("S1000D_SOPM_LINK_BOEING", {"meta_manufacturer": "Boeing"}, True),
+        ("S1000D_SOPM_LINK_BOEING", {"meta_manufacturer": "Airbus"}, False),
+    ],
+)
+def test_rules_apply_only_to_their_update_type_and_manufacturer(
+    code: str, meta: dict[str, str], runs: bool
+) -> None:
+    document = SimpleNamespace(client_metadata=dict(meta))
+    results, _ = execute_pdf_rules(
+        _pdf(_LOEDM),
+        [_DEFINITIONS[code].compiled_rule],
+        document=document,
+        client_operations=_BUNDLE.operations,
+        client_entities=_BUNDLE.mapping.entities,
+    )
+    assert bool(results) is runs
+
+
+def test_update_type_is_an_optional_mapping_field() -> None:
+    field = _BUNDLE.mapping.fields["meta_update_type"]
+    assert field.type == "enum"
+    assert field.allowed_values == ["Migration", "MCO"]
+    assert not field.required
+
+
+def test_condition_equals_requires_a_present_state() -> None:
+    from pydantic import ValidationError
+
+    from app.core.compiled_rules import Condition
+
+    with pytest.raises(ValidationError):
+        Condition(field="meta_manufacturer", state="absent", equals="Boeing")
+
+
+def test_the_document_norm_is_detected_from_its_loedm_and_selects_the_rules() -> None:
+    from app.core.rules_engine import _keep_document_norm_rules
+
+    norm_rules = {
+        norm: [d.compiled_rule for d in _BUNDLE.rules if d.bundle_code == norm]
+        for norm in ("ata100", "s1000d")
+    }
+    everything = [*norm_rules["ata100"], *norm_rules["s1000d"]]
+    s1000d = _pdf(_REAL_LOEDM)
+    classic = _pdf("LIST OF EFFECTIVE PAGES\nPage 1\nF9111CMON-A-72-00-00-00A-500A-A mentioned in the text")
+
+    assert _BUNDLE.norm_selector(s1000d) == "s1000d"
+    assert _BUNDLE.norm_selector(classic) == "ata100"
+    assert _BUNDLE.default_norm == "ata100"
+
+    warnings: list[str] = []
+    kept = _keep_document_norm_rules(everything, s1000d, _BUNDLE, warnings)
+    assert {rule.id for rule in kept} == {rule.id for rule in norm_rules["s1000d"]}
+    assert warnings and "S1000D" in warnings[0] and "ATA100" in warnings[0]
+
+    warnings = []
+    kept = _keep_document_norm_rules(everything, classic, _BUNDLE, warnings)
+    assert {rule.id for rule in kept} == {rule.id for rule in norm_rules["ata100"]}
+    assert not warnings
+
+
+def test_a_chosen_norm_overrides_the_detection() -> None:
+    from app.core.rules_engine import _keep_document_norm_rules
+
+    norm_rules = {
+        norm: [d.compiled_rule for d in _BUNDLE.rules if d.bundle_code == norm]
+        for norm in ("ata100", "s1000d")
+    }
+    everything = [*norm_rules["ata100"], *norm_rules["s1000d"]]
+
+    warnings: list[str] = []
+    kept = _keep_document_norm_rules(everything, _pdf(_REAL_LOEDM), _BUNDLE, warnings, norm="ata100")
+    assert {rule.id for rule in kept} == {rule.id for rule in norm_rules["ata100"]}
+    assert warnings == [
+        "Norme choisie pour cette analyse : ATA100 (le document semble suivre S1000D). "
+        "Les règles S1000D n'ont pas été exécutées."
+    ]
+
+
+def test_a_detected_norm_without_active_rule_is_reported() -> None:
+    from app.core.rules_engine import _keep_document_norm_rules
+
+    ata_only = [d.compiled_rule for d in _BUNDLE.rules if d.bundle_code == "ata100"]
+    warnings: list[str] = []
+
+    kept = _keep_document_norm_rules(ata_only, _pdf(_REAL_LOEDM), _BUNDLE, warnings)
+
+    assert kept == []
+    assert any("Aucune règle S1000D n'est active" in message for message in warnings)
+
+
+def test_chosen_norm_runs_although_all_its_rules_are_disabled() -> None:
+    import json
+
+    from sqlalchemy import select
+
+    from app.core.rules_engine import forced_norm_codes, load_compiled_rules, run_all
+    from app.db.models import Standard, StandardVersion
+    from app.db.session import SessionLocal
+
+    class _Doc:
+        target_unit_system = "none"
+        document_language = "en"
+        client_metadata: dict[str, Any] = {}
+
+    pdf = _pdf(pages=[ParsedPage(page=1, text=_LOEDM), ParsedPage(page=2, text="Testing only.")])
+    with SessionLocal() as session:
+        version = session.scalar(
+            select(StandardVersion).join(Standard).where(Standard.code == "THALES-S1000D")
+        )
+        assert version is not None
+        original = version.disabled_rule_codes
+        try:
+            version.disabled_rule_codes = json.dumps(sorted(_DEFINITIONS))
+            session.commit()
+            assert load_compiled_rules(session, [version], checklist_enabled=False) == []
+            assert forced_norm_codes(session, [version], _BUNDLE, None, checklist_enabled=False) == frozenset()
+            forced = forced_norm_codes(session, [version], _BUNDLE, "s1000d", checklist_enabled=False)
+            assert forced == frozenset(_DEFINITIONS)
+            assert {
+                rule.id
+                for rule in load_compiled_rules(
+                    session, [version], checklist_enabled=False, force_codes=forced
+                )
+            } == set(_DEFINITIONS)
+
+            def s1000d_codes(norm: str | None, warnings: list[str]) -> set[str]:
+                suggestions = run_all(pdf, _Doc(), session, [version], warnings=warnings, norm=norm)
+                return {item.rule_code for item in suggestions if item.rule_code.startswith("S1000D_")}
+
+            auto_warnings: list[str] = []
+            assert not s1000d_codes(None, auto_warnings)
+            assert any("Aucune règle S1000D n'est active" in message for message in auto_warnings)
+            assert "S1000D_SHOP_VERIFICATION" in s1000d_codes("s1000d", [])
+
+            # When some rules of the norm are active, the toggles are respected.
+            version.disabled_rule_codes = json.dumps(
+                sorted(set(_DEFINITIONS) - {"S1000D_SHOP_VERIFICATION"})
+            )
+            session.commit()
+            assert forced_norm_codes(session, [version], _BUNDLE, "s1000d", checklist_enabled=False) == frozenset()
+            assert s1000d_codes("s1000d", []) == {"S1000D_SHOP_VERIFICATION"}
+        finally:
+            version.disabled_rule_codes = original
+            session.commit()

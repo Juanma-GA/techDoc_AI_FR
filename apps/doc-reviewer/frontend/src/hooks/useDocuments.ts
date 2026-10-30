@@ -133,6 +133,8 @@ export type DocumentMetadataSuggestions = {
   meta_revision_number: string | null;
   meta_revision_date: string | null;
   meta_first_issue_date: string | null;
+  /** Only suggested by norms that have one (S1000D: Migration / MCO). */
+  meta_update_type?: string | null;
 };
 
 export function useSuggestDocumentMetadata(id: string) {

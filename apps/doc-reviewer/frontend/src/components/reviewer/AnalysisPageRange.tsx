@@ -12,11 +12,21 @@ type Props = {
   }) => void;
   blocked?: boolean;
   blockReason?: string;
+  /** False for norms that do not follow modified pages: the scope is the whole document. */
+  trackModifiedPages?: boolean;
 };
 
-export function AnalysisPageRange({ pageCount, running, onStart, blocked = false, blockReason }: Props) {
+export function AnalysisPageRange({
+  pageCount,
+  running,
+  onStart,
+  blocked = false,
+  blockReason,
+  trackModifiedPages = true,
+}: Props) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<"modified" | "all" | "range">("modified");
+  const [chosenMode, setMode] = useState<"modified" | "all" | "range">("modified");
+  const mode = !trackModifiedPages && chosenMode === "modified" ? "all" : chosenMode;
   const [firstPage, setFirstPage] = useState(1);
   const [lastPage, setLastPage] = useState(Math.max(pageCount, 1));
 
@@ -39,7 +49,9 @@ export function AnalysisPageRange({ pageCount, running, onStart, blocked = false
         onChange={(event) => setMode(event.target.value as "modified" | "all" | "range")}
         aria-label={t("reviewer.pageScope.label")}
       >
-        <option value="modified">{t("reviewer.pageScope.modified")}</option>
+        {trackModifiedPages ? (
+          <option value="modified">{t("reviewer.pageScope.modified")}</option>
+        ) : null}
         <option value="all">{t("reviewer.pageScope.all")}</option>
         <option value="range">{t("reviewer.pageScope.range")}</option>
       </select>

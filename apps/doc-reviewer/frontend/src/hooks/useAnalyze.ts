@@ -27,6 +27,8 @@ export type AnalyzeOptions = {
   pageNumber?: number;
   additionalPages?: number[];
   pageOverrides?: Record<number, boolean>;
+  /** Norm code of the client bundle; omitted = detected from the PDF. */
+  norm?: string;
 };
 
 export type PageRevisionStatus = {
@@ -104,6 +106,7 @@ export function useAnalyze(
       if (options.pageNumber !== undefined) {
         params.set("page_number", String(options.pageNumber));
       }
+      if (options.norm) params.set("norm", options.norm);
       for (const pageNumber of options.additionalPages ?? []) {
         params.append("additional_pages", String(pageNumber));
       }

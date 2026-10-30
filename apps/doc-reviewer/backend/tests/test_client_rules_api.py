@@ -70,7 +70,7 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
     assert {rule["catalog_code"] for rule in ata_rules} == {"THALES-CUSTOM"}
     assert {rule["catalog_code"] for rule in s1000d_rules} == {"THALES-S1000D"}
     assert all(rule["active"] for rule in ata_rules)
-    assert all(not rule["active"] for rule in s1000d_rules)
+    assert all(rule["active"] for rule in s1000d_rules)
     assert all(rule["scope"] == "verification" for rule in s1000d_rules)
     assert ste_rules and all(not rule["active"] for rule in ste_rules)
     assert all(rule["description"] and rule["message"] for rule in rules)
@@ -183,28 +183,28 @@ def test_s1000d_rules_are_toggled_independently_of_ata100(client: TestClient) ->
     )
     rule_code = "S1000D_SHOP_VERIFICATION"
 
-    enabled = client.patch(f"/api/v1/client-rules/{rule_code}", json={"active": True})
+    disabled_rule = client.patch(f"/api/v1/client-rules/{rule_code}", json={"active": False})
 
-    assert enabled.status_code == 200, enabled.text
-    assert enabled.json()["catalog_code"] == "THALES-S1000D"
-    assert enabled.json()["bundle_code"] == "s1000d"
-    assert enabled.json()["active"] is True
+    assert disabled_rule.status_code == 200, disabled_rule.text
+    assert disabled_rule.json()["catalog_code"] == "THALES-S1000D"
+    assert disabled_rule.json()["bundle_code"] == "s1000d"
+    assert disabled_rule.json()["active"] is False
     with SessionLocal() as session:
         version = session.get(StandardVersion, s1000d_version_id)
         assert version is not None
         disabled = set(json.loads(version.disabled_rule_codes))
-        assert rule_code not in disabled
-        assert "S1000D_NO_SILICA_GEL_DESICCANT" in disabled
+        assert disabled == {rule_code}
         sync_user_standard(session)
         session.refresh(version)
-        assert rule_code not in json.loads(version.disabled_rule_codes)
+        assert rule_code in json.loads(version.disabled_rule_codes)
     refreshed = {item["code"]: item for item in client.get("/api/v1/client-rules").json()}
-    assert refreshed[rule_code]["active"] is True
+    assert refreshed[rule_code]["active"] is False
+    assert refreshed["S1000D_NO_SILICA_GEL_DESICCANT"]["active"] is True
     assert refreshed["CUSTOM_CMM_NUMBER"]["active"] is True
 
-    restored = client.patch(f"/api/v1/client-rules/{rule_code}", json={"active": False})
+    restored = client.patch(f"/api/v1/client-rules/{rule_code}", json={"active": True})
     assert restored.status_code == 200, restored.text
-    assert restored.json()["active"] is False
+    assert restored.json()["active"] is True
 
 
 def test_ste_rule_toggle_uses_the_ste100_catalog(client: TestClient) -> None:

@@ -6,7 +6,7 @@ Le bundle THALES est decoupe en deux normes, une par sous-dossier de
 | Norme | Dossier | Catalogue | Etat par defaut |
 | --- | --- | --- | --- |
 | ATA100 | `ata100/` | `THALES-CUSTOM` `v1` | actif |
-| S1000D | `s1000d/` | `THALES-S1000D` `v1` | desactive |
+| S1000D | `s1000d/` | `THALES-S1000D` `v1` | actif (execute seulement sur un PDF S1000D) |
 
 Chaque norme declare ses regles dans son `rules.py` : source unique des
 `CompiledRule` et des metadonnees de presentation, construites par la fabrique
@@ -120,6 +120,14 @@ Les controles S1000D sont regroupes en trois operations a parametre `control`
 (`s1000d_dm_status`, `s1000d_front_matter`, `s1000d_content`). Un controle ne
 renvoie jamais FAIL sans preuve : lorsque la structure attendue (LOEDM, titre,
 annotations de lien) est absente du PDF, il renvoie INCONCLUSIVE avec la raison.
+
+Les normes sont exclusives par document : un module optionnel `norm_detector.py`
+(declare dans le manifest de la norme, il exporte `matches_document(parsed)`)
+reconnait le PDF de la norme, et l'analyse n'execute que les regles de la norme
+detectee (S1000D si le PDF imprime une LOEDM listant des DMC, sinon la norme sans
+detecteur, ATA100). Une regle propre a un type de mise a jour ou a un constructeur
+se limite avec `only_if=Condition(field=..., equals=...)` ; les champs
+`meta_update_type` (Migration / MCO) et `meta_manufacturer` viennent du mapping.
 
 ## Classifier une page
 

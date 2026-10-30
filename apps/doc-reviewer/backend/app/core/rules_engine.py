@@ -90,6 +90,8 @@ def run_all(
     execute_compiled: bool = True,
     client_bundle: ClientBundle[Any] | None = None,
     previous_revision_pdf: ParsedPdf | None = None,
+    norm: Optional[str] = None,
+    filter_norms: bool = True,
 ) -> list[RawSuggestion]:
     """Run every check against the parsed PDF, return raw suggestions.
 
@@ -111,6 +113,9 @@ def run_all(
     call per page) so the caller can stream real progress instead of a single
     jump once the whole run completes — that step is usually the bulk of the
     wall-clock time when checklist rules are active.
+
+    `norm` forces one norm of the client bundle (otherwise it is detected from
+    the PDF); `filter_norms=False` keeps the rules of every norm.
     """
     if client_bundle is None:
         client_bundle = load_active_client_configuration().bundle
@@ -168,9 +173,13 @@ def run_all(
     ]
     # Chaque standard selectionne peut classer les pages (`page.page_type`)
     # avant l'execution des regles compilees qui en dependent (RuleTarget.
-    # page_type) via le bundle transmis/resolu pour ce run.
+    # page_type) via le bundle transmis/resolu pour ce run. Une norme sans
+    # classifieur propre (S1000D) ne suit pas les pages modifiees.
+    tracks_pages = not filter_norms or client_bundle.uses_page_classifier(
+        resolve_document_norm(parsed, client_bundle, norm)
+    )
     for version in versions:
-        if version.standard.code in client_bundle.standard_specs:
+        if tracks_pages and version.standard.code in client_bundle.standard_specs:
             classifier = client_bundle.page_classifier
         else:
             classifier = None
@@ -194,7 +203,22 @@ def run_all(
         for rule in _merge_catalogs(versions)
         if is_rule_kind_applicable(str(rule.get("kind") or ""), execution_context)
     ]
-    compiled_rules = load_compiled_rules(db, versions, checklist_enabled=checklist_enabled)
+    compiled_rules = load_compiled_rules(
+        db,
+        versions,
+        checklist_enabled=checklist_enabled,
+        force_codes=(
+            forced_norm_codes(db, versions, client_bundle, norm, checklist_enabled=checklist_enabled)
+            if filter_norms
+            else frozenset()
+        ),
+    )
+    # The legacy catalog runner must not pick up the rules of the norm the document does not follow.
+    compiled_ids = {rule.id for rule in compiled_rules}
+    if filter_norms:
+        compiled_rules = _keep_document_norm_rules(
+            compiled_rules, parsed, client_bundle, warnings, norm=norm
+        )
     checklist_ai_scan = checklist_enabled and get_checklist_ai_scan(db)
     if checklist_ai_scan and (
         not get_llm_enabled(db) or not get_effective(db).get("api_key")
@@ -208,7 +232,6 @@ def run_all(
         compiled_rules,
         checklist_ai_scan=checklist_ai_scan,
     )
-    compiled_ids = {rule.id for rule in compiled_rules}
     catalog = [
         rule
         for rule in catalog
@@ -279,11 +302,13 @@ def run_all(
     )
 
     stage_start = len(out)
-    out.extend(pagination_checks.run(parsed))
+    # Chapters on odd pages is a CMM page convention, not an S1000D one.
+    if tracks_pages:
+        out.extend(pagination_checks.run(parsed))
     _logger.info(
         "rules_stage_finished",
         stage="pagination",
-        enabled=True,
+        enabled=tracks_pages,
         raw_suggestion_count=len(out) - stage_start,
     )
 
@@ -384,11 +409,15 @@ def load_compiled_rules(
     standard_versions: list[StandardVersion],
     *,
     checklist_enabled: bool,
+    force_codes: frozenset[str] = frozenset(),
 ) -> list[CompiledRule]:
-    """Return deterministic rules for this run, de-duplicated by rule id."""
+    """Return deterministic rules for this run, de-duplicated by rule id.
+
+    `force_codes` are loaded even when disabled in the Rules screen.
+    """
     compiled: dict[str, CompiledRule] = {}
     for version in standard_versions:
-        disabled_codes = _disabled_codes(version)
+        disabled_codes = _disabled_codes(version) - force_codes
         try:
             catalog = json.loads(version.catalog_json or "[]")
         except (TypeError, ValueError):
@@ -892,6 +921,85 @@ def _enrich_with_ai(
 def _append_analysis_warning(warnings: list[str] | None, message: str) -> None:
     if warnings is not None and message not in warnings:
         warnings.append(message)
+
+
+def resolve_document_norm(
+    parsed: ParsedPdf,
+    client_bundle: ClientBundle[Any],
+    norm: Optional[str] = None,
+) -> Optional[str]:
+    """Norm of the run: the one chosen by the user, else the one detected in the PDF."""
+    if norm:
+        return norm
+    if client_bundle.norm_selector is None:
+        return client_bundle.default_norm
+    return client_bundle.norm_selector(parsed)
+
+
+def forced_norm_codes(
+    db: Session,
+    standard_versions: list[StandardVersion],
+    client_bundle: ClientBundle[Any],
+    norm: Optional[str],
+    *,
+    checklist_enabled: bool,
+) -> frozenset[str]:
+    """Rules of the chosen norm to run although none of them is active in the Rules screen."""
+    if not norm:
+        return frozenset()
+    codes = frozenset(
+        definition.code
+        for definition in client_bundle.rules
+        if definition.bundle_code == norm and not definition.preparation
+    )
+    loaded = load_compiled_rules(db, standard_versions, checklist_enabled=checklist_enabled)
+    return frozenset() if any(rule.id in codes for rule in loaded) else codes
+
+
+def _keep_document_norm_rules(
+    rules: list[CompiledRule],
+    parsed: ParsedPdf,
+    client_bundle: ClientBundle[Any],
+    warnings: Optional[list[str]],
+    *,
+    norm: Optional[str] = None,
+) -> list[CompiledRule]:
+    """Run only the rules of one norm: the one chosen for the run, else the one detected in the PDF."""
+    if client_bundle.norm_selector is None or not client_bundle.norm_codes:
+        return rules
+    detected = client_bundle.norm_selector(parsed)
+    chosen = norm or detected
+    norm_of_rule = {
+        definition.code: definition.bundle_code
+        for definition in client_bundle.rules
+        if definition.bundle_code in client_bundle.norm_codes
+    }
+    kept = [rule for rule in rules if norm_of_rule.get(rule.id, chosen) == chosen]
+    labels = {definition.bundle_code: definition.bundle_label for definition in client_bundle.rules}
+
+    def label(code: Optional[str]) -> str:
+        return labels.get(str(code), str(code))
+
+    skipped = sorted({norm_of_rule[rule.id] for rule in rules if norm_of_rule.get(rule.id, chosen) != chosen})
+    _logger.info("document_norm_selected", norm=chosen, detected=detected, skipped_norms=skipped)
+    skipped_text = f"Les règles {', '.join(label(code) for code in skipped)} n'ont pas été exécutées."
+    if norm is not None and norm != detected:
+        _append_analysis_warning(
+            warnings,
+            f"Norme choisie pour cette analyse : {label(norm)} (le document semble suivre "
+            f"{label(detected)}). {skipped_text if skipped else ''}".strip(),
+        )
+    elif skipped and chosen != client_bundle.default_norm:
+        _append_analysis_warning(
+            warnings, f"Norme du document détectée : {label(chosen)}. {skipped_text}"
+        )
+    if chosen in norm_of_rule.values() and chosen not in {norm_of_rule.get(rule.id) for rule in rules}:
+        _append_analysis_warning(
+            warnings,
+            f"Aucune règle {label(chosen)} n'est active : activez-les dans l'onglet Règles "
+            "ou choisissez la norme au lancement de l'analyse.",
+        )
+    return kept
 
 
 def materialize(
