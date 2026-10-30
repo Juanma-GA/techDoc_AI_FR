@@ -24,7 +24,8 @@ const ISSUES = ["4.1", "4.2"] as const;
 
 type ValidationItem = Omit<DmValidationResult, "status"> & {
   id: string;
-  file: File;
+  file: File | null;
+  generated?: { docId: string; dmId: string };
   displayName: string;
   status: DmValidationStatus | "checking";
 };
@@ -139,7 +140,7 @@ export function Validation() {
     setPendingCount((current) => current + 1);
     void validationApi
       .validate(
-        entries.map((entry) => entry.file),
+        files,
         entries.map(() => null),
         entries.map((entry) => entry.displayName),
       )
@@ -153,8 +154,12 @@ export function Validation() {
       entry.id === item.id ? { ...entry, issue, status: "checking" } : entry,
     ));
     setPendingCount((current) => current + 1);
-    void validationApi
-      .validate([item.file], [issue], [item.displayName])
+    const file = item.file
+      ? Promise.resolve(item.file)
+      : item.generated
+        ? wizardApi.downloadDmFile(item.generated.docId, item.generated.dmId)
+        : Promise.reject(new Error(t("validation.sourceUnavailable")));
+    void file.then((source) => validationApi.validate([source], [issue], [item.displayName]))
       .then(({ results }) => updateFromResults([item], results))
       .catch((error: unknown) => markRequestFailed([item], error))
       .finally(() => setPendingCount((current) => Math.max(0, current - 1)));
@@ -170,27 +175,15 @@ export function Validation() {
       setLoadError(null);
       setPendingCount((current) => current + 1);
       try {
-        const files = await Promise.all(
-          generated.dmIds.map((dmId) => wizardApi.downloadDmFile(generated.documentId, dmId)),
-        );
+        const { results } = await wizardApi.validate(generated.documentId, generated.dmIds);
         if (cancelled) return;
 
-        const entries = files.map((file) => newItem(file));
+        const entries: ValidationItem[] = results.map((result) => ({
+          ...result, id: crypto.randomUUID(), file: null, displayName: result.filename,
+          generated: { docId: generated.documentId, dmId: result.dm_id },
+        }));
         setItems((current) => [...entries, ...current]);
         setSelectedId((current) => current ?? entries[0]?.id ?? null);
-        setPendingCount((current) => current + 1);
-        try {
-          const { results } = await validationApi.validate(
-            files,
-            files.map(() => null),
-            entries.map((entry) => entry.displayName),
-          );
-          if (!cancelled) updateFromResults(entries, results);
-        } catch (error) {
-          if (!cancelled) markRequestFailed(entries, error);
-        } finally {
-          if (!cancelled) setPendingCount((current) => Math.max(0, current - 1));
-        }
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : String(error));
       } finally {

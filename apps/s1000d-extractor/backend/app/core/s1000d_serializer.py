@@ -16,15 +16,19 @@ Noms d'elements conformes aux XSD locaux Issue 4.1 / 4.2 :
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
 import structlog
 from lxml import etree
 
+from app.core import ir as ir_mod
 from app.core import xml_safe
 from app.core.dm_header import DEFAULT_HEADER_TEMPLATE
 from app.core.ir import InlineRun, IRNode
@@ -168,7 +172,41 @@ class SerializationDiagnostics:
     provisional_fields: list[str] = field(default_factory=list)
 
 
+@dataclass
+class CachedContent:
+    fingerprint: str
+    issue: str
+    dm_type: str
+    content: etree._Element
+    report: ConstraintReport
+
+
+@dataclass
+class _InlineBinding:
+    parent: etree._Element
+    text: str
+    runs: list[InlineRun] | None
+    refs: list[dict]
+    dm_id: str
+
+
 ReferenceIndex = dict[tuple[str, str], list[ReferenceTarget]]
+
+
+class _CachedReferenceIndex(ReferenceIndex):
+    def __init__(self) -> None:
+        super().__init__()
+        self.contents: dict[str, CachedContent] = {}
+        self.pending: list[_InlineBinding] | None = []
+
+
+SERIALIZER_VERSION = 2
+
+
+def ir_fingerprint(root: IRNode) -> str:
+    return hashlib.sha256(json.dumps(
+        ir_mod.to_dict(root), sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8")).hexdigest()
 
 
 def xml_text(value: str | None) -> str:
@@ -234,21 +272,28 @@ def build_reference_index(
     documents: Sequence[tuple[str, IRNode, Mapping[str, object] | None]],
 ) -> ReferenceIndex:
     """Index visible reference targets with the IDs emitted in each DM."""
-    index: ReferenceIndex = {}
+    index = _CachedReferenceIndex()
+    prepared = []
     for dm_id, root, metadata in documents:
         metadata = metadata or {}
         dmc = str(metadata.get("dmc") or "")
         dm_type = _normalize_dm_type(str(metadata.get("dm_type") or "descriptive"))
         issue = str(metadata.get("issue") or "4.2")
+        pending_start = len(index.pending or [])
         content = _build_content(
             root,
             dm_type,
             {"figure": 0, "table": 0, "section": 0},
-            reference_index={},
+            reference_index=index,
             current_dm_id=dm_id,
         )
-        load_xsd_model(issue, dm_type).constrain(content)
+        model = load_xsd_model(issue, dm_type)
+        declarations = {}
+        report = model.constrain(content, root_path="/dmodule/content", declarations=declarations)
         normalize_dm_ids(content)
+        cached = CachedContent(ir_fingerprint(root), issue, dm_type, content, report)
+        index.contents[dm_id] = cached
+        prepared.append((cached, model, declarations, (index.pending or [])[pending_start:]))
 
         targets_by_kind = {
             "figure": list(content.iter("figure")),
@@ -317,6 +362,23 @@ def build_reference_index(
                     dm_id=dm_id,
                     dmc=dmc,
                 ))
+    index.pending = None
+    # All constrained target IDs must be known before resolving cross-DM references.
+    for cached, model, declarations, bindings in prepared:
+        for binding in bindings:
+            declaration = declarations.get(binding.parent)
+            if declaration is None:
+                continue
+            binding.parent.text = None
+            for child in list(binding.parent):
+                binding.parent.remove(child)
+            _inline_content_with_refs(
+                binding.parent, binding.text, binding.runs, binding.refs,
+                reference_index=index, current_dm_id=binding.dm_id,
+            )
+            extra = model.constrain_fragment(binding.parent, *declaration)
+            cached.report.violations.extend(extra.violations)
+            cached.report.provisional_fields.extend(extra.provisional_fields)
     return index
 
 
@@ -834,6 +896,10 @@ def _inline_content_with_refs(
     reference_index: ReferenceIndex,
     current_dm_id: str,
 ) -> None:
+    if refs and isinstance(reference_index, _CachedReferenceIndex) and reference_index.pending is not None:
+        reference_index.pending.append(_InlineBinding(parent, text, runs, refs, current_dm_id))
+        _inline_content(parent, text, runs)
+        return
     if not refs:
         _inline_content(parent, text, runs)
         return
@@ -893,7 +959,7 @@ def _para(
         text,
         runs,
         refs,
-        reference_index=reference_index or {},
+        reference_index=reference_index if reference_index is not None else {},
         current_dm_id=current_dm_id,
     )
     return el
@@ -1677,14 +1743,26 @@ def serialize(
         created_at=created_at,
     )
 
-    dmodule.append(_build_content(
-        root,
-        normalized_type,
-        counters,
-        reference_index=reference_index,
+    cached = (
+        reference_index.contents.get(reference_dm_id)
+        if isinstance(reference_index, _CachedReferenceIndex) else None
+    )
+    if cached and (
+        cached.fingerprint != ir_fingerprint(root)
+        or cached.issue != issue or cached.dm_type != normalized_type
+    ):
+        cached = None
+    content = deepcopy(cached.content) if cached else _build_content(
+        root, normalized_type, counters, reference_index=reference_index,
         current_dm_id=reference_dm_id,
-    ))
-    xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(dmodule)
+    )
+    dmodule.append(content)
+    xsd_report: ConstraintReport = load_xsd_model(issue, normalized_type).constrain(
+        dmodule, skip_nodes=frozenset({content}) if cached else frozenset(),
+    )
+    if cached:
+        xsd_report.violations.extend(deepcopy(cached.report.violations))
+        xsd_report.provisional_fields.extend(cached.report.provisional_fields)
     normalize_dm_ids(dmodule)
     if normalized_type == "ipd" and _content_nodes(root):
         xsd_report.violations.append({

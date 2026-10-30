@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import struct
+import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+import pymupdf as fitz
 from sqlalchemy.orm import Session
 
 from app.core import ir as ir_mod
@@ -22,7 +25,64 @@ ImageFormat = Literal["original", "jpeg", "png"]
 @dataclass(frozen=True)
 class ZipImageExport:
     archive_path: str
-    content: bytes
+    source_path: Path
+    target_format: Literal["jpeg", "png"] | None = None
+    max_dimension: int | None = None
+
+    def write_to(self, archive: zipfile.ZipFile) -> None:
+        if self.target_format is None:
+            archive.write(self.source_path, self.archive_path)
+            return
+        try:
+            with fitz.open(str(self.source_path)) as image:
+                page = image[0]
+                width, height = _image_dimensions(self.source_path)
+                target_max = min(self.max_dimension or max(width, height), max(width, height))
+                scale = target_max / max(page.rect.width, page.rect.height)
+                pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale),
+                                        alpha=self.target_format == "png")
+                archive.writestr(self.archive_path, pixmap.tobytes(self.target_format))
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AppError("IMAGE_EXPORT_FAILED", "Impossible de convertir l'image exportee.", 500) from exc
+
+
+def _image_dimensions(path: Path) -> tuple[int, int]:
+    with path.open("rb") as source:
+        header = source.read(24)
+        if header.startswith(b"\x89PNG\r\n\x1a\n") and len(header) == 24:
+            width, height = struct.unpack(">II", header[16:24])
+            if width and height:
+                return width, height
+        if not header.startswith(b"\xff\xd8"):
+            raise ValueError("Invalid image header.")
+        source.seek(2)
+        while True:
+            marker = source.read(1)
+            if not marker:
+                raise ValueError("Incomplete JPEG header.")
+            if marker != b"\xff":
+                continue
+            while marker == b"\xff":
+                marker = source.read(1)
+            if not marker or marker in {b"\xd9", b"\xda"}:
+                raise ValueError("JPEG has no dimension marker.")
+            if marker in {b"\x01", b"\xd8", *(bytes([value]) for value in range(0xd0, 0xd8))}:
+                continue
+            length_bytes = source.read(2)
+            if len(length_bytes) != 2:
+                raise ValueError("Incomplete JPEG segment.")
+            length = int.from_bytes(length_bytes, "big")
+            if length < 2:
+                raise ValueError("Invalid JPEG segment.")
+            if marker[0] in {0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf}:
+                dimensions = source.read(5)
+                if len(dimensions) != 5:
+                    raise ValueError("Incomplete JPEG dimensions.")
+                height, width = struct.unpack(">HH", dimensions[1:])
+                if width and height:
+                    return width, height
+                raise ValueError("Image dimensions must be positive.")
+            source.seek(length - 2, 1)
 
 
 def pictogram_image_names(doc: Document) -> set[str]:
@@ -47,7 +107,6 @@ def prepare_zip_images(
     max_dimension: int | None,
     image_format: ImageFormat,
 ) -> tuple[list[ZipImageExport], dict[str, str]]:
-    import pymupdf as fitz
 
     exports: list[ZipImageExport] = []
     image_name_map: dict[str, str] = {}
@@ -84,27 +143,8 @@ def prepare_zip_images(
         archive_paths.add(archive_path)
 
         try:
-            source_bytes = path.read_bytes()
-            source_pixmap = fitz.Pixmap(str(path))
-            source_max = max(source_pixmap.width, source_pixmap.height)
-            resize = max_dimension is not None and source_max > max_dimension
-            if not resize and target_format == source_format:
-                content = source_bytes
-            else:
-                with fitz.open(stream=source_bytes, filetype=source_format) as image_doc:
-                    if image_doc.page_count != 1:
-                        raise ValueError("An image export must contain exactly one page.")
-                    page = image_doc[0]
-                    page_max = max(page.rect.width, page.rect.height)
-                    if page_max <= 0:
-                        raise ValueError("Image dimensions must be positive.")
-                    target_max = min(max_dimension or source_max, source_max)
-                    scale = target_max / page_max
-                    pixmap = page.get_pixmap(
-                        matrix=fitz.Matrix(scale, scale),
-                        alpha=target_format == "png",
-                    )
-                    content = pixmap.tobytes(target_format)
+            width, height = _image_dimensions(path)
+            resize = max_dimension is not None and max(width, height) > max_dimension
         except (OSError, RuntimeError, ValueError) as exc:
             raise AppError(
                 "IMAGE_EXPORT_FAILED",
@@ -114,7 +154,11 @@ def prepare_zip_images(
 
         if output_name != path.name:
             image_name_map[path.name] = output_name
-        exports.append(ZipImageExport(archive_path=archive_path, content=content))
+        exports.append(ZipImageExport(
+            archive_path=archive_path, source_path=path,
+            target_format=target_format if resize or target_format != source_format else None,
+            max_dimension=max_dimension,
+        ))
 
     return exports, image_name_map
 
@@ -123,6 +167,7 @@ def reference_index_documents(
     dms: list[dict],
     dmrl_by_dmc: dict[str, dict],
     issue: str,
+    root_transform: Callable[[dict, ir_mod.IRNode], ir_mod.IRNode] | None = None,
 ) -> list[tuple[str, ir_mod.IRNode, dict[str, object]]]:
     documents = []
     for dm in dms:
@@ -134,9 +179,12 @@ def reference_index_documents(
             "dm_type": dm["dm_type"],
             "issue": issue,
         })
+        root = ir_mod.from_dict(dm["tree"])
+        if root_transform is not None:
+            root = root_transform(dm, root)
         documents.append((
             str(dm["dm_id"]),
-            ir_mod.from_dict(dm["tree"]),
+            root,
             metadata,
         ))
     return documents
@@ -149,6 +197,7 @@ def generate_zip_dm_xmls(
     db: Session,
     dm_xml_generator: Callable[..., str],
     image_name_map: dict[str, str] | None = None,
+    root_transform: Callable[[dict, ir_mod.IRNode], ir_mod.IRNode] | None = None,
 ) -> dict[str, str]:
     dms = ws.load_dms(doc)
     dmrl_by_dmc = {
@@ -157,7 +206,7 @@ def generate_zip_dm_xmls(
         if entry.dmc
     }
     reference_index: ReferenceIndex = build_reference_index(
-        reference_index_documents(dms, dmrl_by_dmc, doc.s1000d_issue)
+        reference_index_documents(dms, dmrl_by_dmc, doc.s1000d_issue, root_transform)
     )
     xml_by_dm = {
         dm_id: dm_xml_generator(

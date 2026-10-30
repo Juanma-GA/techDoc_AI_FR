@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.errors import AppError
-from app.core.fs import atomic_output_path
+from app.core.fs import atomic_output_path, atomic_write_bytes
 from app.core.pdf_cut_scoring import dmrl_data_module_titles
 from app.core.pdf_cut_scoring import score_page as _score_page
 from app.db.models import Document
@@ -134,6 +134,20 @@ def preview_page(doc: Document, page_number: int) -> bytes:
         return pixmap.tobytes("png")
     finally:
         source.close()
+
+
+def previews_dir(doc: Document) -> Path:
+    return Path(doc.storage_path).parent / f"document_{doc.id}_previews"
+
+
+def preview_path(doc: Document, page_number: int) -> Path:
+    if page_number < 1:
+        raise AppError("PDF_PAGE_INVALID", "Numero de page invalide.", 422)
+    stat = Path(doc.storage_path).stat()
+    path = previews_dir(doc) / f"{stat.st_mtime_ns}_{stat.st_size}" / f"page_{page_number}_z15.png"
+    if not path.is_file():
+        atomic_write_bytes(path, preview_page(doc, page_number))
+    return path
 
 
 def cut_from_page(doc: Document, start_page: int, end_page: int | None = None) -> str:

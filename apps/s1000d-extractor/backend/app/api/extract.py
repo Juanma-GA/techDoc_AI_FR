@@ -6,13 +6,13 @@ queue vers le flux SSE. Evenements : session -> progress* -> done | error.
 
 from __future__ import annotations
 
-import asyncio
+import hashlib
 import json
 from pathlib import Path
 
 import pymupdf as fitz
 import structlog
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,8 +29,10 @@ from app.core.brex_profile import extract_brex_dm_code
 from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
 from app.core.fs import atomic_write_bytes, atomic_write_text, remove_files
+from app.core.pdf_cut import previews_dir
 from app.core.s1000d_schema import SELECTABLE_ISSUES
-from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields
+from app.core.s1000d_serializer import missing_data_fields
+from app.core.sse import JobCancelled, stream_threaded_job
 from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db, open_session, storage_directory
@@ -101,11 +103,12 @@ def delete_document(
         doc.dm_header_path, doc.cir_path, doc.brex_rules_path,
     ) if path]
     directory = images_dir(doc.id, root=Path(doc.storage_path).parent)
+    previews = previews_dir(doc)
     db.query(DmDocumentLink).filter(DmDocumentLink.doc_id == doc.id).delete()
     db.query(DmVersion).filter(DmVersion.doc_id == doc.id).delete()
     db.delete(doc)
     db.commit()
-    remove_files(paths, directories=[directory])
+    remove_files(paths, directories=[directory, previews])
     return {"id": doc_id, "status": "deleted"}
 
 
@@ -161,46 +164,16 @@ def upload_document(
 
 
 @router.post("/{doc_id}/extract")
-async def extract(doc_id: str, db: Session = Depends(get_db)) -> EventSourceResponse:
+async def extract(doc_id: str, request: Request, db: Session = Depends(get_db)) -> EventSourceResponse:
     doc = _require(db, doc_id)
     _require_single_document_workflow(doc)
     demo_mode = is_demo_mode(db)
     doc_id = doc.id  # detache de la session avant le thread
 
-    async def event_gen():
-        queue: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-
-        def cb(step: str, pct: int) -> None:
-            loop.call_soon_threadsafe(
-                queue.put_nowait, ("progress", {"step": step, "pct": pct})
-            )
-
-        def work() -> dict:
-            return _run_and_persist(doc_id, cb, demo_mode)
-
-        task = asyncio.create_task(asyncio.to_thread(work))
-        yield {"event": "session", "data": json.dumps({"document_id": doc_id})}
-        while True:
-            getter = asyncio.ensure_future(queue.get())
-            done, _ = await asyncio.wait(
-                {getter, task}, return_when=asyncio.FIRST_COMPLETED
-            )
-            if getter in done:
-                event, data = getter.result()
-                yield {"event": event, "data": json.dumps(data)}
-            else:
-                getter.cancel()
-            if task.done() and queue.empty():
-                break
-        try:
-            result = task.result()
-            yield {"event": "done", "data": json.dumps(result)}
-        except Exception as exc:
-            code = exc.code if isinstance(exc, AppError) else "EXTRACT_FAILED"
-            yield {"event": "error", "data": json.dumps({"code": code, "message": str(exc)})}
-
-    return EventSourceResponse(event_gen())
+    return stream_threaded_job(
+        request, lambda progress: _run_and_persist(doc_id, progress, demo_mode),
+        session_data={"document_id": doc_id}, error_code="EXTRACT_FAILED",
+    )
 
 
 @router.get("/{doc_id}/result", response_model=ExtractDoneOut)
@@ -225,52 +198,15 @@ def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
-    brex_xml = _brex_xml(db, doc.brex_id, doc.s1000d_issue)
-    brex_rules = parse_brex(brex_xml) if brex_xml else []
-    brex_dm_code = extract_brex_dm_code(brex_xml) if brex_xml else None
-    serialization = SerializationDiagnostics()
-    if doc.ir_json:
-        root = ir_mod.from_dict(json.loads(doc.ir_json))
-        resources = wres.load_resources(doc)
-        entries = wres.dmrl_data_module_entries(doc)
-        metadata = entries[0].to_dict() if entries else None
-        xml, serialization, _brex_guided_candidates = serialize_with_brex_guidance(
-            root,
-            brex_rules,
-            issue=doc.s1000d_issue,
-            dm_type=doc.dm_type or "descriptive",
-            dm_metadata=metadata,
-            header_template=dm_header_mod.with_brex_dm_code(
-                resources.header_template, brex_dm_code
-            ),
-        )
-        doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
-        atomic_write_text(Path(doc.xml_path), xml)
-    violations = validate_document(
-        xml,
-        issue=doc.s1000d_issue,
-        dm_type=doc.dm_type or "descriptive",
-        brex_xml=brex_xml,
-    )
-    violations.extend(serialization.xsd_violations)
-    doc.violations_json = json.dumps(violations, ensure_ascii=False)
+    violations = json.loads(doc.violations_json or "[]")
     missing_fields = missing_data_fields(xml)
-    doc.status = (
-        "incomplete"
-        if (
-            not xsd_is_valid(violations)
-            or missing_fields
-            or any(v.get("severity") == "error" for v in violations)
-        )
-        else "extracted"
-    )
-    db.commit()
     return Response(
         content=xml, media_type="application/xml",
         headers={
             "Content-Disposition": f'attachment; filename="{doc.id}.xml"',
             "X-S1000D-XSD-Valid": str(xsd_is_valid(violations)).lower(),
             "X-S1000D-Missing-Fields": str(len(missing_fields)),
+            "ETag": f'"{hashlib.sha256(xml.encode("utf-8")).hexdigest()}"',
         },
     )
 
@@ -387,10 +323,14 @@ def _run_and_persist(doc_id: str, cb, demo_mode: bool = False) -> dict:
                 header_template=wres.load_resources(doc).header_template,
                 progress_cb=cb,
             )
+        except JobCancelled:
+            db.rollback()
+            raise
         except Exception:
             doc.status = "extract_failed"
             db.commit()
             raise
+        cb("persist", 100)
         xml_path = _storage(db) / f"document_{doc.id}.xml"
         atomic_write_text(xml_path, result.xml)
         doc.xml_path = str(xml_path)

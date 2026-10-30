@@ -24,6 +24,11 @@ class SettingsOut(BaseModel):
     demo_enabled: bool = False
 
 
+class WizardValidateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dm_ids: list[str] | None = None
+
+
 # ----- Admin (stats + reset) ------------------------------------------------
 
 

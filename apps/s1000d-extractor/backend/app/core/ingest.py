@@ -32,6 +32,7 @@ def extract_blocks(
     *,
     fmt: str,
     progress_cb: ProgressCb | None = None,
+    table_bboxes_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
 ) -> list[RawBlock]:
     if fmt == "docx":
         return parse_docx(path)
@@ -54,6 +55,8 @@ def extract_blocks(
         path,
         progress_cb=report_parse_progress if progress_cb is not None else None,
     )
+    if table_bboxes_by_page is not None:
+        table_bboxes_by_page.update({page.index: page.table_bboxes for page in pages})
     scanned = [p for p in pages if not p.has_text]
     log.info(
         "document_ingest_done",

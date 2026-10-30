@@ -202,6 +202,13 @@ export function Migration() {
 
   // Flux de génération.
   const [docId, setDocId] = useState<string | null>(null);
+  const streamRequest = useRef<{ docId: string; controller: AbortController } | null>(null);
+  useEffect(() => () => streamRequest.current?.controller.abort(), []);
+  useEffect(() => {
+    if (streamRequest.current && streamRequest.current.docId !== docId) {
+      streamRequest.current.controller.abort();
+    }
+  }, [docId]);
   const [wiz, setWiz] = useState<WizardState | null>(null);
   const [starting, setStarting] = useState<{
     pct: number;
@@ -413,7 +420,16 @@ export function Migration() {
 
   const startAnalysis = async (id: string) => {
     setStarting({ pct: 5, label: t("migration.start.starting"), indeterminate: true });
-    await startWizardStream(id, (ev, data) => onStreamEvent(ev, data, id));
+    streamRequest.current?.controller.abort();
+    const controller = new AbortController();
+    streamRequest.current = { docId: id, controller };
+    try {
+      await startWizardStream(id, (ev, data) => onStreamEvent(ev, data, id), controller.signal);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) throw error;
+    } finally {
+      if (streamRequest.current?.controller === controller) streamRequest.current = null;
+    }
     refreshDocs();
   };
 
@@ -1458,6 +1474,8 @@ export function Migration() {
                           style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}
                         >
                           <img
+                            loading="lazy"
+                            decoding="async"
                             src={docId ? wizardApi.imageUrl(docId, name) : undefined}
                             alt={t(group.alt, { index: i + 1 })}
                             style={{

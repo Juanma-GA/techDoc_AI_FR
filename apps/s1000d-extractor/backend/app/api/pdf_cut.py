@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends
-from fastapi.responses import Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -46,9 +46,10 @@ def detect_pdf_start(
 
 
 @router.get("/{doc_id}/pdf-cut/preview/{page_number}")
-def preview_pdf_page(doc_id: str, page_number: int, db: Session = Depends(get_db)) -> Response:
+def preview_pdf_page(doc_id: str, page_number: int, db: Session = Depends(get_db)) -> FileResponse:
     doc = _require(db, doc_id)
-    return Response(content=pdf_cut.preview_page(doc, page_number), media_type="image/png")
+    return FileResponse(pdf_cut.preview_path(doc, page_number), media_type="image/png",
+                        headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.post("/{doc_id}/pdf-cut/confirm")

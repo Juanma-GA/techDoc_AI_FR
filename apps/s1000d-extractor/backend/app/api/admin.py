@@ -11,10 +11,11 @@ from pathlib import Path
 import structlog
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.core.errors import AppError
 from app.core.fs import remove_files
+from app.core.pdf_cut import previews_dir
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db
 from app.schemas import AdminResetOut, AdminStatsOut
@@ -85,7 +86,10 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
     """Purge documents + fichiers (PDF/DOCX/XML). Preserve app_config + BREX."""
     from app.core.wizard import images_dir
 
-    docs = db.scalars(select(Document)).all()
+    docs = db.scalars(select(Document).options(load_only(
+        Document.id, Document.storage_path, Document.pdf_cut_path, Document.xml_path,
+        Document.dmrl_path, Document.dm_header_path, Document.cir_path, Document.brex_rules_path,
+    ))).all()
     paths: list[Path] = []
     directories: list[Path] = []
     for d in docs:
@@ -101,6 +105,7 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
             if p:
                 paths.append(Path(p))
         directories.append(images_dir(d.id, root=Path(d.storage_path).parent))
+        directories.append(previews_dir(d))
     count = len(docs)
     db.query(DmDocumentLink).delete()
     db.query(DmVersion).delete()

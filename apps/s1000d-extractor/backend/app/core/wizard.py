@@ -22,6 +22,7 @@ merge / split / masquage entetes-pieds / undo / apercu) vit dans `wizard_split`.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
@@ -57,6 +58,7 @@ from app.core.s1000d_serializer import (
     missing_data_fields,
 )
 from app.core.validator import validate_document, xsd_is_valid
+from app.core.wizard_fingerprint import dm_xml_fingerprint, xml_context_fingerprint
 from app.core.wizard_zip_export import reference_index_documents
 from app.db.models import BrexProfile, Document
 
@@ -118,7 +120,11 @@ def images_dir(doc_id: str, *, root: Path | None = None) -> Path:
     return root / f"document_{doc_id}_images"
 
 
-def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> illustrations.IllustrationResult:
+def _extract_illustrations(
+    doc: Document, root: ir_mod.IRNode, *, source_path: str | None = None,
+    table_bboxes_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
+    progress_cb: Callable[[str, int], None] | None = None,
+) -> illustrations.IllustrationResult:
     """Publish new images and IR links only after a successful extraction."""
     out_dir = images_dir(doc.id, root=Path(doc.storage_path).parent)
     staged_root = ir_mod.from_dict(ir_mod.to_dict(root))
@@ -127,15 +133,18 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> illustrations.
             staging = Path(name)
             result = illustrations.attach_illustrations(
                 staged_root,
-                pdf_path=doc.pdf_cut_path or doc.storage_path,
+                pdf_path=source_path or doc.pdf_cut_path or doc.storage_path,
                 out_dir=staging,
                 doc_id=doc.id,
                 dm_level=splitter.level_of(_DEFAULT_LEVEL),
+                table_bboxes_by_page=table_bboxes_by_page,
             )
             if result.illustration_errors:
                 log.warning("wizard_illustrations_not_published", document_id=doc.id,
                             illustration_errors=result.illustration_errors)
                 return illustrations.IllustrationResult(illustration_errors=result.illustration_errors)
+            if progress_cb is not None:
+                progress_cb("infer", 55)
             replace_directory(staging, out_dir)
         root.children = staged_root.children
         root.icn = staged_root.icn
@@ -234,8 +243,10 @@ def start(
     )
     progress_cb("parse", 10)
     stage_started = perf_counter()
+    table_bboxes = {} if doc.source_format == "pdf" else None
     blocks = ingest.extract_blocks(
         source_path, fmt=doc.source_format, progress_cb=progress_cb,
+        table_bboxes_by_page=table_bboxes,
     )
     log.info(
         "wizard_stage_timing",
@@ -261,7 +272,10 @@ def start(
     illustration_result = illustrations.IllustrationResult()
     if doc.source_format == "pdf":
         stage_started = perf_counter()
-        illustration_result = _extract_illustrations(doc, root)
+        illustration_result = _extract_illustrations(
+            doc, root, source_path=str(source_path), table_bboxes_by_page=table_bboxes,
+            progress_cb=progress_cb,
+        )
         log.info(
             "wizard_stage_timing",
             stage="illustration_extraction",
@@ -516,6 +530,17 @@ def _apply_overrides(doc: Document, overrides: list[dict]) -> None:
     ws.save_dms(doc, dms)
 
 
+def reference_root_transform(doc: Document) -> Callable[[dict, ir_mod.IRNode], ir_mod.IRNode]:
+    reviews = preliminary.load(doc).get("reviews", {})
+
+    def transform(dm: dict, root: ir_mod.IRNode) -> ir_mod.IRNode:
+        if reviews.get(dm["dm_id"], {}).get("status") in {"reviewed", "skipped"}:
+            return reviewed_root(doc, dm, root)
+        return root
+
+    return transform
+
+
 def _generate_all(db: Session, doc: Document) -> None:
     """Serialise et valide chaque DM de maniere deterministe et locale.
 
@@ -534,8 +559,12 @@ def _generate_all(db: Session, doc: Document) -> None:
         dm_count=len(dms),
     )
     reference_index = build_reference_index(
-        reference_index_documents(dms, dmrl_by_dmc, doc.s1000d_issue)
+        reference_index_documents(
+            dms, dmrl_by_dmc, doc.s1000d_issue,
+            root_transform=reference_root_transform(doc),
+        )
     )
+    fingerprint_context = xml_context_fingerprint(doc, brex_xml)
     for dm_index, dm in enumerate(dms, start=1):
         dm_started = perf_counter()
         resources_ms = 0.0
@@ -575,6 +604,7 @@ def _generate_all(db: Session, doc: Document) -> None:
             })
             dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
+            dm["xml_fingerprint"] = dm_xml_fingerprint(dm, fingerprint_context)
             dm["template_missing_fields"] = template_missing_fields
 
             serialization_ms = (perf_counter() - stage_started) * 1000
@@ -672,13 +702,14 @@ def _resources_state(doc: Document) -> dict:
     }
 
 
-def dm_xml(
+def render_dm(
     doc: Document,
     dm_id: str,
     *,
     db: Session | None = None,
     reference_index: ReferenceIndex | None = None,
     image_name_map: dict[str, str] | None = None,
+    persist: bool = True,
 ) -> str:
     dms = ws.load_dms(doc)
     res = wres.load_resources(doc)
@@ -690,7 +721,10 @@ def dm_xml(
     dmrl_by_dmc = {entry.dmc: entry.to_dict() for entry in wres.dmrl_entries(doc) if entry.dmc}
     if reference_index is None:
         reference_index = build_reference_index(
-            reference_index_documents(dms, dmrl_by_dmc, doc.s1000d_issue)
+            reference_index_documents(
+                dms, dmrl_by_dmc, doc.s1000d_issue,
+                root_transform=reference_root_transform(doc),
+            )
         )
     for dm in dms:
         if dm["dm_id"] == dm_id:
@@ -725,6 +759,7 @@ def dm_xml(
             sync_mappings(root, render_root)
             dm["tree"] = ir_mod.to_dict(root)
             dm["xml"] = xml
+            dm["xml_fingerprint"] = dm_xml_fingerprint(dm, xml_context_fingerprint(doc, brex_xml))
             dm["template_missing_fields"] = template_missing_fields
             xsd_results = validate_document(
                 xml, issue=doc.s1000d_issue, dm_type=dm["dm_type"],
@@ -741,7 +776,7 @@ def dm_xml(
             dm["missing_fields"] = missing_data_fields(
                 xml, template_missing_fields,
             )
-            if image_name_map is None:
+            if persist and image_name_map is None:
                 doc.status = (
                     "incomplete"
                     if any(
@@ -758,3 +793,25 @@ def dm_xml(
                 ws.save_dms(doc, dms)
             return xml
     raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)
+
+
+dm_xml = render_dm
+
+
+def read_dm_xml(
+    doc: Document, dm_id: str, *, db: Session,
+    fingerprint_context: str | None = None,
+    reference_index: ReferenceIndex | None = None,
+) -> tuple[str, str]:
+    dm = next((item for item in ws.load_dms(doc) if item["dm_id"] == dm_id), None)
+    if dm is None:
+        raise AppError("DM_NOT_FOUND", f"DM inconnu : {dm_id}", 404)
+    preliminary.require_complete(doc, dm_id)
+    context = fingerprint_context or xml_context_fingerprint(
+        doc, _brex_xml(db, doc.brex_id, doc.s1000d_issue),
+    )
+    fingerprint = dm_xml_fingerprint(dm, context)
+    if dm.get("xml_fingerprint") == fingerprint:
+        return dm["xml"], fingerprint
+    xml = render_dm(doc, dm_id, db=db, reference_index=reference_index, persist=False)
+    return xml, dm_xml_fingerprint({**dm, "xml": xml}, context)

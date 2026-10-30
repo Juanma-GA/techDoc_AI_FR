@@ -100,16 +100,9 @@ def storage_directory(db: Session) -> Path:
 
 
 def get_db() -> Generator[Session, None, None]:
-    control_db = SessionLocal()
-    from app.core.demo_mode import get_demo_enabled
+    from app.core.demo_mode import current_demo_enabled
 
-    demo_mode = get_demo_enabled(control_db)
-    if demo_mode:
-        control_db.close()
-        db = open_session(demo_mode=True)
-    else:
-        db = control_db
-        db.info["demo_mode"] = False
+    db = open_session(current_demo_enabled())
     try:
         yield db
     finally:

@@ -445,6 +445,7 @@
     }
   },
   "validation": {
+    "sourceUnavailable": "The source for this validation is unavailable.",
     "title": "Data Module validation",
     "subtitle": "Deterministic XML and XSD checks, with no AI processing.",
     "dropTitle": "Drop XML files here",

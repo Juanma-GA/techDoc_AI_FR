@@ -49,10 +49,11 @@ def _schema():
 @pytest.fixture(autouse=True)
 def _clean_tables():
     """Purge les tables metier avant chaque test (isolation)."""
-    from app.core.demo_mode import set_demo_enabled
+    from app.core.demo_mode import reset_demo_cache, set_demo_enabled
     from app.db.models import AppConfig, BrexProfile, DmDocumentLink, DmVersion, Document
     from app.db.session import DemoSessionLocal, SessionLocal
 
+    reset_demo_cache()
     for factory in (SessionLocal, DemoSessionLocal):
         db = factory()
         try:
@@ -69,6 +70,7 @@ def _clean_tables():
         finally:
             db.close()
     yield
+    reset_demo_cache()
 
 
 @pytest.fixture

@@ -445,6 +445,7 @@
     }
   },
   "validation": {
+    "sourceUnavailable": "La source de cette validation est indisponible.",
     "title": "Validation des Data Modules",
     "subtitle": "Contrôle XML et XSD déterministe, sans traitement IA.",
     "dropTitle": "Dépose des fichiers XML ici",

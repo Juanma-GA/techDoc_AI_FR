@@ -1,5 +1,7 @@
 """ZIP export reference-index reuse tests."""
 
+import io
+import zipfile
 from types import SimpleNamespace
 
 import pymupdf
@@ -9,6 +11,14 @@ from app.core import ir as ir_mod
 from app.core import wizard_zip_export
 from app.core.ir import IRNode
 from app.core.s1000d_serializer import serialize
+
+
+def _export_content(image) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        image.write_to(archive)
+    with zipfile.ZipFile(buffer) as archive:
+        return archive.read(image.archive_path)
 
 
 def test_export_filename_map_does_not_modify_document_state(client, pdf_bytes_image) -> None:
@@ -133,7 +143,7 @@ def test_zip_images_resize_convert_and_separate_pictograms(
         "figure-1.png": "figure-1.jpg",
         "picto_chapitre_1.png": "picto_chapitre_1.jpg",
     }
-    image = pymupdf.Pixmap(exports[0].content)
+    image = pymupdf.Pixmap(_export_content(exports[0]))
     assert max(image.width, image.height) == 60
 
 
@@ -184,5 +194,5 @@ def test_zip_images_convert_jpeg_to_png_with_matching_extension(tmp_path) -> Non
     )
 
     assert exports[0].archive_path == "illustrations/figure-2.png"
-    assert exports[0].content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert _export_content(exports[0]).startswith(b"\x89PNG\r\n\x1a\n")
     assert name_map == {"figure-2.jpg": "figure-2.png"}

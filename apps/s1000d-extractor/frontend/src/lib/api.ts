@@ -4,6 +4,7 @@
  */
 
 import type { DmValidationResult, WizardState } from "./wizardTypes";
+import { readSse } from "./sse";
 export type {
   Candidate,
   DmPreview,
@@ -313,6 +314,11 @@ export const resourcesApi = {
 };
 
 export const wizardApi = {
+  validate: (docId: string, dmIds?: string[]) =>
+    api<{ results: Array<DmValidationResult & { dm_id: string }> }>(
+      `/documents/${docId}/wizard/validate`,
+      { method: "POST", body: JSON.stringify({ dm_ids: dmIds ?? null }) },
+    ),
   get: (docId: string) => api<WizardState>(`/documents/${docId}/wizard`),
   // action : "update" | "advance" | "back" (+ params optionnels).
   action: (docId: string, action: string, params?: Record<string, unknown>) =>
@@ -394,67 +400,22 @@ export const validationApi = {
 export async function startWizardStream(
   docId: string,
   onEvent: (event: string, data: Record<string, unknown>) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/documents/${docId}/wizard/start_stream`, {
     method: "POST",
+    signal,
   });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true }).replace(/\r/g, "");
-    const blocks = buf.split("\n\n");
-    buf = blocks.pop() ?? "";
-    for (const block of blocks) {
-      let event = "message";
-      let data = "";
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data += line.slice(5).trim();
-      }
-      if (!data) continue;
-      let parsed: Record<string, unknown> = {};
-      try {
-        parsed = JSON.parse(data) as Record<string, unknown>;
-      } catch {
-        /* ignore */
-      }
-      onEvent(event, parsed);
-    }
-  }
+  await readSse(res, onEvent, signal);
 }
 
 export async function generatePmcStream(
   docId: string,
   onEvent: (event: string, data: Record<string, unknown>) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/documents/${docId}/validate-and-generate-pmc`, { method: "POST" });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true }).replace(/\r/g, "");
-    const blocks = buf.split("\n\n");
-    buf = blocks.pop() ?? "";
-    for (const block of blocks) {
-      let event = "message";
-      let data = "";
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) data += line.slice(5).trim();
-      }
-      if (!data) continue;
-      try {
-        onEvent(event, JSON.parse(data) as Record<string, unknown>);
-      } catch {
-        onEvent(event, {});
-      }
-    }
-  }
+  const res = await fetch(`${API_BASE}/documents/${docId}/validate-and-generate-pmc`, {
+    method: "POST", signal,
+  });
+  await readSse(res, onEvent, signal);
 }

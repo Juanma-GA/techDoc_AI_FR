@@ -64,19 +64,19 @@ class Document(Base):
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="uploaded", index=True)
     dm_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    ir_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ir_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     violations_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Wizard (configuration etape par etape) :
     wizard_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
     split_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    dms_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dms_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     # Pile d'annulation (undo) des editions de decoupage : liste JSON
     # d'instantanes `dms_json` successifs (bornee cote code).
-    dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    preliminary_review_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    preliminary_review_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     # Ressources client optionnelles : DMRL (decoupage impose + PMC), CIR
     # (contenus partages), regles client BREX JSON.
-    dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
     dmrl_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     dm_header_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     dm_header_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)

@@ -41,6 +41,7 @@ class PageParse:
     index: int                                   # 1-indexe
     blocks: list[RawBlock] = field(default_factory=list)
     has_text: bool = False
+    table_bboxes: list[tuple[float, float, float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -315,7 +316,7 @@ def parse_pdf_pages(
                     or not any(_in_vertical_band(b.y0, b.y1, bx) for bx in tbl_bboxes)
                 ]
             merged = sorted(text_blocks + tbl_blocks, key=lambda b: (b.y0 if b.y0 is not None else 0.0))
-            out.append(PageParse(index=idx, blocks=merged, has_text=True))
+            out.append(PageParse(index=idx, blocks=merged, has_text=True, table_bboxes=tbl_bboxes))
             text_page_count += 1
             table_count += len(tbl_blocks)
             block_count += len(merged)

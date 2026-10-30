@@ -637,6 +637,7 @@ def attach_illustrations(
     out_dir: Path,
     doc_id: str,
     dm_level: int | None = None,
+    table_bboxes_by_page: dict[int, list[tuple[float, float, float, float]]] | None = None,
 ) -> IllustrationResult:
     """Extrait les figures hors tableaux et range les images non associees comme pictogrammes.
 
@@ -684,10 +685,17 @@ def attach_illustrations(
     seen_digests: set[str] = set()
     xref_digest_cache: dict[int, bytes] = {}
     try:
+        if table_bboxes_by_page is not None:
+            assert set(table_bboxes_by_page) == set(range(1, doc.page_count + 1)), (
+                "Table geometry must describe the same PDF pages as illustration extraction."
+            )
         out_dir.mkdir(parents=True, exist_ok=True)
         for pidx, page in enumerate(doc, start=1):
             page_analysis = _PageAnalysis(page)
-            table_bboxes = _table_bboxes(page, pidx, result)
+            table_bboxes = (
+                table_bboxes_by_page[pidx] if table_bboxes_by_page is not None
+                else _table_bboxes(page, pidx, result)
+            )
             figs = list(figs_by_page.get(pidx, []))
             stage_started = perf_counter()
             figure_anchors = [
