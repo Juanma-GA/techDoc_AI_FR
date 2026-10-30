@@ -1,4 +1,4 @@
-import { Checkbox } from "@internal/ui";
+import { Badge, Checkbox, Button, Input, Spinner } from "@internal/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -52,14 +52,14 @@ function ComposerConfigurationCard() {
   });
 
   return (
-    <article className="card">
-      <h2 className="card-title">
+    <section className="workflow-section">
+      <h2 className="section-title">
         <span className="row">
           <span>{t("settings.composerTitle")}</span>
           {statusQuery.data ? (
-            <span className={`badge ${statusQuery.data.available ? "ok" : "warn"}`}>
+            <Badge variant={statusQuery.data.available ? "success" : "warning"}>
               {statusQuery.data.available ? t("conversion.composerReady") : t("conversion.composerNotReady")}
-            </span>
+            </Badge>
           ) : null}
         </span>
       </h2>
@@ -72,9 +72,9 @@ function ComposerConfigurationCard() {
       <div className="form">
         <div className="field">
           <label htmlFor="conv-exe" className="field-label">{t("conversion.composerExecutable")}</label>
-          <input
+          <Input
             id="conv-exe"
-            className="input mono"
+            className="font-mono"
             value={executable}
             onChange={(e) => setExecutableDraft(e.target.value)}
             placeholder={statusQuery.data?.executable || "C:\\Program Files\\...\\ComposerConverter.exe"}
@@ -83,9 +83,9 @@ function ComposerConfigurationCard() {
         </div>
         <div className="field">
           <label htmlFor="conv-settings" className="field-label">{t("conversion.composerSettings")}</label>
-          <input
+          <Input
             id="conv-settings"
-            className="input mono"
+            className="font-mono"
             value={settingsFile}
             onChange={(e) => setSettingsDraft(e.target.value)}
             placeholder="C:\\CATIA\\conversion-settings.xml"
@@ -94,9 +94,9 @@ function ComposerConfigurationCard() {
         </div>
         <div className="field">
           <label htmlFor="conv-lic" className="field-label">{t("settings.composerLicense")}</label>
-          <input
+          <Input
             id="conv-lic"
-            className="input mono"
+            className="font-mono"
             value={license}
             onChange={(e) => setLicenseDraft(e.target.value)}
             placeholder="4085@serveur-licence"
@@ -104,22 +104,25 @@ function ComposerConfigurationCard() {
           <p className="hint">{t("settings.composerHint")}</p>
         </div>
         <div className="row">
-        <button
+        <Button
           type="button"
-          className="btn primary small"
+          variant="primary" size="sm"
           onClick={() => {
             setNotice(null);
             saveMutation.mutate();
           }}
           disabled={saveMutation.isPending}
         >
-          {saveMutation.isPending ? <span className="spinner" /> : null}
+          {saveMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
           <span>{t("settings.save")}</span>
-        </button>
+        </Button>
         {notice ? <span className="success">{notice}</span> : null}
         </div>
+        {saveMutation.isError ? <p role="alert" className="error">{saveMutation.error.message}</p> : null}
+        {settingsQuery.isError ? <p role="alert" className="error">{settingsQuery.error.message}</p> : null}
+        {statusQuery.isError ? <p role="alert" className="error">{statusQuery.error.message}</p> : null}
       </div>
-    </article>
+    </section>
   );
 }
 
@@ -256,8 +259,8 @@ export function Conversion() {
       <ComposerConfigurationCard />
 
       {/* ---- 1. Source a convertir : dossier ou zip ---- */}
-      <article className="card">
-        <h2 className="card-title">{t("conversion.sourceTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("conversion.sourceTitle")}</h2>
 
         <div className="field">
           <label className="field-label">{t("conversion.folderLabel")}</label>
@@ -269,24 +272,24 @@ export function Conversion() {
             onFolderChange={setFolderPath}
           />
           <div className="row" style={{ marginTop: "0.5rem" }}>
-            <button
+            <Button
               type="button"
-              className="btn secondary small"
+              variant="secondary" size="sm"
               onClick={() => importFolder.mutate()}
               disabled={!folderPath.trim() || importFolder.isPending}
             >
-              {importFolder.isPending ? <span className="spinner" /> : null}
+              {importFolder.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
               <span>{t("conversion.importFolder")}</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="btn secondary small"
+              variant="secondary" size="sm"
               onClick={() => importSelection.mutate()}
               disabled={selection.length === 0 || importSelection.isPending}
             >
-              {importSelection.isPending ? <span className="spinner" /> : null}
+              {importSelection.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
               <span>{t("conversion.importSelection", { count: selection.length })}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -294,34 +297,34 @@ export function Conversion() {
           <label className="field-label">{t("conversion.zipLabel")}</label>
           <FilePicker exts={ZIP_EXTS} value={zipPath} onChange={setZipPath} sheetPreview={false} />
           <div className="row" style={{ marginTop: "0.5rem" }}>
-            <button
+            <Button
               type="button"
-              className="btn secondary small"
+              variant="secondary" size="sm"
               onClick={() => importZip.mutate()}
               disabled={!zipPath.trim() || importZip.isPending}
             >
-              {importZip.isPending ? <span className="spinner" /> : null}
+              {importZip.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
               <span>{t("conversion.importZip")}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
         {sourceLabel ? <p className="success">{t("conversion.currentSource", { name: sourceLabel })}</p> : null}
         {error ? <p className="error">{error}</p> : null}
-      </article>
+      </section>
 
       {/* ---- 2. Dossier de sortie + generation du plan ---- */}
-      <article className="card">
-        <h2 className="card-title">{t("conversion.planTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("conversion.planTitle")}</h2>
         <p className="banner warn">
           <strong>{t("common.dryRunTitle")}</strong> {t("conversion.dryRun")}
         </p>
 
         <div className="field">
           <label className="field-label" htmlFor="conv-output">{t("conversion.outputNameLabel")}</label>
-          <input
+          <Input
             id="conv-output"
-            className="input"
+
             value={outputName}
             onChange={(e) => setOutputName(e.target.value)}
             placeholder="NomDossierInput_Converti"
@@ -330,36 +333,36 @@ export function Conversion() {
           <p className="hint">{t("conversion.outputInfo")}</p>
         </div>
 
-        <button
+        <Button
           type="button"
-          className="btn primary"
+          variant="primary"
           onClick={() => planMutation.mutate({ id: importId as string, output: outputName })}
           disabled={!importId || !outputName.trim() || planMutation.isPending}
         >
-          {planMutation.isPending ? <span className="spinner" /> : null}
+          {planMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
           <span>{t("conversion.generate")}</span>
-        </button>
+        </Button>
         {!importId ? <p className="hint" style={{ marginTop: "0.5rem" }}>{t("conversion.sourceRequired")}</p> : null}
-      </article>
+      </section>
 
       {/* ---- 3. Plan : fichiers a convertir (selection) ---- */}
       {run ? (
-        <article className="card">
-          <h2 className="card-title">{t("conversion.resultTitle", { count: items.length })}</h2>
+        <section className="workflow-section">
+          <h2 className="section-title">{t("conversion.resultTitle", { count: items.length })}</h2>
           {outputPath ? <p className="hint">{t("conversion.outputFolder", { name: outputPath })}</p> : null}
 
           <div className="row" style={{ margin: "0.5rem 0" }}>
-            <button type="button" className="btn ghost small" onClick={() => setAll(true)}>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setAll(true)}>
               {t("conversion.selectAll")}
-            </button>
-            <button type="button" className="btn ghost small" onClick={() => setAll(false)}>
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setAll(false)}>
               {t("conversion.deselectAll")}
-            </button>
+            </Button>
             <a href={exportUrl.conversionCsv(run.id)}>
-              <button type="button" className="btn secondary small">{t("common.exportCsv")}</button>
+              <Button type="button" variant="secondary" size="sm">{t("common.exportCsv")}</Button>
             </a>
             <a href={exportUrl.conversionScript(run.id)}>
-              <button type="button" className="btn secondary small">{t("conversion.composerScript")}</button>
+              <Button type="button" variant="secondary" size="sm">{t("conversion.composerScript")}</Button>
             </a>
             <span className="hint" style={{ marginLeft: "auto" }}>
               {t("conversion.selected", { count: selectedCount, total: items.length })}
@@ -403,38 +406,38 @@ export function Conversion() {
           )}
 
           {/* ---- Execution locale (non destructive) ---- */}
-          <div style={{ marginTop: "1rem", borderTop: "1px solid var(--border)", paddingTop: "0.75rem" }}>
-            <h3 className="card-title">{t("conversion.execTitle")}</h3>
+          <div style={{ marginTop: "1rem", paddingTop: "0.75rem" }}>
+            <h3 className="section-title">{t("conversion.execTitle")}</h3>
             <p className="hint">{t("conversion.execHint")}</p>
             <div className="row" style={{ marginTop: "0.5rem" }}>
-              <button
+              <Button
                 type="button"
-                className="btn secondary small"
+                variant="secondary" size="sm"
                 onClick={() => executeMutation.mutate({ dryRun: true, confirm: false })}
                 disabled={executeMutation.isPending || selectedCount === 0}
               >
-                {executeMutation.isPending ? <span className="spinner" /> : null}
+                {executeMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
                 <span>{t("conversion.execDry")}</span>
-              </button>
+              </Button>
               {execArmed ? (
-                <button
+                <Button
                   type="button"
-                  className="btn danger small"
+                  variant="danger" size="sm"
                   onClick={confirmExecuteReal}
                   disabled={executeMutation.isPending || selectedCount === 0}
                 >
                   <span>{t("conversion.execConfirm")}</span>
-                </button>
+                </Button>
               ) : (
-                <button
+                <Button
                   type="button"
-                  className="btn danger small"
+                  variant="danger" size="sm"
                   onClick={armExecuteReal}
                   disabled={executeMutation.isPending || selectedCount === 0}
                 >
-                  {executeMutation.isPending ? <span className="spinner" /> : null}
+                  {executeMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
                   <span>{t("conversion.execReal")}</span>
-                </button>
+                </Button>
               )}
             </div>
 
@@ -457,8 +460,6 @@ export function Conversion() {
                     maxHeight: "20rem",
                     overflow: "auto",
                     background: "var(--bg-2)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
                     padding: "0.5rem",
                     fontFamily: '"JetBrains Mono", monospace',
                     fontSize: "0.78rem",
@@ -471,7 +472,7 @@ export function Conversion() {
               </div>
             ) : null}
           </div>
-        </article>
+        </section>
       ) : null}
     </div>
   );

@@ -1,3 +1,4 @@
+import { Button, Spinner } from "@internal/ui";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -44,8 +45,8 @@ export function CatPartDiff() {
 
   return (
     <div className="form">
-      <article className="card">
-        <h2 className="card-title">{t("catpartDiff.title")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("catpartDiff.title")}</h2>
         <p className="hint">{t("catpartDiff.description")}</p>
         <p className="hint">{t("catpartDiff.limit")}</p>
         <div className="row">
@@ -71,20 +72,20 @@ export function CatPartDiff() {
               label={t("catpartDiff.selectFolder")}
             />
           </div>
-          <button
+          <Button
             type="button"
-            className="btn primary"
+            variant="primary"
             onClick={() => compareMutation.mutate()}
             disabled={!oldPath || !newPath || compareMutation.isPending}
           >
-            {compareMutation.isPending ? <span className="spinner" /> : null}
+            {compareMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
             {compareMutation.isPending ? t("catpartDiff.analyzing") : t("catpartDiff.compare")}
-          </button>
+          </Button>
         </div>
         {errorMessage(compareMutation.error) ? (
           <p className="error" role="alert">{errorMessage(compareMutation.error)}</p>
         ) : null}
-      </article>
+      </section>
 
       {comparison ? (
         <CatPartDiffResults
@@ -95,7 +96,7 @@ export function CatPartDiff() {
         />
       ) : (
         <div className="empty-state">
-          <h3 className="card-title">{t("catpartDiff.runPrompt")}</h3>
+          <h3 className="section-title">{t("catpartDiff.runPrompt")}</h3>
         </div>
       )}
     </div>

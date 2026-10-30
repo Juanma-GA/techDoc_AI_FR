@@ -1,3 +1,4 @@
+import { Badge, Button, Spinner } from "@internal/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -46,39 +47,39 @@ export function CatPartDiffResults({ result, isExporting, exportError, onExportE
 
   return (
     <section className="form" aria-live="polite">
-      <article className="card">
-        <h2 className="card-title">{t("catpartDiff.resultTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("catpartDiff.resultTitle")}</h2>
         <div className="row">
-          <span className="badge default">{t("catpartDiff.oldCount", { count: result.old_count })}</span>
-          <span className="badge default">{t("catpartDiff.newCount", { count: result.new_count })}</span>
-          <span className="badge ok">{t("catpartDiff.sameGeCount", { count: result.same_ge.length })}</span>
-          <span className="badge warn">{t("catpartDiff.soloACount", { count: result.solo_a.length })}</span>
-          <span className="badge warn">{t("catpartDiff.soloBCount", { count: result.solo_b.length })}</span>
+          <Badge variant="default">{t("catpartDiff.oldCount", { count: result.old_count })}</Badge>
+          <Badge variant="default">{t("catpartDiff.newCount", { count: result.new_count })}</Badge>
+          <Badge variant="success">{t("catpartDiff.sameGeCount", { count: result.same_ge.length })}</Badge>
+          <Badge variant="warning">{t("catpartDiff.soloACount", { count: result.solo_a.length })}</Badge>
+          <Badge variant="warning">{t("catpartDiff.soloBCount", { count: result.solo_b.length })}</Badge>
         </div>
         {result.status === "empty" ? <p className="hint">{t("catpartDiff.noCatparts")}</p> : null}
         {hasExportRows ? (
-          <button
+          <Button
             type="button"
-            className="btn secondary small"
+            variant="secondary" size="sm"
             onClick={onExportExcel}
             disabled={isExporting}
           >
-            {isExporting ? <span className="spinner" /> : null}
+            {isExporting ? <Spinner aria-label={t("common.loading")} /> : null}
             {isExporting ? t("catpartDiff.exportingExcel") : t("catpartDiff.exportExcel")}
-          </button>
+          </Button>
         ) : null}
         {exportError ? <p className="error" role="alert">{exportError}</p> : null}
-      </article>
+      </section>
 
-      <article className="card">
-        <h3 className="card-title">{t("catpartDiff.matchesTitle")}</h3>
+      <section className="workflow-section">
+        <h3 className="section-title">{t("catpartDiff.matchesTitle")}</h3>
         <p className="hint">{t("catpartDiff.matchesDescription")}</p>
         {result.matches.length ? (
           <>
             <ul className="item-list">
               {result.matches.slice(0, visibleMatchCount).map((match) => (
                 <li key={match.sin} className="item-row">
-                  <span className="badge warn">{t("catpartDiff.sinValue", { sin: match.sin })}</span>
+                  <Badge variant="warning">{t("catpartDiff.sinValue", { sin: match.sin })}</Badge>
                   <div className="item-main">
                     <span className="item-meta">
                       {t("catpartDiff.pnValues", { side: "A", values: match.old_pns.join(", ") })}
@@ -93,31 +94,31 @@ export function CatPartDiffResults({ result, isExporting, exportError, onExportE
               ))}
             </ul>
             {result.matches.length > visibleMatchCount ? (
-              <button
+              <Button
                 type="button"
-                className="btn ghost small"
+                variant="ghost" size="sm"
                 onClick={() => setVisibleMatchCount((count) => count + GROUP_PAGE_SIZE)}
               >
                 {t("catpartDiff.showMore", { remaining: result.matches.length - visibleMatchCount })}
-              </button>
+              </Button>
             ) : null}
           </>
         ) : (
           <p className="hint">{t("catpartDiff.noMatches")}</p>
         )}
-      </article>
+      </section>
 
-      <article className="card">
-        <h3 className="card-title">{t("catpartDiff.sameGeTitle")}</h3>
+      <section className="workflow-section">
+        <h3 className="section-title">{t("catpartDiff.sameGeTitle")}</h3>
         <p className="hint">{t("catpartDiff.sameGeDescription")}</p>
         {result.same_ge.length ? (
           <>
             <ul className="item-list">
               {result.same_ge.slice(0, visibleSameCount).map((sameGe) => (
                 <li key={`${sameGe.sin}-${sameGe.pn}`} className="item-row">
-                  <span className="badge ok">
+                  <Badge variant="success">
                     {t("catpartDiff.sameGeValue", { sin: sameGe.sin, pn: sameGe.pn })}
-                  </span>
+                  </Badge>
                   <div className="item-main">
                     <FileList label={t("catpartDiff.oldFiles")} files={sameGe.old_files} />
                     <FileList label={t("catpartDiff.newFiles")} files={sameGe.new_files} />
@@ -126,27 +127,27 @@ export function CatPartDiffResults({ result, isExporting, exportError, onExportE
               ))}
             </ul>
             {result.same_ge.length > visibleSameCount ? (
-              <button
+              <Button
                 type="button"
-                className="btn ghost small"
+                variant="ghost" size="sm"
                 onClick={() => setVisibleSameCount((count) => count + GROUP_PAGE_SIZE)}
               >
                 {t("catpartDiff.showMore", { remaining: result.same_ge.length - visibleSameCount })}
-              </button>
+              </Button>
             ) : null}
           </>
         ) : (
           <p className="hint">{t("catpartDiff.noSameGe")}</p>
         )}
-      </article>
+      </section>
 
       {result.issues.length ? (
-        <article className="card">
-          <h3 className="card-title">{t("catpartDiff.issuesTitle")}</h3>
+        <section className="workflow-section">
+          <h3 className="section-title">{t("catpartDiff.issuesTitle")}</h3>
           <ul className="item-list">
             {result.issues.map((issue, index) => (
               <li key={`${issue.code}-${issue.file ?? index}`} className="item-row">
-                <span className="badge warn">{issue.code}</span>
+                <Badge variant="warning">{issue.code}</Badge>
                 <div className="item-main">
                   {issue.file ? <span className="item-name">{issue.file}</span> : null}
                   <span className="item-meta">{issue.message}</span>
@@ -154,7 +155,7 @@ export function CatPartDiffResults({ result, isExporting, exportError, onExportE
               </li>
             ))}
           </ul>
-        </article>
+        </section>
       ) : null}
     </section>
   );

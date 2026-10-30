@@ -1,3 +1,4 @@
+import { Badge, Button, Checkbox, Select, Spinner, Textarea } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -82,8 +83,8 @@ function BatchRenameCard() {
   const statusLabel = (s: string) => t(`smgxmlRename.status.${s}`, { defaultValue: s });
 
   return (
-    <article className="card">
-      <h2 className="card-title">{t("smgxmlRename.batchTitle")}</h2>
+    <section className="workflow-section">
+      <h2 className="section-title">{t("smgxmlRename.batchTitle")}</h2>
 
       <div className="form">
         <div className="field">
@@ -97,24 +98,24 @@ function BatchRenameCard() {
 
         <div className="field">
           <label htmlFor="batch-nomen" className="field-label">{t("smgxmlRename.nomenLabel")}</label>
-          <select id="batch-nomen" className="input" value={nomenId} onChange={(e) => setNomenId(e.target.value)}>
+          <Select options={[]} id="batch-nomen"  value={nomenId} onChange={(e) => setNomenId(e.target.value)}>
             <option value="">{t("smgxmlRename.nomenEmpty")}</option>
             {runs.map((r) => (
               <option key={r.id} value={r.id}>{fileName(r.source_ref)}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         <label className="checkbox">
-          <input type="checkbox" checked={apply} onChange={(e) => setApply(e.target.checked)} />
+          <Checkbox  checked={apply} onCheckedChange={(checked) => setApply(checked)} />
           <span>{t("smgxml.apply")}</span>
         </label>
 
         <div className="row">
-          <button type="button" className="btn primary" onClick={onRun} disabled={batchMutation.isPending || !canRun}>
-            {batchMutation.isPending ? <span className="spinner" /> : null}
+          <Button type="button" variant="primary" onClick={onRun} disabled={batchMutation.isPending || !canRun}>
+            {batchMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
             <span>{armed ? t("smgxml.confirmWrite") : t("smgxmlRename.batchLaunch")}</span>
-          </button>
+          </Button>
           {error ? <span className="error">{error}</span> : null}
         </div>
       </div>
@@ -147,10 +148,10 @@ function BatchRenameCard() {
                     <td>{it.new_stem || it.new_pn}</td>
                     <td style={{ textAlign: "center" }}>{it.replacements}</td>
                     <td>
-                      <span className={it.status === "ok" ? "badge ok" : "badge warn"}>
+                      <Badge variant={it.status === "ok" ? "success" : "warning"}>
                         {statusLabel(it.status)}
-                      </span>
-                      {it.applied ? <span className="badge default" style={{ marginLeft: 4 }}>{t("smgxmlRename.doneBadge")}</span> : null}
+                      </Badge>
+                      {it.applied ? <Badge variant="default" style={{ marginLeft: 4 }}>{t("smgxmlRename.doneBadge")}</Badge> : null}
                     </td>
                   </tr>
                 ))}
@@ -159,7 +160,7 @@ function BatchRenameCard() {
           </div>
         </div>
       ) : null}
-    </article>
+    </section>
   );
 }
 
@@ -197,7 +198,7 @@ function SmgxmlResult({ run }: { run: SmgxmlRunDto }) {
       )}
 
       {changesQuery.isLoading ? (
-        <span className="spinner" />
+        <Spinner aria-label={t("common.loading")} />
       ) : changes.length ? (
         <table className="tbl">
           <thead>
@@ -221,7 +222,7 @@ function SmgxmlResult({ run }: { run: SmgxmlRunDto }) {
         </table>
       ) : (
         <div className="empty-state">
-          <h3 className="card-title">{t("smgxml.noChange")}</h3>
+          <h3 className="section-title">{t("smgxml.noChange")}</h3>
         </div>
       )}
     </div>
@@ -287,8 +288,8 @@ export function SmgxmlRename() {
     <div className="form" style={{ maxWidth: "48rem" }}>
       <BatchRenameCard />
 
-      <article className="card">
-        <h2 className="card-title">{t("smgxmlRename.title")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("smgxmlRename.title")}</h2>
         <p className="banner warn">{t("smgxmlRename.banner")}</p>
 
         <div className="form">
@@ -301,9 +302,9 @@ export function SmgxmlRename() {
             <label htmlFor="smg_map" className="field-label">
               {t("smgxmlRename.mappingLabel")}
             </label>
-            <textarea
+            <Textarea
               id="smg_map"
-              className="input"
+
               rows={6}
               placeholder="LEAP_U320_n-1.CATPart=LEAP_U320_n.CATPart"
               value={mappingText}
@@ -312,26 +313,26 @@ export function SmgxmlRename() {
           </div>
 
           <label className="checkbox">
-            <input
-              type="checkbox"
+            <Checkbox
+
               checked={apply}
-              onChange={(e) => setApply(e.target.checked)}
+              onCheckedChange={(checked) => setApply(checked)}
             />
             <span>{t("smgxml.apply")}</span>
           </label>
 
           <div className="row">
-            <button type="button" className="btn primary" onClick={onRun} disabled={renameMutation.isPending}>
-              {renameMutation.isPending ? <span className="spinner" /> : null}
+            <Button type="button" variant="primary" onClick={onRun} disabled={renameMutation.isPending}>
+              {renameMutation.isPending ? <Spinner aria-label={t("common.loading")} /> : null}
               <span>{armed ? t("smgxml.confirmWrite") : t("common.launch")}</span>
-            </button>
+            </Button>
             {feedback ? <span className="success">{feedback}</span> : null}
             {error ? <span className="error">{error}</span> : null}
           </div>
         </div>
 
         {result ? <SmgxmlResult run={result} /> : null}
-      </article>
+      </section>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { Button } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
 import { exportUrl, type NomenclatureCompareDto } from "../../lib/api";
@@ -18,17 +19,17 @@ export function NomenclatureComparisonResult({ result, pairLabel }: Props) {
   ];
 
   return (
-    <article className="card">
+    <section className="workflow-section">
       <div className="row" style={{ marginBottom: 8 }}>
         <div>
-          <h2 className="card-title" style={{ margin: 0 }}>{t("diff.resultTitle")}</h2>
+          <h2 className="section-title" style={{ margin: 0 }}>{t("diff.resultTitle")}</h2>
           {pairLabel ? <p className="hint" style={{ margin: "0.25rem 0 0" }}>{pairLabel}</p> : null}
         </div>
         <a
           href={exportUrl.nomenclatureCompareCsv(result.base_run_id, result.other_run_id)}
           style={{ marginLeft: "auto" }}
         >
-          <button type="button" className="btn secondary small">{t("diff.exportCsv")}</button>
+          <Button type="button" variant="secondary" size="sm">{t("diff.exportCsv")}</Button>
         </a>
       </div>
       <p className="hint">
@@ -78,6 +79,6 @@ export function NomenclatureComparisonResult({ result, pairLabel }: Props) {
           ))}
         </table>
       </div>
-    </article>
+    </section>
   );
 }

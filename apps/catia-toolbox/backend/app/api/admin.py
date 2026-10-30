@@ -1,6 +1,6 @@
 """Routes /api/v1/admin - stats globales + operations de reset.
 
-La cle Mistral (table app_config) est preservee par convention lors d'un reset.
+Les chemins et reglages Composer (table app_config) sont preserves au reset.
 """
 
 from __future__ import annotations
@@ -16,8 +16,6 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.errors import AppError
 from app.db.models import (
-    CheckResult,
-    CheckRun,
     ColorizationItem,
     ColorizationRun,
     ConversionItem,
@@ -26,15 +24,9 @@ from app.db.models import (
     DiffRun,
     NomenclatureItem,
     NomenclatureRun,
-    OptimizationRun,
-    QcChecklist,
-    QcItem,
-    ReplacementItem,
-    ReplacementRun,
     SmgxmlChange,
     SmgxmlRun,
     StructureImport,
-    Suggestion,
     TreeNode,
 )
 from app.db.session import get_db
@@ -51,16 +43,11 @@ def stats(db: Session = Depends(get_db)) -> AdminStatsOut:
     return AdminStatsOut(
         imports=db.scalar(select(func.count(StructureImport.id))) or 0,
         nodes=db.scalar(select(func.count(TreeNode.id))) or 0,
-        runs=db.scalar(select(func.count(OptimizationRun.id))) or 0,
-        suggestions=db.scalar(select(func.count(Suggestion.id))) or 0,
         diffs=db.scalar(select(func.count(DiffRun.id))) or 0,
-        checks=db.scalar(select(func.count(CheckRun.id))) or 0,
         conversions=db.scalar(select(func.count(ConversionRun.id))) or 0,
-        replacements=db.scalar(select(func.count(ReplacementRun.id))) or 0,
         colorizations=db.scalar(select(func.count(ColorizationRun.id))) or 0,
         nomenclatures=db.scalar(select(func.count(NomenclatureRun.id))) or 0,
         smgxml_runs=db.scalar(select(func.count(SmgxmlRun.id))) or 0,
-        qc_checklists=db.scalar(select(func.count(QcChecklist.id))) or 0,
         total_size_bytes=db.scalar(select(func.coalesce(func.sum(TreeNode.size), 0))) or 0,
     )
 
@@ -100,28 +87,20 @@ def _purge_local_uploads() -> int:
 
 # Tables filles (leaf-first) purgees avant StructureImport pour des compteurs exacts.
 _RUN_TABLES = (
-    Suggestion,
-    OptimizationRun,
     DiffEntry,
     DiffRun,
-    CheckResult,
-    CheckRun,
     ConversionItem,
     ConversionRun,
-    ReplacementItem,
-    ReplacementRun,
     ColorizationItem,
     ColorizationRun,
 )
 
-# Tables du pipeline 5 etapes, independantes des imports (leaf-first).
+# Tables du pipeline, independantes des imports (leaf-first).
 _PIPELINE_TABLES = (
     NomenclatureItem,
     NomenclatureRun,
     SmgxmlChange,
     SmgxmlRun,
-    QcItem,
-    QcChecklist,
 )
 
 

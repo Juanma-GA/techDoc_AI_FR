@@ -2,15 +2,7 @@
   "app": {
     "title": "Catia Toolbox",
     "version": "0.1.0",
-    "description": "CATIA automation toolbox for exported data: nomenclature, conversion, and checks."
-  },
-  "llm": {
-    "label": "LLM",
-    "title": "LLM status (see Settings)",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "UNTESTED",
-    "noKey": "NO KEY"
+    "description": "CATIA toolbox: nomenclature, comparison, conversion, and Composer processing."
   },
   "nav": {
     "identification": "Nomenclature / DE",
@@ -20,16 +12,13 @@
     "colorization": "Colorization",
     "optimizationTree": "Tree optimization",
     "smgxmlRename": "SMGXML: rename",
-    "replacement": "Replacement (plan)",
-    "qc": "QC checklist",
-    "checks": "Auto checks",
+    "data": "Data",
     "settings": "Settings",
     "groups": {
       "identification": "1 - Identification",
       "preparation": "2 - Preparation",
       "traitement": "3 - Processing",
       "integration": "4 - Integration",
-      "controle": "5 - Control",
       "outils": "Tools"
     },
     "ariaLabel": "Main navigation",
@@ -67,21 +56,9 @@
       "title": "4 - SMGXML: rename",
       "sub": "Replace the old part name with the new one in the SMGXML (dry-run by default)."
     },
-    "replacement": {
-      "title": "Replacement",
-      "sub": "Part replacement plan from a mapping."
-    },
-    "qc": {
-      "title": "5 - Quality Control",
-      "sub": "Checklist for verifying parts in the assembly."
-    },
-    "checks": {
-      "title": "Checks",
-      "sub": "Run configurable checks on the current import."
-    },
     "settings": {
       "title": "Settings",
-      "sub": "Mistral API key and models in use."
+      "sub": "Working folders and CATIA Composer configuration."
     }
   },
   "common": {
@@ -90,6 +67,8 @@
     "launch": "Run",
     "view": "View",
     "yes": "yes",
+    "loading": "Loading",
+    "version": "Version V{{index}}",
     "confirmAgain": "Click again to confirm",
     "dryRunTitle": "Dry-run."
   },
@@ -250,16 +229,6 @@
     "colDesignation": "Designation",
     "nomenSummary": "{{added}} added, {{removed}} removed, {{changed}} changed."
   },
-  "checks": {
-    "title": "Checks",
-    "subtitle": "Run configurable checks on the current import.",
-    "noImport": "No current import",
-    "runTitle": "Run checks",
-    "maxDepth": "Max allowed depth",
-    "run": "Check",
-    "resultTitle": "{{count}} violation(s)",
-    "none": "No violation."
-  },
   "conversion": {
     "title": "CATIA 3D → Composer conversion",
     "subtitle": "Conversion plan (dry-run).",
@@ -303,51 +272,24 @@
     "execResult": "{{mode}} finished (code {{code}}).",
     "execBase": "Base folder: {{base}}"
   },
-  "replacement": {
-    "title": "Part replacement",
-    "subtitle": "Replacement plan from a mapping (dry-run).",
-    "noImport": "No current import",
-    "mappingTitle": "Import a mapping",
-    "dryRun": "The POC produces a plan + a CATIA macro skeleton, never executed.",
-    "dropLabel": "Drop a CSV or JSON mapping",
-    "dropDescription": "Expected columns: old, new.",
-    "resultTitle": "{{count}} occurrence(s)",
-    "macro": "CATIA macro",
-    "sourceLabel": "Mapping from the Source",
-    "useSource": "Use",
-    "orUpload": "or import a file",
-    "sourceRequired": "Choose a mapping in the Source.",
-    "sourceApplied": "Mapping applied.",
-    "resultEmpty": "No occurrence found.",
-    "pickMapping": "Choose a mapping."
-  },
   "settings": {
     "title": "Settings",
-    "subtitle": "Mistral API key and models in use.",
-    "apiKeyLabel": "Mistral API key",
-    "apiKeyStored": "A key is already stored (leave blank to keep it).",
-    "baseUrlLabel": "Base URL",
-    "chatModelLabel": "Chat model",
-    "embedModelLabel": "Embeddings model",
+    "subtitle": "Working folders and CATIA Composer configuration.",
     "save": "Save",
-    "test": "Test connection",
+    "loading": "Loading settings",
+    "retry": "Retry",
     "saved": "Settings saved.",
-    "testOk": "Connection OK ({{count}} models available).",
-    "testFailed": "Failed: {{error}}",
     "onedriveTitle": "OneDrive folders (input / output)",
     "onedriveInput": "Common input root (e.g. SAFRAN)",
     "onedriveOutput": "Output root",
     "onedriveDetect": "Auto-detect",
     "onedriveUseInput": "Input",
     "onedriveUseOutput": "Output",
-    "composerTitle": "Composer license (conversion)",
+    "composerTitle": "CATIA Composer",
     "deleteUserDataTitle": "Delete user data",
     "deleteUserDataHint": "Deletes saved imports, analyses, results, and temporary local copies. OneDrive sources and all application settings are kept. This cannot be undone.",
     "composerLicense": "License server (port@host)",
-    "composerHint": "Best-effort: the exact variable read by your Composer edition is still to be confirmed (candidates DSLICSRV / DS_LICENSE_SERVER / LSERVRC).",
-    "llmTitle": "Artificial intelligence",
-    "llmEnabled": "LLM enabled",
-    "llmHint": "When disabled, AI-driven tasks are skipped (deterministic result). The key is kept."
+    "composerHint": "License server for your Composer installation (DSLICSRV / DS_LICENSE_SERVER / LSERVRC)."
   },
   "identification": {
     "sourceTitle": "Import a nomenclature",
@@ -534,40 +476,19 @@
       "write_error": "Could not write file"
     }
   },
-  "qc": {
-    "title": "Quality Control checklist",
-    "titlePlaceholder": "Title (e.g. QC Batch 3 - U320 n)",
-    "defaultTitle": "Quality control - assembly",
-    "newChecklist": "New checklist (assembly template)",
-    "ok": "OK",
-    "ko": "KO",
-    "na": "N/A",
-    "commentPlaceholder": "Comment",
-    "okCount": "{{count}} OK",
-    "koCount": "{{count}} KO",
-    "naCount": "{{count}} N/A",
-    "progress": "{{done}}/{{total}}",
-    "empty": "No checklist.",
-    "noCategory": "-"
-  },
   "data": {
     "overviewTitle": "Overview",
     "statsUnavailable": "Stats unavailable.",
     "imports": "Imports",
     "nodes": "Nodes",
-    "runs": "Runs",
-    "suggestions": "Suggestions",
     "diffs": "Comparisons",
-    "checks": "Checks",
     "conversions": "Conversions",
-    "replacements": "Replacements",
     "colorizations": "Colorizations",
     "nomenclatures": "Nomenclatures",
     "smgxmlRuns": "SMGXML",
-    "qcChecklists": "QC checklists",
     "totalSize": "Total size",
     "resetTitle": "Reset",
-    "resetBanner": "This cannot be undone. Imports, analyses, results, and temporary local copies will be deleted. OneDrive sources and all settings, including Mistral, are kept.",
+    "resetBanner": "This cannot be undone. Imports, analyses, results, and temporary local copies will be deleted. OneDrive sources and CATIA Composer settings are kept.",
     "resetAll": "Delete everything",
     "resetOk": "Reset OK ({{items}}).",
     "resetEmpty": "(nothing to delete)"

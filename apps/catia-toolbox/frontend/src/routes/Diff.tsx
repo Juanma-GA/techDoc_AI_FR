@@ -1,4 +1,6 @@
+import { Badge, Button, Select, buttonVariants } from "@internal/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, Files, FileSpreadsheet, FolderOpen, GitCompareArrows } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -14,10 +16,10 @@ import {
 import { NomenclatureDiff } from "../components/business/NomenclatureDiff";
 import { CatPartDiff } from "./CatPartDiff";
 
-const CHANGE_VARIANT: Record<string, "ok" | "danger" | "warn"> = {
-  added: "ok",
+const CHANGE_VARIANT: Record<string, "success" | "danger" | "warning"> = {
+  added: "success",
   removed: "danger",
-  modified: "warn",
+  modified: "warning",
 };
 
 /** Onglet 1 : comparaison de deux dossiers importés (existant). */
@@ -48,7 +50,7 @@ function FoldersDiff() {
   if (imports.length < 2) {
     return (
       <div className="empty-state">
-        <h3 className="card-title">{t("diff.needTwo")}</h3>
+        <h3 className="section-title">{t("diff.needTwo")}</h3>
         <p className="hint">{t("diff.needTwoDesc")}</p>
       </div>
     );
@@ -58,37 +60,38 @@ function FoldersDiff() {
 
   return (
     <div className="form">
-      <article className="card">
-        <h2 className="card-title">{t("diff.compareTitle")}</h2>
+      <section className="workflow-section">
+        <h2 className="section-title">{t("diff.compareTitle")}</h2>
         <div className="row" style={{ alignItems: "flex-end" }}>
           <label className="field grow">
             <span className="field-label">{t("diff.base")}</span>
-            <select className="input" value={base || opts[0]!.value} onChange={(e) => setBase(e.target.value)}>
+            <Select options={[]}  value={base || opts[0]!.value} onChange={(e) => setBase(e.target.value)}>
               {opts.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field grow">
             <span className="field-label">{t("diff.other")}</span>
-            <select className="input" value={other || opts[1]!.value} onChange={(e) => setOther(e.target.value)}>
+            <Select options={[]}  value={other || opts[1]!.value} onChange={(e) => setOther(e.target.value)}>
               {opts.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
-            </select>
+            </Select>
           </label>
-          <button type="button" className="btn primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          <Button type="button" variant="primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            <GitCompareArrows size={16} aria-hidden="true" />
             {t("diff.compare")}
-          </button>
+          </Button>
         </div>
         {error ? <p className="error">{error}</p> : null}
-      </article>
+      </section>
 
-      <article className="card">
+      <section className="workflow-section">
         {run ? (
           <>
-            <h2 className="card-title">{t("diff.resultTitle")}</h2>
-            <div className="kpi-grid grid-2" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+            <h2 className="section-title">{t("diff.resultTitle")}</h2>
+            <div className="kpi-grid">
               <div className="kpi">
                 <span className="label">{t("diff.added")}</span>
                 <span className="kpi-value">{run.summary.added ?? 0}</span>
@@ -102,16 +105,15 @@ function FoldersDiff() {
                 <span className="kpi-value">{run.summary.modified ?? 0}</span>
               </div>
             </div>
-            <a href={exportUrl.diffCsv(run.id)}>
-              <button type="button" className="btn secondary small">
-                {t("common.exportCsv")}
-              </button>
+            <a href={exportUrl.diffCsv(run.id)} className={buttonVariants({ variant: "secondary", size: "sm" })}>
+              <Download size={16} aria-hidden="true" />
+              {t("common.exportCsv")}
             </a>
             {entries.length > 0 ? (
               <ul className="item-list">
                 {entries.map((e) => (
                   <li key={e.id} className="item-row">
-                    <span className={`badge ${CHANGE_VARIANT[e.change_type] ?? "default"}`}>{e.change_type}</span>
+                    <Badge variant={CHANGE_VARIANT[e.change_type] ?? "default"}>{t(`diff.${e.change_type}`, { defaultValue: e.change_type })}</Badge>
                     <div className="item-main">
                       <span className="item-name">{e.rel_path}</span>
                       {e.detail ? <span className="item-meta">{`— ${e.detail}`}</span> : null}
@@ -121,16 +123,16 @@ function FoldersDiff() {
               </ul>
             ) : (
               <div className="empty-state">
-                <h3 className="card-title">{t("diff.noDifference")}</h3>
+                <h3 className="section-title">{t("diff.noDifference")}</h3>
               </div>
             )}
           </>
         ) : (
           <div className="empty-state">
-            <h3 className="card-title">{t("diff.runPrompt")}</h3>
+            <h3 className="section-title">{t("diff.runPrompt")}</h3>
           </div>
         )}
-      </article>
+      </section>
     </div>
   );
 }
@@ -139,32 +141,43 @@ export function Diff() {
   const { t } = useTranslation();
   // Focus sur la comparaison de nomenclatures (SIN / PN) par defaut.
   const [tab, setTab] = useState<"folders" | "nomenclatures" | "catparts">("nomenclatures");
+  const tabs = [
+    { key: "folders", label: t("diff.tabFolders"), icon: FolderOpen },
+    { key: "nomenclatures", label: t("diff.tabNomenclatures"), icon: FileSpreadsheet },
+    { key: "catparts", label: t("catpartDiff.tab"), icon: Files },
+  ] as const;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="row">
-        <button
-          type="button"
-          className={`btn small ${tab === "folders" ? "secondary" : "ghost"}`}
-          onClick={() => setTab("folders")}
-        >
-          {t("diff.tabFolders")}
-        </button>
-        <button
-          type="button"
-          className={`btn small ${tab === "nomenclatures" ? "secondary" : "ghost"}`}
-          onClick={() => setTab("nomenclatures")}
-        >
-          {t("diff.tabNomenclatures")}
-        </button>
-        <button
-          type="button"
-          className={`btn small ${tab === "catparts" ? "secondary" : "ghost"}`}
-          onClick={() => setTab("catparts")}
-        >
-          {t("catpartDiff.tab")}
-        </button>
+      <div className="row" role="tablist" aria-label={t("nav.diff")} onKeyDown={(event) => {
+        const index = tabs.findIndex((item) => item.key === tab);
+        const nextIndex = event.key === "ArrowRight" ? (index + 1) % tabs.length
+          : event.key === "ArrowLeft" ? (index - 1 + tabs.length) % tabs.length
+            : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
+        if (nextIndex < 0) return;
+        event.preventDefault();
+        const nextTab = tabs[nextIndex]!;
+        setTab(nextTab.key);
+        event.currentTarget.querySelector<HTMLButtonElement>(`#diff-tab-${nextTab.key}`)?.focus();
+      }}>
+        {tabs.map(({ key, label, icon: Icon }) => (
+          <Button
+            key={key}
+            id={`diff-tab-${key}`}
+            role="tab"
+            aria-selected={tab === key}
+            aria-controls="diff-panel"
+            tabIndex={tab === key ? 0 : -1}
+            variant={tab === key ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setTab(key)}
+          >
+            <Icon size={16} aria-hidden="true" />
+            {label}
+          </Button>
+        ))}
       </div>
+      <div id="diff-panel" role="tabpanel" aria-labelledby={`diff-tab-${tab}`} tabIndex={0}>
       {tab === "folders" ? (
         <FoldersDiff />
       ) : tab === "nomenclatures" ? (
@@ -172,6 +185,7 @@ export function Diff() {
       ) : (
         <CatPartDiff />
       )}
+      </div>
     </div>
   );
 }

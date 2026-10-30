@@ -8,7 +8,7 @@ test("CATPart screening separates same GE identities and exports an Excel workbo
         status: "ok",
         app_name: "Catia Toolbox",
         version: "0.1.0",
-        llm: "disabled",
+        db: "ok",
       },
       "/api/v1/imports": [],
       "/api/v1/identification": [],
@@ -61,7 +61,7 @@ test("CATPart screening separates same GE identities and exports an Excel workbo
 
   await page.goto("/");
   await page.getByRole("link", { name: /Compare|Comparaison/ }).click();
-  await page.getByRole("button", { name: /CATPart screening|Écrémage CATPart/ }).click();
+  await page.getByRole("tab", { name: /CATPart screening|Écrémage CATPart/ }).click();
 
   const folderPaths = page.locator('input[type="text"]');
   await expect(folderPaths).toHaveCount(2);
