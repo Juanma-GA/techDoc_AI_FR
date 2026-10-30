@@ -83,8 +83,27 @@ def test_ocr_requires_exact_reference_tokens_within_each_detected_box() -> None:
 
     updated_lines, matches = _match_references(lines, ["XXXY"])
 
-    assert matches == [{"reference": "XXXY", "found": False, "line_indices": []}]
+    assert matches == [{
+        "reference": "XXXY",
+        "found": False,
+        "line_indices": [],
+        "partial_line_indices": [0],
+    }]
     assert all(line["matched_references"] == [] for line in updated_lines)
+
+
+def test_ocr_reports_a_longer_token_without_marking_it_as_matched() -> None:
+    lines = [{"text": "34 708 SM"}, {"text": "34 708 SM 2"}]
+
+    updated_lines, matches = _match_references(lines, ["34708SM"])
+
+    assert matches == [{
+        "reference": "34708SM",
+        "found": True,
+        "line_indices": [0],
+        "partial_line_indices": [1],
+    }]
+    assert [line["matched_references"] for line in updated_lines] == [["34708SM"], []]
 
 
 def test_ocr_matches_reference_as_a_complete_token() -> None:

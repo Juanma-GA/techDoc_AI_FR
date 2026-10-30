@@ -356,9 +356,15 @@ export function useImageReplace(t: TFunction) {
         const replacementCount = renderedIndex < 0
           ? reference.replacement_count
           : rendered.replacement_counts[renderedIndex];
+        const partialLineIndices = renderedIndex < 0
+          ? undefined
+          : rendered.partial_line_indices?.[renderedIndex];
         return {
           ...reference,
           ...(replacementCount === undefined ? {} : { replacement_count: replacementCount }),
+          ...(partialLineIndices === undefined
+            ? {}
+            : { partial_line_indices: partialLineIndices }),
         };
       });
       image.applyTextReplacement({

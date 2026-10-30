@@ -65,6 +65,7 @@ class OcrReferenceSnapshot(StateModel):
     reference: str
     found: bool
     line_indices: list[int]
+    partial_line_indices: list[int] = Field(default_factory=list)
     replacement: str = ""
     replacement_count: int = 0
 

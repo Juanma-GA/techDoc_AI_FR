@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from io import BytesIO
 
+import structlog
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, ValidationError
@@ -17,13 +18,18 @@ from app.services.constants import (
 )
 from app.services.image_layout import create_a4_page, prepare_source_image
 from app.services.image_replacement import apply_replacements
-from app.services.ocr_engine import find_reference_occurrences, normalize_reference
+from app.services.ocr_engine import (
+    _match_references,
+    find_reference_occurrences,
+    normalize_reference,
+)
 
 router = APIRouter(prefix="/image-processor", tags=["image-processor"])
+log = structlog.get_logger(__name__)
 
 
 class RecognizedLineIn(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(max_length=2000)
     box: list[tuple[FiniteFloat, FiniteFloat]] = Field(min_length=4, max_length=4)
 
 
@@ -32,11 +38,29 @@ class ReplacementPairIn(BaseModel):
     replacement: str = Field(min_length=1, max_length=500)
 
 
+def _log_invalid_reapply_payload(field: str, error: ValueError) -> None:
+    validation_errors = []
+    if isinstance(error, ValidationError):
+        validation_errors = [
+            {"location": list(item["loc"]), "type": item["type"]}
+            for item in error.errors(include_input=False)
+        ]
+    log.warning(
+        "reapply_replacements_payload_invalid",
+        field=field,
+        error_type=type(error).__name__,
+        validation_errors=validation_errors,
+    )
+
+
 def _parse_line(raw_line: str) -> RecognizedLineIn:
     try:
-        return RecognizedLineIn.model_validate_json(raw_line)
+        line = RecognizedLineIn.model_validate_json(raw_line)
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=422, detail="La ligne OCR est invalide.") from error
+    if not line.text.strip():
+        raise HTTPException(status_code=422, detail="La ligne OCR est invalide.")
+    return line
 
 
 def _open_a4_image(image_bytes: bytes) -> Image.Image:
@@ -145,11 +169,21 @@ async def reapply_replacements(
 
     try:
         lines = TypeAdapter(list[RecognizedLineIn]).validate_json(lines_json)
+    except (ValueError, ValidationError) as error:
+        _log_invalid_reapply_payload("lines_json", error)
+        raise HTTPException(status_code=422, detail="Les zones ou remplacements sont invalides.") from error
+    lines = [line for line in lines if line.text.strip()]
+    try:
         replacement_pairs = TypeAdapter(list[ReplacementPairIn]).validate_json(
             replacement_pairs_json,
         )
+    except (ValueError, ValidationError) as error:
+        _log_invalid_reapply_payload("replacement_pairs_json", error)
+        raise HTTPException(status_code=422, detail="Les zones ou remplacements sont invalides.") from error
+    try:
         broadcast_references = TypeAdapter(list[str]).validate_json(broadcast_references_json)
     except (ValueError, ValidationError) as error:
+        _log_invalid_reapply_payload("broadcast_references_json", error)
         raise HTTPException(status_code=422, detail="Les zones ou remplacements sont invalides.") from error
 
     if any(
@@ -177,14 +211,17 @@ async def reapply_replacements(
             detail="Une référence à appliquer à toutes les zones est invalide.",
         )
 
-    replacement_lines = [
-        {"text": line.text, "box": [list(point) for point in line.box]}
-        for line in lines
-    ]
+    replacement_lines, replacement_matches = _match_references(
+        [
+            {"text": line.text, "box": [list(point) for point in line.box]}
+            for line in lines
+        ],
+        [pair["reference"] for pair in pairs],
+    )
     if any(
         x < 0 or x > A4_WIDTH or y < 0 or y > A4_HEIGHT
-        for line in replacement_lines
-        for x, y in line["box"]
+        for line in lines
+        for x, y in line.box
     ):
         raise HTTPException(status_code=422, detail="Une boîte OCR est hors de l'image.")
 
@@ -209,5 +246,8 @@ async def reapply_replacements(
     return {
         "edited_image": f"data:image/jpeg;base64,{encoded}",
         "replacement_counts": replacement_counts,
+        "partial_line_indices": [
+            match.get("partial_line_indices", []) for match in replacement_matches
+        ],
         "replacement_font_size": font_size,
     }
