@@ -49,7 +49,8 @@ Any new shared path or dependency requires a new approved batch.
 
 - Components come from `@internal/ui`; new primitives live there only with shared-change approval.
 - Colors, typography, spacing, and dimensions use approved tokens.
-- Token edits happen in `design-tokens/tokens.json` only, followed by `pnpm tokens:build`; `theme.css` is generated and never edited by hand. `pnpm tokens:check` and `pnpm --filter @internal/design-tokens test` pass.
+- Token edits happen in `design-tokens/tokens.json` only, followed by `pnpm tokens:build`; `theme.css` is generated and never edited by hand. `pnpm tokens:check` and `pnpm --filter @internal/design-tokens test` (theme sync + WCAG contrast for both themes) pass.
+- Active/selected states use `--color-nav-active-bg`/`--color-nav-active-fg` (soft tint in light, solid blue in dark); a printable or exported "white page" uses `card.base`, not the tinted light `bg.base`.
 - Text or icons on a `bg-brand`/`bg-danger` fill use `text-brand-fg`, never `text-fg`. Opacity modifiers (`bg-success/15`) are allowed on hex tokens only.
 - Dark and light themes, FR and EN, keyboard use, focus, loading, error, empty, disabled, and optimistic states are covered when applicable.
 - The shared AI4TECHDOC logo must also appear as the browser tab icon: call `setAi4TechDocFavicon()` from `@internal/ui` once in the frontend entry point (`src/main.tsx`) and do not leave the default Vite icon. Use `Ai4TechDocLogo` rather than copying the asset; see `docs/standards/demo-mode-integration.md`.

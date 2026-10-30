@@ -45,12 +45,13 @@ function flatten(node: string | ColorTree, prefix = ""): Record<string, string> 
 }
 
 const FLAT_COLORS = flatten(tokens.color as ColorTree);
+const FLAT_LIGHT = flatten(tokens.themes.light.color as ColorTree);
 const isHex = (value: string | undefined) => !!value && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value);
 
-/** Color utility value for `--color-<name>` (alpha-capable when the token is a hex color). */
+/** Color utility value for `--color-<name>` (alpha-capable when the token is hex in both themes). */
 export const tokenColor = (name: string) => {
   if (!(name in FLAT_COLORS)) throw new Error(`Unknown design token color: ${name}`);
-  return isHex(FLAT_COLORS[name])
+  return isHex(FLAT_COLORS[name]) && isHex(FLAT_LIGHT[name] ?? FLAT_COLORS[name])
     ? `rgb(var(--color-${name}-rgb) / <alpha-value>)`
     : `var(--color-${name})`;
 };

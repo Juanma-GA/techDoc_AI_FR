@@ -12,7 +12,7 @@
 
 .ui-language-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-brand-blue-light);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .ui-language-switch {
@@ -36,8 +36,9 @@
 
 .ui-language-button-active {
   border-color: var(--color-brand-blue);
-  background: var(--color-brand-blue);
-  color: var(--color-text-base);
+  background: var(--color-nav-active-bg);
+  color: var(--color-nav-active-fg);
+  font-weight: 600;
 }
 
 .ui-main {

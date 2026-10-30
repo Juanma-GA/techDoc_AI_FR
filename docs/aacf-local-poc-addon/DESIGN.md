@@ -13,34 +13,45 @@ The workspace calls its current token set **Midnight Executive**. The values bel
 
 The source is `design-tokens/tokens.json`: `color.*` contains the dark values and `themes.light.color.*` the light overrides. Values are listed here for design review only.
 
-| Token | Dark | Light |
+| Token | Dark | Light (v2) |
 |---|---|---|
-| `bg.base` | `#0e1117` | `#ffffff` |
-| `bg.2` | `#131720` | `#f8fafc` |
-| `bg.3` | `#1a2035` | `#e2e8f0` |
+| `bg.base` | `#0e1117` | `#f5f7fb` |
+| `bg.2` | `#131720` | `#ffffff` |
+| `bg.3` | `#1a2035` | `#eaeef4` |
 | `card.base` | `#161c2b` | `#ffffff` |
 | `card.hover` | `#1d2540` | `#f1f5f9` |
 | `brand.blue` | `#2563eb` | `#2563eb` |
 | `brand.blue-light` | `#3b82f6` | `#3b82f6` |
-| `semantic.success` | `#10b981` | `#059669` |
-| `semantic.warning` | `#f59e0b` | `#d97706` |
-| `semantic.danger` | `#ef4444` | `#dc2626` |
-| `semantic.info` | `#3b82f6` | `#2563eb` |
+| `brand.fg` | `#ffffff` | `#ffffff` |
+| `brand.hover` | `#3b82f6` | `#1d4ed8` |
+| `brand.text` | `#3b82f6` | `#1d4ed8` |
+| `brand.soft` | `rgba(37,99,235,0.18)` | `rgba(37,99,235,0.10)` |
+| `semantic.success` | `#10b981` | `#047857` |
+| `semantic.warning` | `#f59e0b` | `#b45309` |
+| `semantic.danger` | `#ef4444` | `#b91c1c` |
+| `semantic.info` | `#3b82f6` | `#1d4ed8` |
 | `accent.teal` | `#06b6d4` | `#0891b2` |
 | `accent.purple` | `#8b5cf6` | `#7c3aed` |
 | `accent.orange` | `#f97316` | `#ea580c` |
 | `accent.pink` | `#ec4899` | `#db2777` |
 | `accent.yellow` | `#eab308` | `#ca8a04` |
 | `text.base` | `#e2e8f0` | `#0f172a` |
-| `text.dim` | `#94a3b8` | `#64748b` |
-| `text.muted` | `#4b5563` | `#94a3b8` |
-| `border.base` | `rgba(255,255,255,0.07)` | `rgba(0,0,0,0.07)` |
-| `border.md` | `rgba(255,255,255,0.12)` | `rgba(0,0,0,0.12)` |
-| `border.bright` | `rgba(37,99,235,0.4)` | `rgba(37,99,235,0.4)` |
+| `text.dim` | `#94a3b8` | `#475569` |
+| `text.muted` | `#64748b` | `#64748b` |
+| `border.base` | `rgba(255,255,255,0.07)` | `rgba(15,23,42,0.10)` |
+| `border.md` | `rgba(255,255,255,0.12)` | `rgba(15,23,42,0.16)` |
+| `border.bright` | `rgba(37,99,235,0.4)` | `rgba(37,99,235,0.45)` |
+| `surface.sunken` | `#131720` | `#f8fafc` |
+| `focus.ring` | `#3b82f6` | `#2563eb` |
+| `nav.active-bg` | `#2563eb` | `rgba(37,99,235,0.10)` |
+| `nav.active-fg` | `#ffffff` | `#1d4ed8` |
+| `overlay` | `rgba(0,0,0,0.6)` | `rgba(15,23,42,0.4)` |
+
+Contrast targets are enforced by `design-tokens/tests/contrast.test.mjs`; see [design-system.md](../standards/design-system.md).
 
 ## 3. Token Consumption
 
-- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/theme.css` through their `index.css` and extend the shared Tailwind preset.
+- [tokens.json](../../design-tokens/tokens.json) is the repository value source; [theme.css](../../design-tokens/theme.css) is generated from it and exposes CSS variables; [tailwind-preset.ts](../../design-tokens/tailwind-preset.ts) maps semantic utilities to those variables. Apps import `@internal/design-tokens/theme.css` through their `index.css` and extend the shared Tailwind preset.
 - Use semantic utilities such as `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-fg`, `text-fg-dim`, `text-fg-muted`, `text-brand-blue-light`, `text-success`, `text-warning`, `text-danger`, `text-info`, `border`, `border-md`, and `border-bright`.
 - Use `font-sans`, `font-mono`, `font-display`, `rounded-sm`, `rounded-lg`, `shadow-card`, `w-sidebar-w`, `h-topbar-h`, `text-base`, and `text-label` for their corresponding shared tokens.
 - Charts needing theme-aware colors use the shared `colorByTheme(theme, tokenPath)` helper from [design-tokens/index.ts](../../design-tokens/index.ts). Never add app-local hex values or duplicate tokens.

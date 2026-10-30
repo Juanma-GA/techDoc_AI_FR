@@ -20,6 +20,7 @@ Audit du framework UI (octobre 2026) :
 1. `tokens.json` est l'unique source ; `theme.css` est **généré** par `design-tokens/scripts/build-theme.mjs` et vérifié par `pnpm tokens:check` (test + `check_standard.sh`).
 2. Chaque token hex émet `--color-<nom>` (couleur complète, compatible) **et** `--color-<nom>-rgb` (canaux). Le preset consomme `rgb(var(--color-<nom>-rgb) / <alpha-value>)`, ce qui réactive les opacités Tailwind.
 3. Nouveaux tokens sémantiques : `brand.fg`, `brand.hover`, `brand.text`, `brand.soft`, `surface.sunken`, `focus.ring`, `nav.active-bg/fg`, `overlay`, ombres thémées (`shadow.card`, `shadow.popover`), échelles `radius`, `fontSize`, `motion`, et polices exposées en variables CSS avec des polices système de repli.
+4. **Palette claire v2** : fond d'app teinté (`#f5f7fb`) et cartes blanches, textes secondaires assombris, couleurs d'état en nuances 700, bordures teintées ardoise, ombre légère dédiée, onglet actif en teinte douce. Le mode sombre reste le défaut ; seul son `text.muted` est éclairci. Les ratios WCAG sont vérifiés par `design-tokens/tests/contrast.test.mjs`.
 
 ## Conséquences
 

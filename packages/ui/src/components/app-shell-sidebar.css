@@ -31,7 +31,7 @@
 
 .ui-sidebar-brand {
   overflow: hidden;
-  color: var(--color-brand-blue-light);
+  color: var(--color-brand-text);
   font-family: "Orbitron", sans-serif;
   font-size: 1.15rem;
   line-height: 1.2;
@@ -115,14 +115,20 @@
 }
 
 .ui-nav-item-active {
-  background: var(--color-brand-blue);
-  color: var(--color-text-base);
+  background: var(--color-nav-active-bg);
+  color: var(--color-nav-active-fg);
+  font-weight: 600;
+}
+
+.ui-nav-item-active:hover {
+  background: var(--color-nav-active-bg);
+  color: var(--color-nav-active-fg);
 }
 
 .ui-nav-item:focus-visible,
 .ui-sidebar-collapse-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-brand-blue-light);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .ui-sidebar-collapsible {

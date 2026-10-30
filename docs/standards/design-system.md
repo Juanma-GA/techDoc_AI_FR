@@ -77,3 +77,29 @@ Rules:
 - `color.*`, `colorByTheme`, `font`, `radius`, `shadow`, `layout` exports of `@internal/design-tokens` keep their shape. New exports are additive.
 - Existing Tailwind utilities keep their names; they now also support opacity modifiers.
 - The test `design-tokens/tests/theme.test.mjs` guards the legacy variables and the light/dark key parity.
+
+## 3. Palettes And Contrast
+
+Dark remains the default theme (`.dark`, applied by the anti-flash script). Light v2 (October 2026) replaces the flat white light theme:
+
+| Role | Light token | Value | Intent |
+|---|---|---|---|
+| App background | `bg.base` | `#f5f7fb` | Slightly tinted so white cards stand out |
+| Sidebar | `bg.2` | `#ffffff` | Sidebar separated by its border |
+| Recessed areas | `bg.3` | `#eaeef4` | Tracks, inactive switches |
+| Cards / hover | `card.base` / `card.hover` | `#ffffff` / `#f1f5f9` | |
+| Text | `text.base` / `dim` / `muted` | `#0f172a` / `#475569` / `#64748b` | AA for body and secondary text |
+| Status text | `semantic.*` | 700 shades (`#047857`, `#b45309`, `#b91c1c`, `#1d4ed8`) | AA as text on white |
+| Brand | `brand.blue` / `hover` / `text` | `#2563eb` / `#1d4ed8` / `#1d4ed8` | Hover darkens in light, lightens in dark |
+| Active navigation | `nav.active-bg` / `nav.active-fg` | `brand.soft` tint / `#1d4ed8` | Light uses a soft tint; dark keeps the solid blue pill |
+| Borders | `border.base` / `md` | `rgba(15,23,42,.10)` / `.16` | Slate-tinted, visible on tinted backgrounds |
+| Shadow | `shadow.card` | two light slate layers | Dark keeps its deeper shadow |
+
+Dark `text.muted` moved from `#4b5563` to `#64748b` (it was 2.3:1 on cards).
+
+`design-tokens/tests/contrast.test.mjs` enforces WCAG ratios for both themes: body text 7:1, secondary text 4.5:1, muted text 3:1, text on brand 4.5:1, active navigation 4.5:1, status colors 3:1 (4.5:1 in light). A palette change that breaks a ratio fails `pnpm --filter @internal/design-tokens test`.
+
+Compatibility notes:
+
+- Code that used the light `bg.base` as a "white page" color must use `card.base` instead (done for flowchart-generator printable exports).
+- Shared shell CSS reads `--color-nav-active-*`, `--color-brand-text` and `--color-focus-ring`; app CSS should do the same rather than `--color-brand-blue` + `--color-text-base` for active states.
