@@ -34,7 +34,7 @@ from app.core.s1000d_schema import SELECTABLE_ISSUES
 from app.core.s1000d_serializer import missing_data_fields
 from app.core.sse import JobCancelled, stream_threaded_job
 from app.core.uploads import UPLOAD_LOCK, file_sha256, staged_upload
-from app.core.validator import validate_document, xsd_is_valid
+from app.core.validator import has_blocking_violation, validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
 from app.db.session import get_db, open_session, storage_directory
 from app.parsers import detect_format
@@ -282,16 +282,7 @@ def override_node(
         brex_xml=brex_xml,
     )
     violations.extend(serialization.xsd_violations)
-    missing_fields = missing_data_fields(xml)
-    doc.status = (
-        "incomplete"
-        if (
-            not xsd_is_valid(violations)
-            or missing_fields
-            or any(v.get("severity") == "error" for v in violations)
-        )
-        else "extracted"
-    )
+    doc.status = "incomplete" if has_blocking_violation(violations) else "extracted"
     atomic_write_text(Path(doc.xml_path), xml)  # type: ignore[arg-type]
     doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     doc.violations_json = json.dumps(violations, ensure_ascii=False)
@@ -367,15 +358,8 @@ def _run_and_persist(doc_id: str, cb, demo_mode: bool = False) -> dict:
         doc.dm_type = result.dm_type
         doc.ir_json = json.dumps(result.tree, ensure_ascii=False)
         doc.violations_json = json.dumps(result.violations, ensure_ascii=False)
-        missing_fields = missing_data_fields(result.xml)
         doc.status = (
-            "incomplete"
-            if (
-                not xsd_is_valid(result.violations)
-                or missing_fields
-                or any(v.get("severity") == "error" for v in result.violations)
-            )
-            else "extracted"
+            "incomplete" if has_blocking_violation(result.violations) else "extracted"
         )
         db.commit()
         return {

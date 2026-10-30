@@ -2,14 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@internal/ui";
 import { useTranslation } from "react-i18next";
 
-export function ConfirmAction({ label, onConfirm, disabled = false }: {
-  label: string; onConfirm: () => void; disabled?: boolean;
+export function ConfirmAction({ label, onConfirm, disabled = false, variant = "danger" }: {
+  label: string; onConfirm: () => void; disabled?: boolean; variant?: "danger" | "ghost" | "secondary";
 }) {
   const { t } = useTranslation();
   const [armed, setArmed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(timer.current), []);
-  return <Button type="button" variant="danger" size="sm" disabled={disabled}
+  return <Button type="button" variant={armed ? "danger" : variant} size="sm" disabled={disabled}
     aria-live="polite" onClick={() => {
       if (!armed) {
         setArmed(true);

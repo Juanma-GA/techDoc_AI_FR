@@ -8,7 +8,7 @@ import type { MigrationWizard } from "./useMigrationWizard";
 import { ConfirmAction } from "./ConfirmAction";
 
 const variants = {
-  extracted: "success", incomplete: "warning", extract_failed: "danger", wizard: "info", uploaded: "default",
+  extracted: "success", incomplete: "danger", extract_failed: "danger", wizard: "info", uploaded: "default",
 } as const;
 export function DocumentList({ inputs, wizard }: { inputs: MigrationInputs; wizard: MigrationWizard }) {
   const { t } = useTranslation();

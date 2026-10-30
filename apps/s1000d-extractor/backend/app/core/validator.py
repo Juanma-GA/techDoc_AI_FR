@@ -102,3 +102,11 @@ def xsd_is_valid(violations: list[dict]) -> bool:
         violation.get("rule") in {"XSD", "WELLFORMED"}
         for violation in violations
     )
+
+
+def has_blocking_violation(violations: list[dict]) -> bool:
+    """Only XSD/well-formedness failures and error-severity rules make a DM incomplete;
+    warnings and provisional missing fields are reported but do not."""
+    return not xsd_is_valid(violations) or any(
+        violation.get("severity") == "error" for violation in violations
+    )

@@ -2,13 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from "@internal/ui";
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Select } from "@internal/ui";
 import { useTranslation } from "react-i18next";
-import { CircleHelp } from "lucide-react";
 import { BrexProfileControl } from "../../components/BrexProfileControl";
 import type { MigrationInputs } from "./useMigrationInputs";
 import type { MigrationWizard } from "./useMigrationWizard";
-import { ConfirmAction } from "./ConfirmAction";
+import { ResourceField } from "./ResourceField";
 import { StartProgress } from "./StartProgress";
 
 export function UploadCard({ inputs, wizard }: { inputs: MigrationInputs; wizard: MigrationWizard }) {
@@ -31,24 +30,22 @@ export function UploadCard({ inputs, wizard }: { inputs: MigrationInputs; wizard
     <CardHeader><CardTitle>{t("migration.upload.title")}</CardTitle></CardHeader>
     <CardContent>
       <form className="space-y-4" onSubmit={handleSubmit(wizard.start)} noValidate>
-        <label className="block space-y-2">
-          <span>{t("migration.upload.file")}</span>
-          <Controller control={control} name="source" render={({ field }) =>
-            <Input type="file" accept=".pdf,.docx" disabled={disabled} ref={field.ref}
-              onBlur={field.onBlur} aria-invalid={!!formState.errors.source}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                field.onChange(file);
-                inputs.selectDocument(file);
-              }} />} />
-          {inputs.file || savedName ? <span className="block text-sm text-fg-dim" role="status">
-            {t(inputs.file ? "migration.upload.selectedFile" : "migration.upload.lastDocument",
-              { filename: inputs.file?.name ?? savedName })}
-          </span> : null}
-          {formState.errors.source ? <span role="alert" className="text-danger">
-            {formState.errors.source.message}
-          </span> : null}
-        </label>
+        <Controller control={control} name="source" render={({ field }) =>
+          <ResourceField label={t("migration.upload.file")} accept=".pdf,.docx" disabled={disabled}
+            onSelect={(file) => {
+              field.onChange(file);
+              field.onBlur();
+              inputs.selectDocument(file);
+            }}
+            status={<>
+              {inputs.file || savedName ? <span className="block text-sm text-fg-dim" role="status">
+                {t(inputs.file ? "migration.upload.selectedFile" : "migration.upload.lastDocument",
+                  { filename: inputs.file?.name ?? savedName })}
+              </span> : null}
+              {formState.errors.source ? <span role="alert" className="text-sm text-danger">
+                {formState.errors.source.message}
+              </span> : null}
+            </>} />} />
         <label className="block space-y-2">
           <span>{t("migration.upload.issue")}</span>
           <Controller control={control} name="issue" render={({ field }) =>
@@ -66,31 +63,27 @@ export function UploadCard({ inputs, wizard }: { inputs: MigrationInputs; wizard
         </label>
         {inputs.mode === "demo" ? null : <BrexProfileControl issue={inputs.issue}
           value={inputs.brexId} onChange={inputs.setBrexId} onReadyChange={setBrexReady} disabled={disabled} />}
-        <div className="grid gap-4 md:grid-cols-3">
-          {(["dmrl", "dm_header"] as const).map((kind) => {
-            const name = inputs.resources[kind]?.name ?? inputs.mapping?.files[kind]?.filename;
-            return <div key={kind} className="space-y-2">
-              <label className="block space-y-2">
-                <span>{t(kind === "dmrl" ? "migration.upload.dmrl" : "migration.upload.dmHeader")}</span>
-                <Input type="file" accept={kind === "dmrl" ? ".xlsx,.xlsm,.csv,.json" : ".json,.xml"}
-                  disabled={disabled} onChange={(event) => inputs.selectResource(kind, event.target.files?.[0] ?? null)} />
-              </label>
-              {kind === "dm_header" ? <Button type="button" variant="ghost" size="sm"
-                title={t("migration.upload.dmHeaderHelp")} aria-label={t("migration.upload.dmHeaderHelp")}>
-                <CircleHelp size={15} aria-hidden="true" />
-              </Button> : null}
-              {name ? <><p className="break-all text-sm text-fg-dim" role="status">
-                {t("migration.upload.selectedFile", { filename: name })}
-              </p><ConfirmAction label={t("migration.ui.clearResource")} disabled={disabled}
-                onConfirm={() => inputs.selectResource(kind, null)} /></> : null}
-            </div>;
-          })}
-          <label className="space-y-2">
-            <span>{t("migration.upload.cir")}</span>
-            <Input type="file" accept=".xml" disabled aria-describedby="conversion-cir-status" />
-            <span id="conversion-cir-status" className="text-sm text-fg-dim">{t("migration.upload.inDevelopment")}</span>
-          </label>
-        </div>
+        <fieldset className="space-y-3 border-t pt-4">
+          <legend className="pr-2 font-mono text-label uppercase text-fg-dim">
+            {t("migration.upload.resourcesTitle")}
+          </legend>
+          <div className="grid items-start gap-4 md:grid-cols-3">
+            {(["dmrl", "dm_header"] as const).map((kind) => {
+              const name = inputs.resources[kind]?.name ?? inputs.mapping?.files[kind]?.filename;
+              const dmrl = kind === "dmrl";
+              return <ResourceField key={kind} disabled={disabled} filename={name}
+                label={t(dmrl ? "migration.upload.dmrl" : "migration.upload.dmHeader")}
+                hint={t(dmrl ? "migration.upload.dmrlHint" : "migration.upload.dmHeaderHint")}
+                help={dmrl ? undefined : t("migration.upload.dmHeaderHelp")}
+                accept={dmrl ? ".xlsx,.xlsm,.csv,.json" : ".json,.xml"}
+                onSelect={(file) => inputs.selectResource(kind, file)}
+                onClear={() => inputs.selectResource(kind, null)} />;
+            })}
+            <ResourceField label={t("migration.upload.cir")} hint={t("migration.upload.cirHint")}
+              accept=".xml" disabled onSelect={() => undefined}
+              status={<Badge className="self-start">{t("migration.upload.inDevelopment")}</Badge>} />
+          </div>
+        </fieldset>
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" disabled={disabled || !brexReady}>{t("migration.upload.start")}</Button>
           <StartProgress progress={wizard.starting} />

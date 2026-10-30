@@ -56,7 +56,7 @@ def test_missing_direct_dmc_is_reported_but_downloadable(client, pdf_bytes) -> N
         violation for violation in result["violations"]
         if violation["rule"] == "XSD" and violation["severity"] == "error"
     ]
-    assert client.get(f"/api/v1/documents/{doc_id}").json()["status"] == "incomplete"
+    assert client.get(f"/api/v1/documents/{doc_id}").json()["status"] == "extracted"
     response = client.get(f"/api/v1/documents/{doc_id}/xml")
 
     assert response.status_code == 200

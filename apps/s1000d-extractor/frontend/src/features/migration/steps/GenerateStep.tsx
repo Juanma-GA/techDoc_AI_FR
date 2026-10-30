@@ -25,14 +25,14 @@ export function GenerateStep({ state, wizard, docId, profileId }: {
   const images = useQuery({ queryKey: ["s1000d-images", docId], queryFn: () => wizardApi.images(docId) });
   const common = useMemo(() => getCommonMissingFields(state.dms), [state.dms]);
   const commonSet = useMemo(() => new Set(common), [common]);
-  const errors = state.dms.filter((dm) => dm.xsd_valid === false).length;
+  const errors = state.dms.filter(generationHasError).length;
   const valid = state.dms.filter((dm) => !generationHasError(dm) && dm.xsd_valid === true &&
     !dm.missing_fields?.length && !dm.cir_unresolved?.length).length;
   const visible = errorsOnly ? state.dms.filter(generationHasError) : state.dms;
   return <Card>
     <CardHeader><CardTitle>{t("migration.generate.title", { count: state.dms.length })}</CardTitle></CardHeader>
     <CardContent className="space-y-4">
-      <p role="status">{t("migration.ui.summary", { valid, incomplete: state.dms.length - valid - errors, errors })}</p>
+      <p role="status">{t("migration.ui.summary", { valid, warnings: state.dms.length - valid - errors, errors })}</p>
       <div className="flex flex-wrap items-end gap-3">
         <WizardStepBackButton steps={state.steps ?? []} step={state.step} disabled={wizard.busy}
           onBack={() => void wizard.action("back")} />

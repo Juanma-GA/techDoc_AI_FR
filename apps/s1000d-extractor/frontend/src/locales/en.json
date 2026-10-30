@@ -122,6 +122,7 @@
     "uploaded": "Uploaded",
     "wizard": "Configuring",
     "extracted": "Extracted",
+    "incomplete": "In error",
     "extract_failed": "Extraction failed"
   },
   "common": {
@@ -206,10 +207,17 @@
       "issueValue": "Issue {{issue}}",
       "brex": "Project BREX",
       "inDevelopment": "In development",
-      "dmrl": "DMRL (xlsx / csv / json) — drives the split + the PMC",
-      "cir": "CIR (xml) — shared content",
-      "dmHeader": "Client DM header (json / xml)",
+      "dmrl": "DMRL",
+      "dmrlHint": "Drives the split and the PMC",
+      "cir": "CIR",
+      "cirHint": "Shared content",
+      "dmHeader": "Client DM header",
+      "dmHeaderHint": "Shared Data Module metadata",
       "dmHeaderHelp": "This JSON or XML file supplies shared Data Module header metadata, such as language, security classification, responsible or originating organization, and applicability.",
+      "helpToggle": "Show help: {{label}}",
+      "resourcesTitle": "Project resources",
+      "dropLabel": "Drop or choose a file",
+      "wrongFormat": "Unsupported format. Accepted formats: {{formats}}",
       "start": "Generate",
       "noFile": "Select a PDF or Word file to start a new generation.",
       "selectedFile": "File sent to Generate: {{filename}}",
@@ -443,7 +451,7 @@
       "validationDetails": "XSD error details",
       "brexDetails": "BREX analysis details",
       "errorsOnly": "Errors only",
-      "summary": "Valid: {{valid}} / Incomplete: {{incomplete}} / XSD errors: {{errors}}",
+      "summary": "Valid: {{valid}} / With warnings: {{warnings}} / In error: {{errors}}",
       "reused": "Existing document reused: no duplicate created."
     }
   },

@@ -122,6 +122,7 @@
     "uploaded": "Chargé",
     "wizard": "En configuration",
     "extracted": "Extrait",
+    "incomplete": "En erreur",
     "extract_failed": "Échec d'extraction"
   },
   "common": {
@@ -206,10 +207,17 @@
       "issueValue": "Issue {{issue}}",
       "brex": "BREX projet",
       "inDevelopment": "En cours de développement",
-      "dmrl": "DMRL (xlsx / csv / json) — pilote le découpage + la PMC",
-      "cir": "CIR (xml) — contenus partagés",
-      "dmHeader": "En-tête DM client (json / xml)",
+      "dmrl": "DMRL",
+      "dmrlHint": "Pilote le découpage et la PMC",
+      "cir": "CIR",
+      "cirHint": "Contenus partagés",
+      "dmHeader": "En-tête DM client",
+      "dmHeaderHint": "Métadonnées communes des Data Modules",
       "dmHeaderHelp": "Ce fichier JSON ou XML fournit les métadonnées communes de l’en-tête des Data Modules : langue, sécurité, société responsable ou émettrice, applicabilité, etc.",
+      "helpToggle": "Afficher l’aide : {{label}}",
+      "resourcesTitle": "Ressources projet",
+      "dropLabel": "Déposer ou choisir un fichier",
+      "wrongFormat": "Format non pris en charge. Formats acceptés : {{formats}}",
       "start": "Générer",
       "noFile": "Sélectionne un fichier PDF ou Word pour lancer une nouvelle génération.",
       "selectedFile": "Fichier envoyé à Générer : {{filename}}",
@@ -443,7 +451,7 @@
       "validationDetails": "Détails des erreurs XSD",
       "brexDetails": "Détails de l’analyse BREX",
       "errorsOnly": "Erreurs uniquement",
-      "summary": "Valides : {{valid}} / Incomplets : {{incomplete}} / Erreurs XSD : {{errors}}",
+      "summary": "Valides : {{valid}} / Avec avertissements : {{warnings}} / En erreur : {{errors}}",
       "reused": "Document existant réutilisé : aucun doublon créé."
     }
   },

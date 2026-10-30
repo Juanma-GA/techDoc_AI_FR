@@ -13,6 +13,30 @@ import {
   isRestorableMigrationInput,
 } from "../lib/migrationUtils";
 import { IllustrationWarning } from "../features/migration/WizardNotices";
+import { StartProgress } from "../features/migration/StartProgress";
+
+describe("conversion loading bar", () => {
+  it("uses the original thin blue bar with accessible progress", () => {
+    const markup = renderToStaticMarkup(<StartProgress progress={{ pct: 42, label: "Analysis" }} />);
+    expect(markup).toContain('class="progress"');
+    expect(markup).toContain('role="progressbar"');
+    expect(markup).toContain('aria-label="Analysis"');
+    expect(markup).toContain('aria-valuenow="42"');
+    expect(markup).toContain('style="width:42%"');
+    expect(markup).not.toContain("<progress");
+  });
+
+  it.each([-10, 110])("keeps progress within bounds for %i", (pct) => {
+    const bounded = Math.max(0, Math.min(100, pct));
+    const markup = renderToStaticMarkup(<StartProgress progress={{ pct, label: "Analysis" }} />);
+    expect(markup).toContain(`aria-valuenow="${bounded}"`);
+    expect(markup).toContain(`style="width:${bounded}%"`);
+  });
+
+  it("does not display a bar when no operation is running", () => {
+    expect(renderToStaticMarkup(<StartProgress progress={null} />)).toBe("");
+  });
+});
 
 describe("illustration extraction warning", () => {
   it.each([

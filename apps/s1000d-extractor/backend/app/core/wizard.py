@@ -58,7 +58,7 @@ from app.core.s1000d_serializer import (
     build_reference_index,
     missing_data_fields,
 )
-from app.core.validator import validate_document, xsd_is_valid
+from app.core.validator import has_blocking_violation, validate_document, xsd_is_valid
 from app.core.wizard_fingerprint import dm_xml_fingerprint, xml_context_fingerprint
 from app.core.wizard_zip_export import reference_index_documents
 from app.db.models import BrexProfile, Document
@@ -473,8 +473,7 @@ def _finish_generation(db: Session, doc: Document) -> None:
         "incomplete"
         if any(
             dm.get("xsd_valid") is not True
-            or dm.get("missing_fields")
-            or any(v.get("severity") == "error" for v in dm.get("violations") or [])
+            or has_blocking_violation(dm.get("violations") or [])
             for dm in ws.load_dms(doc)
         )
         else "extracted"
@@ -782,11 +781,7 @@ def render_dm(
                     "incomplete"
                     if any(
                         item.get("xsd_valid") is not True
-                        or item.get("missing_fields")
-                        or any(
-                            violation.get("severity") == "error"
-                            for violation in item.get("violations") or []
-                        )
+                        or has_blocking_violation(item.get("violations") or [])
                         for item in dms
                     )
                     else "extracted"

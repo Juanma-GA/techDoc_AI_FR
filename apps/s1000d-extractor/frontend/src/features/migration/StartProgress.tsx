@@ -7,6 +7,9 @@ export function StartProgress({ progress }: { progress: StartProgressState | nul
     <div className="flex justify-between gap-3 text-sm text-fg-dim">
       <span>{progress.label}</span><span>{pct}%</span>
     </div>
-    <progress className="w-full accent-brand" value={pct} max={100} aria-label={progress.label} />
+    <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100}
+      aria-valuenow={pct} aria-label={progress.label}>
+      <span style={{ width: `${pct}%` }} />
+    </div>
   </div>;
 }
