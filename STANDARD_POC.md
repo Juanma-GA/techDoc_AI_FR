@@ -353,45 +353,44 @@ apps/<poc>/frontend/src/
 
 ### 5.1 Tokens
 
-Trois fichiers à la racine de `design-tokens/`, source unique de vérité :
+Trois fichiers à la racine de `design-tokens/`, source unique de vérité (détail complet : [supplément design system](./docs/standards/design-system.md)) :
 
 | Fichier | Rôle |
 |---|---|
-| `tokens.json` | Valeurs brutes : couleurs dark (à plat sous `color.*`) + overrides light sous `themes.light.color.*` + tokens non-thèmes (font, radius, shadow, layout). |
-| `theme.css` | CSS custom properties dérivées de `tokens.json`. Pattern Tailwind classique : `:root { … }` = palette light par défaut, `.dark { … }` = overrides dark. Importé par chaque app via `index.css` (`@import "@internal/design-tokens/theme.css"`). |
-| `tailwind-preset.ts` | Preset Tailwind partagé. Mappe les classes (`bg-bg`, `text-fg`…) vers `var(--color-*)` pour rendre le dual-theme automatique sans recompile. |
+| `tokens.json` | Valeurs brutes : couleurs dark (à plat sous `color.*`) + overrides light sous `themes.light.color.*` / `themes.light.shadow.*` + tokens non-thèmes (font, fontSize, radius, shadow, motion, layout). Validé par `tokens.schema.json`. |
+| `theme.css` | **Généré** depuis `tokens.json` par `pnpm tokens:build` (`design-tokens/scripts/build-theme.mjs`) — ne jamais l'éditer à la main ; `pnpm tokens:check` échoue s'il est périmé. `:root { … }` = palette light + tokens statiques, `.dark { … }` = palette dark. Chaque couleur hex émet `--color-x` (couleur complète, rétrocompatible) et `--color-x-rgb` (canaux). |
+| `tailwind-preset.ts` | Preset Tailwind partagé. Mappe les classes (`bg-bg`, `text-fg`…) vers `rgb(var(--color-x-rgb) / <alpha-value>)` : dual-theme automatique **et** modificateurs d'opacité (`bg-success/15`) fonctionnels. |
 
-**Structure de `tokens.json`** :
+**Structure de `tokens.json`** (extrait — fichier complet dans `design-tokens/tokens.json`) :
 
 ```json
 {
   "color": {
     "bg":   { "base": "#0e1117", "2": "#131720", "3": "#1a2035" },
     "card": { "base": "#161c2b", "hover": "#1d2540" },
-    "brand":    { "blue": "#2563eb", "blue-light": "#3b82f6" },
+    "brand":    { "blue": "#2563eb", "blue-light": "#3b82f6", "fg": "#ffffff", "hover": "…", "text": "…", "soft": "rgba(…)" },
     "semantic": { "success": "#10b981", "warning": "#f59e0b", "danger": "#ef4444", "info": "#3b82f6" },
     "text":     { "base": "#e2e8f0", "dim": "#94a3b8", "muted": "#4b5563" },
-    "border":   { "base": "rgba(255,255,255,0.07)", "md": "rgba(255,255,255,0.12)", "bright": "rgba(37,99,235,0.4)" }
+    "border":   { "base": "rgba(255,255,255,0.07)", "md": "rgba(255,255,255,0.12)", "bright": "rgba(37,99,235,0.4)" },
+    "surface":  { "sunken": "…" }, "focus": { "ring": "…" }, "nav": { "active-bg": "…", "active-fg": "…" }, "overlay": "rgba(…)"
   },
   "themes": {
     "light": {
-      "color": {
-        "bg":   { "base": "#ffffff", "2": "#f8fafc", "3": "#e2e8f0" },
-        "card": { "base": "#ffffff", "hover": "#f1f5f9" },
-        "text": { "base": "#0f172a", "dim": "#64748b", "muted": "#94a3b8" },
-        "border": { "base": "rgba(0,0,0,0.07)", "md": "rgba(0,0,0,0.12)", "bright": "rgba(37,99,235,0.4)" }
-      }
+      "color":  { "bg": { "base": "…" }, "text": { "base": "#0f172a" } },
+      "shadow": { "card": "…", "popover": "…" }
     }
   },
-  "font":   { "sans": ["Inter", "sans-serif"], "mono": ["JetBrains Mono", "monospace"] },
-  "radius": { "sm": "8px", "lg": "12px" },
+  "font":   { "sans": ["Inter", "system-ui", "…"], "mono": ["JetBrains Mono", "…"], "display": ["Orbitron", "…"] },
+  "radius": { "xs": "4px", "sm": "8px", "md": "10px", "lg": "12px", "xl": "16px", "full": "9999px" },
+  "shadow": { "card": "…", "popover": "…" },
+  "motion": { "duration-fast": "150ms", "duration-base": "200ms", "easing-standard": "…" },
   "layout": { "sidebar-w": "252px", "topbar-h": "52px" }
 }
 ```
 
-**Pourquoi cette structure** : `color.*` reste à plat pour la rétrocompat des consommateurs JS/TS (charts Recharts qui font `color.brand.blue`). Les overrides light vivent sous `themes.light` et n'ont à contenir que les valeurs qui changent. Le preset Tailwind ne consomme **plus** ces hex directement — il consomme les CSS variables émises par `theme.css`, ce qui rend le toggle dark/light automatique sans recompiler Tailwind.
+**Pourquoi cette structure** : `color.*` reste à plat pour la rétrocompat des consommateurs JS/TS (charts Recharts qui font `color.brand.blue`). Les overrides light vivent sous `themes.light` et n'ont à contenir que les valeurs qui changent. Le preset Tailwind ne consomme **plus** ces hex directement — il consomme les CSS variables générées dans `theme.css`, ce qui rend le toggle dark/light automatique sans recompiler Tailwind.
 
-**Naming Tailwind** : le preset expose `text.*` sous `fg.*` pour éviter la classe `text-text-base`. Utiliser `text-fg`, `text-fg-dim`, `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-brand-blue-light`.
+**Naming Tailwind** : le preset expose `text.*` sous `fg.*` pour éviter la classe `text-text-base`. Utiliser `text-fg`, `text-fg-dim`, `bg-bg`, `bg-bg-2`, `bg-card`, `bg-card-hover`, `text-brand-text`. Sur un fond `bg-brand` ou `bg-danger`, le texte est **toujours** `text-brand-fg` (jamais `text-fg`, quasi noir en clair).
 
 **Conforme** : `<div className="bg-bg text-fg">…</div>` (classes Tailwind résolues via CSS vars, dual-theme automatique).
 **Non conforme** : `<div style={{ background: "#0e1117" }}>…</div>` (hex en dur, ne suit pas le toggle theme).
@@ -399,8 +398,8 @@ Trois fichiers à la racine de `design-tokens/`, source unique de vérité :
 **Code TS theme-aware** (charts qui doivent changer de couleurs entre dark/light) :
 
 ```ts
-import { colorByTheme } from "@internal/design-tokens";
-const fill = colorByTheme(theme, "text.base");  // "#e2e8f0" en dark, "#0f172a" en light
+import { colorByTheme, currentTheme } from "@internal/design-tokens";
+const fill = colorByTheme(currentTheme(), "text.base");  // "#e2e8f0" en dark, "#0f172a" en light
 ```
 
 ### 5.2 Typographie

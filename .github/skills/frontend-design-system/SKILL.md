@@ -21,8 +21,9 @@ Plan and apply frontend changes through the repository design system while keepi
 1. Current AACF design system and branding when accessible.
 2. `STANDARD_POC.md` frontend and design-system rules.
 3. `CLAUDE.md` shared-component, token, i18n, and structural-change rules.
-4. `design-tokens/tokens.json` and existing `@internal/ui` patterns.
-5. Application-specific README deviations and accepted ADRs.
+4. `docs/standards/design-system.md` (token pipeline, utilities, fonts, light palette, shared primitives, guardrails) and ADR 0005.
+5. `design-tokens/tokens.json` and existing `@internal/ui` patterns.
+6. Application-specific README deviations and accepted ADRs.
 
 ## Procedure
 
@@ -48,6 +49,8 @@ Any new shared path or dependency requires a new approved batch.
 
 - Components come from `@internal/ui`; new primitives live there only with shared-change approval.
 - Colors, typography, spacing, and dimensions use approved tokens.
+- Token edits happen in `design-tokens/tokens.json` only, followed by `pnpm tokens:build`; `theme.css` is generated and never edited by hand. `pnpm tokens:check` and `pnpm --filter @internal/design-tokens test` pass.
+- Text or icons on a `bg-brand`/`bg-danger` fill use `text-brand-fg`, never `text-fg`. Opacity modifiers (`bg-success/15`) are allowed on hex tokens only.
 - Dark and light themes, FR and EN, keyboard use, focus, loading, error, empty, disabled, and optimistic states are covered when applicable.
 - The shared AI4TECHDOC logo must also appear as the browser tab icon: call `setAi4TechDocFavicon()` from `@internal/ui` once in the frontend entry point (`src/main.tsx`) and do not leave the default Vite icon. Use `Ai4TechDocLogo` rather than copying the asset; see `docs/standards/demo-mode-integration.md`.
 - For apps with the `llm` profile, the LLM settings (key, base URL, models, connection test) must sit in a collapsible section of Settings, collapsed by default once configured, with an accessible toggle (`aria-expanded`) and FR/EN labels. The models available from the provider (returned by the connection test, `models` field of `POST /api/v1/settings/test`) must be listed and selectable for the chat, embedding and vision model fields rather than typed blind; free text stays possible when the list is empty.
