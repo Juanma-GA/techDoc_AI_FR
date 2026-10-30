@@ -26,6 +26,7 @@ Ask for missing values and reject ambiguous or unsafe slugs.
 3. `CLAUDE.md` for local safety and structural-change approval.
 4. `docs/standards/app-readme-template.md` for application documentation.
 5. `docs/apps/README.md` for target port assignments.
+6. `docs/standards/design-system.md` for the inherited visual framework: `design-tokens/base.css` entry stylesheet, dark default and light palette, self-hosted fonts, shared `@internal/ui` primitives (including `LlmSettingsPanel` and `DemoModeSettingsCard`), the `/design` gallery, and the `check_standard` design-system checks 18-22.
 
 ## Procedure
 
@@ -38,7 +39,8 @@ Ask for missing values and reject ambiguous or unsafe slugs.
 7. Otherwise use the documented manual fallback: copy `_template`, exclude generated/data directories, replace template markers, create the matching packaging script from `scripts/package_TEMPLATE.py`, and update root workspace scripts.
 8. Search the created source and configuration for unresolved `TEMPLATE`, `_template`, template logger, database, package, and port markers.
 9. Validate README sections, launchers, backend tests, frontend tests, and packaging paths.
-10. Report every executed and blocked validation separately.
+10. Build the business screens from the template patterns in `docs/standards/design-system.md` §5-6: `PageHeader` on every page, shared primitives instead of local components, `LlmSettingsPanel` for the Mistral block (extra models via `modelFields`, app options as children) and `DemoModeSettingsCard` for the operating mode. Add every visible string to both `locales/fr.json` and `locales/en.json` (`src/locales/locales.test.ts` checks key parity and accents).
+11. Report every executed and blocked validation separately.
 
 For desktop scaffolding, copy only the canonical optional assets under
 `apps/_template/desktop`, never an existing application's Tauri sources.
@@ -65,7 +67,7 @@ Any change outside the approved path list requires a new mutation batch and conf
 - Default port is unique in `docs/apps/README.md`; both launchers start from it and implement the same free-port behavior.
 - App README follows `docs/standards/app-readme-template.md` and declares profiles and deviations.
 - Required launcher, packager, backend, frontend, migration, and test files exist.
-- The frontend inherits the design system without local copies: `src/index.css` starts with `@import "@internal/design-tokens/base.css";`, `package.json` has no `@fontsource/*` dependency, `index.html` has no Google Fonts link and keeps `<meta name="color-scheme">` plus the dark-by-default anti-flash script (see `docs/standards/design-system.md`).
+- The frontend inherits the design system without local copies: `src/index.css` starts with `@import "@internal/design-tokens/base.css";`, `package.json` has no `@fontsource/*` dependency, `index.html` has no Google Fonts link and keeps `<meta name="color-scheme">` plus the dark-by-default anti-flash script (see `docs/standards/design-system.md`). `bash scripts/check_standard.sh` design-system checks 18-22 pass.
 - With the `llm` profile, the overlay `App.tsx`, `routes/Settings.tsx` and locales still contain every template key (`nav.design`, `home.*`, `settings.title`, `design.*`); `pnpm typecheck` and `pnpm test` pass on the generated frontend.
 - `pnpm test:e2e` (including `tests/e2e/design-system.spec.ts`: themes, languages, viewports, fonts loaded) is recorded as executed or recommended; remove the `/design` gallery only if the app owner asks (generated apps show it in `pnpm dev` only; opt in for builds with `VITE_DESIGN_GALLERY=true` in `frontend/.env.production`).
 - No unresolved template markers remain outside intentional template documentation.
