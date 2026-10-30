@@ -108,7 +108,7 @@ export function Data() {
       <div className="card">
         <h2 className="card-title">{t("data.reset")}</h2>
         <div className="banner warn">
-          {t("data.warningPrefix")} <strong>{t("data.irreversible")}</strong>. {t("data.warningSuffix", { config: "app_config" })}
+          {t("data.warningPrefix")} <strong>{t("data.irreversible")}</strong>. {t("data.warningSuffix")}
         </div>
         <div className="row">
           <ConfirmButton

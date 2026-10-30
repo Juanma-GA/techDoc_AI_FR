@@ -1,7 +1,7 @@
 """Routes /api/v1/admin - stats globales + reset.
 
-La cle Mistral (app_config) ET les profils BREX sont preserves par les resets
-(le BREX est une config projet, pas de la donnee jetable).
+Le mode de fonctionnement (app_config) et les profils BREX sont preserves par les
+resets (le BREX est une config projet, pas de la donnee jetable).
 """
 
 from __future__ import annotations

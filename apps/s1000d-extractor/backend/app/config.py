@@ -41,17 +41,6 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 50
     pdf_cut_requires_validation: bool = True
 
-    # Cle de chiffrement Fernet (base64, >=32 chars) pour la cle Mistral stockee
-    # dans AppConfig. Vide en local (stockage en clair). En prod, l'IT la fournit
-    # via .env — la generer avec app.core.encryption.generate_key() (cf. .env.example).
-    encryption_key: str = ""
-
-    mistral_api_key: str = ""
-    mistral_base_url: str = "https://api.mistral.ai"
-    mistral_chat_model: str = "mistral-small-latest"
-    mistral_embed_model: str = "mistral-embed"
-    mistral_ocr_model: str = "mistral-ocr-latest"
-
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _parse_cors_origins(cls, v: object) -> object:
@@ -62,15 +51,5 @@ class Settings(BaseSettings):
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
-
-    @property
-    def llm_configured(self) -> bool:
-        return bool(self.mistral_api_key)
-
-    @property
-    def encryption_configured(self) -> bool:
-        """Cle de chiffrement presente et assez longue pour Fernet."""
-        return bool(self.encryption_key and len(self.encryption_key) >= 32)
-
 
 settings = Settings()

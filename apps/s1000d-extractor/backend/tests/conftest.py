@@ -26,9 +26,6 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_DB}"
 os.environ["DEMO_DATABASE_URL"] = f"sqlite:///{_DEMO_DB}"
 os.environ["STORAGE_DIR"] = str(_STORAGE)
 os.environ["DEMO_STORAGE_DIR"] = str(_DEMO_STORAGE)
-os.environ["MISTRAL_API_KEY"] = ""  # Synthetic tests must never use a real provider key.
-
-
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
     for f in (

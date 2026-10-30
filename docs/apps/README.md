@@ -19,7 +19,7 @@ the same registered value.
 | [doc-reviewer](../../apps/doc-reviewer/README.md) | fastapi | `local-first`, `llm`, `files` | 8003 | No |
 | [catia-toolbox](../../apps/catia-toolbox/README.md) | fastapi | `local-first`, `llm`, `files` | 8004 | No |
 | [ocr-vision](../../apps/ocr-vision/README.md) | fastapi | `local-first`, `llm`, `files` | 8005 | No |
-| [s1000d-extractor](../../apps/s1000d-extractor/README.md) | fastapi | `local-first`, `llm`, `files` | 8006 | No |
+| [s1000d-extractor](../../apps/s1000d-extractor/README.md) | fastapi | `local-first`, `files` | 8006 | No |
 | [ecm-automation](../../apps/ecm-automation/README.md) | fastapi | `local-first` | 8009 | No |
 | [flowchart-generator](../../apps/flowchart-generator/README.md) | fastapi | `local-first`, `llm`, `files` | 8010 | No |
 | [pdf-toolkit](../../apps/pdf-toolkit/README.md) | go | `local-first`, `files` | 8085 | Yes |

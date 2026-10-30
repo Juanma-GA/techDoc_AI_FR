@@ -226,7 +226,7 @@ def start(
     progress_cb("parse", 10)
     stage_started = perf_counter()
     blocks = ingest.extract_blocks(
-        source_path, fmt=doc.source_format, progress_cb=progress_cb, local_only=True,
+        source_path, fmt=doc.source_format, progress_cb=progress_cb,
     )
     log.info(
         "wizard_stage_timing",
@@ -494,9 +494,7 @@ def _apply_overrides(doc: Document, overrides: list[dict]) -> None:
 
 
 def _generate_all(db: Session, doc: Document) -> None:
-    """Serialise et valide chaque DM. Etape 100% deterministe : aucun appel IA
-    ici (un appel LLM pendant la generation/validation faisait remonter une
-    "Unexpected server error" au moindre incident reseau).
+    """Serialise et valide chaque DM de maniere deterministe et locale.
 
     Un DM qui echoue ne casse plus toute l'etape : il porte sa propre violation.
     """

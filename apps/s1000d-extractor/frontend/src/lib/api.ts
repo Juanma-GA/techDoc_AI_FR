@@ -78,8 +78,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ----- Standard DTOs --------------------------------------------------------
 
-export type LlmStatus = "ok" | "disabled" | "not_configured" | "untested";
-export type HealthDto = { status: string; version: string; llm: LlmStatus | string };
+export type HealthDto = { status: string; version: string; db: string };
 
 export type AdminStatsDto = {
   documents: number;
@@ -90,14 +89,8 @@ export type AdminStatsDto = {
 export type AdminResetDto = { deleted: Record<string, number> };
 
 export type SettingsDto = {
-  api_key_set: boolean;
-  base_url: string;
-  chat_model: string;
-  embed_model: string;
-  llm_enabled: boolean;
   demo_enabled: boolean;
 };
-export type TestConnectionDto = { ok: boolean; models: string[]; error?: string | null };
 
 export const healthApi = { read: () => api<HealthDto>("/health") };
 
@@ -112,15 +105,8 @@ export const adminApi = {
 
 export const settingsApi = {
   read: () => api<SettingsDto>("/settings"),
-  write: (body: {
-    api_key?: string;
-    base_url?: string;
-    chat_model?: string;
-    embed_model?: string;
-    llm_enabled?: boolean;
-    demo_enabled?: boolean;
-  }) => api<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(body) }),
-  test: () => api<TestConnectionDto>("/settings/test", { method: "POST" }),
+  write: (body: { demo_enabled?: boolean }) =>
+    api<SettingsDto>("/settings", { method: "POST", body: JSON.stringify(body) }),
 };
 
 // ----- Domain types ---------------------------------------------------------

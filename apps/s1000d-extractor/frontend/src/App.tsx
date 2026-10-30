@@ -10,7 +10,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 
-import { LlmBadge } from "./components/LlmBadge";
 import { settingsApi, type SettingsDto } from "./lib/api";
 import { Data } from "./routes/Data";
 import { Migration } from "./routes/Migration";
@@ -54,7 +53,6 @@ export function App() {
           </div>
         ) : null
       }
-      llmStatus={<LlmBadge />}
       navigation={navItems.map(({ to, labelKey, icon }) => {
         const label = t(labelKey);
         return (

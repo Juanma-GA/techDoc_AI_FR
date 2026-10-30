@@ -109,14 +109,6 @@
     "collapse": "Replier le menu",
     "expand": "Déplier le menu"
   },
-  "llm": {
-    "label": "LLM",
-    "title": "État du LLM (voir Paramètres)",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "À TESTER",
-    "noKey": "NO KEY"
-  },
   "demo": {
     "badge": "MODE DÉMO",
     "filesLoading": "Chargement des fichiers de démonstration…",
@@ -149,7 +141,7 @@
     "reset": "Réinitialiser",
     "warningPrefix": "Cette opération est",
     "irreversible": "irréversible",
-    "warningSuffix": "La configuration Mistral ({{config}}) et les profils BREX sont préservés.",
+    "warningSuffix": "Les paramètres applicatifs et les profils BREX sont préservés.",
     "deleteDocuments": "Supprimer les documents",
     "deleteAll": "Tout supprimer",
     "confirm": "Cliquer encore pour confirmer",
@@ -159,28 +151,12 @@
   },
   "settings": {
     "title": "Paramètres",
-    "subtitle": "Règles de préremplissage, mode de fonctionnement et configuration Mistral.",
+    "subtitle": "Règles de préremplissage et mode de fonctionnement.",
     "demoTitle": "Mode de fonctionnement",
     "demoHint": "Le mode démo précharge les fichiers d’exemple. Le traitement démarre uniquement lorsque vous lancez la migration.",
     "normalMode": "Mode normal",
     "demoMode": "Mode démo",
-    "demoSaveError": "Impossible d’enregistrer le mode.",
-    "aiTitle": "Intelligence artificielle",
-    "llmEnabled": "LLM activé",
-    "llmHelp": "Désactiver coupe les tâches confiées à l'IA (OCR scans, classification, découpage). La clé Mistral est conservée.",
-    "configuration": "Configuration Mistral",
-    "configured": "CONFIGURÉE",
-    "notConfigured": "NON CONFIGURÉE",
-    "apiKey": "Clé API Mistral",
-    "apiKeyKeep": "Une clé est déjà enregistrée (laisser vide pour la conserver).",
-    "baseUrl": "URL de base",
-    "chatModel": "Modèle chat",
-    "embedModel": "Modèle d'embeddings",
-    "save": "Enregistrer",
-    "testConnection": "Tester la connexion",
-    "saved": "Paramètres enregistrés.",
-    "connectionOk": "Connexion OK ({{count}} modèles disponibles).",
-    "connectionFailed": "Échec : {{message}}"
+    "demoSaveError": "Impossible d’enregistrer le mode."
   },
   "settingsRules": {
     "title": "Règles de préremplissage des exigences",

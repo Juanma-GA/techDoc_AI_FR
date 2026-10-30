@@ -1,7 +1,7 @@
 // Contenu FR (le preview source est FR-only).
 export function Architecture() {
   const workflow = [
-    "Paramètres → clé Mistral (active OCR scans + classification IA).",
+    "Paramètres → mode démo et règles de préremplissage.",
     "Charger → PDF/Word + version S1000D (4.1/4.2) + profil BREX optionnel → « Générer ».",
     "Découpage → choisir le niveau (chapitre/section/sous-section), revoir les Data Modules détectés.",
     "Types → corriger le type de chaque DM (descriptive / procedural / ipd).",
@@ -9,10 +9,10 @@ export function Architecture() {
     "Génération → XML S1000D par DM + violations ; download par DM ou ZIP.",
   ];
   const pipeline = [
-    "parse → PyMuPDF (PDF) / python-docx (Word) ; page scannée → OCR Mistral.",
+    "parse → PyMuPDF (PDF) / python-docx (Word) ; PDF scanné → OCR local requis.",
     "IR canonique → arbre logique commun (sections / listes / admonitions / figures / tables).",
     "découpage (étape 1) → 1 Data Module par section/chapitre/sous-section.",
-    "typage par DM (étape 2) → descriptive / procedural / ipd (heuristique + IA Mistral).",
+    "typage par DM (étape 2) → descriptive / procedural / ipd (heuristiques déterministes).",
     "résolution (étape 3) → élément S1000D selon contexte × forme ; candidats multiples si ambigu.",
     "sérialisation + validation (étape 4) → XML par DM (lxml) + XSD + règles BREX prises en charge.",
   ];
@@ -49,8 +49,8 @@ export function Architecture() {
       <div className="card">
         <h2 className="card-title">Workflow utilisateur — génération guidée</h2>
         <p className="label">
-          Étapes bloquantes : on valide chacune avant la suivante. L'IA dégrossit,
-          l'humain tranche.
+          Étapes bloquantes : les heuristiques proposent, l'humain vérifie et corrige
+          avant de passer à la suite.
         </p>
         <div className="arch-flow">
           {workflow.map((s, i) => (

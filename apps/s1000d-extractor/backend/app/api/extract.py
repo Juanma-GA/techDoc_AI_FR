@@ -379,7 +379,7 @@ def _run_and_persist(doc_id: str, cb, demo_mode: bool = False) -> dict:
         try:
             result = pipeline.run(
                 doc.storage_path, fmt=doc.source_format, issue=doc.s1000d_issue,
-                hint=doc.context_hint, db=db, brex_xml=brex_xml,
+                hint=doc.context_hint, brex_xml=brex_xml,
                 dm_metadata=(dmrl_entries[0].to_dict() if dmrl_entries else None),
                 header_template=wres.load_resources(doc).header_template,
                 progress_cb=cb,

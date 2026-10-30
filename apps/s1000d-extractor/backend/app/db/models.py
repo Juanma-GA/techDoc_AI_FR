@@ -1,6 +1,6 @@
 """SQLAlchemy 2.0 models pour s1000d-extractor.
 
-- `AppConfig`    : key/value runtime (cle Mistral). Preserve par les resets.
+- `AppConfig`    : key/value runtime (mode demo). Preserve par les resets.
 - `BrexProfile`  : un BREX projet reutilisable (uploade une fois, applique a
   tous les documents du projet -> evite le remapping par document).
 - `Document`     : un document source (PDF/DOCX) et le resultat de sa migration

@@ -334,33 +334,9 @@ def test_backtracking_to_structure_preserves_review_but_reanalysis_invalidates_i
     assert client.get(f"/api/v1/documents/{doc_id}/wizard").json()["preliminary"]["reviews"]["proc"]["status"] == "stale"
 
 
-def test_wizard_never_calls_remote_typing_or_ocr(client, pdf_bytes, monkeypatch):
-    from app.core import context_classifier, ocr
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("A local wizard must not consult a remote AI service")
-
-    monkeypatch.setattr(context_classifier, "_llm_refine_dms", forbidden)
-    monkeypatch.setattr(ocr, "ocr_available", forbidden)
-    monkeypatch.setattr(ocr, "run_ocr", forbidden)
-    uploaded = client.post(
-        "/api/v1/documents", files={"file": ("synthetic.pdf", pdf_bytes)},
-        data={"s1000d_issue": "4.2", "context_hint": "mixed"},
-    )
-    doc_id = uploaded.json()["id"]
-    response = client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
-    assert response.status_code == 200, response.text
-    assert response.json()["step"] == "split"
-
-
-def test_local_ingest_rejects_mixed_scans_without_ignoring_pages_or_calling_ocr(tmp_path, monkeypatch):
-    from app.core import ingest, ocr
+def test_ingest_rejects_mixed_scans_without_ignoring_pages(tmp_path):
+    from app.core import ingest
     from app.core.errors import AppError
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("OCR must not be consulted in local mode")
-
-    monkeypatch.setattr(ocr, "ocr_available", forbidden)
     source = tmp_path / "synthetic-mixed.pdf"
     with fitz.open() as pdf:
         page = pdf.new_page()
@@ -372,6 +348,6 @@ def test_local_ingest_rejects_mixed_scans_without_ignoring_pages_or_calling_ocr(
         pdf.new_page()  # A genuinely blank page is not an OCR failure.
         pdf.save(str(source))
     with pytest.raises(AppError) as error:
-        ingest.extract_blocks(source, fmt="pdf", local_only=True)
-    assert error.value.code == "LOCAL_OCR_REQUIRED"
+        ingest.extract_blocks(source, fmt="pdf")
+    assert error.value.code == "OCR_UNAVAILABLE"
     assert error.value.detail == {"pages_in_analyzed_pdf": [2]}

@@ -45,11 +45,6 @@ def _validate_security_posture() -> None:
         return
 
     problems: list[str] = []
-    if not settings.encryption_configured:
-        problems.append(
-            "ENCRYPTION_KEY manquante ou trop courte : la cle Mistral serait "
-            "stockee en clair. Generer une cle via app.core.encryption.generate_key()."
-        )
     leftover = [o for o in settings.cors_origins if _is_local_origin(o)]
     if leftover:
         problems.append(

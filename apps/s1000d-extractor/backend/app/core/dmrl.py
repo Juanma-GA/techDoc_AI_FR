@@ -8,7 +8,7 @@ attendus (DMC, titre, arborescence). L'outil s'en sert pour :
    du document source (appariement par titre normalise, ordre de lecture) ;
 3. `generate_pmc`         : produire la PMC XML (delegue a `core.pmc`).
 
-Aucun appel LLM ici : le decoupage DMRL est deterministe et reproductible.
+Le decoupage DMRL est deterministe et reproductible.
 """
 
 from __future__ import annotations

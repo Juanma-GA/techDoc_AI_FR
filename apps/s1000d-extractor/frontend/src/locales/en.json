@@ -109,14 +109,6 @@
     "collapse": "Collapse menu",
     "expand": "Expand menu"
   },
-  "llm": {
-    "label": "LLM",
-    "title": "LLM status (see Settings)",
-    "on": "ON",
-    "off": "OFF",
-    "untested": "UNTESTED",
-    "noKey": "NO KEY"
-  },
   "demo": {
     "badge": "DEMO MODE",
     "filesLoading": "Loading demo files…",
@@ -149,7 +141,7 @@
     "reset": "Reset",
     "warningPrefix": "This operation is",
     "irreversible": "irreversible",
-    "warningSuffix": "Mistral configuration ({{config}}) and BREX profiles are preserved.",
+    "warningSuffix": "Application settings and BREX profiles are preserved.",
     "deleteDocuments": "Delete documents",
     "deleteAll": "Delete all",
     "confirm": "Click again to confirm",
@@ -159,28 +151,12 @@
   },
   "settings": {
     "title": "Settings",
-    "subtitle": "Prefill rules, operating mode and Mistral configuration.",
+    "subtitle": "Prefill rules and operating mode.",
     "demoTitle": "Operating mode",
     "demoHint": "Demo mode preloads the sample files. Processing starts only when you start the migration.",
     "normalMode": "Normal mode",
     "demoMode": "Demo mode",
-    "demoSaveError": "Could not save the mode.",
-    "aiTitle": "Artificial intelligence",
-    "llmEnabled": "LLM enabled",
-    "llmHelp": "Disabling stops tasks delegated to AI (scan OCR, classification, splitting). The Mistral key is kept.",
-    "configuration": "Mistral configuration",
-    "configured": "CONFIGURED",
-    "notConfigured": "NOT CONFIGURED",
-    "apiKey": "Mistral API key",
-    "apiKeyKeep": "A key is already stored (leave blank to keep it).",
-    "baseUrl": "Base URL",
-    "chatModel": "Chat model",
-    "embedModel": "Embeddings model",
-    "save": "Save",
-    "testConnection": "Test connection",
-    "saved": "Settings saved.",
-    "connectionOk": "Connection OK ({{count}} models available).",
-    "connectionFailed": "Failure: {{message}}"
+    "demoSaveError": "Could not save the mode."
   },
   "settingsRules": {
     "title": "Requirement prefill rules",

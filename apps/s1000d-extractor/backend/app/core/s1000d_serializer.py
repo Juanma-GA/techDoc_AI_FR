@@ -46,7 +46,7 @@ _MISSING_DATA_COMMENT_PREFIX = "A REMPLACER AVANT PUBLICATION:"
 # souvent : form feed, NUL...). lxml leve une ValueError -> 500 cote API. On les
 # retire au seuil de la serialisation, une fois pour toutes.
 _INVALID_XML_CHARS = re.compile(r"[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD]")
-# Nom d'element XML valide (les candidats viennent d'un override humain / LLM).
+# Nom d'element XML valide (les candidats viennent d'un override humain).
 _NCNAME = re.compile(r"^[A-Za-z_][\w.\-]*$")
 _GRAPHIC_EXTENSION = re.compile(r"\.(?:jpe?g|png)$", re.IGNORECASE)
 _GRAPHIC_NOTATION = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png"}

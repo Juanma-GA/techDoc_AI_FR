@@ -20,9 +20,6 @@ def test_demo_mode_defaults_off_and_persists_settings(client) -> None:
 
 
 def test_demo_mode_isolates_history_files_and_brex(client, pdf_bytes, brex_xml) -> None:
-    normal_settings = client.post("/api/v1/settings", json={"chat_model": "normal-only"})
-    assert normal_settings.status_code == 200
-
     normal_document = client.post(
         "/api/v1/documents",
         files={"file": ("normal.pdf", pdf_bytes, "application/pdf")},
@@ -55,9 +52,6 @@ def test_demo_mode_isolates_history_files_and_brex(client, pdf_bytes, brex_xml) 
 
     enabled = client.post("/api/v1/settings", json={"demo_enabled": True})
     assert enabled.status_code == 200
-    assert client.get("/api/v1/settings").json()["chat_model"] != "normal-only"
-    demo_settings = client.post("/api/v1/settings", json={"chat_model": "demo-only"})
-    assert demo_settings.status_code == 200
     assert client.get("/api/v1/documents").json() == []
     assert client.get("/api/v1/brex").json() == []
     assert client.get("/api/v1/migration-inputs").json()["files"] == {}
@@ -109,7 +103,7 @@ def test_demo_mode_isolates_history_files_and_brex(client, pdf_bytes, brex_xml) 
 
     disabled = client.post("/api/v1/settings", json={"demo_enabled": False})
     assert disabled.status_code == 200
-    assert client.get("/api/v1/settings").json()["chat_model"] == "normal-only"
+    assert client.get("/api/v1/settings").json()["demo_enabled"] is False
     assert [item["id"] for item in client.get("/api/v1/documents").json()] == [normal_id]
     assert [item["id"] for item in client.get("/api/v1/brex").json()] == [normal_brex_id]
     assert client.get("/api/v1/migration-inputs").json() == normal_mapping
@@ -118,10 +112,17 @@ def test_demo_mode_isolates_history_files_and_brex(client, pdf_bytes, brex_xml) 
 
     enabled_again = client.post("/api/v1/settings", json={"demo_enabled": True})
     assert enabled_again.status_code == 200
-    assert client.get("/api/v1/settings").json()["chat_model"] == "demo-only"
+    assert client.get("/api/v1/settings").json()["demo_enabled"] is True
     assert [item["id"] for item in client.get("/api/v1/documents").json()] == [demo_id]
     assert client.get(f"/api/v1/documents/{normal_id}").status_code == 404
     assert client.get(f"/api/v1/documents/{demo_id}/dm-versions").json()[0]["id"] == demo_version.json()["id"]
+
+
+def test_settings_reject_removed_provider_configuration(client) -> None:
+    response = client.post("/api/v1/settings", json={"api_key": "synthetic-key"})
+    assert response.status_code == 422
+    openapi = client.get("/api/v1/openapi.json").json()
+    assert "/api/v1/settings/test" not in openapi["paths"]
 
 
     def test_both_mode_databases_are_migrated_separately(tmp_path, monkeypatch) -> None:

@@ -38,9 +38,9 @@ async function mockSettings(page: Page, language = "fr", termCount = 1, category
       }
       response = state;
     } else if (path.endsWith("/settings")) response = {
-      api_key_set: false, base_url: "", chat_model: "", embed_model: "", llm_enabled: false, demo_enabled: false,
+      demo_enabled: false,
     };
-    else if (path.endsWith("/health")) response = { status: "ok", llm: "disabled" };
+    else if (path.endsWith("/health")) response = { status: "ok", version: "test", db: "ok" };
     await route.fulfill({ json: response });
   });
   return {

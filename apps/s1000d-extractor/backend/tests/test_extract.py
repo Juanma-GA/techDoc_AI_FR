@@ -173,7 +173,7 @@ def test_invalid_node_override_is_downloadable_with_xsd_warning(client, docx_byt
     assert "proceduralStep" not in xml_response.text
 
 
-def test_no_text_layer_pdf_rejected(client) -> None:
+def test_blank_pdf_rejected(client) -> None:
     import fitz
 
     doc = fitz.open()
@@ -184,8 +184,7 @@ def test_no_text_layer_pdf_rejected(client) -> None:
     with client.stream("POST", f"/api/v1/documents/{doc_id}/extract") as r:
         body = "".join(r.iter_text())
     events = _parse_sse(body)
-    # Sans cle Mistral, un PDF sans couche texte ne peut pas etre OCR -> erreur claire.
-    assert any(e == "error" and d.get("code") == "OCR_UNAVAILABLE" for e, d in events), events
+    assert any(e == "error" and d.get("code") == "EMPTY_SOURCE" for e, d in events), events
 
 
 def _walk(node: dict) -> list[dict]:

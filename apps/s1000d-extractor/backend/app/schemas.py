@@ -2,42 +2,26 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthResponse(BaseModel):
     status: str
     version: str
     db: str
-    llm: str
 
 
-# ----- Settings (Mistral runtime config) ------------------------------------
+# ----- Settings -------------------------------------------------------------
 
 
 class SettingsIn(BaseModel):
-    api_key: str | None = None
-    base_url: str | None = None
-    chat_model: str | None = None
-    embed_model: str | None = None
-    llm_enabled: bool | None = None
+    model_config = ConfigDict(extra="forbid")
+
     demo_enabled: bool | None = None
 
 
 class SettingsOut(BaseModel):
-    api_key_set: bool
-    base_url: str
-    chat_model: str
-    embed_model: str
-    llm_enabled: bool
-    llm_tested: bool = False
     demo_enabled: bool = False
-
-
-class TestConnectionOut(BaseModel):
-    ok: bool
-    models: list[str] = Field(default_factory=list)
-    error: str | None = None
 
 
 # ----- Admin (stats + reset) ------------------------------------------------

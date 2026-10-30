@@ -3,7 +3,7 @@
 Couverture de TOUS les PDF :
 - page avec couche texte exploitable  -> lecture directe (spans + police) ;
 - page sans texte (scannee / image)   -> signalee `has_text=False` pour que la
-  couche superieure (`core.ingest`) la confie a l'OCR Mistral.
+  couche superieure (`core.ingest`) signale qu'un OCR local est necessaire.
 
 La decision est PAR PAGE : un PDF mixte (pages texte + pages scannees) est donc
 correctement couvert, sans perdre les pages scannees ni re-OCR les pages texte.

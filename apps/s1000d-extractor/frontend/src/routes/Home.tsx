@@ -44,7 +44,6 @@ export function Home() {
           )}
           {health ? (
             <>
-              {" · "}LLM : <span className="badge">{health.llm}</span>
               {" · "}version : <code>{health.version}</code>
             </>
           ) : null}

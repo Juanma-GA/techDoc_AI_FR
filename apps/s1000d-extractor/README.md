@@ -34,7 +34,6 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 
 <!-- APP_PROFILES_START -->
 - `local-first`
-- `llm`
 - `files`
 <!-- APP_PROFILES_END -->
 
@@ -44,7 +43,7 @@ The target default port is `8006`, followed by the next free port when needed. C
 
 ## Prerequisites
 
-Python 3.11+, Node 20, and pnpm 9. Mistral is used for context classification. Client XSD, BREX, DMRL, and CIR inputs are optional workflow resources.
+Python 3.11+, Node 20, and pnpm 9. Client XSD, BREX, DMRL, and CIR inputs are optional workflow resources.
 
 ## Start On Windows
 
@@ -90,13 +89,11 @@ structure screens. Workflows without DMRL retain explicit type and structure
 confirmation. Procedural DMs enter **Review the procedural DM** before
 generation. **Resume** restores the saved step without automatically advancing it.
 
-- The entire wizard is deterministic and local, including initial DM typing.
-  It does not consult the Mistral configuration or send source content to an AI
-  service, even when the global LLM switch is on. Other, non-wizard features
-  retain their existing LLM settings.
-- PDF pages requiring OCR are rejected explicitly in the local wizard, including
-  mixed text/scanned PDFs; no scanned page is silently skipped. Supply a PDF
-  whose OCR was performed locally. Truly blank pages do not require OCR.
+- The entire workflow is deterministic and local. Source content is never sent
+  to an AI service.
+- PDF pages requiring OCR are rejected explicitly, including mixed
+  text/scanned PDFs; no scanned page is silently skipped. Supply a PDF whose OCR
+  was performed locally. Truly blank pages do not require OCR.
 - Source roles distinguish editorial headings, chapter markers, captions,
   layout noise and table headers from requirement content. These source anchors
   remain available to the reader but do not become resource names or decisions
@@ -237,10 +234,6 @@ precision/recall or review-time guarantees on real manuals. User trials still
 need annotated representative procedures, agreed omission thresholds, median/
 tail review time and action-count measurements. Do not copy real user documents
 into test fixtures.
-
-## LLM Configuration
-
-Mistral supports context classification. Behavior with LLM disabled is not sufficiently documented and remains to be confirmed.
 
 ## Tests
 

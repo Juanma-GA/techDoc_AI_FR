@@ -41,7 +41,7 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
     const url = new URL(route.request().url());
     const path = url.pathname;
     let response: unknown = {};
-    if (path.endsWith("/health")) response = { status: "ok", llm: "disabled" };
+    if (path.endsWith("/health")) response = { status: "ok", version: "test", db: "ok" };
     else if (path.endsWith("/settings/preliminary-rules")) {
       if (route.request().method() === "POST") {
         const payload = route.request().postDataJSON() as RequirementRules;
@@ -49,7 +49,7 @@ async function mockApplication(page: Page, sourceFormat = "docx", includeEmpty =
       }
       response = rules;
     }
-    else if (path.endsWith("/settings")) response = { demo_enabled: false, llm_enabled: false };
+    else if (path.endsWith("/settings")) response = { demo_enabled: false };
     else if (path.endsWith("/documents")) response = [{
       id: "synthetic-doc", filename: "synthetic-source.docx", source_format: sourceFormat, status: "wizard",
     }];
@@ -159,7 +159,7 @@ test("saving rules in Settings flags an already-open review without discarding i
   await category.locator("fieldset").first().getByLabel("Liste française (FR)").fill("avant\navant intervention");
   await form.getByRole("button", { name: "Enregistrer les règles", exact: true }).click();
   await expect(form.getByRole("status")).toContainText("révision 1");
-  await page.getByRole("link", { name: "Migration", exact: true }).click();
+  await page.getByRole("link", { name: "Génération de DM", exact: true }).click();
   await expect(page.getByRole("button", { name: "Recommencer cette revue", exact: true })).toBeVisible();
   expect(server.read().reviews.proc!.passages[0]?.decision).toBe("safety");
   expect(server.writes.some((write) => write.op === "restart")).toBe(false);

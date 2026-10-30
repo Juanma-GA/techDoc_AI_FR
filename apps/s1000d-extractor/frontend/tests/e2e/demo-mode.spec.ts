@@ -24,14 +24,9 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
         const body = route.request().postDataJSON() as { demo_enabled?: boolean };
         if (body.demo_enabled !== undefined) demoEnabled = body.demo_enabled;
       }
-      await route.fulfill({
-        json: {
-          api_key_set: false, base_url: "", chat_model: "", embed_model: "",
-          llm_enabled: false, demo_enabled: demoEnabled,
-        },
-      });
+      await route.fulfill({ json: { demo_enabled: demoEnabled } });
     } else if (path.endsWith("/health")) {
-      await route.fulfill({ json: { status: "ok", version: "test", db: "ok", llm: "disabled" } });
+      await route.fulfill({ json: { status: "ok", version: "test", db: "ok" } });
     } else if (path === "/api/v1/documents") {
       await route.fulfill({ json: demoEnabled ? demoDocuments : normalDocuments });
     } else if (path === "/api/v1/brex") {
@@ -74,8 +69,9 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
     .toBe("normal-input.pdf");
 
   await page.getByRole("link", { name: "Paramètres", exact: true }).click();
+  await expect(page.getByText(/LLM|Mistral/i)).toHaveCount(0);
   await page.getByRole("button", { name: "Mode démo", exact: true }).click();
-  await page.getByRole("link", { name: "Migration", exact: true }).click();
+  await page.getByRole("link", { name: "Génération de DM", exact: true }).click();
   await expect(page.getByText("demo-history.pdf")).toBeVisible();
   await expect(page.getByText("normal-history.pdf")).toHaveCount(0);
   await expect(page.locator(".brex-profile-control")).toHaveCount(0);
@@ -85,7 +81,7 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
 
   await page.getByRole("link", { name: "Paramètres", exact: true }).click();
   await page.getByRole("button", { name: "Mode normal", exact: true }).click();
-  await page.getByRole("link", { name: "Migration", exact: true }).click();
+  await page.getByRole("link", { name: "Génération de DM", exact: true }).click();
   await expect(page.getByText("normal-history.pdf")).toBeVisible();
   await expect(page.getByText("demo-history.pdf")).toHaveCount(0);
   await expect(page.locator(".brex-profile-control")).toHaveCount(1);
