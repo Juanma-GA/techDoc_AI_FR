@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from app.checks.thales_rules.rules import (
+from app.checks.thales_rules.ata100.operations import highlights_document_type_expected
+from app.checks.thales_rules.ata100.rules import (
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_NUMBER_FONT_SIZE,
@@ -8,40 +9,41 @@ from app.checks.thales_rules.rules import (
     CUSTOM_DECIMAL_COMMA,
     CUSTOM_ENUMERATION_PUNCTUATION_SWAP,
     CUSTOM_FOOTER_PAGE_NUMBER,
-    CUSTOM_HEADER_DOCUMENT_TYPE,
     CUSTOM_FORBIDDEN_CONSUMABLES,
+    CUSTOM_HEADER_DOCUMENT_TYPE,
+    CUSTOM_HIGHLIGHTS_ATA_NUMBER,
     CUSTOM_HIGHLIGHTS_DOCUMENT_TYPE,
     CUSTOM_HIGHLIGHTS_HOLDER,
     CUSTOM_HIGHLIGHTS_LEGEND_FOOTER,
-    CUSTOM_HIGHLIGHTS_ATA_NUMBER,
     CUSTOM_HIGHLIGHTS_PNR_HEADER,
     CUSTOM_HIGHLIGHTS_REVISION_HEADER,
+    CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
     CUSTOM_METRIC_LENGTH_INCH_CONVERSION,
     CUSTOM_METRIC_MASS_LBF_CONVERSION,
     CUSTOM_METRIC_TORQUE_LBF_IN_CONVERSION,
     CUSTOM_NO_DEGREE_C_SYMBOL,
     CUSTOM_NO_DEGREE_F_SYMBOL,
-    CUSTOM_PASCAL_INHG_CONVERSION,
     CUSTOM_PARAGRAPH_JUSTIFICATION,
+    CUSTOM_PASCAL_INHG_CONVERSION,
     CUSTOM_REPAIR_NOTE,
     CUSTOM_REPLACE_LEGACY_NAMES,
     CUSTOM_SENTENCE_PUNCTUATION,
     CUSTOM_STORAGE_NOTE,
-    CUSTOM_THALES_LOGO_FONT_SIZE,
     CUSTOM_TEMPERATURE_FAHRENHEIT,
-    CUSTOM_INTRODUCTION_SHOP_VERIFICATION,
-    CUSTOM_TP1_THALES_LOGO_FONT_SIZE,
-    CUSTOM_TP1_HEADER_DOCUMENT_TYPE,
-    CUSTOM_TP1_THALES_ADDRESS,
     CUSTOM_TESTING_NOTE,
-    CUSTOM_TP2_IMPORTANT_NOTICE,
+    CUSTOM_THALES_LOGO_FONT_SIZE,
     CUSTOM_TITLE_PAGE_COPYRIGHT,
+    CUSTOM_TP1_HEADER_DOCUMENT_TYPE,
+    CUSTOM_TP1_REVISION_NUMBER,
+    CUSTOM_TP1_THALES_ADDRESS,
+    CUSTOM_TP1_THALES_LOGO_FONT_SIZE,
+    CUSTOM_TP2_IMPORTANT_NOTICE,
+    CUSTOM_TP2_REVISION_BAR_BODY_ONLY,
     DOCUMENT_TYPE_PATTERN,
     DOCUMENT_TYPES,
     HIGHLIGHTS_DOCUMENT_TYPE_PATTERN,
     IMPORTANT_NOTICE_TEXT,
 )
-from app.checks.thales_rules.operations import highlights_document_type_expected
 
 
 def test_rule_factory_builds_compiled_rule_and_legacy_metadata() -> None:
@@ -172,10 +174,17 @@ def test_tp2_important_notice_bundle_definition_keeps_text_and_normalization() -
     check = definition.compiled_rule.checks[0]
 
     assert definition.code == "CUSTOM_TP2_IMPORTANT_NOTICE"
+    assert definition.preparation is True
     assert definition.compiled_rule.target.page_type == "TP2"
     assert check.operator == "normalized_equals"
     assert check.expected == IMPORTANT_NOTICE_TEXT
     assert check.normalization == ["unicode", "spaces", "line_breaks", "trim"]
+
+
+def test_preparation_includes_tp1_revision_and_tp2_notice_not_tp2_revision_bar() -> None:
+    assert CUSTOM_TP1_REVISION_NUMBER.preparation is True
+    assert CUSTOM_TP2_IMPORTANT_NOTICE.preparation is True
+    assert CUSTOM_TP2_REVISION_BAR_BODY_ONLY.preparation is False
 
 
 def test_highlights_revision_header_keeps_target_anchor_and_single_suggestion() -> None:
@@ -351,7 +360,9 @@ def test_note_rules_keep_page_scopes_check_counts_and_storage_anchor() -> None:
     assert len(testing.checks) == 3
     assert storage.target.page_type == "STORAGE"
     assert len(storage.checks) == 3
-    assert storage.checks[2].missing_anchor == r"(?i)\bRelative\s+humidity\s*:"
+    assert storage.checks[1].missing_anchor == r"(?i)\bRelative\s+humidity\s*:"
+    assert storage.checks[1].missing_anchor_position == "below"
+    assert storage.checks[2].missing_anchor == r"(?i)\bPressure\s*:"
     assert storage.checks[2].missing_anchor_position == "below"
 
 

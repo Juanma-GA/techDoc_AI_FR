@@ -1,0 +1,333 @@
+"""Recover the S1000D data-module structure from the published PDF render.
+
+The Doc Reviewer only sees the printed PDF, never the S1000D XML. Data modules
+are therefore recognised through their data module code (DMC) and through the
+List Of Effective Data Modules (LOEDM) that Thales prints in the front matter.
+Every helper returns "unknown" (None / empty) instead of guessing when the
+expected structure is not found, so callers can report INCONCLUSIVE.
+"""
+
+from __future__ import annotations
+
+import re
+from bisect import bisect_right
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from app.parsers.pdf_parser import ParsedPage, ParsedPdf
+
+# MIC-SDC-SYSTEM-SUBSYSTEM-ASSY-DISASSY-INFO-ITEMLOC, e.g. F9111CMON-A-20-02-00-00A-800A-A.
+DMC_RE = re.compile(
+    r"\b[A-Z0-9]{2,14}-[A-Z0-9]{1,4}-[A-Z0-9]{2,3}-[A-Z0-9]{2}-[A-Z0-9]{2,4}"
+    r"-[A-Z0-9]{3,4}-\d{3}[A-Z]-[A-Z0-9]\b"
+)
+
+# Status letters printed in the LOEDM, mapped to the S1000D issue types.
+STATUS_CHANGED = "C"
+STATUS_NEW = "N"
+STATUS_REVISED = "R"
+STATUS_STATUS = "S"
+STATUS_DELETED = "D"
+_STATUS_LETTER_RE = re.compile(r"(?<![\w-])([NCRSD])(?![\w-])")
+
+# Generic data modules are shared between manuals; adapt this marker to the
+# convention used in the published LOEDM.
+GENERIC_DM_RE = re.compile(r"(?i)\bgeneric\b")
+
+_LOEDM_TITLE_RE = re.compile(r"(?im)^\s*LIST\s+OF\s+EFFECTIVE\s+DATA\s+MODULES\b")
+_IPL_TITLE_RE = re.compile(
+    r"(?im)^\s*(?:ILLUSTRATED\s+PARTS\s+(?:LIST|DATA)|DETAILED\s+PARTS\s+LIST)\s*$"
+)
+_IPL_INFO_CODE_PREFIX = "941"
+
+_MONTHS = {
+    name: index
+    for index, name in enumerate(
+        ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"),
+        start=1,
+    )
+}
+_MONTH_PATTERN = "|".join(_MONTHS)
+_DATE_PATTERNS = (
+    re.compile(
+        r"(?<![\d-])(?P<y>\d{4})-(?P<m>0[1-9]|1[0-2])"
+        r"(?:-(?P<d>0[1-9]|[12]\d|3[01]))?(?![\d-])"
+    ),
+    re.compile(
+        rf"(?<!\d)(?P<d>\d{{1,2}})\s+(?P<mon>{_MONTH_PATTERN})[A-Z]*\.?\s+"
+        r"(?P<y>\d{4}|\d{2})(?!\d)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?P<mon>{_MONTH_PATTERN})[A-Z]*\.?\s+(?:(?P<d>\d{{1,2}})\s*/\s*)?"
+        r"(?P<y>\d{4}|\d{2})(?!\d)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?<![\d/])(?:(?P<d>\d{1,2})/)?(?P<m>\d{1,2})/(?P<y>\d{4})(?![\d/])"
+    ),
+)
+
+
+@dataclass(frozen=True)
+class IssueDate:
+    year: int
+    month: int
+    day: int | None = None
+
+    def __str__(self) -> str:
+        suffix = f"-{self.day:02d}" if self.day is not None else ""
+        return f"{self.year}-{self.month:02d}{suffix}"
+
+
+def _full_year(value: str) -> int:
+    year = int(value)
+    if len(value) == 4:
+        return year
+    return 2000 + year if year < 50 else 1900 + year
+
+
+def find_issue_date(text: str) -> tuple[IssueDate, str] | None:
+    """Return the first date written in one of the supported layouts and its raw text."""
+    best: tuple[int, IssueDate, str] | None = None
+    for pattern in _DATE_PATTERNS:
+        match = pattern.search(text)
+        if match is None or (best is not None and match.start() >= best[0]):
+            continue
+        groups = match.groupdict()
+        month = (
+            _MONTHS[groups["mon"][:3].upper()]
+            if groups.get("mon")
+            else int(groups["m"])
+        )
+        if not 1 <= month <= 12:
+            continue
+        day = int(groups["d"]) if groups.get("d") else None
+        if day is not None and not 1 <= day <= 31:
+            continue
+        best = (match.start(), IssueDate(_full_year(groups["y"]), month, day), match.group(0))
+    return (best[1], best[2]) if best is not None else None
+
+
+def parse_issue_date(text: str | None) -> IssueDate | None:
+    found = find_issue_date(text or "")
+    return found[0] if found is not None else None
+
+
+def same_issue_date(left: IssueDate, right: IssueDate) -> bool:
+    """Compare year and month, plus the day when both dates carry one."""
+    return (
+        left.year == right.year
+        and left.month == right.month
+        and (left.day is None or right.day is None or left.day == right.day)
+    )
+
+
+@dataclass(frozen=True)
+class PageText:
+    """All page texts of a document joined, with the offset of each page."""
+
+    pages: tuple[ParsedPage, ...]
+    text: str
+    starts: tuple[int, ...]
+
+    @classmethod
+    def build(cls, pages: Sequence[ParsedPage]) -> PageText:
+        starts: list[int] = []
+        offset = 0
+        for page in pages:
+            starts.append(offset)
+            offset += len(page.text) + 1
+        return cls(tuple(pages), "\n".join(page.text for page in pages), tuple(starts))
+
+    def locate(self, offset: int) -> tuple[ParsedPage, int]:
+        """Return the page holding `offset` and the offset inside that page text."""
+        index = max(bisect_right(self.starts, offset) - 1, 0)
+        page = self.pages[index]
+        return page, min(max(offset - self.starts[index], 0), len(page.text))
+
+
+def complete_pages(parsed_pdf: ParsedPdf) -> list[ParsedPage]:
+    """Every page of the document, even when the analysis covers a page subset."""
+    return list(parsed_pdf.full_document_pages or parsed_pdf.pages)
+
+
+@dataclass(frozen=True)
+class LoedmRow:
+    dmc: str
+    page: int
+    text: str
+    issue_date: IssueDate | None
+    issue_date_text: str | None
+    status: str | None
+
+    @property
+    def info_code(self) -> str:
+        return self.dmc.split("-")[-2]
+
+    @property
+    def generic(self) -> bool:
+        return bool(GENERIC_DM_RE.search(self.text))
+
+    @property
+    def modified(self) -> bool:
+        return self.status in {STATUS_CHANGED, STATUS_NEW, STATUS_REVISED, STATUS_STATUS}
+
+
+def loedm_page_numbers(pages: Sequence[ParsedPage]) -> list[int]:
+    """Pages of the LOEDM: a titled page holding DMCs plus its dense continuations."""
+    numbers: list[int] = []
+    for page in pages:
+        dmc_count = len(DMC_RE.findall(page.text))
+        titled = bool(_LOEDM_TITLE_RE.search(page.text))
+        if not numbers:
+            if titled and dmc_count:
+                numbers.append(page.page)
+            continue
+        if (titled and dmc_count) or dmc_count >= 5:
+            numbers.append(page.page)
+        else:
+            break
+    return numbers
+
+
+def _row_status(chunk: str, date_end: int | None) -> str | None:
+    letters = [(match.start(), match.group(1)) for match in _STATUS_LETTER_RE.finditer(chunk)]
+    if not letters:
+        return None
+    if date_end is not None:
+        after = [letter for start, letter in letters if start >= date_end]
+        if after:
+            return after[0]
+    return letters[0][1]
+
+
+def parse_loedm(pages: Sequence[ParsedPage]) -> tuple[list[LoedmRow], list[int]]:
+    """Parse the LOEDM rows; an empty row list means the table was not recognised."""
+    page_numbers = loedm_page_numbers(pages)
+    by_number = {page.page: page for page in pages}
+    rows: list[LoedmRow] = []
+    for number in page_numbers:
+        text = by_number[number].text
+        matches = list(DMC_RE.finditer(text))
+        for index, match in enumerate(matches):
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            chunk = " ".join(" ".join(text[match.end() : end].splitlines()[:6]).split())
+            found = find_issue_date(chunk)
+            date_end = None
+            if found is not None:
+                date_end = chunk.find(found[1]) + len(found[1])
+            rows.append(
+                LoedmRow(
+                    dmc=match.group(0),
+                    page=number,
+                    text=f"{match.group(0)} {chunk}",
+                    issue_date=found[0] if found is not None else None,
+                    issue_date_text=found[1] if found is not None else None,
+                    status=_row_status(chunk, date_end),
+                )
+            )
+    return rows, page_numbers
+
+
+def _edge_text(page: ParsedPage) -> str:
+    """Header and footer text, where Thales prints the DMC of the current module."""
+    if page.lines and page.page_height > 0:
+        top, bottom = page.page_height * 0.12, page.page_height * 0.88
+        return "\n".join(
+            line.text for line in page.lines if line.bbox[1] < top or line.bbox[3] > bottom
+        )
+    lines = [line for line in page.text.splitlines() if line.strip()]
+    return "\n".join(lines[:4] + lines[-4:])
+
+
+def dm_page_map(
+    pages: Sequence[ParsedPage],
+    rows: Sequence[LoedmRow],
+    loedm_pages: Sequence[int],
+) -> dict[int, str]:
+    """Map each page to the DMC printed in its header/footer (or inherited from the previous page)."""
+    known = {row.dmc for row in rows}
+    skipped = set(loedm_pages)
+    mapping: dict[int, str] = {}
+    current: str | None = None
+    for page in pages:
+        if page.page in skipped:
+            current = None
+            continue
+        found = DMC_RE.findall(_edge_text(page))
+        if found:
+            current = next((code for code in found if code in known), found[0])
+        if current is not None:
+            mapping[page.page] = current
+    return mapping
+
+
+def ipl_page_numbers(
+    pages: Sequence[ParsedPage],
+    rows: Sequence[LoedmRow],
+    page_map: dict[int, str],
+) -> list[int]:
+    """Pages of the illustrated parts list (IPL data modules, else from its title page to the end)."""
+    ipl_codes = {row.dmc for row in rows if row.info_code.startswith(_IPL_INFO_CODE_PREFIX)}
+    by_dm = [page.page for page in pages if page_map.get(page.page) in ipl_codes]
+    if by_dm:
+        return by_dm
+    skipped = set(loedm_page_numbers(pages))
+    start = next(
+        (
+            page.page
+            for page in pages
+            if page.page not in skipped and _IPL_TITLE_RE.search(page.text)
+        ),
+        None,
+    )
+    return [page.page for page in pages if start is not None and page.page >= start]
+
+
+@dataclass(frozen=True)
+class RevisionBar:
+    x: float
+    top: float
+    bottom: float
+
+
+def _is_black(color: tuple[float, ...] | None) -> bool:
+    return color is not None and len(color) >= 3 and all(value <= 0.05 for value in color[:3])
+
+
+def revision_bars(page: ParsedPage) -> list[RevisionBar]:
+    """Black vertical bars drawn in the outer margins, left or right of the body text."""
+    if not page.vector_primitives:
+        return []
+    page_width = page.page_width or max((span.bbox[2] for span in page.spans), default=0.0)
+    height = page.page_height
+    body = [
+        span
+        for span in page.spans
+        if height <= 0 or height * 0.12 < (span.bbox[1] + span.bbox[3]) / 2 < height * 0.88
+    ] or page.spans
+    left = min((span.bbox[0] for span in body), default=None)
+    right = max((span.bbox[2] for span in body), default=None)
+
+    bars: list[RevisionBar] = []
+    for primitive in page.vector_primitives:
+        x0, y0, x1, y1 = primitive.bbox
+        if primitive.kind == "line" and _is_black(primitive.color):
+            if abs(x1 - x0) > max(2.0, primitive.width * 1.5) or not 1.0 <= primitive.width <= 4.5:
+                continue
+        elif primitive.kind == "rect" and _is_black(primitive.fill):
+            if not 1.0 <= abs(x1 - x0) <= 6.0:
+                continue
+        else:
+            continue
+        if abs(y1 - y0) < 8.0:
+            continue
+        center = (x0 + x1) / 2
+        if left is not None and right is not None:
+            in_margin = center < left - 1.0 or center > right + 1.0
+        else:
+            in_margin = page_width > 0 and (center <= page_width * 0.25 or center >= page_width * 0.75)
+        if in_margin:
+            bars.append(RevisionBar(x=center, top=min(y0, y1), bottom=max(y0, y1)))
+    return bars

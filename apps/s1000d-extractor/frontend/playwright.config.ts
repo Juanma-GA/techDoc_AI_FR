@@ -7,6 +7,7 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   use: {
+    channel: process.env.E2E_BROWSER_CHANNEL,
     baseURL: `http://127.0.0.1:${e2ePort}`,
     trace: "on-first-retry",
   },

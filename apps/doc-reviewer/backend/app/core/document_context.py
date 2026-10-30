@@ -43,6 +43,8 @@ DEFAULT_DOCUMENT_MANUFACTURER = "Airbus"
 def missing_document_context(
     document: Any,
     mapping: ClientMapping | None = None,
+    *,
+    metadata_override: dict[str, Any] | None = None,
 ) -> list[str]:
     """Return required document metadata fields that are empty at runtime."""
     fields = (
@@ -50,7 +52,11 @@ def missing_document_context(
         if mapping is not None
         else list(REQUIRED_DOCUMENT_CONTEXT_FIELDS)
     )
-    metadata = getattr(document, "client_metadata", None)
+    metadata = (
+        metadata_override
+        if metadata_override is not None
+        else getattr(document, "client_metadata", None)
+    )
     metadata = metadata if isinstance(metadata, dict) else {}
     missing: list[str] = []
     for field in fields:

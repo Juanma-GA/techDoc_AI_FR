@@ -14,6 +14,8 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.demo_mode import get_demo_enabled, set_demo_enabled
+from app.core.demo_seed import remove_demo_project, seed_demo_project
 from app.core.errors import AppError
 from app.core.mistral_client import (
     MistralClient,
@@ -41,6 +43,8 @@ from app.schemas import (
     ChecklistImportResult,
     MistralSettingsIn,
     MistralSettingsOut,
+    SettingsIn,
+    SettingsOut,
     SheetInfo,
     SheetInspectOut,
     TestConnectionOut,
@@ -48,6 +52,25 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+
+@router.get("", response_model=SettingsOut)
+def get_settings(db: Session = Depends(get_db)) -> SettingsOut:
+    enabled = get_demo_enabled(db)
+    if enabled:
+        seed_demo_project(db)
+    return SettingsOut(demo_enabled=enabled)
+
+
+@router.post("", response_model=SettingsOut)
+def update_settings(body: SettingsIn, db: Session = Depends(get_db)) -> SettingsOut:
+    if body.demo_enabled is not None:
+        set_demo_enabled(db, body.demo_enabled)
+        if body.demo_enabled:
+            seed_demo_project(db)
+        else:
+            remove_demo_project(db)
+    return SettingsOut(demo_enabled=get_demo_enabled(db))
 
 
 def _build_settings_out(db: Session) -> MistralSettingsOut:

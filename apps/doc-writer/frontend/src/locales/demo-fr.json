@@ -1,0 +1,71 @@
+{
+  "demo": {
+    "badge": "MODE DÉMO",
+    "panelTitle": "Démo — maintenance industrielle",
+    "panelDescription": "Explore des ordres de travail entièrement fictifs. La simulation reste locale : aucun document n'est importé et aucun service IA n'est appelé.",
+    "scenarioLabel": "Scénario de maintenance",
+    "sampleFiles": "Documents fictifs fournis",
+    "briefLabel": "Brief de rédaction",
+    "run": "Simuler la rédaction",
+    "reset": "Réinitialiser",
+    "result": "Résultat de la simulation",
+    "empty": "Aucun scénario disponible.",
+    "error": "La simulation n'a pas pu être exécutée.",
+    "outputRequest": "Brief",
+    "outputTitle": "Compte rendu de maintenance — brouillon",
+    "sourceDocument": "Ordre de travail source (fictif)",
+    "disclaimer": "Simulation locale uniquement. À valider par le personnel qualifié avant tout usage opérationnel.",
+    "documentsHint": "Mode Démo : seuls des ordres de travail fictifs sont affichés. L'import et la suppression sont désactivés.",
+    "readOnlyExamples": "Exemples fictifs en lecture seule : aucun fichier n'est envoyé ni modifié.",
+    "generated": "Compte rendu fictif généré localement.",
+    "noFilesSelected": "Sélectionne au moins un document de démonstration.",
+    "templates": {
+      "title": "Templates de démonstration",
+      "serviceReport": {
+        "name": "Modèle de compte rendu d'intervention (DOCX fictif)"
+      },
+      "inspectionChecklist": {
+        "name": "Modèle de fiche de contrôle (DOCX fictif)"
+      },
+      "inspection-checklist": {
+        "steps": "Points de contrôle",
+        "stepIsolation": "Consigner et isoler l'équipement selon la procédure du site.",
+        "stepInspection": "Réaliser les contrôles de l'ordre de travail et relever les mesures.",
+        "stepApproval": "Faire valider les résultats avant toute remise en service."
+      }
+    },
+    "styles": {
+      "title": "Documents de style de démonstration",
+      "documentName": "Guide de style — rapports de maintenance fictifs.md",
+      "documentContent": "Rédiger avec des rubriques courtes et des faits vérifiables. Distinguer les constats des actions prévues. Ne jamais présenter une hypothèse comme une réparation confirmée. Conclure par les contrôles de sécurité et la validation d'une personne habilitée.",
+      "applied": "Repères de style appliqués"
+    },
+    "scenarios": {
+      "conveyor": {
+        "title": "Préventif — convoyeur CV-204",
+        "description": "Préparer un compte rendu à partir d'un ordre préventif fictif.",
+        "fileName": "OT-preventif-CV-204.txt",
+        "fileContent": "OT FICTIF — Atelier Orion\nÉquipement : Convoyeur CV-204\nDate : 18/06/2026\nMotif : légère vibration au palier côté entraînement.\nConsigne : inspection après consignation selon la procédure du site.",
+        "brief": "Rédige un compte rendu synthétique de l'intervention préventive.",
+        "output": "Convoyeur CV-204 — Atelier Orion\nConstat : vibration légère à confirmer par mesure après consignation.\nSuite : vérifier palier et lubrification selon la gamme approuvée ; relever les mesures et signaler tout écart.\nClôture : validation par le responsable habilité avant remise en service."
+      },
+      "pump": {
+        "title": "Correctif — pompe P-118",
+        "description": "Structurer un brouillon de rapport à partir d'un signalement de fuite fictif.",
+        "fileName": "OT-correctif-P-118.txt",
+        "fileContent": "OT FICTIF — Unité Delta\nÉquipement : Pompe P-118\nSignalement : 02/03/2026\nMotif : fluide observé près du presse-étoupe ; fuite à caractériser.\nConsigne : arrêt et isolement selon procédure locale avant diagnostic.",
+        "brief": "Prépare un brouillon de compte rendu et liste les contrôles de clôture.",
+        "output": "Pompe P-118 — Unité Delta\nConstat : fuite à caractériser ; aucune réparation n'est confirmée.\nSuite : arrêt et isolement selon procédure locale, puis diagnostic par un technicien habilité. Suivre la documentation constructeur.\nClôture : relever les mesures, vérifier l'absence de fuite et faire autoriser la remise en service."
+      }
+    }
+  },
+  "settings": {
+    "demo": {
+      "title": "Mode de démonstration",
+      "hint": "Utilise des ordres de maintenance fictifs et une simulation locale, sans importer de documents ni contacter l'IA.",
+      "normal": "Mode normal",
+      "demo": "Mode démo",
+      "saveError": "Impossible d'enregistrer le mode de démonstration."
+    }
+  }
+}

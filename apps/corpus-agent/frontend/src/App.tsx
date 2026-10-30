@@ -1,17 +1,22 @@
 import {
   AppShell,
+  DemoModeBadge,
+  DemoModeProvider,
   ErrorBoundary,
   LanguageSwitcher,
   PortalLink,
   SidebarNavContent,
   sidebarNavItemClass,
 } from "@internal/ui";
+import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { LlmBadge } from "./components/LlmBadge";
 import { setAppLanguage } from "./i18n";
+import { demoSettingsApi } from "./lib/api";
+import type { AppSettingsOut } from "./lib/types";
 import { useUnsavedGuardStore } from "./stores/useUnsavedGuardStore";
 
 // Routes chargees en lazy (code-splitting) : chaque onglet devient un chunk
@@ -50,6 +55,11 @@ export function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const guardMessage = useUnsavedGuardStore((s) => s.message);
+  const settingsQuery = useQuery<AppSettingsOut>({
+    queryKey: ["app-settings"],
+    queryFn: demoSettingsApi.read,
+  });
+  const demoEnabled = settingsQuery.data?.demo_enabled ?? false;
   // Onglet cible en attente de confirmation (clic intercepte pendant qu'une
   // page a des modifications non enregistrees, cf. useUnsavedGuardStore).
   const [pendingTo, setPendingTo] = useState<string | null>(null);
@@ -94,9 +104,20 @@ export function App() {
       themeToggleLabel={t("nav.themeToggle")}
       collapseLabel={t("nav.collapse")}
       expandLabel={t("nav.expand")}
-      sidebarTop={<PortalLink className="sidebar-home" label={t("nav.portal")} />}
+      sidebarTop={
+        <>
+          <PortalLink className="sidebar-home" label={t("nav.portal")} />
+          {demoEnabled ? (
+            <div className="px-4 py-2">
+              <DemoModeBadge label={t("demo.badge")} />
+            </div>
+          ) : null}
+        </>
+      }
       llmStatus={<LlmBadge />}
-      navigation={navItems.map(({ to, labelKey, icon }) => {
+      navigation={navItems
+        .filter(({ to }) => !(demoEnabled && to === "/data"))
+        .map(({ to, labelKey, icon }) => {
         const label = t(labelKey);
         return (
           <NavLink
@@ -131,26 +152,29 @@ export function App() {
         <LanguageSwitcher
           languages={LANGS}
           currentLanguage={currentLang}
+          ariaLabel={t("nav.languageSwitcher")}
           onLanguageChange={(language) => {
             if (language === "fr" || language === "en") void setAppLanguage(language);
           }}
         />
       }
     >
-      <ErrorBoundary>
-        <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
-          <Routes>
-            <Route path="/" element={<Manager />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:id" element={<ProjectDetail />} />
-            <Route path="/redacteur" element={<Redacteur />} />
-            <Route path="/chatbot" element={<Chatbot />} />
-            <Route path="/architecture" element={<Architecture />} />
-            <Route path="/data" element={<Data />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
+      <DemoModeProvider mode={demoEnabled ? "demo" : "normal"} isReady={settingsQuery.isSuccess}>
+        <ErrorBoundary>
+          <Suspense fallback={<div className="empty-state">{t("common.loading")}</div>}>
+            <Routes>
+              <Route path="/" element={<Manager />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              <Route path="/redacteur" element={<Redacteur />} />
+              <Route path="/chatbot" element={<Chatbot />} />
+              <Route path="/architecture" element={<Architecture />} />
+              <Route path="/data" element={demoEnabled ? <Navigate to="/" replace /> : <Data />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </DemoModeProvider>
     </AppShell>
   );
 }

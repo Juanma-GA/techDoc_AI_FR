@@ -24,6 +24,8 @@ function appReadme({ title, slug, port, profiles, desktop }) {
   const desktopSection = desktop
     ? `## Desktop\n\nOptional Tauri: \`pnpm desktop:dev:${slug}\` or ` +
       `\`pnpm desktop:build:${slug}\` from the repository root. ` +
+      `On Windows, double-click \`package-desktop.bat\`; \`package.bat\` without arguments ` +
+      `creates the web package. ` +
       `See [desktop guide](../../docs/standards/desktop-and-stacks.md).\n\n`
     : "";
 

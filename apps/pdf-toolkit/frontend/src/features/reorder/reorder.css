@@ -1,0 +1,11 @@
+/* The app shell sidebar makes the content column narrower than the viewport. */
+.thumbnail-panel {
+  container-name: reorder-panel;
+  container-type: inline-size;
+}
+
+@container reorder-panel (max-width: 720px) {
+  .reorder-submit {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

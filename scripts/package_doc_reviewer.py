@@ -67,6 +67,8 @@ _EXCLUDED_DIRS = {
     # Test suites and their sample files are never shipped (client-proprietary
     # documents live there).
     "tests",
+    # Manual verification scripts write client documents to their `outputs/`.
+    "dev_tools",
 }
 # `.pdf`: no PDF is needed at runtime; the PDFs in the repository are client
 # document samples that must never leave with the ZIP.

@@ -68,7 +68,26 @@ export function Preparation() {
             {(documents.data ?? [])
               .filter((document) => document.working_format === "pdf")
               .map((document) => (
-                <div className="item-row" key={document.id}>
+                <div
+                  className="item-row clickable prep-document-row"
+                  key={document.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`${t("documents.open")}: ${document.original_filename}`}
+                  onClick={(event) => {
+                    if (event.target instanceof Element && event.target.closest("button")) return;
+                    navigate(`/preparation/${document.id}`);
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "Enter" &&
+                      !(event.target instanceof Element && event.target.closest("button"))
+                    ) {
+                      event.preventDefault();
+                      navigate(`/preparation/${document.id}`);
+                    }
+                  }}
+                >
                   <div className="item-main">
                     <p className="item-name">{document.original_filename}</p>
                     <p className="item-meta">
@@ -81,7 +100,7 @@ export function Preparation() {
                       className="btn primary small"
                       onClick={() => navigate(`/preparation/${document.id}`)}
                     >
-                      {t("preparation.resume")}
+                      {t("documents.open")}
                     </button>
                     <DocumentDeleteButton
                       label={t("common.delete")}

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
 import { FileDropzone } from "./FileDropzone";
 import { MAX_FILE_SIZE } from "../files";
+import { DemoPdfFileProvider } from "../demoPdf";
 
 beforeEach(async () => { await i18n.changeLanguage("en"); });
 afterEach(cleanup);
@@ -58,6 +59,31 @@ describe("shared dropzone with PDF business validation", () => {
     });
     expect(view.onFiles).not.toHaveBeenCalled();
     expect(view.getByRole("button").getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("preloads the demo PDF only into PDF dropzones", async () => {
+    const demoPdf = new File(["%PDF-synthetic"], "DEMO_CMM_PDF_anonyme.pdf", {
+      type: "application/pdf",
+    });
+    const onFiles = vi.fn();
+    const onError = vi.fn();
+    const pdfView = render(
+      <DemoPdfFileProvider file={demoPdf}>
+        <FileDropzone onFiles={onFiles} onError={onError} />
+      </DemoPdfFileProvider>,
+    );
+
+    await waitFor(() => expect(onFiles).toHaveBeenCalledWith([demoPdf]));
+    pdfView.unmount();
+
+    const imageOnFiles = vi.fn();
+    render(
+      <DemoPdfFileProvider file={demoPdf}>
+        <FileDropzone fileType="image" onFiles={imageOnFiles} onError={onError} />
+      </DemoPdfFileProvider>,
+    );
+
+    expect(imageOnFiles).not.toHaveBeenCalled();
   });
 
   it("renders translated labels and accepts multiple images", async () => {

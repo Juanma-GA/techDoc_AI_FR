@@ -1,0 +1,16 @@
+{
+  "label": "S1000D",
+  "bundle_version": "1.0.0",
+  "catalogs": [
+    {
+      "code": "THALES-S1000D",
+      "version": "v1"
+    }
+  ],
+  "modules": {
+    "rules": "rules.py",
+    "operations": "operations.py",
+    "data_modules": "data_modules.py"
+  },
+  "default_enabled": false
+}

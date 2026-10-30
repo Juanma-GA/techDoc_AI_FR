@@ -2,6 +2,7 @@ import { render, screen, type RenderResult } from "@testing-library/react";
 import type userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
+import { DemoModeProvider } from "@internal/ui";
 
 import { WorkflowProvider } from "../hooks/WorkflowProvider";
 import { imageReplaceApi, type OcrResultDto } from "../lib/api";
@@ -69,7 +70,11 @@ export function mockWorkspaceApi(initialPreset = emptyPreset) {
 }
 
 export function renderWorkflow(ui: ReactElement): RenderResult {
-  return render(<WorkflowProvider>{ui}</WorkflowProvider>);
+  return render(
+    <DemoModeProvider mode="normal" isReady>
+      <WorkflowProvider>{ui}</WorkflowProvider>
+    </DemoModeProvider>,
+  );
 }
 
 export async function selectExcelPartInHome(
@@ -106,5 +111,5 @@ export async function selectExcelPartInHome(
   await user.selectOptions(screen.getByLabelText("ICN (nom du JPG)"), "4");
   await user.selectOptions(screen.getByLabelText("Noms des pièces"), "5");
   await screen.findByRole("option", { name: "Pump A" });
-  await user.selectOptions(screen.getByLabelText("Pièce à traiter"), "2");
+  await user.selectOptions(screen.getByLabelText("Description au point d’emploi"), "2");
 }

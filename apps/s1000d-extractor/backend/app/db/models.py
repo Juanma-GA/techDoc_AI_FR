@@ -73,6 +73,7 @@ class Document(Base):
     # Pile d'annulation (undo) des editions de decoupage : liste JSON
     # d'instantanes `dms_json` successifs (bornee cote code).
     dms_history_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preliminary_review_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Ressources client optionnelles : DMRL (decoupage impose + PMC), CIR
     # (contenus partages), regles client BREX JSON.
     dmrl_json: Mapped[str | None] = mapped_column(Text, nullable=True)

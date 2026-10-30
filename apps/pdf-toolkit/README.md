@@ -1,6 +1,6 @@
 # PDF Toolkit
 
-Application web locale, légère et open source pour les opérations PDF courantes : fusion, compression, conversion d'images, extraction, suppression, réorganisation et rotation de pages. Aucun compte, aucune base de données et aucun stockage permanent.
+Application web locale, légère et open source pour les opérations PDF courantes : fusion, compression, conversion d'images, extraction, découpage par valeur, suppression, réorganisation et rotation de pages. Aucun compte, aucune base de données et aucun stockage permanent.
 
 ## Auth
 
@@ -27,19 +27,22 @@ un adaptateur de validation métier autour de FileDropzone partagé.
 - Assembler des images PNG ou JPEG dans l'ordre choisi vers `images.pdf`.
 - Exporter toutes les pages d'un PDF en PNG ou JPEG dans `pdf-images.zip`, directement dans le navigateur.
 - Extraire des pages avec des sélections comme `1`, `1-5`, `1,3,7` ou `2-4,8` vers `extract.pdf`.
+- Découper un PDF en plusieurs documents téléchargés dans un dossier ZIP. Découpage simple : un document toutes les N pages ou par plages personnalisées (`1-4 ; 5-8 ; 9-12`, un PDF par plage ; retour à la ligne également accepté, virgules pour réunir des pages dans un même PDF), fichiers numérotés `<nom>_01.pdf`, `<nom>_02.pdf`… Le panneau repliable « Découpage avancé » (« Advanced split ») regroupe le découpage par valeur : tableau pages / valeur, modèle de nom, collage `pages;valeur` depuis Excel et détection automatique (relancée à l'export si la zone ou les réglages ont changé) : l'utilisateur trace une zone sur l'aperçu (ou la saisit en %, décimales libres), ou cherche sur la page entière, et choisit le type de valeur (texte, nombre, code/référence, expression régulière) ; un nouveau document commence à chaque changement de valeur, ou les pages de même valeur sont regroupées. Les noms suivent un modèle paramétrable avec les balises `{valeur}`, `{n}`, `{pages}` et `{nom}` (ex. `DOC_{valeur}_rev1`), nettoyés et dédoublonnés. La lecture de zone se fait dans le navigateur et exige un PDF avec couche texte (pas d'OCR pour les scans). La progression affiche le nombre de PDF extraits puis ajoutés au ZIP.
 - Supprimer des pages selon la même syntaxe vers `trimmed.pdf` (au moins une page doit rester).
 - Réorganiser toutes les pages par glisser-déposer de miniatures vers `reordered.pdf`.
-- Faire pivoter toutes les pages ou une sélection vers `rotated.pdf`, de 90°, 180° ou 270° dans le sens horaire.
+- Faire pivoter toutes les pages ou une sélection vers `rotated.pdf`, de 90°, 180° ou 270° dans le sens horaire ; l'aperçu affiche la première page concernée.
 - Dessiner ou importer une signature PNG/JPEG (10 Mo maximum), ajouter facultativement un prénom, un nom et une date dans des cadres déplaçables et redimensionnables par leurs coins, puis exporter `signed.pdf`. Ces éléments sont visuels, gardés en mémoire uniquement pendant l'opération et n'ont pas de validation cryptographique. Les caractères hors Latin-1 sont refusés par la police PDF standard.
+- Renommer les fichiers exportés (et le dossier/ZIP de découpage) depuis chaque onglet. Au lancement de l'export, le sélecteur « Enregistrer sous » permet de choisir le nom et l'emplacement ; si le navigateur ne le prend pas en charge, le téléchargement standard est utilisé.
+- En mode bureau Tauri, les PDF intermédiaires du découpage apparaissent dans le dossier du ZIP pendant le traitement, puis sont supprimés après création de l’archive ou en cas d’échec. Le ZIP choisi reste le seul résultat.
 - Limite de 250 Mo par fichier, vérification du contenu MIME PDF, noms d'upload nettoyés et espaces temporaires supprimés après chaque requête.
-- Shell et thème visuel repris de `apps/_template` et `packages/ui` : huit onglets, modes clair/sombre et interface française/anglaise.
+- Shell et thème visuel repris de `apps/_template` et `packages/ui` : dix onglets, modes clair/sombre et interface française/anglaise.
 
 ## Architecture
 
 ```text
 frontend/
   src/App.tsx
-  src/features/{merge,compress,extract,delete,reorder,rotate,signature,images-to-pdf,pdf-to-images}
+  src/features/{merge,compress,extract,split,delete,reorder,rotate,signature,images-to-pdf,pdf-to-images}
   src/shared
   src/locales/{fr,en}.json
 backend/
@@ -121,9 +124,9 @@ Pour obtenir directement le setup Windows x64 dans un ZIP, double-cliquez sur
 node scripts\package_pdf_toolkit_desktop.mjs --out apps\pdf-toolkit\dist
 ```
 
-Le résultat `dist/pdf-toolkit-desktop-v1.0.0-YYYYMMDD.zip` contient uniquement le setup `.exe` NSIS, à extraire puis exécuter. Aucun ancien ZIP n'est écrasé. Les fichiers intermédiaires restent sous `dist/tauri/x86_64-pc-windows-msvc/release/bundle/nsis/`. Le poste de build nécessite Go, Node/pnpm, Rust et Visual Studio C++ ; le destinataire n'a pas besoin de ces outils. WebView2 est requis ; le setup peut le télécharger s'il est absent. Le setup et le backend embarqué restent soumis aux protections Windows, sans signature ni acceptation garanties.
+Le résultat `dist/pdf-toolkit-desktop-v1.0.0-YYYYMMDD.zip` contient uniquement le setup `.exe` NSIS, à extraire puis exécuter. Les packages répétés le même jour reçoivent un suffixe (`-2`, `-3`, etc.) ; aucun ancien ZIP n'est écrasé. Les fichiers intermédiaires restent sous `dist/tauri/x86_64-pc-windows-msvc/release/bundle/nsis/`. Le poste de build nécessite Go, Node/pnpm, Rust et Visual Studio C++ ; le destinataire n'a pas besoin de ces outils. WebView2 est requis ; le setup peut le télécharger s'il est absent. Le setup et le backend embarqué restent soumis aux protections Windows, sans signature ni acceptation garanties.
 
-Tauri embarque le même frontend et serveur Go. Un écran de démarrage affiche les erreurs éventuelles, puis l'interface s'ouvre dans la fenêtre native. Le serveur utilise un port local libre et s'arrête à sa fermeture. Le mode web et les routes API restent inchangés.
+Tauri embarque le même frontend et serveur Go. Un écran de démarrage affiche les erreurs éventuelles, puis l'interface s'ouvre dans la fenêtre native. Le logo AI4TECHDOC est utilisé comme icône de la fenêtre ; sa barre de titre suit le thème clair/sombre de l'interface. Le serveur utilise un port local libre et s'arrête à sa fermeture. Le mode web et les routes API restent inchangés.
 
 ## Développement
 
@@ -180,6 +183,7 @@ Toutes les réponses de traitement réussies sont des téléchargements `applica
 | `POST` | `/api/v1/images-to-pdf` | `images` répété, PNG ou JPEG | `images.pdf` |
 | `POST` | `/api/v1/compress` | `file` | `compressed.pdf` |
 | `POST` | `/api/v1/extract` | `file`, `pages` | `extract.pdf` |
+| `POST` | `/api/v1/split` | `file`, `groups` (tableau JSON `[{name, pages}]`, 5000 maximum), `folder` (facultatif) | `<folder>.zip` contenant `<folder>/<name>.pdf` |
 | `POST` | `/api/v1/delete` | `file`, `pages` | `trimmed.pdf` |
 | `POST` | `/api/v1/reorder` | `file`, `order` (tableau JSON de pages 1-based) | `reordered.pdf` |
 | `POST` | `/api/v1/rotate` | `file`, `rotation` (90, 180 ou 270), `pages` (facultatif; vide pour toutes les pages) | `rotated.pdf` |
@@ -209,7 +213,12 @@ MIT. Voir [LICENSE](./LICENSE).
 Les contrats Go existants ne sont pas réécrits pour imiter FastAPI : erreurs `{error}`,
 logs Gin/Go et absence de routes admin/settings persistantes. Le stockage est temporaire,
 sans SQLite ni migrations. Le profil `files` utilise cette suppression après requête plutôt
-qu'une conservation/version SHA-256. L'interface garde ses huit outils plutôt que d'ajouter
-des onglets Données/Paramètres sans fonctionnalités correspondantes.
+qu'une conservation/version SHA-256. L'interface propose dix outils PDF et un onglet
+Paramètres : le mode démo est conservé en mémoire jusqu'à la fermeture. Il précharge
+`frontend/public/demo/DEMO_CMM_PDF_anonyme.pdf` dans les outils acceptant un PDF, puis les
+actions habituelles utilisent leur flux local normal (backend Go ou navigateur selon l'outil) ;
+c'est une exception documentée au contrat général d'isolation des scénarios démo.
+Dans l'outil Fusionner, deux copies du PDF démo sont préchargées pour permettre de tester la fusion.
+L'outil Images → PDF reste réservé aux images.
 Le bundle est généré dans `backend/web/static/generated` pour `go:embed`, pas dans
 `frontend/dist`. Ces différences sont bornées à cette application.

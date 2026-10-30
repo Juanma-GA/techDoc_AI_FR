@@ -39,6 +39,15 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 _HINTS = {"mixed", "descriptive", "procedural"}
 
 
+def _require_single_document_workflow(doc: Document) -> None:
+    if doc.wizard_step:
+        raise AppError(
+            "WIZARD_WORKFLOW_REQUIRED",
+            "Ce document utilise le wizard : modifiez et exportez ses DMs dans ce parcours.",
+            409,
+        )
+
+
 def _storage() -> Path:
     p = Path(settings.storage_dir)
     p.mkdir(parents=True, exist_ok=True)
@@ -148,6 +157,7 @@ async def upload_document(
 @router.post("/{doc_id}/extract")
 async def extract(doc_id: str, db: Session = Depends(get_db)) -> EventSourceResponse:
     doc = _require(db, doc_id)
+    _require_single_document_workflow(doc)
     doc_id = doc.id  # detache de la session avant le thread
 
     async def event_gen():
@@ -204,6 +214,7 @@ def get_result(doc_id: str, db: Session = Depends(get_db)) -> ExtractDoneOut:
 @router.get("/{doc_id}/xml")
 def get_xml(doc_id: str, db: Session = Depends(get_db)) -> Response:
     doc = _require(db, doc_id)
+    _require_single_document_workflow(doc)
     if not doc.xml_path or not Path(doc.xml_path).exists():
         raise AppError("NO_XML", "Aucun XML : lance l'extraction d'abord.", 409)
     xml = Path(doc.xml_path).read_text(encoding="utf-8")
@@ -263,6 +274,7 @@ def override_node(
 ) -> ExtractDoneOut:
     """Force l'element S1000D d'un noeud (revue humaine), re-serialise, re-valide."""
     doc = _require(db, doc_id)
+    _require_single_document_workflow(doc)
     if not doc.ir_json:
         raise AppError("NO_TREE", "Aucun arbre : lance l'extraction d'abord.", 409)
     root = ir_mod.from_dict(json.loads(doc.ir_json))

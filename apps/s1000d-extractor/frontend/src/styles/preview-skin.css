@@ -86,9 +86,9 @@
 .migration-split-review summary { padding: 10px 0; color: var(--fg); cursor: pointer; font-weight: 600; }
 .migration-split-review[open] summary { margin-bottom: 8px; }
 .migration-split-review-content { display: flex; flex-direction: column; gap: 8px; }
-.input, .dw select, .dw textarea { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
-.dw textarea { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
-.input:focus, .dw select:focus, .dw textarea:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
+.input { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; color: var(--fg); font: inherit; width: 100%; }
+textarea.input { font-family: "Inter", sans-serif; min-height: 80px; resize: vertical; }
+.input:focus { outline: none; border-color: var(--brand-light); box-shadow: 0 0 0 2px var(--border-bright); }
 .input:disabled { color: var(--fg-muted); opacity: 0.55; cursor: not-allowed; }
 .migration-upload-label { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 4px; }
 .migration-upload-label .label { margin: 0; }

@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from PIL import Image, ImageDraw
 
+from app.services.ocr_engine import _match_references
+
 
 def _image_bytes() -> bytes:
     image = BytesIO()
@@ -70,6 +72,47 @@ def test_ocr_maps_duplicate_manual_references_to_occurrences_in_order(
         (item["reference"], item["replacement"], item["replacement_count"])
         for item in response.json()["references"]
     ] == [("R-001", "101", 1), ("R-001", "202", 1)]
+
+
+def test_ocr_requires_exact_reference_tokens_within_each_detected_box() -> None:
+    lines = [
+        {"text": "XXXYY*"},
+        {"text": "XXX"},
+        {"text": "Y"},
+    ]
+
+    updated_lines, matches = _match_references(lines, ["XXXY"])
+
+    assert matches == [{
+        "reference": "XXXY",
+        "found": False,
+        "line_indices": [],
+        "partial_line_indices": [0],
+    }]
+    assert all(line["matched_references"] == [] for line in updated_lines)
+
+
+def test_ocr_reports_a_longer_token_without_marking_it_as_matched() -> None:
+    lines = [{"text": "34 708 SM"}, {"text": "34 708 SM 2"}]
+
+    updated_lines, matches = _match_references(lines, ["34708SM"])
+
+    assert matches == [{
+        "reference": "34708SM",
+        "found": True,
+        "line_indices": [0],
+        "partial_line_indices": [1],
+    }]
+    assert [line["matched_references"] for line in updated_lines] == [["34708SM"], []]
+
+
+def test_ocr_matches_reference_as_a_complete_token() -> None:
+    lines = [{"text": "(XXXY*)"}]
+
+    updated_lines, matches = _match_references(lines, ["XXXY"])
+
+    assert matches == [{"reference": "XXXY", "found": True, "line_indices": [0]}]
+    assert updated_lines[0]["matched_references"] == ["XXXY"]
 
 
 def test_ocr_allows_duplicate_references_across_manual_and_excel_pairs(
