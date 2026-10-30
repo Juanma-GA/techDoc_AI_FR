@@ -172,10 +172,6 @@ _REPAIR_RELATIVE_HUMIDITY = (
     "Relative humidity: Refer to Standard Practices Manual ATA No. 20-02-00, "
     "F9111CMON-A-20-02-00-00A-800A-A - Storage - General procedure."
 )
-_STORAGE_TEMPERATURE = (
-    "Temperature: Refer to Standard Practices Manual ATA No. 20-02-00, "
-    "F9111CMON-A-20-02-00-00A-812A-A – Storage and Transportation of Assemblies."
-)
 _THALES_TP1_ADDRESS_ELEMENTS: tuple[tuple[str, str], ...] = (
     (r"\(F9111\)", "(F9111)"),
     (r"75-77\s+Avenue\s+Marcel\s+Dassault", "75-77 Avenue Marcel Dassault"),
@@ -188,13 +184,6 @@ _REPAIR_RELATIVE_HUMIDITY_PATTERN = (
     + re.escape(_REPAIR_RELATIVE_HUMIDITY)
     .replace(r"\ ", r"\s+")
     .replace("procedure", r"proc(?:e|\u00e9|\uFFFD)dure")
-    + ")"
-)
-_STORAGE_TEMPERATURE_PATTERN = (
-    "(?i:"
-    + re.escape(_STORAGE_TEMPERATURE)
-    .replace(r"\ ", r"\s+")
-    .replace("–", r"[-\u2010-\u2015\u2212\uFFFD]")
     + ")"
 )
 _NOTE_PRESSURE_PATTERN = r"\bPressure\s*:"
@@ -1821,17 +1810,23 @@ CUSTOM_STORAGE_NOTE = rule(
             display="Pressure:",
             page_type="STORAGE",
         ),
-        _required_note_check(
-            _REPAIR_RELATIVE_HUMIDITY_PATTERN,
-            display=_REPAIR_RELATIVE_HUMIDITY,
-            page_type="STORAGE",
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="storage_note_reference",
+            operation_params={"reference": "temperature"},
+            require_all=True,
+            missing_anchor=r"(?i)\bRelative\s+humidity\s*:",
+            missing_anchor_position="below",
         ),
-        _required_note_check(
-            _STORAGE_TEMPERATURE_PATTERN,
-            display=_STORAGE_TEMPERATURE,
-            page_type="STORAGE",
-            anchor=r"(?i)\bRelative\s+humidity\s*:",
-            anchor_position="below",
+        Check(
+            field="text",
+            operator="client_operation",
+            operation="storage_note_reference",
+            operation_params={"reference": "relative_humidity"},
+            require_all=True,
+            missing_anchor=r"(?i)\bPressure\s*:",
+            missing_anchor_position="below",
         ),
     ],
     failure_message="introduction ou categories NOTE STORAGE non conformes.",

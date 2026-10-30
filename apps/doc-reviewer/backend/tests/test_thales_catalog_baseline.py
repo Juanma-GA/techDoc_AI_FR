@@ -15,7 +15,7 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
 
     assert len(payload) == 85
     assert hashlib.sha256(canonical.encode("utf-8")).hexdigest() == (
-        "4ed0cedffa8ec98e7f46a06da34ee9c1ec05cb914c0af81fabefd741872ab3cb"
+        "612ca3ec963e6b32516d77de65ca4d38c0ad8178a73e18d9bd9c91266fa96385"
     )
 
     expected_controls = {
@@ -131,6 +131,11 @@ def test_thales_v1_catalog_matches_bundle_operation_baseline() -> None:
         assert check["operation"] == operation
         assert check["operation_params"] == operation_params
         assert check["expected"] is None
+    storage_checks = by_code["CUSTOM_STORAGE_NOTE"]["checks"]
+    assert storage_checks[1]["operation"] == "storage_note_reference"
+    assert storage_checks[1]["operation_params"] == {"reference": "temperature"}
+    assert storage_checks[2]["operation"] == "storage_note_reference"
+    assert storage_checks[2]["operation_params"] == {"reference": "relative_humidity"}
 
     expected_conversions = {
         "CUSTOM_PASCAL_INHG_CONVERSION": "pascal_to_inhg",

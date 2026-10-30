@@ -83,6 +83,7 @@ def test_repository_active_client_configuration_loads() -> None:
         "revision_consistency",
         "preparation_check",
         "shop_verification",
+        "storage_note_reference",
         "cmm_mapping_consistency",
         "highlights_holder",
         "highlights_document_type",

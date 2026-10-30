@@ -360,7 +360,9 @@ def test_note_rules_keep_page_scopes_check_counts_and_storage_anchor() -> None:
     assert len(testing.checks) == 3
     assert storage.target.page_type == "STORAGE"
     assert len(storage.checks) == 3
-    assert storage.checks[2].missing_anchor == r"(?i)\bRelative\s+humidity\s*:"
+    assert storage.checks[1].missing_anchor == r"(?i)\bRelative\s+humidity\s*:"
+    assert storage.checks[1].missing_anchor_position == "below"
+    assert storage.checks[2].missing_anchor == r"(?i)\bPressure\s*:"
     assert storage.checks[2].missing_anchor_position == "below"
 
 

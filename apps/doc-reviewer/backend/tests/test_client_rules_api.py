@@ -23,7 +23,7 @@ def test_client_config_and_rules_expose_active_bundle(client: TestClient) -> Non
 
     assert config["client_code"] == "THALES"
     assert config["bundle"] == "thales_rules"
-    assert config["bundle_version"] == "1.2.19"
+    assert config["bundle_version"] == "1.2.20"
     assert config["bundle_hash"]
     assert config["mapping"]["fields"]["meta_pnr_number"]["type"] == "string_list"
     assert config["catalogs"][0]["code"] == "THALES-CUSTOM"

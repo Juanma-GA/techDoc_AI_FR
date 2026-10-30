@@ -23,6 +23,7 @@ from app.checks.client_bundle import ClientOperation, OperationResult
 from . import revision_engine as revision
 from .preparation_operations import PREPARATION_CHECK
 from .revision_engine import _highlights_previous_revision_findings
+from .storage_operations import STORAGE_NOTE_REFERENCE
 from .rules import (
     DOCUMENT_TYPE_PATTERN,
     DOCUMENT_TYPES,
@@ -3292,6 +3293,7 @@ OPERATIONS = {
         REVISION_CONSISTENCY,
         PREPARATION_CHECK,
         SHOP_VERIFICATION,
+        STORAGE_NOTE_REFERENCE,
         HIGHLIGHTS_HOLDER,
         HIGHLIGHTS_DOCUMENT_TYPE,
         PARAGRAPH_JUSTIFICATION,
