@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, render as renderUi, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -141,7 +141,7 @@ describe("recognized text replacement", () => {
       filename: "synthetic.jpg",
     };
     const onReplaceLine = vi.fn(async () => true);
-    render(
+    renderUi(
       <OcrResults
         result={result}
         disabled={false}
@@ -159,5 +159,70 @@ describe("recognized text replacement", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => expect(onReplaceLine).toHaveBeenCalledWith(0, "K555", "K777", null));
+  });
+
+  it("warns when a reference is present only inside a longer OCR token", () => {
+    const result: OcrResultDto = {
+      width: 2480,
+      height: 3508,
+      source_width: 120,
+      source_height: 80,
+      full_text: "34708SM\n34708SM2",
+      lines: [
+        {
+          text: "34708SM",
+          confidence: 0.99,
+          box: [[100, 100], [200, 100], [200, 130], [100, 130]],
+          matched_references: ["34708SM"],
+        },
+        {
+          text: "34708SM2",
+          confidence: 0.99,
+          box: [[100, 140], [210, 140], [210, 170], [100, 170]],
+          matched_references: [],
+        },
+      ],
+      references: [{
+        reference: "34708SM",
+        found: true,
+        line_indices: [0],
+        partial_line_indices: [1],
+        replacement: "28",
+        replacement_count: 1,
+      }],
+      edited_image: imageData,
+      filename: "synthetic.jpg",
+    };
+
+    const { rerender } = renderUi(
+      <OcrResults
+        result={result}
+        disabled={false}
+        selectionRequest={null}
+        onSelectionHandled={vi.fn()}
+        onReplaceLine={vi.fn(async () => true)}
+        onUndoLine={vi.fn(async () => false)}
+        t={i18n.getFixedT("fr")}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Une ligne contient cette référence dans un repère plus long ; elle ne sera pas remplacée.",
+    );
+
+    rerender(
+      <OcrResults
+        result={result}
+        disabled={false}
+        selectionRequest={null}
+        onSelectionHandled={vi.fn()}
+        onReplaceLine={vi.fn(async () => true)}
+        onUndoLine={vi.fn(async () => false)}
+        t={i18n.getFixedT("en")}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "One line contains this reference inside a longer token; it will be left unchanged.",
+    );
   });
 });

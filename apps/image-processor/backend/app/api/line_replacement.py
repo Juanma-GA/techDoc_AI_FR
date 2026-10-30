@@ -18,7 +18,11 @@ from app.services.constants import (
 )
 from app.services.image_layout import create_a4_page, prepare_source_image
 from app.services.image_replacement import apply_replacements
-from app.services.ocr_engine import find_reference_occurrences, normalize_reference
+from app.services.ocr_engine import (
+    _match_references,
+    find_reference_occurrences,
+    normalize_reference,
+)
 
 router = APIRouter(prefix="/image-processor", tags=["image-processor"])
 log = structlog.get_logger(__name__)
@@ -207,14 +211,17 @@ async def reapply_replacements(
             detail="Une référence à appliquer à toutes les zones est invalide.",
         )
 
-    replacement_lines = [
-        {"text": line.text, "box": [list(point) for point in line.box]}
-        for line in lines
-    ]
+    replacement_lines, replacement_matches = _match_references(
+        [
+            {"text": line.text, "box": [list(point) for point in line.box]}
+            for line in lines
+        ],
+        [pair["reference"] for pair in pairs],
+    )
     if any(
         x < 0 or x > A4_WIDTH or y < 0 or y > A4_HEIGHT
-        for line in replacement_lines
-        for x, y in line["box"]
+        for line in lines
+        for x, y in line.box
     ):
         raise HTTPException(status_code=422, detail="Une boîte OCR est hors de l'image.")
 
@@ -239,5 +246,8 @@ async def reapply_replacements(
     return {
         "edited_image": f"data:image/jpeg;base64,{encoded}",
         "replacement_counts": replacement_counts,
+        "partial_line_indices": [
+            match.get("partial_line_indices", []) for match in replacement_matches
+        ],
         "replacement_font_size": font_size,
     }

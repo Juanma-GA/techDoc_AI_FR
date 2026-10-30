@@ -95,6 +95,11 @@ export function OcrResults({
                         ? t("image.found")
                         : t("image.notFound")}
                   </Badge>
+                  {item.partial_line_indices?.length ? (
+                    <p role="status" className="w-full text-xs text-warning">
+                      {t("image.partialTokenWarning", { count: item.partial_line_indices.length })}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>

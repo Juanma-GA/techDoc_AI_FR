@@ -24,13 +24,16 @@ def _normalized_text_with_positions(value: str) -> tuple[str, list[int]]:
     return "".join(normalized_parts), positions
 
 
-def find_reference_occurrences(value: str, reference: str) -> list[tuple[int, int]]:
+def _find_reference_occurrences(
+    value: str, reference: str,
+) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
     normalized_reference = normalize_reference(reference)
     if not normalized_reference:
-        return []
+        return [], []
 
     normalized_text, positions = _normalized_text_with_positions(value)
     occurrences: list[tuple[int, int]] = []
+    partial_occurrences: list[tuple[int, int]] = []
     search_offset = 0
     while True:
         start = normalized_text.find(normalized_reference, search_offset)
@@ -43,17 +46,27 @@ def find_reference_occurrences(value: str, reference: str) -> list[tuple[int, in
         ends_inside_character = end < len(positions) and positions[end] == source_end - 1
         has_left_boundary = source_start == 0 or not normalize_reference(value[source_start - 1])
         has_right_boundary = source_end == len(value) or not normalize_reference(value[source_end])
+        if has_right_boundary and source_end < len(value) and value[source_end].isspace():
+            next_non_space = source_end
+            while next_non_space < len(value) and value[next_non_space].isspace():
+                next_non_space += 1
+            if next_non_space < len(value) and value[next_non_space].isdigit():
+                has_right_boundary = False
 
-        if (
-            not starts_inside_character
-            and not ends_inside_character
-            and has_left_boundary
-            and has_right_boundary
-        ):
-            occurrences.append((source_start, source_end))
-            search_offset = end
+        if not starts_inside_character and not ends_inside_character:
+            if has_left_boundary and has_right_boundary:
+                occurrences.append((source_start, source_end))
+                search_offset = end
+            else:
+                partial_occurrences.append((source_start, source_end))
+                search_offset = start + 1
         else:
             search_offset = start + 1
+    return occurrences, partial_occurrences
+
+
+def find_reference_occurrences(value: str, reference: str) -> list[tuple[int, int]]:
+    occurrences, _ = _find_reference_occurrences(value, reference)
     return occurrences
 
 
@@ -111,11 +124,20 @@ def _match_references(
 
     for pair_indices in reference_indices.values():
         occurrences: list[list[int]] = []
+        partial_line_indices: list[int] = []
         reference = references[pair_indices[0]]
         for line_index, line in enumerate(lines):
-            occurrences.extend(
-                [[line_index] for _ in find_reference_occurrences(str(line["text"]), reference)]
+            line_occurrences, partial_occurrences = _find_reference_occurrences(
+                str(line["text"]), reference,
             )
+            occurrences.extend(
+                [[line_index] for _ in line_occurrences]
+            )
+            if partial_occurrences:
+                partial_line_indices.append(line_index)
+        partial_matches = (
+            {"partial_line_indices": partial_line_indices} if partial_line_indices else {}
+        )
 
         for line_indices in occurrences:
             for line_index in line_indices:
@@ -131,6 +153,7 @@ def _match_references(
                 "reference": references[pair_index],
                 "found": bool(occurrences),
                 "line_indices": line_indices,
+                **partial_matches,
             }
             continue
 
@@ -144,6 +167,7 @@ def _match_references(
                 "reference": references[pair_index],
                 "found": bool(line_indices),
                 "line_indices": line_indices,
+                **partial_matches,
             }
 
     for index, values in enumerate(line_matches):

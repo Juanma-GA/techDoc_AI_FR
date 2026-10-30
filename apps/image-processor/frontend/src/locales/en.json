@@ -139,6 +139,8 @@
     "replacementApplied_other": "{{count}} occurrences replaced",
     "foundNotReplaced": "Found, not replaced",
     "notFound": "Not found",
+    "partialTokenWarning_one": "One line contains this reference inside a longer token; it will be left unchanged.",
+    "partialTokenWarning_other": "{{count}} lines contain this reference inside a longer token; they will be left unchanged.",
     "recognizedText": "Recognized text",
     "recognizedBoxes": "Recognized text boxes",
     "editRecognizedHint": "Select a line to change its content in the image.",
