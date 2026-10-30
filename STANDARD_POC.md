@@ -36,7 +36,8 @@ internal-poc-monorepo/
 │   ├── _run.bat                      # logique de lancement Windows
 │   ├── start.sh                      # lanceur Unix
 │   ├── package.bat                   # packaging Windows — wrapper court
-│   ├── _package.bat                  # logique de packaging Windows
+│   ├── _package.bat                  # logique de packaging Windows (web + `desktop`)
+│   ├── package-desktop.bat           # packaging Tauri — wrapper court (apps générées avec --desktop)
 │   ├── backend/                      # FastAPI
 │   │   ├── README.md                 # niveau backend — détail tech
 │   │   ├── pyproject.toml
@@ -572,7 +573,7 @@ while (true) {
 
 ## 9. Lanceurs locaux et packaging
 
-Chaque POC fournit **six** fichiers à la racine de `apps/<poc>/` (quatre `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/` :
+Chaque POC fournit **sept** fichiers à la racine de `apps/<poc>/` (cinq `.bat` + un `start.sh` + un `_needs_rebuild.ps1`), copiés depuis `apps/_template/`. `package-desktop.bat` est copié dans toutes les apps mais n'est fonctionnel que pour une app générée avec `--desktop` (sinon il s'arrête avec un message explicite) :
 
 Les commandes Python ci-dessous s'appliquent au template FastAPI. Un backend Go
 utilise son binaire et un packager Node ; le frontend peut être embarqué via
@@ -587,7 +588,10 @@ s'appliquent. Tauri est optionnel et ne remplace jamais le mode web.
 | `_run.bat` | Logique de lancement Windows (détection Python, venv, deps, Alembic, **rebuild front auto**, uvicorn). **ASCII pur** : aucun accent (sinon cmd.exe ferme la fenêtre avant que l'utilisateur ne voie le message). |
 | `_needs_rebuild.ps1` | Helper PowerShell appelé par `_run.bat` : compare la date de `frontend/dist/index.html` aux sources front (`frontend/src` + configs) et renvoie `exit 1` si le dist est périmé. Permet le **rebuild auto** sans comparaison de dates en batch pur (impossible proprement). |
 | `start.sh` | Équivalent Unix (variable `PORT` configurable, `lsof` pour vérifier que le port est libre, **même rebuild front auto** via comparaison `find -newer`). |
-| `package.bat` + `_package.bat` | Wrapper Windows qui spawn une fenêtre `cmd /k` et délègue à `scripts/package_<poc>.py` pour produire un ZIP autonome. |
+| `package.bat` + `_package.bat` | Wrapper Windows qui spawn une fenêtre `cmd /k` et délègue à `scripts/package_<poc>.py` pour produire un ZIP autonome. `package.bat desktop` (arguments transmis) lance le build Tauri. |
+| `package-desktop.bat` | Wrapper Windows double-cliquable équivalent à `package.bat desktop` : fenêtre `cmd /k`, puis `_package.bat desktop` (vérifie `frontend/desktop.json`, `pnpm install` seulement si `node_modules` absent, `pnpm tauri:build`). Installeurs dans `apps/<poc>/dist/tauri/release/bundle/`. |
+
+`start.bat` / `start.sh` lancent **toujours le mode web** (navigateur). Le mode desktop se lance en développement par `pnpm desktop:dev:<slug>` depuis la racine et se distribue via `package-desktop.bat` ; il n'existe pas de lanceur `.bat` desktop. Détail : [stacks et desktop](docs/standards/desktop-and-stacks.md#windows-launchers-and-packaging).
 
 **Comportement attendu de `start.bat`** :
 
