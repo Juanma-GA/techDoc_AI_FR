@@ -14,6 +14,10 @@ def get_demo_enabled(db: Session) -> bool:
     return row is not None and row.value.strip().lower() in {"1", "true", "yes"}
 
 
+def is_demo_mode(db: Session) -> bool:
+    return bool(db.info.get("demo_mode", False))
+
+
 def set_demo_enabled(db: Session, enabled: bool) -> None:
     value = "true" if enabled else "false"
     row = db.get(AppConfig, DEMO_MODE_KEY)

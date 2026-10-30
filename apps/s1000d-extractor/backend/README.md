@@ -10,10 +10,12 @@ python -m venv .venv
 . .venv/Scripts/activate            # Windows
 pip install -e ".[dev]"
 cp .env.example .env
-alembic upgrade head
+python -m app.db.migrations
 pytest
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+`python -m app.db.migrations` upgrades both the normal and demo databases.
 
 ## À adapter dans un nouveau POC
 

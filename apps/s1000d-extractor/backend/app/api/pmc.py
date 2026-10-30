@@ -10,11 +10,12 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from app.core import dmrl as dmrl_mod
+from app.core.demo_mode import is_demo_mode
 from app.core.dmrl_rules import is_pm_title
 from app.core.errors import AppError
 from app.core.pmc import generate_pmc
 from app.db.models import Document
-from app.db.session import SessionLocal, get_db
+from app.db.session import get_db, open_session
 
 router = APIRouter(prefix="/documents", tags=["pmc"])
 
@@ -32,6 +33,7 @@ async def validate_and_generate_pmc(
 ) -> EventSourceResponse:
     """Validate the persisted DMRL and stream PMC generation progress."""
     _require(db, doc_id)
+    demo_mode = is_demo_mode(db)
 
     async def gen():
         queue: asyncio.Queue = asyncio.Queue()
@@ -44,7 +46,7 @@ async def validate_and_generate_pmc(
             )
 
         def work() -> dict:
-            session = SessionLocal()
+            session = open_session(demo_mode)
             try:
                 document = session.get(Document, doc_id)
                 if document is None:

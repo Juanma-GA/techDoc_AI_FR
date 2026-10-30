@@ -26,6 +26,7 @@ from app.core import migration_inputs
 from app.core import wizard_resources as wres
 from app.core.brex_rules import load_brex_rules
 from app.core.cir import load_cir
+from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
 from app.core.pmc import pmc_filename
 from app.db.models import Document
@@ -48,10 +49,10 @@ def _require(db: Session, doc_id: str) -> Document:
     return doc
 
 
-def _store(doc_id: str, kind: str, suffix: str, raw: bytes) -> Path:
-    directory = Path(settings.storage_dir)
+def _store(doc: Document, kind: str, suffix: str, raw: bytes) -> Path:
+    directory = Path(doc.storage_path).parent
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"document_{doc_id}_{kind}{suffix}"
+    path = directory / f"document_{doc.id}_{kind}{suffix}"
     path.write_bytes(raw)
     return path
 
@@ -63,6 +64,8 @@ async def upload_resource(
     if kind not in _KINDS:
         raise AppError("BAD_RESOURCE", f"Ressource inconnue : {kind}", 422)
     doc = _require(db, doc_id)
+    if kind == "brex_rules" and is_demo_mode(db):
+        raise AppError("DEMO_BREX_DISABLED", "Les règles BREX ne sont pas disponibles en mode démo.", 409)
     original_filename = file.filename or "resource"
     suffix = Path(original_filename).suffix.lower()
     if suffix not in _KINDS[kind]:
@@ -74,7 +77,7 @@ async def upload_resource(
     raw = await file.read()
     if len(raw) > settings.max_upload_size_bytes:
         raise AppError("FILE_TOO_LARGE", "Fichier trop volumineux.", 413)
-    path = _store(doc.id, kind, suffix, raw)
+    path = _store(doc, kind, suffix, raw)
 
     if kind == "dmrl":
         entries = dmrl_mod.load_dmrl(path, issue=doc.s1000d_issue)

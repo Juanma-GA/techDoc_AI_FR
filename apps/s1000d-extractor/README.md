@@ -67,11 +67,20 @@ FastAPI serves the built React/Vite application from `frontend/dist/` at `/`.
 Select Demo mode in Settings to preload `WEG-WMO.pdf`, `DMRL_v2.xlsx`, and
 `dm_header_template.example.json` from `frontend/public/demo/` into the Migration
 form. This only selects the files; upload and processing begin when you start
-the migration.
+the migration. Demo documents, histories, saved inputs, files and runtime
+settings use a separate persistent database and storage folder. Switching back
+to Normal restores the existing normal history without copying or clearing it.
+BREX profiles and BREX rule uploads are unavailable in Demo mode.
 
 ## Persistence
 
-SQLite stores projects, source metadata, intermediate structures, mappings, outputs, findings, and runtime configuration under `backend/data/`.
+The normal workspace remains in `backend/data/s1000d-extractor.db` and
+`backend/data/storage/`. By default, the demo workspace uses
+`backend/data/s1000d-extractor-demo.db` and `backend/data/storage-demo/`.
+`DEMO_DATABASE_URL` and `DEMO_STORAGE_DIR` can override those demo paths. The
+global mode switch is kept in the normal database; all other runtime settings
+are stored with their respective workspace. Startup migrations upgrade both
+databases.
 
 ## Procedural Review
 

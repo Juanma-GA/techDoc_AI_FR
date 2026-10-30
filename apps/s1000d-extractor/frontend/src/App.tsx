@@ -79,6 +79,7 @@ export function App() {
       }
     >
       <DemoModeProvider
+        key={demoEnabled ? "demo" : "normal"}
         mode={demoEnabled ? "demo" : "normal"}
         isReady={settingsQuery.isSuccess}
       >

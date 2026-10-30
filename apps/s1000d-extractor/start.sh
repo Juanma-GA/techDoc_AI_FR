@@ -37,7 +37,7 @@ if [[ ! -f .venv/.installed ]]; then
 fi
 
 echo "[setup] Migrations Alembic..."
-alembic upgrade head
+python -m app.db.migrations
 
 # Vérifier que le port est libre
 if command -v lsof >/dev/null 2>&1 && lsof -iTCP:"$PORT" -sTCP:LISTEN -P -n >/dev/null 2>&1; then

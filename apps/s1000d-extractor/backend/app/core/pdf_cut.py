@@ -145,7 +145,7 @@ def cut_from_page(doc: Document, start_page: int, end_page: int | None = None) -
         selected_end_page = total_pages if end_page is None else end_page
         if not 1 <= selected_end_page <= total_pages or start_page > selected_end_page:
             raise AppError("PDF_PAGE_INVALID", "La plage de pages est invalide.", 422)
-        output = Path(settings.storage_dir) / f"document_{doc.id}_cut.pdf"
+        output = Path(doc.storage_path).parent / f"document_{doc.id}_cut.pdf"
         output.parent.mkdir(parents=True, exist_ok=True)
         cut = fitz.open()
         try:

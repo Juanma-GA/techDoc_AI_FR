@@ -103,7 +103,9 @@ def _reset_documents(db: Session, *, scope: str) -> AdminResetOut:
                 except OSError:
                     pass
         try:
-            shutil.rmtree(images_dir(d.id), ignore_errors=True)  # illustrations extraites
+            shutil.rmtree(
+                images_dir(d.id, root=Path(d.storage_path).parent), ignore_errors=True
+            )  # illustrations extraites
         except OSError:
             pass
     count = len(docs)

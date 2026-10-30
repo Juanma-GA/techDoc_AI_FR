@@ -24,12 +24,13 @@ from app.core import wizard_resources as wres
 from app.core.brex import parse_brex
 from app.core.brex_generation import serialize_with_brex_guidance
 from app.core.brex_profile import extract_brex_dm_code
+from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
 from app.core.s1000d_schema import SELECTABLE_ISSUES
 from app.core.s1000d_serializer import SerializationDiagnostics, missing_data_fields
 from app.core.validator import validate_document, xsd_is_valid
 from app.db.models import BrexProfile, DmDocumentLink, DmVersion, Document
-from app.db.session import SessionLocal, get_db
+from app.db.session import get_db, open_session, storage_directory
 from app.parsers import detect_format
 from app.parsers.pdf_parser import pdf_page_count
 from app.schemas import DocumentOut, ExtractDoneOut, NodeOverrideIn
@@ -48,8 +49,8 @@ def _require_single_document_workflow(doc: Document) -> None:
         )
 
 
-def _storage() -> Path:
-    p = Path(settings.storage_dir)
+def _storage(db: Session) -> Path:
+    p = storage_directory(db)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -99,7 +100,7 @@ def delete_document(
     ):
         if path:
             Path(path).unlink(missing_ok=True)
-    shutil.rmtree(images_dir(doc.id), ignore_errors=True)
+    shutil.rmtree(images_dir(doc.id, root=Path(doc.storage_path).parent), ignore_errors=True)
     db.query(DmDocumentLink).filter(DmDocumentLink.doc_id == doc.id).delete()
     db.query(DmVersion).filter(DmVersion.doc_id == doc.id).delete()
     db.delete(doc)
@@ -119,6 +120,8 @@ async def upload_document(
         raise AppError("BAD_ISSUE", f"Issue non supportee : {s1000d_issue}", 422)
     if context_hint not in _HINTS:
         raise AppError("BAD_HINT", f"Hint invalide : {context_hint}", 422)
+    if brex_id and is_demo_mode(db):
+        raise AppError("DEMO_BREX_DISABLED", "Les profils BREX ne sont pas disponibles en mode démo.", 409)
     fmt = detect_format(file.filename or "")
     raw = await file.read()
     if len(raw) > settings.max_upload_size_bytes:
@@ -141,7 +144,7 @@ async def upload_document(
     )
     db.add(doc)
     db.flush()
-    path = _storage() / f"document_{doc.id}.{fmt}"
+    path = _storage(db) / f"document_{doc.id}.{fmt}"
     path.write_bytes(raw)
     doc.storage_path = str(path)
     if fmt == "pdf":
@@ -158,6 +161,7 @@ async def upload_document(
 async def extract(doc_id: str, db: Session = Depends(get_db)) -> EventSourceResponse:
     doc = _require(db, doc_id)
     _require_single_document_workflow(doc)
+    demo_mode = is_demo_mode(db)
     doc_id = doc.id  # detache de la session avant le thread
 
     async def event_gen():
@@ -170,7 +174,7 @@ async def extract(doc_id: str, db: Session = Depends(get_db)) -> EventSourceResp
             )
 
         def work() -> dict:
-            return _run_and_persist(doc_id, cb)
+            return _run_and_persist(doc_id, cb, demo_mode)
 
         task = asyncio.create_task(asyncio.to_thread(work))
         yield {"event": "session", "data": json.dumps({"document_id": doc_id})}
@@ -362,10 +366,10 @@ def _brex_xml(
         raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
-def _run_and_persist(doc_id: str, cb) -> dict:
+def _run_and_persist(doc_id: str, cb, demo_mode: bool = False) -> dict:
     """Execute dans un thread : ouvre sa propre session, lance le pipeline,
     persiste l'arbre + le XML + les violations, renvoie le payload 'done'."""
-    db = SessionLocal()
+    db = open_session(demo_mode)
     try:
         doc = db.get(Document, doc_id)
         if doc is None:
@@ -384,7 +388,7 @@ def _run_and_persist(doc_id: str, cb) -> dict:
             doc.status = "extract_failed"
             db.commit()
             raise
-        xml_path = _storage() / f"document_{doc.id}.xml"
+        xml_path = _storage(db) / f"document_{doc.id}.xml"
         xml_path.write_text(result.xml, encoding="utf-8")
         doc.xml_path = str(xml_path)
         doc.dm_type = result.dm_type

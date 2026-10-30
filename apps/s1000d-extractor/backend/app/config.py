@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     database_url: str = f"sqlite:///{BASE_DIR / 'data' / 's1000d-extractor.db'}"
+    demo_database_url: str = ""
     storage_dir: str = str(BASE_DIR / "data" / "storage")
+    demo_storage_dir: str = ""
 
     # Hote de bind uvicorn. Palier 1 (local) : 127.0.0.1. L'IT le passe a une
     # valeur exposee au deploiement (palier 2/3) via .env — ce qui rend les

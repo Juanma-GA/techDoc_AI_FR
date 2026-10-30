@@ -97,8 +97,9 @@ def _write_config(db: Session, key: str, value: str) -> None:
 def get_effective_settings(db: Session) -> dict[str, str]:
     from app.config import settings as defaults
 
+    api_key_default = "" if db.info.get("demo_mode", False) else defaults.mistral_api_key
     return {
-        "api_key": _read_config(db, CONFIG_KEYS["api_key"], defaults.mistral_api_key),
+        "api_key": _read_config(db, CONFIG_KEYS["api_key"], api_key_default),
         "base_url": _read_config(db, CONFIG_KEYS["base_url"], defaults.mistral_base_url),
         "chat_model": _read_config(db, CONFIG_KEYS["chat_model"], defaults.mistral_chat_model),
         "embed_model": _read_config(

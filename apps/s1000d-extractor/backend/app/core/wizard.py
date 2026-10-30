@@ -34,9 +34,9 @@ from app.core import (
     structure_infer,
     wizard_response,
 )
-from app.core import preliminary_review as preliminary
 from app.core import dmrl as dmrl_mod
 from app.core import ir as ir_mod
+from app.core import preliminary_review as preliminary
 from app.core import wizard_resources as wres
 from app.core import wizard_split as ws
 from app.core.brex import parse_brex
@@ -94,10 +94,13 @@ def _brex_xml(
         raise AppError("BREX_FILE_UNREADABLE", "Le fichier du profil BREX est illisible.", 500) from exc
 
 
-def images_dir(doc_id: str) -> Path:
+def images_dir(doc_id: str, *, root: Path | None = None) -> Path:
     """Dossier des illustrations extraites d'un document."""
-    from app.config import settings
-    return Path(settings.storage_dir) / f"document_{doc_id}_images"
+    if root is None:
+        from app.config import settings
+
+        root = Path(settings.storage_dir)
+    return root / f"document_{doc_id}_images"
 
 
 def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> int:
@@ -105,7 +108,7 @@ def _extract_illustrations(doc: Document, root: ir_mod.IRNode) -> int:
     echec / pas d'image). Le dossier est purge d'abord : relancer l'assistant ne
     doit pas empiler des doublons d'illustrations."""
     from app.core import illustrations
-    out_dir = images_dir(doc.id)
+    out_dir = images_dir(doc.id, root=Path(doc.storage_path).parent)
     try:
         if out_dir.exists():
             for old in out_dir.iterdir():
@@ -287,7 +290,9 @@ def _resplit(db: Session, doc: Document, split_level: str, progress_cb=_noop_pro
     entries = wres.dmrl_data_module_entries(doc)
     units = splitter.split_by_dmrl(root, entries) if entries else splitter.split_into_dms(root, split_level)
     if entries:
-        _apply_dmrl_icns(units, entries, images_dir(doc.id))
+        _apply_dmrl_icns(
+            units, entries, images_dir(doc.id, root=Path(doc.storage_path).parent),
+        )
         doc.ir_json = json.dumps(ir_mod.to_dict(root), ensure_ascii=False)
     log.info(
         "wizard_stage_timing",

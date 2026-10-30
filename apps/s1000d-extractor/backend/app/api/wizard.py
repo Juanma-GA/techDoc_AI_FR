@@ -19,9 +19,10 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from app.core import wizard
 from app.core import preliminary_review as preliminary
+from app.core import wizard
 from app.core import wizard_resources as wres
+from app.core.demo_mode import is_demo_mode
 from app.core.errors import AppError
 from app.core.wizard_zip_export import (
     ImageFormat,
@@ -30,7 +31,7 @@ from app.core.wizard_zip_export import (
     prepare_zip_images,
 )
 from app.db.models import Document
-from app.db.session import SessionLocal, get_db
+from app.db.session import get_db, open_session
 
 router = APIRouter(prefix="/documents", tags=["wizard"])
 
@@ -67,8 +68,8 @@ def _require(db: Session, doc_id: str) -> Document:
     return doc
 
 
-def _image_paths(doc_id: str) -> list[Path]:
-    directory = wizard.images_dir(doc_id)
+def _image_paths(doc_id: str, *, root: Path | None = None) -> list[Path]:
+    directory = wizard.images_dir(doc_id, root=root)
     if not directory.exists():
         return []
     return sorted(
@@ -105,6 +106,7 @@ async def wizard_start_stream(
     """Demarre l'assistant en streamant la progression (parse / ocr / infer /
     split / classify) ; l'evenement `done` porte l'etat initial (etape split)."""
     doc = _require(db, doc_id)
+    demo_mode = is_demo_mode(db)
     cut_pdf, start_page, end_page = _start_options(params)
     doc_id = doc.id
 
@@ -116,7 +118,7 @@ async def wizard_start_stream(
             loop.call_soon_threadsafe(queue.put_nowait, ("progress", {"step": step, "pct": pct}))
 
         def work() -> dict:
-            s = SessionLocal()
+            s = open_session(demo_mode)
             try:
                 d = s.get(Document, doc_id)
                 if d is None:
@@ -198,16 +200,16 @@ def wizard_dm_xml(doc_id: str, dm_id: str, db: Session = Depends(get_db)) -> Res
 @router.get("/{doc_id}/wizard/images")
 def wizard_images(doc_id: str, db: Session = Depends(get_db)) -> list[str]:
     """Liste les illustrations extraites du document."""
-    _require(db, doc_id)
-    return [path.name for path in _image_paths(doc_id)]
+    doc = _require(db, doc_id)
+    return [path.name for path in _image_paths(doc_id, root=Path(doc.storage_path).parent)]
 
 
 @router.get("/{doc_id}/wizard/images/{name}")
 def wizard_image(doc_id: str, name: str, db: Session = Depends(get_db)) -> Response:
-    _require(db, doc_id)
+    doc = _require(db, doc_id)
     # Empeche toute traversee de repertoire : on ne sert que le basename.
     safe = Path(name).name
-    path = wizard.images_dir(doc_id) / safe
+    path = wizard.images_dir(doc_id, root=Path(doc.storage_path).parent) / safe
     if safe != name or not path.exists() or path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
         raise AppError("IMAGE_NOT_FOUND", "Illustration inconnue.", 404)
     media_type = "image/png" if path.suffix.lower() == ".png" else "image/jpeg"
@@ -235,7 +237,7 @@ def wizard_zip(
             409,
         )
     images, image_name_map = prepare_zip_images(
-        _image_paths(doc_id),
+        _image_paths(doc_id, root=Path(doc.storage_path).parent),
         pictogram_names=pictogram_image_names(doc),
         max_dimension=max_dimension,
         image_format=image_format,

@@ -255,12 +255,30 @@ export function Migration() {
       setDemoFilesLoading(false);
       setDemoFilesError(null);
       clearDemoInputs();
+      mappingTouched.current = false;
+      setBrexId(null);
+      setBrexReady(true);
+      setDocId(null);
+      setWiz(null);
+      setPdfCut(null);
       return () => {
         cancelled = true;
       };
     }
 
     mappingTouched.current = true;
+    for (const input of Object.values(inputRefs.current)) {
+      if (input) input.value = "";
+    }
+    demoSeededInputs.current.clear();
+    setFile(null);
+    setLastDocumentName(null);
+    setResourceFiles({});
+    setBrexId(null);
+    setBrexReady(true);
+    setDocId(null);
+    setWiz(null);
+    setPdfCut(null);
     setDemoFilesLoading(true);
     setDemoFilesError(null);
     setLoadError(null);
@@ -332,7 +350,7 @@ export function Migration() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [demoMode, demoModeReady]);
 
   useEffect(() => {
     setSelected(new Set());
@@ -697,20 +715,22 @@ export function Migration() {
               </select>
             </label>
           </div>
-          <div className="row">
-            <div className="grow">
-              <BrexProfileControl
-                issue={issue}
-                value={brexId}
-                onChange={(nextId) => {
-                  mappingTouched.current = true;
-                  setBrexId(nextId);
-                }}
-                onReadyChange={setBrexReady}
-                disabled={demoFilesLoading || busy || starting !== null || pdfCutBusy}
-              />
+          {demoMode === "demo" ? null : (
+            <div className="row">
+              <div className="grow">
+                <BrexProfileControl
+                  issue={issue}
+                  value={brexId}
+                  onChange={(nextId) => {
+                    mappingTouched.current = true;
+                    setBrexId(nextId);
+                  }}
+                  onReadyChange={setBrexReady}
+                  disabled={demoFilesLoading || busy || starting !== null || pdfCutBusy}
+                />
+              </div>
             </div>
-          </div>
+          )}
           <div className="row">
             <label className="grow">
               <div className="label">{t("migration.upload.dmrl")}</div>
