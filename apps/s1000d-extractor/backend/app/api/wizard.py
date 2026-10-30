@@ -160,6 +160,10 @@ def wizard_state(doc_id: str, db: Session = Depends(get_db)) -> dict:
     doc = _require(db, doc_id)
     if not doc.wizard_step:
         raise AppError("WIZARD_NOT_STARTED", "Lance d'abord /wizard/start.", 409)
+    if doc.wizard_step in {"type", "structure"} and "type" not in wizard.steps_for(doc):
+        doc.wizard_step = "split"
+        doc.status = "wizard"
+        db.commit()
     if doc.wizard_step == "generate" and "preliminary" in wizard.steps_for(doc):
         if any(item["status"] not in {"reviewed", "skipped"} for item in preliminary.view(doc)["reviews"].values()):
             preliminary.prepare(doc)

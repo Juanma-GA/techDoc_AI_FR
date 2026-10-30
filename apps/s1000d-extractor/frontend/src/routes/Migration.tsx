@@ -267,6 +267,7 @@ export function Migration() {
     }
 
     mappingTouched.current = true;
+    setIssue("4.1");
     for (const input of Object.values(inputRefs.current)) {
       if (input) input.value = "";
     }

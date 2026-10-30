@@ -210,6 +210,7 @@ def _map_row(
         entry.info_code_schema = schema
         mapped_type = dm_type_for_schema(schema) if schema else None
         entry.info_code_dm_type = mapped_type or ""
+        declared_type = _canonical_type(entry.dmrl_type, "")
 
         if not code:
             entry.type_issue = "missing_info_code"
@@ -219,7 +220,6 @@ def _map_row(
             entry.type_issue = "unsupported_schema"
 
         if entry.dmrl_type and schema:
-            declared_type = _canonical_type(entry.dmrl_type, "")
             entry.type_conflict = (
                 declared_type != mapped_type
                 if mapped_type
@@ -228,7 +228,7 @@ def _map_row(
         entry.dm_type = (
             mapped_type
             if mapped_type and not entry.type_conflict
-            else ""
+            else declared_type
         )
         if (
             not entry.dm_type

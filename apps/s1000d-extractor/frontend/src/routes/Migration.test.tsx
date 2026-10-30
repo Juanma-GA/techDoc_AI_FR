@@ -70,7 +70,7 @@ describe("DMRL wizard review", () => {
     expect(hasUnmatchedDmrlDms(wizardWithDmrl([title]))).toBe(false);
   });
 
-  it("pauses for unresolved InfoCode type conflicts and resumes after a choice", () => {
+  it("keeps the DMRL review visible for InfoCode warnings after a type fallback", () => {
     const conflict: DmrlRow = {
       index: 1,
       arbo: "1",
@@ -92,7 +92,10 @@ describe("DMRL wizard review", () => {
 
     expect(needsDmrlReview(wizardWithDmrl([conflict]))).toBe(true);
     expect(
-      needsDmrlReview(wizardWithDmrl([{ ...conflict, dm_type: "procedural" }])),
-    ).toBe(false);
+      needsDmrlReview(wizardWithDmrl([{ ...conflict, dm_type: "descriptive" }])),
+    ).toBe(true);
+    expect(needsDmrlReview(wizardWithDmrl([{
+      ...conflict, dm_type: "descriptive", type_conflict: false, type_issue: "",
+    }]))).toBe(false);
   });
 });

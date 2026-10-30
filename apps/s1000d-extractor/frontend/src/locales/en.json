@@ -372,7 +372,7 @@
       "typeLabel": "Type for DM {{title}}",
       "typeIssuesTitle": "Reviewing the InfoCode-derived DM types ({{count}} DMs).",
       "typeIssuesPending": "{{count}} type(s) need resolution: choose the type to use when generating each DM.",
-      "typeIssuesResolved": "A type has been selected for every row. Review the differences before validating.",
+      "typeIssuesResolved": "A type is retained for every row. Review the differences before validating.",
       "typeConflict": "InfoCode {{infoCode}} maps to schema \"{{schema}}\"{{mappedType}}, while the DMRL proposes \"{{dmrlType}}\".",
       "missingInfoCode": "No InfoCode is provided, so the reference workbook cannot determine the DM type (the DMRL proposes \"{{dmrlType}}\").",
       "unmappedInfoCode": "InfoCode {{infoCode}} is not listed in the Issue 4.1 reference workbook (the DMRL proposes \"{{dmrlType}}\").",

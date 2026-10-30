@@ -153,6 +153,43 @@ def test_selected_dm_title_changes_candidate_scoring(tmp_path) -> None:
     assert detect_start_pages(document, "Pump assembly")[0]["page"] == 2
 
 
+def test_partial_first_dm_title_outranks_a_generic_heading_on_the_next_page(tmp_path) -> None:
+    import fitz
+
+    pdf_path = tmp_path / "dmrl-title-before-following-heading.pdf"
+    pdf = fitz.open()
+    first_page = pdf.new_page()
+    first_page.insert_text((72, 72), "This page introduces the Terminologie entry.")
+    for index in range(1, 16):
+        first_page.insert_text(
+            (72, 72 + 16 * index),
+            "Background terminology and system context before the first numbered chapter.",
+        )
+    second_page = pdf.new_page()
+    second_page.insert_text((72, 72), "1.1 First numbered section")
+    for index in range(1, 16):
+        second_page.insert_text(
+            (72, 72 + 16 * index),
+            "Detailed section text describes equipment, operation and maintenance steps.",
+        )
+    pdf.save(str(pdf_path))
+    pdf.close()
+
+    document = SimpleNamespace(
+        source_format="pdf",
+        storage_path=str(pdf_path),
+        dmrl_json=json.dumps([{
+            "dmc": "DMC-PUMP-A-00-00-00-00A-040A-D",
+            "title": "Terminologie",
+        }]),
+    )
+
+    candidates = detect_start_pages(document)
+
+    assert candidates[0]["page"] == 1
+    assert "dmrl_title_contains" in candidates[0]["reasons"]
+
+
 def test_selected_title_score_outranks_after_tables_list_hint(tmp_path) -> None:
     import fitz
 

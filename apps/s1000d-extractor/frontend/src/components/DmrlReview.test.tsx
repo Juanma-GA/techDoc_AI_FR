@@ -1,4 +1,7 @@
-import { createElement } from "react";
+// @vitest-environment jsdom
+
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -12,6 +15,9 @@ vi.mock("react-i18next", () => ({
 }));
 
 import { DmrlReview } from "./DmrlReview";
+import { DmrlTypeConflictNotice } from "./DmrlTypeConflictNotice";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 function makeRow(overrides: Partial<DmrlRow>): DmrlRow {
   return {
@@ -31,6 +37,40 @@ function makeRow(overrides: Partial<DmrlRow>): DmrlRow {
 }
 
 describe("DMRL review", () => {
+  it("allows the resolved warning details to be folded and unfolded", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(createElement(DmrlTypeConflictNotice, {
+          rows: [makeRow({
+            dm_type: "descriptive",
+            dmrl_type: "DESCR",
+            info_code: "001",
+            info_code_schema: "frontmatter",
+            type_conflict: true,
+            type_issue: "unsupported_schema",
+          })],
+        }));
+      });
+
+      const details = host.querySelector("details");
+      const summary = details?.querySelector("summary");
+      expect(details?.open).toBe(false);
+      expect(summary).not.toBeNull();
+
+      await act(async () => summary?.click());
+      expect(details?.open).toBe(true);
+
+      await act(async () => summary?.click());
+      expect(details?.open).toBe(false);
+    } finally {
+      await act(async () => root.unmount());
+      host.remove();
+    }
+  });
+
   it("alerts only for missing DMs and labels publication-only titles", () => {
     const markup = renderToStaticMarkup(
       createElement(DmrlReview, {
@@ -88,20 +128,21 @@ describe("DMRL review", () => {
     expect(markup).not.toContain("migration.dmrl.exclude");
   });
 
-  it("shows the InfoCode/DMRL disagreement and requires a type choice", () => {
+  it("uses a recognized DMRL fallback while preserving the InfoCode warning", () => {
     const markup = renderToStaticMarkup(
       createElement(DmrlReview, {
         rows: [
           makeRow({
             index: 1,
-            dmc: "DMC-PUMP-A-00-00-00-00A-520A-D",
-            title: "Removal Procedure",
-            dm_type: "",
-            dmrl_type: "Descriptif",
-            info_code: "520",
-            info_code_schema: "proced",
-            info_code_dm_type: "procedural",
+            dmc: "DMC-PUMP-A-00-00-00-00A-001A-D",
+            title: "Terminologie",
+            dm_type: "descriptive",
+            dmrl_type: "DESCR",
+            info_code: "001",
+            info_code_schema: "frontmatter",
+            info_code_dm_type: "",
             type_conflict: true,
+            type_issue: "unsupported_schema",
             matched: true,
             match_rank: "exact",
           }),
@@ -115,25 +156,32 @@ describe("DMRL review", () => {
       }),
     );
 
-    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('role="status"');
     expect(markup).toContain("migration.dmrl.typeConflict");
-    expect(markup).toContain("migration.dmrl.typeResolutionRequiredRow");
-    expect(markup).toContain("migration.dmrl.selectType");
-    expect(markup).toContain('disabled=""');
+    expect(markup).toContain("migration.dmrl.unsupportedSchema");
+    expect(markup).toContain("migration.dmrl.typeSelected:dmType.descriptive");
+    expect(markup).toContain('value="descriptive" selected=""');
+    expect(markup).not.toContain("migration.dmrl.typeResolutionRequiredRow");
+    expect(markup).not.toContain("migration.dmrl.selectType");
+    expect(markup).not.toContain('open=""');
+    const validateButton = markup.match(
+      /<button\b[^>]*>migration\.dmrl\.validate<\/button>/,
+    )?.[0] ?? "";
+    expect(validateButton).not.toContain("disabled");
     expect(markup).toContain('href="#dmrl-type-1"');
     expect(markup).toContain('id="dmrl-type-1"');
   });
 
-  it("disables type selectors while saving and enables validation after resolution", () => {
+  it("opens unresolved warnings and still requires a type when DMRL has no recognized fallback", () => {
     const row = makeRow({
       index: 1,
       dmc: "DMC-PUMP-A-00-00-00-00A-520A-D",
       title: "Removal Procedure",
-      dmrl_type: "Descriptif",
-      info_code: "520",
-      info_code_schema: "proced",
-      info_code_dm_type: "procedural",
+      dmrl_type: "Unknown category",
+      info_code: "001",
+      info_code_schema: "frontmatter",
       type_conflict: true,
+      type_issue: "unsupported_schema",
       matched: true,
       match_rank: "exact",
     });
@@ -150,6 +198,10 @@ describe("DMRL review", () => {
     );
     const pendingSelect = pendingMarkup.match(/<select\b[^>]*>/)?.[0] ?? "";
     expect(pendingSelect).toContain('disabled=""');
+    expect(pendingMarkup).toContain('role="alert"');
+    expect(pendingMarkup).toContain('open=""');
+    expect(pendingMarkup).toContain("migration.dmrl.selectType");
+    expect(pendingMarkup).toContain("migration.dmrl.typeResolutionRequiredRow");
 
     const resolvedMarkup = renderToStaticMarkup(
       createElement(DmrlReview, {

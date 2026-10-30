@@ -69,23 +69,15 @@ def test_wizard_full_flow(client, pdf_bytes, complete_preliminary) -> None:
     ).json()
     assert len(st["dms"]) == 2
 
-    # avancer vers le typage
+    # La DMRL fournit les types ; seule la validation du decoupage reste a faire.
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/advance",
         json={"split_level": "chapter"},
     ).json()
-    assert st["step"] == "type"
+    assert st["step"] == "preliminary"
     types = {d["title"]: d["dm_type"] for d in st["dms"]}
-    # Heuristique : "Description" -> descriptive, "Removal Procedure" -> procedural
-    assert any("escription" in t for t in types)
+    assert types == {"Description": "descriptive", "Removal Procedure": "procedural"}
 
-    # avancer vers structure (sans changer les types)
-    st = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"types": {}}).json()
-    assert st["step"] == "structure"
-    assert all("tree" in d for d in st["dms"])
-
-    # avancer vers generation
-    st = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}).json()
     st = complete_preliminary(doc_id, st)
     assert st["step"] == "generate"
 
@@ -201,14 +193,7 @@ def test_wizard_zip_includes_pmc_in_pmc_directory(client, pdf_bytes, complete_pr
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
     assert state["step"] == "split"
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
-    assert state["step"] == "type"
-    state = client.post(
-        f"/api/v1/documents/{doc_id}/wizard/advance", json={"types": {}}
-    ).json()
-    assert state["step"] == "structure"
-    state = client.post(
-        f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}
-    ).json()
+    assert state["step"] == "preliminary"
     state = complete_preliminary(doc_id, state)
     assert state["step"] == "generate"
 
@@ -546,17 +531,17 @@ def test_wizard_type_override(client, pdf_bytes, complete_preliminary) -> None:
     assert response.status_code == 200, response.text
     state = client.post(f"/api/v1/documents/{doc_id}/wizard/start").json()
     assert state["step"] == "dmrl"
-    client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={})
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/update", json={
+        "op": "set_type", "index": 0, "dm_type": "procedural",
+    }).json()
+    assert state["dmrl"][0]["dm_type"] == "procedural"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
     st = client.post(
         f"/api/v1/documents/{doc_id}/wizard/advance", json={"split_level": "chapter"}
     ).json()
-    # Force le 1er DM en procedural
+    assert st["step"] == "preliminary"
+    # Le type choisi dans la DMRL pilote directement le DM genere.
     dm0 = st["dms"][0]["dm_id"]
-    st = client.post(
-        f"/api/v1/documents/{doc_id}/wizard/advance",
-        json={"types": {dm0: "procedural"}},
-    ).json()
-    st = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={"overrides": []}).json()
     complete_preliminary(doc_id, st)
     xml = client.get(f"/api/v1/documents/{doc_id}/wizard/dm/{dm0}/xml").text
     assert "<procedure>" in xml

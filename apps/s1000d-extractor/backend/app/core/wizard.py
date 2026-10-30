@@ -1,11 +1,15 @@
 """Assistant guide (wizard) : configuration etape par etape d'une migration.
 
-Etapes bloquantes, l'utilisateur valide chacune avant la suivante :
+Parcours standard, avec validation de chaque etape :
 
     split     -> decoupage en Data Modules (choix du niveau)
     type      -> type de chaque DM (descriptive / procedural / ipd)
     structure -> arbre par DM + arbitrage des noeuds ambigus
     generate  -> XML S1000D par DM + validation
+
+Avec une DMRL contenant des Data Modules, le parcours est
+dmrl -> split -> preliminary (si procedural) -> generate : types et arbre sont
+resolus automatiquement depuis les donnees disponibles.
 
 L'etat vit sur le `Document` : `wizard_step`, `split_level`, `ir_json` (IR
 complet apres parse) et `dms_json` (liste de DM en cours de configuration).
@@ -57,13 +61,21 @@ STEPS = ("split", "type", "structure", "generate")
 # Une DMRL chargee insere une etape de validation AVANT le decoupage : on ne
 # decoupe pas sur une liste de DM que l'utilisateur n'a pas encore validee.
 STEPS_WITH_DMRL = ("dmrl", *STEPS)
+STEPS_DMRL_DRIVEN = ("dmrl", "split", "generate")
 _DEFAULT_LEVEL = "section"
 
 log = structlog.get_logger("s1000d_extractor.wizard")
 
 
 def steps_for(doc: Document) -> tuple[str, ...]:
-    steps = STEPS_WITH_DMRL if doc.dmrl_json else STEPS
+    if doc.dmrl_json:
+        steps = (
+            STEPS_DMRL_DRIVEN
+            if wres.dmrl_data_module_entries(doc)
+            else STEPS_WITH_DMRL
+        )
+    else:
+        steps = STEPS
     if any(dm["dm_type"] == "procedural" for dm in ws.load_dms(doc)):
         return (*steps[:-1], "preliminary", "generate")
     return steps
@@ -385,7 +397,16 @@ def advance(db: Session, doc: Document, params: dict) -> dict:
         new_level = params.get("split_level")
         if new_level and new_level != doc.split_level:
             _resplit(db, doc, new_level)
-        doc.wizard_step = "type"
+        if "type" not in steps_for(doc):
+            _apply_types(doc, {})
+            _resolve_all(doc)
+            if "preliminary" in steps_for(doc):
+                preliminary.prepare(doc)
+                doc.wizard_step = "preliminary"
+            else:
+                _finish_generation(db, doc)
+        else:
+            doc.wizard_step = "type"
     elif step == "type":
         _apply_types(doc, params.get("types") or {})
         _resolve_all(doc)

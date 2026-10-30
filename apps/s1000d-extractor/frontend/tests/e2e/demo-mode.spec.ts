@@ -67,6 +67,8 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
   await page.goto("/migration");
   await expect(page.getByText("normal-history.pdf")).toBeVisible();
   await expect(page.locator(".brex-profile-control")).toHaveCount(1);
+  const issueSelect = page.getByLabel("Version S1000D");
+  await expect(issueSelect).toHaveValue("4.2");
   const documentInput = page.locator('input[type="file"][accept=".pdf,.docx"]');
   await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.[0]?.name))
     .toBe("normal-input.pdf");
@@ -77,6 +79,7 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
   await expect(page.getByText("demo-history.pdf")).toBeVisible();
   await expect(page.getByText("normal-history.pdf")).toHaveCount(0);
   await expect(page.locator(".brex-profile-control")).toHaveCount(0);
+  await expect(issueSelect).toHaveValue("4.1");
   await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.[0]?.name))
     .toBe("WEG-WMO.pdf");
 
@@ -86,6 +89,7 @@ test("switches between isolated histories and hides BREX profiles in demo mode",
   await expect(page.getByText("normal-history.pdf")).toBeVisible();
   await expect(page.getByText("demo-history.pdf")).toHaveCount(0);
   await expect(page.locator(".brex-profile-control")).toHaveCount(1);
+  await expect(issueSelect).toHaveValue("4.2");
   await expect.poll(() => documentInput.evaluate((input: HTMLInputElement) => input.files?.[0]?.name))
     .toBe("normal-input.pdf");
 });

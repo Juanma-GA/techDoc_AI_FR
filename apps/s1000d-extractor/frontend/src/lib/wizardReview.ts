@@ -19,6 +19,15 @@ export function hasUnresolvedDmrlTypeIssues(state: WizardState): boolean {
   );
 }
 
+export function hasDmrlTypeWarnings(state: WizardState): boolean {
+  return (
+    state.step === "dmrl" &&
+    (state.dmrl ?? []).some(
+      (row) => !row.is_pm_title && Boolean(row.type_conflict || row.type_issue),
+    )
+  );
+}
+
 export function needsDmrlReview(state: WizardState): boolean {
-  return hasUnmatchedDmrlDms(state) || hasUnresolvedDmrlTypeIssues(state);
+  return hasUnmatchedDmrlDms(state) || hasDmrlTypeWarnings(state);
 }

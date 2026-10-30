@@ -1,21 +1,32 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DmrlRow } from "../lib/wizardTypes";
 
 export function DmrlTypeConflictNotice({ rows }: { rows: DmrlRow[] }) {
   const { t } = useTranslation();
+  const pendingCount = rows.filter((row) => !row.dm_type).length;
+  const [expanded, setExpanded] = useState(pendingCount > 0);
+
+  useEffect(() => {
+    setExpanded(pendingCount > 0);
+  }, [pendingCount]);
+
   if (!rows.length) return null;
 
-  const pendingCount = rows.filter((row) => !row.dm_type).length;
-
   return (
-    <div className="banner warn" role={pendingCount ? "alert" : "status"}>
-      <p>
+    <details
+      className="banner warn"
+      role={pendingCount ? "alert" : "status"}
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary className="cursor-pointer">
         <strong>{t("migration.dmrl.typeIssuesTitle", { count: rows.length })}</strong>{" "}
         {pendingCount
           ? t("migration.dmrl.typeIssuesPending", { count: pendingCount })
           : t("migration.dmrl.typeIssuesResolved")}
-      </p>
+      </summary>
       <ul>
         {rows.map((row) => {
           const details: string[] = [];
@@ -64,6 +75,6 @@ export function DmrlTypeConflictNotice({ rows }: { rows: DmrlRow[] }) {
           );
         })}
       </ul>
-    </div>
+    </details>
   );
 }

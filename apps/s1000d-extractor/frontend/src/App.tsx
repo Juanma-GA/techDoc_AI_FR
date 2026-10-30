@@ -23,7 +23,6 @@ const navItems = [
   { to: "/validation", labelKey: "nav.validation", icon: "quality" },
   { to: "/data", labelKey: "nav.data", icon: "data" },
   { to: "/settings", labelKey: "nav.settings", icon: "settings" },
-  { to: "/versioning", labelKey: "nav.versioning", icon: "versioning" },
 ] as const;
 
 const LANGS = ["fr", "en"] as const;

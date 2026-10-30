@@ -16,7 +16,7 @@ Transform PDF or Word source documents into an S1000D XML structure constrained 
 - Link generated DMs to the selected BREX DMC, guide ambiguous mappings with applicable supported rules, and validate the final XML.
 - Keep title-only DMRL rows in the PMC without generating Data Modules from them.
 - Flag expected Data Modules that are missing from the source before the split, with a row-level exclusion action.
-- For Issue 4.1, use `S1000D_4.1_info_codes.xlsx` as the InfoCode-to-schema reference; DMRL type conflicts require an explicit user choice before splitting. If the InfoCode is missing or unmapped and the DMRL has no type, default to descriptive; unsupported schemas remain flagged for manual selection. Only descriptive, procedural, and IPD types are generated.
+- For Issue 4.1, use `S1000D_4.1_info_codes.xlsx` as the InfoCode-to-schema reference. Preserve InfoCode/DMRL mismatch warnings; use a recognized DMRL type as the fallback, and require an explicit choice only when the DMRL type is absent or unrecognized. If the InfoCode is missing or unmapped and the DMRL has no type, default to descriptive. Only descriptive, procedural, and IPD types are generated.
 - Generate data-module and publication-module skeletons.
 - Assign content IDs locally per DM and emit indented XML. Do not invent procedural maintenance intervals or task durations when source-backed structured values are unavailable.
 - Download the PMC as `PMC-<source-name>.xml` and emit DMC components as `dmCode` attributes.
@@ -84,9 +84,11 @@ databases.
 
 ## Procedural Review
 
-The migration wizard now requires explicit type and structure confirmation. Only
-procedural DMs then enter **Review the procedural DM**, before generation.
-**Resume** restores the saved step without automatically advancing it.
+The migration wizard keeps the split review for DMRL-driven documents, then uses
+the DMRL types and automatically resolves their trees without separate type or
+structure screens. Workflows without DMRL retain explicit type and structure
+confirmation. Procedural DMs enter **Review the procedural DM** before
+generation. **Resume** restores the saved step without automatically advancing it.
 
 - The entire wizard is deterministic and local, including initial DM typing.
   It does not consult the Mistral configuration or send source content to an AI

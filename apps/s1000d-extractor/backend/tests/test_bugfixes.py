@@ -94,7 +94,7 @@ def test_wizard_generate_returns_200_on_hostile_document(client, pdf_bytes) -> N
     assert all(d["has_xml"] for d in state["dms"])
 
 
-def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
+def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes, complete_preliminary) -> None:
     doc_id = _upload(client, pdf_bytes)
     dmrl = [
         {"DMC": "DMC-PUMP-A-00-00-00-00A-040A-D", "Titre": "Description"},
@@ -105,12 +105,18 @@ def test_dm_download_rebuilds_stale_persisted_xml(client, pdf_bytes) -> None:
         files={"file": ("DMRL.json", json.dumps(dmrl).encode())},
     )
     assert response.status_code == 200, response.text
-    client.post(f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False})
-    for params in ({}, {"types": {}}, {"overrides": []}, {}):
-        response = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json=params)
-        assert response.status_code == 200, response.text
+    state = client.post(
+        f"/api/v1/documents/{doc_id}/wizard/start", json={"cut_pdf": False}
+    ).json()
+    assert state["step"] == "dmrl"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    assert state["step"] == "split"
+    state = client.post(f"/api/v1/documents/{doc_id}/wizard/advance", json={}).json()
+    if state["step"] == "preliminary":
+        state = complete_preliminary(doc_id, state)
+    assert state["step"] == "generate"
 
-    dm_id = response.json()["dms"][0]["dm_id"]
+    dm_id = state["dms"][0]["dm_id"]
     from app.db.models import Document
     from app.db.session import SessionLocal
 
