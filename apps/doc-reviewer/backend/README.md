@@ -160,6 +160,15 @@ bundle rules start disabled by default; the primary normal rules remain
 enabled. Rule bundles declare their catalog and `rules.py` module in their own
 `manifest.json`.
 
+A client bundle can also be split into **norms**: its `manifest.json` lists
+sub-folders in `norms`, and each sub-folder has its own `manifest.json`
+(label, catalogs, `rules`/`operations`/`page_classifier` modules and
+`default_enabled`). The mapping stays shared at the client level. Each norm
+shows up as its own collapsible group in the Rules screen (group code = folder
+name, label = manifest `label`) and can be enabled or disabled as a whole or
+rule by rule. `thales_rules` has two norms: `ata100/` (enabled by default) and
+`s1000d/` (disabled by default, catalog `THALES-S1000D`).
+
 ## Layout
 
 ```

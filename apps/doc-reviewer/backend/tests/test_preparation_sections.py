@@ -3,7 +3,7 @@ from __future__ import annotations
 import fitz
 import pytest
 
-from app.checks.thales_rules.section_detection import (
+from app.checks.thales_rules.ata100.section_detection import (
     classify_preparation_sections,
     page_types_for_titles,
 )

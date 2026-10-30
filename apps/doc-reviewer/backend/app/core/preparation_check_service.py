@@ -8,8 +8,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.checks.client_registry import LoadedClientConfiguration
-from app.checks.thales_rules.section_detection import page_types_for_titles
-from app.checks.thales_rules.preparation_detector import detect_pages_to_modify
+from app.checks.thales_rules.ata100.section_detection import page_types_for_titles
+from app.checks.thales_rules.ata100.preparation_detector import detect_pages_to_modify
 from app.core.compiled_rules import CompiledRule
 from app.core.errors import AppError
 from app.core.pdf_versioning import current_path

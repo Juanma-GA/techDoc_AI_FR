@@ -9,8 +9,8 @@ import pytest
 
 from app.checks.client_registry import load_active_client_configuration
 from app.checks.standards import BUILTIN_STANDARDS, serialize_builtin_version
-from app.checks.thales_rules.operations import shop_verification_text
-from app.checks.thales_rules.page_classifier import (
+from app.checks.thales_rules.ata100.operations import shop_verification_text
+from app.checks.thales_rules.ata100.page_classifier import (
     HIGHLIGHTS_PAGE_TYPE,
     HIGHLIGHTS_FIRST_PAGE_TYPE,
     INTRODUCTION_PAGE_TYPE,
@@ -26,7 +26,7 @@ from app.checks.thales_rules.page_classifier import (
     identify_introduction_pages,
     identify_tp1_pages,
 )
-from app.checks.thales_rules.rules import (
+from app.checks.thales_rules.ata100.rules import (
     DOCUMENT_TYPES,
     IMPORTANT_NOTICE_TEXT as _IMPORTANT_NOTICE_TEXT,
 )

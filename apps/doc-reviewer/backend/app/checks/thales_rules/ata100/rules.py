@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import re
+from functools import partial
 from typing import Literal
 
-from app.checks.client_bundle import ClientRuleDefinition
+from app.checks.thales_rules.rule_factory import build_rule
 from app.core.compiled_rules import (
     Check,
-    CompiledRule,
     Condition,
     FieldRef,
-    RuleExample,
-    RulePrerequisite,
     RuleTarget,
 )
 
@@ -217,50 +215,7 @@ def _required_note_check(
     )
 
 
-def rule(
-    *,
-    code: str,
-    name: str,
-    description: str,
-    message: str,
-    kind: str,
-    severity: Literal["info", "warning", "error"],
-    presentation_severity: Literal["info", "warning", "error"] | None = None,
-    target: RuleTarget,
-    checks: list[Check],
-    failure_message: str | None = None,
-    only_if: Condition | None = None,
-    valid_examples: list[RuleExample] | None = None,
-    invalid_examples: list[RuleExample] | None = None,
-    prerequisites: list[RulePrerequisite] | None = None,
-    preparation: bool = False,
-    translations: dict[str, dict[str, str]] | None = None,
-) -> ClientRuleDefinition:
-    compiled_rule = CompiledRule(
-        id=code,
-        topic=name,
-        failure_message=failure_message,
-        severity=severity,
-        execution="deterministic",
-        target=target,
-        checks=checks,
-        source="standard_rule",
-        origin_ref=f"{_STANDARD_CODE}:{_CATALOG_VERSION}:{code}",
-        only_if=only_if,
-        valid_examples=valid_examples or [],
-        invalid_examples=invalid_examples or [],
-        prerequisites=prerequisites or [],
-    )
-    return ClientRuleDefinition(
-        compiled_rule=compiled_rule,
-        name=name,
-        description=description,
-        message=message,
-        kind=kind,
-        presentation_severity=presentation_severity,
-        preparation=preparation,
-        translations=translations or {},
-    )
+rule = partial(build_rule, _STANDARD_CODE, _CATALOG_VERSION)
 
 
 CUSTOM_THALES_LOGO_FONT_SIZE = rule(

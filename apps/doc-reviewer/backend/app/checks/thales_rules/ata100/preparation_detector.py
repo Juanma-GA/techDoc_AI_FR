@@ -7,9 +7,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.checks.client_bundle import ClientBundle
-from app.checks.thales_rules.page_classifier import page_classification_evidence
-from app.checks.thales_rules.preparation_toc import map_preparation_pages_to_toc
-from app.checks.thales_rules.section_detection import classify_preparation_sections
+from app.checks.thales_rules.ata100.page_classifier import page_classification_evidence
+from app.checks.thales_rules.ata100.preparation_toc import map_preparation_pages_to_toc
+from app.checks.thales_rules.ata100.section_detection import classify_preparation_sections
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.core.compiled_rules import CompiledRule
 from app.core.logging import get_logger

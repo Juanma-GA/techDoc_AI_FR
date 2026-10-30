@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from app.checks.thales_rules.operations import highlights_document_type_expected
-from app.checks.thales_rules.rules import (
+from app.checks.thales_rules.ata100.operations import highlights_document_type_expected
+from app.checks.thales_rules.ata100.rules import (
     CUSTOM_BAR_PSI_CONVERSION,
     CUSTOM_CMM_NUMBER,
     CUSTOM_CMM_NUMBER_FONT_SIZE,

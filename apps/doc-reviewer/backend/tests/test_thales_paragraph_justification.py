@@ -4,8 +4,8 @@ from types import SimpleNamespace
 import fitz
 
 from app.checks.client_registry import load_active_client_configuration
-from app.checks.thales_rules.operations import _paragraphs_from_pdf_page
-from app.checks.thales_rules.page_classifier import classify_pages
+from app.checks.thales_rules.ata100.operations import _paragraphs_from_pdf_page
+from app.checks.thales_rules.ata100.page_classifier import classify_pages
 from app.core.compiled_rule_executor import execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfLine, Span, parse_pdf
 

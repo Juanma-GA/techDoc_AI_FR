@@ -52,6 +52,8 @@ exclude = ["tests*", "alembic*"]
 "app.checks" = ["active_client.json"]
 "app.checks.demo_rules" = ["*.json"]
 "app.checks.thales_rules" = ["*.json"]
+"app.checks.thales_rules.ata100" = ["*.json"]
+"app.checks.thales_rules.s1000d" = ["*.json"]
 "app.checks.ste100_rules" = ["*.json"]
 "app.checks.sample_client" = ["*.json"]
 

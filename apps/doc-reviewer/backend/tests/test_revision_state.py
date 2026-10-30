@@ -8,9 +8,9 @@ from typing import Any
 import pytest
 
 from app.checks.client_registry import load_active_client_configuration
-from app.checks.thales_rules import revision_engine as revision
-from app.checks.thales_rules.page_classifier import classify_pages
-from app.checks.thales_rules.rules import REVISION_RULE_DEFINITIONS
+from app.checks.thales_rules.ata100 import revision_engine as revision
+from app.checks.thales_rules.ata100.page_classifier import classify_pages
+from app.checks.thales_rules.ata100.rules import REVISION_RULE_DEFINITIONS
 from app.core.compiled_rule_executor import execute_pdf_rules as _execute_pdf_rules
 from app.parsers.pdf_parser import ParsedPage, ParsedPdf, PdfWord, Span
 
@@ -964,7 +964,7 @@ def test_missing_lep_footer_page_number_is_reported() -> None:
 
 
 def test_footer_page_number_ignores_cached_findings_outside_selected_pages() -> None:
-    from app.checks.thales_rules import operations
+    from app.checks.thales_rules.ata100 import operations
     from app.core.page_range import filter_pdf_pages
 
     parsed = _consistent_document()

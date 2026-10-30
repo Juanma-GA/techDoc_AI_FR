@@ -58,11 +58,8 @@ def test_repository_active_client_configuration_loads() -> None:
     assert configuration.selection.bundle == "thales_rules"
     assert configuration.selection.rule_bundles == ["ste100_rules"]
     assert configuration.manifest.client_code == "THALES"
-    assert configuration.manifest.catalogs[0].code == "THALES-CUSTOM"
-    assert configuration.manifest.modules["rules"] == "rules.py"
-    assert configuration.manifest.modules["operations"] == "operations.py"
-    assert configuration.manifest.modules["page_classifier"] == "page_classifier.py"
-    assert configuration.manifest.modules["revision_engine"] == "revision_engine.py"
+    assert configuration.manifest.norms == ["ata100", "s1000d"]
+    assert configuration.manifest.catalogs == []
     assert "meta_pnr_number" in configuration.mapping.fields
     assert configuration.mapping.fields["meta_pnr_number"].required
     assert configuration.manifest_hash
@@ -71,9 +68,17 @@ def test_repository_active_client_configuration_loads() -> None:
     assert configuration.bundle_hash == configuration.configuration_hash
     assert [catalog.code for catalog in configuration.bundle.catalogs] == [
         "THALES-CUSTOM",
+        "THALES-S1000D",
         "ASD-STE100",
     ]
-    assert len(configuration.bundle.rules) == 91
+    assert len(configuration.bundle.rules) == 124
+    rules_by_bundle: dict[str, list[str]] = {}
+    for rule in configuration.bundle.rules:
+        rules_by_bundle.setdefault(rule.bundle_code, []).append(rule.code)
+    assert list(rules_by_bundle) == ["ata100", "s1000d", "ste100_rules"]
+    assert [len(codes) for codes in rules_by_bundle.values()] == [85, 32, 7]
+    labels = {rule.bundle_code: rule.bundle_label for rule in configuration.bundle.rules}
+    assert labels == {"ata100": "ATA100", "s1000d": "S1000D", "ste100_rules": "ASD-STE100"}
     ste_rule = next(
         rule for rule in configuration.bundle.rules if rule.code == "STE_NO_MAYBE"
     )
@@ -94,6 +99,9 @@ def test_repository_active_client_configuration_loads() -> None:
         "document_structure",
         "vendor_code_list",
         "pdf_bookmarks",
+        "s1000d_dm_status",
+        "s1000d_front_matter",
+        "s1000d_content",
     }
     assert configuration.bundle.page_classifier is not None
 
@@ -251,6 +259,137 @@ def test_selected_rule_bundle_adds_catalog_and_group_metadata(tmp_path: Path) ->
     ] == {"v1": ["ADDON_RULE"]}
 
 
+def _write_norm_client(tmp_path: Path, norms: list[str]) -> Path:
+    client_dir = tmp_path / "norm_client"
+    client_dir.mkdir()
+    (client_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "client_code": "NORM",
+                "label": "Norm client",
+                "bundle_version": "1.0.0",
+                "contract_version": "1",
+                "norms": norms,
+                "files": {"mapping": "mapping.json"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (client_dir / "mapping.json").write_text(
+        json.dumps({"fields": {}, "entities": {}, "tokens": {}}), encoding="utf-8"
+    )
+    (tmp_path / "active_client.json").write_text(
+        json.dumps({"bundle": "norm_client"}), encoding="utf-8"
+    )
+    return client_dir
+
+
+def _write_norm(
+    client_dir: Path,
+    name: str,
+    *,
+    catalog: str,
+    operation: str,
+    default_enabled: bool | None = None,
+) -> None:
+    norm_dir = client_dir / name
+    norm_dir.mkdir()
+    manifest: dict[str, Any] = {
+        "label": f"{name} norm",
+        "bundle_version": "1.0.0",
+        "catalogs": [{"code": catalog, "version": "v1"}],
+        "modules": {
+            "rules": "rules.py",
+            "operations": "operations.py",
+            "page_classifier": "page_classifier.py",
+        },
+    }
+    if default_enabled is not None:
+        manifest["default_enabled"] = default_enabled
+    (norm_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    code = f"{name.upper()}_RULE"
+    (norm_dir / "rules.py").write_text(
+        "from app.checks.client_bundle import ClientRuleDefinition\n"
+        "from app.core.compiled_rules import Check, CompiledRule, RuleTarget\n"
+        f"rule = CompiledRule(id='{code}', topic='{code}', execution='deterministic', "
+        "target=RuleTarget(page='all', region='full_page'), "
+        f"checks=[Check(field='text', operator='client_operation', operation='{operation}')], "
+        "source='standard_rule')\n"
+        f"definition = ClientRuleDefinition(compiled_rule=rule, name='{code}', "
+        "description='Norm rule.', message='Norm failure.', kind='content')\n"
+        "RULE_DEFINITIONS = (definition,)\n"
+        f"STANDARD_SPEC = {{'code': '{catalog}', 'label': '{catalog}', 'description': 'Norm.', "
+        f"'versions': {{'v1': [rule]}}, 'metadata': {{'{code}': definition.metadata}}}}\n",
+        encoding="utf-8",
+    )
+    (norm_dir / "operations.py").write_text(
+        "from app.checks.client_bundle import ClientOperation, OperationResult\n"
+        "def execute(context, parameters):\n"
+        "    return OperationResult(status='PASS')\n"
+        f"OPERATIONS = {{'{operation}': ClientOperation(name='{operation}', execute=execute)}}\n",
+        encoding="utf-8",
+    )
+    (norm_dir / "page_classifier.py").write_text(
+        "def classify_pages(parsed, document):\n"
+        f"    parsed.calls.append('{name}')\n",
+        encoding="utf-8",
+    )
+
+
+def test_client_norms_add_catalogs_rules_operations_and_classifiers(tmp_path: Path) -> None:
+    client_dir = _write_norm_client(tmp_path, ["alpha", "beta"])
+    _write_norm(client_dir, "alpha", catalog="ALPHA", operation="alpha_op", default_enabled=True)
+    _write_norm(client_dir, "beta", catalog="BETA", operation="beta_op")
+
+    bundle = load_active_client_configuration(tmp_path, environ={}).bundle
+
+    assert [catalog.code for catalog in bundle.catalogs] == ["ALPHA", "BETA"]
+    assert [(rule.code, rule.bundle_code, rule.bundle_label) for rule in bundle.rules] == [
+        ("ALPHA_RULE", "alpha", "alpha norm"),
+        ("BETA_RULE", "beta", "beta norm"),
+    ]
+    assert "default_disabled_rule_codes_by_version" not in bundle.standard_specs["ALPHA"]
+    assert bundle.standard_specs["BETA"]["default_disabled_rule_codes_by_version"] == {
+        "v1": ["BETA_RULE"]
+    }
+    assert set(bundle.operations) == {"alpha_op", "beta_op"}
+    parsed = type("Parsed", (), {"calls": []})()
+    assert bundle.page_classifier is not None
+    bundle.page_classifier(parsed, None)
+    assert parsed.calls == ["alpha", "beta"]
+
+
+def test_client_norms_cannot_share_an_operation_name(tmp_path: Path) -> None:
+    client_dir = _write_norm_client(tmp_path, ["alpha", "beta"])
+    _write_norm(client_dir, "alpha", catalog="ALPHA", operation="shared_op")
+    _write_norm(client_dir, "beta", catalog="BETA", operation="shared_op")
+
+    with pytest.raises(ClientConfigurationError, match="operations are declared by more than one"):
+        load_active_client_configuration(tmp_path, environ={})
+
+
+def test_client_norms_cannot_share_a_catalog_code(tmp_path: Path) -> None:
+    client_dir = _write_norm_client(tmp_path, ["alpha", "beta"])
+    _write_norm(client_dir, "alpha", catalog="SAME", operation="alpha_op")
+    _write_norm(client_dir, "beta", catalog="SAME", operation="beta_op")
+
+    with pytest.raises(ClientConfigurationError, match="catalog code is selected by more than one"):
+        load_active_client_configuration(tmp_path, environ={})
+
+
+def test_client_manifest_needs_catalogs_or_norms_and_slug_norm_names(tmp_path: Path) -> None:
+    _write_norm_client(tmp_path, [])
+    with pytest.raises(ClientConfigurationError, match="catalogs or norms"):
+        load_active_client_configuration(tmp_path, environ={})
+
+    _write_norm_client_manifest = tmp_path / "norm_client" / "manifest.json"
+    payload = json.loads(_write_norm_client_manifest.read_text(encoding="utf-8"))
+    payload["norms"] = ["../outside"]
+    _write_norm_client_manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ClientConfigurationError, match="lowercase slugs"):
+        load_active_client_configuration(tmp_path, environ={})
+
+
 def test_declared_rules_module_must_export_definitions(tmp_path: Path) -> None:
     _write_bundle(
         tmp_path,
@@ -310,7 +449,11 @@ def test_active_standard_versions_resolves_selected_bundle_catalogs() -> None:
     finally:
         db.close()
 
-    assert resolved == [("THALES-CUSTOM", "v1"), ("ASD-STE100", "issue 7")]
+    assert resolved == [
+        ("THALES-CUSTOM", "v1"),
+        ("THALES-S1000D", "v1"),
+        ("ASD-STE100", "issue 7"),
+    ]
 
 
 def test_client_bundle_environment_variable_overrides_selection(tmp_path: Path) -> None:

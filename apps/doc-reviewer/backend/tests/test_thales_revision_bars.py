@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import fitz
 
 from app.checks.demo_rules import operations as demo_operations
-from app.checks.thales_rules import operations
-from app.checks.thales_rules.revision_engine import HighlightsEntry, RevisionState
-from app.checks.thales_rules.rules import (
+from app.checks.thales_rules.ata100 import operations
+from app.checks.thales_rules.ata100.revision_engine import HighlightsEntry, RevisionState
+from app.checks.thales_rules.ata100.rules import (
     CUSTOM_REVISION_BAR_MODIFIED_PAGE,
     CUSTOM_REVISION_BAR_NEW_PAGE,
     CUSTOM_TP1_REVISION_BAR_FOOTER,

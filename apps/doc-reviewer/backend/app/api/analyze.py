@@ -736,7 +736,7 @@ def analyze_stream(
                             if version.standard.code in client_bundle.standard_specs:
                                 page_classifier(parsed, _DocStub())
                     if preparation_context:
-                        from app.checks.thales_rules.section_detection import (
+                        from app.checks.thales_rules.ata100.section_detection import (
                             apply_preparation_page_types,
                         )
 
