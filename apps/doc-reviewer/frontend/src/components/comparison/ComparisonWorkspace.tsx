@@ -1,5 +1,6 @@
+import { buttonVariants } from "@internal/ui";
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -165,8 +166,14 @@ export function ComparisonWorkspace({
             >
               <ChevronRight size={16} aria-hidden="true" />
             </button>
-            <a className="btn ghost small" href={comparisonApi.exportDocumentUrl(comparison.id, activePair.document_index, language)} download>
-              {t("comparison.exportOne")}
+            <a
+              data-comparison-download
+              className={buttonVariants({ variant: "secondary" })}
+              href={comparisonApi.exportDocumentUrl(comparison.id, activePair.document_index, language)}
+              download
+            >
+              <Download size={16} className="shrink-0" aria-hidden="true" />
+              <span>{t("comparison.exportOne")}</span>
             </a>
           </nav>
         ) : null}

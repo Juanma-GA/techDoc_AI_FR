@@ -134,4 +134,85 @@ test.describe("Doc Reviewer smoke", () => {
 
     expect(uploadBody).toContain('filename="DEMO_CMM_PDF_anonyme.pdf"');
   });
+
+  test("loads both real demo assets and submits them to the comparison API", async ({ page }, testInfo) => {
+    let uploadBody = "";
+    await page.route("**/api/v1/**", async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path === "/api/v1/settings/mistral") {
+        await route.fulfill({ json: { demo_enabled: true, llm_enabled: false } });
+      } else if (path === "/api/v1/health") {
+        await route.fulfill({
+          json: { status: "ok", version: "test", db: "ok", llm: "disabled" },
+        });
+      } else if (path === "/api/v1/comparisons" && route.request().method() === "POST") {
+        uploadBody = route.request().postData() ?? "";
+        await route.fulfill({
+          status: 422,
+          json: {
+            code: "SYNTHETIC_SMOKE",
+            message: "Synthetic comparison upload captured",
+            detail: null,
+            request_id: "smoke",
+          },
+        });
+      } else {
+        await route.fulfill({ json: [] });
+      }
+    });
+
+    await page.goto("/comparison");
+
+    const compare = page.getByRole("button", { name: "Comparer et enregistrer" });
+    await expect(compare).toBeDisabled();
+    const loadDemo = page.getByRole("button", { name: "Charger les deux PDF de démonstration" });
+    await loadDemo.focus();
+    await expect(loadDemo).toBeFocused();
+    await page.keyboard.press("Enter");
+    const reference = page.getByRole("combobox", { name: "Document de référence" });
+    await expect(reference.locator("option")).toHaveCount(2);
+    await expect(reference.locator("option:checked")).toHaveText("DEMO_CMM_PDF_anonyme.pdf");
+    await expect(page.getByText("DEMO_CMM_PDF_revision_anonyme.pdf", { exact: true }).first()).toBeVisible();
+    await expect(compare).toBeEnabled();
+    expect(uploadBody).toBe("");
+
+    for (const state of [
+      { language: "FR", dark: true },
+      { language: "FR", dark: false },
+      { language: "EN", dark: false },
+      { language: "EN", dark: true },
+    ]) {
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.getByRole("button", { name: state.language, exact: true }).click();
+      const isFrench = state.language === "FR";
+      const demoLabel = isFrench ? "Charger les deux PDF de démonstration" : "Load both demo PDFs";
+      await expect(page.getByRole("button", { name: demoLabel })).toBeVisible();
+      const isDark = await page.locator("html").evaluate((root) => root.classList.contains("dark"));
+      if (isDark !== state.dark) {
+        await page.getByRole("button", { name: isFrench ? "Changer de thème" : "Switch theme" }).click();
+      }
+      if (state.dark) await expect(page.locator("html")).toHaveClass(/dark/);
+      else await expect(page.locator("html")).not.toHaveClass(/dark/);
+
+      await page.screenshot({
+        path: testInfo.outputPath(`demo-${state.language}-${state.dark ? "dark" : "light"}.png`),
+        fullPage: true,
+      });
+      for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(viewport);
+        expect(await page.evaluate(() =>
+          document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        )).toBeLessThanOrEqual(1);
+      }
+    }
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole("button", { name: "FR", exact: true }).click();
+    await compare.click();
+    await expect(page.getByRole("alert")).toContainText("Synthetic comparison upload captured");
+    expect(uploadBody).toContain('filename="DEMO_CMM_PDF_anonyme.pdf"');
+    expect(uploadBody).toContain('filename="DEMO_CMM_PDF_revision_anonyme.pdf"');
+    expect(uploadBody).toContain('name="reference_index"\r\n\r\n0');
+    expect(uploadBody.match(/%PDF-/g)).toHaveLength(2);
+  });
 });

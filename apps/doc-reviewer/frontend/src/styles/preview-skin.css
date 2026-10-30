@@ -54,8 +54,8 @@
 
 .pr *, .pr *::before, .pr *::after { box-sizing: border-box; }
 .pr { font-family: "Inter", sans-serif; line-height: 1.5; background: var(--bg); color: var(--fg); min-height: 100vh; min-height: 100dvh; }
-.pr .ui-main a,
-.pr .reviewer a { color: var(--brand-light); text-decoration: none; }
+.pr .ui-main a:where(:not([data-comparison-download])),
+.pr .reviewer a:where(:not([data-comparison-download])) { color: var(--brand-light); text-decoration: none; }
 .pr button { cursor: pointer; }
 .pr [hidden] { display: none !important; }
 

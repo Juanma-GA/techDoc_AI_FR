@@ -1,3 +1,5 @@
+import { buttonVariants } from "@internal/ui";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -42,8 +44,14 @@ export function ComparisonResults({
         <div className="space-y-3">
           <p className="label">{t("comparison.reference")}: {reference?.filename ?? comparison.title}</p>
           {comparison.file_count > 2 ? <p className="hint">{t("comparison.exportZipHint")}</p> : null}
-          <a className="btn primary small" href={comparisonApi.exportUrl(comparison.id, language)} download>
-            {t(comparison.file_count > 2 ? "comparison.exportAll" : "comparison.exportOne")}
+          <a
+            data-comparison-download
+            className={buttonVariants({ variant: "secondary" })}
+            href={comparisonApi.exportUrl(comparison.id, language)}
+            download
+          >
+            <Download size={16} className="shrink-0" aria-hidden="true" />
+            <span>{t(comparison.file_count > 2 ? "comparison.exportAll" : "comparison.exportOne")}</span>
           </a>
         </div>
         <ComparisonWorkspace
